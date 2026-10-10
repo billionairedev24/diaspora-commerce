@@ -775,7 +775,7 @@
 "S255","Story","AfroTransact Delivery from the seller's store","Seller-fulfilled orders can use AfroTransact Delivery: the seller packs, our driver collects from the seller's store or warehouse and delivers. Payments gets a third fulfilment mode with a configurable delivery fee per package (zone/weight tiers) and the customer's shipping going to AfroTransact; offers and checkout expose the option per ship-from location.","- Seller can enable AfroTransact pickup per ship-from location and per offer
 - Split charges the configured delivery fee and books shipping to AfroTransact
 - Fee is editable in the fee schedule editor
-- Driver pickup stops are created for these orders","E12","","High","8","fulfilment payments offers seller-center","delivery","To Do"
+- Driver pickup stops are created for these orders","E12","","High","8","fulfilment payments offers seller-center","delivery","In Progress"
 "S256","Story","Shipping labels bought through AfroTransact are charged to the seller","When a seller buys a carrier label through Seller Center, the label cost is debited from the seller's balance in the ledger, voids are credited back, and statements show label charges.","- Label purchase posts a seller debit at the label cost
 - Void credits it back
 - Seller statement lists label charges","E11","","High","3","carrier-gateway payments","carriers","In Progress"
