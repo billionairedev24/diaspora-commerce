@@ -1,0 +1,141 @@
+spring:
+  application:
+    name: tax-returns-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/taxreturns}
+    username: ${DB_USER:taxreturns}
+    password: ${DB_PASSWORD:taxreturns}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: ${KAFKA_GROUP:tax-returns-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+
+server:
+  port: ${PORT:8111}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: tax-returns-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  consumers:
+    # Kafka listeners for other services' events (off in tests that have no broker).
+    enabled: ${CONSUMERS_ENABLED:true}
+  api-docs:
+    title: Tax & Returns API
+    description: >-
+      Marketplace-facilitator sales tax (quotes, rate table, ledger, monthly liability and seller statements),
+      returns (RMAs: eligibility, drop-off labels, driver pickup, inspection) and refund orchestration through
+      payments-service with restock / quarantine in inventory-service.
+    version: v1
+  events:
+    relay-enabled: true
+  taxreturns:
+    tax:
+      # RULES = built-in rules engine over the tax_state_rule / tax_local_rate tables (no external calls).
+      # STRIPE_TAX | TAXJAR | AVALARA need an adapter of the TaxCalculator port (not installed).
+      provider: ${TAX_PROVIDER:RULES}
+      category-by-product-type:
+        fresh-produce: GROCERY
+        pantry: GROCERY
+        spices: GROCERY
+        grains: GROCERY
+        beverages: GROCERY
+        frozen-food: GROCERY
+        meat-seafood: GROCERY
+        prepared-meals: PREPARED_FOOD
+        hot-food: PREPARED_FOOD
+    returns:
+      default-window-days: ${RETURN_WINDOW_DAYS:30}
+      window-days-by-product-type:
+        electronics: 15
+        books: 30
+      # Food and other perishables are reported as a problem (refund without return), never sent back.
+      non-returnable-product-types: [fresh-produce, frozen-food, meat-seafood, prepared-meals, hot-food, pantry,
+                                     spices, grains, beverages]
+      low-value-threshold-minor: ${RETURN_LOW_VALUE_MINOR:1000}
+      first-scan-refund-max-minor: ${RETURN_FIRST_SCAN_MAX_MINOR:20000}
+      seller-approval-sla: ${RETURN_SELLER_SLA:48h}
+      drop-off-days: ${RETURN_DROP_OFF_DAYS:14}
+      max-restocking-fee-bps: 2000
+      max-evidence: 6
+      return-centre:
+        node: ${RETURN_CENTRE_NODE:}
+        name: ${RETURN_CENTRE_NAME:AfroTransact Returns}
+        line1: ${RETURN_CENTRE_LINE1:}
+        line2: ${RETURN_CENTRE_LINE2:}
+        city: ${RETURN_CENTRE_CITY:}
+        state: ${RETURN_CENTRE_STATE:}
+        postal-code: ${RETURN_CENTRE_POSTAL_CODE:}
+        country: ${RETURN_CENTRE_COUNTRY:US}
+        phone: ${RETURN_CENTRE_PHONE:}
+      label:
+        carrier: ${RETURN_LABEL_CARRIER:ups}
+        service: ${RETURN_LABEL_SERVICE:03}
+        weight-lb: ${RETURN_LABEL_WEIGHT_LB:2.0}
+    upstreams:
+      token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
+      client-id: ${TAX_RETURNS_CLIENT_ID:tax-returns-service}
+      # Only from the environment (identity's tax-returns-service client secret).
+      client-secret: ${TAX_RETURNS_CLIENT_SECRET}
+      timeout: ${UPSTREAM_TIMEOUT:10s}
+      payments-url: ${PAYMENTS_URL:http://localhost:8105}
+      inventory-url: ${INVENTORY_URL:http://localhost:8103}
+      carrier-url: ${CARRIER_GATEWAY_URL:http://localhost:8209}
+      catalog-url: ${CATALOG_URL:http://localhost:8101}
+    consumers:
+      order-topic: at.order.events
+      payment-topic: at.payment.events
+      carrier-topic: at.carrier-shipment.events
+    jobs:
+      enabled: ${TAX_RETURNS_JOBS_ENABLED:true}
+      interval: ${TAX_RETURNS_JOBS_INTERVAL:60s}

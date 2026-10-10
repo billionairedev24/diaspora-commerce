@@ -368,7 +368,7 @@
 - Return can be cancelled before drop-off
 - Mobile app shows a QR code for drop-off","E17","","High","5","returns java","returns","In Progress"
 "S115","Story","Refund orchestration","Inspection outcome triggers refund and inventory restock or damaged.","- Refund reverses the seller transfer portion and commission
-- Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","In Progress"
+- Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","Done"
 "S116","Story","Marketplace-facilitator sales tax","Tax per line by delivery address (Stripe Tax or Avalara) attributed to each seller.","- Tax is computed at checkout and stored per line
 - Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","In Progress"
 "E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","In Progress"
@@ -692,3 +692,9 @@
 "S234","Story","Phone number verification","Identity verifies phone numbers by SMS code independently of MFA so notifications can text verified numbers.","- User can verify a phone with a 6-digit SMS code
 - phoneVerified is true after verification
 - Changing the phone resets verification","E02","","Medium","2","identity notifications","identity","To Do"
+"S235","Story","Returns and tax integration across services","Orders calls the tax quote at checkout and links returns; order placed events carry product type, perishable, discount, jurisdiction, shipping amount and street; payments exposes refunded amounts per line; inventory returns accept a service scope and receiving warehouse; carrier-gateway supports box-free QR drop-off and return rate choice; fulfilment schedules return pickups; storefront and mobile return screens.","- Checkout tax comes from tax-returns quote
+- Return eligibility uses order event data without customer-entered address
+- Payments reports refunded amount per line
+- Return pickups are scheduled with fulfilment
+- Customers start returns from web and mobile order pages
+- Finance confirms seeded tax rates before production","E17","","High","13","tax-returns orders payments inventory carrier-gateway fulfilment","returns","To Do"

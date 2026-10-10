@@ -1,0 +1,1557 @@
+openapi: 3.1.0
+info:
+  title: Tax & Returns API
+  description: 'Marketplace-facilitator sales tax (quotes, rate table, ledger, monthly liability and seller statements), returns
+    (RMAs: eligibility, drop-off labels, driver pickup, inspection) and refund orchestration through payments-service with
+    restock / quarantine in inventory-service.'
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8111
+  description: local
+- url: https://api.dev.afrotransact.com/tax-returns
+  description: dev
+- url: https://api.uat.afrotransact.com/tax-returns
+  description: uat
+- url: https://api.afrotransact.com/tax-returns
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Returns
+  description: Start a return on delivered items, RMA lifecycle, inspection and seller policies
+- name: Refunds
+  description: 'Refund orchestration: partial refunds, refund history and retries'
+- name: Tax
+  description: 'Marketplace-facilitator sales tax: quotes, rate table, ledger and liability reports'
+paths:
+  /v1/refunds:
+    get:
+      tags:
+      - Refunds
+      summary: 'Refunds of an order or of a return (staff: refunds:issue or returns:manage)'
+      operationId: list
+      parameters:
+      - name: orderId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: rmaId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Refund'
+    post:
+      tags:
+      - Refunds
+      summary: Partial refund without return (Idempotency-Key; staff or the seller of every line)
+      description: Calls payments POST /v1/payments/{id}/refunds with Idempotency-Key = refund id; payments reverses the seller
+        transfer portion and commission. The tax reversal is booked in the ledger.
+      operationId: create_1
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRefund'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Refund'
+  /v1/refunds/{id}:
+    get:
+      tags:
+      - Refunds
+      summary: A refund
+      operationId: get_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Refund'
+  /v1/refunds/{id}/retry:
+    post:
+      tags:
+      - Refunds
+      summary: Send a pending or failed refund to payments again (same Idempotency-Key; refunds:issue)
+      operationId: retry
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Refund'
+  /v1/return-policies/{orgId}:
+    get:
+      tags:
+      - Returns
+      summary: A seller's return policy (returns:manage for the organisation, or staff)
+      operationId: policy
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerReturnPolicy'
+    put:
+      tags:
+      - Returns
+      summary: 'Set the seller''s return policy: window ≥ 14 days, restocking fee ≤ 20 %, return address'
+      operationId: putPolicy
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellerReturnPolicy'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerReturnPolicy'
+  /v1/returns:
+    get:
+      tags:
+      - Returns
+      summary: 'Returns: customers see their own, sellers their organisation''s, staff filter by seller'
+      operationId: search
+      parameters:
+      - name: orderId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - REQUESTED
+          - APPROVED
+          - AUTO_APPROVED
+          - LABEL_ISSUED
+          - IN_TRANSIT
+          - RECEIVED
+          - INSPECTED
+          - REFUNDED
+          - REJECTED
+          - CANCELLED
+      - name: sellerOrgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Rma'
+    post:
+      tags:
+      - Returns
+      summary: Start a return (Idempotency-Key required; same key replays the same RMA)
+      description: Auto-approved returns come back with the label / QR (drop-off), the handover code (driver pickup) or the
+        refund (no return). Seller-fulfilled returns wait for the seller until the SLA.
+      operationId: create
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReturn'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/returns/eligibility:
+    get:
+      tags:
+      - Returns
+      summary: 'What can be returned from an order (per shipment and line: window, methods, report a problem)'
+      operationId: eligibility
+      parameters:
+      - name: orderId
+        in: query
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReturnEligibility'
+  /v1/returns/number/{number}:
+    get:
+      tags:
+      - Returns
+      summary: A return by its number (RMA-XXXXXXXX), e.g. scanned from the QR code
+      operationId: byNumber
+      parameters:
+      - name: number
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/returns/{id}:
+    get:
+      tags:
+      - Returns
+      summary: A return
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/returns/{id}/approve:
+    post:
+      tags:
+      - Returns
+      summary: Approve (seller for seller-fulfilled, staff otherwise; returns:manage)
+      operationId: approve
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Decision'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/returns/{id}/cancel:
+    post:
+      tags:
+      - Returns
+      summary: Cancel a return before drop-off / pickup (customer)
+      operationId: cancel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/returns/{id}/inspect:
+    post:
+      tags:
+      - Returns
+      summary: 'Inspection per line: restock or damaged; passed lines are refunded (returns:manage)'
+      description: AfroTransact-fulfilled lines post RETURN_RESTOCK / RETURN_DAMAGED to inventory.
+      operationId: inspect
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Inspection'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/returns/{id}/label:
+    post:
+      tags:
+      - Returns
+      summary: Retry the return label / handover code of an approved return (staff, returns:manage)
+      operationId: label
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/returns/{id}/pickup:
+    post:
+      tags:
+      - Returns
+      summary: Driver collected the parcel with the customer's handover code (delivery:operate)
+      operationId: pickup
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pickup'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/returns/{id}/receive:
+    post:
+      tags:
+      - Returns
+      summary: Parcel received at the seller or return centre (returns:manage)
+      operationId: receive
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/returns/{id}/refund-quote:
+    get:
+      tags:
+      - Returns
+      summary: Refund estimate of the return (items + proportional tax + fault shipping − restocking fee)
+      operationId: refundQuote
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RefundQuote'
+  /v1/returns/{id}/reject:
+    post:
+      tags:
+      - Returns
+      summary: Reject with a note to the customer (returns:manage)
+      operationId: reject
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Decision'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Rma'
+  /v1/tax/liability:
+    get:
+      tags:
+      - Tax
+      summary: Monthly marketplace liability per jurisdiction (tax:read)
+      operationId: liability
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LiabilityReport'
+  /v1/tax/liability/export:
+    get:
+      tags:
+      - Tax
+      summary: Monthly liability as CSV (tax:read)
+      operationId: liabilityCsv
+      parameters:
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/csv:
+              schema:
+                type: string
+  /v1/tax/orders/{orderId}/transactions:
+    get:
+      tags:
+      - Tax
+      summary: 'Tax ledger entries of an order: sales and refund reversals (tax:read)'
+      operationId: transactions
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TaxTransaction'
+  /v1/tax/quotes:
+    post:
+      tags:
+      - Tax
+      summary: Quote tax per line for a cart or order (tax:quote; orders-service at checkout)
+      description: rate = state rate for the category + local rate for the ZIP; tax = taxable × rate rounded half up once
+        per line. Non-facilitator states and non-US addresses get no tax.
+      operationId: quote
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxQuoteRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxQuote'
+  /v1/tax/rates:
+    get:
+      tags:
+      - Tax
+      summary: 'The rate table: state rules and local ZIP rates (tax:read)'
+      operationId: rates
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxRateTable'
+  /v1/tax/rates/local/{state}/{zipPrefix}:
+    put:
+      tags:
+      - Tax
+      summary: Create or update a local rate for a 5-digit ZIP or 3-digit prefix (tax:configure)
+      operationId: putLocal
+      parameters:
+      - name: state
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: zipPrefix
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocalTaxRate'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocalTaxRate'
+    delete:
+      tags:
+      - Tax
+      summary: Delete a local rate (tax:configure)
+      operationId: deleteLocal
+      parameters:
+      - name: state
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: zipPrefix
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
+  /v1/tax/rates/states/{state}:
+    put:
+      tags:
+      - Tax
+      summary: Create or update a state rule (tax:configure; version from the last read to update)
+      operationId: putState
+      parameters:
+      - name: state
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StateTaxRule'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StateTaxRule'
+  /v1/tax/reversals:
+    post:
+      tags:
+      - Tax
+      summary: Reverse tax for a refund made outside the returns flow (refunds:issue; idempotent per refundRef and line).
+        Refunds published as payments.refunded are reversed automatically.
+      operationId: reverse
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaxReversal'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TaxReversalResult'
+  /v1/tax/sellers/{orgId}/statement:
+    get:
+      tags:
+      - Tax
+      summary: Tax collected on a seller's behalf per jurisdiction, for the monthly statement (the seller with payouts:read,
+        or staff with tax:read)
+      operationId: sellerStatement
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LiabilityReport'
+  /v1/tax/sellers/{orgId}/statement/export:
+    get:
+      tags:
+      - Tax
+      summary: Seller statement as CSV
+      operationId: sellerStatementCsv
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: month
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            text/csv:
+              schema:
+                type: string
+components:
+  schemas:
+    StateTaxRule:
+      type: object
+      description: State rates are fractions (0.0625 = 6.25 %)
+      properties:
+        country:
+          type: string
+          maxLength: 2
+          minLength: 0
+        state:
+          type: string
+        name:
+          type: string
+          maxLength: 80
+          minLength: 0
+        generalRate:
+          type: number
+          maximum: 0.5
+          minimum: 0
+        groceryRate:
+          type: number
+          maximum: 0.5
+          minimum: 0
+        preparedFoodRate:
+          type: number
+          maximum: 0.5
+          minimum: 0
+        shippingTaxable:
+          type: boolean
+        facilitator:
+          type: boolean
+          description: AfroTransact collects and remits as marketplace facilitator
+        version:
+          type: integer
+          format: int64
+      required:
+      - generalRate
+      - groceryRate
+      - name
+      - preparedFoodRate
+    LocalTaxRate:
+      type: object
+      description: Local rate added to the state rate for a ZIP or 3-digit ZIP prefix
+      properties:
+        state:
+          type: string
+        zipPrefix:
+          type: string
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        rate:
+          type: number
+          maximum: 0.5
+          minimum: 0
+        appliesToGrocery:
+          type: boolean
+      required:
+      - name
+      - rate
+    Address:
+      type: object
+      description: Postal address (customer origin or seller / FC return address)
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        line1:
+          type: string
+          maxLength: 200
+          minLength: 0
+        line2:
+          type: string
+          maxLength: 200
+          minLength: 0
+        city:
+          type: string
+          maxLength: 120
+          minLength: 0
+        state:
+          type: string
+          maxLength: 10
+          minLength: 0
+        postalCode:
+          type: string
+          maxLength: 20
+          minLength: 0
+        country:
+          type: string
+          maxLength: 2
+          minLength: 0
+        phone:
+          type: string
+          maxLength: 40
+          minLength: 0
+    SellerReturnPolicy:
+      type: object
+      properties:
+        windowDays:
+          type: integer
+          format: int32
+          maximum: 365
+          minimum: 14
+        restockingFeeBps:
+          type: integer
+          format: int32
+          description: Restocking fee for no-fault returns, basis points (max 2000)
+          maximum: 2000
+          minimum: 0
+        acceptsReturns:
+          type: boolean
+        refundAtFirstScan:
+          type: boolean
+        returnAddress:
+          $ref: '#/components/schemas/Address'
+        version:
+          type: integer
+          format: int64
+          description: Optimistic-lock version from the last read; omit to create
+    TaxReversal:
+      type: object
+      description: Reverse tax for a refund made outside the returns flow
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        refundRef:
+          type: string
+          maxLength: 80
+          minLength: 0
+        currency:
+          type: string
+          minLength: 1
+          pattern: '[A-Z]{3}'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxReversalLine'
+          maxItems: 200
+          minItems: 0
+      required:
+      - currency
+      - lines
+      - orderId
+      - refundRef
+    TaxReversalLine:
+      type: object
+      properties:
+        lineId:
+          type: string
+          minLength: 1
+        taxableMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        taxMinor:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - lineId
+    TaxReversalResult:
+      type: object
+      properties:
+        linesBooked:
+          type: integer
+          format: int32
+    TaxQuoteLine:
+      type: object
+      properties:
+        lineId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        atin:
+          type: string
+          maxLength: 40
+          minLength: 0
+        sellerOrgId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        taxCategory:
+          type: string
+          description: GENERAL | GROCERY | PREPARED_FOOD; when absent productType decides
+          maxLength: 30
+          minLength: 0
+        productType:
+          type: string
+          description: catalog product type (mapped by at.taxreturns.tax.category-by-product-type)
+          maxLength: 80
+          minLength: 0
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+        unitPriceMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        discountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        shippingMinor:
+          type: integer
+          format: int64
+          minimum: 0
+    TaxQuoteRequest:
+      type: object
+      description: Cart or order lines shipped to one address
+      properties:
+        currency:
+          type: string
+          minLength: 1
+          pattern: '[A-Za-z]{3}'
+        shipTo:
+          $ref: '#/components/schemas/TaxShipTo'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxQuoteLine'
+          maxItems: 500
+          minItems: 0
+      required:
+      - currency
+      - lines
+      - shipTo
+    TaxShipTo:
+      type: object
+      properties:
+        country:
+          type: string
+          maxLength: 2
+          minLength: 0
+        state:
+          type: string
+          maxLength: 10
+          minLength: 0
+        postalCode:
+          type: string
+          maxLength: 10
+          minLength: 0
+        city:
+          type: string
+          maxLength: 120
+          minLength: 0
+      required:
+      - postalCode
+      - state
+    TaxQuote:
+      type: object
+      description: Tax per line, rounded half up to the minor unit once per line
+      properties:
+        currency:
+          type: string
+        jurisdiction:
+          type: string
+        collectedBy:
+          type: string
+        totalTaxMinor:
+          type: integer
+          format: int64
+        provider:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaxQuoteLineResult'
+    TaxQuoteLineResult:
+      type: object
+      properties:
+        lineId:
+          type: string
+        sellerOrgId:
+          type: string
+        taxCategory:
+          type: string
+        taxableMinor:
+          type: integer
+          format: int64
+        rate:
+          type: number
+          description: Combined rate applied (fraction, 0.0825 = 8.25 %)
+        taxMinor:
+          type: integer
+          format: int64
+        jurisdiction:
+          type: string
+        localJurisdiction:
+          type: string
+        collectedBy:
+          type: string
+    CreateReturn:
+      type: object
+      description: Items of one delivered shipment, the reason per item and the method
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        shipmentId:
+          type: string
+          format: uuid
+        method:
+          type: string
+          enum:
+          - DROP_OFF
+          - DRIVER_PICKUP
+          - NO_RETURN
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateReturnLine'
+          maxItems: 100
+          minItems: 0
+        returnFrom:
+          $ref: '#/components/schemas/Address'
+          description: 'Required for DROP_OFF: where the parcel ships from'
+      required:
+      - lines
+      - method
+      - orderId
+      - shipmentId
+    CreateReturnLine:
+      type: object
+      properties:
+        lineId:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+        reason:
+          type: string
+          enum:
+          - DAMAGED
+          - DEFECTIVE
+          - WRONG_ITEM
+          - NOT_AS_DESCRIBED
+          - MISSING_PARTS
+          - EXPIRED_OR_SPOILED
+          - ARRIVED_LATE
+          - NO_LONGER_NEEDED
+          - ORDERED_BY_MISTAKE
+          - BETTER_PRICE_AVAILABLE
+        comment:
+          type: string
+          maxLength: 500
+          minLength: 0
+        evidenceAssetIds:
+          type: array
+          description: media-service asset ids of evidence photos (required for damaged, defective, wrong item, expired or
+            spoiled)
+          items:
+            type: string
+            maxLength: 120
+            minLength: 0
+          maxItems: 6
+          minItems: 0
+      required:
+      - lineId
+      - reason
+    Rma:
+      type: object
+      description: A return (RMA). handoverCode is only shown to the customer and staff.
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        sellerOrgId:
+          type: string
+        fulfilmentType:
+          type: string
+        deliveryMethod:
+          type: string
+        method:
+          type: string
+          enum:
+          - DROP_OFF
+          - DRIVER_PICKUP
+          - NO_RETURN
+        status:
+          type: string
+        refundState:
+          type: string
+        autoApproved:
+          type: boolean
+        approvalDueAt:
+          type: string
+          format: date-time
+        refundAtFirstScan:
+          type: boolean
+        currency:
+          type: string
+        estimateMinor:
+          type: integer
+          format: int64
+        carrier:
+          type: string
+        trackingNumber:
+          type: string
+        labelUrl:
+          type: string
+        qrPayload:
+          type: string
+          description: Payload the app renders as the drop-off / handover QR code
+        handoverCode:
+          type: string
+        dropOffBy:
+          type: string
+          format: date-time
+        decisionNote:
+          type: string
+        cancellable:
+          type: boolean
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RmaLine'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    RmaLine:
+      type: object
+      properties:
+        lineId:
+          type: string
+        atin:
+          type: string
+        title:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        unitPriceMinor:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          enum:
+          - DAMAGED
+          - DEFECTIVE
+          - WRONG_ITEM
+          - NOT_AS_DESCRIBED
+          - MISSING_PARTS
+          - EXPIRED_OR_SPOILED
+          - ARRIVED_LATE
+          - NO_LONGER_NEEDED
+          - ORDERED_BY_MISTAKE
+          - BETTER_PRICE_AVAILABLE
+        comment:
+          type: string
+        evidenceAssetIds:
+          type: array
+          items:
+            type: string
+        outcome:
+          type: string
+        condition:
+          type: string
+        stockStatus:
+          type: string
+        inspectionNote:
+          type: string
+    Decision:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+    Pickup:
+      type: object
+      properties:
+        handoverCode:
+          type: string
+          description: 6-digit code the customer shows the driver
+          maxLength: 10
+          minLength: 0
+    InspectLine:
+      type: object
+      properties:
+        lineId:
+          type: string
+          minLength: 1
+        outcome:
+          type: string
+          enum:
+          - PASS
+          - FAIL
+        condition:
+          type: string
+          description: 'Default: RESTOCK when passed, DAMAGED when failed'
+          enum:
+          - RESTOCK
+          - DAMAGED
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - lineId
+      - outcome
+    Inspection:
+      type: object
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InspectLine'
+          maxItems: 100
+          minItems: 0
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - lines
+    AdjustmentLine:
+      type: object
+      properties:
+        lineId:
+          type: string
+          minLength: 1
+        itemsMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        shippingMinor:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - lineId
+    CreateRefund:
+      type: object
+      description: Partial refund of amounts of an order's lines; tax follows proportionally (refunds:issue)
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdjustmentLine'
+          maxItems: 200
+          minItems: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - lines
+      - orderId
+      - reason
+    Refund:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        rmaId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+          format: uuid
+        paymentId:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        status:
+          type: string
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        restockingFeeMinor:
+          type: integer
+          format: int64
+        totalMinor:
+          type: integer
+          format: int64
+        reason:
+          type: string
+        paymentsRefundId:
+          type: string
+        failure:
+          type: string
+        attempts:
+          type: integer
+          format: int32
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundLineAmount'
+        createdAt:
+          type: string
+          format: date-time
+        issuedAt:
+          type: string
+          format: date-time
+    RefundLineAmount:
+      type: object
+      properties:
+        lineId:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        restockingFeeMinor:
+          type: integer
+          format: int64
+        totalMinor:
+          type: integer
+          format: int64
+    LiabilityReport:
+      type: object
+      description: 'Monthly tax per jurisdiction: collected on sales − reversed by refunds (booked in the month of the refund)
+        = net to remit'
+      properties:
+        month:
+          type: string
+        sellerOrgId:
+          type: string
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiabilityRow'
+    LiabilityRow:
+      type: object
+      properties:
+        jurisdiction:
+          type: string
+        currency:
+          type: string
+        orders:
+          type: integer
+          format: int64
+        grossSalesMinor:
+          type: integer
+          format: int64
+        taxableSalesMinor:
+          type: integer
+          format: int64
+        taxCollectedMinor:
+          type: integer
+          format: int64
+        taxRefundedMinor:
+          type: integer
+          format: int64
+        netTaxMinor:
+          type: integer
+          format: int64
+    TaxRateTable:
+      type: object
+      properties:
+        states:
+          type: array
+          items:
+            $ref: '#/components/schemas/StateTaxRule'
+        locals:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocalTaxRate'
+    TaxTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        lineId:
+          type: string
+        sourceRef:
+          type: string
+        sellerOrgId:
+          type: string
+        jurisdiction:
+          type: string
+        localJurisdiction:
+          type: string
+        currency:
+          type: string
+        taxableMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        occurredAt:
+          type: string
+          format: date-time
+    RefundQuote:
+      type: object
+      description: 'Refund estimate: items + proportional tax + shipping when the seller is at fault − restocking fee'
+      properties:
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        restockingFeeMinor:
+          type: integer
+          format: int64
+        totalMinor:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundLineAmount'
+    LineEligibility:
+      type: object
+      properties:
+        lineId:
+          type: string
+        atin:
+          type: string
+        title:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        unitPriceMinor:
+          type: integer
+          format: int64
+        eligible:
+          type: boolean
+        reportProblemOnly:
+          type: boolean
+          description: 'Food / perishables: report a problem, no return'
+        sellerFaultOnly:
+          type: boolean
+        maxQuantity:
+          type: integer
+          format: int32
+        windowEndsAt:
+          type: string
+          format: date-time
+        methods:
+          type: array
+          items:
+            type: string
+            enum:
+            - DROP_OFF
+            - DRIVER_PICKUP
+            - NO_RETURN
+        ineligibleCode:
+          type: string
+    ReturnEligibility:
+      type: object
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        currency:
+          type: string
+        shipments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentEligibility'
+    ShipmentEligibility:
+      type: object
+      properties:
+        shipmentId:
+          type: string
+          format: uuid
+        sellerOrgId:
+          type: string
+        sellerName:
+          type: string
+        fulfilmentType:
+          type: string
+        deliveryMethod:
+          type: string
+        deliveredAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineEligibility'
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,0 +1,21 @@
+# Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
+# payments, inventory and carrier-gateway run locally without security too, so no client-credentials token is
+# requested (blank secret).
+at:
+  security:
+    enabled: false
+  taxreturns:
+    upstreams:
+      client-secret: ${TAX_RETURNS_CLIENT_SECRET:}
+    returns:
+      return-centre:
+        node: ${RETURN_CENTRE_NODE:fc_houston}
+        name: AfroTransact Returns (local)
+        line1: 1 Return Way
+        city: Houston
+        state: TX
+        postal-code: "77002"
+        country: US
+logging:
+  level:
+    com.afrotransact: DEBUG

@@ -1,0 +1,17 @@
+# Production: reference pages off (published on developers.afrotransact.com), sampled traces.
+at:
+  api-docs:
+    enabled: false
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:30}
+management:
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:0.1}

@@ -1,0 +1,31 @@
+env: prod
+replicas: 3
+autoscaling:
+  enabled: true
+  min: 3
+  max: 12
+  cpu: 70
+rollout:
+  enabled: true
+resources:
+  requests: {cpu: 500m, memory: 1Gi}
+  limits: {memory: 2Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.1"
+tolerations: []
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.afrotransact.com
+  AUTH_TOKEN_URI: https://auth.afrotransact.com/oauth2/token
+  PAYMENTS_URL: http://payments:8080
+  INVENTORY_URL: http://inventory:8080
+  CARRIER_GATEWAY_URL: http://carrier-gateway:8080
+  CATALOG_URL: http://catalog:8080
+  TAX_PROVIDER: RULES
+  RETURN_CENTRE_NODE: fc_houston
+  RETURN_CENTRE_NAME: AfroTransact Returns
+  RETURN_CENTRE_LINE1: 9800 Returns Pkwy
+  RETURN_CENTRE_CITY: Houston
+  RETURN_CENTRE_STATE: TX
+  RETURN_CENTRE_POSTAL_CODE: "77032"
+  RETURN_CENTRE_COUNTRY: US

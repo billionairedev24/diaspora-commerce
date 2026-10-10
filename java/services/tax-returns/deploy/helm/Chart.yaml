@@ -1,0 +1,10 @@
+apiVersion: v2
+name: tax-returns
+description: AfroTransact tax-returns service (java). Deployed independently by its own Argo CD Application.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+dependencies:
+  - name: at-service
+    version: 0.1.0
+    repository: "file://../../../../../infra/helm/library/at-service"
