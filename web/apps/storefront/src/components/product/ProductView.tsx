@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { PdpPreorderBanner, PdpPreorderBox, PdpStandardDelivery } from '@/components/preorder/PdpPreorder';
 import { DeliverToDialog } from '@/components/shell/DeliverToDialog';
 import { LolaSheet } from '@/components/shell/LolaSheet';
 import { useT } from '@/i18n/t';
@@ -15,6 +16,7 @@ import { browserApi } from '@/lib/api/browser';
 import { siteQueries } from '@/lib/api/queries';
 import { lineForOffer, useCart, useCartMutation } from '@/lib/cart/useCart';
 import { productHref } from '@/lib/links';
+import { useAvailability } from '@/lib/preorder/useAvailability';
 
 import styles from './Product.module.css';
 
@@ -61,6 +63,7 @@ export function ProductView({ atin }: { atin: string }) {
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
   const alert = useMutation({ mutationFn: (e?: string) => api.createStockAlert(atin, e) });
+  const availability = useAvailability(data?.product.preorderEligible);
 
   if (!data) return <p className={styles.notFound}>{t('pdp.notFound')}</p>;
   const { product: p, buyBox: bb } = data;
@@ -70,8 +73,12 @@ export function ProductView({ atin }: { atin: string }) {
   const images = p.images.length ? p.images : [{ url: null, alt: p.title }];
   const current = images[img] ?? images[0];
 
+  // Pre-order (S273): delivery box by stage; adding is blocked until the window opens / after it closes.
+  const pre = availability.state.kind === 'preorder' ? availability.live : null;
+  const lockedLabel = availability.locked ? (pre?.copy.pdpAddLabel ?? availability.card?.lockedLabel ?? null) : null;
+
   const addToCart = (andCheckout = false) => {
-    if (!bb) return;
+    if (!bb || lockedLabel) return;
     const n = Math.max(1, Math.min(qty, max - inCart));
     cartMutation.mutate({ kind: 'add', offerId: bb.offerId, quantity: n, title: p.title }, { onSuccess: () => andCheckout && router.push('/checkout') });
   };
@@ -187,25 +194,33 @@ export function ProductView({ atin }: { atin: string }) {
           {bb ? (
             <>
               <Price amountMinor={bb.priceMinor} size="lg" locale={fmt.tag} />
-              <FulfilmentBadge
-                fulfilment={bb.fulfilment}
-                shipsFrom={bb.seller.city}
-                localDeliveryLabel={(city) => (city ? t('ld.badge', { city }) : t('ld.badgeNoCity'))}
-              />
-              {bb.fulfilment === 'AFROTRANSACT_DELIVERY' ? (
-                <p className={styles.promise} data-testid="local-delivery-promise">
-                  <strong>{bb.delivery.label}</strong>. {t('ld.pdpPromise', { city: bb.seller.city })}
-                </p>
+              {pre ? (
+                <PdpPreorderBox live={pre} />
+              ) : availability.card ? (
+                <PdpStandardDelivery availability={availability} eligible={!!p.preorderEligible} />
               ) : (
-                <p className={styles.promise}>
-                  {bb.delivery.free ? 'FREE delivery' : `${fmt.money(bb.delivery.feeMinor)} delivery`} <strong>{bb.delivery.label}</strong>
-                  {bb.delivery.cutoff ? `. ${bb.delivery.cutoff}` : '.'}
-                </p>
-              )}
-              {bb.delivery.expressLabel && (
-                <p className={styles.express}>
-                  {t('pdp.orFastest')} <strong>{bb.delivery.expressLabel}</strong>
-                </p>
+                <>
+                  <FulfilmentBadge
+                    fulfilment={bb.fulfilment}
+                    shipsFrom={bb.seller.city}
+                    localDeliveryLabel={(city) => (city ? t('ld.badge', { city }) : t('ld.badgeNoCity'))}
+                  />
+                  {bb.fulfilment === 'AFROTRANSACT_DELIVERY' ? (
+                    <p className={styles.promise} data-testid="local-delivery-promise">
+                      <strong>{bb.delivery.label}</strong>. {t('ld.pdpPromise', { city: bb.seller.city })}
+                    </p>
+                  ) : (
+                    <p className={styles.promise}>
+                      {bb.delivery.free ? 'FREE delivery' : `${fmt.money(bb.delivery.feeMinor)} delivery`} <strong>{bb.delivery.label}</strong>
+                      {bb.delivery.cutoff ? `. ${bb.delivery.cutoff}` : '.'}
+                    </p>
+                  )}
+                  {bb.delivery.expressLabel && (
+                    <p className={styles.express}>
+                      {t('pdp.orFastest')} <strong>{bb.delivery.expressLabel}</strong>
+                    </p>
+                  )}
+                </>
               )}
               <button type="button" className={`link-button ${styles.deliverTo}`} onClick={() => setLocOpen(true)}>
                 <MapPin aria-hidden />
@@ -220,7 +235,7 @@ export function ProductView({ atin }: { atin: string }) {
                     size="md"
                     block
                     value={inCart}
-                    max={line.maxQuantity}
+                    max={lockedLabel ? inCart : line.maxQuantity}
                     busy={cartMutation.isPending}
                     itemLabel={p.title}
                     format={(n) => t('card.inCart', { n })}
@@ -244,14 +259,16 @@ export function ProductView({ atin }: { atin: string }) {
                       ))}
                     </select>
                   </label>
-                  <Button block loading={cartMutation.isPending} onClick={() => addToCart(false)}>
-                    {t('pdp.addToCart')}
+                  <Button block loading={cartMutation.isPending} disabled={!!lockedLabel} onClick={() => addToCart(false)}>
+                    {lockedLabel ?? t('pdp.addToCart')}
                   </Button>
                 </>
               )}
-              <Button block variant="secondary" onClick={() => (inCart > 0 ? router.push('/checkout') : addToCart(true))}>
-                {t('pdp.buyNow')}
-              </Button>
+              {!lockedLabel && (
+                <Button block variant="secondary" onClick={() => (inCart > 0 ? router.push('/checkout') : addToCart(true))}>
+                  {t('pdp.buyNow')}
+                </Button>
+              )}
             </>
           ) : (
             <div className={styles.notify}>
@@ -282,6 +299,7 @@ export function ProductView({ atin }: { atin: string }) {
           </Button>
         </aside>
       </div>
+      {pre && <PdpPreorderBanner live={pre} />}
       <DeliverToDialog open={locOpen} onOpenChange={setLocOpen} />
       <LolaSheet open={lolaOpen} onOpenChange={setLolaOpen} />
     </div>

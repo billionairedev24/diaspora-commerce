@@ -81,6 +81,8 @@ export const ProductSummarySchema = z.object({
   delivery: DeliveryPromiseSchema,
   offerCount: z.number().int().min(1),
   minOfferPriceMinor: MinorSchema,
+  /** Eligible for the shopper's pre-order window (catalog preorderEligible, category in the window, not shipsNow). */
+  preorderEligible: z.boolean().optional(),
   sponsor: z
     .object({
       advertiser: z.string(),
@@ -126,7 +128,9 @@ export const ProductDetailSchema = z.object({
     rating: z.number().min(0).max(5),
     reviewCount: z.number().int().min(0),
     images: z.array(z.object({ url: z.string().nullable(), alt: z.string() })),
-    variants: z.array(VariantOptionSchema)
+    variants: z.array(VariantOptionSchema),
+    /** Eligible for the shopper's pre-order window (see ProductSummary.preorderEligible). */
+    preorderEligible: z.boolean().optional()
   }),
   /** Winning offer; null when nothing is purchasable. */
   buyBox: OfferSchema.nullable(),

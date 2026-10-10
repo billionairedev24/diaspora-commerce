@@ -10,7 +10,7 @@ export { Button, buttonClassName, type ButtonProps, type ButtonSize, type Button
 export { Badge, type BadgeProps, type BadgeTone, FulfilmentBadge, type FulfilmentBadgeProps } from './commerce/Badge';
 export { ImagePlaceholder, type ImagePlaceholderProps, Skeleton } from './commerce/ImagePlaceholder';
 export { Price, type PriceProps } from './commerce/Price';
-export { defaultProductCardLabels, type LinkLikeProps, ProductCard, type ProductCardData, type ProductCardLabels, type ProductCardProps } from './commerce/ProductCard';
+export { defaultProductCardLabels, type LinkLikeProps, ProductCard, type ProductCardAvailability, type ProductCardData, type ProductCardLabels, type ProductCardProps } from './commerce/ProductCard';
 export { QuantityStepper, type QuantityStepperProps } from './commerce/QuantityStepper';
 export { Stars, type StarsProps } from './commerce/Stars';
 export { cx } from './cx';

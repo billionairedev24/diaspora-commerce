@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { CartPreorderSchema } from '../preorders';
 import { AtinSchema, DeliveryPromiseSchema, FulfilmentSchema, SellerSchema, StockStatusSchema } from './catalog';
 import { MinorSchema } from './common';
 
@@ -22,7 +23,9 @@ export const CartLineSchema = z.object({
   stockStatus: StockStatusSchema,
   selected: z.boolean(),
   /** Perishable (catalog): AfroTransact Delivery and pickup need a handover code, no safe place. */
-  perishable: z.boolean().optional()
+  perishable: z.boolean().optional(),
+  /** Catalogue: eligible for the delivery place's pre-order window (category in the window, not shipsNow). */
+  preorderEligible: z.boolean().optional()
 });
 export type CartLine = z.infer<typeof CartLineSchema>;
 
@@ -51,7 +54,9 @@ export const CartPackageSchema = z.object({
   lines: z.array(CartLineSchema),
   itemCount: z.number().int().min(0),
   subtotalMinor: MinorSchema,
-  freeShippingNudge: z.object({ remainingMinor: MinorSchema, thresholdMinor: MinorSchema }).nullable()
+  freeShippingNudge: z.object({ remainingMinor: MinorSchema, thresholdMinor: MinorSchema }).nullable(),
+  /** Pre-order package (S273): delivered on the window's date, door or pickup; absent for packages that ship now. */
+  preorder: CartPreorderSchema.nullable().optional()
 });
 export type CartPackage = z.infer<typeof CartPackageSchema>;
 

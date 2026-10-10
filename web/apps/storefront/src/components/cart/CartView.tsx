@@ -7,11 +7,13 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { CartPreorderHeader, CartPreorderSummary, CartShipsNowHeader, FulfilmentChoice } from '@/components/preorder/CartPreorder';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { searchQueries } from '@/lib/api/queries';
 import { useCart, useCartMutation } from '@/lib/cart/useCart';
 import { productHref, searchHref } from '@/lib/links-search';
+import { usePreorderResolution } from '@/lib/preorder/usePreorder';
 
 import styles from './Cart.module.css';
 
@@ -73,6 +75,27 @@ function Line({ line, pkg }: { line: CartLine; pkg: CartPackage }) {
         {line.quantity > 1 && <div className={styles.each}>{t('cart.each', { price: fmt.money(line.priceMinor) })}</div>}
       </div>
     </li>
+  );
+}
+
+/** The pre-order package (S273): dark group header with the delivery day and countdown, its lines, door/pickup. */
+function PreorderPackage({ pkg }: { pkg: CartPackage & { preorder: NonNullable<CartPackage['preorder']> } }) {
+  const m = useCartMutation();
+  const block = pkg.preorder;
+  return (
+    <section aria-labelledby={`pkg-${pkg.packageId}`} data-testid="cart-preorder-package">
+      <CartPreorderHeader block={block} id={`pkg-${pkg.packageId}`} />
+      <div className={styles.preorderLines}>
+        <ul className={styles.lines}>
+          {pkg.lines.map((l) => (
+            <Line key={l.lineId} line={l} pkg={pkg} />
+          ))}
+        </ul>
+        {block.stage === 'OPEN' && (
+          <FulfilmentChoice block={block} busy={m.isPending} onChange={(fulfilment) => m.mutate({ kind: 'preorderFulfilment', windowId: block.windowId, fulfilment })} />
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -153,6 +176,7 @@ export function CartView() {
   const fmt = useFormatters();
   const t = useT();
   const { data: cart, isPending, isError, refetch } = useCart();
+  const { data: preorder } = usePreorderResolution();
   const m = useCartMutation();
   const [gift, setGift] = useState(false);
 
@@ -207,9 +231,17 @@ export function CartView() {
             </div>
           ) : (
             <>
-              {cart.packages.map((p, i) => (
-                <Package key={p.packageId} pkg={p} n={i + 1} total={cart.packages.length} />
-              ))}
+              {cart.packages.map((p, i) => {
+                if (p.preorder) return <PreorderPackage key={p.packageId} pkg={{ ...p, preorder: p.preorder }} />;
+                // With a pre-order in the cart, the other packages are grouped under "Ships now".
+                const firstOther = cart.packages.some((x) => x.preorder) && cart.packages.findIndex((x) => !x.preorder) === i;
+                return (
+                  <div key={p.packageId}>
+                    {firstOther && <CartShipsNowHeader metro={preorder?.metro} waitlist={!preorder?.on && preorder?.fallback === 'WAITLIST'} />}
+                    <Package pkg={p} n={i + 1} total={cart.packages.length} />
+                  </div>
+                );
+              })}
               <p className={styles.subtotalRow}>
                 {subtotal} <strong>{fmt.money(cart.subtotalMinor, cart.currency)}</strong>
               </p>
@@ -250,15 +282,19 @@ export function CartView() {
             <input type="checkbox" checked={gift} onChange={(e) => setGift(e.target.checked)} />
             {t('cart.gift')}
           </label>
-          {cart.selectedCount > 0 ? (
-            <Link href="/checkout" className={buttonClassName({ block: true })}>
-              {t('cart.checkout')}
-            </Link>
-          ) : (
-            <Button block disabled>
-              {t('cart.checkout')}
-            </Button>
-          )}
+          <CartPreorderSummary cart={cart}>
+            {({ locked, lockedLabel }) =>
+              cart.selectedCount > 0 && !locked ? (
+                <Link href="/checkout" className={buttonClassName({ block: true })}>
+                  {t('cart.checkout')}
+                </Link>
+              ) : (
+                <Button block disabled>
+                  {locked ? lockedLabel : t('cart.checkout')}
+                </Button>
+              )
+            }
+          </CartPreorderSummary>
         </div>
         <Recommendations exclude={new Set(lines.map((l) => l.atin))} />
       </aside>

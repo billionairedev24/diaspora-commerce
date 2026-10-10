@@ -12,6 +12,7 @@ import { deliveryOptions, deliveryPromise, etaDays, FREE_SHIPPING_THRESHOLD_MINO
 import { atinOf,DEPARTMENTS, type FixtureProduct, PLATFORM_SELLER } from './fixtures/catalog';
 import { PLACEMENTS, SPONSORED_SEARCH } from './fixtures/content';
 import { completePhrases, matchScore } from './matching';
+import { fixturePreorderEligible, withPreorderPackage } from './preorders';
 
 export class MockProblem extends Error {
   constructor(
@@ -90,6 +91,7 @@ export function summarize(p: FixtureProduct, metro: string, now: Date, sponsor: 
     delivery: deliveryPromise({ fulfilment: bb.fulfilment, city: bb.city }, metro, now),
     offerCount: offers.length,
     minOfferPriceMinor: Math.min(...offers.map((o) => o.priceMinor)),
+    preorderEligible: fixturePreorderEligible(p),
     sponsor: sponsor ? { advertiser: sponsor } : null
   };
 }
@@ -119,6 +121,7 @@ export function productDetail(atin: string, metro: string, now: Date): ProductDe
       rating: p.rating,
       reviewCount: p.reviews,
       images: Array.from({ length: 5 }, (_, i) => ({ url: null, alt: `${p.name} — image ${i + 1} of 5` })),
+      preorderEligible: fixturePreorderEligible(p),
       variants:
         family.length > 1
           ? family.map((x) => {
@@ -369,7 +372,8 @@ export function buildCart(s: MockSession, now: Date): Cart {
         maxQuantity: maxFor(offer),
         availableQty: Math.max(0, offer.stock),
         stockStatus: stockStatus(offer.stock),
-        selected: line.selected
+        selected: line.selected,
+        preorderEligible: fixturePreorderEligible(p)
       };
     });
     const selected = lines.filter((l) => l.selected);
@@ -394,7 +398,8 @@ export function buildCart(s: MockSession, now: Date): Cart {
   });
   const allLines = packages.flatMap((p) => p.lines);
   const sel = allLines.filter((l) => l.selected);
-  return {
+  // Lines eligible for the place's live pre-order window become one pre-order package (S273).
+  return withPreorderPackage({
     cartId: `cart_${s.sid.slice(0, 12)}`,
     currency: CURRENCY,
     packages,
@@ -410,7 +415,7 @@ export function buildCart(s: MockSession, now: Date): Cart {
     subtotalMinor: sel.reduce((a, l) => a + l.lineTotalMinor, 0),
     allSelected: allLines.length > 0 && allLines.every((l) => l.selected),
     sellerCount: new Set(packages.map((p) => p.seller.id)).size
-  };
+  }, s, now);
 }
 
 /** Mock search ad (S240): label, slot, click token and the reason it was shown (never bids). */

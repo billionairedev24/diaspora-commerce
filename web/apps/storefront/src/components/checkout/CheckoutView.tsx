@@ -25,10 +25,12 @@ import { AddressDialog } from '@/components/account/AddressDialog';
 import { AddPaymentMethodDialog } from '@/components/payments/AddPaymentMethodDialog';
 import { PaymentChip } from '@/components/payments/PaymentChip';
 import { QuickPay } from '@/components/payments/QuickPay';
+import { useCartPreorderCopy } from '@/components/preorder/CartPreorder';
 import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 import { type ConfirmResult, confirmWithSavedMethod } from '@/lib/payments/stripe';
+import { readAttribution } from '@/lib/preorder/attribution';
 
 import styles from './Checkout.module.css';
 
@@ -299,7 +301,11 @@ export function CheckoutView() {
   const itemCount = s?.packages.reduce((n, p) => n + p.itemCount, 0) ?? 0;
   const busy = placing >= 0;
   // AfroTransact Delivery packages the chosen address can't be served by block the order until removed (S255).
-  const blocked = (s?.packages ?? []).some((p) => p.localDelivery?.available === false);
+  // A pre-order package whose window is not open (upcoming or closed) blocks the order too (S273, 422 orders.preorder-not-open).
+  const preBlock = (s?.packages ?? []).find((p) => p.preorder)?.preorder ?? null;
+  const preCopy = useCartPreorderCopy(preBlock);
+  const preLocked = !!preBlock && preBlock.stage !== 'OPEN';
+  const blocked = (s?.packages ?? []).some((p) => p.localDelivery?.available === false) || preLocked;
   const [removing, setRemoving] = useState<string | null>(null);
   const removePackage = async (p: CheckoutPackage) => {
     setRemoving(p.packageId);
@@ -343,7 +349,9 @@ export function CheckoutView() {
     setError(null);
     setPlacing(0);
     try {
-      return await api.placeOrder({ addressId: address.id, paymentMethodId: wallet ? undefined : (pm?.id ?? undefined), wallet, deliverySelections: selections() }, keyRef.current);
+      // Last-touch channel (?src=&cr=&po= or the pre-order placement clicked) is stored on the order.
+      const attribution = readAttribution() ?? undefined;
+      return await api.placeOrder({ addressId: address.id, paymentMethodId: wallet ? undefined : (pm?.id ?? undefined), wallet, deliverySelections: selections(), attribution }, keyRef.current);
     } catch (e) {
       fail(e);
       return null;
@@ -451,7 +459,7 @@ export function CheckoutView() {
               <QuickPay
                 publishableKey={s.publishableKey ?? ''}
                 amountMinor={total}
-                disabled={busy}
+                disabled={busy || preLocked}
                 onPay={async (w) => {
                   const conf = await place(w);
                   walletConf.current = conf;
@@ -511,9 +519,14 @@ export function CheckoutView() {
 
       <aside className={styles.aside} aria-label={t('co.orderSummary')}>
         <Button size="lg" block onClick={() => void placeWithCard()} loading={busy} disabled={step < 3 || !pm || !address || blocked} data-place-order="1">
-          {busy ? t('co.placing') : t('co.place')}
+          {busy ? t('co.placing') : preLocked ? t('preorder.locked.button') : t('co.place')}
         </Button>
-        {blocked && step === 3 && (
+        {preLocked && preCopy?.copy.lockedText && (
+          <p className={styles.fine} role="note" data-testid="preorder-checkout-locked">
+            {preCopy.copy.lockedText}
+          </p>
+        )}
+        {blocked && !preLocked && step === 3 && (
           <p className={styles.fine} data-testid="local-delivery-blocked">
             {t('ld.blocked')}
           </p>

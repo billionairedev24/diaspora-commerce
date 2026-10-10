@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
 import pageStyles from '@/components/account/Pages.module.css';
+import { PlacedConfirmation } from '@/components/preorder/PreorderConfirmation';
 import { useLolaLauncher } from '@/components/shell/LolaLauncher';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
@@ -102,13 +103,18 @@ export function OrdersView() {
   return (
     <div className={pageStyles.page}>
       {placed && (
-        <div className={styles.placed} role="status">
-          <CheckCircle size={28} weight="fill" aria-hidden />
-          <div>
-            <strong>{t('ord.placedThanks')}</strong>
-            <p className={pageStyles.muted}>{t('ord.placedSub', { number: placed })}</p>
-          </div>
-        </div>
+        <PlacedConfirmation
+          orderNumber={placed}
+          fallback={
+            <div className={styles.placed} role="status">
+              <CheckCircle size={28} weight="fill" aria-hidden />
+              <div>
+                <strong>{t('ord.placedThanks')}</strong>
+                <p className={pageStyles.muted}>{t('ord.placedSub', { number: placed })}</p>
+              </div>
+            </div>
+          }
+        />
       )}
       <h1 className={pageStyles.h1}>{t('account.orders')}</h1>
       <div className={styles.layout}>

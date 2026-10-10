@@ -3,6 +3,7 @@
 import { DEFAULT_ZIP } from './delivery';
 import { atinOf, type FixtureProduct, PLATFORM_SELLER, PRODUCTS } from './fixtures/catalog';
 import { DEMO_ACCOUNTS, type DemoAccount } from './fixtures/content';
+import { type PreorderMockState, type PreorderPreview } from './preorders';
 
 export interface MockOffer {
   offerId: string;
@@ -26,6 +27,10 @@ export interface MockSession {
   zip: string;
   lines: MockCartLine[];
   saved: MockSaved[];
+  /** Door or pickup for the cart's pre-order package (S273). */
+  preorderFulfilment?: 'DOOR' | 'PICKUP';
+  /** Dev/mocks only: "Preview pre-order city" overrides (place, stage, master switch, fallback). */
+  preorderPreview?: PreorderPreview;
 }
 
 export interface MockChallenge {
@@ -46,6 +51,8 @@ export interface MockDb {
   challenges: Map<string, MockChallenge>;
   stockAlerts: Set<string>;
   seq: number;
+  /** Pre-order windows, settings, waitlist (seeded on first use, relative to that day). */
+  preorders: PreorderMockState | null;
 }
 
 export const slugify = (s: string): string =>
@@ -81,7 +88,7 @@ function createDb(): MockDb {
   }
   const users = new Map<string, DemoAccount>();
   DEMO_ACCOUNTS.forEach((u) => users.set(u.email, { ...u }));
-  return { products, offers, offersByAtin, sessions: new Map(), users, challenges: new Map(), stockAlerts: new Set(), seq: 1 };
+  return { products, offers, offersByAtin, sessions: new Map(), users, challenges: new Map(), stockAlerts: new Set(), seq: 1, preorders: null };
 }
 
 const KEY = '__AFROTRANSACT_MOCK_DB__';

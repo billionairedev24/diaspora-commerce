@@ -30,7 +30,8 @@ type CartMutation =
   | { kind: 'remove'; lineId: string; title: string }
   | { kind: 'save'; lineId: string; title: string }
   | { kind: 'moveToCart'; savedId: string; title: string }
-  | { kind: 'removeSaved'; savedId: string };
+  | { kind: 'removeSaved'; savedId: string }
+  | { kind: 'preorderFulfilment'; windowId: string; fulfilment: 'DOOR' | 'PICKUP' };
 
 /** All cart mutations: server is the source of truth (stock caps); errors become toasts + announcements. */
 export function useCartMutation() {
@@ -60,6 +61,8 @@ export function useCartMutation() {
           return api.moveToCart(m.savedId);
         case 'removeSaved':
           return api.removeSaved(m.savedId);
+        case 'preorderFulfilment':
+          return api.setPreorderFulfilment({ windowId: m.windowId, fulfilment: m.fulfilment });
       }
     },
     onSuccess: (cart, m) => {

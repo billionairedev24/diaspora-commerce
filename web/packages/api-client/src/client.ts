@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { type ApiClientOptions, createRequester, joinUrl } from './http';
+import { type PreorderFulfilmentRequest, preorderMethods } from './preorders';
 import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema, type ReturnSummary, ReturnSummarySchema } from './schemas/account';
 import {
   type AuthResult,
@@ -82,6 +83,11 @@ export function createApiClient(options: ApiClientOptions) {
     saveForLater: (lineId: string): Promise<Cart> => request(`/v1/cart/items/${encodeURIComponent(lineId)}/save-for-later`, CartSchema, { method: 'POST' }),
     moveToCart: (savedId: string): Promise<Cart> => request(`/v1/cart/saved/${encodeURIComponent(savedId)}/move-to-cart`, CartSchema, { method: 'POST' }),
     removeSaved: (savedId: string): Promise<Cart> => request(`/v1/cart/saved/${encodeURIComponent(savedId)}`, CartSchema, { method: 'DELETE' }),
+    /** Door delivery or pickup for the cart's pre-order package (fees from the window's payment setup). */
+    setPreorderFulfilment: (body: PreorderFulfilmentRequest): Promise<Cart> => request('/v1/cart/preorder-fulfilment', CartSchema, { method: 'PUT', body }),
+
+    /* Pre-orders (S273) */
+    ...preorderMethods(request),
 
     /* Auth (OIDC PKCE against identity is driven by the BFF; these are the first-party form steps) */
     getMe: (signal?: AbortSignal): Promise<Me> => request('/v1/me', MeSchema, { signal }),

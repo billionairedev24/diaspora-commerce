@@ -1,5 +1,6 @@
 /* Per-account state of the mock BFF for the account pages, checkout, returns, security and bookings. Lives on the
    mock database (getDb()), so resetDb() restores the fixtures. */
+import { type PreorderAttribution, type PreorderConfirmation } from '../preorders';
 import { type Address, type PaymentMethod, type ReturnSummary } from '../schemas/account';
 import {
   type CustomerBooking,
@@ -25,6 +26,10 @@ export interface PendingCheckout {
   status: 'awaiting_payment' | 'placed';
   order: MockOrder;
   lineIds: string[];
+  /** Last-touch channel sent with checkout (S273). */
+  attribution?: PreorderAttribution | null;
+  /** The "You're in" facts when the order holds a pre-order package. */
+  preorder?: PreorderConfirmation | null;
 }
 
 export interface AccountState {
