@@ -371,7 +371,7 @@
 - Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","Done"
 "S116","Story","Marketplace-facilitator sales tax","Tax per line by delivery address (Stripe Tax or Avalara) attributed to each seller.","- Tax is computed at checkout and stored per line
 - Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","In Progress"
-"E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","Done"
+"E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","In Progress"
 "S117","Story","Listing moderation queue","AI-flagged listings with allow/remove decisions.","- Queue shows AI flags with reasons
 - Decisions are audited","E18","","High","5","trust java","trust","Done"
 "S118","Story","Disputes and A-to-z claims","Customers open claims; staff decide with refund or deny.","- Claims have SLAs and escalation
@@ -729,6 +729,6 @@
 - BFF Lola relay uses the shared server without workarounds","E01","","Medium","2","go platform","foundation","In Progress"
 "S243","Story","Review moderation, PO emails and media purposes","trust-ops queues booking.review.submitted and approves/rejects via bookings; notifications consumes at.retail.events with a retail.purchase_order.sent template; media adds purchase-order and shipping-document purposes, accepts retail-service tokens and supports 14-day signed links.","- Reviews appear in the trust-ops moderation queue and decisions publish them
 - Suppliers receive PO emails with a working PDF link
-- Media issues long-lived links only for these purposes","E18","","Medium","5","trust-ops notifications media","trust","To Do"
+- Media issues long-lived links only for these purposes","E18","","Medium","5","trust-ops notifications media","trust","In Progress"
 "S244","Story","Fix flaky BarcodeIT prefill cache test","catalog BarcodeIT.unknownGtinFallsBackToManualEntryAndTheMissIsCachedButErrorsAreNot fails intermittently.","- Test passes 20 consecutive runs
-- Root cause documented","E33","","Medium","1","catalog test","quality","To Do"
+- Root cause documented","E33","","Medium","1","catalog test","quality","In Progress"
