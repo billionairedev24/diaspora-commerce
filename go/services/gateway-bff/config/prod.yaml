@@ -136,6 +136,11 @@ upstreams:
     timeout: 3s
     retries: 1
     breaker: {failures: 5, cooldown: 15s}
+  deliveryRuns:
+    url: http://delivery-runs
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
 rateLimit:
   authPerMinute: 20
   lookupPerMinute: 120

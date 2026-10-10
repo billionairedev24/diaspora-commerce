@@ -2,6 +2,7 @@ package port
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -176,6 +177,9 @@ type UpstreamCartPackage struct {
 	Fulfilment    string             `json:"fulfilment"`
 	Lines         []UpstreamCartLine `json:"lines"`
 	SubtotalMinor int64              `json:"subtotalMinor"`
+	// Preorder is the pre-order block of a PREORDER package (window, stage, fulfilment choice, effective fees),
+	// relayed as the cart service shapes it; absent for packages that ship now.
+	Preorder json.RawMessage `json:"preorder,omitempty"`
 }
 
 // UpstreamCart is the cart-service view.
@@ -232,6 +236,8 @@ type CartClient interface {
 	SaveForLater(ctx context.Context, o CartOwner, variantATIN string) (UpstreamCart, error)
 	MoveToCart(ctx context.Context, o CartOwner, variantATIN string) (UpstreamCart, error)
 	Merge(ctx context.Context, o CartOwner) (UpstreamCart, error)
+	// SetPreorderFulfilment chooses DOOR or PICKUP for the cart's pre-order package of a window.
+	SetPreorderFulfilment(ctx context.Context, o CartOwner, windowID, fulfilment string) (UpstreamCart, error)
 }
 
 // ---------------------------------------------------------------- geo (contracts/openapi/geo.yaml)

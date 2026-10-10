@@ -24,6 +24,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/contactcache"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/deliveryruns"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/identity"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/jwtcontact"
@@ -145,7 +146,7 @@ func run() error {
 	}
 	stockAlerts := app.NewStockAlerts(postgres.NewStockAlertStore(pool), notifier, resolver, links, log)
 	ingest := app.NewIngest(notifier, app.IngestConfig{Resolver: resolver, Links: links, StockAlerts: stockAlerts,
-		Contacts: contactCache}, log)
+		Contacts: contactCache, Audience: preorderAudience(cfg, local, log)}, log)
 
 	twilioV, resendV, sendGridV, err := verifiers(cfg)
 	if err != nil {
@@ -220,6 +221,29 @@ func recipientResolver(cfg config.Config, local bool, log *slog.Logger) contactc
 		&http.Client{Timeout: timeout})
 	return contactcache.New(inner, contactcache.Options{TTL: cfg.Identity.CacheTTL, NotFoundTTL: cfg.Identity.NotFoundTTL,
 		MaxEntries: cfg.Identity.CacheMax})
+}
+
+// preorderAudience builds delivery-runs' pre-order audience client with the identity client's credentials. Without
+// it, pre-order announcements, reminders and last calls reach nobody (buyers still get closed / out for delivery).
+func preorderAudience(cfg config.Config, local bool, log *slog.Logger) port.PreorderAudience {
+	if !cfg.DeliveryRuns.Enabled {
+		log.Warn("delivery-runs audience disabled: pre-order announcements, reminders and last calls are not sent")
+		return nil
+	}
+	secret := cfg.Identity.ClientSecret
+	if secret == "" && local {
+		secret = localClientSecret
+	}
+	if secret == "" {
+		log.Error("NOTIFICATIONS_CLIENT_SECRET missing: pre-order audiences disabled")
+		return nil
+	}
+	timeout := cfg.DeliveryRuns.Timeout
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	return deliveryruns.New(deliveryruns.Config{BaseURL: cfg.DeliveryRuns.BaseURL, TokenURL: cfg.Identity.TokenURL,
+		ClientID: cfg.Identity.ClientID, ClientSecret: secret}, &http.Client{Timeout: timeout})
 }
 
 // attachmentFetcher builds the email attachment fetcher (signed media links, allow-listed hosts, size limit). When

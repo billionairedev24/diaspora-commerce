@@ -49,6 +49,8 @@ type StaffUpstreams struct {
 	Content       StaffUpstream
 	Notifications StaffUpstream
 	Bookings      StaffUpstream
+	// DeliveryRuns owns pre-order windows, coverage areas and late adds (S270–S275).
+	DeliveryRuns StaffUpstream
 }
 
 // ExportJobStore keeps export jobs (shared by every BFF replica; jobs live 24 hours after they finish).

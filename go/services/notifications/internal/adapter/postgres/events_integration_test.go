@@ -61,7 +61,7 @@ func seededTemplatesRender(t *testing.T, pool *pgxpool.Pool) {
 func producerEvents(t *testing.T, pool *pgxpool.Pool) {
 	e := newEnv(t, pool)
 	ctx := context.Background()
-	ing := app.NewIngest(e.notifier, app.IngestConfig{Resolver: identityStub{},
+	ing := app.NewIngest(e.notifier, app.IngestConfig{Resolver: identityStub{}, Audience: app.SampleAudience(),
 		Links: app.Links{Storefront: "https://afrotransact.com", SellerCenter: "https://seller.afrotransact.com",
 			ProviderHub: "https://provider.afrotransact.com"}}, discard)
 	producerFixtures := app.SampleEvents(app.Links{Storefront: "https://afrotransact.com", SellerCenter: "https://seller.afrotransact.com"}) // contract-shaped payloads, one per rule (shared with the template gallery)
@@ -111,7 +111,7 @@ func producerEvents(t *testing.T, pool *pgxpool.Pool) {
 	rows, _ := e.store.List(ctx, domain.ListFilter{Recipient: "cust-1@example.com", Limit: 100})
 	found := false
 	for _, r := range rows {
-		if r.TemplateKey == "order.confirmed" {
+		if r.TemplateKey == "order.confirmed" && strings.Contains(r.Subject, "AT-2026-7KQ3MD") {
 			found = true
 			if r.Subject != "Order AT-2026-7KQ3MD is confirmed" || !strings.Contains(r.BodyText, "$48.00") ||
 				!strings.Contains(r.BodyText, "by Wed, Oct 14") || !strings.Contains(r.BodyText, "https://afrotransact.com/orders") {
@@ -130,7 +130,9 @@ func producerEvents(t *testing.T, pool *pgxpool.Pool) {
 			"claim.seller_response_due": "Respond by Tue, Oct 13", "claim.decided.seller": "We refunded the customer $48.00",
 			"listing.taken_down": "reason: unapproved health claim", "seller.listings.restored.reinstated": "reinstated"},
 		"cust-1@example.com": {"claim.opened": "claim AZ-10001 (item not received)", "claim.decided": "refunding $48.00",
-			"booking.balance_unpaid": "$150.00 balance", "payment.authentication_required": "https://afrotransact.com/bookings/BK-24018"},
+			"booking.balance_unpaid": "$150.00 balance", "payment.authentication_required": "https://afrotransact.com/bookings/BK-24018",
+			"preorder.confirmed": "You're in: Lubbock Pre-order #7", "preorder.delivery_missed": "choice=refund&src=email&po=LBK-7&cr=missed",
+			"preorder.announce": "Door delivery: $7.99 flat", "preorder.waitlist.opened": "Leave the waitlist"},
 	}
 	for addr, byKey := range want {
 		rows, _ := e.store.List(ctx, domain.ListFilter{Recipient: addr, Limit: 200})

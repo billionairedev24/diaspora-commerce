@@ -466,6 +466,13 @@ func (h *handlersImpl) placeOrder(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
+	b.Attribution = b.Attribution.Clean()
+	if b.Attribution == nil {
+		// Last-touch attribution the storefront keeps in at_attr (the visit, or 30 days with consent).
+		if ck, err := r.Cookie(domain.PreorderAttrCookie); err == nil {
+			b.Attribution = domain.ParseAttributionCookie(ck.Value)
+		}
+	}
 	place := h.s.Checkout.PlaceOrder
 	if h.s.Shopper.enabled() {
 		place = h.s.Shopper.Checkout.Place

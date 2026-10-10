@@ -138,6 +138,11 @@ upstreams:
     timeout: 3s
     retries: 1
     breaker: {failures: 5, cooldown: 15s}
+  deliveryRuns:
+    url: http://localhost:8115
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
 rateLimit:
   authPerMinute: 60
   lookupPerMinute: 120

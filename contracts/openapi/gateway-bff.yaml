@@ -66,6 +66,14 @@ tags:
     description: Services marketplace (bookings) — search by ZIP, provider pages, booking with a deposit, my bookings
   - name: Lola
     description: Lola, the AI shopping assistant (ai-gateway SSE relayed)
+  - name: Pre-orders
+    description: |
+      Pre-order windows by city (delivery-runs; S270–S275). The storefront resolves the window covering the
+      shopper's delivery location (ribbon, hero, badges, PDP, cart), lists open and upcoming windows on
+      `/pre-orders`, and offers a waitlist where no pre-order covers the area (fallback `waitlist`). Fees, currency,
+      pickup window and allowed payment methods are the effective values from Back office → Pre-orders → Settings
+      (payment) and the window's overrides. Links carry `?src=<channel>&po=<CODE>&cr=<slot>`; the storefront keeps
+      the last touch in the `at_attr` cookie and checkout sends it as `attribution`.
 security:
   - {}
   - sessionCookie: []
@@ -934,6 +942,110 @@ paths:
               schema: {$ref: '#/components/schemas/CheckoutSummary'}
         '401': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/StockProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/cart/preorder-fulfilment:
+    put:
+      tags: [Cart, Pre-orders]
+      operationId: setPreorderFulfilment
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Choose door delivery or pickup for the cart's pre-order package of a window
+      description: |
+        Relayed to the cart service (`PUT /v1/cart/preorder-fulfilment {windowId, fulfilment}`). The fee is the
+        window's effective door fee (Back office → Pre-orders → Settings → payment, or the window's override) or the
+        pickup fee; only options the window offers (`preorder.options[]`) are accepted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [windowId, fulfilment]
+              properties:
+                windowId: {type: string, maxLength: 64}
+                fulfilment: {type: string, enum: [DOOR, PICKUP]}
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/preorders/resolve:
+    get:
+      tags: [Pre-orders]
+      operationId: resolvePreorder
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: The pre-order window covering the shopper's delivery location (or an explicit place)
+      description: |
+        Without `country`/`region` the BFF uses the session's delivery location (`/v1/delivery-location`: market
+        country, state, city); `place.source` says which (`session`, `default` or `query`). delivery-runs
+        `GET /v1/public/preorders/resolve` answers: the first OPEN, else UPCOMING, else CLOSED window that covers the
+        place, whether pre-order is `on` (master switch, window active, area on; metro cities never), the countdown
+        target, creatives, live count and the fallback when off. Cached 30 seconds.
+      parameters:
+        - {name: country, in: query, schema: {type: string, pattern: '^[A-Za-z]{2}$'}, description: ISO 3166-1 alpha-2 (default the market)}
+        - {name: region, in: query, schema: {type: string, maxLength: 3}, description: State / region code}
+        - {name: city, in: query, schema: {type: string, maxLength: 80}}
+      responses:
+        '200':
+          description: Resolution
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PreorderResolution'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/preorders/open:
+    get:
+      tags: [Pre-orders]
+      operationId: listOpenPreorders
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Open and upcoming windows for the /pre-orders page
+      description: delivery-runs `GET /v1/public/preorders/open`. Cached 30 seconds.
+      responses:
+        '200':
+          description: Windows
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/PreorderWindowCard'}}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/preorders/waitlist:
+    post:
+      tags: [Pre-orders]
+      operationId: joinPreorderWaitlist
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Hear when a pre-order opens in an area (email, double opt-in)
+      description: |
+        delivery-runs `POST /v1/public/subscriptions {email, area, country, region, city, source: preorder-waitlist}`.
+        The area defaults to the session's delivery location. Always 202 for a valid email (whether or not it was
+        known); notifications sends the confirmation link, then `preorder.waitlist.opened` when a window opens.
+        Rate limited like other lookups.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, format: email, maxLength: 254}
+                country: {type: string}
+                region: {type: string}
+                city: {type: string, maxLength: 80}
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, area]
+                properties:
+                  status: {type: string, examples: [CONFIRMATION_SENT]}
+                  area: {type: string, examples: [US/TX/Lubbock]}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/checkout/orders:
     post:
@@ -2286,6 +2398,11 @@ components:
           properties:
             remainingMinor: {type: integer}
             thresholdMinor: {type: integer}
+        preorder:
+          description: Pre-order block (packageId ends in `:preorder`); null for packages that ship now
+          oneOf:
+            - {$ref: '#/components/schemas/CartPreorder'}
+            - {type: 'null'}
     SavedItem:
       type: object
       required: [savedId, atin, offerId, title, imageUrl, priceMinor, available]
@@ -2816,10 +2933,115 @@ components:
         roadMiles: {type: [number, 'null']}
         durationMinutes: {type: [number, 'null']}
         chargeMinor: {type: integer}
+    Attribution:
+      type: object
+      description: |
+        Last-touch marketing source (`?src=ig|fb|tt|wa|email|sms|app` or the on-site placement, `cr` creative slot,
+        `po` window code). Stored on the order and echoed in `orders.order.placed`. Malformed values are dropped.
+      properties:
+        src: {type: string, maxLength: 20, examples: [ig]}
+        cr: {type: string, maxLength: 40, examples: [story]}
+        po: {type: string, maxLength: 40, examples: [LBK-7]}
+    PreorderPayment:
+      type: object
+      description: |
+        Effective payment setup of a window: Back office → Pre-orders → Settings → payment (door fee per currency,
+        pickup fee, pickup window, allowed methods), with the window's doorFeeOverride / pickupFeeOverride applied.
+      properties:
+        currency: {type: string, examples: [USD]}
+        doorFee: {type: [integer, 'null'], description: Door delivery fee in minor units (null when the window has no door delivery), examples: [799]}
+        pickupFee: {type: [integer, 'null'], description: Pickup fee in minor units (null when the window has no pickup), examples: [0]}
+        pickupWindow: {type: [string, 'null'], examples: [10am–2pm]}
+        allowedMethods:
+          type: array
+          items: {type: string, enum: [CARD, WALLET, ACH]}
+    PreorderPlace:
+      type: object
+      required: [country, region, city, source]
+      properties:
+        country: {type: string, examples: [US]}
+        region: {type: string, examples: [TX]}
+        city: {type: string, examples: [Lubbock]}
+        source: {type: string, enum: [query, session, default]}
+    PreorderWindowCard:
+      type: object
+      description: A window as the storefront shows it (no PII); relayed from delivery-runs.
+      additionalProperties: true
+      properties:
+        id: {type: string}
+        code: {type: string, examples: [LBK-7]}
+        name: {type: string, examples: ['Lubbock Pre-order #7']}
+        stage: {type: string, enum: [OPEN, UPCOMING, CLOSED, DELIVERED]}
+        where: {type: string, examples: ['Lubbock, TX']}
+        targets: {type: array, items: {type: string, examples: [US/TX/Lubbock]}}
+        opensAt: {type: string, format: date-time}
+        closesAt: {type: string, format: date-time}
+        deliversOn: {type: string, format: date}
+        ribbon: {type: string}
+        headline: {type: string}
+        categories: {type: array, items: {type: string}}
+        door: {type: boolean}
+        pickup: {type: boolean}
+        pickupPoint: {type: [object, 'null'], additionalProperties: true}
+        count: {type: [integer, 'null'], description: Live count when the window shows it (not while upcoming)}
+        creatives:
+          type: object
+          description: Slot (HERO, PDP, STORY, FEED, EMAIL) → {url, width, height}
+          additionalProperties: true
+        doorFee: {type: [integer, 'null']}
+        pickupFee: {type: [integer, 'null']}
+        currency: {type: string}
+        pickupWindow: {type: [string, 'null']}
+        allowedMethods: {type: array, items: {type: string, enum: [CARD, WALLET, ACH]}}
+    PreorderResolution:
+      type: object
+      required: ['on', place]
+      additionalProperties: true
+      properties:
+        'on': {type: boolean, description: 'Pre-order applies to this place now (master switch, window active, area on)'}
+        stage: {type: [string, 'null'], description: 'OPEN, UPCOMING, CLOSED or DELIVERED; null when no window covers the place'}
+        countdownTo: {type: [string, 'null'], description: 'closesAt when open, opensAt when upcoming, deliversOn when closed'}
+        window:
+          oneOf:
+            - {$ref: '#/components/schemas/PreorderWindowCard'}
+            - {type: 'null'}
+        fallback: {type: [string, 'null'], description: 'SHIP (UPS Ground, quoted) or WAITLIST (no checkout): what the storefront does when `on` is false'}
+        placements:
+          type: object
+          description: Settings placements (ribbon, hero, badge, pdp, cart, family) → on/off
+          additionalProperties: {type: boolean}
+        payment: {$ref: '#/components/schemas/PreorderPayment'}
+        place: {$ref: '#/components/schemas/PreorderPlace'}
+    CartPreorder:
+      type: object
+      description: Pre-order block of a PREORDER package (relayed from the cart service).
+      additionalProperties: true
+      properties:
+        windowId: {type: string}
+        code: {type: string}
+        name: {type: string}
+        deliversOn: {type: string, format: date}
+        stage: {type: string, enum: [OPEN, UPCOMING, CLOSED, DELIVERED]}
+        closesAt: {type: string, format: date-time}
+        fulfilment: {type: string, enum: [DOOR, PICKUP]}
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              fulfilment: {type: string, enum: [DOOR, PICKUP]}
+              feeMinor: {type: integer}
+              label: {type: string}
+        doorFee: {type: [integer, 'null']}
+        pickupFee: {type: [integer, 'null']}
+        currency: {type: string}
+        pickupWindow: {type: [string, 'null']}
+        allowedMethods: {type: array, items: {type: string, enum: [CARD, WALLET, ACH]}}
     PlaceOrderRequest:
       type: object
       required: [addressId, deliverySelections]
       properties:
+        attribution: {$ref: '#/components/schemas/Attribution'}
         addressId: {type: string}
         paymentMethodId: {type: string, description: 'A Stripe PaymentMethod id — saved, or new from PaymentSheet / the Payment Element; omit when paying with a wallet'}
         wallet: {type: string, enum: [apple_pay, google_pay, link]}

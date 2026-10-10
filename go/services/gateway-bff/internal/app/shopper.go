@@ -539,7 +539,8 @@ func (s *checkoutPaymentServiceImpl) Place(ctx context.Context, c *domain.Caller
 		return port.PlaceOrderResult{}, domain.ValidationProblem(map[string]string{"cart": "Select at least one item to check out"})
 	}
 	v, status, err := s.d.Orders.Checkout(ctx, c.BearerToken, key, port.UpCheckoutRequest{AddressID: req.AddressID, DeliverySelections: sels,
-		Lines: lines, PaymentMethodID: req.PaymentMethodID, Wallet: req.Wallet, Gift: req.Gift, CouponCode: strings.TrimSpace(req.CouponCode)})
+		Lines: lines, PaymentMethodID: req.PaymentMethodID, Wallet: req.Wallet, Gift: req.Gift, CouponCode: strings.TrimSpace(req.CouponCode),
+		Attribution: req.Attribution.Clean()})
 	if err != nil {
 		return port.PlaceOrderResult{}, orderErr(err)
 	}

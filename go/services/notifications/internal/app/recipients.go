@@ -16,6 +16,10 @@ type target struct {
 	firstName string
 	market    string
 	disabled  []domain.Channel
+	// channels, when set, replaces the rule's channels for this target (an audience member consented on one channel).
+	channels []domain.Channel
+	// extra is per-recipient template data (the member's unsubscribe link).
+	extra map[string]any
 }
 
 func hasAddress(ch domain.Channel, r domain.Recipient) bool { return len(addresses(ch, r)) > 0 }
@@ -52,6 +56,59 @@ func fill(ctx context.Context, res port.RecipientResolver, r domain.Recipient, c
 	}
 	t.firstName, t.market, t.disabled = c.FirstName, c.Market, c.Disabled
 	return t, nil
+}
+
+// audience pages a pre-order window's audience on each channel: one target per member and channel, addressed with
+// what delivery-runs knows (email-only subscribers) or identity's verified contact (signed-in members).
+func (h *ingestImpl) audience(ctx context.Context, rule EventRule, windowID string, channels []domain.Channel) ([]target, error) {
+	if h.cfg.Audience == nil || windowID == "" {
+		h.log.DebugContext(ctx, "no pre-order audience source; rule skipped", "template", rule.Template)
+		return nil, nil
+	}
+	segment := rule.Segment
+	if segment == "" {
+		segment = port.AudienceSubscribers
+	}
+	var out []target
+	for _, ch := range channels {
+		after := ""
+		for range maxAudiencePages {
+			page, err := h.cfg.Audience.Audience(ctx, windowID, ch, segment, after, h.cfg.AudiencePageSize)
+			if errors.Is(err, domain.ErrRecipientNotFound) {
+				return out, nil
+			}
+			if err != nil {
+				return nil, fmt.Errorf("audience of %s on %s: %w", windowID, ch, err)
+			}
+			for _, m := range page.Members {
+				r := domain.Recipient{ID: m.UserID}
+				switch ch {
+				case domain.ChannelEmail:
+					r.Email = m.Email
+				case domain.ChannelSMS:
+					r.Phone = m.Phone
+				case domain.ChannelPush, domain.ChannelChat:
+					// push tokens and chat numbers come from identity
+				}
+				one := []domain.Channel{ch}
+				t, err := fill(ctx, h.cfg.Resolver, r, one)
+				if err != nil {
+					return nil, err
+				}
+				if !hasAddress(ch, t.recipient) {
+					continue
+				}
+				t.channels = one
+				t.extra = map[string]any{"unsubscribeUrl": m.UnsubscribeURL}
+				out = append(out, t)
+			}
+			if page.Next == "" || page.Next == after {
+				break
+			}
+			after = page.Next
+		}
+	}
+	return out, nil
 }
 
 // enabled drops channels the user switched off in identity.

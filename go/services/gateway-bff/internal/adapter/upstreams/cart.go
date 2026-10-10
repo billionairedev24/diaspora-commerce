@@ -63,6 +63,10 @@ func (k *cartImpl) MoveToCart(ctx context.Context, o port.CartOwner, atin string
 	return k.do(ctx, o, http.MethodPost, "/v1/cart/saved/"+url.PathEscape(atin)+"/move-to-cart", nil)
 }
 
+func (k *cartImpl) SetPreorderFulfilment(ctx context.Context, o port.CartOwner, windowID, fulfilment string) (port.UpstreamCart, error) {
+	return k.do(ctx, o, http.MethodPut, "/v1/cart/preorder-fulfilment", map[string]any{"windowId": windowID, "fulfilment": fulfilment})
+}
+
 func (k *cartImpl) Merge(ctx context.Context, o port.CartOwner) (port.UpstreamCart, error) {
 	return k.do(ctx, o, http.MethodPost, "/v1/cart/merge", nil)
 }

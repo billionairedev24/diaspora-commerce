@@ -63,10 +63,21 @@ func (r *Response) Decode(v any) error {
 	return nil
 }
 
+// StreamResponse is a successful upstream answer whose body is relayed without buffering (CSV exports). The caller
+// must close Body.
+type StreamResponse struct {
+	Status int
+	Header http.Header
+	Body   io.ReadCloser
+}
+
 // Client calls one upstream.
 type Client interface {
 	Name() string
 	Do(ctx context.Context, req Request) (*Response, error)
+	// Stream performs one attempt (no retries) and hands back the open body of a 2xx answer; errors follow Do.
+	// accept is the Accept header (e.g. "text/csv"); timeout bounds the whole transfer.
+	Stream(ctx context.Context, req Request, accept string, timeout time.Duration) (*StreamResponse, error)
 	BreakerState() BreakerState
 }
 
@@ -232,6 +243,77 @@ func (c *clientImpl) once(ctx context.Context, method string, req Request) (*Res
 		c.breaker.Success()
 		return &Response{Status: res.StatusCode, Header: res.Header, Body: body}, nil, false
 	}
+}
+
+// cancelOnClose cancels the transfer's context when the relayed body is closed.
+type cancelOnClose struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (b cancelOnClose) Close() error {
+	defer b.cancel()
+	if err := b.ReadCloser.Close(); err != nil {
+		return fmt.Errorf("close upstream body: %w", err)
+	}
+	return nil
+}
+
+func (c *clientImpl) Stream(ctx context.Context, req Request, accept string, timeout time.Duration) (*StreamResponse, error) {
+	method := req.Method
+	if method == "" {
+		method = http.MethodGet
+	}
+	if !c.breaker.Allow() {
+		c.o.Metrics.requests.WithLabelValues(c.o.Name, method, "breaker_open").Inc()
+		return nil, unavailable(c.o.Name, errors.New("circuit breaker open"))
+	}
+	start := time.Now()
+	outcome := "ok"
+	defer func() {
+		c.o.Metrics.duration.WithLabelValues(c.o.Name, method, outcome).Observe(time.Since(start).Seconds())
+		c.o.Metrics.requests.WithLabelValues(c.o.Name, method, outcome).Inc()
+	}()
+	if timeout <= 0 {
+		timeout = c.o.Timeout
+	}
+	sctx, cancel := context.WithTimeout(ctx, timeout)
+	hreq, err := c.build(sctx, method, req)
+	if err != nil {
+		cancel()
+		outcome = "client_error"
+		return nil, err
+	}
+	if accept != "" {
+		hreq.Header.Set("Accept", accept+", application/problem+json")
+	}
+	res, err := c.http.Do(hreq)
+	if err != nil {
+		cancel()
+		outcome = "unavailable"
+		c.breaker.Failure()
+		return nil, unavailable(c.o.Name, err)
+	}
+	if res.StatusCode < 400 {
+		c.breaker.Success()
+		return &StreamResponse{Status: res.StatusCode, Header: res.Header, Body: cancelOnClose{ReadCloser: res.Body, cancel: cancel}}, nil
+	}
+	defer cancel()
+	defer func() { _ = res.Body.Close() }()
+	body, _ := io.ReadAll(io.LimitReader(res.Body, maxBody))
+	if res.StatusCode >= 500 {
+		outcome = "unavailable"
+		c.breaker.Failure()
+		return nil, unavailable(c.o.Name, fmt.Errorf("status %d", res.StatusCode))
+	}
+	c.breaker.Success()
+	p := decodeProblem(c.o.Name, res, body)
+	if (res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusMethodNotAllowed) && p.Code == "" {
+		outcome = "unavailable"
+		return nil, unavailable(c.o.Name, fmt.Errorf("route %s %s not served (%d)", method, req.Path, res.StatusCode))
+	}
+	outcome = "client_error"
+	return nil, p
 }
 
 func (c *clientImpl) build(ctx context.Context, method string, req Request) (*http.Request, error) {

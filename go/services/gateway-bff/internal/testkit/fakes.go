@@ -72,6 +72,9 @@ type cartLine struct {
 type fakeCart struct {
 	lines []cartLine
 	saved []cartLine
+	// preorder is the pre-order fulfilment chosen with PUT /v1/cart/preorder-fulfilment (DOOR | PICKUP); once set,
+	// the first package is presented as the window's pre-order package.
+	preorder string
 }
 
 // Options choose which pending upstreams the fake serves (others answer 404 for every route, like a service not
@@ -125,6 +128,8 @@ type Upstreams struct {
 	PhoneVerified bool
 	LastSignUp    map[string]any
 	team          *teamState
+	// LastWaitlist is the last delivery-runs POST /v1/public/subscriptions body (pre-order waitlist).
+	LastWaitlist map[string]any
 }
 
 type issuedCode struct {
@@ -144,6 +149,7 @@ func NewUpstreams(o Options) *Upstreams {
 		team: &teamState{removed: map[string]bool{}}}
 	mux := http.NewServeMux()
 	u.routes(mux)
+	u.preorderRoutes(mux)
 	u.sellerRoutes(mux)
 	u.firstPartyRoutes(mux)
 	u.shopperRoutes(mux)
@@ -305,6 +311,8 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 			writeJSON(w, 200, map[string]any{"city": "Houston", "state": "TX", "postalCode": "77042", "country": "US"})
 		case "10456":
 			writeJSON(w, 200, map[string]any{"city": "Bronx", "state": "NY", "postalCode": "10456", "country": "US"})
+		case "79401":
+			writeJSON(w, 200, map[string]any{"city": "Lubbock", "state": "TX", "postalCode": "79401", "country": "US"})
 		default:
 			problem(w, 404, "geo.not-found", "No matching address", nil)
 		}
@@ -518,6 +526,19 @@ func (u *Upstreams) view(c *fakeCart) map[string]any {
 	if pkgs == nil {
 		pkgs = []*pkg{}
 	}
+	if c.preorder != "" && len(pkgs) > 0 {
+		out := make([]any, 0, len(pkgs))
+		for i, p := range pkgs {
+			m := map[string]any{"sellerOrgId": p.SellerOrgID, "sellerName": p.SellerName, "fulfilment": p.Fulfilment, "lines": p.Lines,
+				"subtotalMinor": p.Subtotal}
+			if i == 0 {
+				m["fulfilment"] = "PREORDER"
+				m["preorder"] = PreorderCartBlock(c.preorder)
+			}
+			out = append(out, m)
+		}
+		return map[string]any{"packages": out, "saved": saved, "itemCount": items, "subtotalMinor": subtotal, "currency": "USD", "checkoutable": items > 0, "version": 1}
+	}
 	return map[string]any{"packages": pkgs, "saved": saved, "itemCount": items, "subtotalMinor": subtotal, "currency": "USD", "checkoutable": items > 0, "version": 1}
 }
 
@@ -667,6 +688,68 @@ func (u *Upstreams) cartRoutes(mux *http.ServeMux) {
 		}
 		delete(u.carts, "guest:"+g)
 		writeJSON(w, 200, u.view(user))
+	})
+	mux.HandleFunc("PUT /v1/cart/preorder-fulfilment", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		var b struct {
+			WindowID   string `json:"windowId"`
+			Fulfilment string `json:"fulfilment"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		c := u.cartOf(u.owner(w, r))
+		if b.WindowID != PreorderWindowID || len(c.lines) == 0 {
+			problem(w, 404, "cart.preorder-not-found", "The cart has no pre-order items for this window", nil)
+			return
+		}
+		c.preorder = b.Fulfilment
+		writeJSON(w, 200, u.view(c))
+	})
+}
+
+// PreorderWindowID is the fake delivery-runs window (Lubbock Pre-order #7).
+const PreorderWindowID = "LBK-7"
+
+// PreorderCartBlock is the cart service's pre-order block of the fake window with the chosen fulfilment.
+func PreorderCartBlock(fulfilment string) map[string]any {
+	//nolint:gosec // fake cart data, no credentials (G101 matches "pickup…" keys)
+	return map[string]any{"windowId": PreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7", "deliversOn": "2026-10-25",
+		"stage": "OPEN", "closesAt": "2026-10-22T04:59:00Z", "fulfilment": fulfilment, "doorFee": 799, "pickupFee": 0, "currency": "USD",
+		"pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD", "WALLET"},
+		"options": []any{map[string]any{"fulfilment": "DOOR", "feeMinor": 799, "label": "Door delivery"},
+			map[string]any{"fulfilment": "PICKUP", "feeMinor": 0, "label": "Pickup"}}}
+}
+
+// preorderRoutes fakes delivery-runs' public pre-order routes: Lubbock (US/TX/Lubbock) has an open window; every
+// other place is off with the SHIP fallback.
+func (u *Upstreams) preorderRoutes(mux *http.ServeMux) {
+	//nolint:gosec // fake window, no credentials
+	window := map[string]any{"id": "7b1e2c3d-0000-4000-8000-000000000007", "code": "LBK-7", "name": "Lubbock Pre-order #7", "stage": "OPEN",
+		"where": "Lubbock, TX", "targets": []string{"US/TX/Lubbock"}, "opensAt": "2026-10-06T14:00:00Z", "closesAt": "2026-10-22T04:59:00Z",
+		"deliversOn": "2026-10-25", "ribbon": "Lubbock pre-order is open", "headline": "African groceries, delivered to Lubbock",
+		"categories": []string{"Pantry", "Spices"}, "door": true, "pickup": true, "count": 142, "doorFee": 799, "pickupFee": 0,
+		"currency": "USD", "pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD", "WALLET"}}
+	mux.HandleFunc("GET /v1/public/preorders/resolve", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("country") == "US" && q.Get("region") == "TX" && strings.EqualFold(q.Get("city"), "Lubbock") {
+			//nolint:gosec // fake resolution, no credentials
+			writeJSON(w, 200, map[string]any{"on": true, "stage": "OPEN", "countdownTo": window["closesAt"], "window": window,
+				"fallback": nil, "placements": map[string]any{"ribbon": true, "hero": true}, "payment": map[string]any{"currency": "USD",
+					"doorFee": 799, "pickupFee": 0, "pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD", "WALLET"}}})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"on": false, "stage": nil, "countdownTo": nil, "window": nil, "fallback": "SHIP"})
+	})
+	mux.HandleFunc("GET /v1/public/preorders/open", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, []any{window})
+	})
+	mux.HandleFunc("POST /v1/public/subscriptions", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		u.LastWaitlist = b
+		u.mu.Unlock()
+		writeJSON(w, 202, map[string]any{"status": "CONFIRMATION_SENT"})
 	})
 }
 

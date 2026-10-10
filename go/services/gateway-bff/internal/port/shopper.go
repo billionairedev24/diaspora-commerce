@@ -180,6 +180,8 @@ type UpCheckoutRequest struct {
 	Wallet             string                `json:"wallet,omitempty"`
 	Gift               bool                  `json:"gift,omitempty"`
 	CouponCode         string                `json:"couponCode,omitempty"`
+	// Attribution {src, cr, po} is stored on the order and echoed in orders.order.placed.
+	Attribution *domain.Attribution `json:"attribution,omitempty"`
 }
 
 // CustomerOrdersClient calls orders with the customer's token: Your orders, cancel, checkout saga.

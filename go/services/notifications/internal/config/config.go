@@ -30,7 +30,7 @@ type Config struct {
 		Enabled bool     `yaml:"enabled" env:"KAFKA_ENABLED"`
 		Brokers []string `yaml:"brokers" env:"KAFKA_BROKERS"`
 		// Topics maps logical topic names (identity, orders, sellerApplications, sellerCompliance, payouts,
-		// bookings, content, inventory, payments, trustOps, retail) to addresses; missing names default to the
+		// bookings, content, inventory, payments, trustOps, retail, deliveryRuns) to addresses; missing names default to the
 		// AsyncAPI channel addresses.
 		Topics map[string]string `yaml:"topics"`
 	} `yaml:"kafka"`
@@ -46,6 +46,13 @@ type Config struct {
 		NotFoundTTL  time.Duration `yaml:"notFoundTtl"`
 		CacheMax     int           `yaml:"cacheMaxEntries"`
 	} `yaml:"identity"`
+	// DeliveryRuns serves pre-order audiences (GET /v1/service/preorders/{id}/audience) with the identity client's
+	// credentials (scope delivery-runs:audience.read). Disabled: announcement, reminder and last call reach nobody.
+	DeliveryRuns struct {
+		Enabled bool          `yaml:"enabled" env:"DELIVERY_RUNS_ENABLED"`
+		BaseURL string        `yaml:"baseUrl" env:"DELIVERY_RUNS_URL"`
+		Timeout time.Duration `yaml:"timeout" env:"DELIVERY_RUNS_TIMEOUT"`
+	} `yaml:"deliveryRuns"`
 	// Links are the public base URLs templates link to: the shared PUBLIC_WEB_URL and SELLER_CENTER_URL. Provider
 	// Hub is served by the Seller Center app, so ProviderHub defaults to SellerCenter (PROVIDER_HUB_URL overrides).
 	Links struct {

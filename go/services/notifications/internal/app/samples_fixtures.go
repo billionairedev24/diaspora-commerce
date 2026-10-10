@@ -30,7 +30,22 @@ func SampleEvents(l Links) map[string][]map[string]any {
 			"discountMinor": 0, "totalMinor": 4800, "placedAt": "2026-10-10T10:00:00Z",
 			"shipments": []any{map[string]any{"shipmentId": "1a7d2e6b-3c4f-4d8e-9fa0-b1c2d3e4f502", "sellerOrgId": "org_1",
 				"fulfilmentType": "RETAIL_1P", "deliveryMethod": "CARRIER", "promisedBy": "2026-10-14", "totalMinor": 4800,
-				"lines": []any{map[string]any{"variantAtin": "ATGARI0001", "quantity": 2}}}}}},
+				"lines": []any{map[string]any{"variantAtin": "ATGARI0001", "quantity": 2}}}}},
+			samplePreorderOrder()},
+		"orders.preorder.delivery_missed": {{"orderId": "5c2d8e1f-3a4b-4c5d-8e6f-7a8b9c0d1e21", "orderNumber": "AT-2026-PRE7LB",
+			"customerId": "cust-1", "windowId": samplePreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7",
+			"deliversOn": "2026-10-25", "newDate": "2026-10-28", "offerRefund": true, "offerNewDate": true, "refundUrl": nil,
+			"newDateUrl": nil, "totalMinor": 5196, "currency": "USD", "reason": "VEHICLE_BREAKDOWN"}},
+		"preorder.comms.due": {
+			samplePreorderComms(PreorderAnnounce, "AfroTransact: Lubbock pre-order is open until Wed 11:59PM. {link} Reply STOP to opt out"),
+			samplePreorderComms(PreorderAnnounce, ""),
+			samplePreorderComms(PreorderRemind48h, ""), samplePreorderComms(PreorderLastCall6h, ""),
+			samplePreorderComms(PreorderClosed, ""), samplePreorderComms(PreorderOutForDelivery, ""),
+		},
+		"preorder.late_order.added": {{"windowId": samplePreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7",
+			"orderId": "6d3e9f20-4b5c-4d6e-9f70-8b9c0d1e2f32", "number": "LBK-L90", "customerId": "cust-1", "phone": "+15550001111",
+			"payment": "PAYMENT_LINK", "paymentUrl": "https://buy.stripe.com/test_8wM5kR", "totalMinor": 4297, "currency": "USD",
+			"deliversOn": "2026-10-25", "expiresAt": "2026-10-23T05:00:00Z", "reason": "Customer called", "actor": "staff-4"}},
 		"orders.order.cancelled": {{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "orderNumber": "AT-2026-7KQ3MD",
 			"customerId": "cust-1", "code": "orders.all-shipments-cancelled", "wasPlaced": true, "cancelledAt": "2026-10-10T10:00:00Z"}},
 		"orders.shipment.status_changed": {
@@ -111,12 +126,55 @@ func SampleData(l Links) map[string]map[string]any {
 	return map[string]map[string]any{
 		// bookings has no reminder event yet; it would request the template with the booking's display fields.
 		"booking.reminder": {"firstName": "Ada", "serviceName": "Knotless braids", "providerName": "Kemi's Studio",
-			"startsAt": "Sat, Oct 17 · 10:00 AM", "location": "Houston, TX", "bookingReference": "BK-24018",
+			"startsAt": "Sat, Oct 17 at 10:00 AM", "location": "Houston, TX", "bookingReference": "BK-24018",
 			"manageUrl": join(l.Storefront, "/bookings/BK-24018")},
 		// The original v1 Stripe requirement reminder (superseded by seller.compliance.reminder).
 		"payout.requirement_due": {"businessName": "Mama Put Foods", "requirement": "Upload a bank statement",
 			"dueDate": "Tue, Oct 13", "actionUrl": join(l.SellerCenter, "/payouts")},
 	}
+}
+
+const samplePreorderWindowID = "7b1e2c3d-0000-4000-8000-000000000007"
+
+// samplePreorderComms is delivery-runs' preorder.comms.due for the Lubbock window (fees from the payment settings;
+// display strings in the market's time zone). CLOSED and OUT_FOR_DELIVERY carry the window's buyers.
+func samplePreorderComms(kind, smsCopy string) map[string]any {
+	//nolint:gosec // sample event, no credentials
+	e := map[string]any{"windowId": samplePreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7", "kind": kind,
+		"where": "Lubbock, TX", "targets": []string{"US/TX/Lubbock"}, "opensAt": "2026-10-06T14:00:00Z", "closesAt": "2026-10-22T04:59:00Z",
+		"deliversOn": "2026-10-25", "opensDisplay": "Tue, Oct 6 9:00 AM", "closesDisplay": "Wed, Oct 21 11:59 PM",
+		"deliversDisplay": "Sun, Oct 25", "ribbon": "Lubbock pre-order is open", "headline": "African groceries, delivered to Lubbock",
+		"smsCopy": smsCopy, "categories": []string{"Pantry", "Spices"}, "door": true, "pickup": true, "doorFeeMinor": 799,
+		"pickupFeeMinor": 0, "currency": "USD", "pickupWindow": "10am–2pm", "deliveryWindow": nil, "timeZone": "America/Chicago"}
+	if smsCopy == "" {
+		e["smsCopy"] = nil
+	}
+	if kind == PreorderClosed || kind == PreorderOutForDelivery {
+		e["orders"] = []any{map[string]any{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "customerId": "cust-1", "fulfilment": "DOOR"}}
+	}
+	if kind == PreorderOutForDelivery {
+		e["deliveryWindow"] = "10am-2pm"
+	}
+	return e
+}
+
+// samplePreorderOrder is orders.order.placed for a cart with a pre-order package (door delivery, fee from the
+// window) and two items that ship now.
+func samplePreorderOrder() map[string]any {
+	return map[string]any{"orderId": "5c2d8e1f-3a4b-4c5d-8e6f-7a8b9c0d1e21", "orderNumber": "AT-2026-PRE7LB", "customerId": "cust-1",
+		"currency": "USD", "itemsMinor": 4198, "shippingMinor": 799, "taxMinor": 199, "discountMinor": 0, "totalMinor": 5196,
+		"placedAt": "2026-10-10T10:00:00Z", "attribution": map[string]any{"src": "ig", "cr": "story", "po": "LBK-7"},
+		"shipments": []any{
+			map[string]any{"shipmentId": "2b8e3f7c-0000-4e9f-a0b1-c2d3e4f5a611", "sellerOrgId": "org_afrotransact_retail",
+				"fulfilmentType": "PREORDER", "deliveryMethod": "AFROTRANSACT_DELIVERY", "promisedBy": "2026-10-25", "totalMinor": 3398,
+				"preorder": map[string]any{"windowId": samplePreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7",
+					"number": "LBK-1042", "deliversOn": "2026-10-25", "deliversDisplay": "Sun, Oct 25", "closesAt": "2026-10-22T04:59:00Z",
+					"closesDisplay": "Wed, Oct 21 11:59 PM", "fulfilment": "DOOR", "feeMinor": 799, "pickupWindow": nil},
+				"lines": []any{map[string]any{"variantAtin": "ATGARI0001", "quantity": 2}}},
+			map[string]any{"shipmentId": "3c9f4a8d-0000-4fa0-b1c2-d3e4f5a6b722", "sellerOrgId": "org_1", "fulfilmentType": "SELLER_FULFILLED",
+				"deliveryMethod": "CARRIER", "promisedBy": "2026-10-15", "totalMinor": 1798,
+				"lines": []any{map[string]any{"variantAtin": "ATSHEA0001", "quantity": 2}}},
+		}}
 }
 
 func sampleShipment(from, to, method string) map[string]any {
@@ -174,7 +232,7 @@ func samplePayout(status string) map[string]any {
 func sampleBooking(l Links, status string) map[string]any {
 	return map[string]any{"recipient": map[string]any{"id": "cust-1", "email": nil, "phone": nil, "timeZone": "America/Chicago"},
 		"firstName": "Ada", "serviceName": "Knotless braids", "providerName": "Kemi's Studio",
-		"startsAt": "Sat, Oct 17 · 10:00 AM", "location": "Houston, TX", "bookingReference": "BK-24018",
+		"startsAt": "Sat, Oct 17 at 10:00 AM", "location": "Houston, TX", "bookingReference": "BK-24018",
 		"manageUrl": join(l.Storefront, "/bookings/BK-24018"), "bookingId": "a306b1f4-cfd2-4017-c8d9-eafb0c1d2e11",
 		"orgId": "org_2", "memberId": "b417c205-d0e3-4128-d9ea-fb0c1d2e3f12", "serviceId": "c528d316-e1f4-4239-eafb-0c1d2e3f4a13",
 		"status": status, "startAt": "2026-10-17T15:00:00Z", "endAt": "2026-10-17T18:00:00Z", "priceMinor": 18000,

@@ -141,6 +141,38 @@ type RecipientResolver interface {
 	OrgOwners(ctx context.Context, orgID string) ([]string, error)
 }
 
+// AudienceMember is one opted-in recipient of a pre-order window's comms on one channel: a signed-in shopper
+// (UserID; addresses resolved through identity) or an email-only subscriber (Email). UnsubscribeURL withdraws the
+// consent the member gave delivery-runs.
+type AudienceMember struct {
+	SubscriptionID string `json:"subscriptionId"`
+	UserID         string `json:"userId"`
+	Email          string `json:"email"`
+	Phone          string `json:"phone"`
+	UnsubscribeURL string `json:"unsubscribeUrl"`
+}
+
+// AudiencePage is one keyset page of a window's audience; Next is empty on the last page.
+type AudiencePage struct {
+	Members []AudienceMember `json:"members"`
+	Next    string           `json:"next"`
+}
+
+// Pre-order audience segments.
+const (
+	// AudienceSubscribers: area subscribers (consented channel) and past buyers in the window's targets.
+	AudienceSubscribers = "SUBSCRIBERS"
+	// AudienceWaitlist: shoppers who joined the waitlist of one of the window's areas.
+	AudienceWaitlist = "WAITLIST"
+)
+
+// PreorderAudience pages through who may receive a pre-order window's comms on a channel (delivery-runs
+// GET /v1/service/preorders/{windowId}/audience?channel=&segment=&after=&limit=, scope delivery-runs:audience.read).
+// An unknown window returns domain.ErrRecipientNotFound; other errors are transient.
+type PreorderAudience interface {
+	Audience(ctx context.Context, windowID string, channel domain.Channel, segment, after string, limit int) (AudiencePage, error)
+}
+
 // ContactInvalidator drops a user's cached contact details when identity reports that they changed.
 type ContactInvalidator interface {
 	Forget(userID string)

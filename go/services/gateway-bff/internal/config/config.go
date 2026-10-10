@@ -49,6 +49,8 @@ type Upstreams struct {
 	TrustOps   Upstream `yaml:"trustOps"`
 	Retail     Upstream `yaml:"retail"`
 	Fulfilment Upstream `yaml:"fulfilment"`
+	// DeliveryRuns owns pre-orders: storefront resolution, waitlist and the staff Pre-orders module (DELIVERY_RUNS_URL).
+	DeliveryRuns Upstream `yaml:"deliveryRuns"`
 }
 
 // Named returns the upstreams keyed by their metric/log name.
@@ -59,7 +61,7 @@ func (u *Upstreams) Named() map[string]*Upstream {
 		"orders": &u.Orders, "notifications": &u.Notifications, "seller": &u.Seller, "offers": &u.Offers, "bookings": &u.Bookings,
 		"storefront": &u.Storefront, "media": &u.Media, "carrier": &u.Carrier,
 		"tax_returns": &u.TaxReturns, "ai_gateway": &u.AIGateway,
-		"trust_ops": &u.TrustOps, "retail": &u.Retail, "fulfilment": &u.Fulfilment,
+		"trust_ops": &u.TrustOps, "retail": &u.Retail, "fulfilment": &u.Fulfilment, "delivery_runs": &u.DeliveryRuns,
 	}
 }
 

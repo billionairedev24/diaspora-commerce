@@ -52,6 +52,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"inventory", "inventory", "Inventory", "AfroTransact-owned and FBA stock by fulfilment centre, lot by lot."},
 		{"retail", "retail", "AfroTransact Retail (1P)", "Purchase orders for AfroTransact-owned and AfroTransact Brand inventory."},
 		{"dispatch", "dispatch", "Delivery dispatch", "AfroTransact Delivery routes, drivers and internal delivery."},
+		{"preorders", "preorders", "Pre-orders", "Open pre-order windows by city with opening, closing and delivery dates. Upload advertorials, watch every pre-order live, export and add late orders."},
 	}},
 	{"partners", "Partners", []StaffModule{
 		{"apps", "apps", "Applications", "Seller and service-provider onboarding queue. Every application goes through two people: a reviewer, then a different approver."},
@@ -117,9 +118,15 @@ func (a StaffAccess) Level(module string) string {
 	case "exports":
 		module = "dash"
 	}
+	matrix := a.Matrix
+	if module == PreorderModule && len(matrix[module]) == 0 {
+		// identity's matrix predates the Pre-orders column: use the seeded levels (design: Super Admin and Marketing
+		// Full, Operations Edit, Support Approve, Finance / Auditor / Product owner / Fulfilment / Retail View).
+		matrix = DefaultPlatformMatrix
+	}
 	best := LevelNone
 	for _, r := range a.Roles {
-		if lv := a.Matrix.Level(module, r); levelRank[lv] > levelRank[best] {
+		if lv := matrix.Level(module, r); levelRank[lv] > levelRank[best] {
 			best = lv
 		}
 	}

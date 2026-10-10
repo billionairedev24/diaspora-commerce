@@ -20,6 +20,7 @@ var DefaultPlatformMatrix = matrixFrom(map[string]string{
 	"markets":   "FULL,VIEW,NONE,NONE,NONE,NONE,NONE,NONE,VIEW,NONE,NONE,FULL,VIEW,VIEW,NONE",
 	"siteCfg":   "FULL,VIEW,VIEW,NONE,VIEW,EDIT,NONE,NONE,NONE,NONE,NONE,NONE,NONE,NONE,NONE",
 	"dev":       "FULL,NONE,NONE,NONE,NONE,NONE,NONE,NONE,NONE,NONE,NONE,VIEW,FULL,VIEW,NONE",
+	"preorders": "FULL,EDIT,NONE,VIEW,APPROVE,FULL,NONE,VIEW,VIEW,NONE,NONE,VIEW,NONE,VIEW,NONE",
 }, DefaultPlatformRoles)
 
 // DefaultPlatformRoles are identity's platform roles in matrix column order.

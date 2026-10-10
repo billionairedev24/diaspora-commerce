@@ -95,6 +95,7 @@ func run() error {
 	catalog := upstreams.NewCatalog(catalogClient, cache, cfg.Cache.CatalogTTL, cfg.Cache.ReferenceTTL)
 	inventory := upstreams.NewInventory(inventoryClient)
 	cart := upstreams.NewCart(client("cart", up.Cart))
+	deliveryRunsClient := client("delivery-runs", up.DeliveryRuns)
 	geo := upstreams.NewGeo(client("geo", up.Geo), cache, cfg.Cache.ReferenceTTL)
 	identity := upstreams.NewIdentity(identityClient, cache, upstreams.IdentityOptions{
 		ClientID: cfg.OIDC.ClientID, ClientSecret: cfg.OIDC.ClientSecret, ProvidersTTL: cfg.Cache.DefaultTTL})
@@ -150,6 +151,8 @@ func run() error {
 		Account:  app.NewAccountService(identity, geo, payments, orders),
 		Checkout: app.NewCheckoutService(carts, identity, payments, orders),
 		Careers:  app.NewCareersService(media, serviceTokens),
+		// Pre-orders (delivery-runs public routes; resolution and open list cached for 30 s).
+		Preorders: app.NewPreorderService(upstreams.NewPreorders(deliveryRunsClient, cache, 30*time.Second), location, cfg.Market),
 		// Seller Center & Provider Hub
 		SellerShell:     app.NewSellerShellService(sellerDeps),
 		SellerDashboard: app.NewSellerDashboardService(sellerDeps),
@@ -167,7 +170,7 @@ func run() error {
 		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers}, services, log)
 	// Staff console (cmd/gateway-bff/staff.go).
 	if services.Staff, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient, inventory: inventoryClient,
-		payments: paymentsClient, orders: ordersClient}, rdb, cache, log); err != nil {
+		payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient}, rdb, cache, log); err != nil {
 		return err
 	}
 

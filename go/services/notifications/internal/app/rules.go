@@ -27,6 +27,7 @@ const (
 	TopicPayments           = "payments"
 	TopicTrustOps           = "trustOps"
 	TopicRetail             = "retail"
+	TopicDeliveryRuns       = "deliveryRuns"
 )
 
 // DefaultTopics are the AsyncAPI channel addresses (contracts/asyncapi/events.yaml) for each logical topic.
@@ -42,6 +43,7 @@ var DefaultTopics = map[string]string{
 	TopicPayments:           "at.payment.events",
 	TopicTrustOps:           "at.trustops.events",
 	TopicRetail:             "at.retail.events",
+	TopicDeliveryRuns:       "at.delivery-runs.events",
 }
 
 // ResolveTopics overlays configured addresses on DefaultTopics. Unknown names and empty addresses are errors, so a
@@ -87,6 +89,12 @@ const (
 	RecipientUser RecipientSource = "user"
 	// RecipientOrgOwners resolves every owner of the seller/provider organisation id in IDField.
 	RecipientOrgOwners RecipientSource = "orgOwners"
+	// RecipientAudience pages through a pre-order window's audience (Segment) on each of the rule's channels
+	// (IngestConfig.Audience, delivery-runs); the window id is in IDField.
+	RecipientAudience RecipientSource = "audience"
+	// RecipientCustomers resolves the distinct customerId of every object in the list IDField names (a window's
+	// orders[]).
+	RecipientCustomers RecipientSource = "customers"
 )
 
 // EventRule maps one event type to one template. An event type may have several rules (e.g. one per shipment
@@ -97,6 +105,8 @@ type EventRule struct {
 	Channels  []domain.Channel
 	Recipient RecipientSource
 	IDField   string
+	// Segment is the audience segment of RecipientAudience rules (port.AudienceSubscribers or port.AudienceWaitlist).
+	Segment string
 	// Security messages (one-time codes) skip identity lookups and the account's channel switches.
 	Security bool
 	// PayloadChannels honours the payload's "channels" list (seller compliance: email, sms, in_app → push).
@@ -182,8 +192,20 @@ var DefaultEventRules = map[string][]EventRule{
 		Enrich: enrichWelcome}},
 
 	// ---- orders (at.order.events) ----
-	"orders.order.placed": {{Topic: TopicOrders, Template: "order.confirmed", Channels: chEmailSMSPush,
-		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichOrderPlaced}},
+	// An order whose every shipment is a pre-order package gets only "You're in"; mixed carts get both.
+	"orders.order.placed": {
+		{Topic: TopicOrders, Template: "order.confirmed", Channels: chEmailSMSPush, Recipient: RecipientUser,
+			IDField: "customerId", When: hasShipNow, Enrich: enrichOrderPlaced},
+		{Topic: TopicOrders, Template: "preorder.confirmed", Channels: chEmail, Recipient: RecipientUser,
+			IDField: "customerId", When: hasPreorder, Enrich: enrichPreorderConfirmed},
+	},
+	// Pre-orders (S270–S275): missed delivery date → refund or new date.
+	"orders.preorder.delivery_missed": {{Topic: TopicOrders, Template: "preorder.delivery_missed", Channels: chEmail,
+		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichPreorderMissed}},
+
+	// ---- pre-orders (at.delivery-runs.events), S270–S275 ----
+	"preorder.comms.due":        preorderCommsRules,
+	"preorder.late_order.added": {preorderLatePaymentRule},
 	"orders.order.cancelled": {{Topic: TopicOrders, Template: "order.cancelled", Channels: chEmailPush,
 		Recipient: RecipientUser, IDField: "customerId",
 		When: func(d map[string]any) bool { return boolean(d, "wasPlaced") }, Enrich: enrichOrder}},
@@ -254,14 +276,15 @@ var DefaultEventRules = map[string][]EventRule{
 		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichPayout}},
 
 	// ---- bookings (at.bookings.events; payloads carry the customer's recipient block + template fields) ----
+	// startsAt is bookings' display string; enrichBooking keeps it in the GSM-7 alphabet ("Sat, Oct 17 at 10:00 AM").
 	"booking.confirmed": {{Topic: TopicBookings, Template: "booking.confirmed", Channels: chEmailSMSPush,
-		Recipient: RecipientPayload}},
+		Recipient: RecipientPayload, Enrich: enrichBooking}},
 	"booking.cancelled": {{Topic: TopicBookings, Template: "booking.cancelled", Channels: chEmailSMSPush,
 		Recipient: RecipientPayload, Enrich: enrichBookingCancelled}},
 	"booking.declined": {{Topic: TopicBookings, Template: "booking.declined", Channels: chEmailPush,
-		Recipient: RecipientPayload}},
+		Recipient: RecipientPayload, Enrich: enrichBooking}},
 	"booking.rescheduled": {{Topic: TopicBookings, Template: "booking.rescheduled", Channels: chEmailSMSPush,
-		Recipient: RecipientPayload}},
+		Recipient: RecipientPayload, Enrich: enrichBooking}},
 	"booking.balance_unpaid": {{Topic: TopicBookings, Template: "booking.balance_unpaid", Channels: chEmailPush,
 		Recipient: RecipientPayload, Enrich: enrichBalanceUnpaid}},
 
@@ -450,7 +473,14 @@ func enrichPayout(d map[string]any, l Links) {
 	d["actionUrl"] = join(l.SellerCenter, "/payouts")
 }
 
-func enrichBookingCancelled(d map[string]any, _ Links) {
+func enrichBooking(d map[string]any, _ Links) {
+	if s := str(d, "startsAt"); s != "" {
+		d["startsAt"] = smsSafeDisplay(s)
+	}
+}
+
+func enrichBookingCancelled(d map[string]any, l Links) {
+	enrichBooking(d, l)
 	d["refundNote"] = ""
 	if n, ok := integer(d, "refundedMinor"); ok && n > 0 {
 		d["refundNote"] = "We're refunding " + moneyField(d, "refundedMinor") + " to your original payment method."
@@ -506,7 +536,8 @@ func enrichSellerEnforcement(d map[string]any, l Links) {
 	d["actionUrl"] = join(l.SellerCenter, "/account-health")
 }
 
-func enrichBalanceUnpaid(d map[string]any, _ Links) {
+func enrichBalanceUnpaid(d map[string]any, l Links) {
+	enrichBooking(d, l)
 	d["balance"] = moneyField(d, "balanceMinor")
 	if d["balance"] == "" {
 		price, _ := integer(d, "priceMinor")

@@ -14,6 +14,7 @@ channels:
       ordersShipmentStatusChanged: {$ref: '#/components/messages/ordersShipmentStatusChanged'}
       ordersShipmentDelivered: {$ref: '#/components/messages/ordersShipmentDelivered'}
       ordersShipmentCancelled: {$ref: '#/components/messages/ordersShipmentCancelled'}
+      ordersPreorderDeliveryMissed: {$ref: '#/components/messages/ordersPreorderDeliveryMissed'}
 operations:
   publishOrdersOrderEvents:
     action: send
@@ -22,6 +23,8 @@ operations:
       orders-service publishes order placement / cancellation and every applied shipment transition. Notifications map
       them to templates (order confirmation, shipped, out for delivery, delivered, cancelled), payments and finance
       follow deliveries and cancellations, the indexer keeps sales stats, tax-returns reads delivered lines for RMAs.
+      Pre-orders (S270–S275): an orders.order.placed with a PREORDER shipment sends preorder.confirmed ("You're in");
+      orders.preorder.delivery_missed sends preorder.delivery_missed (refund / new date links).
   receiveOrdersPaymentEvents:
     action: receive
     channel: {$ref: '#/channels/paymentsPaymentEvents'}
@@ -67,7 +70,50 @@ components:
       title: 'One shipment of a placed order was cancelled (refund or release follows)'
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/OrdersShipmentCancelled'}
+    ordersPreorderDeliveryMissed:
+      name: orders.preorder.delivery_missed
+      title: >-
+        A pre-order package was not delivered on the window's date; the customer chooses a refund or the new date
+        (the choices the pre-order payment settings allow: missedDelivery.offerRefund / offerNewDate)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OrdersPreorderDeliveryMissed'}
   schemas:
+    OrdersPreorderDeliveryMissed:
+      type: object
+      required: [orderId, orderNumber, customerId, windowId, code, name, deliversOn, totalMinor, currency]
+      properties:
+        orderId: {type: string, format: uuid}
+        orderNumber: {type: string}
+        customerId: {type: string}
+        shipmentId: {type: [string, 'null']}
+        windowId: {type: string}
+        code: {type: string, examples: [LBK-7]}
+        name: {type: string}
+        deliversOn: {type: string, format: date, description: The missed date}
+        newDate: {type: [string, 'null'], format: date, description: The proposed new delivery date}
+        offerRefund: {type: boolean}
+        offerNewDate: {type: boolean}
+        refundUrl: {type: [string, 'null'], format: uri, description: 'Default <PUBLIC_WEB_URL>/orders/<number>/pre-order?choice=refund'}
+        newDateUrl: {type: [string, 'null'], format: uri}
+        totalMinor: {type: integer, format: int64, description: Refund amount of the pre-order package}
+        currency: {type: string}
+        reason: {type: [string, 'null']}
+    OrdersPreorderBlock:
+      type: [object, 'null']
+      description: Pre-order package of the order (fulfilmentType PREORDER); null for other shipments
+      properties:
+        windowId: {type: string}
+        code: {type: string, examples: [LBK-7]}
+        name: {type: string}
+        number: {type: [string, 'null'], examples: [LBK-1042], description: Pre-order number shown to the customer}
+        deliversOn: {type: string, format: date}
+        deliversDisplay: {type: [string, 'null']}
+        closesAt: {type: string, format: date-time, description: Cancel for a full refund until then}
+        closesDisplay: {type: [string, 'null']}
+        fulfilment: {type: string, enum: [DOOR, PICKUP]}
+        feeMinor: {type: integer, format: int64, description: Effective door or pickup fee charged}
+        currency: {type: string}
+        pickupWindow: {type: [string, 'null']}
     OrdersShipmentStatus:
       type: string
       enum: [pending_payment, placed, confirmed, packed, ready, picked_up, in_transit, out_for_delivery,
@@ -95,6 +141,13 @@ components:
         shipToLine1: {type: [string, 'null'], description: Ship-to street line (return labels need no app address)}
         shipToLine2: {type: [string, 'null']}
         paymentId: {type: [string, 'null'], description: payments-service payment of the order}
+        attribution:
+          type: [object, 'null']
+          description: Last-touch source the storefront sent with checkout (?src=&cr=&po=)
+          properties:
+            src: {type: string}
+            cr: {type: string}
+            po: {type: string}
         shipments:
           type: array
           items:
@@ -104,7 +157,8 @@ components:
               shipmentId: {type: string, format: uuid}
               sellerOrgId: {type: string}
               sellerName: {type: [string, 'null']}
-              fulfilmentType: {type: string, enum: [SELLER_FULFILLED, FBA_AFROTRANSACT, RETAIL_1P]}
+              fulfilmentType: {type: string, enum: [SELLER_FULFILLED, FBA_AFROTRANSACT, RETAIL_1P, PREORDER]}
+              preorder: {$ref: '#/components/schemas/OrdersPreorderBlock'}
               deliveryMethod: {type: string, enum: [CARRIER, AFROTRANSACT_DELIVERY, PICKUP]}
               serviceLevel: {type: [string, 'null'], examples: [standard, express, local, pickup]}
               promisedBy: {type: [string, 'null'], format: date}

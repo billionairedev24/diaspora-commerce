@@ -30,6 +30,8 @@ type StaffServices struct {
 	Dispatch app.StaffDispatchService
 	// Notifications serves Notifications → Templates (S268); routes are registered when it is set.
 	Notifications app.StaffNotificationsService
+	// Preorders serves the Pre-orders module (S270–S275); routes are registered when it is set.
+	Preorders app.StaffPreordersService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
 	Files port.LocalExportFiles
 }
@@ -77,6 +79,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		route("POST /v1/staff/notifications/templates/{key}/preview", h.staffTemplatePreview)
 		route("POST /v1/staff/notifications/templates/{key}/versions", h.staffTemplateVersion)
 		route("POST /v1/staff/notifications/templates/{key}/test-send", h.staffTemplateTestSend)
+	}
+	if s.Preorders != nil {
+		h.registerStaffPreorders(route)
 	}
 }
 

@@ -226,6 +226,10 @@ type CartPackage struct {
 	ItemCount         int              `json:"itemCount"`
 	SubtotalMinor     int64            `json:"subtotalMinor"`
 	FreeShippingNudge *ShippingNudge   `json:"freeShippingNudge"`
+	// Preorder is the pre-order block of a PREORDER package (windowId, name, deliversOn, stage, closesAt, fulfilment,
+	// options[], effective doorFee / pickupFee, currency, pickupWindow, allowedMethods), relayed from the cart
+	// service; null for packages that ship now.
+	Preorder json.RawMessage `json:"preorder"`
 }
 
 // SavedItem is a "saved for later" row.
@@ -532,6 +536,8 @@ type PlaceOrderRequest struct {
 	DeliverySelections []json.RawMessage `json:"deliverySelections"`
 	// CouponCode is validated and redeemed by orders with offers-service (released if the order fails).
 	CouponCode string `json:"couponCode,omitempty"`
+	// Attribution is the last-touch source {src, cr, po}; the handler falls back to the at_attr cookie.
+	Attribution *Attribution `json:"attribution,omitempty"`
 }
 
 // OrderConfirmationShipment is one shipment of a placed order.

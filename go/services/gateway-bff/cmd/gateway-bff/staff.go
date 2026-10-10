@@ -21,7 +21,7 @@ import (
 // staffClients are the upstream clients the staff console shares with the rest of the BFF (one breaker per upstream);
 // the remaining ones are created here.
 type staffClients struct {
-	identity, catalog, inventory, payments, orders httpclient.Client
+	identity, catalog, inventory, payments, orders, deliveryRuns httpclient.Client
 }
 
 // staffServices wires the staff console (contracts/openapi/gateway-bff-staff.yaml): shell, tables and sheets,
@@ -39,7 +39,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			TrustOps: upstreams.NewStaffUpstream(client("trust-ops", up.TrustOps)), TaxReturns: upstreams.NewStaffUpstream(client("tax-returns", up.TaxReturns)),
 			Retail: upstreams.NewStaffUpstream(client("retail", up.Retail)), Fulfilment: upstreams.NewStaffUpstream(client("fulfilment", up.Fulfilment)),
 			Content: upstreams.NewStaffUpstream(client("content", up.Content)), Notifications: upstreams.NewStaffUpstream(client("notifications", up.Notifications)),
-			Bookings: upstreams.NewStaffUpstream(client("bookings", up.Bookings)),
+			Bookings: upstreams.NewStaffUpstream(client("bookings", up.Bookings)), DeliveryRuns: upstreams.NewStaffUpstream(sc.deliveryRuns),
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
 		Jobs: valkey.NewExportJobs(rdb), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
@@ -60,6 +60,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Shell, out.Records, out.Dashboard = app.NewStaffShellService(d), app.NewStaffRecordsService(d), app.NewStaffDashboardService(d)
 	out.Exports, out.Support, out.Fees = app.NewStaffExportsService(d), app.NewStaffSupportService(d), app.NewStaffFeesService(d)
 	out.Dispatch, out.Notifications = app.NewStaffDispatchService(d), app.NewStaffNotificationsService(d)
+	out.Preorders = app.NewStaffPreordersService(d)
 	return out, nil
 }
 

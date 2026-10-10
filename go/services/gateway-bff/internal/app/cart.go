@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -31,6 +32,8 @@ type CartService interface {
 	SaveForLater(ctx context.Context, c *domain.Caller, lineID string) (domain.Cart, error)
 	MoveToCart(ctx context.Context, c *domain.Caller, savedID string) (domain.Cart, error)
 	RemoveSaved(ctx context.Context, c *domain.Caller, savedID string) (domain.Cart, error)
+	// SetPreorderFulfilment chooses DOOR or PICKUP for the pre-order package of a window (PUT /v1/cart/preorder-fulfilment).
+	SetPreorderFulfilment(ctx context.Context, c *domain.Caller, windowID, fulfilment string) (domain.Cart, error)
 	// Snapshot returns the presented cart with the raw upstream cart (checkout).
 	Snapshot(ctx context.Context, c *domain.Caller) (domain.Cart, port.UpstreamCart, error)
 }
@@ -516,6 +519,14 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 		default:
 			pkg.Heading, pkg.ShipsFrom = "Shipped by "+seller.Name, seller.Name
 		}
+		if pre := preorderBlock(p.Preorder); pre != nil {
+			// A pre-order package is delivered on the window's date (door or pickup, priced by delivery-runs); the
+			// storefront renders it from the preorder block, not from carrier options.
+			pkg.Preorder = pre
+			pkg.PackageID += ":preorder"
+			pkg.Heading = "Pre-order"
+			pkg.DeliveryOptions, pkg.FreeShippingNudge = []domain.DeliveryOption{}, nil
+		}
 		sellers[seller.ID] = true
 		cart.Packages = append(cart.Packages, pkg)
 	}
@@ -527,6 +538,41 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 	cart.AllSelected = lineCount > 0 && allSelected
 	cart.SellerCount = len(sellers)
 	return cart, nil
+}
+
+// preorderBlock keeps a relayed pre-order block when it is a JSON object (nil otherwise).
+func preorderBlock(raw json.RawMessage) json.RawMessage {
+	t := strings.TrimSpace(string(raw))
+	if !strings.HasPrefix(t, "{") || !json.Valid(raw) {
+		return nil
+	}
+	return raw
+}
+
+// SetPreorderFulfilment chooses door delivery or pickup for the cart's pre-order package of a window.
+func (s *cartServiceImpl) SetPreorderFulfilment(ctx context.Context, c *domain.Caller, windowID, fulfilment string) (domain.Cart, error) {
+	errs := map[string]string{}
+	if p := domain.ValidPreorderID(windowID); p != nil {
+		errs["windowId"] = "Choose the pre-order"
+	}
+	f, ok := domain.ValidPreorderFulfilment(fulfilment)
+	if !ok {
+		errs["fulfilment"] = "Choose DOOR or PICKUP"
+	}
+	if len(errs) > 0 {
+		return domain.Cart{}, domain.ValidationProblem(errs)
+	}
+	if owner(c) == (port.CartOwner{}) {
+		return domain.Cart{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "Your cart has no pre-order items.")
+	}
+	up, err := s.d.Cart.SetPreorderFulfilment(ctx, owner(c), windowID, f)
+	if err != nil {
+		return domain.Cart{}, cartErr(err, "")
+	}
+	if err := s.remember(ctx, c, up); err != nil {
+		return domain.Cart{}, err
+	}
+	return s.present(ctx, c, up)
 }
 
 // storeCity is the city of an AfroTransact Delivery offer's store (offers' seller.city is the ship-from city); best

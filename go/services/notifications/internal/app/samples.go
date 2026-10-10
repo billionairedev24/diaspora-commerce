@@ -59,7 +59,8 @@ func NewTemplateSamples(ctx context.Context, links Links) (TemplateSamples, erro
 	capture := &captureNotifier{data: map[string]map[string]any{}, source: map[string]SampleSource{}}
 	discard := slog.New(slog.DiscardHandler)
 	alerts := NewStockAlerts(sampleAlertStore{}, capture, sampleIdentity{}, links, discard)
-	ingest := NewIngest(capture, IngestConfig{Resolver: sampleIdentity{}, Links: links, StockAlerts: alerts}, discard)
+	ingest := NewIngest(capture, IngestConfig{Resolver: sampleIdentity{}, Links: links, StockAlerts: alerts,
+		Audience: SampleAudience()}, discard)
 
 	handle := func(typ string, i int, payload map[string]any, src SampleSource) error {
 		raw, err := json.Marshal(payload)
@@ -179,7 +180,7 @@ func TemplateArea(key string) string {
 		return AreaSecurity
 	case has("account", "org", "careers", "identity"):
 		return AreaAccount
-	case has("order", "shipment", "payment"):
+	case has("order", "shipment", "payment", "preorder"):
 		return AreaOrders
 	case has("payout", "seller.payouts"):
 		return AreaPayouts
@@ -243,6 +244,25 @@ func (sampleIdentity) Contact(_ context.Context, id string) (port.Contact, error
 
 func (sampleIdentity) OrgOwners(context.Context, string) ([]string, error) {
 	return []string{"owner-1"}, nil
+}
+
+// sampleAudienceImpl answers pre-order audience pages like delivery-runs would: one signed-in subscriber (cust-1)
+// on every channel, plus an email-only waitlist sign-up.
+type sampleAudienceImpl struct{}
+
+var _ port.PreorderAudience = sampleAudienceImpl{}
+
+// SampleAudience returns the pre-order audience used by the samples, the gallery and the integration tests.
+func SampleAudience() port.PreorderAudience { return sampleAudienceImpl{} }
+
+func (sampleAudienceImpl) Audience(_ context.Context, windowID string, _ domain.Channel, segment, _ string, _ int) (port.AudiencePage, error) {
+	unsub := "https://afrotransact.com/pre-orders/unsubscribe?t=sample-" + windowID
+	if segment == port.AudienceWaitlist {
+		return port.AudiencePage{Members: []port.AudienceMember{{SubscriptionID: "3e7a1c2b-0000-4000-8000-000000000001",
+			Email: "cust-1@example.com", UnsubscribeURL: unsub}}}, nil
+	}
+	return port.AudiencePage{Members: []port.AudienceMember{{SubscriptionID: "3e7a1c2b-0000-4000-8000-000000000002", UserID: "cust-1",
+		UnsubscribeURL: unsub}}}, nil
 }
 
 const sampleAtin = "ATOGBO0500"

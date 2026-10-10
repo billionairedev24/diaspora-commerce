@@ -42,7 +42,14 @@ type IngestConfig struct {
 	StockAlerts StockAlerts
 	// Contacts drops cached contact details when identity reports a change (the contact cache).
 	Contacts port.ContactInvalidator
+	// Audience pages pre-order audiences (delivery-runs); nil sends RecipientAudience rules to nobody.
+	Audience port.PreorderAudience
+	// AudiencePageSize is the audience page size (default 500).
+	AudiencePageSize int
 }
+
+// maxAudiencePages bounds one event's fan-out per channel (500 × 400 = 200,000 recipients).
+const maxAudiencePages = 400
 
 type ingestImpl struct {
 	notifier Notifier
@@ -56,6 +63,9 @@ var _ Ingest = (*ingestImpl)(nil)
 func NewIngest(notifier Notifier, cfg IngestConfig, log *slog.Logger) Ingest {
 	if cfg.Rules == nil {
 		cfg.Rules = DefaultEventRules
+	}
+	if cfg.AudiencePageSize <= 0 {
+		cfg.AudiencePageSize = 500
 	}
 	return &ingestImpl{notifier: notifier, cfg: cfg, log: log}
 }
@@ -254,6 +264,24 @@ func (h *ingestImpl) targets(ctx context.Context, rule EventRule, data map[strin
 			out = append(out, t)
 		}
 		return out, nil
+	case RecipientAudience:
+		return h.audience(ctx, rule, str(data, rule.IDField), channels)
+	case RecipientCustomers:
+		var out []target
+		seen := map[string]bool{}
+		for _, o := range objects(data, rule.IDField) {
+			id := str(o, "customerId")
+			if id == "" || seen[id] {
+				continue
+			}
+			seen[id] = true
+			t, err := fill(ctx, h.cfg.Resolver, domain.Recipient{ID: id}, channels)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, t)
+		}
+		return out, nil
 	default: // RecipientPayload
 		r := p.Recipient
 		if r.Email == "" && r.Phone == "" && len(r.PushTokens) == 0 {
@@ -286,13 +314,19 @@ func (h *ingestImpl) forRule(ctx context.Context, rule EventRule, data map[strin
 	reqs := make([]domain.Request, 0, len(targets))
 	for _, t := range targets {
 		chans := channels
+		if t.channels != nil {
+			chans = t.channels
+		}
 		if !rule.Security {
-			chans = enabled(channels, t.disabled)
+			chans = enabled(chans, t.disabled)
 		}
 		if len(chans) == 0 {
 			continue
 		}
 		d := maps.Clone(base)
+		for k, v := range t.extra {
+			d[k] = v
+		}
 		setDefault(d, "firstName", t.firstName)
 		setDefault(d, "firstName", "there")
 		market := p.Market

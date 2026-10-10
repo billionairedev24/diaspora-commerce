@@ -25,6 +25,8 @@ type Services struct {
 	Account  app.AccountService
 	Checkout app.CheckoutService
 	Careers  app.CareersService
+	// Preorders serves the storefront's pre-order routes (S270–S275); registered when set.
+	Preorders app.PreorderService
 	// Seller Center & Provider Hub (contracts/openapi/gateway-bff-seller.yaml); routes are registered when set.
 	SellerShell     app.SellerShellService
 	SellerDashboard app.SellerDashboardService
@@ -106,6 +108,9 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("POST /v1/cart/items/{lineId}/save-for-later", h.saveForLater)
 	route("POST /v1/cart/saved/{savedId}/move-to-cart", h.moveToCart)
 	route("DELETE /v1/cart/saved/{savedId}", h.removeSaved)
+	route("PUT /v1/cart/preorder-fulfilment", h.setPreorderFulfilment)
+	// Pre-orders
+	h.registerPreorders(route, lookup)
 	// Auth
 	route("GET /v1/me", h.me)
 	route("GET /v1/auth/login", auth(h.login))

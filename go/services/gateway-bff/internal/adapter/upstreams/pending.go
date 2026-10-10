@@ -288,6 +288,9 @@ func (o *ordersImpl) Place(ctx context.Context, bearer, key string, req domain.P
 	if code := strings.TrimSpace(req.CouponCode); code != "" {
 		body["couponCode"] = code
 	}
+	if a := req.Attribution.Clean(); a != nil {
+		body["attribution"] = a
+	}
 	var out domain.OrderConfirmation
 	res, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/orders", Bearer: bearer, JSON: body,
 		Header: http.Header{"Idempotency-Key": {key}}, RetryUnsafe: true}, &out)

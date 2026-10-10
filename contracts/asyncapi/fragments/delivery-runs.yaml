@@ -20,6 +20,8 @@ channels:
       deliveryRunsSubscriptionCreated: {$ref: '#/components/messages/deliveryRunsSubscriptionCreated'}
       deliveryRunsSubscriptionConfirmed: {$ref: '#/components/messages/deliveryRunsSubscriptionConfirmed'}
       deliveryRunsSubscriptionCancelled: {$ref: '#/components/messages/deliveryRunsSubscriptionCancelled'}
+      preorderCommsDue: {$ref: '#/components/messages/preorderCommsDue'}
+      preorderLateOrderAdded: {$ref: '#/components/messages/preorderLateOrderAdded'}
 operations:
   publishDeliveryRunsEvents:
     action: send
@@ -32,8 +34,28 @@ operations:
       confirmed / cancelled. orders captures payment on run.confirmed and releases stock and payment holds on
       run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch). content
       refreshes run advertorials on announced / opened / extended and expires them on cancelled / confirmed.
+      Pre-orders (S270–S275): notifications sends preorder.comms.due by kind — ANNOUNCE (preorder.announce email / SMS
+      / push to the window's audience from GET /v1/service/preorders/{windowId}/audience?segment=SUBSCRIBERS, and
+      preorder.waitlist.opened email to segment=WAITLIST), REMIND_48H (preorder.reminder email / push), LAST_CALL_6H
+      (preorder.last_call SMS / push), CLOSED (preorder.closed email to orders[]) and OUT_FOR_DELIVERY
+      (preorder.out_for_delivery SMS / push to orders[]) — and texts the payment link of preorder.late_order.added
+      (payment PAYMENT_LINK, preorder.late_order.payment_link).
 components:
   messages:
+    preorderCommsDue:
+      name: preorder.comms.due
+      title: >-
+        A pre-order window's comms are due (scheduler: opening, closes − 48 h, closes − 6 h, closing; OUT_FOR_DELIVERY
+        from the driver events), for a kind the window has switched on. Keyed by window id.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderCommsDue'}
+    preorderLateOrderAdded:
+      name: preorder.late_order.added
+      title: >-
+        Customer service added a late order to a window (channel AGENT_LATE). With payment PAYMENT_LINK the order
+        awaits payment until the customer pays the link (expiresAt from the payment settings' lateAdd.linkExpiryHours).
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderLateOrderAdded'}
     deliveryRunsRunAnnounced:
       name: delivery-runs.run.announced
       title: A run was announced (date and fee known; preorders not open yet)
@@ -198,3 +220,64 @@ components:
         unsubscribeUrl: {type: string, format: uri}
         locationUrl: {type: string, format: uri}
         whatsappInviteUrl: {type: [string, 'null'], format: uri}
+    PreorderCommsDue:
+      type: object
+      required: [windowId, code, name, kind, where, opensAt, closesAt, deliversOn, door, pickup, currency]
+      properties:
+        windowId: {type: string, format: uuid}
+        code: {type: string, examples: [LBK-7], description: 'Window code; links carry po=<code>'}
+        name: {type: string, examples: ['Lubbock Pre-order #7']}
+        kind: {type: string, enum: [ANNOUNCE, REMIND_48H, LAST_CALL_6H, CLOSED, OUT_FOR_DELIVERY]}
+        where: {type: string, examples: ['Lubbock, TX']}
+        targets: {type: array, items: {type: string, examples: [US/TX/Lubbock]}}
+        timeZone: {type: string, examples: [America/Chicago]}
+        opensAt: {type: string, format: date-time}
+        closesAt: {type: string, format: date-time}
+        deliversOn: {type: string, format: date}
+        opensDisplay: {type: [string, 'null'], examples: ['Tue, Oct 6 9:00 AM'], description: Market-local, GSM-7}
+        closesDisplay: {type: [string, 'null'], examples: ['Wed, Oct 21 11:59 PM']}
+        deliversDisplay: {type: [string, 'null'], examples: ['Sun, Oct 25']}
+        ribbon: {type: [string, 'null']}
+        headline: {type: [string, 'null']}
+        smsCopy:
+          type: [string, 'null']
+          description: >-
+            The window's SMS copy (≤ 160, GSM-7). "{link}" is replaced with the tracked link
+            <PUBLIC_WEB_URL>/pre-orders?src=sms&po=<code>&cr=<slot> (about 60 characters): count it in the 160.
+        categories: {type: array, items: {type: string}}
+        door: {type: boolean}
+        pickup: {type: boolean}
+        doorFeeMinor: {type: [integer, 'null'], description: Effective door fee (window override or payment settings)}
+        pickupFeeMinor: {type: [integer, 'null'], description: Effective pickup fee}
+        currency: {type: string, examples: [USD]}
+        pickupWindow: {type: [string, 'null'], examples: [10am-2pm]}
+        deliveryWindow: {type: [string, 'null'], description: OUT_FOR_DELIVERY only, examples: [10am-2pm]}
+        orders:
+          type: [array, 'null']
+          description: CLOSED and OUT_FOR_DELIVERY only — the window's paid orders (notifications resolves contacts)
+          items:
+            type: object
+            required: [orderId, customerId]
+            properties:
+              orderId: {type: string}
+              customerId: {type: string}
+              fulfilment: {type: string, enum: [DOOR, PICKUP]}
+    PreorderLateOrderAdded:
+      type: object
+      required: [windowId, code, name, orderId, number, customerId, payment, totalMinor, currency, deliversOn]
+      properties:
+        windowId: {type: string, format: uuid}
+        code: {type: string}
+        name: {type: string}
+        orderId: {type: string}
+        number: {type: string, examples: [LBK-L90]}
+        customerId: {type: string}
+        phone: {type: [string, 'null'], description: The number the agent confirmed with the customer (E.164)}
+        payment: {type: string, enum: [SAVED_CARD, PAYMENT_LINK]}
+        paymentUrl: {type: [string, 'null'], format: uri, description: Stripe payment link (PAYMENT_LINK)}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        totalMinor: {type: integer, format: int64, description: Items + the window's door fee when DOOR}
+        currency: {type: string}
+        deliversOn: {type: string, format: date}
+        reason: {type: string, examples: [Customer called]}
+        actor: {type: string, description: Staff subject}
