@@ -1,0 +1,758 @@
+openapi: 3.1.0
+info:
+  title: Catalog API
+  description: Products (ATIN/GTIN), variants, category tree, product-type schemas and category requests.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8101
+  description: local
+- url: https://api.dev.afrotransact.com/catalog
+  description: dev
+- url: https://api.uat.afrotransact.com/catalog
+  description: uat
+- url: https://api.afrotransact.com/catalog
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Identifiers
+  description: GTIN / ISBN checks for the product builder
+- name: Categories
+  description: Browse tree, product-type schemas and new-category requests
+- name: Products
+  description: Product builder, listing moderation and lookup
+paths:
+  /v1/categories:
+    get:
+      tags:
+      - Categories
+      summary: Full active category tree (department › category › product type)
+      operationId: tree
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryNode'
+  /v1/category-requests:
+    get:
+      tags:
+      - Categories
+      summary: Review queue of category requests (catalog:taxonomy)
+      operationId: queue
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING_REVIEW
+          - APPROVED
+          - REJECTED
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryRequest'
+    post:
+      tags:
+      - Categories
+      summary: Request a new category (products can be built against it right away)
+      operationId: request
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CategoryRequest'
+  /v1/category-requests/mine:
+    get:
+      tags:
+      - Categories
+      summary: My organisation's category requests
+      operationId: mine
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryRequest'
+  /v1/category-requests/{id}/approve:
+    post:
+      tags:
+      - Categories
+      summary: Approve a category request; waiting products move into listing review
+      operationId: approve_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveCategoryRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CategoryRequest'
+  /v1/category-requests/{id}/reject:
+    post:
+      tags:
+      - Categories
+      summary: Reject a category request; waiting products are rejected with the note
+      operationId: reject_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectCategoryRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CategoryRequest'
+  /v1/identifiers/gtin/{code}:
+    get:
+      tags:
+      - Identifiers
+      summary: Validate a GTIN and find an existing product page that already uses it
+      operationId: check
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: isbn
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GtinCheck'
+  /v1/product-types:
+    get:
+      tags:
+      - Categories
+      summary: All product-type schemas
+      operationId: productTypes
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductType'
+  /v1/product-types/{code}:
+    get:
+      tags:
+      - Categories
+      summary: 'Product-type schema: required details, variation themes, identifier rule'
+      operationId: productType
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductType'
+  /v1/products:
+    get:
+      tags:
+      - Products
+      summary: List products (own organisation; staff may filter by org)
+      operationId: list
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - IN_REVIEW
+          - PENDING_CATEGORY_APPROVAL
+          - LIVE
+          - REJECTED
+          - PAUSED
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ProductPage'
+    post:
+      tags:
+      - Products
+      summary: Create a product and submit it for review
+      description: The listing owner (seller org or AfroTransact Retail) is derived from the token.
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+  /v1/products/atin/{atin}:
+    get:
+      tags:
+      - Products
+      summary: Get a product by ATIN
+      operationId: byAtin
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+  /v1/products/{id}:
+    get:
+      tags:
+      - Products
+      summary: Get a product by id
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+  /v1/products/{id}/approve:
+    post:
+      tags:
+      - Products
+      summary: Approve a product in review (catalog:moderate)
+      operationId: approve
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+  /v1/products/{id}/pause:
+    post:
+      tags:
+      - Products
+      summary: Pause a live product
+      operationId: pause
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+  /v1/products/{id}/reject:
+    post:
+      tags:
+      - Products
+      summary: Reject a product with a note (catalog:moderate)
+      operationId: reject
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModerationNote'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+  /v1/products/{id}/resume:
+    post:
+      tags:
+      - Products
+      summary: Resume a paused product
+      operationId: resume
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+components:
+  schemas:
+    CreateProductRequest:
+      type: object
+      description: Exactly one of categoryId or categoryRequestId
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        categoryRequestId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          maxLength: 200
+          minLength: 10
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+          maxItems: 10
+          minItems: 0
+        variationTheme:
+          type: string
+          minLength: 1
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantRequest'
+          maxItems: 200
+          minItems: 0
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+      required:
+      - images
+      - title
+      - variants
+      - variationTheme
+    ProductImage:
+      type: object
+      properties:
+        url:
+          type: string
+          minLength: 1
+        width:
+          type: integer
+          format: int32
+          minimum: 0
+        height:
+          type: integer
+          format: int32
+          minimum: 0
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        contentType:
+          type: string
+          minLength: 1
+      required:
+      - contentType
+      - url
+    VariantRequest:
+      type: object
+      properties:
+        options:
+          type: object
+          additionalProperties:
+            type: string
+        sellerSku:
+          type: string
+          minLength: 1
+        gtin:
+          type: string
+        gtinExempt:
+          type: boolean
+        priceMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        quantity:
+          type: integer
+          format: int32
+          minimum: 0
+      required:
+      - options
+      - sellerSku
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        ownerKind:
+          type: string
+        ownerOrgId:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        categoryRequestId:
+          type: string
+          format: uuid
+        productType:
+          type: string
+        title:
+          type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+        variationTheme:
+          type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Variant'
+        status:
+          type: string
+        moderationNote:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    Variant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        sellerSku:
+          type: string
+        gtin:
+          type: string
+        gtinExempt:
+          type: boolean
+        options:
+          type: object
+          additionalProperties:
+            type: string
+        priceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+    ModerationNote:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - note
+    CreateCategoryRequest:
+      type: object
+      properties:
+        parentPath:
+          type: string
+          maxLength: 200
+          minLength: 3
+        name:
+          type: string
+          maxLength: 80
+          minLength: 3
+        exampleProduct:
+          type: string
+          maxLength: 200
+          minLength: 3
+        detailsNeeded:
+          type: string
+          maxLength: 1000
+          minLength: 3
+      required:
+      - detailsNeeded
+      - exampleProduct
+      - name
+      - parentPath
+    CategoryRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        orgId:
+          type: string
+        path:
+          type: string
+        exampleProduct:
+          type: string
+        detailsNeeded:
+          type: string
+        status:
+          type: string
+        resolvedCategoryId:
+          type: string
+          format: uuid
+        decisionNote:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        decidedAt:
+          type: string
+          format: date-time
+    RejectCategoryRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 3
+      required:
+      - note
+    ApproveCategoryRequest:
+      type: object
+      properties:
+        parentCategoryId:
+          type: string
+          format: uuid
+        productType:
+          type: string
+          minLength: 1
+        note:
+          type: string
+      required:
+      - parentCategoryId
+      - productType
+    ProductPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    AttributeDefinition:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+        required:
+          type: boolean
+        multiline:
+          type: boolean
+    ProductType:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        identifierRule:
+          type: string
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AttributeDefinition'
+        themes:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariationTheme'
+    VariationDimension:
+      type: object
+      properties:
+        name:
+          type: string
+        options:
+          type: array
+          items:
+            type: string
+    VariationTheme:
+      type: object
+      properties:
+        name:
+          type: string
+        dimensions:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariationDimension'
+    GtinCheck:
+      type: object
+      properties:
+        digits:
+          type: string
+        valid:
+          type: boolean
+        suggestion:
+          type: string
+        existingAtin:
+          type: string
+        message:
+          type: string
+    CategoryNode:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        parentId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        level:
+          type: string
+        productType:
+          type: string
+        path:
+          type: string
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
