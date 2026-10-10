@@ -22,7 +22,7 @@ resource "cloudflare_dns_record" "www" {
   content = "100::"
   proxied = true
   ttl     = 1
-  comment = "www -> storefront Worker"
+  comment = "www -> 301 to the bare domain (redirect rule)"
   tags    = local.tags
 }
 
@@ -34,11 +34,29 @@ resource "cloudflare_workers_route" "web" {
   script   = "${each.key}-${var.environment}"
 }
 
-resource "cloudflare_workers_route" "www" {
-  count   = var.workers_routes_enabled && var.environment == "prod" ? 1 : 0
+# www is not a second storefront: it redirects (301) to the bare domain, keeping path and query, so the BFF's
+# origin checks and OAuth callbacks only ever see the bare domain.
+resource "cloudflare_ruleset" "www_redirect" {
+  count   = var.environment == "prod" ? 1 : 0
   zone_id = local.zone_id
-  pattern = "www.${var.zone_name}/*"
-  script  = "storefront-${var.environment}"
+  name    = "www to apex"
+  kind    = "zone"
+  phase   = "http_request_dynamic_redirect"
+  rules = [{
+    description = "www.${var.zone_name} -> ${var.zone_name}"
+    expression  = "(http.host eq \"www.${var.zone_name}\")"
+    action      = "redirect"
+    enabled     = true
+    action_parameters = {
+      from_value = {
+        status_code           = 301
+        preserve_query_string = true
+        target_url = {
+          expression = "concat(\"https://${var.zone_name}\", http.request.uri.path)"
+        }
+      }
+    }
+  }]
 }
 
 # ------------------------------------------------------------------------------ API origins

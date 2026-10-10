@@ -1,0 +1,22 @@
+# Fails when a production host (or another environment's host) is hard-coded where it shouldn't be (S251).
+# See docs/engineering/environments.md.
+name: env-urls
+
+on:
+  push:
+    branches: [main]
+    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, .github/workflows/env-urls.yml]
+  pull_request:
+    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, .github/workflows/env-urls.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  env-urls:
+    name: environment URL guard
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: No hard-coded environment hosts
+        run: python3 tools/ci/check_env_urls.py --format github

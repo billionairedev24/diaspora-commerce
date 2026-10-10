@@ -113,7 +113,15 @@ jobs:
           TARGET: ${{ inputs.target }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          if [[ "$TARGET" == "preview" ]]; then
+          # Apps with per-environment sections in wrangler.jsonc (top level = dev) select them with --env so
+          # each environment gets its own vars and routes; apps without one fall back to the Worker name.
+          if [[ -f "$APP_DIR/wrangler.jsonc" ]] && grep -q '"env"' "$APP_DIR/wrangler.jsonc"; then
+            case "$TARGET" in
+              preview) echo "command=versions upload --env preview --preview-alias pr-${PR}" >> "$GITHUB_OUTPUT" ;;
+              dev)     echo "command=deploy" >> "$GITHUB_OUTPUT" ;;
+              *)       echo "command=deploy --env ${TARGET}" >> "$GITHUB_OUTPUT" ;;
+            esac
+          elif [[ "$TARGET" == "preview" ]]; then
             echo "command=versions upload --name ${APP}-dev --preview-alias pr-${PR}" >> "$GITHUB_OUTPUT"
           else
             echo "command=deploy --name ${APP}-${TARGET}" >> "$GITHUB_OUTPUT"
