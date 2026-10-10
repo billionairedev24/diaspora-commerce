@@ -44,6 +44,17 @@ public record Run(UUID id, UUID locationId, RunStatus status, RunTerms terms, In
                 RunMilestones.NONE, now, now, 0);
     }
 
+    /**
+     * A run created when a pre-order window closes: ordering already happened in the window (there is no minimum),
+     * so the run starts CONFIRMED with the window's paid orders and goes on to collecting and delivery.
+     */
+    public static Run confirmedFromWindow(UUID id, UUID locationId, RunTerms terms, RouteEstimate estimate, int orders,
+                                          int packages, Instant now) {
+        RunMilestones m = RunMilestones.NONE.announced(now).opened(now).cutOff(now).confirmed(now);
+        return new Run(id, locationId, RunStatus.CONFIRMED, terms, terms.cutoffAt(), 0, orders, packages, null, null,
+                estimate, m, now, now, 0);
+    }
+
     // ---- lifecycle ---------------------------------------------------------------------------------------------
 
     public Run announce(Instant now) {

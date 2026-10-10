@@ -40,6 +40,12 @@ public class ItSupport {
     }
 
     @Bean
+    @Primary
+    FakeUpstreams fakeUpstreams() {
+        return new FakeUpstreams();
+    }
+
+    @Bean
     MutableClock mutableClock() {
         return new MutableClock();
     }

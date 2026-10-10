@@ -3,17 +3,26 @@ package com.afrotransact.deliveryruns.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import com.afrotransact.deliveryruns.domain.AreaKey;
 import com.afrotransact.deliveryruns.domain.Capacity;
+import com.afrotransact.deliveryruns.domain.CutoffPolicy;
 import com.afrotransact.deliveryruns.domain.DeliveryWindow;
 import com.afrotransact.deliveryruns.domain.DropMode;
 import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.Location;
 import com.afrotransact.deliveryruns.domain.LocationDetails;
 import com.afrotransact.deliveryruns.domain.PickupPoint;
+import com.afrotransact.deliveryruns.domain.PreorderOrder;
+import com.afrotransact.deliveryruns.domain.PreorderWindow;
 import com.afrotransact.deliveryruns.domain.RouteEstimate;
 import com.afrotransact.deliveryruns.domain.RuleViolation;
 import com.afrotransact.deliveryruns.domain.Run;
@@ -49,10 +58,11 @@ class RunServiceImpl implements RunService {
     private final DeliveryRunsSettings settings;
     private final PermissionChecker permissions;
     private final Clock clock;
+    private final PreorderHandover preorders;
 
     RunServiceImpl(RunRepository runs, RunOrderRepository runOrders, LocationRepository locations, GeoGateway geo,
                    RunEconomicsCalculator economics, RunLifecycle lifecycle, DeliveryRunsSettings settings,
-                   PermissionChecker permissions, Clock clock) {
+                   PermissionChecker permissions, Clock clock, PreorderHandover preorders) {
         this.runs = runs;
         this.runOrders = runOrders;
         this.locations = locations;
@@ -62,6 +72,7 @@ class RunServiceImpl implements RunService {
         this.settings = settings;
         this.permissions = permissions;
         this.clock = clock;
+        this.preorders = preorders;
     }
 
     @Override
@@ -239,6 +250,71 @@ class RunServiceImpl implements RunService {
         permissions.require(DeliveryRunsPermissions.READ);
         find(id);
         return runOrders.findByRun(id, status);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Run> fromWindow(UUID windowId) {
+        PreorderWindow w = preorders.windows().findById(windowId).orElseThrow(() -> new NotFoundException(
+                "delivery-runs.preorder-not-found", "Pre-order not found"));
+        if (w.runId() != null) {
+            return runs.findById(w.runId());
+        }
+        Optional<Location> served = windowLocation(w);
+        if (served.isEmpty()) {
+            LOG.warn("Pre-order {} closed but no active location serves {}; no run created", w.code(),
+                    w.details().targets());
+            return Optional.empty();
+        }
+        Location location = served.get();
+        Instant now = Instant.now(clock);
+        ZoneId zone = location.details().timeZone();
+        Instant start = w.details().deliversOn().atTime(LocalTime.of(9, 0)).atZone(zone).toInstant();
+        Instant end = w.details().deliversOn().atTime(LocalTime.of(21, 0)).atZone(zone).toInstant();
+        Instant cutoff = w.details().closesAt().isBefore(start) ? w.details().closesAt() : start.minusSeconds(60);
+        boolean pickupOnly = !w.details().door() && w.details().pickup();
+        PickupPoint point = pickupOnly ? location.details().pickupPoint() : null;
+        DropMode mode = point != null ? DropMode.PICKUP_POINT : DropMode.DOORSTEP;
+        long fee = w.doorFee(preorders.settings().settings().payment()).map(m -> m.minor())
+                .orElse(location.details().defaultFeeMinor());
+        RunTerms terms = new RunTerms(new DeliveryWindow(start, end), cutoff, null, null, fee,
+                w.details().currency(), 1, Capacity.UNLIMITED, mode, point, CutoffPolicy.CANCEL, 1);
+        List<PreorderOrder> paid = new ArrayList<>();
+        for (PreorderOrder o : preorders.orders().findByWindow(w.id())) {
+            if (o.counts() && runOrders.findActiveByOrderId(o.orderId()).isEmpty()) {
+                paid.add(o);
+            }
+        }
+        Run run = runs.insert(Run.confirmedFromWindow(UUID.randomUUID(), location.id(), terms, tryRoute(location),
+                paid.size(), paid.size(), now));
+        List<RunOrder> slots = new ArrayList<>();
+        for (PreorderOrder o : paid) {
+            String customer = o.customerId() == null || o.customerId().isBlank() ? "unknown" : o.customerId();
+            String code = mode == DropMode.PICKUP_POINT ? preorders.codes().next() : null;
+            slots.add(runOrders.insert(RunOrder.reserve(UUID.randomUUID(), run.id(), o.orderId(), customer, 1, null,
+                    now).confirm(code, now)));
+        }
+        preorders.events().run(DeliveryRunsEvents.RUN_CONFIRMED, location, run, null, null, "PREORDER " + w.code(),
+                slots);
+        LOG.info("Pre-order {} handed {} orders to run {} at {}", w.code(), slots.size(), run.id(), location.slug());
+        return Optional.of(run);
+    }
+
+    /** The window's location, else the active location named like its first target city in that state. */
+    private Optional<Location> windowLocation(PreorderWindow w) {
+        if (w.details().locationId() != null) {
+            return locations.findById(w.details().locationId()).filter(Location::active);
+        }
+        Optional<AreaKey> city = w.details().targets().stream().filter(AreaKey::isCity).findFirst();
+        if (city.isEmpty()) {
+            return Optional.empty();
+        }
+        AreaKey k = city.get();
+        return locations.findAll(true).stream()
+                .filter(l -> l.name().equalsIgnoreCase(k.city())
+                        && k.region().equalsIgnoreCase(l.details().state() == null ? "" : l.details().state())
+                        && k.country().equals(l.details().market().toUpperCase(Locale.ROOT)))
+                .findFirst();
     }
 
     private RunTerms terms(Location location, RunCommand c) {

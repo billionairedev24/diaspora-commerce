@@ -1,6 +1,7 @@
 package com.afrotransact.deliveryruns.application;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -49,4 +50,16 @@ public interface RunService {
     RunEconomics economics(UUID id, Long commissionShareMinor);
 
     List<RunOrder> orders(UUID id, RunOrderStatus status);
+
+    /**
+     * A closed pre-order window hands its paid orders to a run for batched seller pickups and the driver route: a
+     * CONFIRMED run on the delivery day at the window's location (its {@code locationId}, else the active location
+     * named like the first target city in the same state and market), with one confirmed slot per order (orders
+     * already holding a slot are skipped). Publishes {@code delivery-runs.run.confirmed}. System use (scheduler):
+     * no permission check.
+     *
+     * @return the run (the existing one when the window was handed over already); empty when no location serves
+     *         the window
+     */
+    Optional<Run> fromWindow(UUID windowId);
 }

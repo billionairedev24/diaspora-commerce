@@ -82,9 +82,16 @@ final class PublicDtos {
         }
     }
 
-    @Schema(name = "EmailSubscriptionRequest", description = "Anonymous sign-up: email alerts after double opt-in")
-    record EmailSubscriptionRequest(@NotNull UUID locationId, @NotBlank @Email @Size(max = 254) String email,
-                                    @Size(max = 80) @Schema(example = "location-page") String source) {
+    @Schema(name = "EmailSubscriptionRequest", description = """
+            Anonymous sign-up. With locationId: run alerts for the location (double opt-in). Without it: the pre-order
+            waitlist of an area (area "US/TX/Lubbock", or country + region [+ city]); the opening notice is sent to it.""")
+    record EmailSubscriptionRequest(@Schema(description = "Run alerts of a location") UUID locationId,
+                                    @NotBlank @Email @Size(max = 254) String email,
+                                    @Size(max = 80) @Schema(example = "location-page") String source,
+                                    @Size(max = 100) @Schema(description = "Waitlist area", example = "US/TX/Lubbock")
+                                    String area,
+                                    @Size(max = 2) String country, @Size(max = 3) String region,
+                                    @Size(max = 80) String city) {
     }
 
     @Schema(name = "SubscriptionAccepted")

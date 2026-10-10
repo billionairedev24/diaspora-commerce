@@ -20,6 +20,13 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    # Pre-order projection: orders.order.placed / shipment.cancelled / order.cancelled from at.order.events.
+    consumer:
+      group-id: ${KAFKA_GROUP:delivery-runs-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
   security:
     oauth2:
       resourceserver:
@@ -76,6 +83,7 @@ at:
       - /v1/public/subscriptions
       - /v1/public/subscriptions/confirm
       - /v1/public/subscriptions/unsubscribe
+      - /v1/public/preorders/waitlist/unsubscribe
   events:
     relay-enabled: true
   delivery-runs:
@@ -109,7 +117,34 @@ at:
       pickup-point-stop-minutes: ${RUN_PICKUP_POINT_STOP_MINUTES:30}
       handover-minutes-per-order: ${RUN_HANDOVER_MINUTES_PER_ORDER:1}
       round-trip: true
-    # Auto-open, 24 h cutoff reminder and cutoff decision; safe on every replica (FOR UPDATE SKIP LOCKED).
+    # media-service (creatives: GET /v1/assets/{id}, scope media:read), orders-service (late pre-orders:
+    # POST /v1/service/orders/late-preorder, scope orders:on-behalf) and catalog-service (eligibility: public
+    # variant reads). Tokens: client credentials of geo.client-id / geo.client-secret.
+    media:
+      base-url: ${MEDIA_URL:http://localhost:8207}
+      timeout: ${MEDIA_TIMEOUT:5s}
+    orders:
+      base-url: ${ORDERS_URL:http://localhost:8104}
+      timeout: ${ORDERS_TIMEOUT:15s}
+    catalog:
+      base-url: ${CATALOG_URL:http://localhost:8101}
+      timeout: ${CATALOG_TIMEOUT:3s}
+    # search-service: products of a window's categories for the late-add picker (public GET /v1/search).
+    search:
+      base-url: ${SEARCH_URL:http://localhost:8201}
+      timeout: ${SEARCH_TIMEOUT:3s}
+    consumers:
+      order-topic: at.order.events
+    # Pre-orders (S270, S271).
+    preorders:
+      page-path: ${PREORDERS_PAGE_PATH:/pre-orders}
+      # Next-day metro cities (served by geo zones) never show pre-order, e.g. US/TX/Houston.
+      metro-cities: ${PREORDERS_METRO_CITIES:}
+      retention-days: ${PREORDERS_RETENTION_DAYS:90}
+      seed-demo-areas: false
+      support-phone: ${PREORDERS_SUPPORT_PHONE:+1 (833) 555-0199}
+    # Auto-open, 24 h cutoff reminder and cutoff decision, pre-order comms / close / hand-over; safe on every replica
+    # (FOR UPDATE SKIP LOCKED).
     jobs:
       enabled: ${DELIVERY_RUNS_JOBS_ENABLED:true}
       interval: ${DELIVERY_RUNS_JOBS_INTERVAL:60s}

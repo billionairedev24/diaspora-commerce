@@ -1,0 +1,8 @@
+# Integration tests run with the local profile: no order-events consumer (tests call the projection directly) and
+# no demo coverage areas (tests seed what they need).
+at:
+  consumers:
+    enabled: false
+  delivery-runs:
+    preorders:
+      seed-demo-areas: false

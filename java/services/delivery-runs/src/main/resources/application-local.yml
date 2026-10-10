@@ -2,6 +2,11 @@
 at:
   security:
     enabled: false
+  delivery-runs:
+    preorders:
+      # The design's demo coverage areas (Lubbock, Amarillo, El Paso, Midland, Odessa, Toronto, Mississauga,
+      # Brampton on; Laredo off). Local only: no demo data in migrations.
+      seed-demo-areas: ${PREORDERS_SEED_DEMO_AREAS:true}
 logging:
   level:
     com.afrotransact: DEBUG

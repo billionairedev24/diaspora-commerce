@@ -22,6 +22,16 @@ channels:
       deliveryRunsSubscriptionCancelled: {$ref: '#/components/messages/deliveryRunsSubscriptionCancelled'}
       preorderCommsDue: {$ref: '#/components/messages/preorderCommsDue'}
       preorderLateOrderAdded: {$ref: '#/components/messages/preorderLateOrderAdded'}
+      preorderWindowPublished: {$ref: '#/components/messages/preorderWindowPublished'}
+      preorderWindowUpdated: {$ref: '#/components/messages/preorderWindowUpdated'}
+      preorderWindowPaused: {$ref: '#/components/messages/preorderWindowPaused'}
+      preorderWindowResumed: {$ref: '#/components/messages/preorderWindowResumed'}
+      preorderWindowOpened: {$ref: '#/components/messages/preorderWindowOpened'}
+      preorderWindowClosed: {$ref: '#/components/messages/preorderWindowClosed'}
+      preorderWindowDelivered: {$ref: '#/components/messages/preorderWindowDelivered'}
+      preorderSettingsChanged: {$ref: '#/components/messages/preorderSettingsChanged'}
+      preorderExportCreated: {$ref: '#/components/messages/preorderExportCreated'}
+      preorderWaitlistJoined: {$ref: '#/components/messages/preorderWaitlistJoined'}
 operations:
   publishDeliveryRunsEvents:
     action: send
@@ -39,7 +49,19 @@ operations:
       preorder.waitlist.opened email to segment=WAITLIST), REMIND_48H (preorder.reminder email / push), LAST_CALL_6H
       (preorder.last_call SMS / push), CLOSED (preorder.closed email to orders[]) and OUT_FOR_DELIVERY
       (preorder.out_for_delivery SMS / push to orders[]) — and texts the payment link of preorder.late_order.added
-      (payment PAYMENT_LINK, preorder.late_order.payment_link).
+      (payment PAYMENT_LINK, preorder.late_order.payment_link). preorder.window.* follow a window's lifecycle (keyed by
+      window id; opened / closed / delivered come from the scheduler, closed after the paid orders were handed to a
+      run, which publishes delivery-runs.run.confirmed); preorder.settings.changed (key preorder-settings) and
+      preorder.export.created are audit records; preorder.waitlist.joined records a waitlist sign-up.
+  receiveDeliveryRunsOrderEvents:
+    action: receive
+    channel: {$ref: '#/channels/ordersOrderEvents'}
+    summary: >-
+      delivery-runs projects pre-orders (consumer delivery-runs-preorders, inbox-deduplicated on event-id):
+      orders.order.placed with shipments[] of fulfilmentType PREORDER (preorder.windowId, preorder.fulfilment,
+      attribution {src, cr, po} on the order or the preorder block) becomes a window order numbered <CODE>-1001…;
+      orders.shipment.cancelled cancels that package (the order once none is left); orders.order.cancelled of a placed
+      order cancels it. Late adds (<CODE>-L90…) are completed by their order's placed event.
 components:
   messages:
     preorderCommsDue:
@@ -49,6 +71,56 @@ components:
         from the driver events), for a kind the window has switched on. Keyed by window id.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PreorderCommsDue'}
+    preorderWindowPublished:
+      name: preorder.window.published
+      title: A draft passed its publish checks and was published (placements and comms follow its dates)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderWindowUpdated:
+      name: preorder.window.updated
+      title: A published window or its creatives changed
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderWindowPaused:
+      name: preorder.window.paused
+      title: Staff paused the window (placements hidden, comms stop)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderWindowResumed:
+      name: preorder.window.resumed
+      title: Staff resumed a paused window
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderWindowOpened:
+      name: preorder.window.opened
+      title: The window opened for orders (scheduler, at opensAt; once)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderWindowClosed:
+      name: preorder.window.closed
+      title: Ordering closed; runId is the run the paid orders were handed to (null when no location serves it)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderWindowDelivered:
+      name: preorder.window.delivered
+      title: The day after the delivery day (projected orders are deleted after the retention period)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWindowEvent'}
+    preorderSettingsChanged:
+      name: preorder.settings.changed
+      title: Platform pre-order settings, payment setup or coverage areas changed (audit; key preorder-settings)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderSettingsChanged'}
+    preorderExportCreated:
+      name: preorder.export.created
+      title: Staff exported a window's orders, picking list or advertorial report (audit)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderExportCreated'}
+    preorderWaitlistJoined:
+      name: preorder.waitlist.joined
+      title: A shopper joined the waitlist of an area (email only; keyed by entry id)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PreorderWaitlistJoined'}
     preorderLateOrderAdded:
       name: preorder.late_order.added
       title: >-
@@ -252,6 +324,26 @@ components:
         currency: {type: string, examples: [USD]}
         pickupWindow: {type: [string, 'null'], examples: [10am-2pm]}
         deliveryWindow: {type: [string, 'null'], description: OUT_FOR_DELIVERY only, examples: [10am-2pm]}
+        status: {type: string, description: Window status when the event was written}
+        dueAt: {type: string, format: date-time, description: When the message was due}
+        pickupAddress: {type: [string, 'null']}
+        comms: {type: array, items: {type: string}}
+        heroUrl: {type: [string, 'null'], format: uri}
+        emailImageUrl: {type: [string, 'null'], format: uri}
+        runId: {type: [string, 'null'], format: uuid}
+        pageUrl: {type: string, format: uri, description: '<PUBLIC_WEB_URL>/pre-orders/<code>'}
+        links:
+          type: object
+          description: pageUrl with ?src=<channel>&po=<code>[&cr=<slot>] per channel
+          properties:
+            email: {type: string, format: uri}
+            sms: {type: string, format: uri}
+            push: {type: string, format: uri}
+            whatsapp: {type: string, format: uri}
+            instagram: {type: string, format: uri}
+            facebook: {type: string, format: uri}
+            tiktok: {type: string, format: uri}
+        supportPhone: {type: [string, 'null']}
         orders:
           type: [array, 'null']
           description: CLOSED and OUT_FOR_DELIVERY only — the window's paid orders (notifications resolves contacts)
@@ -281,3 +373,96 @@ components:
         deliversOn: {type: string, format: date}
         reason: {type: string, examples: [Customer called]}
         actor: {type: string, description: Staff subject}
+        note: {type: [string, 'null'], description: Recorded note (reason, payment, agent)}
+        addedAt: {type: string, format: date-time}
+    PreorderWindowEvent:
+      type: object
+      description: >-
+        The window as notifications, content and the storefront need it (same fields as PreorderCommsDue without kind,
+        dueAt and orders).
+      required: [windowId, code, name, status, targets, opensAt, closesAt, deliversOn, door, pickup, currency]
+      properties:
+        windowId: {type: string, format: uuid}
+        code: {type: string}
+        name: {type: string}
+        status: {type: string, enum: [DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED]}
+        targets: {type: array, items: {type: string}}
+        where: {type: string}
+        opensAt: {type: string, format: date-time}
+        closesAt: {type: string, format: date-time}
+        deliversOn: {type: string, format: date}
+        timeZone: {type: string}
+        opensDisplay: {type: [string, 'null']}
+        closesDisplay: {type: [string, 'null']}
+        deliversDisplay: {type: [string, 'null']}
+        ribbon: {type: [string, 'null']}
+        headline: {type: [string, 'null']}
+        smsCopy: {type: [string, 'null']}
+        categories: {type: array, items: {type: string}}
+        door: {type: boolean}
+        pickup: {type: boolean}
+        doorFeeMinor: {type: [integer, 'null']}
+        pickupFeeMinor: {type: [integer, 'null']}
+        currency: {type: string}
+        pickupWindow: {type: [string, 'null']}
+        pickupAddress: {type: [string, 'null']}
+        comms: {type: array, items: {type: string}}
+        heroUrl: {type: [string, 'null'], format: uri}
+        emailImageUrl: {type: [string, 'null'], format: uri}
+        runId: {type: [string, 'null'], format: uuid}
+        pageUrl: {type: string, format: uri}
+        links: {type: object, additionalProperties: {type: string, format: uri}}
+        supportPhone: {type: [string, 'null']}
+    PreorderSettingsChanged:
+      type: object
+      required: [enabled, fallback, placements, payment, actor]
+      properties:
+        enabled: {type: boolean}
+        fallback: {type: string, enum: [SHIP, WAITLIST]}
+        placements: {type: array, items: {type: string, enum: [RIBBON, HERO, BADGE, PDP, CART, FAMILY]}}
+        payment:
+          type: object
+          properties:
+            doorFees: {type: object, additionalProperties: {type: integer}, description: Minor units per currency}
+            pickupFees: {type: object, additionalProperties: {type: integer}}
+            allowedMethods: {type: array, items: {type: string, enum: [CARD, WALLET, ACH]}}
+            cancelUntil: {type: string, enum: [CLOSE]}
+            lateAdd:
+              type: object
+              properties:
+                savedCard: {type: boolean}
+                paymentLink: {type: boolean}
+                linkExpiryHours: {type: integer}
+            missedDelivery:
+              type: object
+              properties:
+                offerRefund: {type: boolean}
+                offerNewDate: {type: boolean}
+            pickupWindow: {type: string}
+        actor: {type: string}
+        changedAt: {type: [string, 'null'], format: date-time}
+    PreorderExportCreated:
+      type: object
+      required: [windowId, code, export, rows, actor, createdAt]
+      properties:
+        windowId: {type: string, format: uuid}
+        code: {type: string}
+        export: {type: string, enum: [orders, orders-filtered, picking-list, advertorial-report]}
+        rows: {type: integer}
+        filter: {type: object, additionalProperties: {type: string}, description: 'orders-filtered: status, channel, q'}
+        containsPii: {type: boolean}
+        actor: {type: string}
+        createdAt: {type: string, format: date-time}
+    PreorderWaitlistJoined:
+      type: object
+      required: [entryId, area, country, region, email, source, unsubscribeUrl, joinedAt]
+      properties:
+        entryId: {type: string, format: uuid}
+        area: {type: string, examples: [US/TX/Lubbock]}
+        country: {type: string}
+        region: {type: string}
+        city: {type: [string, 'null']}
+        email: {type: string, format: email}
+        source: {type: string, examples: [preorder-waitlist]}
+        unsubscribeUrl: {type: string, format: uri}
+        joinedAt: {type: string, format: date-time}

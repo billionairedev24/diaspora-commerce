@@ -1,6 +1,7 @@
 package com.afrotransact.deliveryruns.config;
 
 import java.time.Duration;
+import java.util.List;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -16,11 +17,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param geo                geo-service client
  * @param economics          driver cost model
  * @param jobs               cutoff / reminder / auto-open job
+ * @param media              media-service client (creatives)
+ * @param orders             orders-service client (late pre-orders)
+ * @param catalog            catalog-service client (pre-order eligibility)
+ * @param search             search-service client (late-add product picker)
+ * @param preorders          pre-order options
  */
 @ConfigurationProperties(prefix = "at.delivery-runs")
 public record DeliveryRunsProperties(String publicWebUrl, String locationPath, Duration reminderLead,
                                      Duration confirmationTtl, Integer nextRunSearchLimit, Origin origin, Geo geo,
-                                     Economics economics, Jobs jobs) {
+                                     Economics economics, Jobs jobs, Upstream media, Upstream orders,
+                                     Upstream catalog, Upstream search, Preorders preorders) {
 
     public DeliveryRunsProperties {
         publicWebUrl = publicWebUrl == null || publicWebUrl.isBlank() ? "http://localhost:3000" : publicWebUrl;
@@ -32,6 +39,52 @@ public record DeliveryRunsProperties(String publicWebUrl, String locationPath, D
         geo = geo == null ? new Geo(null, null, null, null, null, null) : geo;
         economics = economics == null ? new Economics(null, null, null, null, null, null, null) : economics;
         jobs = jobs == null ? new Jobs(null, null, null) : jobs;
+        media = media == null ? new Upstream("http://localhost:8207", null) : media.orDefault("http://localhost:8207");
+        orders = orders == null ? new Upstream("http://localhost:8104", null)
+                : orders.orDefault("http://localhost:8104");
+        catalog = catalog == null ? new Upstream("http://localhost:8101", null)
+                : catalog.orDefault("http://localhost:8101");
+        search = search == null ? new Upstream("http://localhost:8201", null)
+                : search.orDefault("http://localhost:8201");
+        preorders = preorders == null ? new Preorders(null, null, null, null, null) : preorders;
+    }
+
+    /**
+     * An upstream HTTP service (client credentials of {@code geo.clientId} where a token is needed).
+     *
+     * @param baseUrl service URL
+     * @param timeout connect and read timeout
+     */
+    public record Upstream(String baseUrl, Duration timeout) {
+
+        public Upstream {
+            timeout = timeout == null ? Duration.ofSeconds(5) : timeout;
+        }
+
+        Upstream orDefault(String url) {
+            return baseUrl == null || baseUrl.isBlank() ? new Upstream(url, timeout) : this;
+        }
+    }
+
+    /**
+     * Pre-order options.
+     *
+     * @param pagePath      storefront path of pre-order pages
+     * @param metroCities   next-day metro cities ({@code US/TX/Houston}): never show pre-order
+     * @param retentionDays projected orders are deleted this many days after delivery
+     * @param seedDemoAreas seed the design's demo coverage areas (local profile only)
+     * @param supportPhone  "Missed it? Call …" number
+     */
+    public record Preorders(String pagePath, List<String> metroCities, Integer retentionDays, Boolean seedDemoAreas,
+                            String supportPhone) {
+
+        public Preorders {
+            pagePath = pagePath == null || pagePath.isBlank() ? "/pre-orders" : pagePath;
+            metroCities = metroCities == null ? List.of() : List.copyOf(metroCities);
+            retentionDays = retentionDays == null ? 90 : retentionDays;
+            seedDemoAreas = seedDemoAreas != null && seedDemoAreas;
+            supportPhone = supportPhone == null ? "+1 (833) 555-0199" : supportPhone;
+        }
     }
 
     /** Default origin of runs (Austin, TX unless configured). */

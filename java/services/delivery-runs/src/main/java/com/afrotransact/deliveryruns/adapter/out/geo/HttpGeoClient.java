@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import com.afrotransact.deliveryruns.adapter.out.http.ClientCredentialsTokens;
 import com.afrotransact.deliveryruns.domain.GeoPoint;
 import com.afrotransact.deliveryruns.domain.RouteEstimate;
 import com.afrotransact.deliveryruns.port.GeoGateway;
@@ -45,7 +46,8 @@ public class HttpGeoClient implements GeoGateway, GeoZoneRegistry {
         factory.setConnectTimeout(timeout);
         factory.setReadTimeout(timeout);
         this.geo = RestClient.builder().baseUrl(baseUrl).requestFactory(factory).build();
-        this.tokens = new ClientCredentialsTokens(tokenUri, clientId, clientSecret, "geo:zones:write", timeout, clock);
+        this.tokens = new ClientCredentialsTokens(tokenUri, clientId, clientSecret, "geo:zones:write", timeout, clock,
+                GeoUnavailableException::new);
         this.zoneType = zoneType;
     }
 

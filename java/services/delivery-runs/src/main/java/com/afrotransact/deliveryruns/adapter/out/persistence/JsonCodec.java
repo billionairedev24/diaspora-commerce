@@ -30,4 +30,12 @@ class JsonCodec {
     PickupPoint pickupPoint(String json) {
         return json == null ? null : mapper.readValue(json, PickupPoint.class);
     }
+
+    <T> T read(String json, Class<T> type) {
+        return json == null ? null : mapper.readValue(json, type);
+    }
+
+    <T> T read(String json, TypeReference<T> type) {
+        return json == null ? null : mapper.readValue(json, type);
+    }
 }

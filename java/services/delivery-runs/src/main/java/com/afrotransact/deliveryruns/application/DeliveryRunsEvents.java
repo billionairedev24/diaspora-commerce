@@ -22,6 +22,20 @@ public final class DeliveryRunsEvents {
     public static final String SUBSCRIPTION_CONFIRMED = "delivery-runs.subscription.confirmed";
     public static final String SUBSCRIPTION_CANCELLED = "delivery-runs.subscription.cancelled";
 
+    // Pre-orders (S270, S271): keyed by window id (settings by "preorder-settings").
+    public static final String PREORDER_WINDOW_PUBLISHED = "preorder.window.published";
+    public static final String PREORDER_WINDOW_UPDATED = "preorder.window.updated";
+    public static final String PREORDER_WINDOW_PAUSED = "preorder.window.paused";
+    public static final String PREORDER_WINDOW_RESUMED = "preorder.window.resumed";
+    public static final String PREORDER_WINDOW_OPENED = "preorder.window.opened";
+    public static final String PREORDER_WINDOW_CLOSED = "preorder.window.closed";
+    public static final String PREORDER_WINDOW_DELIVERED = "preorder.window.delivered";
+    public static final String PREORDER_SETTINGS_CHANGED = "preorder.settings.changed";
+    public static final String PREORDER_COMMS_DUE = "preorder.comms.due";
+    public static final String PREORDER_LATE_ORDER_ADDED = "preorder.late_order.added";
+    public static final String PREORDER_EXPORT_CREATED = "preorder.export.created";
+    public static final String PREORDER_WAITLIST_JOINED = "preorder.waitlist.joined";
+
     private DeliveryRunsEvents() {
     }
 }

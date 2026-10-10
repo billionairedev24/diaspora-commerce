@@ -154,7 +154,7 @@ at:
         type: confidential
         secret: ${DELIVERY_RUNS_CLIENT_SECRET:local-delivery-runs-service-secret}
         grant-types: [client_credentials]
-        scopes: [geo:zones:write]
+        scopes: [geo:zones:write, "orders:on-behalf", "media:read"]
       - client-id: media-service
         name: Media service
         type: confidential

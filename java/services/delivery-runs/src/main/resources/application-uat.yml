@@ -6,6 +6,14 @@ at:
     public-web-url: ${PUBLIC_WEB_URL:https://uat.afrotransact.com}
     geo:
       base-url: ${GEO_URL:http://geo}
+    media:
+      base-url: ${MEDIA_URL:http://media}
+    orders:
+      base-url: ${ORDERS_URL:http://orders}
+    catalog:
+      base-url: ${CATALOG_URL:http://catalog}
+    search:
+      base-url: ${SEARCH_URL:http://search}
 spring:
   datasource:
     hikari:

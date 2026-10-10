@@ -20,6 +20,9 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Pre-orders
+  description: 'Staff: pre-order windows, creatives, orders, analytics, exports and late adds (delivery-runs:read to view;
+    preorders:manage, preorders:export, preorders:late-add)'
 - name: Locations
   description: 'Staff: towns / areas served by delivery runs (delivery-runs:read / :manage)'
 - name: Public runs
@@ -30,13 +33,18 @@ tags:
   description: 'Staff: schedule runs and move them through their lifecycle (delivery-runs:manage)'
 - name: Service
   description: 'Service clients: orders (run slots), fulfilment (dispatch), notifications (audience)'
+- name: Pre-order settings
+  description: 'Staff: master switch, fallback, placements, payment setup and coverage areas (delivery-runs:read to view;
+    preorders:manage to change)'
+- name: Public pre-orders
+  description: 'No sign-in: what the storefront shows for a delivery place; service: per-product eligibility for orders-service'
 paths:
   /v1/locations:
     get:
       tags:
       - Locations
       summary: List locations, optionally only active or inactive ones (delivery-runs:read)
-      operationId: list_1
+      operationId: list_2
       parameters:
       - name: active
         in: query
@@ -62,7 +70,7 @@ paths:
       tags:
       - Locations
       summary: Create a location (delivery-runs:manage)
-      operationId: create_1
+      operationId: create_2
       requestBody:
         content:
           application/json:
@@ -87,7 +95,7 @@ paths:
       tags:
       - Locations
       summary: Get a location (delivery-runs:read)
-      operationId: get_1
+      operationId: get_3
       parameters:
       - name: id
         in: path
@@ -112,7 +120,7 @@ paths:
       tags:
       - Locations
       summary: Replace a location's details (delivery-runs:manage)
-      operationId: update_1
+      operationId: update_3
       parameters:
       - name: id
         in: path
@@ -302,6 +310,806 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /v1/places/search:
+    get:
+      tags:
+      - Pre-order settings
+      summary: Places for the area pickers (delivery-runs:read)
+      description: 'q (2+ characters): search countries, regions and cities (8 best). Otherwise browse: every country, a country''s
+        regions (country) or a region''s cities (country + region). regionLabel is what the country calls regions.'
+      operationId: places
+      parameters:
+      - name: country
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: region
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlaceList'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorder-areas:
+    get:
+      tags:
+      - Pre-order settings
+      summary: 'Coverage drill-down: countries → regions → areas, 12 per page (delivery-runs:read)'
+      description: level COUNTRY (no country), REGION (country) or AREA (country + region). Rows carry areas on of total and
+        the published pre-orders targeting them; saved lists every area switched on.
+      operationId: areas
+      parameters:
+      - name: country
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: region
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 12
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AreaPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags:
+      - Pre-order settings
+      summary: Add a coverage area, switched on (preorders:manage)
+      description: 'key: country/region (every city) or country/region/city; 409 when it exists. Returns the page of the area''s
+        region.'
+      operationId: add
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderAreaRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AreaPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags:
+      - Pre-order settings
+      summary: Remove a coverage area named by ?key= (preorders:manage)
+      operationId: removeByQuery
+      parameters:
+      - name: key
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AreaPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    patch:
+      tags:
+      - Pre-order settings
+      summary: Switch areas on or off in bulk (preorders:manage)
+      description: 'Every area at or under each key: a country code, a region key or one area. Returns the page of the first
+        key''s row.'
+      operationId: toggle
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderAreaToggleRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AreaPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorder-areas/{key}:
+    delete:
+      tags:
+      - Pre-order settings
+      summary: Remove a coverage area (preorders:manage)
+      description: The key is the rest of the path (DELETE /v1/preorder-areas/US/TX/El%20Paso; an encoded US%2FTX%2FEl%20Paso
+        works too). Returns the page of the area's region.
+      operationId: remove
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AreaPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorder-settings:
+    get:
+      tags:
+      - Pre-order settings
+      summary: Platform pre-order settings incl. payment setup (delivery-runs:read)
+      description: ETag carries the version to send back in If-Match.
+      operationId: get_2
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderSettings'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    put:
+      tags:
+      - Pre-order settings
+      summary: Change settings (preorders:manage)
+      description: Null fields keep their value; placements may name only the ones that change. Fees 0–100.00 per currency,
+        at least one payment method (422 otherwise). If-Match; publishes preorder.settings.changed.
+      operationId: update_2
+      parameters:
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderSettingsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderSettings'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders:
+    get:
+      tags:
+      - Pre-orders
+      summary: List pre-orders with tab counts (delivery-runs:read)
+      description: 'status: all, open, upcoming, closed, draft (tabs) or a status (OPEN, UPCOMING, CLOSED, DELIVERED, DRAFT,
+        PAUSED); q searches name, code and areas. counts per tab; enabled = master switch.'
+      operationId: list_1
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindowPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags:
+      - Pre-orders
+      summary: Open a pre-order (DRAFT) (preorders:manage)
+      description: The code (e.g. LUB-7) is the first 3 letters of the first target city plus a counter.
+      operationId: create_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderWindowRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}:
+    get:
+      tags:
+      - Pre-orders
+      summary: A pre-order with its checks, fees, creatives and counts (delivery-runs:read)
+      description: ETag carries the version to send back in If-Match.
+      operationId: get_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    put:
+      tags:
+      - Pre-orders
+      summary: Edit a pre-order (preorders:manage)
+      description: If-Match with the ETag; 412 delivery-runs.version-mismatch when it changed since. A published pre-order
+        must keep passing its checks (422 delivery-runs.preorder-checks-failed); a delivered one is read-only.
+      operationId: update_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderWindowRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/creatives/{slot}:
+    put:
+      tags:
+      - Pre-orders
+      summary: Attach an uploaded image to a creative slot (preorders:manage)
+      description: Verified with media-service (READY image); width and height are stored and a ratio more than 12 % off the
+        slot spec is flagged RATIO_OFF (warning). 502 when media is unavailable.
+      operationId: setCreative
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: slot
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - HERO
+          - PDP
+          - STORY
+          - FEED
+          - EMAIL
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderCreativeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags:
+      - Pre-orders
+      summary: Remove a creative (a published pre-order keeps its hero) (preorders:manage)
+      operationId: removeCreative
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: slot
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - HERO
+          - PDP
+          - STORY
+          - FEED
+          - EMAIL
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/exports/{kind}.csv:
+    get:
+      tags:
+      - Pre-orders
+      summary: CSV export (preorders:export)
+      description: 'kind: orders, orders-filtered (takes the orders filter), picking-list, advertorial-report. Audit event
+        preorder.export.created.'
+      operationId: export
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PAID
+          - LATE_ADD
+          - CANCELLED
+      - name: channel
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - SITE_HERO
+          - SITE_RIBBON
+          - SITE_PDP
+          - SITE_PAGE
+          - SITE_DIRECT
+          - APP
+          - INSTAGRAM
+          - FACEBOOK
+          - TIKTOK
+          - WHATSAPP
+          - EMAIL
+          - SMS
+          - AGENT_LATE
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/late-orders:
+    post:
+      tags:
+      - Pre-orders
+      summary: Add a late order for a customer (preorders:late-add)
+      description: OPEN (assisted) or CLOSED pre-orders; 422 once delivered. Placed through orders-service (saved card off-session
+        or SMS payment link); recorded as LATE_ADD with channel AGENT_LATE and returned as the projected order (with paymentLinkUrl
+        / ordersStatus). Idempotency-Key makes retries safe.
+      operationId: addLateOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreorderLateOrderRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderOrder'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/orders:
+    get:
+      tags:
+      - Pre-orders
+      summary: Orders of a pre-order, newest first (delivery-runs:read)
+      description: q searches order number, customer, phone, address and zip.
+      operationId: orders_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PAID
+          - LATE_ADD
+          - CANCELLED
+      - name: channel
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - SITE_HERO
+          - SITE_RIBBON
+          - SITE_PDP
+          - SITE_PAGE
+          - SITE_DIRECT
+          - APP
+          - INSTAGRAM
+          - FACEBOOK
+          - TIKTOK
+          - WHATSAPP
+          - EMAIL
+          - SMS
+          - AGENT_LATE
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 12
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderOrderPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/pause:
+    post:
+      tags:
+      - Pre-orders
+      summary: Pause a published pre-order (placements and comms stop) (preorders:manage)
+      operationId: pause
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/products:
+    get:
+      tags:
+      - Pre-orders
+      summary: 'Products customer service can add late: the window''s categories (delivery-runs:read)'
+      description: Live products of the window's categories in its market (search-service); price in minor units. 502 when
+        search is unavailable.
+      operationId: products
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderProductList'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/publish:
+    post:
+      tags:
+      - Pre-orders
+      summary: Publish a draft (preorders:manage)
+      description: 'All checks must pass: name set, at least one area, closes after opens, delivers on or after close (−12
+        h), storefront hero uploaded, ribbon text set, door or pickup, and a door fee for the window''s currency. 422 delivery-runs.preorder-checks-failed
+        lists violations[] and errors{check: label} (keys name, area, dates, delivery, hero, ribbon, fulfilment, doorFee).'
+      operationId: publish
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/resume:
+    post:
+      tags:
+      - Pre-orders
+      summary: Resume a paused pre-order (preorders:manage)
+      operationId: resume
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/preorders/{id}/summary:
+    get:
+      tags:
+      - Pre-orders
+      summary: KPIs, orders by day, by channel, top products, door/pickup split, placements (delivery-runs:read)
+      operationId: summary
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderSummary'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /v1/public/locations:
     get:
       tags:
@@ -343,6 +1151,91 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/LocationPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/preorders/open:
+    get:
+      tags:
+      - Public pre-orders
+      summary: Open and upcoming pre-orders for the /pre-orders page (no sign-in)
+      description: Published, active windows with at least one target area on; open first, then by name. Empty when pre-orders
+        are switched off.
+      operationId: open_1
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PreorderOpenWindow'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/preorders/resolve:
+    get:
+      tags:
+      - Public pre-orders
+      summary: Resolve the pre-order for a delivery place (no sign-in, no PII)
+      description: Windows that are not drafts and cover the place; the first OPEN, else UPCOMING, else CLOSED one. on = window
+        found && master switch && window active && area on. Metro cities never show pre-order. Fees are the effective door
+        / pickup fees.
+      operationId: resolve
+      parameters:
+      - name: country
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: region
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: city
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderResolution'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/preorders/waitlist/unsubscribe:
+    post:
+      tags:
+      - Subscriptions
+      summary: Leave a pre-order waitlist (token from the opening notice)
+      operationId: leaveWaitlist
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -425,9 +1318,11 @@ paths:
     post:
       tags:
       - Subscriptions
-      summary: Subscribe by email (no sign-in, double opt-in)
-      description: Always 202, whether or not the address was known. notifications sends the confirmation link from delivery-runs.subscription.created;
-        nothing else is sent until it is used.
+      summary: 'Subscribe by email (no sign-in): location run alerts or a pre-order waitlist'
+      description: 'Always 202, whether or not the address was known. With locationId: notifications sends the confirmation
+        link from delivery-runs.subscription.created; nothing else is sent until it is used (status CONFIRMATION_SENT). Without
+        locationId: joins the pre-order waitlist of area (or country / region / city), source defaults to preorder-waitlist;
+        the opening notice (preorder.waitlist.opened) carries a one-click leave link (status WAITLISTED).'
       operationId: subscribeEmail
       requestBody:
         content:
@@ -980,7 +1875,7 @@ paths:
       - Service
       summary: Opted-in subscribers of a location on a channel (delivery-runs:audience.read)
       description: 'Keyset paging: pass `next` as `after`. For notifications'' announcement fan-out.'
-      operationId: audience
+      operationId: audience_1
       parameters:
       - name: locationId
         in: path
@@ -1018,6 +1913,109 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AudiencePage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/service/preorders/eligibility:
+    get:
+      tags:
+      - Public pre-orders
+      summary: Pre-order eligibility of products at a place (delivery-runs:reserve, orders-service)
+      description: 'atins: comma-separated or repeated (1–100). A product is pre-order where pre-order is on, its catalog
+        category is in the window''s categories and it is not flagged shipsNow (catalog flags preorderEligible / shipsNow).
+        Returns the effective fees orders-service charges for the PREORDER package. 502 when catalog is unavailable.'
+      operationId: eligibility
+      parameters:
+      - name: country
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: region
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: city
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: atins
+        in: query
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PreorderEligibility'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/service/preorders/{windowId}/audience:
+    get:
+      tags:
+      - Public pre-orders
+      summary: A pre-order window's audience on a channel (delivery-runs:audience.read, notifications)
+      description: 'segment SUBSCRIBERS: subscribers of the delivery-runs locations in the window''s targets with consent
+        on the channel, plus past pre-order buyers there (subscriptionId buyer:<id>; notifications applies its SMS consent
+        and preferences). segment WAITLIST: waitlist sign-ups of the window''s areas (EMAIL only). Cursor paging: send next
+        back as after. 404 for an unknown window.'
+      operationId: audience
+      parameters:
+      - name: windowId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: channel
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - EMAIL
+          - SMS
+          - PUSH
+          - WHATSAPP
+      - name: segment
+        in: query
+        required: false
+        schema:
+          type: string
+          default: SUBSCRIBERS
+      - name: after
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 500
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AudiencePageView'
         4XX:
           description: Problem (RFC 9457)
           content:
@@ -1399,6 +2397,398 @@ components:
           type: string
           format: date-time
         cancelledAt:
+          type: string
+          format: date-time
+    PreorderWindowRequest:
+      type: object
+      description: 'Create (draft) or edit a pre-order window. Drafts may be incomplete; a published window must keep passing
+
+        its publish checks. Fees are minor units of the window''s currency (the first target''s country); null fee
+
+        overrides use the platform payment settings.'
+      properties:
+        name:
+          type: string
+          example: 'Lubbock Pre-order #7'
+          maxLength: 120
+          minLength: 0
+        targets:
+          type: array
+          description: country/region or country/region/city
+          example:
+          - US/TX/Lubbock
+          items:
+            type: string
+          maxItems: 50
+          minItems: 0
+        opensAt:
+          type: string
+          format: date-time
+        closesAt:
+          type: string
+          format: date-time
+        deliversOn:
+          type: string
+          format: date
+          example: 2026-10-25
+        ribbon:
+          type: string
+          maxLength: 80
+          minLength: 0
+        headline:
+          type: string
+          maxLength: 140
+          minLength: 0
+        smsCopy:
+          type: string
+          description: 'One SMS: 160 GSM-7 characters'
+          maxLength: 320
+          minLength: 0
+        categories:
+          type: array
+          items:
+            type: string
+          uniqueItems: true
+        door:
+          type: boolean
+        pickup:
+          type: boolean
+        pickupPoint:
+          type: string
+          description: Pickup point shown to shoppers
+          maxLength: 200
+          minLength: 0
+        doorFeeOverride:
+          type: integer
+          format: int64
+          maximum: 10000
+          minimum: 0
+        pickupFeeOverride:
+          type: integer
+          format: int64
+          maximum: 10000
+          minimum: 0
+        showCount:
+          type: boolean
+        socialBudget:
+          type: integer
+          format: int64
+          minimum: 0
+        comms:
+          type: array
+          items:
+            type: string
+            enum:
+            - ANNOUNCE
+            - REMIND_48H
+            - LAST_CALL_6H
+            - CLOSED
+            - OUT_FOR_DELIVERY
+            - PAID_SOCIAL
+          uniqueItems: true
+        timeZone:
+          type: string
+          description: IANA zone (default America/Chicago)
+        pickupPointId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        locationId:
+          type: string
+          format: uuid
+          description: Location of the closing run (null = matched by city)
+      required:
+      - closesAt
+      - deliversOn
+      - opensAt
+    CheckResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    PreorderCreative:
+      type: object
+      description: An uploaded creative
+      properties:
+        slot:
+          type: string
+          enum:
+          - HERO
+          - PDP
+          - STORY
+          - FEED
+          - EMAIL
+        assetId:
+          type: string
+          format: uuid
+        url:
+          type: string
+        width:
+          type: integer
+          format: int32
+        height:
+          type: integer
+          format: int32
+        ratioOff:
+          type: boolean
+          description: More than 12 % off the slot's aspect ratio (warning)
+    PreorderWindow:
+      type: object
+      description: A pre-order window; the ETag carries its version for If-Match
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/TargetResponse'
+        where:
+          type: string
+        opensAt:
+          type: string
+          format: date-time
+        closesAt:
+          type: string
+          format: date-time
+        deliversOn:
+          type: string
+          format: date
+        ribbon:
+          type: string
+        headline:
+          type: string
+        smsCopy:
+          type: string
+        categories:
+          type: array
+          items:
+            type: string
+        door:
+          type: boolean
+        pickup:
+          type: boolean
+        pickupPoint:
+          type: string
+        doorFeeOverride:
+          type: integer
+          format: int64
+        pickupFeeOverride:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        effectiveDoorFee:
+          type: integer
+          format: int64
+          description: Door fee shoppers pay (override, else platform; 0 when none is set)
+        effectivePickupFee:
+          type: integer
+          format: int64
+          description: Pickup fee shoppers pay
+        showCount:
+          type: boolean
+        socialBudget:
+          type: integer
+          format: int64
+        comms:
+          type: array
+          items:
+            type: string
+            enum:
+            - ANNOUNCE
+            - REMIND_48H
+            - LAST_CALL_6H
+            - CLOSED
+            - OUT_FOR_DELIVERY
+            - PAID_SOCIAL
+        draft:
+          type: boolean
+        active:
+          type: boolean
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PAUSED
+          - UPCOMING
+          - OPEN
+          - CLOSED
+          - DELIVERED
+        areaOff:
+          type: boolean
+        creatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderCreative'
+        orderCount:
+          type: integer
+          format: int32
+        revenue:
+          type: integer
+          format: int64
+        version:
+          type: integer
+          format: int64
+        statusLabel:
+          type: string
+          description: Open, Scheduled, Closed · delivering, Delivered, Draft, Paused or Area off
+        timeZone:
+          type: string
+        smsSeptets:
+          type: integer
+          format: int32
+          description: GSM-7 septets (-1 = needs UCS-2)
+        pickupPointId:
+          type: string
+        pickupWindow:
+          type: string
+        locationId:
+          type: string
+          format: uuid
+        runId:
+          type: string
+          format: uuid
+        checks:
+          type: array
+          description: Failed publish checks
+          items:
+            $ref: '#/components/schemas/CheckResponse'
+        publishable:
+          type: boolean
+        timeProgressPct:
+          type: integer
+          format: int32
+          description: 'Open windows: share of the ordering time elapsed (0–100)'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    TargetResponse:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+    PreorderCreativeRequest:
+      type: object
+      properties:
+        assetId:
+          type: string
+          format: uuid
+          description: media-service asset (READY image)
+      required:
+      - assetId
+    LateAddBody:
+      type: object
+      properties:
+        savedCard:
+          type: boolean
+        paymentLink:
+          type: boolean
+        linkExpiryHours:
+          type: integer
+          format: int32
+          maximum: 168
+          minimum: 1
+    MissedDeliveryBody:
+      type: object
+      properties:
+        offerRefund:
+          type: boolean
+        offerNewDate:
+          type: boolean
+    PreorderPaymentSettings:
+      type: object
+      description: 'Fees per currency in minor units (0–10000), at least one payment method. Customers cancel for a full
+
+        refund incl. the delivery fee until the window closes (cancelUntil CLOSE).'
+      properties:
+        doorFee:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          example:
+            USD: 799
+            CAD: 999
+        pickupFee:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          example:
+            USD: 0
+        pickupWindow:
+          type: string
+          example: 10am–2pm
+          maxLength: 40
+          minLength: 0
+        allowedMethods:
+          type: array
+          description: CARD, WALLET (Apple Pay, Google Pay, Link), ACH
+          items:
+            type: string
+            enum:
+            - CARD
+            - WALLET
+            - ACH
+        lateAdd:
+          $ref: '#/components/schemas/LateAddBody'
+        missedDelivery:
+          $ref: '#/components/schemas/MissedDeliveryBody'
+        cancelUntil:
+          type: string
+          enum:
+          - CLOSE
+    PreorderSettingsRequest:
+      type: object
+      description: Null fields keep their value
+      properties:
+        enabled:
+          type: boolean
+        fallback:
+          type: string
+          enum:
+          - SHIP
+          - WAITLIST
+        placements:
+          type: object
+          additionalProperties:
+            type: boolean
+        payment:
+          $ref: '#/components/schemas/PreorderPaymentSettings'
+    PreorderSettings:
+      type: object
+      description: Platform settings; the ETag carries the version for If-Match
+      properties:
+        enabled:
+          type: boolean
+        fallback:
+          type: string
+          enum:
+          - SHIP
+          - WAITLIST
+        placements:
+          type: object
+          additionalProperties:
+            type: boolean
+          description: ribbon, hero, badge, pdp, cart, family
+        payment:
+          $ref: '#/components/schemas/PreorderPaymentSettings'
+        version:
+          type: integer
+          format: int64
+        updatedAt:
           type: string
           format: date-time
     LocationRequest:
@@ -1836,11 +3226,14 @@ components:
           $ref: '#/components/schemas/EconomicsSnapshot'
     EmailSubscriptionRequest:
       type: object
-      description: 'Anonymous sign-up: email alerts after double opt-in'
+      description: 'Anonymous sign-up. With locationId: run alerts for the location (double opt-in). Without it: the pre-order
+
+        waitlist of an area (area "US/TX/Lubbock", or country + region [+ city]); the opening notice is sent to it.'
       properties:
         locationId:
           type: string
           format: uuid
+          description: Run alerts of a location
         email:
           type: string
           format: email
@@ -1851,9 +3244,26 @@ components:
           example: location-page
           maxLength: 80
           minLength: 0
+        area:
+          type: string
+          description: Waitlist area
+          example: US/TX/Lubbock
+          maxLength: 100
+          minLength: 0
+        country:
+          type: string
+          maxLength: 2
+          minLength: 0
+        region:
+          type: string
+          maxLength: 3
+          minLength: 0
+        city:
+          type: string
+          maxLength: 80
+          minLength: 0
       required:
       - email
-      - locationId
     SubscriptionAccepted:
       type: object
       properties:
@@ -1930,6 +3340,306 @@ components:
           minLength: 0
       required:
       - token
+    PreorderItem:
+      type: object
+      properties:
+        atin:
+          type: string
+          minLength: 1
+        qty:
+          type: integer
+          format: int32
+          maximum: 99
+          minimum: 1
+      required:
+      - atin
+    PreorderLateAddress:
+      type: object
+      description: Delivery address snapshot of a late order
+      properties:
+        fullName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        phone:
+          type: string
+          maxLength: 40
+          minLength: 0
+        line1:
+          type: string
+          maxLength: 200
+          minLength: 0
+        line2:
+          type: string
+          maxLength: 200
+          minLength: 0
+        city:
+          type: string
+          maxLength: 120
+          minLength: 0
+        region:
+          type: string
+          description: State / region code
+          maxLength: 40
+          minLength: 0
+        zip:
+          type: string
+          maxLength: 20
+          minLength: 0
+        country:
+          type: string
+          maxLength: 2
+          minLength: 2
+        instructions:
+          type: string
+          maxLength: 240
+          minLength: 0
+    PreorderLateOrderRequest:
+      type: object
+      description: 'A late order placed by customer service through orders-service (on-behalf order, channel AGENT_LATE).
+
+        Send either addressId or newAddress; phoneConfirmed must be true. address carries the delivery address
+
+        snapshot orders-service needs (recipient, street, city, state, postal code): required with a saved
+
+        addressId; for a new address, city / state default to the window''s first city.'
+      properties:
+        customerId:
+          type: string
+          minLength: 1
+        addressId:
+          type: string
+        newAddress:
+          $ref: '#/components/schemas/PreorderNewAddress'
+        address:
+          $ref: '#/components/schemas/PreorderLateAddress'
+        phoneConfirmed:
+          type: boolean
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderItem'
+          maxItems: 50
+          minItems: 0
+        payment:
+          type: string
+          enum:
+          - SAVED_CARD
+          - PAYMENT_LINK
+        reason:
+          type: string
+          enum:
+          - CUSTOMER_CALLED
+          - LIVE_CHAT
+          - PAYMENT_FAILED
+          - GOODWILL
+          - DRIVER_REPORT
+          - OTHER
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - customerId
+      - items
+      - payment
+      - phoneConfirmed
+      - reason
+    PreorderNewAddress:
+      type: object
+      properties:
+        line1:
+          type: string
+          maxLength: 200
+          minLength: 0
+        zip:
+          type: string
+          maxLength: 20
+          minLength: 0
+        placeId:
+          type: string
+          description: Google Places id it was verified with
+          minLength: 1
+      required:
+      - line1
+      - placeId
+      - zip
+    PreorderOrder:
+      type: object
+      description: 'A projected pre-order (minimum PII for dispatch). paymentLinkUrl / ordersStatus are set on the response
+        of
+
+        a late add only.'
+      properties:
+        orderId:
+          type: string
+        number:
+          type: string
+        windowId:
+          type: string
+          format: uuid
+        customerName:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        addressLine:
+          type: string
+        city:
+          type: string
+        region:
+          type: string
+        zip:
+          type: string
+        deliveryNote:
+          type: string
+        placedAt:
+          type: string
+          format: date-time
+        channel:
+          type: string
+          enum:
+          - SITE_HERO
+          - SITE_RIBBON
+          - SITE_PDP
+          - SITE_PAGE
+          - SITE_DIRECT
+          - APP
+          - INSTAGRAM
+          - FACEBOOK
+          - TIKTOK
+          - WHATSAPP
+          - EMAIL
+          - SMS
+          - AGENT_LATE
+        trackingTag:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderOrderLine'
+        units:
+          type: integer
+          format: int32
+        fulfilment:
+          type: string
+          enum:
+          - DOOR
+          - PICKUP
+        total:
+          type: integer
+          format: int64
+          description: Pre-order total incl. delivery, minor units
+        status:
+          type: string
+          enum:
+          - PAID
+          - LATE_ADD
+          - CANCELLED
+        note:
+          type: string
+        customerId:
+          type: string
+        channelLabel:
+          type: string
+        statusLabel:
+          type: string
+        deliveryFee:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        paymentLinkUrl:
+          type: string
+        ordersStatus:
+          type: string
+    PreorderOrderLine:
+      type: object
+      properties:
+        atin:
+          type: string
+        name:
+          type: string
+        sellerName:
+          type: string
+        qty:
+          type: integer
+          format: int32
+    PreorderAreaRequest:
+      type: object
+      properties:
+        key:
+          type: string
+          example: US/TX/Lubbock
+          minLength: 1
+      required:
+      - key
+    AreaPage:
+      type: object
+      properties:
+        level:
+          type: string
+        country:
+          type: string
+        region:
+          type: string
+        countryName:
+          type: string
+        regionName:
+          type: string
+        regionLabel:
+          type: string
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/Row'
+        total:
+          type: integer
+          format: int32
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        onCount:
+          type: integer
+          format: int32
+        offCount:
+          type: integer
+          format: int32
+        saved:
+          type: array
+          items:
+            $ref: '#/components/schemas/Saved'
+    Row:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        coverage:
+          type: string
+        windows:
+          type: integer
+          format: int32
+        'on':
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int32
+        leaf:
+          type: boolean
+    Saved:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
     MySubscriptionRequest:
       type: object
       properties:
@@ -1955,6 +3665,21 @@ components:
       required:
       - channels
       - locationId
+    PreorderAreaToggleRequest:
+      type: object
+      description: 'Keys: a country (US), a region (US/TX) or an area'
+      properties:
+        keys:
+          type: array
+          items:
+            type: string
+          maxItems: 500
+          minItems: 0
+        'on':
+          type: boolean
+      required:
+      - keys
+      - 'on'
     SubscriberCounts:
       type: object
       properties:
@@ -2017,6 +3742,145 @@ components:
         centerLng:
           type: number
           format: double
+    AudiencePageView:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+        next:
+          type: string
+    Member:
+      type: object
+      properties:
+        subscriptionId:
+          type: string
+        userId:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        unsubscribeUrl:
+          type: string
+    PlaceResponse:
+      type: object
+      properties:
+        key:
+          type: string
+        country:
+          type: string
+        region:
+          type: string
+        city:
+          type: string
+    PreorderEligibility:
+      type: object
+      description: 'Per-ATIN pre-order eligibility at a place (orders-service). A product is pre-order where pre-order is
+        on,
+
+        its catalog category is in the window''s categories and it is not flagged shipsNow. fees are what orders
+
+        charges for the PREORDER package (DOOR or PICKUP); lines of an UPCOMING or CLOSED window block checkout.'
+      properties:
+        place:
+          $ref: '#/components/schemas/PlaceResponse'
+        'on':
+          type: boolean
+        stage:
+          type: string
+          enum:
+          - DRAFT
+          - PAUSED
+          - UPCOMING
+          - OPEN
+          - CLOSED
+          - DELIVERED
+        windowId:
+          type: string
+          format: uuid
+        deliversOn:
+          type: string
+          format: date
+        fees:
+          $ref: '#/components/schemas/PreorderFees'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderEligibilityItem'
+    PreorderEligibilityItem:
+      type: object
+      description: 'One product. Window fields are set when preorder is true: orders-service builds the PREORDER package from
+
+        them (fees in minor units, the payment methods the checkout may use).'
+      properties:
+        atin:
+          type: string
+        preorder:
+          type: boolean
+        windowId:
+          type: string
+          format: uuid
+        windowCode:
+          type: string
+        windowName:
+          type: string
+        stage:
+          type: string
+          enum:
+          - DRAFT
+          - PAUSED
+          - UPCOMING
+          - OPEN
+          - CLOSED
+          - DELIVERED
+        deliversOn:
+          type: string
+          format: date
+        closesAt:
+          type: string
+          format: date-time
+        timeZone:
+          type: string
+        door:
+          type: boolean
+        pickup:
+          type: boolean
+        doorFeeMinor:
+          type: integer
+          format: int64
+        pickupFeeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        allowedMethods:
+          type: array
+          items:
+            type: string
+            enum:
+            - CARD
+            - WALLET
+            - ACH
+        pickupWindow:
+          type: string
+        pickupPointId:
+          type: string
+    PreorderFees:
+      type: object
+      description: Effective fees in minor units (null = option not offered)
+      properties:
+        doorFeeMinor:
+          type: integer
+          format: int64
+        pickupFeeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        pickupWindow:
+          type: string
     AudiencePage:
       type: object
       properties:
@@ -2027,18 +3891,6 @@ components:
         next:
           type: string
           format: uuid
-    Member:
-      type: object
-      properties:
-        subscriptionId:
-          type: string
-          format: uuid
-        userId:
-          type: string
-        email:
-          type: string
-        unsubscribeUrl:
-          type: string
     Advertorial:
       type: object
       properties:
@@ -2173,6 +4025,168 @@ components:
           description: No room left; checkout offers the next run
         runUrl:
           type: string
+    PreorderPublicWindow:
+      type: object
+      description: What shoppers see of a window (no PII)
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        where:
+          type: string
+        ribbon:
+          type: string
+        headline:
+          type: string
+        opensAt:
+          type: string
+          format: date-time
+        closesAt:
+          type: string
+          format: date-time
+        deliversOn:
+          type: string
+          format: date
+        timeZone:
+          type: string
+        categories:
+          type: array
+          items:
+            type: string
+        door:
+          type: boolean
+        pickup:
+          type: boolean
+        pickupAddress:
+          type: string
+        creatives:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PublicCreative'
+    PreorderResolution:
+      type: object
+      description: 'What the storefront shows for a delivery place: on = a window covers it, the master switch and the area
+
+        are on and the window is active. stage OPEN | UPCOMING | CLOSED; countdownTarget is closesAt when open,
+
+        opensAt when upcoming and the delivery day when closed. When on is false the fallback applies (SHIP or
+
+        WAITLIST); metro cities never show pre-order.'
+      properties:
+        place:
+          $ref: '#/components/schemas/PlaceResponse'
+        'on':
+          type: boolean
+        stage:
+          type: string
+          enum:
+          - DRAFT
+          - PAUSED
+          - UPCOMING
+          - OPEN
+          - CLOSED
+          - DELIVERED
+        metro:
+          type: boolean
+        fallback:
+          type: string
+          enum:
+          - SHIP
+          - WAITLIST
+        placements:
+          type: object
+          additionalProperties:
+            type: boolean
+        window:
+          $ref: '#/components/schemas/PreorderPublicWindow'
+        countdownTarget:
+          type: string
+          format: date-time
+        count:
+          type: integer
+          format: int32
+          description: Live pre-order count (when shown)
+        fees:
+          $ref: '#/components/schemas/PreorderFees'
+        paymentMethods:
+          type: array
+          items:
+            type: string
+            enum:
+            - CARD
+            - WALLET
+            - ACH
+        cancelUntil:
+          type: string
+          enum:
+          - CLOSE
+    PublicCreative:
+      type: object
+      properties:
+        url:
+          type: string
+        width:
+          type: integer
+          format: int32
+        height:
+          type: integer
+          format: int32
+    PreorderOpenWindow:
+      type: object
+      description: An open or upcoming window for the /pre-orders page
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        where:
+          type: string
+        stage:
+          type: string
+          enum:
+          - DRAFT
+          - PAUSED
+          - UPCOMING
+          - OPEN
+          - CLOSED
+          - DELIVERED
+        open:
+          type: boolean
+        city:
+          type: string
+        region:
+          type: string
+        country:
+          type: string
+        heroUrl:
+          type: string
+        opensAt:
+          type: string
+          format: date-time
+        closesAt:
+          type: string
+          format: date-time
+        deliversOn:
+          type: string
+          format: date
+        label:
+          type: string
+          example: Order by Oct 22 · delivered Oct 25
+        doorFeeMinor:
+          type: integer
+          format: int64
+        pickupFeeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
     PublicLocation:
       type: object
       properties:
@@ -2225,6 +4239,282 @@ components:
           type: object
           additionalProperties:
             type: string
+    PreorderWindowPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderWindowRow'
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+          description: 'Counts per tab: all, open, upcoming, closed, draft'
+        total:
+          type: integer
+          format: int32
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        enabled:
+          type: boolean
+          description: The pre-order master switch
+    PreorderWindowRow:
+      type: object
+      description: A row of the staff list
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        where:
+          type: string
+        opensAt:
+          type: string
+          format: date-time
+        closesAt:
+          type: string
+          format: date-time
+        deliversOn:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PAUSED
+          - UPCOMING
+          - OPEN
+          - CLOSED
+          - DELIVERED
+        areaOff:
+          type: boolean
+        orderCount:
+          type: integer
+          format: int32
+        revenue:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        statusLabel:
+          type: string
+        version:
+          type: integer
+          format: int64
+    ChannelResponse:
+      type: object
+      properties:
+        channel:
+          type: string
+          enum:
+          - SITE_HERO
+          - SITE_RIBBON
+          - SITE_PDP
+          - SITE_PAGE
+          - SITE_DIRECT
+          - APP
+          - INSTAGRAM
+          - FACEBOOK
+          - TIKTOK
+          - WHATSAPP
+          - EMAIL
+          - SMS
+          - AGENT_LATE
+        count:
+          type: integer
+          format: int32
+        label:
+          type: string
+    DayResponse:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+          format: int32
+        afterClose:
+          type: boolean
+    KpisResponse:
+      type: object
+      properties:
+        preorders:
+          type: integer
+          format: int32
+        cancelled:
+          type: integer
+          format: int32
+        customers:
+          type: integer
+          format: int32
+        units:
+          type: integer
+          format: int32
+        revenue:
+          type: integer
+          format: int64
+          description: Incl. delivery, minor units
+        avgOrder:
+          type: integer
+          format: int64
+        lateAdds:
+          type: integer
+          format: int32
+        deliveryRevenue:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    PlacementResponse:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        creative:
+          type: boolean
+        impressions:
+          type: integer
+          format: int64
+          description: 0 until placement tracking reports impressions
+        clicks:
+          type: integer
+          format: int64
+        ctr:
+          type: number
+          format: double
+        orders:
+          type: integer
+          format: int32
+    PreorderSummary:
+      type: object
+      description: Overview + Analytics of a window
+      properties:
+        kpis:
+          $ref: '#/components/schemas/KpisResponse'
+        ordersTotal:
+          type: integer
+          format: int32
+          description: Orders incl. cancelled
+        byDay:
+          type: array
+          items:
+            $ref: '#/components/schemas/DayResponse'
+        byChannel:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelResponse'
+        topProducts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductUnitsResponse'
+        fulfilmentSplit:
+          $ref: '#/components/schemas/SplitResponse'
+        placements:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlacementResponse'
+    ProductUnitsResponse:
+      type: object
+      properties:
+        name:
+          type: string
+        units:
+          type: integer
+          format: int32
+        atin:
+          type: string
+        seller:
+          type: string
+    SplitResponse:
+      type: object
+      properties:
+        door:
+          type: integer
+          format: int32
+        pickup:
+          type: integer
+          format: int32
+        doorPct:
+          type: integer
+          format: int32
+        pickupPct:
+          type: integer
+          format: int32
+    PreorderProduct:
+      type: object
+      description: A product of the window's categories (late-add picker)
+      properties:
+        atin:
+          type: string
+        name:
+          type: string
+        price:
+          type: integer
+          format: int64
+          description: Minor units
+        sellerName:
+          type: string
+        currency:
+          type: string
+    PreorderProductList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderProduct'
+    PreorderOrderPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PreorderOrder'
+        total:
+          type: integer
+          format: int32
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    Place:
+      type: object
+      properties:
+        key:
+          type: string
+        code:
+          type: string
+        name:
+          type: string
+        label:
+          type: string
+        sub:
+          type: string
+        type:
+          type: string
+    PlaceList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Place'
+        regionLabel:
+          type: string
     LocationHistory:
       type: object
       description: 'Per-location history: runs with orders, subscriber growth'
