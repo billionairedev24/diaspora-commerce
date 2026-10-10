@@ -572,17 +572,17 @@
 - Respect the caller's org and permissions","E32","","Medium","5","exports","exports","To Do"
 "S196","Story","Export service (PDF, CSV, XLSX with native charts)","Server-side generation for tables and dashboards.","- XLSX includes native Excel charts linked to data
 - PDF includes chart image, legend and data table","E32","","Medium","8","exports","exports","To Do"
-"E33","Epic","Testing & quality","Test pyramid, E2E on web and mobile, Storybook, load and security testing as merge gates.","","","Testing & quality","High","","quality","quality","To Do"
+"E33","Epic","Testing & quality","Test pyramid, E2E on web and mobile, Storybook, load and security testing as merge gates.","","","Testing & quality","High","","quality","quality","In Progress"
 "S197","Story","Unit, contract and integration test standards","JUnit/Go test/Vitest, Pact, Testcontainers; 80% coverage gate on domain modules.","- Every service has unit, ArchUnit/lint and Testcontainers integration tests
-- Coverage reported in CI","E33","","High","3","quality","quality","To Do"
+- Coverage reported in CI","E33","","High","3","quality","quality","In Progress"
 "S198","Story","Playwright E2E journeys","Sign-up, search → checkout (3DS, decline), multi-seller split, returns, onboarding, listing moderation, inventory, RBAC denials.","- Runs against per-PR previews on Chromium, WebKit and Firefox
-- Flaky tests quarantined with an owner","E33","","High","8","quality e2e","quality","To Do"
+- Flaky tests quarantined with an owner","E33","","High","8","quality e2e","quality","In Progress"
 "S199","Story","Storybook for UI packages and apps","Stories for every component state including RTL and mobile; a11y and visual tests.","- Interaction tests run in CI
-- Visual diffs require review","E33","","High","5","quality web","quality","To Do"
+- Visual diffs require review","E33","","High","5","quality web","quality","In Progress"
 "S200","Story","Load tests (k6) for search and checkout","Flash-sale profile proves no overselling and latency budgets.","- Search p95 < 150 ms at target load
-- Exactly N of N+25 concurrent orders succeed for N units","E33","","High","5","quality performance","quality","To Do"
+- Exactly N of N+25 concurrent orders succeed for N units","E33","","High","5","quality performance","quality","In Progress"
 "S201","Story","Security scanning","CodeQL, Trivy, gitleaks, OWASP dependency check and ZAP baseline on previews.","- Critical findings fail the build
-- SBOMs attached to every image","E33","","High","3","quality security","quality","To Do"
+- SBOMs attached to every image","E33","","High","3","quality security","quality","In Progress"
 "S202","Story","Encrypt TOTP secrets and MFA material at rest","TOTP seeds are currently stored in plain text in the identity database; encrypt them with an envelope key from the cloud KMS / secret store.","- TOTP secrets are encrypted with AES-GCM using a key from the secret store
 - Key rotation re-encrypts existing secrets without downtime
 - A database dump alone cannot generate valid codes","E02","","Highest","3","identity security","identity","To Do"
