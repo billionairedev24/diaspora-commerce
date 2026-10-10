@@ -1,0 +1,24 @@
+env: uat
+replicas: 2
+autoscaling:
+  enabled: true
+  min: 2
+  max: 4
+  cpu: 70
+rollout:
+  enabled: true
+resources:
+  requests: {cpu: 250m, memory: 768Mi}
+  limits: {memory: 1536Mi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.5"
+tolerations:
+  - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.uat.afrotransact.com
+  ORDERS_URL: http://orders:8080
+  INVENTORY_URL: http://inventory:8080
+  GEO_URL: http://geo:8080
+  # Node for FC tasks when inventory has no reservation (empty = ops assign it).
+  FULFILMENT_DEFAULT_NODE: ""

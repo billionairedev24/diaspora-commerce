@@ -1,0 +1,114 @@
+spring:
+  application:
+    name: fulfilment-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/fulfilment}
+    username: ${DB_USER:fulfilment}
+    password: ${DB_PASSWORD:fulfilment}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: ${KAFKA_GROUP:fulfilment-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+  mvc:
+    async:
+      # Server-sent event streams (dispatch console, driver app) stay open up to 30 minutes, then reconnect.
+      request-timeout: 30m
+
+server:
+  port: ${PORT:8108}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: fulfilment-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  consumers:
+    # Kafka listeners for orders and identity events (off in tests that have no broker).
+    enabled: ${CONSUMERS_ENABLED:true}
+  api-docs:
+    title: Fulfilment API
+    description: >-
+      Fulfilment centres, pick/pack of FBA and Retail 1P shipments, delivery dispatch (routes per zone, drivers,
+      reassignment, SOS, live stream) and the offline-first driver app API (access check, vehicle inspection, load-out
+      and stop scans, seller pickups, proof of delivery, delivery problems, ordered idempotent sync).
+    version: v1
+  events:
+    relay-enabled: true
+  fulfilment:
+    # Node used for FC tasks when inventory has no reservation for the order (empty = assign by hand).
+    default-node: ${FULFILMENT_DEFAULT_NODE:}
+    pod:
+      max-distance-meters: ${POD_MAX_DISTANCE_METERS:150}
+    reattempt:
+      wait: ${REATTEMPT_WAIT:5m}
+      max-reattempts: ${MAX_REATTEMPTS:2}
+    relay:
+      max-attempts: ${ORDERS_RELAY_MAX_ATTEMPTS:20}
+    oauth:
+      issuer-url: ${AUTH_ISSUER_URI:http://localhost:8100}
+      token-path: /oauth2/token
+      client-id: ${FULFILMENT_CLIENT_ID:fulfilment-service}
+      client-secret: ${FULFILMENT_CLIENT_SECRET:}
+      scopes: ${FULFILMENT_CLIENT_SCOPES:orders:update-status inventory:reserve}
+    upstreams:
+      timeout: ${UPSTREAM_TIMEOUT:5s}
+      geo-timeout: ${GEO_TIMEOUT:2s}
+      orders-url: ${ORDERS_URL:http://localhost:8104}
+      inventory-url: ${INVENTORY_URL:http://localhost:8103}
+      geo-url: ${GEO_URL:http://localhost:8205}
+    consumers:
+      orders-topic: at.order.events
+      identity-topic: at.identity.events
+    jobs:
+      enabled: ${FULFILMENT_JOBS_ENABLED:true}
+      relay-interval: ${ORDERS_RELAY_INTERVAL:5s}
+      relay-batch: 50

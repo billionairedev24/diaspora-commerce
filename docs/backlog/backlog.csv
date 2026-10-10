@@ -274,26 +274,26 @@
 - Pickup ready notifications sent to customers","E11","","Medium","5","carriers delivery","carriers","Done"
 "E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","In Progress"
 "S081","Story","Driver app sign-in with access check","Email + password + 6-digit code; only users with delivery:operate get in.","- Users without delivery:operate see 'No driver access' with who can grant it
-- Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","To Do"
+- Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","In Progress"
 "S082","Story","Vehicle inspection","10 checks with critical items, odometer, fuel, cold-box temperature, 4 live photos and signature.","- Failing brakes, tyres or lights blocks the route and reports a defect to dispatch
 - Cold-box must read 33–40°F when perishables are on board
-- Photos come only from the live in-app camera","E12","","High","5","delivery mobile","delivery","In Progress"
+- Photos come only from the live in-app camera","E12","","High","5","delivery mobile","delivery","Done"
 "S083","Story","Load-out scanning","Scan every package for the route out of the warehouse.","- Unknown or already-scanned labels are rejected
-- Manual label entry is available and flagged","E12","","High","3","delivery mobile","delivery","In Progress"
+- Manual label entry is available and flagged","E12","","High","3","delivery mobile","delivery","Done"
 "S084","Story","Seller pickup stops","Scan packages at seller locations and record who handed them over; handle pickup problems.","- Not ready (wait/skip), closed, wrong count and damaged flows
-- Pickup confirmation needs all expected scans or a reason","E12","","High","5","delivery mobile","delivery","In Progress"
+- Pickup confirmation needs all expected scans or a reason","E12","","High","5","delivery mobile","delivery","Done"
 "S085","Story","Proof of delivery","Arrive, scan, choose handover method and take a live, GPS-stamped photo within 150 m.","- Handed to customer requires the 4-digit code
 - Someone else requires name, relationship and signature
 - Safe place blocked for perishables
 - Photo stamped with time, GPS and route id","E12","","Highest","8","delivery mobile","delivery","In Progress"
 "S086","Story","Delivery problems and reattempts","Customer unavailable, access issues, damage, refusal, missing package, unsafe — with required evidence.","- Customer unavailable needs call, text and 5-minute wait before reattempt/pickup point/return
 - Reattempt stops must be resolved before shift end
-- Failed packages scanned back in at end of shift","E12","","High","8","delivery mobile","delivery","In Progress"
+- Failed packages scanned back in at end of shift","E12","","High","8","delivery mobile","delivery","Done"
 "S087","Story","SOS and offline-first sync","SOS alerts with GPS; every action queued with idempotency keys and sent in order.","- Offline actions queue and sync in order when back online
 - Header shows Synced / Syncing / Offline
-- SOS alerts dispatch immediately","E12","","High","8","delivery mobile","delivery","In Progress"
+- SOS alerts dispatch immediately","E12","","High","8","delivery mobile","delivery","Done"
 "S088","Story","Dispatch console","Plan routes per zone, assign drivers and reassign failed stops.","- Driver events stream into Delivery dispatch
-- Failed stops can be reassigned to another route","E12","","Medium","8","delivery staff-console","delivery","In Progress"
+- Failed stops can be reassigned to another route","E12","","Medium","8","delivery staff-console","delivery","Done"
 "E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","In Progress"
 "S089","Story","Resumable application with autosave","Applicants can save, sign out and resume exactly where they left off.","- Draft autosaves after every change
 - Save & sign out returns to 'Welcome back' and resumes on sign-in
@@ -341,7 +341,7 @@
 - Metered usage for FBA storage, ads and AI credits","E14","","High","8","billing stripe java","billing","In Progress"
 "S104","Story","Billing page with real card/bank presentation","Payment methods shown as brand cards with last 4 or bank with type and verification.","- Default method cannot be removed until another is default
 - Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","Done"
-"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","Done"
+"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","In Progress"
 "S105","Story","Provider availability and calendar","Weekly hours with breaks, blocked dates, minimum notice, buffers, daily limit and instant booking.","- Week and month calendar views with booking quick view
 - Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","Done"
 "S106","Story","Services & prices with provider take-home","Duration, price and deposit per service, showing what the provider receives after commission and fees.","- Take-home amount shown per service
@@ -685,3 +685,7 @@
 - Public review list per provider and service
 - No-deposit services charge balance via off-session flow
 - Customers are notified when the balance is unpaid","E15","","Medium","5","bookings notifications","bookings","To Do"
+"S233","Story","Orders accepts relayed courier events and richer shipment data","Orders accepts courier events relayed by fulfilment-service (scope delivery:relay, driverId as actor); orders.order.placed carries per-shipment nodeId, perishable flag and ship-to street and position; dispatch can read delivery briefs; inventory offers pick confirmation.","- Queued proofs of delivery are accepted from fulfilment-service while the driver is offline
+- order placed events include nodeId, perishable, street and lat/lng per shipment
+- Dispatch role can read delivery briefs
+- 150 m proof-of-delivery check applies to all stops","E12","","High","5","orders fulfilment identity","delivery","To Do"

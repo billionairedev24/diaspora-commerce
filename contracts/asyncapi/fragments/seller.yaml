@@ -20,8 +20,8 @@ channels:
   sellerComplianceEvents:
     address: at.seller-compliance.events
     description: >-
-      Stripe Connect compliance mirror and automatic enforcement (key = org id, so pause / resume and hide / restore
-      for one organisation stay in order).
+      Stripe Connect compliance mirror and automatic enforcement, plus Trust and Safety suspension holds (key = org
+      id, so pause / resume and hide / restore for one organisation stay in order).
     messages:
       sellerComplianceChanged: {$ref: '#/components/messages/sellerComplianceChanged'}
       sellerComplianceReminder: {$ref: '#/components/messages/sellerComplianceReminder'}
@@ -50,7 +50,8 @@ operations:
       organisation with the seller org id (org_…) as its id and grants applicantUserId and ownerUserIds the
       seller.owner / provider.owner role, so the next token carries the org claim (unlocking Seller Center / Provider
       Hub). seller.org.updated: indexer refreshes the seller display name on indexed documents, cart refreshes it;
-      identity mirrors name, status and market.
+      identity mirrors name, status and market. Also published when Trust and Safety suspends (status SUSPENDED) or
+      reinstates (status back to APPROVED) an organisation.
   publishSellerComplianceEvents:
     action: send
     channel: {$ref: '#/channels/sellerComplianceEvents'}
@@ -60,6 +61,11 @@ operations:
       and approvals fail with 422 payments.payouts_paused while held). seller.listings.hidden / restored: catalog
       suppresses the org's products from public reads and republishes them as catalog.product.hidden / restored (the
       indexer follows those), offers and bookings hide or show the org's listings and services.
+      Trust and Safety suspension (POST /v1/orgs/{orgId}/suspend, sellers:enforce) is a separate hold: it publishes
+      seller.listings.hidden and seller.payouts.paused with reason SUSPENDED; reinstatement publishes
+      seller.payouts.resumed / seller.listings.restored with reason REINSTATED only when no Stripe compliance hold
+      still requires them, and compliance releases (CLEARED, MANUAL) are held back while the organisation is
+      suspended. Consumers keep treating these as one latest-wins hold per organisation.
   publishSellerSubscriptionEvents:
     action: send
     channel: {$ref: '#/channels/sellerSubscriptionEvents'}
@@ -112,21 +118,26 @@ components:
       payload: {$ref: '#/components/schemas/SellerComplianceReminder'}
     sellerPayoutsPaused:
       name: seller.payouts.paused
-      title: Hold payouts (past-due requirements, staff hold or disconnected account); funds keep accruing
+      title: >-
+        Hold payouts (past-due requirements, staff hold, disconnected account or Trust and Safety suspension); funds
+        keep accruing
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/SellerEnforcement'}
     sellerPayoutsResumed:
       name: seller.payouts.resumed
-      title: Release held payouts (requirements cleared, or released by Trust & Safety)
+      title: >-
+        Release held payouts (requirements cleared, released by staff, or seller reinstated with no compliance hold
+        left)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/SellerEnforcement'}
     sellerListingsHidden:
       name: seller.listings.hidden
-      title: Charges disabled — hide listings and bookings from the storefront
+      title: Charges disabled, account disconnected or seller suspended — hide listings and bookings from the storefront
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/SellerEnforcement'}
     sellerListingsRestored:
       name: seller.listings.restored
+      title: Show listings again (charges re-enabled, or seller reinstated while no compliance hold hides them)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/SellerEnforcement'}
     sellerSubscriptionChanged:
@@ -212,10 +223,19 @@ components:
       required: [orgId, accountId, reason, occurredAt]
       properties:
         orgId: {type: string}
-        accountId: {type: string}
-        reason: {type: string, enum: [AUTO_PAST_DUE, MANUAL, DEAUTHORIZED, CHARGES_DISABLED, CLEARED]}
-        actorId: {type: [string, 'null'], description: Staff member for manual holds and releases}
-        note: {type: [string, 'null']}
+        accountId:
+          type: [string, 'null']
+          description: Stripe connected account; null for a suspension of an organisation that has none yet
+        reason:
+          type: string
+          enum: [AUTO_PAST_DUE, MANUAL, DEAUTHORIZED, CHARGES_DISABLED, CLEARED, SUSPENDED, REINSTATED]
+          description: >-
+            SUSPENDED / REINSTATED come from Trust and Safety suspension (seller-service /v1/orgs/{orgId}/suspend and
+            /reinstate); the others from Stripe compliance enforcement.
+        actorId:
+          type: [string, 'null']
+          description: Staff member or service client (trust-ops-service) for manual holds, suspensions and releases
+        note: {type: [string, 'null'], description: 'For suspensions: "[REASON_CODE] note"'}
         pastDue: {type: array, items: {type: string}}
         occurredAt: {type: string, format: date-time}
     SellerSubscriptionChanged:

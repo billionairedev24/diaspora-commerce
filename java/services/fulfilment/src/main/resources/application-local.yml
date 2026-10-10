@@ -1,0 +1,11 @@
+# Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
+at:
+  security:
+    enabled: false
+  fulfilment:
+    oauth:
+      # Matches identity-service's local fulfilment-service client; cloud environments read the secret store.
+      client-secret: ${FULFILMENT_CLIENT_SECRET:local-fulfilment-service-secret}
+logging:
+  level:
+    com.afrotransact: DEBUG

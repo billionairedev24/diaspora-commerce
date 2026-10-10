@@ -1,0 +1,1700 @@
+openapi: 3.1.0
+info:
+  title: Fulfilment API
+  description: Fulfilment centres, pick/pack of FBA and Retail 1P shipments, delivery dispatch (routes per zone, drivers,
+    reassignment, SOS, live stream) and the offline-first driver app API (access check, vehicle inspection, load-out and stop
+    scans, seller pickups, proof of delivery, delivery problems, ordered idempotent sync).
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8108
+  description: local
+- url: https://api.dev.afrotransact.com/fulfilment
+  description: dev
+- url: https://api.uat.afrotransact.com/fulfilment
+  description: uat
+- url: https://api.afrotransact.com/fulfilment
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Dispatch
+  description: 'Delivery dispatch console (delivery:dispatch): routes per zone, drivers, reassignment of failed stops, SOS
+    and defects, live driver events'
+- name: Driver app
+  description: Offline-first API of the AfroTransact Delivery driver app (delivery:operate)
+- name: Fulfilment centres
+  description: Centres / nodes and pick-pack tasks for FBA and Retail 1P shipments (fulfilment:operate)
+paths:
+  /v1/centres:
+    get:
+      tags:
+      - Fulfilment centres
+      summary: List fulfilment centres (fulfilment:operate or delivery:dispatch)
+      operationId: listCentres
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Centre'
+  /v1/centres/{id}:
+    get:
+      tags:
+      - Fulfilment centres
+      summary: Get a fulfilment centre
+      operationId: getCentre
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Centre'
+    put:
+      tags:
+      - Fulfilment centres
+      summary: Create or update a fulfilment centre (fulfilment:operate)
+      description: Use the inventory-service node id (e.g. HOU-FC1) so stock, tasks and routes line up.
+      operationId: saveCentre
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CentreRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Centre'
+  /v1/dispatch/defects:
+    get:
+      tags:
+      - Dispatch
+      summary: Open vehicle defects
+      operationId: listDefects
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VehicleDefect'
+  /v1/dispatch/defects/{defectId}/resolve:
+    post:
+      tags:
+      - Dispatch
+      summary: Resolve a defect and unblock the route (the driver re-inspects before starting)
+      operationId: resolveDefect
+      parameters:
+      - name: defectId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveDefectRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/drivers/{driverId}/reinstate:
+    post:
+      tags:
+      - Dispatch
+      summary: Lift a dispatch suspension
+      operationId: reinstateDriver
+      parameters:
+      - name: driverId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DriverAccess'
+  /v1/dispatch/drivers/{driverId}/suspend:
+    post:
+      tags:
+      - Dispatch
+      summary: Suspend a driver now
+      description: The app is told to sign out (driver stream session.revoked, next sync signOut=true); events captured before
+        the suspension still sync.
+      operationId: suspendDriver
+      parameters:
+      - name: driverId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DriverAccess'
+  /v1/dispatch/events:
+    get:
+      tags:
+      - Dispatch
+      summary: Driver events as received (newest first)
+      operationId: listDriverEvents
+      parameters:
+      - name: routeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: driverId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DriverEventLogEntry'
+  /v1/dispatch/forward-failures:
+    get:
+      tags:
+      - Dispatch
+      summary: Calls to orders-service that could not be applied
+      operationId: listForwardFailures
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ForwardFailure'
+  /v1/dispatch/routes:
+    get:
+      tags:
+      - Dispatch
+      summary: List routes (fulfilment:operate or delivery:dispatch)
+      operationId: listRoutes
+      parameters:
+      - name: date
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: driverId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Route'
+    post:
+      tags:
+      - Dispatch
+      summary: Create a route (optionally with shipments from the pool)
+      operationId: createRoute
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRouteRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/routes/build:
+    post:
+      tags:
+      - Dispatch
+      summary: 'Route builder: plan the depot''s waiting shipments into routes per delivery zone'
+      description: Zones come from geo-service (ZIP centroid → active DELIVERY zone covering it); without a zone the ZIP is
+        the group. One drop-off per order, seller pickups first, at most maxDropoffs drop-offs per route (default 25).
+      operationId: buildRoutes
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BuildRoutesRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Route'
+  /v1/dispatch/routes/{routeId}:
+    get:
+      tags:
+      - Dispatch
+      summary: Route with stops and packages
+      operationId: getRoute
+      parameters:
+      - name: routeId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/routes/{routeId}/assign:
+    post:
+      tags:
+      - Dispatch
+      summary: Assign a driver (and vehicle)
+      description: A different vehicle needs a new inspection.
+      operationId: assignRoute
+      parameters:
+      - name: routeId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/routes/{routeId}/cancel:
+    post:
+      tags:
+      - Dispatch
+      summary: Cancel a route that has not started (shipments go back to the pool)
+      operationId: cancelRoute
+      parameters:
+      - name: routeId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/routes/{routeId}/shipments:
+    post:
+      tags:
+      - Dispatch
+      summary: Add pool shipments to a route (drop-offs; seller pickups added automatically)
+      operationId: addShipmentsToRoute
+      parameters:
+      - name: routeId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddShipmentsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/routes/{routeId}/stops/{stopId}:
+    delete:
+      tags:
+      - Dispatch
+      summary: Remove a stop before the route starts (its shipments go back to the pool)
+      operationId: removeStop
+      parameters:
+      - name: routeId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: stopId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/routes/{routeId}/stops/{stopId}/reassign:
+    post:
+      tags:
+      - Dispatch
+      summary: Reassign a failed, retry, skipped or pending drop-off to another open route
+      description: Packages still on the old van are marked for return to the FC; the new route loads them at the FC (or picks
+        them up at the seller when they never left). Returns the target route.
+      operationId: reassignStop
+      parameters:
+      - name: routeId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: stopId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReassignRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/shipments:
+    get:
+      tags:
+      - Dispatch
+      summary: Shipments waiting for a route
+      operationId: listAwaitingShipments
+      parameters:
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeliveryShipment'
+  /v1/dispatch/sos:
+    get:
+      tags:
+      - Dispatch
+      summary: Open SOS alerts
+      operationId: listSos
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SosAlert'
+  /v1/dispatch/sos/{alertId}/acknowledge:
+    post:
+      tags:
+      - Dispatch
+      summary: Acknowledge an SOS alert
+      operationId: acknowledgeSos
+      parameters:
+      - name: alertId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
+  /v1/dispatch/stream:
+    get:
+      tags:
+      - Dispatch
+      summary: Live stream of driver events (server-sent events)
+      description: 'Event names: driver.event (every synced event with its outcome), driver.sos (HIGH), vehicle.defect, route.updated,
+        stop.reassigned, shipment.cancelled, orders.forward_failed, session.revoked, driver.sos_acknowledged.'
+      operationId: dispatchStream
+      responses:
+        '200':
+          description: OK
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SseEmitter'
+  /v1/driver/me:
+    get:
+      tags:
+      - Driver app
+      summary: Access check after sign-in
+      description: '200 with the driver''s open routes when the token grants delivery:operate. 403 fulfilment.no-driver-access
+        (show “No driver access” with grantHint) or fulfilment.driver-access-revoked (signOut=true: sign out, keep the outbox
+        and sync it).'
+      operationId: driverMe
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DriverSession'
+  /v1/driver/routes:
+    get:
+      tags:
+      - Driver app
+      summary: My open routes with stops, packages and manifest (download for offline work)
+      operationId: driverRoutes
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Route'
+  /v1/driver/routes/{routeId}:
+    get:
+      tags:
+      - Driver app
+      summary: One of my routes
+      operationId: driverRoute
+      parameters:
+      - name: routeId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/driver/sos:
+    post:
+      tags:
+      - Driver app
+      summary: Raise an SOS now (also keep it in the outbox with the same eventId)
+      description: 'Dispatch is alerted immediately: fulfilment.driver.sos_raised (priority HIGH) and driver.sos on the dispatch
+        stream. Idempotent per eventId.'
+      operationId: driverSos
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SosRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EventResult'
+  /v1/driver/stream:
+    get:
+      tags:
+      - Driver app
+      summary: My live stream (server-sent events)
+      description: session.revoked (sign out now), route.assigned, route.updated, route.unassigned, route.cancelled, route.unblocked,
+        vehicle.defect, driver.sos.
+      operationId: driverStream
+      responses:
+        '200':
+          description: OK
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SseEmitter'
+  /v1/driver/sync:
+    post:
+      tags:
+      - Driver app
+      summary: Sync queued events (offline-first)
+      description: 'Events are applied strictly in per-device sequence order, each at most once (eventId) and in its own transaction.
+        Per event: APPLIED, REJECTED (a rule failed; fix and queue a new event), CONFLICT (state moved on / sequence reused)
+        or DEFERRED (an earlier sequence is missing; resend from expectedSequence). Replays return the stored outcome with
+        replayed=true. SOS events are raised first even behind a gap. After revocation signOut=true and only events captured
+        before revokedAt are accepted.'
+      operationId: driverSync
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SyncResult'
+  /v1/fc/tasks:
+    get:
+      tags:
+      - Fulfilment centres
+      summary: Pick/pack queue (fulfilment:operate)
+      description: Tasks are created from orders.order.placed for FBA_AFROTRANSACT and RETAIL_1P shipments.
+      operationId: listTasks
+      parameters:
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FulfilmentTask'
+  /v1/fc/tasks/{id}:
+    get:
+      tags:
+      - Fulfilment centres
+      summary: Get a task
+      operationId: getTask
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FulfilmentTask'
+  /v1/fc/tasks/{id}/node:
+    post:
+      tags:
+      - Fulfilment centres
+      summary: Assign the fulfilment centre (when inventory had no reservation node)
+      operationId: assignTaskNode
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignNodeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FulfilmentTask'
+  /v1/fc/tasks/{id}/pack:
+    post:
+      tags:
+      - Fulfilment centres
+      summary: Pack the parcel
+      description: Moves the shipment to packed in orders-service. Carrier shipments attach the carrier label (bought from
+        carrier-gateway POST /v1/labels) for tracking.
+      operationId: packTask
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PackRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FulfilmentTask'
+  /v1/fc/tasks/{id}/pick:
+    post:
+      tags:
+      - Fulfilment centres
+      summary: Record picked units
+      description: All units ⇒ PICKED; fewer with shortReason ⇒ PICK_EXCEPTION (restart the pick to retry).
+      operationId: recordPick
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PickRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FulfilmentTask'
+  /v1/fc/tasks/{id}/pick/start:
+    post:
+      tags:
+      - Fulfilment centres
+      summary: Start picking
+      description: Moves the shipment to confirmed in orders-service.
+      operationId: startPick
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FulfilmentTask'
+  /v1/fc/tasks/{id}/ready:
+    post:
+      tags:
+      - Fulfilment centres
+      summary: Stage at the outbound dock
+      description: Moves the shipment to ready in orders-service.
+      operationId: stageTask
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FulfilmentTask'
+components:
+  schemas:
+    CentreRequest:
+      type: object
+      description: Create or update a fulfilment centre (id from the path)
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        kind:
+          type: string
+          description: FULFILMENT_CENTRE | ORIGIN_HUB | WAREHOUSE
+        timezone:
+          type: string
+          example: America/Chicago
+        addressLine:
+          type: string
+          maxLength: 200
+          minLength: 0
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+          maxLength: 2
+          minLength: 2
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        coldChain:
+          type: boolean
+        active:
+          type: boolean
+      required:
+      - name
+    Centre:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        timezone:
+          type: string
+        addressLine:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        coldChain:
+          type: boolean
+        active:
+          type: boolean
+    FulfilmentTask:
+      type: object
+      description: Pick and pack of one FBA / Retail 1P shipment
+      properties:
+        id:
+          type: string
+        shipmentId:
+          type: string
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        fulfilmentType:
+          type: string
+        deliveryMethod:
+          type: string
+        nodeId:
+          type: string
+        status:
+          type: string
+          description: PICK_PENDING | PICKING | PICK_EXCEPTION | PICKED | PACKED | READY | CANCELLED
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskLine'
+        packageLabel:
+          type: string
+          description: AfroTransact package label (ATS + 9), scanned at driver load-out
+        weightLb:
+          type: number
+          format: double
+        carrier:
+          type: string
+        trackingNumber:
+          type: string
+        exceptionReason:
+          type: string
+        operator:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int32
+    TaskLine:
+      type: object
+      properties:
+        lineId:
+          type: string
+        variantAtin:
+          type: string
+        title:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        picked:
+          type: integer
+          format: int32
+        lotIds:
+          type: string
+    PickRequest:
+      type: object
+      description: Units picked per variant ATIN; fewer than ordered needs shortReason
+      properties:
+        picked:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        lots:
+          type: object
+          additionalProperties:
+            type: string
+          description: Lot ids picked from per variant ATIN (comma separated)
+        shortReason:
+          type: string
+          maxLength: 500
+          minLength: 0
+    PackRequest:
+      type: object
+      description: Carrier shipments need the label bought from carrier-gateway
+      properties:
+        weightLb:
+          type: number
+          format: double
+          maximum: 150
+          minimum: 0.01
+        carrier:
+          type: string
+        trackingNumber:
+          type: string
+    AssignNodeRequest:
+      type: object
+      properties:
+        nodeId:
+          type: string
+          minLength: 1
+      required:
+      - nodeId
+    DeliveryPayload:
+      type: object
+      description: Proof of delivery
+      properties:
+        handoverMethod:
+          type: string
+          description: CUSTOMER | SOMEONE_ELSE | SAFE_PLACE
+        handoverCode:
+          type: string
+          description: Customer's 4-digit code (checked by orders-service, never stored)
+        recipientName:
+          type: string
+        relationship:
+          type: string
+          description: Family member, Neighbour, Roommate, Front desk / concierge, Colleague
+        signatureAssetId:
+          type: string
+        safePlace:
+          type: string
+        photo:
+          $ref: '#/components/schemas/PhotoCapture'
+          description: Stamped with time, GPS and route id; within 150 m of the address
+    DriverEvent:
+      type: object
+      description: 'One queued driver action. Exactly the payload object matching the type is read: inspection.submitted →
+        inspection; loadout.scanned / stop.scanned / return.scanned → scan; pickup.confirmed → pickup; pickup.problem → pickupProblem;
+        customer.contacted → contact; delivery.completed → delivery; delivery.problem → problem; shift.ended → odometer; sos.raised
+        → sos'
+      properties:
+        eventId:
+          type: string
+          description: Client-generated unique id (idempotency key), e.g. a UUID
+          maxLength: 80
+          minLength: 0
+        sequence:
+          type: integer
+          format: int64
+          description: Per-device sequence number starting at 1; applied strictly in order
+        type:
+          type: string
+          description: session.signed_in | inspection.submitted | loadout.scanned | loadout.completed | route.started | stop.arrived
+            | stop.scanned | pickup.confirmed | pickup.problem | customer.contacted | delivery.completed | delivery.problem
+            | return.scanned | shift.ended | sos.raised
+        routeId:
+          type: string
+        stopId:
+          type: string
+        capturedAt:
+          type: string
+          format: date-time
+          description: Device time of the action
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+        inspection:
+          $ref: '#/components/schemas/InspectionPayload'
+        scan:
+          $ref: '#/components/schemas/ScanPayload'
+        pickup:
+          $ref: '#/components/schemas/PickupPayload'
+        pickupProblem:
+          $ref: '#/components/schemas/PickupProblemPayload'
+        contact:
+          type: string
+          description: CALL | TEXT | WAIT_STARTED
+        delivery:
+          $ref: '#/components/schemas/DeliveryPayload'
+        problem:
+          $ref: '#/components/schemas/ProblemPayload'
+        odometer:
+          type: integer
+          format: int32
+          description: End-of-shift odometer (mi)
+        sos:
+          type: string
+          description: BREAKDOWN | ACCIDENT | UNSAFE | MEDICAL
+    InspectionPayload:
+      type: object
+      description: Pre-trip inspection (DVIR)
+      properties:
+        vehicleId:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'PASS | FAIL per item: TYRES, BRAKES, LIGHTS (critical), MIRRORS, HORN_WIPERS, NO_LEAKS, CARGO_AREA,
+            COLD_BOX, SAFETY_KIT, PHONE_MOUNT'
+        odometerMiles:
+          type: integer
+          format: int32
+        fuelPercent:
+          type: integer
+          format: int32
+        coldBoxF:
+          type: number
+          format: double
+        photos:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/PhotoCapture'
+          description: FRONT, BACK, LEFT, RIGHT
+        defectNote:
+          type: string
+        certified:
+          type: boolean
+        signatureAssetId:
+          type: string
+    PhotoCapture:
+      type: object
+      description: A photo from the live in-app camera, uploaded to media-service
+      properties:
+        assetId:
+          type: string
+          description: media-service asset id
+        source:
+          type: string
+          description: LIVE_CAMERA (only accepted value) | GALLERY
+        capturedAt:
+          type: string
+          format: date-time
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        accuracyM:
+          type: number
+          format: double
+        stampRouteId:
+          type: string
+          description: Route id burnt into the stamp
+        sha256:
+          type: string
+          description: SHA-256 of the image bytes, computed on the device
+    PickupPayload:
+      type: object
+      description: Seller pickup confirmation
+      properties:
+        handedOverBy:
+          type: string
+          description: Seller staff who handed over
+        missingReason:
+          type: string
+          description: Required when not every expected label was scanned
+    PickupProblemPayload:
+      type: object
+      properties:
+        type:
+          type: string
+          description: NOT_READY | CLOSED | WRONG_COUNT | DAMAGED
+        resolution:
+          type: string
+          description: WAIT | SKIP | PARTIAL
+        note:
+          type: string
+        photo:
+          $ref: '#/components/schemas/PhotoCapture'
+    ProblemPayload:
+      type: object
+      description: Delivery problem
+      properties:
+        type:
+          type: string
+          description: CUSTOMER_UNAVAILABLE | ACCESS_ISSUE | DAMAGED | REFUSED | MISSING | UNSAFE
+        resolution:
+          type: string
+          description: REATTEMPT | PICKUP_POINT | RETURN_TO_FC | ACCEPTED_WITH_DAMAGE | REPORT_MISSING
+        note:
+          type: string
+        photo:
+          $ref: '#/components/schemas/PhotoCapture'
+    ScanPayload:
+      type: object
+      properties:
+        label:
+          type: string
+          description: ATS + 9 characters
+        method:
+          type: string
+          description: CAMERA | MANUAL (typed in; flagged)
+    SyncRequest:
+      type: object
+      description: A batch of queued driver events from one device
+      properties:
+        deviceId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriverEvent'
+          maxItems: 200
+          minItems: 0
+      required:
+      - deviceId
+      - events
+    EventResult:
+      type: object
+      properties:
+        eventId:
+          type: string
+        sequence:
+          type: integer
+          format: int64
+        outcome:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+        replayed:
+          type: boolean
+        forwardPending:
+          type: boolean
+    SyncResult:
+      type: object
+      properties:
+        deviceId:
+          type: string
+        lastSequence:
+          type: integer
+          format: int64
+        expectedSequence:
+          type: integer
+          format: int64
+        signOut:
+          type: boolean
+        revokedAt:
+          type: string
+          format: date-time
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventResult'
+    SosRequest:
+      type: object
+      description: Immediate SOS (also queue it with the same eventId)
+      properties:
+        deviceId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        event:
+          $ref: '#/components/schemas/DriverEvent'
+      required:
+      - deviceId
+      - event
+    CreateRouteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        zone:
+          type: string
+          maxLength: 120
+          minLength: 0
+        serviceDate:
+          type: string
+          format: date
+        window:
+          type: string
+          example: 1:00–5:00 pm
+          maxLength: 60
+          minLength: 0
+        depotNodeId:
+          type: string
+          minLength: 1
+        shipmentIds:
+          type: array
+          items:
+            type: string
+      required:
+      - depotNodeId
+      - serviceDate
+    ContactAttempt:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - CALL
+          - TEXT
+          - WAIT_STARTED
+        at:
+          type: string
+          format: date-time
+    Route:
+      type: object
+      description: A delivery route with stops and packages (the driver's offline manifest)
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        zone:
+          type: string
+        serviceDate:
+          type: string
+          format: date
+        window:
+          type: string
+        depotNodeId:
+          type: string
+        driverId:
+          type: string
+        vehicleId:
+          type: string
+        status:
+          type: string
+          description: PLANNED | ASSIGNED | IN_PROGRESS | COMPLETED | CANCELLED
+        inspection:
+          type: string
+          description: PASSED | PASSED_WITH_DEFECTS | FAILED_CRITICAL
+        blocked:
+          type: boolean
+        blockedReason:
+          type: string
+        perishable:
+          type: boolean
+          description: 'Perishables on board: cold box 33–40 °F, no safe place'
+        startOdometer:
+          type: integer
+          format: int32
+        endOdometer:
+          type: integer
+          format: int32
+        loadOutCompletedAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int32
+        stops:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteStop'
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoutePackage'
+    RoutePackage:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        shipmentId:
+          type: string
+        orderNumber:
+          type: string
+        origin:
+          type: string
+          description: FC (load-out) | SELLER (pickup stop)
+        pickupStopId:
+          type: string
+        dropoffStopId:
+          type: string
+        perishable:
+          type: boolean
+        status:
+          type: string
+          description: EXPECTED | LOADED | PICKED_UP | NOT_PICKED_UP | DELIVERED | FAILED | TO_PICKUP_POINT | MISSING | RETURNED
+            | REASSIGNED | CANCELLED
+        pickupScanned:
+          type: boolean
+        dropScanned:
+          type: boolean
+        manualEntry:
+          type: boolean
+          description: A scan was typed in by hand (flagged)
+        updatedAt:
+          type: string
+          format: date-time
+    RouteStop:
+      type: object
+      properties:
+        id:
+          type: string
+        sequence:
+          type: integer
+          format: int32
+        kind:
+          type: string
+          description: PICKUP | DROPOFF
+        name:
+          type: string
+        sellerOrgId:
+          type: string
+        orderNumber:
+          type: string
+        addressLine:
+          type: string
+        city:
+          type: string
+        postalCode:
+          type: string
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        window:
+          type: string
+        handoverRequired:
+          type: boolean
+        safePlaceAllowed:
+          type: boolean
+        status:
+          type: string
+          description: PENDING | ARRIVED | DONE | FAILED | RETRY | SKIPPED | REASSIGNED | CANCELLED
+        reattempts:
+          type: integer
+          format: int32
+        contacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactAttempt'
+        partialAccepted:
+          type: boolean
+        handedOverBy:
+          type: string
+        note:
+          type: string
+        handoverMethod:
+          type: string
+        podDistanceMeters:
+          type: number
+          format: double
+        reassignedTo:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    ReassignRequest:
+      type: object
+      description: Move the stop to another open route
+      properties:
+        targetRouteId:
+          type: string
+          minLength: 1
+      required:
+      - targetRouteId
+    AddShipmentsRequest:
+      type: object
+      properties:
+        shipmentIds:
+          type: array
+          items:
+            type: string
+          minItems: 1
+      required:
+      - shipmentIds
+    ReasonRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+    AssignRequest:
+      type: object
+      properties:
+        driverId:
+          type: string
+          minLength: 1
+        vehicleId:
+          type: string
+          maxLength: 60
+          minLength: 0
+      required:
+      - driverId
+    BuildRoutesRequest:
+      type: object
+      description: 'Route builder: group the depot''s waiting shipments by delivery zone (geo-service zones, ZIP fallback)'
+      properties:
+        serviceDate:
+          type: string
+          format: date
+        depotNodeId:
+          type: string
+          minLength: 1
+        maxDropoffs:
+          type: integer
+          format: int32
+          maximum: 200
+          minimum: 1
+        window:
+          type: string
+          maxLength: 60
+          minLength: 0
+      required:
+      - depotNodeId
+      - serviceDate
+    DriverAccess:
+      type: object
+      properties:
+        driverId:
+          type: string
+        status:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        source:
+          type: string
+    ResolveDefectRequest:
+      type: object
+      properties:
+        routeId:
+          type: string
+          minLength: 1
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - routeId
+    SseEmitter:
+      type: object
+      properties:
+        timeout:
+          type: integer
+          format: int64
+    DriverSession:
+      type: object
+      description: Access check after sign-in
+      properties:
+        driverId:
+          type: string
+        access:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        routeIds:
+          type: array
+          items:
+            type: string
+        checkedAt:
+          type: string
+          format: date-time
+    SosAlert:
+      type: object
+      properties:
+        alertId:
+          type: string
+        driverId:
+          type: string
+        routeId:
+          type: string
+        kind:
+          type: string
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        note:
+          type: string
+        raisedAt:
+          type: string
+          format: date-time
+        receivedAt:
+          type: string
+          format: date-time
+    DeliveryShipment:
+      type: object
+      description: AfroTransact Delivery shipment in the dispatch pool
+      properties:
+        shipmentId:
+          type: string
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        sellerOrgId:
+          type: string
+        sellerName:
+          type: string
+        fulfilmentType:
+          type: string
+        origin:
+          type: string
+        nodeId:
+          type: string
+        label:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        perishable:
+          type: boolean
+        handoverRequired:
+          type: boolean
+        units:
+          type: integer
+          format: int32
+        status:
+          type: string
+        routeId:
+          type: string
+        promisedBy:
+          type: string
+          format: date
+        createdAt:
+          type: string
+          format: date-time
+    ForwardFailure:
+      type: object
+      description: A call to orders-service that could not be applied
+      properties:
+        id:
+          type: integer
+          format: int64
+        shipmentId:
+          type: string
+        kind:
+          type: string
+        target:
+          type: string
+        attempts:
+          type: integer
+          format: int32
+        lastError:
+          type: string
+    DriverEventLogEntry:
+      type: object
+      description: A driver event as received, with its outcome
+      properties:
+        eventId:
+          type: string
+        deviceId:
+          type: string
+        sequence:
+          type: integer
+          format: int64
+        driverId:
+          type: string
+        type:
+          type: string
+        routeId:
+          type: string
+        stopId:
+          type: string
+        capturedAt:
+          type: string
+          format: date-time
+        receivedAt:
+          type: string
+          format: date-time
+        outcome:
+          type: string
+        code:
+          type: string
+        message:
+          type: string
+    VehicleDefect:
+      type: object
+      properties:
+        id:
+          type: string
+        routeId:
+          type: string
+        vehicleId:
+          type: string
+        driverId:
+          type: string
+        critical:
+          type: boolean
+        items:
+          type: array
+          items:
+            type: string
+        note:
+          type: string
+        reportedAt:
+          type: string
+          format: date-time
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

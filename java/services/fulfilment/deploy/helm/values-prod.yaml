@@ -1,0 +1,23 @@
+env: prod
+replicas: 3
+autoscaling:
+  enabled: true
+  min: 3
+  max: 12
+  cpu: 70
+rollout:
+  enabled: true
+resources:
+  requests: {cpu: 500m, memory: 1Gi}
+  limits: {memory: 2Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.1"
+tolerations: []
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.afrotransact.com
+  ORDERS_URL: http://orders:8080
+  INVENTORY_URL: http://inventory:8080
+  GEO_URL: http://geo:8080
+  # Node for FC tasks when inventory has no reservation (empty = ops assign it).
+  FULFILMENT_DEFAULT_NODE: ""

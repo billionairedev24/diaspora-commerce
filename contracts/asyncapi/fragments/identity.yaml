@@ -4,8 +4,8 @@ channels:
   identityEvents:
     address: at.identity.events
     description: >-
-      Accounts, one-time codes and access changes from identity-service. Key = user id (role key for
-      role-permission changes). Headers event-id, event-type, occurred-at. Consumers: notifications-service
+      Accounts, one-time codes, access changes, sign-in lockouts, push devices and notification preferences from
+      identity-service. Key = user id (role key for role-permission changes, ip:<address> for IP lockouts). Headers event-id, event-type, occurred-at. Consumers: notifications-service
       (identity.verification.requested), audit/trust-ops (access changes), BFF caches (role and permission changes).
     messages:
       identityUserRegistered: {$ref: '#/components/messages/identityUserRegistered'}
@@ -17,6 +17,10 @@ channels:
       identityPermissionRevoked: {$ref: '#/components/messages/identityPermissionRevoked'}
       identityUserDisabled: {$ref: '#/components/messages/identityUserDisabled'}
       identityUserEnabled: {$ref: '#/components/messages/identityUserEnabled'}
+      identitySignInLocked: {$ref: '#/components/messages/identitySignInLocked'}
+      identityDeviceRegistered: {$ref: '#/components/messages/identityDeviceRegistered'}
+      identityDeviceUnregistered: {$ref: '#/components/messages/identityDeviceUnregistered'}
+      identityNotificationPreferencesUpdated: {$ref: '#/components/messages/identityNotificationPreferencesUpdated'}
 operations:
   publishIdentityEvents:
     action: send
@@ -80,6 +84,33 @@ components:
       name: identity.user.enabled
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/IdentityUserStatusChanged'}
+    identitySignInLocked:
+      name: identity.sign-in.locked
+      title: Too many failed sign-in attempts locked an account or a client IP address
+      description: >-
+        Brute-force protection (hosted pages and the first-party BFF API): 5 failures per account or 30 per IP within
+        15 minutes lock the key for 15 minutes, doubling for consecutive lockouts up to 4 hours. Key = user id
+        (scope ACCOUNT) or ip:<address> (scope IP). Lockouts of emails without an account are not published.
+        notifications-service may send a security notice; trust-ops may alert on IP lockouts.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentitySignInLocked'}
+    identityDeviceRegistered:
+      name: identity.device.registered
+      title: A push token was registered for an account (customer or driver app, web push)
+      description: The token itself is not published; read it with GET /v1/internal/users/{id}/contact (users:read).
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityDeviceChanged'}
+    identityDeviceUnregistered:
+      name: identity.device.unregistered
+      title: A push token was removed from an account (sign-out, removal, or moved to another account)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityDeviceChanged'}
+    identityNotificationPreferencesUpdated:
+      name: identity.notification-preferences.updated
+      title: Account-level notification channel switches or marketing opt-in changed
+      description: Consumers caching contact lookups (notifications-service) should drop the user's entry.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityNotificationPreferencesUpdated'}
   schemas:
     IdentityUserRegistered:
       type: object
@@ -153,4 +184,38 @@ components:
         userId: {type: string, format: uuid}
         actorId: {type: string}
         reason: {type: [string, 'null']}
+        at: {type: string, format: date-time}
+    IdentitySignInLocked:
+      type: object
+      required: [scope, channel, lockouts, lockoutSeconds, lockedUntil, at]
+      properties:
+        scope: {type: string, enum: [ACCOUNT, IP]}
+        userId: {type: [string, 'null'], format: uuid, description: Set for ACCOUNT lockouts}
+        ip: {type: [string, 'null'], description: Set for IP lockouts}
+        channel: {type: string, enum: [first-party, hosted], description: BFF sign-in API or the authorization server pages}
+        lockouts: {type: integer, description: Consecutive lockouts including this one}
+        lockoutSeconds: {type: integer, examples: [900]}
+        lockedUntil: {type: string, format: date-time}
+        at: {type: string, format: date-time}
+    IdentityDeviceChanged:
+      type: object
+      required: [userId, deviceId, app, platform, provider, at]
+      properties:
+        userId: {type: string, format: uuid}
+        deviceId: {type: string, format: uuid}
+        app: {type: string, enum: [customer, driver]}
+        platform: {type: string, enum: [ios, android, web]}
+        provider: {type: string, enum: [fcm, apns]}
+        at: {type: string, format: date-time}
+    IdentityNotificationPreferencesUpdated:
+      type: object
+      required: [userId, email, sms, push, marketingOptIn, at]
+      properties:
+        userId: {type: string, format: uuid}
+        email: {type: boolean}
+        sms: {type: boolean}
+        push: {type: boolean}
+        marketingOptIn: {type: boolean}
+        locale: {type: [string, 'null'], examples: [fr-CA]}
+        timeZone: {type: [string, 'null'], examples: [America/Chicago]}
         at: {type: string, format: date-time}

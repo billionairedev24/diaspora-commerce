@@ -1,0 +1,246 @@
+# AsyncAPI 3.0 fragment for fulfilment-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  fulfilmentEvents:
+    address: at.fulfilment.events
+    description: >-
+      Fulfilment-centre tasks, delivery routes and stops, vehicle defects, SOS alerts and driver access changes from
+      fulfilment-service, written to its transactional outbox in the same transaction as the change. Key = shipment id
+      (task events, forward failures), route id (route, stop, defect and SOS events) or driver id (access events and
+      SOS without a route), so one route's events stay in order. Headers event-id, event-type, occurred-at; consumers
+      de-duplicate on event-id. Shipment status itself is owned by orders-service: fulfilment moves it through
+      orders-service's transitions and courier-events APIs, and orders publishes orders.shipment.status_changed.
+    messages:
+      fulfilmentTaskCreated: {$ref: '#/components/messages/fulfilmentTaskCreated'}
+      fulfilmentTaskPicked: {$ref: '#/components/messages/fulfilmentTaskPicked'}
+      fulfilmentTaskPickException: {$ref: '#/components/messages/fulfilmentTaskPickException'}
+      fulfilmentTaskPacked: {$ref: '#/components/messages/fulfilmentTaskPacked'}
+      fulfilmentTaskReady: {$ref: '#/components/messages/fulfilmentTaskReady'}
+      fulfilmentTaskCancelled: {$ref: '#/components/messages/fulfilmentTaskCancelled'}
+      fulfilmentRoutePlanned: {$ref: '#/components/messages/fulfilmentRoutePlanned'}
+      fulfilmentRouteAssigned: {$ref: '#/components/messages/fulfilmentRouteAssigned'}
+      fulfilmentRouteStarted: {$ref: '#/components/messages/fulfilmentRouteStarted'}
+      fulfilmentRouteCompleted: {$ref: '#/components/messages/fulfilmentRouteCompleted'}
+      fulfilmentRouteCancelled: {$ref: '#/components/messages/fulfilmentRouteCancelled'}
+      fulfilmentStopDelivered: {$ref: '#/components/messages/fulfilmentStopDelivered'}
+      fulfilmentStopFailed: {$ref: '#/components/messages/fulfilmentStopFailed'}
+      fulfilmentStopSkipped: {$ref: '#/components/messages/fulfilmentStopSkipped'}
+      fulfilmentStopReassigned: {$ref: '#/components/messages/fulfilmentStopReassigned'}
+      fulfilmentVehicleDefectReported: {$ref: '#/components/messages/fulfilmentVehicleDefectReported'}
+      fulfilmentDriverSosRaised: {$ref: '#/components/messages/fulfilmentDriverSosRaised'}
+      fulfilmentDriverAccessRevoked: {$ref: '#/components/messages/fulfilmentDriverAccessRevoked'}
+      fulfilmentOrdersForwardFailed: {$ref: '#/components/messages/fulfilmentOrdersForwardFailed'}
+operations:
+  publishFulfilmentEvents:
+    action: send
+    channel: {$ref: '#/channels/fulfilmentEvents'}
+    summary: >-
+      fulfilment-service publishes pick/pack progress, route lifecycle, stop outcomes (delivered, failed, skipped,
+      reassigned), vehicle defects, SOS alerts (priority HIGH: notifications pages dispatch at once), driver access
+      revocations and orders-service calls that could not be applied. Dispatch consoles also get the same updates
+      live over GET /v1/dispatch/stream (server-sent events).
+  receiveFulfilmentOrderEvents:
+    action: receive
+    channel: {$ref: '#/channels/ordersOrderEvents'}
+    summary: >-
+      fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) handles orders.order.placed: a pick /
+      pack task per FBA_AFROTRANSACT or RETAIL_1P shipment (node from inventory's reservation), and an entry in the
+      dispatch pool per AFROTRANSACT_DELIVERY shipment (FC load-out or seller pickup), each with one ATS package label.
+      orders.shipment.cancelled cancels the task and takes the shipment off a route that has not started. Other order
+      events are ignored.
+  receiveFulfilmentIdentityEvents:
+    action: receive
+    channel: {$ref: '#/channels/identityEvents'}
+    summary: >-
+      fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) mirrors driver access:
+      identity.role.revoked (platform.driver), identity.permission.revoked (delivery:operate, direct grants) and
+      identity.user.disabled revoke it at the event's time — the driver app is told to sign out and events captured
+      on the device before that time still sync; the matching granted / enabled events restore it. Older changes never
+      override newer ones.
+components:
+  messages:
+    fulfilmentTaskCreated:
+      name: fulfilment.task.created
+      title: Pick/pack task created for an FBA / Retail 1P shipment
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentTaskEvent'}
+    fulfilmentTaskPicked:
+      name: fulfilment.task.picked
+      title: Every unit picked
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentTaskEvent'}
+    fulfilmentTaskPickException:
+      name: fulfilment.task.pick_exception
+      title: Short pick (reason in the payload); ops recount, re-reserve or cancel
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentTaskEvent'}
+    fulfilmentTaskPacked:
+      name: fulfilment.task.packed
+      title: Parcel packed and labelled (shipment moved to packed in orders-service)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentTaskEvent'}
+    fulfilmentTaskReady:
+      name: fulfilment.task.ready
+      title: Staged at the outbound dock (shipment moved to ready in orders-service)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentTaskEvent'}
+    fulfilmentTaskCancelled:
+      name: fulfilment.task.cancelled
+      title: Task cancelled after orders.shipment.cancelled
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentTaskEvent'}
+    fulfilmentRoutePlanned:
+      name: fulfilment.route.planned
+      title: Route created by hand or by the zone route builder
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentRouteEvent'}
+    fulfilmentRouteAssigned:
+      name: fulfilment.route.assigned
+      title: Driver (and vehicle) assigned
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentRouteEvent'}
+    fulfilmentRouteStarted:
+      name: fulfilment.route.started
+      title: Inspection passed, load-out complete, route started
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentRouteEvent'}
+    fulfilmentRouteCompleted:
+      name: fulfilment.route.completed
+      title: Shift ended (every stop resolved, failed packages scanned back in)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentRouteEvent'}
+    fulfilmentRouteCancelled:
+      name: fulfilment.route.cancelled
+      title: Route cancelled before it started
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentRouteEvent'}
+    fulfilmentStopDelivered:
+      name: fulfilment.stop.delivered
+      title: Drop-off delivered with proof (handover method recorded; code checked by orders-service)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentStopEvent'}
+    fulfilmentStopFailed:
+      name: fulfilment.stop.failed
+      title: Delivery attempt failed (return to FC, pickup point or missing)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentStopEvent'}
+    fulfilmentStopSkipped:
+      name: fulfilment.stop.skipped
+      title: Seller pickup skipped (not ready, closed, wrong count or damaged); the seller reschedules
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentStopEvent'}
+    fulfilmentStopReassigned:
+      name: fulfilment.stop.reassigned
+      title: Dispatch moved a drop-off to another route (targetRouteId)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentStopEvent'}
+    fulfilmentVehicleDefectReported:
+      name: fulfilment.vehicle.defect_reported
+      title: Inspection defect; critical (brakes, tyres, lights) blocks the route until dispatch resolves it
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentDefectEvent'}
+    fulfilmentDriverSosRaised:
+      name: fulfilment.driver.sos_raised
+      title: 'SOS from a driver (priority HIGH): breakdown, accident, feeling unsafe or medical'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentSosEvent'}
+    fulfilmentDriverAccessRevoked:
+      name: fulfilment.driver.access_revoked
+      title: Driver access revoked (identity change, missing permission or dispatch suspension); the app signs out
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentAccessRevoked'}
+    fulfilmentOrdersForwardFailed:
+      name: fulfilment.orders.forward_failed
+      title: orders-service refused or never accepted a transition / courier event / tracking call
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentForwardFailed'}
+  schemas:
+    FulfilmentTaskEvent:
+      type: object
+      required: [taskId, shipmentId, orderId, orderNumber, status, at]
+      properties:
+        taskId: {type: string, format: uuid}
+        shipmentId: {type: string}
+        orderId: {type: string}
+        orderNumber: {type: string, examples: [AT-2026-7KQ3MD]}
+        nodeId: {type: [string, 'null'], examples: [HOU-FC1]}
+        status: {type: string, enum: [PICK_PENDING, PICKING, PICK_EXCEPTION, PICKED, PACKED, READY, CANCELLED]}
+        packageLabel: {type: [string, 'null'], pattern: '^ATS[0-9A-Z]{9}$'}
+        reason: {type: [string, 'null'], description: short-pick or cancellation reason}
+        at: {type: string, format: date-time}
+    FulfilmentRouteEvent:
+      type: object
+      required: [routeId, zone, serviceDate, depotNodeId, status, stops, packages, at]
+      properties:
+        routeId: {type: string, examples: [RT-7K2Q9H4M]}
+        zone: {type: string, examples: [Houston SW]}
+        serviceDate: {type: string, format: date}
+        depotNodeId: {type: string}
+        driverId: {type: [string, 'null']}
+        vehicleId: {type: [string, 'null']}
+        status: {type: string, enum: [PLANNED, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED]}
+        stops: {type: integer}
+        packages: {type: integer}
+        at: {type: string, format: date-time}
+    FulfilmentStopEvent:
+      type: object
+      required: [routeId, stopId, kind, status, shipmentIds, at]
+      properties:
+        routeId: {type: string}
+        stopId: {type: string, format: uuid}
+        driverId: {type: [string, 'null']}
+        kind: {type: string, enum: [PICKUP, DROPOFF]}
+        status: {type: string, enum: [DONE, FAILED, SKIPPED, REASSIGNED]}
+        shipmentIds: {type: array, items: {type: string}}
+        reason: {type: [string, 'null'], description: problem type → resolution and the driver's note}
+        handoverMethod: {type: [string, 'null'], enum: [CUSTOMER, SOMEONE_ELSE, SAFE_PLACE, null]}
+        targetRouteId: {type: [string, 'null'], description: set on fulfilment.stop.reassigned}
+        at: {type: string, format: date-time}
+    FulfilmentDefectEvent:
+      type: object
+      required: [defectId, routeId, vehicleId, driverId, critical, routeBlocked, items, priority, at]
+      properties:
+        defectId: {type: string, format: uuid}
+        routeId: {type: string}
+        vehicleId: {type: string}
+        driverId: {type: string}
+        critical: {type: boolean}
+        routeBlocked: {type: boolean}
+        items:
+          type: array
+          items:
+            type: string
+            enum: [TYRES, BRAKES, LIGHTS, MIRRORS, HORN_WIPERS, NO_LEAKS, CARGO_AREA, COLD_BOX, SAFETY_KIT,
+                   PHONE_MOUNT]
+        note: {type: [string, 'null']}
+        priority: {type: string, enum: [HIGH, NORMAL]}
+        at: {type: string, format: date-time}
+    FulfilmentSosEvent:
+      type: object
+      required: [alertId, driverId, kind, priority, raisedAt]
+      properties:
+        alertId: {type: string, description: the driver app's event id (raised once per id)}
+        driverId: {type: string}
+        routeId: {type: [string, 'null']}
+        kind: {type: string, enum: [BREAKDOWN, ACCIDENT, UNSAFE, MEDICAL]}
+        lat: {type: [number, 'null']}
+        lon: {type: [number, 'null']}
+        note: {type: [string, 'null']}
+        priority: {type: string, const: HIGH}
+        raisedAt: {type: string, format: date-time}
+    FulfilmentAccessRevoked:
+      type: object
+      required: [driverId, reason, revokedAt]
+      properties:
+        driverId: {type: string}
+        reason: {type: string}
+        revokedAt: {type: string, format: date-time, description: events captured on the device up to here still sync}
+    FulfilmentForwardFailed:
+      type: object
+      required: [shipmentId, kind, at]
+      properties:
+        shipmentId: {type: string}
+        kind: {type: string, enum: [TRANSITION, COURIER, TRACKING]}
+        target: {type: [string, 'null'], description: target status or carrier}
+        code: {type: [string, 'null'], examples: [orders.handover-code-invalid, orders.transition-forbidden]}
+        message: {type: [string, 'null']}
+        at: {type: string, format: date-time}

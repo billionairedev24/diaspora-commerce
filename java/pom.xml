@@ -21,6 +21,7 @@
         <module>services/bookings</module>
         <module>services/catalog</module>
         <module>services/content</module>
+        <module>services/fulfilment</module>
         <module>services/identity</module>
         <module>services/inventory</module>
         <module>services/mcp-server</module>
