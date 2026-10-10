@@ -119,10 +119,10 @@
 - Images failing moderation are flagged on the product","E03","","High","5","catalog go media","catalog","In Progress"
 "S031","Story","Barcode lookup prefill (GS1 / Open Food Facts)","When a seller types a GTIN, prefill name, images and description from product-data providers.","- Lookup tries GS1 US Data Hub then Open Food Facts for groceries
 - Prefilled fields are editable and marked as imported
-- No match falls back to manual entry","E03","","Low","5","catalog","catalog","To Do"
+- No match falls back to manual entry","E03","","Low","5","catalog","catalog","In Progress"
 "S032","Story","Barcode label generation (GS1-128, Code 128, EAN-13, ZPL)","Generate retail, case, pallet, shelf and AfroTransact unit labels.","- Unit labels for platform stock without vendor GTIN use the ATF prefix
 - Case labels encode AI 01/10/11/17
-- Labels render as PDF and ZPL for printers","E03","","Medium","5","catalog inventory","catalog","To Do"
+- Labels render as PDF and ZPL for printers","E03","","Medium","5","catalog inventory","catalog","In Progress"
 "E04","Epic","Search & discovery","Elasticsearch read model with typo tolerance, diaspora synonyms, facets, geo and semantic retrieval.","","","Search & discovery","High","","search","search","In Progress"
 "S033","Story","Product index mapping with diaspora synonyms","products-<market>-v<N> behind an alias with analyzers, synonyms, search-as-you-type and dense_vector.","- Index is created with the shared mapping and aliased to products-<market>
 - Synonyms cover gari/garri, zobo/bissap/hibiscus, egusi/melon seed and more
@@ -585,9 +585,9 @@
 - SBOMs attached to every image","E33","","High","3","quality security","quality","In Progress"
 "S202","Story","Encrypt TOTP secrets and MFA material at rest","TOTP seeds are currently stored in plain text in the identity database; encrypt them with an envelope key from the cloud KMS / secret store.","- TOTP secrets are encrypted with AES-GCM using a key from the secret store
 - Key rotation re-encrypts existing secrets without downtime
-- A database dump alone cannot generate valid codes","E02","","Highest","3","identity security","identity","To Do"
+- A database dump alone cannot generate valid codes","E02","","Highest","3","identity security","identity","In Progress"
 "S203","Story","Passkey ceremony end-to-end test with a virtual authenticator","Prove passkey registration and sign-in complete end to end.","- Playwright test registers a passkey with Chromium's virtual authenticator and signs in with it
-- Removing the passkey prevents sign-in with it","E02","","High","3","identity e2e","identity","To Do"
+- Removing the passkey prevents sign-in with it","E02","","High","3","identity e2e","identity","In Progress"
 "S204","Story","Confirm carrier sandbox integrations (USPS, UPS, FedEx, DHL)","Adapters were built against published API shapes; run them against each carrier's sandbox with real credentials and confirm webhook formats.","- Rates, label, void and tracking succeed against each carrier sandbox
 - FedEx and DHL webhook signature formats confirmed and tests updated
 - Zone charts replace the seed transit table","E11","","High","5","carriers","carriers","To Do"
@@ -705,4 +705,4 @@
 "S237","Story","Trust-ops reminder and escalation event payloads","Trust-ops publishes seller response-due reminders and lapse events, includes sellerOrgId/customerId on escalation events and the decision note on claim.decided, and stops sending duplicate notification.requested for claims.","- Seller gets a reminder 24h before the response deadline
 - Escalation events carry the parties' ids
 - Claim decision emails include the staff note
-- No duplicate claim notifications","E18","","Medium","3","trust-ops notifications","trust","To Do"
+- No duplicate claim notifications","E18","","Medium","3","trust-ops notifications","trust","In Progress"
