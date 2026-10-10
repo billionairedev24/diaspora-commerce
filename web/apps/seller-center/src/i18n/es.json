@@ -62,6 +62,8 @@
   "sc.module.payouts.description": "Pagos de Stripe Connect a tu banco.",
   "sc.module.payoutsProvider.title": "Pagos",
   "sc.module.payoutsProvider.description": "Las ganancias se liquidan en 7 días; luego solicitas un pago a tu banco.",
+  "sc.module.fees.title": "Tarifas y comisión",
+  "sc.module.fees.description": "Lo que AfroTransact te cobra: comisión por categoría, tarifas de tarjeta y FBA, y próximos cambios.",
   "sc.module.billing.title": "Plan y facturación",
   "sc.module.billing.description": "Tu suscripción (Stripe Billing) y facturas.",
   "sc.module.billingProvider.title": "Plan y facturación",

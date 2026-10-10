@@ -58,6 +58,8 @@ tags:
     description: Server-side CSV / XLSX exports with signed, expiring download links
   - name: Support
     description: Customer support console (Lola hand-offs, customer lookup, refunds, notifications, shipments)
+  - name: Fees
+    description: Fee-schedule editor (commission per category, seller overrides, card and FBA fees) over payments' immutable versions
 security:
   - sessionCookie: []
 paths:
@@ -427,6 +429,93 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/SupportCancelRequest'}}}
       responses:
         '200': {description: Cancelled, content: {application/json: {schema: {$ref: '#/components/schemas/SupportActionResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── fees & commissions
+  /v1/staff/fees:
+    get:
+      tags: [Fees]
+      operationId: getStaffFees
+      security: [{sessionCookie: []}]
+      summary: Fee schedule versions (active, scheduled, past, cancelled), the base of a new version, categories and limits
+      description: |
+        payments `GET /v1/fee-schedules` (payments:read) and catalog `GET /v1/categories` (departments are the commission
+        categories, lower-cased; `services` is always offered; categories schedules already use are added). Override
+        organisations are named from seller `GET /v1/orgs/directory` (best effort; `orgNamesAvailable`). Needs VIEW on
+        the fees module; `canConfigure` (payments:configure plus EDIT) unlocks creating and cancelling. Rates are basis
+        points (1250 = 12.50 %): the console shows and takes percentages with two decimals.
+      responses:
+        '200': {description: Fees overview, content: {application/json: {schema: {$ref: '#/components/schemas/FeesOverview'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/fees/orgs:
+    get:
+      tags: [Fees]
+      operationId: searchFeeOrgs
+      security: [{sessionCookie: []}]
+      summary: Find a seller or provider organisation by name for a commission override
+      description: |
+        seller `GET /v1/orgs/directory` (pages of 200, up to 1,000 organisations), filtered by name or exact id. AfroTransact
+        Retail is returned with `selectable: false` — it is the merchant of record and pays no commission and no fees.
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 120}}
+      responses:
+        '200': {description: Matches (at most 20), content: {application/json: {schema: {$ref: '#/components/schemas/FeeOrgSearch'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/fees/schedules:
+    post:
+      tags: [Fees]
+      operationId: createFeeSchedule
+      security: [{sessionCookie: []}]
+      summary: Publish a new fee schedule version (Super Admin / Finance)
+      description: |
+        payments `POST /v1/fee-schedules` (payments:configure). The BFF validates first: effective date in the future and
+        not before the latest scheduled version (or `immediate: true`, refused while a version is scheduled), commission
+        0–50 %, card fee 0–10 % + up to $10.00, FBA fee up to $100.00, a note of 3–500 characters, unique categories and
+        (organisation, category) overrides, and no override for AfroTransact Retail. Errors are keyed by property
+        (`categoryRates.2.commissionBps`). Versions are immutable; the new one applies to orders placed from its date.
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FeeScheduleDraft'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/FeeScheduleView'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/fees/schedules/{scheduleId}/cancel:
+    post:
+      tags: [Fees]
+      operationId: cancelFeeSchedule
+      security: [{sessionCookie: []}]
+      summary: Cancel a scheduled fee schedule version before it takes effect (Super Admin / Finance)
+      description: |
+        payments `POST /v1/fee-schedules/{id}/cancel` (payments:configure). Only scheduled versions (409 once in force or
+        already cancelled). The version is kept and marked cancelled (who, when, why) — never deleted — and payments
+        audits it.
+      parameters:
+        - {name: scheduleId, in: path, required: true, schema: {type: string, maxLength: 64}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FeeCancelRequest'}}}
+      responses:
+        '200': {description: Cancelled, content: {application/json: {schema: {$ref: '#/components/schemas/FeeScheduleView'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
@@ -946,3 +1035,139 @@ components:
         message: {type: string}
         reference: {type: [string, 'null'], description: 'Refund, notification or shipment reference'}
         audited: {type: boolean, description: The upstream records the action in the trust-ops audit log}
+    # ── fees & commissions
+    FeeLimits:
+      type: object
+      description: Bounds the editor enforces (rates in basis points, amounts in minor units)
+      required: [commissionMaxBps, cardPctMaxBps, cardFixedMaxMinor, fbaPerUnitMaxMinor, noteMinLength, noteMaxLength, maxCategoryRates, maxOverrides]
+      properties:
+        commissionMaxBps: {type: integer, examples: [5000]}
+        cardPctMaxBps: {type: integer, examples: [1000]}
+        cardFixedMaxMinor: {type: integer, format: int64, examples: [1000]}
+        fbaPerUnitMaxMinor: {type: integer, format: int64, examples: [10000]}
+        noteMinLength: {type: integer}
+        noteMaxLength: {type: integer}
+        maxCategoryRates: {type: integer}
+        maxOverrides: {type: integer}
+    FeeCategory:
+      type: object
+      required: [key, label, source]
+      properties:
+        key: {type: string, description: 'payments category key (lower-case), e.g. groceries'}
+        label: {type: string}
+        source: {type: string, enum: [TAXONOMY, SCHEDULE, PLATFORM], description: 'TAXONOMY: a catalog department; SCHEDULE: only known from a fee schedule; PLATFORM: services'}
+    FeeCategoryRate:
+      type: object
+      required: [category, label, commissionBps]
+      properties:
+        category: {type: string}
+        label: {type: string}
+        commissionBps: {type: integer, minimum: 0, maximum: 10000}
+    FeeOverride:
+      type: object
+      required: [orgId, orgName, category, categoryLabel, commissionBps]
+      properties:
+        orgId: {type: string}
+        orgName: {type: [string, 'null']}
+        category: {type: [string, 'null'], description: null = every category}
+        categoryLabel: {type: string}
+        commissionBps: {type: integer, minimum: 0, maximum: 10000}
+    FeeScheduleView:
+      type: object
+      required: [id, version, status, effectiveFrom, currency, defaultCommissionBps, categoryRates, overrides, cardPctBps, cardFixedMinor, fbaPerUnitMinor,
+        reverseCommissionOnRefund, note, createdBy, createdAt, cancelledAt, cancelledBy, cancelReason, cancellable]
+      properties:
+        id: {type: string}
+        version: {type: integer}
+        status: {type: string, enum: [ACTIVE, SCHEDULED, SUPERSEDED, CANCELLED]}
+        effectiveFrom: {type: string, format: date-time}
+        currency: {type: string}
+        defaultCommissionBps: {type: integer, description: Commission of categories without their own rate (basis points)}
+        categoryRates: {type: array, items: {$ref: '#/components/schemas/FeeCategoryRate'}}
+        overrides: {type: array, items: {$ref: '#/components/schemas/FeeOverride'}}
+        cardPctBps: {type: integer, description: 'Card fee estimate per charge, percentage part'}
+        cardFixedMinor: {type: integer, format: int64, description: 'Card fee estimate per charge, fixed part'}
+        fbaPerUnitMinor: {type: integer, format: int64}
+        reverseCommissionOnRefund: {type: boolean}
+        note: {type: [string, 'null']}
+        createdBy: {type: string}
+        createdAt: {type: [string, 'null'], format: date-time}
+        cancelledAt: {type: [string, 'null'], format: date-time}
+        cancelledBy: {type: [string, 'null']}
+        cancelReason: {type: [string, 'null']}
+        cancellable: {type: boolean, description: Scheduled and the caller may configure fees}
+    FeeRetail:
+      type: object
+      required: [orgId, name, note]
+      properties:
+        orgId: {type: string, description: Empty when RETAIL_ORG_ID is not configured}
+        name: {type: string}
+        note: {type: string, examples: ['No commission, no fees (merchant of record)']}
+    FeesOverview:
+      type: object
+      required: [generatedAt, currency, canConfigure, current, base, minEffectiveFrom, immediateAllowed, schedules, categories, taxonomyAvailable,
+        orgNamesAvailable, retail, limits, exampleSaleMinor, reverseOnRefundHelp]
+      properties:
+        generatedAt: {type: string, format: date-time}
+        currency: {type: string}
+        canConfigure: {type: boolean, description: payments:configure and EDIT on fees (create and cancel versions)}
+        current: {oneOf: [{$ref: '#/components/schemas/FeeScheduleView'}, {type: 'null'}], description: The version in force now}
+        base: {oneOf: [{$ref: '#/components/schemas/FeeScheduleView'}, {type: 'null'}], description: 'What a new version starts from (the latest scheduled version, else the active one)'}
+        minEffectiveFrom: {type: string, format: date-time, description: 'Earliest effective time of a new version'}
+        immediateAllowed: {type: boolean, description: false while a version is scheduled}
+        schedules: {type: array, items: {$ref: '#/components/schemas/FeeScheduleView'}, description: 'Every version, newest first'}
+        categories: {type: array, items: {$ref: '#/components/schemas/FeeCategory'}}
+        taxonomyAvailable: {type: boolean, description: false when catalog could not be read (free text still works)}
+        orgNamesAvailable: {type: boolean}
+        retail: {$ref: '#/components/schemas/FeeRetail'}
+        limits: {$ref: '#/components/schemas/FeeLimits'}
+        exampleSaleMinor: {type: integer, format: int64, description: Sale amount of the impact preview (10000 = $100.00)}
+        reverseOnRefundHelp: {type: string}
+    FeeOrgHit:
+      type: object
+      required: [orgId, name, kind, status, retail, selectable, reason]
+      properties:
+        orgId: {type: string}
+        name: {type: string}
+        kind: {type: string}
+        status: {type: string}
+        retail: {type: boolean}
+        selectable: {type: boolean}
+        reason: {type: [string, 'null'], description: Why the organisation can't be chosen}
+    FeeOrgSearch:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/FeeOrgHit'}}
+    FeeDraftCategoryRate:
+      type: object
+      required: [category, commissionBps]
+      properties:
+        category: {type: string, minLength: 1, maxLength: 80}
+        commissionBps: {type: integer, minimum: 0, maximum: 5000}
+    FeeDraftOverride:
+      type: object
+      required: [orgId, commissionBps]
+      properties:
+        orgId: {type: string, minLength: 1, maxLength: 80}
+        category: {type: [string, 'null'], maxLength: 80, description: Omitted or null = every category}
+        commissionBps: {type: integer, minimum: 0, maximum: 5000}
+    FeeScheduleDraft:
+      type: object
+      required: [defaultCommissionBps, categoryRates, overrides, cardPctBps, cardFixedMinor, fbaPerUnitMinor, reverseCommissionOnRefund, note]
+      properties:
+        effectiveFrom: {type: [string, 'null'], format: date-time, description: Required unless immediate; in the future}
+        immediate: {type: boolean, description: Take effect now (the console asks for confirmation)}
+        defaultCommissionBps: {type: integer, minimum: 0, maximum: 5000}
+        categoryRates: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/FeeDraftCategoryRate'}}
+        overrides: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/FeeDraftOverride'}}
+        cardPctBps: {type: integer, minimum: 0, maximum: 1000}
+        cardFixedMinor: {type: integer, format: int64, minimum: 0, maximum: 1000}
+        fbaPerUnitMinor: {type: integer, format: int64, minimum: 0, maximum: 10000}
+        reverseCommissionOnRefund: {type: boolean}
+        note: {type: string, minLength: 3, maxLength: 500, description: Why the fees change (required)}
+    FeeCancelRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 3, maxLength: 500}

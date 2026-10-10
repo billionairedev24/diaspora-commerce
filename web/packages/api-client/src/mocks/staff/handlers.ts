@@ -21,6 +21,7 @@ import {
 } from '../../schemas/staff';
 import { validateStaffForm } from '../../validation/staff-form';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
+import { createFeeSchedule, feeRecords, feesOverview, feeView, searchFeeOrgs } from './fees';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
 
@@ -355,6 +356,32 @@ function requireSupport(ctx: Ctx, min: AccessLevel) {
 
 const W = '*/v1/staff';
 
+/* ── fees & commissions ── */
+
+const FeeDraftBody = z.object({
+  effectiveFrom: z.string().nullable().optional(),
+  immediate: z.boolean().optional(),
+  defaultCommissionBps: z.number().int(),
+  categoryRates: z.array(z.object({ category: z.string(), commissionBps: z.number().int() })),
+  overrides: z.array(z.object({ orgId: z.string(), category: z.string().nullable().optional(), commissionBps: z.number().int() })),
+  cardPctBps: z.number().int(),
+  cardFixedMinor: z.number().int(),
+  fbaPerUnitMinor: z.number().int(),
+  reverseCommissionOnRefund: z.boolean(),
+  note: z.string()
+});
+
+const canConfigureFees = (ctx: Ctx) => ctx.permissions.includes('payments:configure') && allows(ctx.roles, 'fees', 'EDIT');
+
+function requireFeesConfigure(ctx: Ctx) {
+  if (!allows(ctx.roles, 'fees', 'EDIT')) throw forbidden('Your roles can’t change fees, commissions & tax.');
+  if (!ctx.permissions.includes('payments:configure')) throw forbidden('This needs the payments:configure permission.');
+}
+
+function syncFeeRecords(ctx: Ctx) {
+  ctx.db.records['fee-schedules'] = feeRecords(ctx.db.feeSchedules, ctx.now);
+}
+
 export const staffHandlers = [
   http.get(
     `${W}/session`,
@@ -604,6 +631,58 @@ export const staffHandlers = [
       order.fields.status = 'CANCELLED';
       audit(ctx, 'shipment.cancelled', b.customerId, `Cancelled ${String(s.label)} of ${b.orderNumber}: ${b.reason}`);
       return { ok: true, message: `${String(s.label)} of ${b.orderNumber} cancelled.`, reference: String(s.id), audited: true };
+    })
+  ),
+  /* ── fees & commissions ── */
+  http.get(
+    `${W}/fees`,
+    route((ctx) => {
+      requireModule(ctx, 'fee-schedules');
+      if (!ctx.permissions.includes('payments:read') && !ctx.permissions.includes('payments:configure')) throw forbidden('This needs the payments:read permission.');
+      return feesOverview(ctx.db.feeSchedules, ctx.now, canConfigureFees(ctx));
+    })
+  ),
+  http.get(
+    `${W}/fees/orgs`,
+    route((ctx) => {
+      requireModule(ctx, 'fee-schedules');
+      const q = (query(ctx).get('q') ?? '').trim();
+      if (q.length < 2 || q.length > 120) throw invalid({ q: 'Type 2 to 120 characters' });
+      return { items: searchFeeOrgs(q) };
+    })
+  ),
+  http.post(
+    `${W}/fees/schedules`,
+    route(async (ctx) => {
+      requireFeesConfigure(ctx);
+      const body = await json(ctx.request, FeeDraftBody);
+      const out = createFeeSchedule(
+        ctx.db.feeSchedules,
+        { ...body, effectiveFrom: body.effectiveFrom ?? null, immediate: body.immediate ?? false, overrides: body.overrides.map((o) => ({ ...o, category: o.category ?? null })) },
+        ctx.now,
+        ctx.action.actor
+      );
+      if ('errors' in out) throw invalid(out.errors);
+      syncFeeRecords(ctx);
+      audit(ctx, 'fee-schedule.created', out.created.id, `Created fee schedule v${out.created.version} (effective ${out.created.effectiveFrom})`);
+      return feeView(out.created, ctx.db.feeSchedules, ctx.now, true);
+    }, 201)
+  ),
+  http.post(
+    `${W}/fees/schedules/:id/cancel`,
+    route(async (ctx, p) => {
+      const { reason } = await json(ctx.request, z.object({ reason: z.string().trim().min(3, 'Say why the version is cancelled (3 to 500 characters)').max(500) }));
+      requireFeesConfigure(ctx);
+      const s = ctx.db.feeSchedules.find((x) => x.id === p.id);
+      if (!s) throw notFound('No such fee schedule version.');
+      if (s.cancelledAt) throw conflict(`Version ${s.version} is already cancelled.`);
+      if (new Date(s.effectiveFrom).getTime() <= ctx.now.getTime()) throw conflict(`Version ${s.version} already took effect; only scheduled versions can be cancelled.`);
+      s.cancelledAt = ctx.now.toISOString();
+      s.cancelledBy = ctx.action.actor;
+      s.cancelReason = reason;
+      syncFeeRecords(ctx);
+      audit(ctx, 'fee-schedule.cancelled', s.id, `Cancelled fee schedule v${s.version}: ${reason}`);
+      return feeView(s, ctx.db.feeSchedules, ctx.now, true);
     })
   ),
   /* Anything else under /v1/staff is not part of the contract. */

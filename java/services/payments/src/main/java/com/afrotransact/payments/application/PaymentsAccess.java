@@ -43,6 +43,15 @@ class PaymentsAccess {
         return reader;
     }
 
+    /** Fee schedules: staff readers, calling services, or service clients holding only payments:fees.read. */
+    Actor feeReader() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(PaymentsPermissions.FEES_READ)) {
+            return actor;
+        }
+        return reader();
+    }
+
     Actor configure() {
         Actor actor = permissions.require(PaymentsPermissions.CONFIGURE);
         if (!isStaff(actor)) {

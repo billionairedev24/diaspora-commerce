@@ -651,6 +651,44 @@ type PayoutsClient interface {
 	RequestPayout(ctx context.Context, bearer, idempotencyKey string, amountMinor int64, all bool) (PayoutResponse, error)
 }
 
+// ---------------------------------------------------------------- payments (fee schedules)
+
+// FeeScheduleSummary is the part of payments' FeeScheduleResponse the Seller Center needs (never other sellers' overrides).
+type FeeScheduleSummary struct {
+	ID            string         `json:"id"`
+	Version       int            `json:"version"`
+	EffectiveFrom time.Time      `json:"effectiveFrom"`
+	CategoryBps   map[string]int `json:"categoryBps"`
+	Overrides     []struct {
+		OrgID    string `json:"orgId"`
+		Category string `json:"category"`
+	} `json:"overrides"`
+	CancelledAt *time.Time `json:"cancelledAt"`
+}
+
+// EffectiveFeesResponse is payments' EffectiveFeesResponse (fees for one organisation and category).
+type EffectiveFeesResponse struct {
+	FeeScheduleID             string    `json:"feeScheduleId"`
+	Version                   int       `json:"version"`
+	EffectiveFrom             time.Time `json:"effectiveFrom"`
+	Currency                  string    `json:"currency"`
+	Category                  string    `json:"category"`
+	CommissionBps             int       `json:"commissionBps"`
+	CommissionSource          string    `json:"commissionSource"`
+	CardPctBps                int       `json:"cardPctBps"`
+	CardFixedMinor            int64     `json:"cardFixedMinor"`
+	FbaPerUnitMinor           int64     `json:"fbaPerUnitMinor"`
+	ReverseCommissionOnRefund bool      `json:"reverseCommissionOnRefund"`
+}
+
+// FeesClient reads payments' fee schedules. payments lets only staff and services (payments:service) read them, so
+// the client uses the BFF's own client-credentials token; callers pass the member's own organisation only.
+type FeesClient interface {
+	Schedules(ctx context.Context) ([]FeeScheduleSummary, error)
+	// Effective is GET /v1/fee-schedules/effective?category=&orgId=&at=.
+	Effective(ctx context.Context, category, orgID string, at time.Time) (EffectiveFeesResponse, error)
+}
+
 // ---------------------------------------------------------------- storefront
 
 // Storefront is the storefront service's Storefront document (kept whole so saves never drop fields).

@@ -2,8 +2,10 @@ package com.afrotransact.payments.adapter.in.web;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.BalanceResponse;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.CancelFeeScheduleRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ConnectedAccountRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ConnectedAccountResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.EffectiveFeesResponse;
@@ -96,6 +98,16 @@ class FinanceController {
                 body.categoryBps(), body.defaultCommissionBps(), body.overrides() == null ? List.of()
                 : body.overrides().stream().map(OverrideRequest::toOverride).toList(), body.cardPctBps(),
                 body.cardFixedMinor(), body.fbaPerUnitMinor(), !Boolean.FALSE.equals(body.reverseCommissionOnRefund()), body.note())));
+    }
+
+    @Operation(summary = "Cancel a scheduled fee schedule version (Super Admin / Finance, payments:configure)",
+            description = "Only before its effectiveFrom (409 payments.fee-schedule-in-force afterwards, 409 "
+                    + "payments.fee-schedule-cancelled when already cancelled). Fee schedules stay immutable: the "
+                    + "version is kept and marked cancelled (cancelledAt, cancelledBy, cancelReason), never deleted, "
+                    + "and is skipped when picking the version in force. Audited.")
+    @PostMapping("/v1/fee-schedules/{id}/cancel")
+    FeeScheduleResponse cancelFeeSchedule(@PathVariable UUID id, @Valid @RequestBody CancelFeeScheduleRequest body) {
+        return FeeScheduleResponse.of(fees.cancel(id, body.reason()));
     }
 
     @Operation(summary = "Ledger balances of every account (payments:read)",

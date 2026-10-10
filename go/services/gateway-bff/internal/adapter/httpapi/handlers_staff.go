@@ -25,6 +25,7 @@ type StaffServices struct {
 	Dashboard app.StaffDashboardService
 	Exports   app.StaffExportsService
 	Support   app.StaffSupportService
+	Fees      app.StaffFeesService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
 	Files port.LocalExportFiles
 }
@@ -52,6 +53,12 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	route("POST /v1/staff/support/refunds", h.staffRefund)
 	route("POST /v1/staff/support/notifications/{notificationId}/resend", h.staffResend)
 	route("POST /v1/staff/support/shipments/{shipmentId}/cancel", h.staffCancelShipment)
+	if s.Fees != nil {
+		route("GET /v1/staff/fees", h.staffFees)
+		route("GET /v1/staff/fees/orgs", h.staffFeeOrgs)
+		route("POST /v1/staff/fees/schedules", h.staffCreateFeeSchedule)
+		route("POST /v1/staff/fees/schedules/{scheduleId}/cancel", h.staffCancelFeeSchedule)
+	}
 }
 
 func (h *handlersImpl) staffSession(w http.ResponseWriter, r *http.Request) {
@@ -317,5 +324,37 @@ func (h *handlersImpl) staffCancelShipment(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	v, err := h.s.Staff.Support.CancelShipment(r.Context(), callerFrom(r.Context()), r.PathValue("shipmentId"), b, r.Header.Get("Idempotency-Key"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- fees & commissions
+
+func (h *handlersImpl) staffFees(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Fees.Overview(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffFeeOrgs(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Fees.SearchOrgs(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("q"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffCreateFeeSchedule(w http.ResponseWriter, r *http.Request) {
+	var b domain.FeeScheduleDraft
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.Create(r.Context(), callerFrom(r.Context()), b, r.Header.Get("Idempotency-Key"))
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) staffCancelFeeSchedule(w http.ResponseWriter, r *http.Request) {
+	var b domain.FeeCancelRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.Cancel(r.Context(), callerFrom(r.Context()), r.PathValue("scheduleId"), b.Reason)
 	h.reply(w, r, http.StatusOK, v, err)
 }

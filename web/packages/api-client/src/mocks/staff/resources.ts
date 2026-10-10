@@ -468,29 +468,13 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
   },
   'fee-schedules': {
     title: 'Fee schedules',
-    columns: [col('version', 'Version', 'number', 10), col('effectiveFrom', 'Effective from', 'datetime', 20), col('defaultCommissionBps', 'Commission (bps)', 'number', 16), col('cardPctBps', 'Card % (bps)', 'number', 14), col('fbaPerUnitMinor', 'FBA / unit', 'money', 14), col('note', 'Note', 'text', 26)],
+    columns: [col('version', 'Version', 'number', 9), col('effectiveFrom', 'Effective from', 'datetime', 18), col('status', 'Status', 'status', 12), col('defaultCommissionBps', 'Commission', 'percent', 12), col('cardPctBps', 'Card fee', 'percent', 11), col('fbaPerUnitMinor', 'FBA / unit', 'money', 11), col('note', 'Note', 'text', 27)],
+    statusKey: 'status',
     facets: [],
     exportable: true,
     titleOf: (r) => `Fee schedule v${str(r.fields.version)}`,
     subtitleOf: (r) => str(r.fields.note),
-    actions: [],
-    create: {
-      permission: 'payments:configure',
-      form: form('New fee schedule version (applies to new orders)', 'Create version', [
-        field('effectiveFrom', 'Effective from', 'datetime', true),
-        field('defaultCommissionBps', 'Default commission (bps)', 'number', true, { min: 0, max: 5000 }),
-        field('cardPctBps', 'Card fee (bps)', 'number', true, { min: 0, max: 1000 }),
-        field('cardFixedMinor', 'Card fixed fee', 'money', true, { min: 0 }),
-        field('fbaPerUnitMinor', 'FBA fee per unit', 'money', true, { min: 0 }),
-        field('reverseCommissionOnRefund', 'Reverse commission on refunds', 'toggle', false, { value: true }),
-        field('note', 'Note', 'text', true, { maxLength: 200 })
-      ]),
-      build: (v, id, ctx) => ({
-        id,
-        fields: { version: 0, effectiveFrom: str(v.effectiveFrom), defaultCommissionBps: num(v.defaultCommissionBps), cardPctBps: num(v.cardPctBps), cardFixedMinor: num(v.cardFixedMinor), fbaPerUnitMinor: num(v.fbaPerUnitMinor), reverseCommissionOnRefund: v.reverseCommissionOnRefund === true, note: str(v.note), createdBy: ctx.actor },
-        activity: [{ at: ctx.now.toISOString(), actor: ctx.actor, text: 'Version created' }]
-      })
-    }
+    actions: []
   },
   'tax-rates': {
     title: 'Tax rates',

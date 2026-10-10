@@ -64,6 +64,59 @@ type fakePlatform struct {
 	bodies    map[string]map[string]any
 	payoutSt  string
 	bigOrders bool
+	fees      []map[string]any
+}
+
+// feeSchedules fakes payments' fee-schedule routes: v1 in force, v2 scheduled (with overrides), v3 cancelled.
+func (f *fakePlatform) feeSchedules(w http.ResponseWriter, r *http.Request, p string, body map[string]any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	day := 24 * time.Hour
+	if f.fees == nil {
+		at := func(d time.Duration) string { return time.Now().UTC().Add(d).Format(time.RFC3339) }
+		f.fees = []map[string]any{
+			{"id": "fee-1", "version": 1, "effectiveFrom": at(-90 * day), "currency": "USD", "categoryBps": map[string]any{"groceries": 800, "beauty": 1000},
+				"defaultCommissionBps": 1000, "overrides": []any{}, "cardPctBps": 290, "cardFixedMinor": 30, "fbaPerUnitMinor": 325,
+				"reverseCommissionOnRefund": true, "note": "Launch defaults", "createdBy": "system:seed", "createdAt": at(-90 * day)},
+			{"id": "fee-2", "version": 2, "effectiveFrom": at(10 * day), "currency": "USD", "categoryBps": map[string]any{"groceries": 700, "beauty": 1000},
+				"defaultCommissionBps": 1000, "overrides": []any{map[string]any{"orgId": "org-1", "category": "*", "commissionBps": 600}},
+				"cardPctBps": 290, "cardFixedMinor": 30, "fbaPerUnitMinor": 325, "reverseCommissionOnRefund": true, "note": "Grocery promo",
+				"createdBy": "stf-1", "createdAt": at(-day)},
+			{"id": "fee-3", "version": 3, "effectiveFrom": at(5 * day), "currency": "USD", "categoryBps": map[string]any{}, "defaultCommissionBps": 900,
+				"overrides": []any{}, "cardPctBps": 290, "cardFixedMinor": 30, "fbaPerUnitMinor": 325, "reverseCommissionOnRefund": true, "note": "Typo",
+				"createdBy": "stf-1", "createdAt": at(-2 * day), "cancelledAt": at(-day), "cancelledBy": "stf-1", "cancelReason": "Wrong default"},
+		}
+	}
+	switch {
+	case p == "/v1/fee-schedules" && r.Method == http.MethodPost:
+		created := map[string]any{"id": fmt.Sprintf("fee-%d", len(f.fees)+1), "version": len(f.fees) + 1, "createdBy": "stf-1", "createdAt": time.Now().UTC().Format(time.RFC3339)}
+		for k, v := range body {
+			created[k] = v
+		}
+		if _, ok := created["effectiveFrom"]; !ok {
+			created["effectiveFrom"] = time.Now().UTC().Format(time.RFC3339)
+		}
+		f.fees = append(f.fees, created)
+		writeJ(w, 201, created)
+	case p == "/v1/fee-schedules":
+		out := make([]any, 0, len(f.fees))
+		for i := len(f.fees) - 1; i >= 0; i-- {
+			out = append(out, f.fees[i])
+		}
+		writeJ(w, 200, out)
+	case strings.HasSuffix(p, "/cancel"):
+		id := strings.TrimSuffix(strings.TrimPrefix(p, "/v1/fee-schedules/"), "/cancel")
+		for _, s := range f.fees {
+			if s["id"] == id {
+				s["cancelledAt"], s["cancelledBy"], s["cancelReason"] = time.Now().UTC().Format(time.RFC3339), "stf-1", body["reason"]
+				writeJ(w, 200, s)
+				return
+			}
+		}
+		problemJ(w, 404, "payments.fee-schedule-not-found")
+	default:
+		http.NotFound(w, r)
+	}
 }
 
 func (f *fakePlatform) record(r *http.Request) map[string]any {
@@ -131,6 +184,9 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "admin":
 			writeJ(w, 200, map[string]any{"id": "stf-1", "firstName": "Ifeoma", "lastName": "Okafor", "email": "ifeoma@afrotransact.com", "principalType": "STAFF",
 				"roles": []string{"account.customer", "platform.super_admin"}, "permissions": adminPerms})
+		case "auditor":
+			writeJ(w, 200, map[string]any{"id": "stf-7", "firstName": "Kofi", "lastName": "Mensah", "email": "kofi@afrotransact.com", "principalType": "STAFF",
+				"roles": []string{"platform.auditor"}, "permissions": []string{"audit:read", "payments:read", "orgs:read"}})
 		case "support":
 			writeJ(w, 200, map[string]any{"id": "stf-4", "firstName": "Grace", "lastName": "Adjei", "email": "grace@afrotransact.com", "principalType": "STAFF",
 				"roles": []string{"platform.customer_support"}, "permissions": supportPerms})
@@ -249,13 +305,17 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			f.mu.Unlock()
 		}
 		writeJ(w, 200, map[string]any{"id": "pay-1", "orgId": "org-1", "amountMinor": 50000, "status": f.payoutSt, "requestedAt": now})
-	case p == "/v1/fee-schedules":
-		fs := map[string]any{"id": "fee-1", "version": 1, "effectiveFrom": now, "categoryBps": map[string]any{"BEAUTY": 1200}, "defaultCommissionBps": 1000}
-		if r.Method == http.MethodPost {
-			writeJ(w, 201, fs)
-			return
-		}
-		writeJ(w, 200, []any{fs})
+	case p == "/v1/fee-schedules" || strings.HasPrefix(p, "/v1/fee-schedules/"):
+		f.feeSchedules(w, r, p, body)
+	// catalog taxonomy and seller's organisation directory (fee editor)
+	case p == "/v1/categories":
+		writeJ(w, 200, []any{map[string]any{"id": "d1", "name": "Groceries", "level": "DEPARTMENT", "path": "Groceries"},
+			map[string]any{"id": "d2", "name": "Home & Art", "level": "DEPARTMENT", "path": "Home & Art"},
+			map[string]any{"id": "c1", "parentId": "d1", "name": "Rice", "level": "CATEGORY", "path": "Groceries › Rice"}})
+	case p == "/v1/orgs/directory":
+		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"id": "org-1", "displayName": "Kente Naturals", "kind": "SELLER", "status": "APPROVED"},
+			map[string]any{"id": "org-2", "displayName": "Ade's Kitchen", "kind": "SELLER", "status": "APPROVED"},
+			map[string]any{"id": "org-retail", "displayName": "AfroTransact Retail", "kind": "SELLER", "status": "APPROVED"}}, "page": 0, "size": 200, "total": 3})
 	// inventory, retail, fulfilment
 	case p == "/v1/lots" || strings.HasPrefix(p, "/v1/lots/"):
 		lot := map[string]any{"id": "lot-1", "sku": "AT-SHEA", "lotNo": "L1", "nodeId": "HOU", "qtyOnHand": 10, "qtyReserved": 2, "qtyAvailable": 8, "status": "SELLABLE", "version": 4}
@@ -347,9 +407,9 @@ func staffBFF(t *testing.T, f *fakePlatform) (http.Handler, func(token, method, 
 		TaxReturns: up("tax-returns"), Payments: up("payments"), Inventory: up("inventory"), Retail: up("retail"), Fulfilment: up("fulfilment"),
 		Content: up("content"), Notifications: up("notifications"), Bookings: up("bookings")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
-		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }}
+		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }, RetailOrgID: "org-retail"}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
-		Exports: app.NewStaffExportsService(d), Support: app.NewStaffSupportService(d), Files: files}
+		Exports: app.NewStaffExportsService(d), Support: app.NewStaffSupportService(d), Fees: app.NewStaffFeesService(d), Files: files}
 	mux := http.NewServeMux()
 	httpapi.New(httpapi.Services{Sessions: staffSessions{}, Staff: staff}, nil, httpapi.SecurityOptions{AllowedOrigins: []string{"http://localhost:3002"}}, log).Register(mux)
 	do := func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
@@ -591,9 +651,110 @@ func TestStaffContractConformance(t *testing.T) {
 	do("support", "POST", "/v1/staff/support/shipments/shp-1/cancel", map[string]any{"customerId": "cus-1", "orderNumber": "AT-000001", "reason": "Ordered twice"}, 200)
 	do("support", "POST", "/v1/staff/support/shipments/shp-1/cancel", map[string]any{"customerId": "cus-1", "orderNumber": "AT-999999", "reason": "Ordered twice"}, 404)
 
+	// Fees & commissions: the fee-schedule editor.
+	feesAt := func(m map[string]any, keys ...string) any {
+		var cur any = m
+		for _, k := range keys {
+			if i, err := strconv.Atoi(k); err == nil {
+				cur = cur.([]any)[i]
+			} else {
+				cur = cur.(map[string]any)[k]
+			}
+		}
+		return cur
+	}
+	fees := do("admin", "GET", "/v1/staff/fees", nil, 200)
+	if fees["canConfigure"] != true || feesAt(fees, "current", "version") != float64(1) || feesAt(fees, "base", "version") != float64(2) || fees["immediateAllowed"] != false {
+		t.Fatalf("fees overview = %v", fees)
+	}
+	statuses := []string{}
+	for _, v := range fees["schedules"].([]any) {
+		statuses = append(statuses, v.(map[string]any)["status"].(string))
+	}
+	if strings.Join(statuses, ",") != "CANCELLED,SCHEDULED,ACTIVE" {
+		t.Fatalf("statuses = %v", statuses)
+	}
+	if feesAt(fees, "base", "overrides", "0", "orgName") != "Kente Naturals" || feesAt(fees, "base", "overrides", "0", "category") != nil ||
+		feesAt(fees, "schedules", "1", "cancellable") != true || feesAt(fees, "schedules", "2", "cancellable") != false {
+		t.Fatalf("base = %v", fees["base"])
+	}
+	cats := map[string]string{}
+	for _, c := range fees["categories"].([]any) {
+		cats[c.(map[string]any)["key"].(string)] = c.(map[string]any)["source"].(string)
+	}
+	if cats["groceries"] != "TAXONOMY" || cats["home & art"] != "TAXONOMY" || cats["beauty"] != "SCHEDULE" || cats["services"] != "PLATFORM" || cats["rice"] != "" {
+		t.Fatalf("categories = %v", cats)
+	}
+	if feesAt(fees, "retail", "note") != domain.RetailFeesNote || feesAt(fees, "retail", "orgId") != "org-retail" {
+		t.Fatalf("retail = %v", fees["retail"])
+	}
+	if ro := do("auditor", "GET", "/v1/staff/fees", nil, 200); ro["canConfigure"] != false || feesAt(ro, "schedules", "1", "cancellable") != false {
+		t.Fatalf("auditor overview = %v", ro)
+	}
+	do("support", "GET", "/v1/staff/fees", nil, 403)
+	do("admin", "GET", "/v1/staff/fees/orgs?q=k", nil, 422)
+	if hits := do("admin", "GET", "/v1/staff/fees/orgs?q=kente", nil, 200)["items"].([]any); len(hits) != 1 || hits[0].(map[string]any)["orgId"] != "org-1" {
+		t.Fatalf("org hits = %v", hits)
+	}
+	if hits := do("admin", "GET", "/v1/staff/fees/orgs?q=retail", nil, 200)["items"].([]any); len(hits) != 1 || hits[0].(map[string]any)["selectable"] != false {
+		t.Fatalf("retail hits = %v", hits)
+	}
+	scheduledAt := time.Now().UTC().Add(11 * 24 * time.Hour).Format(time.RFC3339)
+	draft := func() map[string]any {
+		return map[string]any{"effectiveFrom": scheduledAt, "defaultCommissionBps": 1000, "cardPctBps": 290, "cardFixedMinor": 30, "fbaPerUnitMinor": 325,
+			"reverseCommissionOnRefund": true, "note": "Fashion up, Kente promo",
+			"categoryRates": []any{map[string]any{"category": "Groceries", "commissionBps": 700}, map[string]any{"category": "fashion", "commissionBps": 1250}},
+			"overrides":     []any{map[string]any{"orgId": "org-1", "commissionBps": 600}, map[string]any{"orgId": "org-2", "category": "groceries", "commissionBps": 500}}}
+	}
+	bad := draft()
+	bad["effectiveFrom"] = time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	bad["defaultCommissionBps"] = 6000
+	bad["note"] = ""
+	bad["categoryRates"] = []any{map[string]any{"category": "fashion", "commissionBps": 1000}, map[string]any{"category": " Fashion ", "commissionBps": 1000}}
+	bad["overrides"] = []any{map[string]any{"orgId": "org-retail", "commissionBps": 0}}
+	errs := do("admin", "POST", "/v1/staff/fees/schedules", bad, 422)["errors"].(map[string]any)
+	for _, k := range []string{"effectiveFrom", "defaultCommissionBps", "note", "categoryRates.1.category", "overrides.0.orgId"} {
+		if errs[k] == nil {
+			t.Fatalf("missing error %s: %v", k, errs)
+		}
+	}
+	early := draft()
+	early["effectiveFrom"] = time.Now().UTC().Add(24 * time.Hour).Format(time.RFC3339)
+	if e := do("admin", "POST", "/v1/staff/fees/schedules", early, 422)["errors"].(map[string]any); e["effectiveFrom"] == nil {
+		t.Fatalf("before the scheduled version: %v", e)
+	}
+	now := draft()
+	delete(now, "effectiveFrom")
+	now["immediate"] = true
+	if e := do("admin", "POST", "/v1/staff/fees/schedules", now, 422)["errors"].(map[string]any); e["immediate"] == nil {
+		t.Fatalf("immediate while scheduled: %v", e)
+	}
+	do("auditor", "POST", "/v1/staff/fees/schedules", draft(), 403)
+	created := do("admin", "POST", "/v1/staff/fees/schedules", draft(), 201, "Idempotency-Key", "fee-draft-0001")
+	if created["status"] != "SCHEDULED" || created["version"] != float64(4) || len(created["categoryRates"].([]any)) != 2 || len(created["overrides"].([]any)) != 2 {
+		t.Fatalf("created = %v", created)
+	}
+	sent := f.bodies["POST /v1/fee-schedules"]
+	if feesAt(sent, "categoryBps", "groceries") != float64(700) || feesAt(sent, "categoryBps", "fashion") != float64(1250) || sent["effectiveFrom"] != scheduledAt ||
+		feesAt(sent, "overrides", "1", "category") != "groceries" || feesAt(sent, "overrides", "0", "category") != nil || sent["note"] != "Fashion up, Kente promo" {
+		t.Fatalf("payments body = %v", sent)
+	}
+	do("admin", "POST", "/v1/staff/fees/schedules/fee-2/cancel", map[string]any{"reason": "x"}, 422)
+	do("auditor", "POST", "/v1/staff/fees/schedules/fee-2/cancel", map[string]any{"reason": "Promo postponed"}, 403)
+	if c := do("admin", "POST", "/v1/staff/fees/schedules/fee-2/cancel", map[string]any{"reason": "Promo postponed"}, 200); c["status"] != "CANCELLED" || c["cancelReason"] != "Promo postponed" {
+		t.Fatalf("cancelled = %v", c)
+	}
+	do("admin", "POST", "/v1/staff/fees/schedules/fee-2/cancel", map[string]any{"reason": "Again"}, 409)
+	do("admin", "POST", "/v1/staff/fees/schedules/fee-1/cancel", map[string]any{"reason": "Too late"}, 409)
+	do("admin", "POST", "/v1/staff/fees/schedules/fee-404/cancel", map[string]any{"reason": "Unknown"}, 404)
+	if !f.called("POST /v1/fee-schedules/fee-2/cancel") || f.called("POST /v1/fee-schedules/fee-1/cancel") {
+		t.Fatal("cancel calls")
+	}
+
 	for _, op := range []string{"getStaffSession", "getStaffDashboard", "listStaffResource", "createStaffRecord", "getStaffRecord", "updateStaffRecord", "runStaffAction",
 		"addStaffNote", "listStaffExports", "createStaffExport", "getStaffExport", "downloadStaffExport", "getStaffExportFile", "searchSupportCustomers",
-		"getSupportCustomer", "supportRefund", "supportResendNotification", "supportCancelShipment"} {
+		"getSupportCustomer", "supportRefund", "supportResendNotification", "supportCancelShipment", "getStaffFees", "searchFeeOrgs", "createFeeSchedule",
+		"cancelFeeSchedule"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not exercised", op)
 		}

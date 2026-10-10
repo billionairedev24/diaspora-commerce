@@ -285,15 +285,25 @@ final class PaymentsDtos {
                                Map<String, Integer> categoryBps, int defaultCommissionBps,
                                List<OverrideRequest> overrides, int cardPctBps, long cardFixedMinor,
                                long fbaPerUnitMinor, boolean reverseCommissionOnRefund, String note, String createdBy,
-                               Instant createdAt) {
+                               Instant createdAt,
+                               @Schema(description = "Set when the version was cancelled before it took effect "
+                                       + "(it never applies)") Instant cancelledAt,
+                               @Schema(description = "Who cancelled the version") String cancelledBy,
+                               @Schema(description = "Why the version was cancelled") String cancelReason) {
 
         static FeeScheduleResponse of(FeeSchedule s) {
+            FeeSchedule.Cancellation c = s.cancellation();
             return new FeeScheduleResponse(s.id(), s.version(), s.effectiveFrom(), s.currency(),
                     new TreeMap<>(s.categoryBps()), s.defaultCommissionBps(), s.overrides().stream()
                     .map(o -> new OverrideRequest(o.orgId(), o.category(), o.commissionBps())).toList(),
                     s.cardPctBps(), s.cardFixed().minor(), s.fbaPerUnit().minor(), s.reverseCommissionOnRefund(),
-                    s.note(), s.createdBy(), s.createdAt());
+                    s.note(), s.createdBy(), s.createdAt(), c == null ? null : c.at(), c == null ? null : c.by(),
+                    c == null ? null : c.reason());
         }
+    }
+
+    @Schema(description = "Why a scheduled fee schedule version is withdrawn (audited)")
+    record CancelFeeScheduleRequest(@NotBlank @Size(max = 500) String reason) {
     }
 
     @Schema(description = "Fees payments applies to one organisation and category (fee-schedule version in force)")

@@ -17,7 +17,7 @@ export const AccessLevelSchema = z.enum(['VIEW', 'EDIT', 'APPROVE', 'FULL']);
 export type AccessLevel = z.infer<typeof AccessLevelSchema>;
 export const ModuleKeySchema = z.enum([
   'onboarding', 'home', 'orders', 'listings', 'inventory', 'storefront', 'calendar', 'requests', 'hours', 'services', 'policy',
-  'public-page', 'earnings', 'payouts', 'billing', 'account-health', 'team'
+  'public-page', 'earnings', 'payouts', 'fees', 'billing', 'account-health', 'team'
 ]);
 export type ModuleKey = z.infer<typeof ModuleKeySchema>;
 
@@ -432,6 +432,38 @@ export const PayoutSchema = z.object({
 export type Payout = z.infer<typeof PayoutSchema>;
 export const PayoutsViewSchema = z.object({ balance: PayoutBalanceSchema, payouts: z.array(PayoutSchema), historyAvailable: z.boolean() });
 export type PayoutsView = z.infer<typeof PayoutsViewSchema>;
+
+/* ── Fees (read-only; rates in basis points, 1250 = 12.50 %) ── */
+
+export const SellerFeeCategorySchema = z.object({
+  category: z.string(),
+  label: z.string(),
+  commissionBps: z.number().int(),
+  source: z.enum(['OVERRIDE', 'CATEGORY', 'DEFAULT', 'RETAIL'])
+});
+export type SellerFeeCategory = z.infer<typeof SellerFeeCategorySchema>;
+export const SellerFeeVersionSchema = z.object({
+  version: z.number().int(),
+  effectiveFrom: z.string(),
+  defaultCommissionBps: z.number().int(),
+  categories: z.array(SellerFeeCategorySchema),
+  cardPctBps: z.number().int(),
+  cardFixedMinor: z.number().int(),
+  fbaPerUnitMinor: z.number().int(),
+  reverseCommissionOnRefund: z.boolean()
+});
+export type SellerFeeVersion = z.infer<typeof SellerFeeVersionSchema>;
+export const SellerFeeChangeSchema = z.object({ field: z.string(), label: z.string(), from: z.string(), to: z.string() });
+export type SellerFeeChange = z.infer<typeof SellerFeeChangeSchema>;
+export const SellerFeesViewSchema = z.object({
+  currency: z.string(),
+  retail: z.boolean(),
+  note: z.string().nullable(),
+  current: SellerFeeVersionSchema,
+  upcoming: SellerFeeVersionSchema.nullable(),
+  changes: z.array(SellerFeeChangeSchema)
+});
+export type SellerFeesView = z.infer<typeof SellerFeesViewSchema>;
 
 export const CadenceSchema = z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']);
 export type Cadence = z.infer<typeof CadenceSchema>;

@@ -40,6 +40,7 @@ export const SELLER_MODULES: ModuleDef[] = [
   m('sInventory', 'inventory', 'Inventory & FBA', 'commerce', 'stock levels'),
   m('sStorefront', 'storefront', 'Storefront & theme', 'growth', 'the storefront design'),
   m('sPayouts', 'payouts', 'Payouts', 'finance', 'payouts and balances'),
+  m('sPayouts', 'fees', 'Fees & commission', 'finance', 'commission and fees'),
   m('sBilling', 'billing', 'Plan & billing', 'finance', 'the plan and invoices'),
   m('sCompliance', 'account-health', 'Account health', 'trust', 'Stripe verification requirements'),
   m('sTeam', 'team', 'Team & roles', 'settings', 'team members and their roles')
@@ -55,6 +56,7 @@ export const PROVIDER_MODULES: ModuleDef[] = [
   m('pPage', 'public-page', 'Public page', 'setup', 'the public page design, gallery and social links'),
   m('pPayouts', 'earnings', 'Earnings', 'money', 'earnings per booking'),
   m('pPayouts', 'payouts', 'Payouts', 'money', 'payouts and balances'),
+  m('pPayouts', 'fees', 'Fees & commission', 'money', 'commission and fees'),
   m('pBilling', 'billing', 'Plan & billing', 'money', 'the Provider Hub plan and invoices'),
   m('pCompliance', 'account-health', 'Account health', 'trust', 'Stripe verification requirements'),
   m('pTeam', 'team', 'Team & roles', 'settings', 'team members and their roles')

@@ -16,15 +16,17 @@ import (
 
 // SellerDeps are the upstreams of the Seller Center & Provider Hub routes.
 type SellerDeps struct {
-	Orgs       port.OrgAccessClient
-	Sellers    port.SellerServiceClient
-	Catalog    port.SellerCatalogClient
-	Stock      port.StockClient
-	Offers     port.OffersClient
-	Media      port.MediaClient
-	Orders     port.SellerOrdersClient
-	Carrier    port.CarrierClient
-	Payouts    port.PayoutsClient
+	Orgs    port.OrgAccessClient
+	Sellers port.SellerServiceClient
+	Catalog port.SellerCatalogClient
+	Stock   port.StockClient
+	Offers  port.OffersClient
+	Media   port.MediaClient
+	Orders  port.SellerOrdersClient
+	Carrier port.CarrierClient
+	Payouts port.PayoutsClient
+	// Fees reads payments' fee schedules with the BFF's service token (nil: the Fees page answers 503).
+	Fees       port.FeesClient
 	Storefront port.StorefrontClient
 	Bookings   port.BookingsClient
 	// Cache holds identity's module matrix per portal (not personal data).

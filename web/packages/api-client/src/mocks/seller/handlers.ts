@@ -26,6 +26,8 @@ import {
   ProductDraftSchema,
   PublicPageInputSchema,
   SellerAddressSchema,
+  type SellerFeesView,
+  type SellerFeeVersion,
   type SellerOrderDetail,
   type SellerOrderRow,
   type SellerSession,
@@ -297,6 +299,40 @@ function providerFees(db: MockSellerDb) {
       id: `fee-${b.id}`, bookingReference: b.reference, amountMinor: 1500, currency: 'USD', reason: 'Late cancellation by provider',
       status: i === 0 ? ('OUTSTANDING' as const) : ('COLLECTED' as const), nextAttemptAt: i === 0 ? new Date(Date.now() + 86_400_000).toISOString() : null, createdAt: b.startAt
     }));
+}
+
+/** Fees as payments' effective-fee reads give them: v2 in force (fashion 11.50 %, the org's own override), v4 scheduled
+    in three weeks (fashion 13.00 %, FBA $3.50). */
+function sellerFees(kind: string, now: Date): SellerFeesView {
+  const upcomingAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 21, 5, 0, 0)).toISOString();
+  const launch: Record<string, number> = { beauty: 1000, books: 1000, fashion: 1150, groceries: 800, health: 1000, 'home & art': 1200, party: 1000, services: 1000 };
+  const override: [string, number] = kind === 'PROVIDER' ? ['services', 900] : ['groceries', 700];
+  const label = (k: string) => k.charAt(0).toUpperCase() + k.slice(1);
+  const version = (v: number, at: string, rates: Record<string, number>, fba: number): SellerFeeVersion => ({
+    version: v,
+    effectiveFrom: at,
+    defaultCommissionBps: 1000,
+    categories: Object.keys(rates)
+      .sort()
+      .map((k) => (k === override[0] ? { category: k, label: label(k), commissionBps: override[1], source: 'OVERRIDE' as const } : { category: k, label: label(k), commissionBps: rates[k] ?? 1000, source: 'CATEGORY' as const })),
+    cardPctBps: 290,
+    cardFixedMinor: 30,
+    fbaPerUnitMinor: fba,
+    reverseCommissionOnRefund: true
+  });
+  const current = version(2, new Date(now.getTime() - 60 * 86_400_000).toISOString(), launch, 325);
+  const upcoming = version(4, upcomingAt, { ...launch, fashion: 1300 }, 350);
+  return {
+    currency: 'USD',
+    retail: false,
+    note: null,
+    current,
+    upcoming,
+    changes: [
+      { field: 'category:fashion', label: 'Fashion commission', from: '11.50%', to: '13.00%' },
+      { field: 'fbaPerUnitMinor', label: 'FBA fee per unit', from: '$3.25', to: '$3.50' }
+    ]
+  };
 }
 
 const paused = (ctx: Ctx) => ctx.db.payoutsPaused && ctx.org.kind === 'SELLER';
@@ -680,6 +716,13 @@ export const sellerHandlers = [
   ),
 
   /* ── Money ── */
+  http.get(
+    `${W}/fees`,
+    route((ctx): SellerFeesView => {
+      require(ctx, 'fees', 'VIEW');
+      return sellerFees(ctx.org.kind, ctx.now);
+    })
+  ),
   http.get(
     `${W}/payouts`,
     route((ctx) => {

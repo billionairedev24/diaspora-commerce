@@ -25,7 +25,7 @@ type staffClients struct {
 }
 
 // staffServices wires the staff console (contracts/openapi/gateway-bff-staff.yaml): shell, tables and sheets,
-// dashboard, exports and the support console.
+// dashboard, exports, the support console and the fee-schedule editor.
 func staffServices(cfg config.Config, client func(string, config.Upstream) httpclient.Client, sc staffClients, rdb redis.UniversalClient,
 	cache port.Cache, log *slog.Logger) (httpapi.StaffServices, error) {
 	up := cfg.Upstreams
@@ -41,7 +41,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			Bookings: upstreams.NewStaffUpstream(client("bookings", up.Bookings)),
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
-		Jobs: valkey.NewExportJobs(rdb), ExportBasePath: cfg.Web.BFFPath, Log: log,
+		Jobs: valkey.NewExportJobs(rdb), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
 	}
 	out := httpapi.StaffServices{}
 	switch cfg.Staff.ExportStore {
@@ -57,7 +57,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 		return out, fmt.Errorf("staff export store %q: use local or media", cfg.Staff.ExportStore)
 	}
 	out.Shell, out.Records, out.Dashboard = app.NewStaffShellService(d), app.NewStaffRecordsService(d), app.NewStaffDashboardService(d)
-	out.Exports, out.Support = app.NewStaffExportsService(d), app.NewStaffSupportService(d)
+	out.Exports, out.Support, out.Fees = app.NewStaffExportsService(d), app.NewStaffSupportService(d), app.NewStaffFeesService(d)
 	return out, nil
 }
 

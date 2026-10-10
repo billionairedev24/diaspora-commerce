@@ -17,6 +17,7 @@ use the **manual payout schedule**; sellers are paid **on request**.
 | `payment_refund` | Line-level refunds with commission returned per line; PENDING until Stripe confirms (`charge.refunded`) |
 | `journal_entry` / `journal_line` | **Append-only double-entry ledger** (triggers reject UPDATE/DELETE/TRUNCATE; a *deferred constraint trigger* rejects any journal that does not balance per currency or has < 2 lines) |
 | `fee_schedule` (+ `_rate`, `_override`) | Immutable, versioned commission % per category, seller overrides, card fee, FBA fee per unit, refund-commission policy, `effective_from` |
+| `fee_schedule_cancellation` | Append-only withdrawal of a scheduled version before it takes effect (who, when, why; V7). The version row is kept and skipped when picking the version in force |
 | `settlement`, `settlement_transfer`, `transfer_reversal` | Settlement hold per order, Connect transfers (`transfer_group` = order id) and reversals |
 | `payout_request` | Payout requests (unique per org per day, failed excluded) |
 | `dispute` | Chargebacks with per-seller allocation |
@@ -112,6 +113,7 @@ RFC 9457 problems with `code` `payments.*`. Reference pages `/swagger-ui.html`, 
 | `POST /v1/settlements/{orderId}/delivered` (`kind` PRODUCT / SERVICE) · `GET /v1/settlements/{orderId}` | orders, bookings, fulfilment |
 | `GET /v1/orders/{orderId}/split` · `GET /v1/ledger/balances` · `/v1/ledger/orgs/{orgId}/balances` · `/v1/ledger/journals?orderId=` | staff `payments:read` |
 | `GET /v1/fee-schedules` · `/active?at=` · `POST /v1/fee-schedules` | read / `payments:configure` (Super Admin, Finance) |
+| `POST /v1/fee-schedules/{id}/cancel {reason}` | `payments:configure`: only before `effectiveFrom` (`409 payments.fee-schedule-in-force` after, `409 payments.fee-schedule-cancelled` twice). Marks the version cancelled (`cancelledAt/By`, `cancelReason`), never deletes it; cancelled versions never apply and don't block the next version's date. Audited (row + `audit.payments.fee-schedules` log) |
 | `GET /v1/fee-schedules/effective?category=&orgId=&at=` | services (`payments:service`) or staff `payments:read`: commission bps (override / category / default / retail), card fee estimate |
 | `GET /v1/payouts/balance` · `POST /v1/payouts/requests` | org members / owner & finance roles with `payouts:request` |
 | `GET /v1/payouts/provider-fees?orgId=` | org members (own org) / staff |

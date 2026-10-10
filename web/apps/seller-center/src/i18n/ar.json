@@ -62,6 +62,8 @@
   "sc.module.payouts.description": "مدفوعات Stripe Connect إلى بنكك.",
   "sc.module.payoutsProvider.title": "المدفوعات",
   "sc.module.payoutsProvider.description": "تُسوّى الأرباح خلال 7 أيام، ثم تطلب تحويلها إلى بنكك.",
+  "sc.module.fees.title": "الرسوم والعمولة",
+  "sc.module.fees.description": "ما تفرضه AfroTransact عليك: العمولة لكل فئة، ورسوم البطاقة وFBA، والتغييرات القادمة.",
   "sc.module.billing.title": "الخطة والفوترة",
   "sc.module.billing.description": "اشتراكك (Stripe Billing) والفواتير.",
   "sc.module.billingProvider.title": "الخطة والفوترة",

@@ -63,6 +63,8 @@ import {
   type RateQuotes,
   RateQuotesSchema,
   type SellerAddress,
+  type SellerFeesView,
+  SellerFeesViewSchema,
   type SellerOrderDetail,
   SellerOrderDetailSchema,
   type SellerOrderPage,
@@ -168,6 +170,7 @@ export function createSellerApiClient(options: ApiClientOptions) {
 
     /* Money */
     getPayouts: (signal?: AbortSignal): Promise<PayoutsView> => request('/v1/seller/payouts', PayoutsViewSchema, { signal }),
+    getFees: (signal?: AbortSignal): Promise<SellerFeesView> => request('/v1/seller/fees', SellerFeesViewSchema, { signal }),
     requestPayout: (body: { amountMinor?: number; all?: boolean }, key?: string): Promise<Payout> =>
       request('/v1/seller/payouts', PayoutSchema, { method: 'POST', body, headers: idem(key) }),
     getBilling: (signal?: AbortSignal): Promise<BillingView> => request('/v1/seller/billing', BillingViewSchema, { signal }),

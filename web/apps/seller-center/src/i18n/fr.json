@@ -62,6 +62,8 @@
   "sc.module.payouts.description": "Virements Stripe Connect vers votre banque.",
   "sc.module.payoutsProvider.title": "Virements",
   "sc.module.payoutsProvider.description": "Les gains sont disponibles après 7 jours, puis vous demandez un virement vers votre banque.",
+  "sc.module.fees.title": "Frais et commission",
+  "sc.module.fees.description": "Ce qu’AfroTransact vous facture : commission par catégorie, frais de carte et FBA, et changements à venir.",
   "sc.module.billing.title": "Forfait et facturation",
   "sc.module.billing.description": "Votre abonnement (Stripe Billing) et vos factures.",
   "sc.module.billingProvider.title": "Forfait et facturation",

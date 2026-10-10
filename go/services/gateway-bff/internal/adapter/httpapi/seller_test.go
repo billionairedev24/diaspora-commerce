@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -163,6 +164,33 @@ func TestSellerContractConformance(t *testing.T) {
 	}
 	mustStatus(t, b.do("POST", "/v1/seller/payouts", map[string]any{"all": true}), 201)
 	mustStatus(t, b.do("POST", "/v1/seller/payouts", map[string]any{"amountMinor": 100}), 422)
+	// Fees (read-only): commission per category with the org's own overrides, FBA and card fees, the upcoming change.
+	if r := b.do("GET", "/v1/seller/fees", nil); r.status != 200 {
+		t.Fatalf("fees = %d %s", r.status, r.body)
+	} else {
+		v := r.json(t)
+		cur := v["current"].(map[string]any)
+		cats := map[string]string{}
+		for _, c := range cur["categories"].([]any) {
+			m := c.(map[string]any)
+			cats[m["category"].(string)] = fmt.Sprintf("%v/%v", m["commissionBps"], m["source"])
+		}
+		if cats["groceries"] != "600/OVERRIDE" || cats["fashion"] != "1200/CATEGORY" || cats["services"] != "1000/DEFAULT" || cats["beauty"] != "" ||
+			num(cur, "fbaPerUnitMinor") != 325 || num(cur, "cardPctBps") != 290 || v["retail"] != false {
+			t.Fatalf("current fees = %v", cur)
+		}
+		up := v["upcoming"].(map[string]any)
+		if up["effectiveFrom"] != testkit.FeeScheduleUpcoming || num(up, "version") != 2 {
+			t.Fatalf("upcoming = %v", up)
+		}
+		changes := []string{}
+		for _, c := range v["changes"].([]any) {
+			changes = append(changes, c.(map[string]any)["field"].(string))
+		}
+		if strings.Join(changes, ",") != "category:fashion,fbaPerUnitMinor" {
+			t.Fatalf("changes = %v", v["changes"])
+		}
+	}
 	mustStatus(t, b.do("GET", "/v1/seller/billing", nil), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/billing/plan", map[string]any{"planCode": "seller_pro", "cadence": "ANNUAL"}), 200)
 	mustStatus(t, b.do("POST", "/v1/seller/billing/plan", map[string]any{"planCode": "seller_pro", "cadence": "WEEKLY"}), 422)
@@ -270,7 +298,7 @@ func TestSellerContractConformance(t *testing.T) {
 	for _, op := range []string{"getSellerSession", "setActiveOrg", "getOnboarding", "getCompliance", "getDashboard", "listSellerOrders", "getSellerOrder",
 		"updateShipmentStatus", "quoteShippingRates", "buyShippingLabel", "listListings", "setListingActive", "submitProduct", "getCategoryTree",
 		"getProductType", "checkGtin", "listCategoryRequests", "requestCategory", "requestUpload", "completeUpload", "getInventory", "adjustStock",
-		"getPayouts", "requestPayout", "getBilling", "changePlan", "makeDefaultPaymentMethod", "removePaymentMethod", "getTeam", "inviteMember",
+		"getPayouts", "requestPayout", "getSellerFees", "getBilling", "changePlan", "makeDefaultPaymentMethod", "removePaymentMethod", "getTeam", "inviteMember",
 		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
 		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings", "getPublicPage", "savePublicPage", "publishPublicPage"} {
 		if validated[op] == 0 {

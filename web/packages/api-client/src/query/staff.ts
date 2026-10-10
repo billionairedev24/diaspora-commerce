@@ -16,7 +16,9 @@ export const staffKeys = {
   exports: () => [...staffKeys.all, 'exports'] as const,
   exportJob: (id: string) => [...staffKeys.exports(), id] as const,
   customers: (q: string) => [...staffKeys.all, 'support', 'customers', q] as const,
-  customer: (id: string) => [...staffKeys.all, 'support', 'customer', id] as const
+  customer: (id: string) => [...staffKeys.all, 'support', 'customer', id] as const,
+  fees: () => [...staffKeys.all, 'fees'] as const,
+  feeOrgs: (q: string) => [...staffKeys.fees(), 'orgs', q] as const
 };
 
 const MINUTE = 60_000;
@@ -41,5 +43,8 @@ export const staffQueries = {
   customers: (api: StaffApiClient, q: string) =>
     queryOptions({ queryKey: staffKeys.customers(q), queryFn: ({ signal }) => api.searchCustomers(q, signal), staleTime: 30_000 }),
   customer: (api: StaffApiClient, id: string) =>
-    queryOptions({ queryKey: staffKeys.customer(id), queryFn: ({ signal }) => api.getCustomer(id, signal), staleTime: 15_000 })
+    queryOptions({ queryKey: staffKeys.customer(id), queryFn: ({ signal }) => api.getCustomer(id, signal), staleTime: 15_000 }),
+  fees: (api: StaffApiClient) => queryOptions({ queryKey: staffKeys.fees(), queryFn: ({ signal }) => api.getFees(signal), staleTime: 15_000 }),
+  feeOrgs: (api: StaffApiClient, q: string) =>
+    queryOptions({ queryKey: staffKeys.feeOrgs(q), queryFn: ({ signal }) => api.searchFeeOrgs(q, signal), staleTime: 30_000 })
 };

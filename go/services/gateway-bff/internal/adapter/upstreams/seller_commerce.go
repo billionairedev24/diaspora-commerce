@@ -2,6 +2,8 @@ package upstreams
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -305,6 +307,58 @@ func (p *payoutsImpl) RequestPayout(ctx context.Context, bearer, key string, amo
 	var out port.PayoutResponse
 	_, err := call(ctx, p.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/payouts/requests", Bearer: bearer, Header: idem(key),
 		RetryUnsafe: key != "", JSON: body}, &out)
+	return out, err
+}
+
+// ---------------------------------------------------------------- payments: fee schedules (contracts/openapi/payments.yaml)
+
+// FeesScope is the client-credentials scope payments accepts for reading fee schedules on behalf of a service.
+const FeesScope = "payments:fees.read"
+
+type feesImpl struct {
+	c      httpclient.Client
+	tokens port.ServiceTokens
+}
+
+var _ port.FeesClient = (*feesImpl)(nil)
+
+// NewFees returns the fee-schedule reader (BFF service token, scope payments:service).
+func NewFees(c httpclient.Client, tokens port.ServiceTokens) port.FeesClient {
+	return &feesImpl{c: c, tokens: tokens}
+}
+
+func (f *feesImpl) token(ctx context.Context) (string, error) {
+	if f.tokens == nil {
+		return "", errors.New("fees: no service token source")
+	}
+	t, err := f.tokens.Token(ctx, FeesScope)
+	if err != nil {
+		return "", fmt.Errorf("fees: %w", err)
+	}
+	return t, nil
+}
+
+func (f *feesImpl) Schedules(ctx context.Context) ([]port.FeeScheduleSummary, error) {
+	t, err := f.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []port.FeeScheduleSummary
+	_, err = call(ctx, f.c, httpclient.Request{Path: "/v1/fee-schedules", Bearer: t}, &out)
+	return out, err
+}
+
+func (f *feesImpl) Effective(ctx context.Context, category, orgID string, at time.Time) (port.EffectiveFeesResponse, error) {
+	t, err := f.token(ctx)
+	if err != nil {
+		return port.EffectiveFeesResponse{}, err
+	}
+	q := url.Values{"category": {category}, "orgId": {orgID}}
+	if !at.IsZero() {
+		q.Set("at", at.UTC().Format(time.RFC3339))
+	}
+	var out port.EffectiveFeesResponse
+	_, err = call(ctx, f.c, httpclient.Request{Path: "/v1/fee-schedules/effective", Query: q, Bearer: t}, &out)
 	return out, err
 }
 

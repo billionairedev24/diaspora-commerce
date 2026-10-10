@@ -107,8 +107,9 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Catalog: upstreams.NewSellerCatalog(client("catalog", base), cache, 10*time.Minute), Stock: upstreams.NewStock(client("inventory", base)),
 		Offers: upstreams.NewOffers(offersClient), Media: media,
 		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),
-		Payouts: upstreams.NewPayouts(client("payments", base)), Storefront: upstreams.NewStorefront(client("storefront", base)),
-		Bookings: upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
+		Payouts: upstreams.NewPayouts(client("payments", base)), Fees: upstreams.NewFees(client("payments", base), upstreams.NewServiceTokens(identityClient, clientCreds)),
+		Storefront: upstreams.NewStorefront(client("storefront", base)),
+		Bookings:   upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
 		Clock: clock.Now, Log: log}
 
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
@@ -139,6 +140,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerOrders:    app.NewSellerOrdersService(sellerDeps),
 		SellerCatalog:   app.NewSellerCatalogService(sellerDeps),
 		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
+		SellerFees:      app.NewSellerFeesService(sellerDeps),
 		SellerTeam:      app.NewSellerTeamService(sellerDeps),
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),

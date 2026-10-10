@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -143,28 +145,45 @@ func payoutsResource() *staffResource {
 
 // ---------------------------------------------------------------- fee schedules (payments)
 
+// feeSchedulesResource is the read-only table of fee-schedule versions (exports). Versions are created and cancelled
+// in the fee-schedule editor (StaffFeesService, /v1/staff/fees/...), which edits every rate as a percentage.
 func feeSchedulesResource() *staffResource {
 	load := func(ctx context.Context, sc staffCtx, _ staffQuery) ([]jobj, error) {
 		var raw any
 		if err := sc.get(ctx, sc.up.Payments, "/v1/fee-schedules", nil, &raw); err != nil {
 			return nil, err
 		}
-		return jpage(raw).items, nil
+		items := jpage(raw).items
+		for _, it := range items {
+			it["status"] = feeRowStatus(it, sc.now, items)
+		}
+		return items, nil
 	}
 	list := listAll(load)
+	pct := func(o jobj, key string) any { return num(o, key) / 10_000 }
 	return &staffResource{
-		key: "fee-schedules", module: "fees", title: "Fee schedules", exportable: true,
-		columns: []domain.Column{col("version", "Version", "number", 10), col("effectiveFrom", "Effective from", "datetime", 20), col("defaultCommissionBps", "Commission (bps)", "number", 16),
-			col("cardPctBps", "Card % (bps)", "number", 14), col("fbaPerUnitMinor", "FBA / unit", "money", 14), col("note", "Note", "text", 26)},
+		key: "fee-schedules", module: "fees", title: "Fee schedules", statusKey: "status", exportable: true,
+		columns: []domain.Column{col("version", "Version", "number", 9), col("effectiveFrom", "Effective from", "datetime", 18), col("status", "Status", "status", 12),
+			col("defaultCommissionBps", "Commission", "percent", 12), col("cardPctBps", "Card fee", "percent", 11), col("fbaPerUnitMinor", "FBA / unit", "money", 11),
+			col("note", "Note", "text", 27)},
+		cells: func(o jobj) map[string]any {
+			return map[string]any{"defaultCommissionBps": pct(o, "defaultCommissionBps"), "cardPctBps": pct(o, "cardPctBps")}
+		},
 		list: list, get: findIn(list, "id"),
 		titleOf:    func(o jobj) string { return "Fee schedule v" + jstr(o, "version") },
 		subtitleOf: func(o jobj) string { return jstr(o, "note") },
 		sections: func(o jobj) []domain.DetailSection {
-			secs := autoSections(o, "", "categoryBps", "overrides")
-			cat := domain.DetailSection{Title: "Commission by category (bps)", Fields: []domain.DetailField{}}
+			secs := autoSections(o, "status", "categoryBps", "overrides")
+			cat := domain.DetailSection{Title: "Commission by category", Fields: []domain.DetailField{}}
 			if m, ok := o["categoryBps"].(map[string]any); ok {
-				for k, v := range m {
-					cat.Fields = append(cat.Fields, domain.DetailField{Label: k, Value: displayValue(v), Kind: "text"})
+				keys := make([]string, 0, len(m))
+				for k := range m {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
+				for _, k := range keys {
+					bps, _ := m[k].(float64)
+					cat.Fields = append(cat.Fields, domain.DetailField{Label: domain.FeeCategoryLabel(k), Value: domain.FormatBps(int(bps)), Kind: "text"})
 				}
 			}
 			return append(secs, cat)
@@ -172,38 +191,20 @@ func feeSchedulesResource() *staffResource {
 		tables: func(o jobj) []domain.DetailTable {
 			return []domain.DetailTable{tableOf("Seller overrides", objs(o, "overrides"), []domain.Column{col("orgId", "Organisation", "mono", 40), col("category", "Category", "text", 30), col("commissionBps", "Commission (bps)", "number", 30)}, "orgId")}
 		},
-		create: &staffCreate{permission: "payments:configure",
-			form: func(context.Context, staffCtx) domain.Form {
-				return domain.Form{Title: "New fee schedule version (applies to new orders)", SubmitLabel: "Create version", Fields: []domain.FormField{
-					ff("effectiveFrom", "Effective from", "datetime", true),
-					withRange(ff("defaultCommissionBps", "Default commission (bps)", "number", true), 5000),
-					withRange(ff("cardPctBps", "Card fee (bps)", "number", true), 1000),
-					withRange(ff("cardFixedMinor", "Card fixed fee", "money", true), 1000),
-					withRange(ff("fbaPerUnitMinor", "FBA fee per unit", "money", true), 10_000),
-					withValue(ff("reverseCommissionOnRefund", "Reverse commission on refunds", "toggle", false), true),
-					withMax(ff("note", "Note", "text", true), 200),
-				}}
-			},
-			create: func(ctx context.Context, sc staffCtx, v jobj) (string, error) {
-				// categoryBps is required: carry the current schedule's category rates forward.
-				current, _ := load(ctx, sc, staffQuery{})
-				cats := jobj{}
-				if len(current) > 0 {
-					if m, ok := current[0]["categoryBps"].(map[string]any); ok {
-						cats = m
-					}
-				}
-				body := jobj{"effectiveFrom": vs(v, "effectiveFrom"), "currency": "USD", "categoryBps": cats,
-					"defaultCommissionBps": int(vn(v, "defaultCommissionBps")), "cardPctBps": int(vn(v, "cardPctBps")),
-					"cardFixedMinor": int64(vn(v, "cardFixedMinor")), "fbaPerUnitMinor": int64(vn(v, "fbaPerUnitMinor")),
-					"reverseCommissionOnRefund": vb(v, "reverseCommissionOnRefund"), "note": vs(v, "note")}
-				var out jobj
-				if err := sc.post(ctx, sc.up.Payments, "/v1/fee-schedules", body, &out); err != nil {
-					return "", err
-				}
-				return jstr(out, "id"), nil
-			}},
 	}
+}
+
+// feeRowStatus is ACTIVE, SCHEDULED, SUPERSEDED or CANCELLED for one row of payments' history.
+func feeRowStatus(o jobj, now time.Time, all []jobj) string {
+	live := []paymentsSchedule{}
+	for _, it := range all {
+		if jstr(it, "cancelledAt") != "" {
+			continue
+		}
+		live = append(live, paymentsSchedule{ID: jstr(it, "id"), Version: int(num(it, "version")), EffectiveFrom: timeOf(it, "effectiveFrom")})
+	}
+	t := timelineOf(live, now)
+	return domain.FeeStatusOf(jstr(o, "cancelledAt") != "", timeOf(o, "effectiveFrom"), t.active != nil && t.active.ID == jstr(o, "id"), now)
 }
 
 // ---------------------------------------------------------------- tax rates (tax-returns)

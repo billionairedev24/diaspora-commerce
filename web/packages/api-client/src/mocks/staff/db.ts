@@ -1,6 +1,7 @@
 /* In-memory state of the mock staff BFF (stored on globalThis so the route handler, server components and tests share
    it). Seeded from the Backoffice prototype (backoffice-data.js, backoffice-config.js, at-site.js) relative to today. */
 import { type ActivityEntry, type ExportJob, type ResourceKey } from '../../schemas/staff';
+import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 
 export type Scalar = string | number | boolean | null;
 
@@ -30,6 +31,8 @@ export interface MockStaffDb {
   notifications: MockNotification[];
   exports: (ExportJob & { owner: string; body: string })[];
   audit: { at: string; actor: string; action: string; summary: string; entityId: string }[];
+  /** payments' fee-schedule versions (the fee-schedules table is derived from them). */
+  feeSchedules: MockFeeSchedule[];
   seq: number;
 }
 
@@ -364,19 +367,8 @@ function seed(now: Date): MockStaffDb {
     ['microsoft', 'Microsoft', false]
   ].map(([id, name, enabled]) => rec(id as string, { displayName: name as string, enabled: enabled as boolean, status: enabled ? 'ENABLED' : 'DISABLED', configured: id !== 'microsoft', updatedBy: 'Elena Petrova', updatedAt: ago(30) }));
 
-  const fees = [3, 2, 1].map((v, i) =>
-    rec(`fee-${v}`, {
-      version: v,
-      effectiveFrom: ago(i * 90 + 1),
-      defaultCommissionBps: 1200 - i * 100,
-      cardPctBps: 290,
-      cardFixedMinor: 30,
-      fbaPerUnitMinor: 350 - i * 25,
-      reverseCommissionOnRefund: true,
-      note: ['Holiday commission on fashion', 'Q2 review', 'Launch schedule'][i] ?? '',
-      createdBy: 'Musa Bello'
-    })
-  );
+  const feeSchedules = seedFeeSchedules(now);
+  const fees = feeRecords(feeSchedules, now);
 
   const taxRates = [
     rec('state:TX', { kind: 'STATE', state: 'TX', zipPrefix: null, name: 'Texas', generalRate: 0.0625, groceryRate: 0, preparedFoodRate: 0.0625, shippingTaxable: true, facilitator: true, version: 3 }),
@@ -401,6 +393,7 @@ function seed(now: Date): MockStaffDb {
     notifications,
     exports: [],
     audit: [],
+    feeSchedules,
     seq: 1
   };
 }

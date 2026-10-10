@@ -2,6 +2,7 @@ package testkit
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -420,7 +421,59 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 	})
 }
 
+// FeeScheduleUpcoming is when the fake upcoming fee-schedule version (v2) takes effect.
+const FeeScheduleUpcoming = "2099-01-01T00:00:00Z"
+
+// feeRoutes fakes payments' fee schedules: v1 in force, v2 scheduled, v3 cancelled. Only the BFF's service token
+// (scope payments:fees.read) may read them, as in payments.
+func (u *Upstreams) feeRoutes(mux *http.ServeMux) {
+	service := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Header.Get("Authorization") != "Bearer svc-payments:fees.read" {
+			problem(w, 403, "payments.staff-only", "Payment splits and the ledger are staff views", nil)
+			return false
+		}
+		return true
+	}
+	mux.HandleFunc("GET /v1/fee-schedules", func(w http.ResponseWriter, r *http.Request) {
+		if !service(w, r) {
+			return
+		}
+		writeJSON(w, 200, []map[string]any{
+			{"id": "fee-3", "version": 3, "effectiveFrom": "2098-01-01T00:00:00Z", "categoryBps": map[string]any{}, "defaultCommissionBps": 100,
+				"overrides": []any{}, "cancelledAt": "2026-10-01T00:00:00Z"},
+			{"id": "fee-2", "version": 2, "effectiveFrom": FeeScheduleUpcoming, "categoryBps": map[string]any{"groceries": 800, "fashion": 1300},
+				"defaultCommissionBps": 1000, "overrides": []any{map[string]any{"orgId": SellerOrgID, "category": "groceries", "commissionBps": 600},
+					map[string]any{"orgId": "someone-else", "category": "beauty", "commissionBps": 100}}},
+			{"id": "fee-1", "version": 1, "effectiveFrom": "2020-01-01T00:00:00Z", "categoryBps": map[string]any{"groceries": 800, "fashion": 1200},
+				"defaultCommissionBps": 1000, "overrides": []any{map[string]any{"orgId": SellerOrgID, "category": "groceries", "commissionBps": 600}}},
+		})
+	})
+	mux.HandleFunc("GET /v1/fee-schedules/effective", func(w http.ResponseWriter, r *http.Request) {
+		if !service(w, r) {
+			return
+		}
+		q := r.URL.Query()
+		next := q.Get("at") >= FeeScheduleUpcoming
+		version, from, fba, rates := 1, "2020-01-01T00:00:00Z", 325, map[string]int{"groceries": 800, "fashion": 1200}
+		if next {
+			version, from, fba, rates = 2, FeeScheduleUpcoming, 350, map[string]int{"groceries": 800, "fashion": 1300}
+		}
+		cat := strings.ToLower(q.Get("category"))
+		bps, source := 1000, "DEFAULT"
+		if v, ok := rates[cat]; ok {
+			bps, source = v, "CATEGORY"
+		}
+		if q.Get("orgId") == SellerOrgID && cat == "groceries" {
+			bps, source = 600, "OVERRIDE"
+		}
+		writeJSON(w, 200, map[string]any{"feeScheduleId": fmt.Sprintf("fee-%d", version), "version": version, "effectiveFrom": from, "currency": "USD",
+			"category": cat, "orgId": q.Get("orgId"), "commissionBps": bps, "commissionSource": source, "cardPctBps": 290, "cardFixedMinor": 30,
+			"fbaPerUnitMinor": fba, "reverseCommissionOnRefund": true})
+	})
+}
+
 func (u *Upstreams) moneyRoutes(mux *http.ServeMux) {
+	u.feeRoutes(mux)
 	mux.HandleFunc("GET /v1/payouts/balance", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"orgId": SellerOrgID, "currency": "USD", "availableMinor": 128455, "onHoldMinor": 52725, "requestedOrInTransitMinor": 0,
 			"paidMinor": 932210, "providerFeesMinor": 1500, "minimumPayoutMinor": 2500, "canRequestToday": true,

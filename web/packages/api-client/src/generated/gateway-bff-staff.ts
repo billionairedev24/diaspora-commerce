@@ -346,6 +346,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Fee schedule versions (active, scheduled, past, cancelled), the base of a new version, categories and limits
+         * @description payments `GET /v1/fee-schedules` (payments:read) and catalog `GET /v1/categories` (departments are the commission
+         *     categories, lower-cased; `services` is always offered; categories schedules already use are added). Override
+         *     organisations are named from seller `GET /v1/orgs/directory` (best effort; `orgNamesAvailable`). Needs VIEW on
+         *     the fees module; `canConfigure` (payments:configure plus EDIT) unlocks creating and cancelling. Rates are basis
+         *     points (1250 = 12.50 %): the console shows and takes percentages with two decimals.
+         */
+        get: operations["getStaffFees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find a seller or provider organisation by name for a commission override
+         * @description seller `GET /v1/orgs/directory` (pages of 200, up to 1,000 organisations), filtered by name or exact id. AfroTransact
+         *     Retail is returned with `selectable: false` — it is the merchant of record and pays no commission and no fees.
+         */
+        get: operations["searchFeeOrgs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/schedules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a new fee schedule version (Super Admin / Finance)
+         * @description payments `POST /v1/fee-schedules` (payments:configure). The BFF validates first: effective date in the future and
+         *     not before the latest scheduled version (or `immediate: true`, refused while a version is scheduled), commission
+         *     0–50 %, card fee 0–10 % + up to $10.00, FBA fee up to $100.00, a note of 3–500 characters, unique categories and
+         *     (organisation, category) overrides, and no override for AfroTransact Retail. Errors are keyed by property
+         *     (`categoryRates.2.commissionBps`). Versions are immutable; the new one applies to orders placed from its date.
+         */
+        post: operations["createFeeSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/fees/schedules/{scheduleId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a scheduled fee schedule version before it takes effect (Super Admin / Finance)
+         * @description payments `POST /v1/fee-schedules/{id}/cancel` (payments:configure). Only scheduled versions (409 once in force or
+         *     already cancelled). The version is kept and marked cancelled (who, when, why) — never deleted — and payments
+         *     audits it.
+         */
+        post: operations["cancelFeeSchedule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -778,6 +869,168 @@ export interface components {
             reference: string | null;
             /** @description The upstream records the action in the trust-ops audit log */
             audited: boolean;
+        };
+        /** @description Bounds the editor enforces (rates in basis points, amounts in minor units) */
+        FeeLimits: {
+            /** @example 5000 */
+            commissionMaxBps: number;
+            /** @example 1000 */
+            cardPctMaxBps: number;
+            /**
+             * Format: int64
+             * @example 1000
+             */
+            cardFixedMaxMinor: number;
+            /**
+             * Format: int64
+             * @example 10000
+             */
+            fbaPerUnitMaxMinor: number;
+            noteMinLength: number;
+            noteMaxLength: number;
+            maxCategoryRates: number;
+            maxOverrides: number;
+        };
+        FeeCategory: {
+            /** @description payments category key (lower-case), e.g. groceries */
+            key: string;
+            label: string;
+            /**
+             * @description TAXONOMY: a catalog department; SCHEDULE: only known from a fee schedule; PLATFORM: services
+             * @enum {string}
+             */
+            source: "TAXONOMY" | "SCHEDULE" | "PLATFORM";
+        };
+        FeeCategoryRate: {
+            category: string;
+            label: string;
+            commissionBps: number;
+        };
+        FeeOverride: {
+            orgId: string;
+            orgName: string | null;
+            /** @description null = every category */
+            category: string | null;
+            categoryLabel: string;
+            commissionBps: number;
+        };
+        FeeScheduleView: {
+            id: string;
+            version: number;
+            /** @enum {string} */
+            status: "ACTIVE" | "SCHEDULED" | "SUPERSEDED" | "CANCELLED";
+            /** Format: date-time */
+            effectiveFrom: string;
+            currency: string;
+            /** @description Commission of categories without their own rate (basis points) */
+            defaultCommissionBps: number;
+            categoryRates: components["schemas"]["FeeCategoryRate"][];
+            overrides: components["schemas"]["FeeOverride"][];
+            /** @description Card fee estimate per charge, percentage part */
+            cardPctBps: number;
+            /**
+             * Format: int64
+             * @description Card fee estimate per charge, fixed part
+             */
+            cardFixedMinor: number;
+            /** Format: int64 */
+            fbaPerUnitMinor: number;
+            reverseCommissionOnRefund: boolean;
+            note: string | null;
+            createdBy: string;
+            /** Format: date-time */
+            createdAt: string | null;
+            /** Format: date-time */
+            cancelledAt: string | null;
+            cancelledBy: string | null;
+            cancelReason: string | null;
+            /** @description Scheduled and the caller may configure fees */
+            cancellable: boolean;
+        };
+        FeeRetail: {
+            /** @description Empty when RETAIL_ORG_ID is not configured */
+            orgId: string;
+            name: string;
+            /** @example No commission, no fees (merchant of record) */
+            note: string;
+        };
+        FeesOverview: {
+            /** Format: date-time */
+            generatedAt: string;
+            currency: string;
+            /** @description payments:configure and EDIT on fees (create and cancel versions) */
+            canConfigure: boolean;
+            /** @description The version in force now */
+            current: components["schemas"]["FeeScheduleView"] | null;
+            /** @description What a new version starts from (the latest scheduled version, else the active one) */
+            base: components["schemas"]["FeeScheduleView"] | null;
+            /**
+             * Format: date-time
+             * @description Earliest effective time of a new version
+             */
+            minEffectiveFrom: string;
+            /** @description false while a version is scheduled */
+            immediateAllowed: boolean;
+            /** @description Every version, newest first */
+            schedules: components["schemas"]["FeeScheduleView"][];
+            categories: components["schemas"]["FeeCategory"][];
+            /** @description false when catalog could not be read (free text still works) */
+            taxonomyAvailable: boolean;
+            orgNamesAvailable: boolean;
+            retail: components["schemas"]["FeeRetail"];
+            limits: components["schemas"]["FeeLimits"];
+            /**
+             * Format: int64
+             * @description Sale amount of the impact preview (10000 = $100.00)
+             */
+            exampleSaleMinor: number;
+            reverseOnRefundHelp: string;
+        };
+        FeeOrgHit: {
+            orgId: string;
+            name: string;
+            kind: string;
+            status: string;
+            retail: boolean;
+            selectable: boolean;
+            /** @description Why the organisation can't be chosen */
+            reason: string | null;
+        };
+        FeeOrgSearch: {
+            items: components["schemas"]["FeeOrgHit"][];
+        };
+        FeeDraftCategoryRate: {
+            category: string;
+            commissionBps: number;
+        };
+        FeeDraftOverride: {
+            orgId: string;
+            /** @description Omitted or null = every category */
+            category?: string | null;
+            commissionBps: number;
+        };
+        FeeScheduleDraft: {
+            /**
+             * Format: date-time
+             * @description Required unless immediate; in the future
+             */
+            effectiveFrom?: string | null;
+            /** @description Take effect now (the console asks for confirmation) */
+            immediate?: boolean;
+            defaultCommissionBps: number;
+            categoryRates: components["schemas"]["FeeDraftCategoryRate"][];
+            overrides: components["schemas"]["FeeDraftOverride"][];
+            cardPctBps: number;
+            /** Format: int64 */
+            cardFixedMinor: number;
+            /** Format: int64 */
+            fbaPerUnitMinor: number;
+            reverseCommissionOnRefund: boolean;
+            /** @description Why the fees change (required) */
+            note: string;
+        };
+        FeeCancelRequest: {
+            reason: string;
         };
     };
     responses: {
@@ -1365,6 +1618,125 @@ export interface operations {
                     "application/json": components["schemas"]["SupportActionResult"];
                 };
             };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fees overview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeesOverview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchFeeOrgs: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matches (at most 20) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeOrgSearch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createFeeSchedule: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeScheduleDraft"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeScheduleView"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelFeeSchedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                scheduleId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeeCancelRequest"];
+            };
+        };
+        responses: {
+            /** @description Cancelled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeScheduleView"];
+                };
+            };
+            400: components["responses"]["Problem"];
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];

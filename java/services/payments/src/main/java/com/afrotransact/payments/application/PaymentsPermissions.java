@@ -10,6 +10,8 @@ public final class PaymentsPermissions {
     /** Machine-to-machine (orders, bookings, fulfilment services; SERVICE principals): intents, captures, refunds,
      *  delivery notices. */
     public static final String SERVICE = "payments:service";
+    /** Read-only fee schedules for service clients that show fees to users (gateway-bff); grants nothing else. */
+    public static final String FEES_READ = "payments:fees.read";
     /** Seller / provider owner and finance roles (org-scoped) or Finance staff: request a payout. */
     public static final String PAYOUTS_REQUEST = "payouts:request";
     /** Finance staff: approve, hold and release payout requests. */

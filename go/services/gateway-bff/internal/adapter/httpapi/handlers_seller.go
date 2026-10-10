@@ -48,6 +48,9 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	// Money
 	route("GET /v1/seller/payouts", h.payouts)
 	route("POST /v1/seller/payouts", h.requestPayout)
+	if h.s.SellerFees != nil {
+		route("GET /v1/seller/fees", h.sellerFees)
+	}
 	route("GET /v1/seller/billing", h.billing)
 	route("POST /v1/seller/billing/plan", h.changePlan)
 	route("POST /v1/seller/billing/payment-methods/{paymentMethodId}/default", h.defaultBillingMethod)
@@ -305,6 +308,11 @@ func (h *handlersImpl) adjustStock(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) payouts(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerMoney.Payouts(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerFees(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerFees.Fees(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

@@ -62,6 +62,8 @@
   "sc.module.payouts.description": "Ìsanwó Stripe Connect sí báńkì rẹ.",
   "sc.module.payoutsProvider.title": "Ìsanwó jáde",
   "sc.module.payoutsProvider.description": "Owó tí o pa yóò dúró fún ọjọ́ 7, lẹ́yìn náà o lè béèrè ìsanwó sí báńkì rẹ.",
+  "sc.module.fees.title": "Owó ìṣẹ́ àti kọmíṣọ̀n",
+  "sc.module.fees.description": "Ohun tí AfroTransact ń gbà lọ́wọ́ rẹ: kọmíṣọ̀n fún ẹ̀ka kọ̀ọ̀kan, owó káàdì àti FBA, àti àwọn ìyípadà tó ń bọ̀.",
   "sc.module.billing.title": "Ètò àti ìsanwó",
   "sc.module.billing.description": "Ìforúkọsílẹ̀ rẹ (Stripe Billing) àti ìwé owó.",
   "sc.module.billingProvider.title": "Ètò àti ìsanwó",

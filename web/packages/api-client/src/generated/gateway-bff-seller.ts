@@ -522,6 +522,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read-only fees of the active organisation — commission per category (own overrides included), FBA and card fees, upcoming change
+         * @description payments `GET /v1/fee-schedules` (to find the version in force and the next scheduled one; cancelled versions are
+         *     skipped) and `GET /v1/fee-schedules/effective?category=&orgId=&at=` per category, for now and for the upcoming
+         *     version's effective date — one batch for the page. payments lets only staff and services read fee schedules, so the
+         *     BFF reads them with its own client-credentials token (scope `payments:service`) and always passes the active
+         *     organisation: members never see other sellers' overrides. Shares the payouts module level (VIEW). Rates are basis
+         *     points (1250 = 12.50 %). AfroTransact Retail reads `retail: true` (no commission, no fees).
+         */
+        get: operations["getSellerFees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/billing": {
         parameters: {
             query?: never;
@@ -975,7 +1000,7 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /** @enum {string} */
-        ModuleKey: "onboarding" | "home" | "orders" | "listings" | "inventory" | "storefront" | "calendar" | "requests" | "hours" | "services" | "policy" | "public-page" | "earnings" | "payouts" | "billing" | "account-health" | "team";
+        ModuleKey: "onboarding" | "home" | "orders" | "listings" | "inventory" | "storefront" | "calendar" | "requests" | "hours" | "services" | "policy" | "public-page" | "earnings" | "payouts" | "fees" | "billing" | "account-health" | "team";
         SellerUser: {
             id: string;
             firstName: string;
@@ -1908,6 +1933,57 @@ export interface components {
                 url: string;
             }[];
         };
+        SellerFeeCategory: {
+            /** @description payments category key (lower-case) */
+            category: string;
+            label: string;
+            /** @description 1250 = 12.50 % */
+            commissionBps: number;
+            /**
+             * @description OVERRIDE: negotiated for this organisation
+             * @enum {string}
+             */
+            source: "OVERRIDE" | "CATEGORY" | "DEFAULT" | "RETAIL";
+        };
+        SellerFeeVersion: {
+            version: number;
+            /** Format: date-time */
+            effectiveFrom: string;
+            /** @description Commission in categories not listed (the organisation's all-category override when it has one) */
+            defaultCommissionBps: number;
+            categories: components["schemas"]["SellerFeeCategory"][];
+            /** @description Card fee estimate per charge, percentage part */
+            cardPctBps: number;
+            /**
+             * Format: int64
+             * @description Card fee estimate per charge, fixed part
+             */
+            cardFixedMinor: number;
+            /**
+             * Format: int64
+             * @description FBA pick, pack and ship fee per unit
+             */
+            fbaPerUnitMinor: number;
+            /** @description Refunds give back the commission on the refunded amount */
+            reverseCommissionOnRefund: boolean;
+        };
+        SellerFeeChange: {
+            field: string;
+            label: string;
+            from: string;
+            to: string;
+        };
+        SellerFeesView: {
+            currency: string;
+            /** @description AfroTransact Retail (merchant of record) — no commission, no fees */
+            retail: boolean;
+            note: string | null;
+            current: components["schemas"]["SellerFeeVersion"];
+            /** @description The next scheduled version, if any */
+            upcoming: components["schemas"]["SellerFeeVersion"] | null;
+            /** @description What changes for this organisation with the upcoming version */
+            changes: components["schemas"]["SellerFeeChange"][];
+        };
     };
     responses: {
         /** @description RFC 9457 problem */
@@ -2762,6 +2838,30 @@ export interface operations {
             403: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerFees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Fees */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerFeesView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

@@ -139,13 +139,14 @@ var SellerModules = []ModuleDef{
 	{"sInventory", "inventory", "Inventory & FBA", "commerce", "stock levels"},
 	{"sStorefront", "storefront", "Storefront & theme", "growth", "the storefront design"},
 	{"sPayouts", "payouts", "Payouts", "finance", "payouts and balances"},
+	{"sPayouts", "fees", "Fees & commission", "finance", "commission and fees"},
 	{"sBilling", "billing", "Plan & billing", "finance", "the plan and invoices"},
 	{"sCompliance", "account-health", "Account health", "trust", "Stripe verification requirements"},
 	{"sTeam", "team", "Team & roles", "settings", "team members and their roles"},
 }
 
 // ProviderModules is the Provider Hub module catalogue (identity portal PROVIDER), in sidebar order. Earnings
-// share the payouts access level.
+// and fees share the payouts access level (fees do in the Seller Center too).
 var ProviderModules = []ModuleDef{
 	{"pHome", "home", "Home", "overview", "today’s appointments and alerts"},
 	{"pCalendar", "calendar", "Calendar", "bookings", "the appointment calendar — block time, reschedule, cancel"},
@@ -156,6 +157,7 @@ var ProviderModules = []ModuleDef{
 	{"pPage", "public-page", "Public page", "setup", "the public page design, gallery and social links"},
 	{"pPayouts", "earnings", "Earnings", "money", "earnings per booking"},
 	{"pPayouts", "payouts", "Payouts", "money", "payouts and balances"},
+	{"pPayouts", "fees", "Fees & commission", "money", "commission and fees"},
 	{"pBilling", "billing", "Plan & billing", "money", "the Provider Hub plan and invoices"},
 	{"pCompliance", "account-health", "Account health", "trust", "Stripe verification requirements"},
 	{"pTeam", "team", "Team & roles", "settings", "team members and their roles"},

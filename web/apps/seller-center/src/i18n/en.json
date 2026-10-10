@@ -55,6 +55,8 @@
   "sc.module.payouts.description": "Stripe Connect payouts to your bank.",
   "sc.module.payoutsProvider.title": "Payouts",
   "sc.module.payoutsProvider.description": "Earnings settle for 7 days, then you request a payout to your bank.",
+  "sc.module.fees.title": "Fees & commission",
+  "sc.module.fees.description": "What AfroTransact charges you: commission per category, card and FBA fees, and upcoming changes.",
   "sc.module.billing.title": "Plan & billing",
   "sc.module.billing.description": "Your subscription (Stripe Billing) and invoices.",
   "sc.module.billingProvider.title": "Plan & billing",

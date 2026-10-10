@@ -41,13 +41,13 @@ class FeeScheduleServiceImpl implements FeeScheduleService {
 
     @Override
     public List<FeeSchedule> history() {
-        access.reader();
+        access.feeReader();
         return schedules.all().stream().sorted(Comparator.comparingInt(FeeSchedule::version).reversed()).toList();
     }
 
     @Override
     public FeeSchedule activeAt(Instant at) {
-        access.reader();
+        access.feeReader();
         Instant when = at == null ? Instant.now(clock) : at;
         return FeeSchedule.activeAt(schedules.all(), when).orElseThrow(() -> new NotFoundException(
                 "payments.no-fee-schedule", "No fee schedule in force at " + when));

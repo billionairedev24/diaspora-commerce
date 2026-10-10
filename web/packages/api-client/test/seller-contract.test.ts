@@ -23,6 +23,7 @@ import {
   type ProductTypeSchema,
   type PublicPage,
   type RateQuotes,
+  type SellerFeesView,
   type SellerOrderDetail,
   type SellerOrderPage,
   type SellerSession,
@@ -55,6 +56,7 @@ describe('Seller Zod schemas stay aligned with contracts/openapi/gateway-bff-sel
     expectTypeOf<ProductTypeSchema>().toExtend<S['ProductTypeSchema']>();
     expectTypeOf<InventoryView>().toExtend<S['InventoryView']>();
     expectTypeOf<PayoutsView>().toExtend<S['PayoutsView']>();
+    expectTypeOf<SellerFeesView>().toExtend<S['SellerFeesView']>();
     expectTypeOf<BillingView>().toExtend<S['BillingView']>();
     expectTypeOf<TeamView>().toExtend<S['TeamView']>();
     expectTypeOf<CalendarView>().toExtend<S['CalendarView']>();
@@ -81,7 +83,7 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const api = client();
     const session = await api.getSession();
     expect(session.portal).toBe('SELLER_CENTER');
-    expect(keysOf(session)).toEqual(['home', 'orders', 'listings', 'inventory', 'storefront', 'payouts', 'billing', 'account-health', 'team']);
+    expect(keysOf(session)).toEqual(['home', 'orders', 'listings', 'inventory', 'storefront', 'payouts', 'fees', 'billing', 'account-health', 'team']);
     expect(session.navGroups.map((g) => g.label)).toEqual(['Overview', 'Commerce', 'Growth', 'Finance', 'Trust & compliance', 'Settings']);
     await expect(api.getCompliance()).resolves.toMatchObject({ showBanner: true, tone: 'warning', openItems: 2 });
     const dash = await api.getDashboard(30);
@@ -92,6 +94,9 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     await api.listListings({ page: 0, size: 25 });
     await api.getInventory(false);
     await api.getPayouts();
+    const fees = await api.getFees();
+    expect(fees.current.categories.find((c) => c.source === 'OVERRIDE')?.category).toBe('groceries');
+    expect(fees.upcoming?.fbaPerUnitMinor).toBe(350);
     await api.getBilling();
     const team = await api.getTeam();
     expect(team.roles).toHaveLength(7);

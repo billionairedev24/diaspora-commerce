@@ -31,6 +31,8 @@ type StaffDeps struct {
 	Log            *slog.Logger
 	// Background runs export jobs (defaults to a goroutine); tests run them inline.
 	Background func(func())
+	// RetailOrgID is AfroTransact Retail (merchant of record): never charged commission or fees, never overridden.
+	RetailOrgID string
 }
 
 func (d *StaffDeps) defaults() {

@@ -296,3 +296,99 @@ export type SupportRefundForm = z.infer<typeof SupportRefundFormSchema>;
 export interface SupportRefundRequest extends SupportRefundForm {
   customerId: string;
 }
+
+/* ── Fees & commissions (fee-schedule editor; rates in basis points, 1250 = 12.50 %) ── */
+
+export const FeeScheduleStatusSchema = z.enum(['ACTIVE', 'SCHEDULED', 'SUPERSEDED', 'CANCELLED']);
+export type FeeScheduleStatus = z.infer<typeof FeeScheduleStatusSchema>;
+export const FeeLimitsSchema = z.object({
+  commissionMaxBps: z.number().int(),
+  cardPctMaxBps: z.number().int(),
+  cardFixedMaxMinor: z.number().int(),
+  fbaPerUnitMaxMinor: z.number().int(),
+  noteMinLength: z.number().int(),
+  noteMaxLength: z.number().int(),
+  maxCategoryRates: z.number().int(),
+  maxOverrides: z.number().int()
+});
+export type FeeLimits = z.infer<typeof FeeLimitsSchema>;
+export const FeeCategorySchema = z.object({ key: z.string(), label: z.string(), source: z.enum(['TAXONOMY', 'SCHEDULE', 'PLATFORM']) });
+export type FeeCategory = z.infer<typeof FeeCategorySchema>;
+export const FeeCategoryRateSchema = z.object({ category: z.string(), label: z.string(), commissionBps: z.number().int() });
+export type FeeCategoryRate = z.infer<typeof FeeCategoryRateSchema>;
+export const FeeOverrideSchema = z.object({
+  orgId: z.string(),
+  orgName: nullableString,
+  category: nullableString,
+  categoryLabel: z.string(),
+  commissionBps: z.number().int()
+});
+export type FeeOverride = z.infer<typeof FeeOverrideSchema>;
+export const FeeScheduleViewSchema = z.object({
+  id: z.string(),
+  version: z.number().int(),
+  status: FeeScheduleStatusSchema,
+  effectiveFrom: z.string(),
+  currency: z.string(),
+  defaultCommissionBps: z.number().int(),
+  categoryRates: z.array(FeeCategoryRateSchema),
+  overrides: z.array(FeeOverrideSchema),
+  cardPctBps: z.number().int(),
+  cardFixedMinor: z.number().int(),
+  fbaPerUnitMinor: z.number().int(),
+  reverseCommissionOnRefund: z.boolean(),
+  note: nullableString,
+  createdBy: z.string(),
+  createdAt: nullableString,
+  cancelledAt: nullableString,
+  cancelledBy: nullableString,
+  cancelReason: nullableString,
+  cancellable: z.boolean()
+});
+export type FeeScheduleView = z.infer<typeof FeeScheduleViewSchema>;
+export const FeeRetailSchema = z.object({ orgId: z.string(), name: z.string(), note: z.string() });
+export type FeeRetail = z.infer<typeof FeeRetailSchema>;
+export const FeesOverviewSchema = z.object({
+  generatedAt: z.string(),
+  currency: z.string(),
+  canConfigure: z.boolean(),
+  current: FeeScheduleViewSchema.nullable(),
+  base: FeeScheduleViewSchema.nullable(),
+  minEffectiveFrom: z.string(),
+  immediateAllowed: z.boolean(),
+  schedules: z.array(FeeScheduleViewSchema),
+  categories: z.array(FeeCategorySchema),
+  taxonomyAvailable: z.boolean(),
+  orgNamesAvailable: z.boolean(),
+  retail: FeeRetailSchema,
+  limits: FeeLimitsSchema,
+  exampleSaleMinor: z.number().int(),
+  reverseOnRefundHelp: z.string()
+});
+export type FeesOverview = z.infer<typeof FeesOverviewSchema>;
+export const FeeOrgHitSchema = z.object({
+  orgId: z.string(),
+  name: z.string(),
+  kind: z.string(),
+  status: z.string(),
+  retail: z.boolean(),
+  selectable: z.boolean(),
+  reason: nullableString
+});
+export type FeeOrgHit = z.infer<typeof FeeOrgHitSchema>;
+export const FeeOrgSearchSchema = z.object({ items: z.array(FeeOrgHitSchema) });
+export type FeeOrgSearch = z.infer<typeof FeeOrgSearchSchema>;
+
+/** POST /v1/staff/fees/schedules body (the editor converts its percentages to basis points). */
+export interface FeeScheduleDraft {
+  effectiveFrom: string | null;
+  immediate: boolean;
+  defaultCommissionBps: number;
+  categoryRates: { category: string; commissionBps: number }[];
+  overrides: { orgId: string; category: string | null; commissionBps: number }[];
+  cardPctBps: number;
+  cardFixedMinor: number;
+  fbaPerUnitMinor: number;
+  reverseCommissionOnRefund: boolean;
+  note: string;
+}

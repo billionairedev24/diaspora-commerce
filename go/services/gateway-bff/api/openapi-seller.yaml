@@ -555,6 +555,25 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fees:
+    get:
+      tags: [Money]
+      operationId: getSellerFees
+      security: [{sessionCookie: []}]
+      summary: Read-only fees of the active organisation — commission per category (own overrides included), FBA and card fees, upcoming change
+      description: |
+        payments `GET /v1/fee-schedules` (to find the version in force and the next scheduled one; cancelled versions are
+        skipped) and `GET /v1/fee-schedules/effective?category=&orgId=&at=` per category, for now and for the upcoming
+        version's effective date — one batch for the page. payments lets only staff and services read fee schedules, so the
+        BFF reads them with its own client-credentials token (scope `payments:service`) and always passes the active
+        organisation: members never see other sellers' overrides. Shares the payouts module level (VIEW). Rates are basis
+        points (1250 = 12.50 %). AfroTransact Retail reads `retail: true` (no commission, no fees).
+      responses:
+        '200': {description: Fees, content: {application/json: {schema: {$ref: '#/components/schemas/SellerFeesView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/billing:
     get:
       tags: [Money]
@@ -1017,7 +1036,7 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     ModuleKey:
       type: string
-      enum: [onboarding, home, orders, listings, inventory, storefront, calendar, requests, hours, services, policy, public-page, earnings, payouts, billing, account-health, team]
+      enum: [onboarding, home, orders, listings, inventory, storefront, calendar, requests, hours, services, policy, public-page, earnings, payouts, fees, billing, account-health, team]
     SellerUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -2082,3 +2101,42 @@ components:
             properties:
               network: {type: string, enum: [instagram, tiktok, facebook, youtube, whatsapp, x, linkedin, website]}
               url: {type: string, format: uri}
+    # ── fees (read-only)
+    SellerFeeCategory:
+      type: object
+      required: [category, label, commissionBps, source]
+      properties:
+        category: {type: string, description: payments category key (lower-case)}
+        label: {type: string}
+        commissionBps: {type: integer, minimum: 0, maximum: 10000, description: 1250 = 12.50 %}
+        source: {type: string, enum: [OVERRIDE, CATEGORY, DEFAULT, RETAIL], description: 'OVERRIDE: negotiated for this organisation'}
+    SellerFeeVersion:
+      type: object
+      required: [version, effectiveFrom, defaultCommissionBps, categories, cardPctBps, cardFixedMinor, fbaPerUnitMinor, reverseCommissionOnRefund]
+      properties:
+        version: {type: integer}
+        effectiveFrom: {type: string, format: date-time}
+        defaultCommissionBps: {type: integer, description: "Commission in categories not listed (the organisation's all-category override when it has one)"}
+        categories: {type: array, items: {$ref: '#/components/schemas/SellerFeeCategory'}}
+        cardPctBps: {type: integer, description: 'Card fee estimate per charge, percentage part'}
+        cardFixedMinor: {type: integer, format: int64, description: 'Card fee estimate per charge, fixed part'}
+        fbaPerUnitMinor: {type: integer, format: int64, description: 'FBA pick, pack and ship fee per unit'}
+        reverseCommissionOnRefund: {type: boolean, description: Refunds give back the commission on the refunded amount}
+    SellerFeeChange:
+      type: object
+      required: [field, label, from, to]
+      properties:
+        field: {type: string}
+        label: {type: string}
+        from: {type: string}
+        to: {type: string}
+    SellerFeesView:
+      type: object
+      required: [currency, retail, note, current, upcoming, changes]
+      properties:
+        currency: {type: string}
+        retail: {type: boolean, description: 'AfroTransact Retail (merchant of record) — no commission, no fees'}
+        note: {type: [string, 'null']}
+        current: {$ref: '#/components/schemas/SellerFeeVersion'}
+        upcoming: {oneOf: [{$ref: '#/components/schemas/SellerFeeVersion'}, {type: 'null'}], description: 'The next scheduled version, if any'}
+        changes: {type: array, items: {$ref: '#/components/schemas/SellerFeeChange'}, description: What changes for this organisation with the upcoming version}

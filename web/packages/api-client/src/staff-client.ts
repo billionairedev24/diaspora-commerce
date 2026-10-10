@@ -9,6 +9,13 @@ import {
   ExportJobListSchema,
   ExportJobSchema,
   type ExportRequest,
+  type FeeOrgSearch,
+  FeeOrgSearchSchema,
+  type FeeScheduleDraft,
+  type FeeScheduleView,
+  FeeScheduleViewSchema,
+  type FeesOverview,
+  FeesOverviewSchema,
   type RecordDetail,
   RecordDetailSchema,
   type RecordValues,
@@ -78,7 +85,15 @@ export function createStaffApiClient(options: ApiClientOptions) {
     resendNotification: (notificationId: string, customerId: string, key?: string): Promise<SupportActionResult> =>
       request(`/v1/staff/support/notifications/${enc(notificationId)}/resend`, SupportActionResultSchema, { method: 'POST', body: { customerId }, headers: idem(key) }),
     cancelShipment: (shipmentId: string, body: { customerId: string; orderNumber: string; reason: string }, key?: string): Promise<SupportActionResult> =>
-      request(`/v1/staff/support/shipments/${enc(shipmentId)}/cancel`, SupportActionResultSchema, { method: 'POST', body, headers: idem(key) })
+      request(`/v1/staff/support/shipments/${enc(shipmentId)}/cancel`, SupportActionResultSchema, { method: 'POST', body, headers: idem(key) }),
+
+    /* Fees & commissions */
+    getFees: (signal?: AbortSignal): Promise<FeesOverview> => request('/v1/staff/fees', FeesOverviewSchema, { signal }),
+    searchFeeOrgs: (q: string, signal?: AbortSignal): Promise<FeeOrgSearch> => request('/v1/staff/fees/orgs', FeeOrgSearchSchema, { query: { q }, signal }),
+    createFeeSchedule: (body: FeeScheduleDraft, key?: string): Promise<FeeScheduleView> =>
+      request('/v1/staff/fees/schedules', FeeScheduleViewSchema, { method: 'POST', body, headers: idem(key) }),
+    cancelFeeSchedule: (id: string, reason: string): Promise<FeeScheduleView> =>
+      request(`/v1/staff/fees/schedules/${enc(id)}/cancel`, FeeScheduleViewSchema, { method: 'POST', body: { reason } })
   };
 }
 

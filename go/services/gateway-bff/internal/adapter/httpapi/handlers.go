@@ -31,6 +31,7 @@ type Services struct {
 	SellerOrders    app.SellerOrdersService
 	SellerCatalog   app.SellerCatalogService
 	SellerMoney     app.SellerMoneyService
+	SellerFees      app.SellerFeesService
 	SellerTeam      app.SellerTeamService
 	ProviderHub     app.ProviderHubService
 	SellerShipFrom  app.SellerShipFromService

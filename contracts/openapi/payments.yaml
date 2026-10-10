@@ -266,6 +266,35 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/EffectiveFeesResponse'
+  /v1/fee-schedules/{id}/cancel:
+    post:
+      tags:
+      - Finance
+      summary: Cancel a scheduled fee schedule version (Super Admin / Finance, payments:configure)
+      description: 'Only before its effectiveFrom (409 payments.fee-schedule-in-force afterwards, 409 payments.fee-schedule-cancelled
+        when already cancelled). Fee schedules stay immutable: the version is kept and marked cancelled (cancelledAt, cancelledBy,
+        cancelReason), never deleted, and is skipped when picking the version in force. Audited.'
+      operationId: cancelFeeSchedule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelFeeScheduleRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FeeScheduleResponse'
   /v1/ledger/balances:
     get:
       tags:
@@ -1808,6 +1837,26 @@ components:
         createdAt:
           type: string
           format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+          description: Set when the version was cancelled before it took effect (it never applies)
+        cancelledBy:
+          type: string
+          description: Who cancelled the version
+        cancelReason:
+          type: string
+          description: Why the version was cancelled
+    CancelFeeScheduleRequest:
+      type: object
+      description: Why a scheduled fee schedule version is withdrawn (audited)
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
     SetupIntentRequest:
       type: object
       properties:

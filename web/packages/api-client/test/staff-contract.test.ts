@@ -8,7 +8,12 @@ import {
   type Customer360,
   type CustomerSearch,
   type ExportJob,
+  type FeeOrgSearch,
+  type FeeScheduleView,
+  type FeesOverview,
+  formatBps,
   isApiError,
+  parsePercent,
   type RecordDetail,
   type ResourceKey,
   type ResourcePage,
@@ -42,6 +47,9 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
     expectTypeOf<Customer360>().toExtend<S['Customer360']>();
     expectTypeOf<SupportActionResult>().toExtend<S['SupportActionResult']>();
     expectTypeOf<ResourceKey>().toEqualTypeOf<S['ResourceKey']>();
+    expectTypeOf<FeesOverview>().toExtend<S['FeesOverview']>();
+    expectTypeOf<FeeScheduleView>().toExtend<S['FeeScheduleView']>();
+    expectTypeOf<FeeOrgSearch>().toExtend<S['FeeOrgSearch']>();
   });
 
   it('generated file carries the do-not-edit banner', () => {
@@ -163,5 +171,48 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(ok.audited).toBe(true);
     const after = await api.getCustomer('cus-1000');
     expect(after.audit[0]?.action).toBe('refund.issued');
+  });
+
+  it('runs the fee-schedule editor: versions, Retail rule, validation, create and cancel', async () => {
+    expect(parsePercent('12.5')).toBe(1250);
+    expect(formatBps(1250)).toBe('12.50%');
+    const auditor = client('platform.auditor');
+    const ro = await auditor.getFees();
+    expect(ro.canConfigure).toBe(false);
+    expect(ro.schedules.every((s) => !s.cancellable)).toBe(true);
+    await expect(auditor.cancelFeeSchedule('fee-4', 'Not mine to cancel')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+
+    const api = client('platform.finance');
+    const fees = await api.getFees();
+    expect(fees.schedules.map((s) => s.status)).toEqual(['SCHEDULED', 'CANCELLED', 'ACTIVE', 'SUPERSEDED']);
+    expect(fees.current?.version).toBe(2);
+    expect(fees.base?.version).toBe(4);
+    expect(fees.immediateAllowed).toBe(false);
+    expect(fees.retail.note).toBe('No commission, no fees (merchant of record)');
+    const retail = await api.searchFeeOrgs('retail');
+    expect(retail.items[0]).toMatchObject({ retail: true, selectable: false });
+
+    const base = fees.base;
+    if (!base) throw new Error('no base');
+    const draft = {
+      effectiveFrom: new Date(new Date(fees.minEffectiveFrom).getTime() + 86_400_000).toISOString(),
+      immediate: false,
+      defaultCommissionBps: base.defaultCommissionBps,
+      categoryRates: base.categoryRates.map((c) => ({ category: c.category, commissionBps: c.category === 'fashion' ? 1250 : c.commissionBps })),
+      overrides: [{ orgId: fees.retail.orgId, category: null, commissionBps: 0 }],
+      cardPctBps: base.cardPctBps,
+      cardFixedMinor: base.cardFixedMinor,
+      fbaPerUnitMinor: base.fbaPerUnitMinor,
+      reverseCommissionOnRefund: true,
+      note: 'Fashion to 12.50 %'
+    };
+    await expect(api.createFeeSchedule(draft)).rejects.toSatisfy((e) => isApiError(e) && e.status === 422 && !!e.fieldErrors['overrides.0.orgId']);
+    const created = await api.createFeeSchedule({ ...draft, overrides: [{ orgId: 'org-lagos', category: 'fashion', commissionBps: 1000 }] });
+    expect(created.status).toBe('SCHEDULED');
+    expect(created.categoryRates.find((c) => c.category === 'fashion')?.commissionBps).toBe(1250);
+    expect(created.overrides[0]).toMatchObject({ orgName: 'Lagos Threads', category: 'fashion', commissionBps: 1000 });
+    const cancelled = await api.cancelFeeSchedule(created.id, 'Created by mistake');
+    expect(cancelled.status).toBe('CANCELLED');
+    await expect(api.cancelFeeSchedule('fee-2', 'Already in force')).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
   });
 });

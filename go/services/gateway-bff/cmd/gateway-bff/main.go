@@ -112,6 +112,7 @@ func run() error {
 		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(offersClient),
 		Media: media, Orders: upstreams.NewSellerOrders(ordersClient),
 		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient),
+		Fees:       upstreams.NewFees(paymentsClient, serviceTokens),
 		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
 		Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log,
 	}
@@ -154,6 +155,7 @@ func run() error {
 		SellerOrders:    app.NewSellerOrdersService(sellerDeps),
 		SellerCatalog:   app.NewSellerCatalogService(sellerDeps),
 		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
+		SellerFees:      app.NewSellerFeesService(sellerDeps),
 		SellerTeam:      app.NewSellerTeamService(sellerDeps),
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
