@@ -1006,9 +1006,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [windows, placements]
                 properties:
-                  items: {type: array, items: {$ref: '#/components/schemas/PreorderWindowCard'}}
+                  windows: {type: array, items: {$ref: '#/components/schemas/PreorderListItem'}}
+                  placements: {$ref: '#/components/schemas/PreorderPlacements'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/preorders/waitlist:
     post:
@@ -1018,7 +1019,7 @@ paths:
       summary: Hear when a pre-order opens in an area (email, double opt-in)
       description: |
         delivery-runs `POST /v1/public/subscriptions {email, area, country, region, city, source: preorder-waitlist}`.
-        The area defaults to the session's delivery location. Always 202 for a valid email (whether or not it was
+        The place defaults to the session's delivery location. Always 202 for a valid email (whether or not it was
         known); notifications sends the confirmation link, then `preorder.waitlist.opened` when a window opens.
         Rate limited like other lookups.
       requestBody:
@@ -1030,9 +1031,7 @@ paths:
               required: [email]
               properties:
                 email: {type: string, format: email, maxLength: 254}
-                country: {type: string}
-                region: {type: string}
-                city: {type: string, maxLength: 80}
+                place: {$ref: '#/components/schemas/PreorderPlace'}
       responses:
         '202':
           description: Accepted
@@ -1040,9 +1039,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status, area]
+                required: [status, city]
                 properties:
-                  status: {type: string, examples: [CONFIRMATION_SENT]}
+                  status: {type: string, enum: [subscribed]}
+                  city: {type: string, examples: [Lubbock]}
                   area: {type: string, examples: [US/TX/Lubbock]}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
@@ -2936,107 +2936,131 @@ components:
     Attribution:
       type: object
       description: |
-        Last-touch marketing source (`?src=ig|fb|tt|wa|email|sms|app` or the on-site placement, `cr` creative slot,
-        `po` window code). Stored on the order and echoed in `orders.order.placed`. Malformed values are dropped.
+        Last-touch marketing source (`src` = ig | fb | tt | wa | email | sms | app | hero | ribbon | pdp | page, `cr`
+        creative or comm slot, `po` window code). Stored on the order and echoed in `orders.order.placed`. Malformed
+        values are dropped; without a body value the BFF reads the `at_attr` cookie.
       properties:
-        src: {type: string, maxLength: 20, examples: [ig]}
-        cr: {type: string, maxLength: 40, examples: [story]}
-        po: {type: string, maxLength: 40, examples: [LBK-7]}
-    PreorderPayment:
+        src: {type: string, maxLength: 32, examples: [ig]}
+        cr: {type: string, maxLength: 64, examples: [story]}
+        po: {type: string, maxLength: 32, examples: [LBK-7]}
+    PreorderPlacements:
       type: object
-      description: |
-        Effective payment setup of a window: Back office → Pre-orders → Settings → payment (door fee per currency,
-        pickup fee, pickup window, allowed methods), with the window's doorFeeOverride / pickupFeeOverride applied.
+      description: Settings placements (all on by default)
       properties:
-        currency: {type: string, examples: [USD]}
-        doorFee: {type: [integer, 'null'], description: Door delivery fee in minor units (null when the window has no door delivery), examples: [799]}
-        pickupFee: {type: [integer, 'null'], description: Pickup fee in minor units (null when the window has no pickup), examples: [0]}
-        pickupWindow: {type: [string, 'null'], examples: [10am–2pm]}
-        allowedMethods:
-          type: array
-          items: {type: string, enum: [CARD, WALLET, ACH]}
+        ribbon: {type: boolean}
+        hero: {type: boolean}
+        badge: {type: boolean}
+        pdp: {type: boolean}
+        cart: {type: boolean}
+        family: {type: boolean}
     PreorderPlace:
       type: object
-      required: [country, region, city, source]
+      required: [country, region, city]
       properties:
         country: {type: string, examples: [US]}
         region: {type: string, examples: [TX]}
         city: {type: string, examples: [Lubbock]}
-        source: {type: string, enum: [query, session, default]}
-    PreorderWindowCard:
+        source: {type: string, enum: [query, session, default], description: Where the BFF took the place from}
+    PreorderCreative:
+      type: [object, 'null']
+      properties:
+        url: {type: string}
+        width: {type: integer}
+        height: {type: integer}
+    PreorderTerms:
       type: object
+      description: |
+        Money and payment setup of a window, all money in minor units: the window's doorFeeOverride / pickupFeeOverride,
+        else Back office → Pre-orders → Settings → payment for the window's currency.
+      properties:
+        door: {type: boolean}
+        pickup: {type: boolean}
+        doorFeeMinor: {type: integer, examples: [799]}
+        pickupFeeMinor: {type: integer, examples: [0]}
+        currency: {type: string, examples: [USD]}
+        pickupWindow: {type: string, examples: [10am–2pm]}
+        allowedMethods: {type: array, items: {type: string, enum: [CARD, WALLET, ACH]}}
+    PreorderWindowCard:
       description: A window as the storefront shows it (no PII); relayed from delivery-runs.
-      additionalProperties: true
+      allOf:
+        - {$ref: '#/components/schemas/PreorderTerms'}
+        - type: object
+          properties:
+            id: {type: string}
+            code: {type: string, examples: [LBK-7]}
+            name: {type: string, examples: ['Lubbock Pre-order #7']}
+            ribbon: {type: string}
+            headline: {type: string}
+            categories: {type: array, items: {type: string}}
+            departments: {type: array, items: {type: string}}
+            opensAt: {type: string, format: date-time}
+            closesAt: {type: string, format: date-time}
+            deliversOn: {type: string, format: date}
+            timeZone: {type: string, examples: [America/Chicago]}
+            showCount: {type: boolean}
+            count: {type: [integer, 'null'], description: Paid pre-orders so far; null when hidden or not open yet}
+            creatives:
+              type: object
+              properties:
+                hero: {$ref: '#/components/schemas/PreorderCreative'}
+                pdp: {$ref: '#/components/schemas/PreorderCreative'}
+    PreorderListItem:
+      type: object
       properties:
         id: {type: string}
-        code: {type: string, examples: [LBK-7]}
-        name: {type: string, examples: ['Lubbock Pre-order #7']}
-        stage: {type: string, enum: [OPEN, UPCOMING, CLOSED, DELIVERED]}
+        code: {type: string}
+        name: {type: string}
         where: {type: string, examples: ['Lubbock, TX']}
-        targets: {type: array, items: {type: string, examples: [US/TX/Lubbock]}}
+        stage: {type: string, enum: [UPCOMING, OPEN]}
         opensAt: {type: string, format: date-time}
         closesAt: {type: string, format: date-time}
         deliversOn: {type: string, format: date}
-        ribbon: {type: string}
-        headline: {type: string}
-        categories: {type: array, items: {type: string}}
-        door: {type: boolean}
-        pickup: {type: boolean}
-        pickupPoint: {type: [object, 'null'], additionalProperties: true}
-        count: {type: [integer, 'null'], description: Live count when the window shows it (not while upcoming)}
-        creatives:
-          type: object
-          description: Slot (HERO, PDP, STORY, FEED, EMAIL) → {url, width, height}
-          additionalProperties: true
-        doorFee: {type: [integer, 'null']}
-        pickupFee: {type: [integer, 'null']}
+        timeZone: {type: string}
+        place: {$ref: '#/components/schemas/PreorderPlace'}
+        zip: {type: [string, 'null']}
+        heroUrl: {type: [string, 'null']}
+        doorFeeMinor: {type: integer}
         currency: {type: string}
-        pickupWindow: {type: [string, 'null']}
-        allowedMethods: {type: array, items: {type: string, enum: [CARD, WALLET, ACH]}}
     PreorderResolution:
       type: object
-      required: ['on', place]
-      additionalProperties: true
+      required: ['on', place, metro, covered, fallback, placements]
       properties:
-        'on': {type: boolean, description: 'Pre-order applies to this place now (master switch, window active, area on)'}
-        stage: {type: [string, 'null'], description: 'OPEN, UPCOMING, CLOSED or DELIVERED; null when no window covers the place'}
-        countdownTo: {type: [string, 'null'], description: 'closesAt when open, opensAt when upcoming, deliversOn when closed'}
+        place: {$ref: '#/components/schemas/PreorderPlace'}
+        metro: {type: boolean, description: Next-day metro city (geo zones) — never pre-order}
+        covered: {type: boolean, description: A published window covers the place (even when switched off)}
+        'on': {type: boolean, description: 'Window found, master switch on, window active and the area switched on'}
+        stage: {type: [string, 'null'], description: 'UPCOMING, OPEN or CLOSED; null without a window'}
+        countdownTo: {type: [string, 'null'], description: 'closesAt when open, opensAt when upcoming, the delivery day when closed'}
         window:
           oneOf:
             - {$ref: '#/components/schemas/PreorderWindowCard'}
             - {type: 'null'}
-        fallback: {type: [string, 'null'], description: 'SHIP (UPS Ground, quoted) or WAITLIST (no checkout): what the storefront does when `on` is false'}
-        placements:
-          type: object
-          description: Settings placements (ribbon, hero, badge, pdp, cart, family) → on/off
-          additionalProperties: {type: boolean}
-        payment: {$ref: '#/components/schemas/PreorderPayment'}
-        place: {$ref: '#/components/schemas/PreorderPlace'}
+        fallback: {type: string, enum: [SHIP, WAITLIST], description: What the storefront does when `on` is false}
+        placements: {$ref: '#/components/schemas/PreorderPlacements'}
+        supportPhone: {type: string, description: '"Missed it? Call …"'}
     CartPreorder:
-      type: object
-      description: Pre-order block of a PREORDER package (relayed from the cart service).
-      additionalProperties: true
-      properties:
-        windowId: {type: string}
-        code: {type: string}
-        name: {type: string}
-        deliversOn: {type: string, format: date}
-        stage: {type: string, enum: [OPEN, UPCOMING, CLOSED, DELIVERED]}
-        closesAt: {type: string, format: date-time}
-        fulfilment: {type: string, enum: [DOOR, PICKUP]}
-        options:
-          type: array
-          items:
-            type: object
-            properties:
-              fulfilment: {type: string, enum: [DOOR, PICKUP]}
-              feeMinor: {type: integer}
-              label: {type: string}
-        doorFee: {type: [integer, 'null']}
-        pickupFee: {type: [integer, 'null']}
-        currency: {type: string}
-        pickupWindow: {type: [string, 'null']}
-        allowedMethods: {type: array, items: {type: string, enum: [CARD, WALLET, ACH]}}
+      description: Pre-order block of a PREORDER package (relayed from the cart service), money in minor units.
+      allOf:
+        - {$ref: '#/components/schemas/PreorderTerms'}
+        - type: object
+          properties:
+            windowId: {type: string}
+            code: {type: string}
+            name: {type: string}
+            stage: {type: string, enum: [UPCOMING, OPEN, CLOSED]}
+            opensAt: {type: string, format: date-time}
+            closesAt: {type: string, format: date-time}
+            deliversOn: {type: string, format: date}
+            timeZone: {type: string}
+            fulfilment: {type: string, enum: [DOOR, PICKUP]}
+            options:
+              type: array
+              items:
+                type: object
+                required: [fulfilment, feeMinor]
+                properties:
+                  fulfilment: {type: string, enum: [DOOR, PICKUP]}
+                  feeMinor: {type: integer}
     PlaceOrderRequest:
       type: object
       required: [addressId, deliverySelections]
@@ -3075,6 +3099,16 @@ components:
         paymentClientSecret: {type: [string, 'null'], description: The order's PaymentIntent client secret (always present once orders created it)}
         totalMinor: {type: integer}
         currency: {type: string}
+        preorder:
+          type: [object, 'null']
+          description: The "You're in" facts when the order holds a pre-order package (relayed from orders)
+          properties:
+            number: {type: string, examples: [LBK-1042]}
+            windowName: {type: string}
+            deliversOn: {type: string, format: date}
+            closesAt: {type: string, format: date-time}
+            timeZone: {type: string}
+            otherItemCount: {type: integer, description: Units in the same order that ship now}
         shipments:
           type: array
           items:

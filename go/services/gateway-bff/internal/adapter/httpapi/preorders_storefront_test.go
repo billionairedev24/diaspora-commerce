@@ -59,8 +59,8 @@ func TestPreorderStorefrontRoutes(t *testing.T) {
 	if v["on"] != true || place["source"] != "session" || place["region"] != "TX" || place["country"] != "US" {
 		t.Fatalf("lubbock = %v", v)
 	}
-	if p := v["payment"].(map[string]any); p["doorFee"] != float64(799) || p["currency"] != "USD" {
-		t.Fatalf("effective payment setup must be relayed: %v", p)
+	if w := v["window"].(map[string]any); w["doorFeeMinor"] != float64(799) || w["currency"] != "USD" || v["covered"] != true || v["fallback"] != "SHIP" {
+		t.Fatalf("effective fees must be relayed: %v", v)
 	}
 	if !strings.Contains(r.header.Get("Cache-Control"), "max-age=30") {
 		t.Fatalf("cache-control = %q", r.header.Get("Cache-Control"))
@@ -78,14 +78,14 @@ func TestPreorderStorefrontRoutes(t *testing.T) {
 
 	r = b.do("GET", "/v1/preorders/open", nil)
 	mustStatus(t, r, 200)
-	if items := r.json(t)["items"].([]any); len(items) != 1 || items[0].(map[string]any)["code"] != "LBK-7" {
-		t.Fatalf("open = %v", items)
+	if open := r.json(t); len(open["windows"].([]any)) != 1 || open["windows"].([]any)[0].(map[string]any)["code"] != "LBK-7" || open["placements"] == nil {
+		t.Fatalf("open = %v", open)
 	}
 
 	mustStatus(t, b.do("POST", "/v1/preorders/waitlist", map[string]any{"email": "nope"}), 422)
-	r = b.do("POST", "/v1/preorders/waitlist", map[string]any{"email": "ada@example.com", "country": "US", "region": "TX", "city": "Midland"})
+	r = b.do("POST", "/v1/preorders/waitlist", map[string]any{"email": "ada@example.com", "place": map[string]any{"country": "US", "region": "TX", "city": "Midland"}})
 	mustStatus(t, r, 202)
-	if v := r.json(t); v["area"] != "US/TX/Midland" || v["status"] != "CONFIRMATION_SENT" {
+	if v := r.json(t); v["area"] != "US/TX/Midland" || v["status"] != "subscribed" || v["city"] != "Midland" {
 		t.Fatalf("waitlist = %v", v)
 	}
 	if w := bff.Upstreams.LastWaitlist; w["area"] != "US/TX/Midland" || w["source"] != "preorder-waitlist" || w["email"] != "ada@example.com" {
@@ -99,7 +99,7 @@ func TestPreorderStorefrontRoutes(t *testing.T) {
 	mustStatus(t, r, 200)
 	pkg := r.json(t)["packages"].([]any)[0].(map[string]any)
 	pre, _ := pkg["preorder"].(map[string]any)
-	if pre == nil || pre["fulfilment"] != "PICKUP" || pre["doorFee"] != float64(799) || !strings.HasSuffix(pkg["packageId"].(string), ":preorder") ||
+	if pre == nil || pre["fulfilment"] != "PICKUP" || pre["doorFeeMinor"] != float64(799) || !strings.HasSuffix(pkg["packageId"].(string), ":preorder") ||
 		len(pkg["deliveryOptions"].([]any)) != 0 {
 		t.Fatalf("pre-order package = %v", pkg)
 	}

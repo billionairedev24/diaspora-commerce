@@ -2,6 +2,7 @@ package port
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -161,6 +162,8 @@ type UpCheckout struct {
 	TotalMinor          int64                `json:"totalMinor"`
 	Currency            string               `json:"currency"`
 	Shipments           []UpCheckoutShipment `json:"shipments"`
+	// Preorder is orders' pre-order confirmation block (null without a pre-order package).
+	Preorder json.RawMessage `json:"preorder"`
 }
 
 // UpDeliverySelection is orders' DeliverySelection.

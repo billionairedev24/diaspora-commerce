@@ -448,6 +448,7 @@ func toConfirmation(v port.UpCheckout) domain.OrderConfirmation {
 		out.Shipments = append(out.Shipments, domain.OrderConfirmationShipment{ShipmentID: s.ShipmentID, Label: s.Label,
 			ETA: firstNonEmpty(s.ETA, s.PromisedBy), DeliveryCode: strPtr(s.DeliveryCode)})
 	}
+	out.Preorder = preorderBlock(v.Preorder)
 	return out
 }
 

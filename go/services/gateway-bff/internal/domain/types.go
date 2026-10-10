@@ -556,6 +556,9 @@ type OrderConfirmation struct {
 	TotalMinor          int64                       `json:"totalMinor"`
 	Currency            string                      `json:"currency"`
 	Shipments           []OrderConfirmationShipment `json:"shipments"`
+	// Preorder is the "You're in" block of an order with a pre-order package (number, windowName, deliversOn,
+	// closesAt, timeZone, otherItemCount), relayed from orders; omitted otherwise.
+	Preorder json.RawMessage `json:"preorder,omitempty"`
 }
 
 // StockAlertItem is one of the shopper's back-in-stock alerts (GET /v1/account/stock-alerts).

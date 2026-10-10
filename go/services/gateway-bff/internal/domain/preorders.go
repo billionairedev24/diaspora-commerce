@@ -58,8 +58,9 @@ var (
 	preorderIDRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 	countryRe    = regexp.MustCompile(`^[A-Z]{2}$`)
 	regionRe     = regexp.MustCompile(`^[A-Z0-9]{1,3}$`)
-	attrSrcRe    = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,19}$`)
-	attrTokenRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$`)
+	attrSrcRe    = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
+	attrCrRe     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+	attrPoRe     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$`)
 	cityDisallow = "/?#<>\"{}|\\^`"
 )
 
@@ -143,10 +144,10 @@ func (a *Attribution) Clean() *Attribution {
 	if !attrSrcRe.MatchString(out.Src) {
 		out.Src = ""
 	}
-	if !attrTokenRe.MatchString(out.Cr) {
+	if !attrCrRe.MatchString(out.Cr) {
 		out.Cr = ""
 	}
-	if !attrTokenRe.MatchString(out.Po) {
+	if !attrPoRe.MatchString(out.Po) {
 		out.Po = ""
 	}
 	if out.Empty() {

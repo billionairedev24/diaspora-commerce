@@ -713,35 +713,39 @@ const PreorderWindowID = "LBK-7"
 // PreorderCartBlock is the cart service's pre-order block of the fake window with the chosen fulfilment.
 func PreorderCartBlock(fulfilment string) map[string]any {
 	//nolint:gosec // fake cart data, no credentials (G101 matches "pickup…" keys)
-	return map[string]any{"windowId": PreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7", "deliversOn": "2026-10-25",
-		"stage": "OPEN", "closesAt": "2026-10-22T04:59:00Z", "fulfilment": fulfilment, "doorFee": 799, "pickupFee": 0, "currency": "USD",
+	return map[string]any{"windowId": PreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7", "stage": "OPEN",
+		"opensAt": "2026-10-06T14:00:00Z", "closesAt": "2026-10-22T04:59:00Z", "deliversOn": "2026-10-25", "timeZone": "America/Chicago",
+		"fulfilment": fulfilment, "door": true, "pickup": true, "doorFeeMinor": 799, "pickupFeeMinor": 0, "currency": "USD",
 		"pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD", "WALLET"},
-		"options": []any{map[string]any{"fulfilment": "DOOR", "feeMinor": 799, "label": "Door delivery"},
-			map[string]any{"fulfilment": "PICKUP", "feeMinor": 0, "label": "Pickup"}}}
+		"options": []any{map[string]any{"fulfilment": "DOOR", "feeMinor": 799}, map[string]any{"fulfilment": "PICKUP", "feeMinor": 0}}}
 }
 
 // preorderRoutes fakes delivery-runs' public pre-order routes: Lubbock (US/TX/Lubbock) has an open window; every
 // other place is off with the SHIP fallback.
 func (u *Upstreams) preorderRoutes(mux *http.ServeMux) {
+	placements := map[string]any{"ribbon": true, "hero": true, "badge": true, "pdp": true, "cart": true, "family": true}
 	//nolint:gosec // fake window, no credentials
-	window := map[string]any{"id": "7b1e2c3d-0000-4000-8000-000000000007", "code": "LBK-7", "name": "Lubbock Pre-order #7", "stage": "OPEN",
-		"where": "Lubbock, TX", "targets": []string{"US/TX/Lubbock"}, "opensAt": "2026-10-06T14:00:00Z", "closesAt": "2026-10-22T04:59:00Z",
-		"deliversOn": "2026-10-25", "ribbon": "Lubbock pre-order is open", "headline": "African groceries, delivered to Lubbock",
-		"categories": []string{"Pantry", "Spices"}, "door": true, "pickup": true, "count": 142, "doorFee": 799, "pickupFee": 0,
-		"currency": "USD", "pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD", "WALLET"}}
+	window := map[string]any{"id": "7b1e2c3d-0000-4000-8000-000000000007", "code": "LBK-7", "name": "Lubbock Pre-order #7",
+		"ribbon": "Lubbock pre-order is open", "headline": "African groceries, delivered to Lubbock", "categories": []string{"Pantry", "Spices"},
+		"departments": []string{"Groceries"}, "opensAt": "2026-10-06T14:00:00Z", "closesAt": "2026-10-22T04:59:00Z", "deliversOn": "2026-10-25",
+		"timeZone": "America/Chicago", "showCount": true, "count": 142, "door": true, "pickup": true, "doorFeeMinor": 799, "pickupFeeMinor": 0,
+		"currency": "USD", "pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD", "WALLET"},
+		"creatives": map[string]any{"hero": map[string]any{"url": "https://img.example/hero.jpg", "width": 1920, "height": 640}, "pdp": nil}}
 	mux.HandleFunc("GET /v1/public/preorders/resolve", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		if q.Get("country") == "US" && q.Get("region") == "TX" && strings.EqualFold(q.Get("city"), "Lubbock") {
-			//nolint:gosec // fake resolution, no credentials
-			writeJSON(w, 200, map[string]any{"on": true, "stage": "OPEN", "countdownTo": window["closesAt"], "window": window,
-				"fallback": nil, "placements": map[string]any{"ribbon": true, "hero": true}, "payment": map[string]any{"currency": "USD",
-					"doorFee": 799, "pickupFee": 0, "pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD", "WALLET"}}})
+			writeJSON(w, 200, map[string]any{"metro": false, "covered": true, "on": true, "stage": "OPEN", "countdownTo": window["closesAt"],
+				"window": window, "fallback": "SHIP", "placements": placements, "supportPhone": "+1 832 555 0100"})
 			return
 		}
-		writeJSON(w, 200, map[string]any{"on": false, "stage": nil, "countdownTo": nil, "window": nil, "fallback": "SHIP"})
+		writeJSON(w, 200, map[string]any{"metro": q.Get("city") == "Houston", "covered": false, "on": false, "stage": nil, "countdownTo": nil,
+			"window": nil, "fallback": "SHIP", "placements": placements, "supportPhone": "+1 832 555 0100"})
 	})
 	mux.HandleFunc("GET /v1/public/preorders/open", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, []any{window})
+		writeJSON(w, 200, map[string]any{"placements": placements, "windows": []any{map[string]any{"id": window["id"], "code": "LBK-7",
+			"name": "Lubbock Pre-order #7", "where": "Lubbock, TX", "stage": "OPEN", "opensAt": window["opensAt"], "closesAt": window["closesAt"],
+			"deliversOn": "2026-10-25", "timeZone": "America/Chicago", "place": map[string]any{"country": "US", "region": "TX", "city": "Lubbock"},
+			"zip": "79401", "heroUrl": "https://img.example/hero.jpg", "doorFeeMinor": 799, "currency": "USD"}}})
 	})
 	mux.HandleFunc("POST /v1/public/subscriptions", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any

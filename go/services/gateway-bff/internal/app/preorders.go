@@ -21,9 +21,14 @@ type PreorderService interface {
 	Waitlist(ctx context.Context, c *domain.Caller, req PreorderWaitlistRequest) (map[string]any, error)
 }
 
-// PreorderWaitlistRequest is POST /v1/preorders/waitlist; the area defaults to the session's delivery location.
+// PreorderWaitlistRequest is POST /v1/preorders/waitlist; the place defaults to the session's delivery location.
 type PreorderWaitlistRequest struct {
-	Email   string `json:"email"`
+	Email string         `json:"email"`
+	Place *PreorderPlace `json:"place"`
+}
+
+// PreorderPlace is a place as delivery-runs keys it.
+type PreorderPlace struct {
 	Country string `json:"country"`
 	Region  string `json:"region"`
 	City    string `json:"city"`
@@ -89,8 +94,18 @@ func (s *preorderServiceImpl) Resolve(ctx context.Context, c *domain.Caller, cou
 	}
 	out := object(raw)
 	out["place"] = p
-	if _, ok := out["on"]; !ok {
-		out["on"] = false
+	// Defaults for members an older delivery-runs omits (the storefront schema requires them).
+	for k, v := range map[string]any{"on": false, "metro": false, "covered": out["window"] != nil, "stage": nil, "countdownTo": nil,
+		"window": nil, "supportPhone": ""} {
+		if _, ok := out[k]; !ok {
+			out[k] = v
+		}
+	}
+	if f, _ := out["fallback"].(string); f == "" {
+		out["fallback"] = "SHIP"
+	}
+	if _, ok := out["placements"].(map[string]any); !ok {
+		out["placements"] = preorderPlacementDefaults()
 	}
 	return out, nil
 }
@@ -100,20 +115,27 @@ func (s *preorderServiceImpl) Open(ctx context.Context) (map[string]any, error) 
 	if err != nil {
 		return nil, mapErr("delivery-runs", err)
 	}
-	trimmed := strings.TrimSpace(string(raw))
-	if strings.HasPrefix(trimmed, "[") {
-		var items []any
-		_ = json.Unmarshal(raw, &items)
-		if items == nil {
-			items = []any{}
+	if strings.HasPrefix(strings.TrimSpace(string(raw)), "[") {
+		var windows []any
+		_ = json.Unmarshal(raw, &windows)
+		if windows == nil {
+			windows = []any{}
 		}
-		return map[string]any{"items": items}, nil
+		return map[string]any{"windows": windows, "placements": preorderPlacementDefaults()}, nil
 	}
 	out := object(raw)
-	if _, ok := out["items"].([]any); !ok {
-		out["items"] = []any{}
+	if _, ok := out["windows"].([]any); !ok {
+		out["windows"] = []any{}
+	}
+	if _, ok := out["placements"].(map[string]any); !ok {
+		out["placements"] = preorderPlacementDefaults()
 	}
 	return out, nil
+}
+
+// preorderPlacementDefaults are the Settings placements' defaults (all on), used when delivery-runs omits them.
+func preorderPlacementDefaults() map[string]any {
+	return map[string]any{"ribbon": true, "hero": true, "badge": true, "pdp": true, "cart": true, "family": true}
 }
 
 func (s *preorderServiceImpl) Waitlist(ctx context.Context, c *domain.Caller, req PreorderWaitlistRequest) (map[string]any, error) {
@@ -121,7 +143,11 @@ func (s *preorderServiceImpl) Waitlist(ctx context.Context, c *domain.Caller, re
 	if a, err := mail.ParseAddress(email); err != nil || a.Address != email || len(email) > 254 {
 		return nil, domain.ValidationProblem(map[string]string{"email": "Enter a valid email address"})
 	}
-	p, err := s.place(ctx, c, req.Country, req.Region, req.City)
+	var at PreorderPlace
+	if req.Place != nil {
+		at = *req.Place
+	}
+	p, err := s.place(ctx, c, at.Country, at.Region, at.City)
 	if err != nil {
 		return nil, err
 	}
@@ -130,9 +156,6 @@ func (s *preorderServiceImpl) Waitlist(ctx context.Context, c *domain.Caller, re
 	if err != nil {
 		return nil, mapErr("delivery-runs", err)
 	}
-	out := object(raw)
-	if _, ok := out["status"].(string); !ok {
-		out["status"] = "CONFIRMATION_SENT"
-	}
-	return map[string]any{"status": out["status"], "area": p.Key()}, nil
+	_ = raw // delivery-runs answers 202 whether or not the address was known (double opt-in follows)
+	return map[string]any{"status": "subscribed", "city": firstNonEmpty(p.City, p.Region), "area": p.Key()}, nil
 }
