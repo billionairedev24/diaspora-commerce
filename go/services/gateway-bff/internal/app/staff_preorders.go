@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"net/url"
 	"slices"
@@ -37,10 +39,16 @@ type StaffPreordersService interface {
 	Areas(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 	AddArea(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	ToggleAreas(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
-	DeleteArea(ctx context.Context, c *domain.Caller, key string) error
-	Places(ctx context.Context, c *domain.Caller, q string) (any, error)
+	DeleteArea(ctx context.Context, c *domain.Caller, key string) (any, error)
+	Places(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
+	// Products are the window's products (the late-add item list).
+	Products(ctx context.Context, c *domain.Caller, id string) (any, error)
+	// VerifyAddress checks a new late-add address with geo.
+	VerifyAddress(ctx context.Context, c *domain.Caller, a PreorderAddressInput) (domain.AddressVerification, error)
+	// RequestUpload signs a direct media upload for a creative.
+	RequestUpload(ctx context.Context, c *domain.Caller, in PreorderUploadInput) (domain.PreorderUploadTicket, error)
 	// Customers is the late-add customer picker: identity's people search with each customer's saved addresses.
-	Customers(ctx context.Context, c *domain.Caller, q string) (domain.LateAddCustomers, error)
+	Customers(ctx context.Context, c *domain.Caller, q, windowID string) (domain.LateAddCustomers, error)
 }
 
 type staffPreordersImpl struct{ r *staffResolver }
@@ -263,6 +271,11 @@ func (s *staffPreordersImpl) PutCreative(ctx context.Context, c *domain.Caller, 
 	sc, can, err := s.need(ctx, c, poManage)
 	if err != nil {
 		return nil, err
+	}
+	if sc.up.Media != nil {
+		// Finalise the direct upload (media detects type and size); already-complete assets answer an error we ignore,
+		// delivery-runs verifies the asset either way.
+		_ = sc.call(ctx, sc.up.Media, port.StaffCall{Method: http.MethodPost, Path: "/v1/assets/" + url.PathEscape(strings.TrimSpace(asset)) + "/complete"}, nil)
 	}
 	out, err := sc.send(ctx, http.MethodPut, windowPath(id, "/creatives/", sl), "", map[string]any{"assetId": strings.TrimSpace(asset)})
 	if err != nil {
@@ -492,78 +505,231 @@ func (s *staffPreordersImpl) ToggleAreas(ctx context.Context, c *domain.Caller, 
 	return withCan(out, can), nil
 }
 
-func (s *staffPreordersImpl) DeleteArea(ctx context.Context, c *domain.Caller, key string) error {
+func (s *staffPreordersImpl) DeleteArea(ctx context.Context, c *domain.Caller, key string) (any, error) {
 	if !domain.ValidAreaKey(key) {
-		return domain.ValidationProblem(map[string]string{"key": "Use country/region or country/region/city, e.g. US/TX/Lubbock"})
+		return nil, domain.ValidationProblem(map[string]string{"key": "Use country/region or country/region/city, e.g. US/TX/Lubbock"})
 	}
-	sc, _, err := s.need(ctx, c, poManage)
+	sc, can, err := s.need(ctx, c, poManage)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, err = sc.send(ctx, http.MethodDelete, preorderAreas+"/"+url.PathEscape(key), "", nil)
-	return err
+	out, err := sc.send(ctx, http.MethodDelete, preorderAreas+"/"+url.PathEscape(key), "", nil)
+	if err != nil {
+		return nil, err
+	}
+	return withCan(out, can), nil
 }
 
-func (s *staffPreordersImpl) Places(ctx context.Context, c *domain.Caller, q string) (any, error) {
-	q = strings.TrimSpace(q)
-	if len([]rune(q)) < 2 || len(q) > 80 {
-		return nil, domain.ValidationProblem(map[string]string{"q": "Type 2 to 80 characters"})
+func (s *staffPreordersImpl) Places(ctx context.Context, c *domain.Caller, q url.Values) (any, error) {
+	pq, err := passQuery(q, "country", "region", "q")
+	if err != nil {
+		return nil, err
 	}
 	sc, _, err := s.need(ctx, c, poView)
 	if err != nil {
 		return nil, err
 	}
 	var out any
-	if err := sc.get(ctx, sc.up.DeliveryRuns, "/v1/places/search", url.Values{"q": {q}}, &out); err != nil {
+	if err := sc.get(ctx, sc.up.DeliveryRuns, "/v1/places/search", pq, &out); err != nil {
 		return nil, err
 	}
 	return items(out), nil
 }
 
-func (s *staffPreordersImpl) Customers(ctx context.Context, c *domain.Caller, q string) (domain.LateAddCustomers, error) {
+func (s *staffPreordersImpl) Products(ctx context.Context, c *domain.Caller, id string) (any, error) {
+	if p := domain.ValidPreorderID(id); p != nil {
+		return nil, p
+	}
+	sc, _, err := s.need(ctx, c, poView)
+	if err != nil {
+		return nil, err
+	}
+	var out any
+	if err := sc.get(ctx, sc.up.DeliveryRuns, windowPath(id, "/products"), nil, &out); err != nil {
+		return nil, err
+	}
+	return items(out), nil
+}
+
+// VerifyAddress checks a new late-add address with geo (Google Places, Nominatim fallback). placeId is geo's id
+// when it has one, else a stable reference of the standardised address that delivery-runs re-verifies.
+func (s *staffPreordersImpl) VerifyAddress(ctx context.Context, c *domain.Caller, a PreorderAddressInput) (domain.AddressVerification, error) {
+	errs := map[string]string{}
+	if l := len(strings.TrimSpace(a.Line1)); l == 0 || l > 200 {
+		errs["line1"] = "Enter the street address"
+	}
+	if z := strings.TrimSpace(a.ZIP); z == "" || len(z) > 12 {
+		errs["zip"] = "Enter the ZIP or postal code"
+	}
+	if len(a.City) > 80 || len(a.Region) > 3 || len(a.Country) > 2 {
+		errs["city"] = "Check the city, region and country"
+	}
+	if len(errs) > 0 {
+		return domain.AddressVerification{}, domain.ValidationProblem(errs)
+	}
+	sc, _, err := s.need(ctx, c, poLateAdd)
+	if err != nil {
+		return domain.AddressVerification{}, err
+	}
+	country := strings.ToUpper(firstNonEmpty(strings.TrimSpace(a.Country), "US"))
+	var v jobj
+	if err := sc.call(ctx, sc.up.Geo, port.StaffCall{Method: http.MethodPost, Path: "/v1/addresses/validate", Body: jobj{
+		"line1": strings.TrimSpace(a.Line1), "city": strings.TrimSpace(a.City), "state": strings.ToUpper(strings.TrimSpace(a.Region)),
+		"postalCode": strings.TrimSpace(a.ZIP), "country": country}}, &v); err != nil {
+		return domain.AddressVerification{}, err
+	}
+	switch strings.ToUpper(jstr(v, "status")) {
+	case "VALID", "CORRECTED":
+	default:
+		return domain.AddressVerification{Verified: false}, nil
+	}
+	std, _ := v["standardized"].(map[string]any)
+	if std == nil {
+		std = jobj{"line1": a.Line1, "city": a.City, "state": a.Region, "postalCode": a.ZIP}
+	}
+	formatted := strings.TrimSpace(jstr(std, "line1") + ", " + jstr(std, "city") + ", " + jstr(std, "state") + " " + jstr(std, "postalCode"))
+	placeID := firstNonEmpty(jstr(v, "placeId"), jstr(std, "placeId"))
+	if placeID == "" {
+		sum := sha256.Sum256([]byte(strings.ToLower(formatted + "|" + country)))
+		placeID = "geo:" + hex.EncodeToString(sum[:12])
+	}
+	return domain.AddressVerification{Verified: true, PlaceID: &placeID, Formatted: &formatted}, nil
+}
+
+// PreorderAddressInput is POST /v1/staff/preorders/address-verify.
+type PreorderAddressInput struct {
+	Line1   string `json:"line1"`
+	ZIP     string `json:"zip"`
+	City    string `json:"city"`
+	Region  string `json:"region"`
+	Country string `json:"country"`
+}
+
+// PreorderUploadInput is POST /v1/staff/preorders/uploads.
+type PreorderUploadInput struct {
+	FileName    string `json:"fileName"`
+	ContentType string `json:"contentType"`
+	Size        int64  `json:"size"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+}
+
+var creativeTypes = []string{"image/jpeg", "image/png", "image/webp"}
+
+// maxCreativeBytes caps an advertorial creative (a 1920×640 hero or 1080×1920 story fits easily).
+const maxCreativeBytes = 10 << 20
+
+// RequestUpload signs a direct media upload for a creative (media purpose storefront); the console PUTs the file and
+// then sets the slot, where delivery-runs verifies the asset with media-service and stores its size.
+func (s *staffPreordersImpl) RequestUpload(ctx context.Context, c *domain.Caller, in PreorderUploadInput) (domain.PreorderUploadTicket, error) {
+	errs := map[string]string{}
+	if n := strings.TrimSpace(in.FileName); n == "" || len(n) > 200 || strings.ContainsAny(n, "/\\") {
+		errs["fileName"] = "Choose an image file"
+	}
+	if !slices.Contains(creativeTypes, strings.ToLower(in.ContentType)) {
+		errs["contentType"] = "Use a JPEG, PNG or WebP image"
+	}
+	if in.Size <= 0 || in.Size > maxCreativeBytes {
+		errs["size"] = "Images up to 10 MB"
+	}
+	if in.Width < 0 || in.Height < 0 || in.Width > 10000 || in.Height > 10000 {
+		errs["width"] = "Check the image size"
+	}
+	if len(errs) > 0 {
+		return domain.PreorderUploadTicket{}, domain.ValidationProblem(errs)
+	}
+	sc, _, err := s.need(ctx, c, poManage)
+	if err != nil {
+		return domain.PreorderUploadTicket{}, err
+	}
+	var up struct {
+		Asset struct {
+			ID string `json:"id"`
+		} `json:"asset"`
+		Upload struct {
+			URL     string            `json:"url"`
+			Method  string            `json:"method"`
+			Headers map[string]string `json:"headers"`
+		} `json:"upload"`
+	}
+	if err := sc.call(ctx, sc.up.Media, port.StaffCall{Method: http.MethodPost, Path: "/v1/uploads", Body: jobj{"purpose": "storefront",
+		"fileName": strings.TrimSpace(in.FileName), "contentType": strings.ToLower(in.ContentType), "size": in.Size}}, &up); err != nil {
+		return domain.PreorderUploadTicket{}, err
+	}
+	if up.Asset.ID == "" || up.Upload.URL == "" {
+		return domain.PreorderUploadTicket{}, domain.UpstreamUnavailable("media")
+	}
+	method := strings.ToUpper(firstNonEmpty(up.Upload.Method, http.MethodPut))
+	if method != http.MethodPost {
+		method = http.MethodPut
+	}
+	headers := up.Upload.Headers
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	return domain.PreorderUploadTicket{AssetID: up.Asset.ID, Upload: domain.PreorderUploadSpec{Method: method, URL: up.Upload.URL, Headers: headers}}, nil
+}
+
+// Customers is the late-add customer picker. Without a query (fewer than 2 characters) it answers no one.
+func (s *staffPreordersImpl) Customers(ctx context.Context, c *domain.Caller, q, windowID string) (domain.LateAddCustomers, error) {
 	q = strings.TrimSpace(q)
-	if len([]rune(q)) < 2 || len(q) > 120 {
-		return domain.LateAddCustomers{}, domain.ValidationProblem(map[string]string{"q": "Type 2 to 120 characters"})
+	if len(q) > 120 {
+		return domain.LateAddCustomers{}, domain.ValidationProblem(map[string]string{"q": "Type at most 120 characters"})
+	}
+	if windowID != "" {
+		if p := domain.ValidPreorderID(windowID); p != nil {
+			return domain.LateAddCustomers{}, p
+		}
 	}
 	sc, _, err := s.need(ctx, c, poLateAdd)
 	if err != nil {
 		return domain.LateAddCustomers{}, err
 	}
+	out := domain.LateAddCustomers{Items: []domain.LateAddCustomer{}}
+	if len([]rune(q)) < 2 {
+		return out, nil
+	}
 	var page jobj
 	if err := sc.get(ctx, sc.up.Identity, "/v1/admin/users", url.Values{"q": {q}, "size": {customerSearchSize}}, &page); err != nil {
 		return domain.LateAddCustomers{}, err
 	}
-	out := domain.LateAddCustomers{Items: []domain.LateAddCustomer{}}
 	for _, u := range objs(page, "items") {
 		if pt := jstr(u, "principalType"); pt != "" && !strings.EqualFold(pt, "CUSTOMER") {
 			continue
 		}
 		out.Items = append(out.Items, domain.LateAddCustomer{ID: jstr(u, "id"), Name: jstr(u, "name"), Email: jstr(u, "email"),
-			Phone: strPtr(firstNonEmpty(jstr(u, "phone"), jstr(u, "phoneNumber"))), Enabled: boolean(u, "enabled"),
-			Addresses: []domain.LateAddAddress{}})
+			Phone: firstNonEmpty(jstr(u, "phone"), jstr(u, "phoneNumber")), Country: "US", Addresses: []domain.LateAddAddress{}})
 	}
 	var wg sync.WaitGroup
 	for i := range out.Items {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			out.Items[i].Addresses, out.Items[i].AddressesUnavailable = s.addresses(ctx, sc, out.Items[i].ID)
+			cu := &out.Items[i]
+			var country string
+			cu.Addresses, country, cu.AddressesUnavailable = s.addresses(ctx, sc, cu.ID)
+			if len(cu.Addresses) > 0 {
+				cu.City, cu.Region = cu.Addresses[0].City, cu.Addresses[0].Region
+			}
+			if country != "" {
+				cu.Country = country
+			}
 		}()
 	}
 	wg.Wait()
 	return out, nil
 }
 
-// addresses reads a customer's saved addresses from identity (GET /v1/admin/users/{id}/addresses, users:read);
-// best effort: unavailable gives none and the flag.
-func (s *staffPreordersImpl) addresses(ctx context.Context, sc staffCtx, userID string) ([]domain.LateAddAddress, bool) {
+// addresses reads a customer's saved addresses from identity (GET /v1/admin/users/{id}/addresses, users:read),
+// default first, and the default's country; best effort: unavailable gives none and the flag.
+func (s *staffPreordersImpl) addresses(ctx context.Context, sc staffCtx, userID string) ([]domain.LateAddAddress, string, bool) {
 	out := []domain.LateAddAddress{}
 	if userID == "" {
-		return out, true
+		return out, "", true
 	}
 	var raw any
 	if err := sc.get(ctx, sc.up.Identity, "/v1/admin/users/"+url.PathEscape(userID)+"/addresses", nil, &raw); err != nil {
-		return out, true
+		return out, "", true
 	}
 	var list []jobj
 	switch t := raw.(type) {
@@ -576,11 +742,16 @@ func (s *staffPreordersImpl) addresses(ctx context.Context, sc staffCtx, userID 
 	case map[string]any:
 		list = objs(t, "items")
 	}
+	country := ""
 	for _, a := range list {
-		out = append(out, domain.LateAddAddress{ID: jstr(a, "id"), Label: strPtr(jstr(a, "label")), Line1: jstr(a, "line1"),
-			Line2: strPtr(jstr(a, "line2")), City: jstr(a, "city"), Region: firstNonEmpty(jstr(a, "state"), jstr(a, "region")),
-			PostalCode: firstNonEmpty(jstr(a, "postalCode"), jstr(a, "zip")), Country: firstNonEmpty(jstr(a, "country"), "US"),
-			Default: boolean(a, "default") || boolean(a, "isDefault")})
+		addr := domain.LateAddAddress{ID: jstr(a, "id"), Label: firstNonEmpty(jstr(a, "label"), "Address"), Line1: jstr(a, "line1"),
+			City: jstr(a, "city"), Region: firstNonEmpty(jstr(a, "state"), jstr(a, "region")), ZIP: firstNonEmpty(jstr(a, "postalCode"), jstr(a, "zip"))}
+		if boolean(a, "default") || boolean(a, "isDefault") {
+			out = append([]domain.LateAddAddress{addr}, out...)
+			country = jstr(a, "country")
+			continue
+		}
+		out = append(out, addr)
 	}
-	return out, false
+	return out, country, false
 }

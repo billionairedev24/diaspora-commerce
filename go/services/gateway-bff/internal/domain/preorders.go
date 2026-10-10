@@ -189,26 +189,26 @@ func ValidPreorderFulfilment(f string) (string, bool) {
 	return f, slices.Contains(PreorderFulfilments, f)
 }
 
-// LateAddAddress is a saved address of a customer in the late-add picker.
+// LateAddAddress is a saved address of a customer in the late-add picker (default first).
 type LateAddAddress struct {
-	ID         string  `json:"id"`
-	Label      *string `json:"label"`
-	Line1      string  `json:"line1"`
-	Line2      *string `json:"line2"`
-	City       string  `json:"city"`
-	Region     string  `json:"region"`
-	PostalCode string  `json:"postalCode"`
-	Country    string  `json:"country"`
-	Default    bool    `json:"default"`
+	ID     string `json:"id"`
+	Label  string `json:"label"`
+	Line1  string `json:"line1"`
+	City   string `json:"city"`
+	Region string `json:"region"`
+	ZIP    string `json:"zip"`
 }
 
-// LateAddCustomer is one customer search hit with their saved addresses.
+// LateAddCustomer is one customer search hit with their saved addresses; city, region and country are the default
+// address's.
 type LateAddCustomer struct {
 	ID        string           `json:"id"`
 	Name      string           `json:"name"`
+	Phone     string           `json:"phone"`
 	Email     string           `json:"email"`
-	Phone     *string          `json:"phone"`
-	Enabled   bool             `json:"enabled"`
+	City      string           `json:"city"`
+	Region    string           `json:"region"`
+	Country   string           `json:"country"`
 	Addresses []LateAddAddress `json:"addresses"`
 	// AddressesUnavailable is true when identity could not list the customer's addresses (enter a new one).
 	AddressesUnavailable bool `json:"addressesUnavailable"`
@@ -217,4 +217,24 @@ type LateAddCustomer struct {
 // LateAddCustomers is GET /v1/staff/customers/search.
 type LateAddCustomers struct {
 	Items []LateAddCustomer `json:"items"`
+}
+
+// AddressVerification is POST /v1/staff/preorders/address-verify.
+type AddressVerification struct {
+	Verified  bool    `json:"verified"`
+	PlaceID   *string `json:"placeId"`
+	Formatted *string `json:"formatted"`
+}
+
+// PreorderUploadTicket is POST /v1/staff/preorders/uploads: the media asset and its direct upload.
+type PreorderUploadTicket struct {
+	AssetID string             `json:"assetId"`
+	Upload  PreorderUploadSpec `json:"upload"`
+}
+
+// PreorderUploadSpec is a signed direct upload.
+type PreorderUploadSpec struct {
+	Method  string            `json:"method"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers"`
 }

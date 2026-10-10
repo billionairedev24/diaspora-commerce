@@ -51,6 +51,9 @@ type StaffUpstreams struct {
 	Bookings      StaffUpstream
 	// DeliveryRuns owns pre-order windows, coverage areas and late adds (S270–S275).
 	DeliveryRuns StaffUpstream
+	// Media signs creative uploads; Geo verifies late-add addresses (Pre-orders module).
+	Media StaffUpstream
+	Geo   StaffUpstream
 }
 
 // ExportJobStore keeps export jobs (shared by every BFF replica; jobs live 24 hours after they finish).

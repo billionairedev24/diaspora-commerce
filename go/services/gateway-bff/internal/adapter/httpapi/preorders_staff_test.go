@@ -63,6 +63,25 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"postalCode": "79401", "country": "US", "isDefault": true}})
 		return
 	}
+	switch {
+	case p == "/v1/addresses/validate":
+		status := "VALID"
+		if b := f.record(r); b["postalCode"] == "00000" {
+			status = "UNDELIVERABLE"
+		}
+		writeJ(w, 200, map[string]any{"status": status, "standardized": map[string]any{"line1": "2401 BROADWAY", "city": "LUBBOCK", "state": "TX",
+			"postalCode": "79401"}})
+		return
+	case p == "/v1/uploads":
+		f.record(r)
+		writeJ(w, 201, map[string]any{"asset": map[string]any{"id": "ast-9"}, "upload": map[string]any{"url": "https://storage.example/put/ast-9",
+			"method": "PUT", "headers": map[string]any{"Content-Type": "image/jpeg"}}})
+		return
+	case strings.HasPrefix(p, "/v1/assets/") && strings.HasSuffix(p, "/complete"):
+		f.record(r)
+		writeJ(w, 200, map[string]any{"id": "ast-9", "status": "READY"})
+		return
+	}
 	if !strings.HasPrefix(p, "/v1/preorder") && !strings.HasPrefix(p, "/v1/places/") {
 		f.fakePlatform.ServeHTTP(w, r)
 		return
@@ -75,10 +94,10 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.idemKeys[key] = r.Header.Get("Idempotency-Key")
 	f.mu.Unlock()
 	window := map[string]any{"id": "win-7", "code": "LBK-7", "name": "Lubbock Pre-order #7", "status": "OPEN", "targets": []string{"US/TX/Lubbock"},
-		"doorFee": 799, "pickupFee": 0, "currency": "USD", "pickupWindow": "10am–2pm", "allowedMethods": []string{"CARD"}, "version": 3,
+		"doorFeeOverride": nil, "pickupFeeOverride": nil, "effectiveDoorFee": 799, "effectivePickupFee": 0, "currency": "USD", "version": 3,
 		"creatives": map[string]any{"HERO": map[string]any{"assetId": "ast-1", "width": 1920, "height": 640}}}
 	settings := map[string]any{"enabled": true, "fallback": "SHIP", "placements": map[string]any{"ribbon": true}, "version": 2,
-		"payment": map[string]any{"doorFee": map[string]any{"USD": 799}, "pickupFee": 0, "pickupWindow": "10am–2pm",
+		"payment": map[string]any{"doorFee": map[string]any{"USD": 799, "CAD": 999}, "pickupFee": map[string]any{"USD": 0, "CAD": 0}, "pickupWindow": "10am–2pm",
 			"allowedMethods": []string{"CARD", "WALLET"}, "lateAdd": map[string]any{"savedCard": true, "paymentLink": true, "linkExpiryHours": 24},
 			"missedDelivery": map[string]any{"offerRefund": true, "offerNewDate": true}}}
 	switch {
@@ -95,6 +114,8 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		problemDetail(w, 422, "delivery-runs.publish-checks-failed", "2 checks to fix")
 	case strings.HasSuffix(p, "/orders"):
 		writeJ(w, 200, []any{map[string]any{"number": "LBK-1001", "customer": "Amara Nwosu", "status": "PAID", "channel": "INSTAGRAM"}})
+	case strings.HasSuffix(p, "/products"):
+		writeJ(w, 200, []any{map[string]any{"atin": "ATGARI0001", "name": "Gari 1kg", "price": 899, "sellerName": "AfroTransact Retail"}})
 	case strings.HasSuffix(p, "/summary"):
 		writeJ(w, 200, map[string]any{"kpis": map[string]any{"preorders": 142, "lateAdds": 2}, "byChannel": []any{}})
 	case strings.Contains(p, "/exports/"):
@@ -110,11 +131,11 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case p == "/v1/preorder-areas" && r.Method == http.MethodGet:
 		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"key": "US/TX", "on": true, "onCount": 3, "windows": 1}}, "total": 1})
 	case strings.HasPrefix(p, "/v1/preorder-areas") && r.Method == http.MethodDelete:
-		w.WriteHeader(http.StatusNoContent)
+		writeJ(w, 200, map[string]any{"level": "COUNTRY", "rows": []any{}, "total": 0})
 	case strings.HasPrefix(p, "/v1/preorder-areas"):
 		writeJ(w, 200, map[string]any{"updated": 1})
 	case p == "/v1/places/search":
-		writeJ(w, 200, []any{map[string]any{"key": "US/TX/Lubbock", "label": "Lubbock, TX"}})
+		writeJ(w, 200, map[string]any{"items": []any{map[string]any{"key": "US/TX/Lubbock", "label": "Lubbock, TX"}}, "regionLabel": "State"})
 	default:
 		http.NotFound(w, r)
 	}
@@ -134,7 +155,7 @@ func preorderStaffBFF(t *testing.T) (*fakeDeliveryRuns, func(token, method, path
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), DeliveryRuns: up("delivery-runs")},
+	d := app.StaffDeps{Up: port.StaffUpstreams{Identity: up("identity"), DeliveryRuns: up("delivery-runs"), Media: up("media"), Geo: up("geo")},
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
 		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, Log: log, Background: func(fn func()) { fn() }}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
@@ -254,7 +275,9 @@ func TestStaffPreordersConformance(t *testing.T) {
 		t.Fatalf("idempotency key not relayed: %v", f.idemKeys)
 	}
 	do("cs", "POST", "/v1/staff/preorders", draft, 403)
-	do("ops", "PUT", "/v1/staff/preorders/win-7", draft, 200, "If-Match", `"3"`)
+	if etag := do("ops", "PUT", "/v1/staff/preorders/win-7", draft, 200, "If-Match", `"3"`).Header().Get("ETag"); etag != `"3"` {
+		t.Fatalf("window ETag = %q", etag)
+	}
 	if f.ifMatch["PUT /v1/preorders/win-7"] != `"3"` {
 		t.Fatalf("If-Match not relayed: %v", f.ifMatch)
 	}
@@ -293,13 +316,43 @@ func TestStaffPreordersConformance(t *testing.T) {
 	}
 
 	// Customer picker (identity + addresses), gated like late adds.
-	cust := jsonOf(t, do("cs", "GET", "/v1/staff/customers/search?q=amara", nil, 200))
+	cust := jsonOf(t, do("cs", "GET", "/v1/staff/customers/search?q=amara&windowId=win-7", nil, 200))
 	first := cust["items"].([]any)[0].(map[string]any)
-	if adr := first["addresses"].([]any); len(adr) != 1 || adr[0].(map[string]any)["default"] != true || first["addressesUnavailable"] != false {
+	if adr := first["addresses"].([]any); len(adr) != 1 || adr[0].(map[string]any)["zip"] != "79401" || first["city"] != "Lubbock" ||
+		first["region"] != "TX" || first["addressesUnavailable"] != false {
 		t.Fatalf("customers = %v", cust)
 	}
 	do("finance", "GET", "/v1/staff/customers/search?q=amara", nil, 403)
-	do("cs", "GET", "/v1/staff/customers/search?q=a", nil, 422)
+	if items := jsonOf(t, do("cs", "GET", "/v1/staff/customers/search?q=a&windowId=win-7", nil, 200))["items"].([]any); len(items) != 0 {
+		t.Fatalf("short query = %v", items)
+	}
+	do("cs", "GET", "/v1/staff/customers/search?q=amara&windowId=bad%20id", nil, 404)
+
+	// Late-add helpers: the window's products and address verification (geo).
+	if items := jsonOf(t, do("cs", "GET", "/v1/staff/preorders/win-7/products", nil, 200))["items"].([]any); len(items) != 1 {
+		t.Fatalf("products = %v", items)
+	}
+	v := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/address-verify", map[string]any{"line1": "2401 Broadway", "zip": "79401", "city": "Lubbock",
+		"region": "TX", "country": "US"}, 200))
+	if v["verified"] != true || !strings.HasPrefix(v["placeId"].(string), "geo:") || v["formatted"] != "2401 BROADWAY, LUBBOCK, TX 79401" {
+		t.Fatalf("verify = %v", v)
+	}
+	if v := jsonOf(t, do("cs", "POST", "/v1/staff/preorders/address-verify", map[string]any{"line1": "1 Nowhere", "zip": "00000"}, 200)); v["verified"] != false || v["placeId"] != nil {
+		t.Fatalf("unverified = %v", v)
+	}
+	do("finance", "POST", "/v1/staff/preorders/address-verify", map[string]any{"line1": "x", "zip": "1"}, 403)
+
+	// Creative upload: media ticket, then the slot (the BFF finalises the asset).
+	ticket := jsonOf(t, do("ops", "POST", "/v1/staff/preorders/uploads", map[string]any{"fileName": "hero.jpg", "contentType": "image/jpeg",
+		"size": 120000, "width": 1920, "height": 640}, 201))
+	if ticket["assetId"] != "ast-9" || ticket["upload"].(map[string]any)["method"] != "PUT" {
+		t.Fatalf("ticket = %v", ticket)
+	}
+	if b := f.bodies["POST /v1/uploads"]; b["purpose"] != "storefront" {
+		t.Fatalf("media body = %v", b)
+	}
+	do("ops", "POST", "/v1/staff/preorders/uploads", map[string]any{"fileName": "hero.gif", "contentType": "image/gif", "size": 1}, 422)
+	do("cs", "POST", "/v1/staff/preorders/uploads", map[string]any{"fileName": "hero.jpg", "contentType": "image/jpeg", "size": 1}, 403)
 
 	// Settings (incl. payment): FULL only for changes.
 	if s := jsonOf(t, do("ops", "GET", "/v1/staff/preorders/settings", nil, 200)); s["payment"].(map[string]any)["doorFee"].(map[string]any)["USD"] != float64(799) {
@@ -307,7 +360,9 @@ func TestStaffPreordersConformance(t *testing.T) {
 	}
 	update := map[string]any{"enabled": true, "fallback": "WAITLIST", "payment": map[string]any{"doorFee": map[string]any{"USD": 899}, "allowedMethods": []string{"CARD", "ACH"}}}
 	do("ops", "PUT", "/v1/staff/preorders/settings", update, 403)
-	do("marketing", "PUT", "/v1/staff/preorders/settings", update, 200, "If-Match", `"2"`)
+	if etag := do("marketing", "PUT", "/v1/staff/preorders/settings", update, 200, "If-Match", `"2"`).Header().Get("ETag"); etag != `"2"` {
+		t.Fatalf("settings ETag = %q", etag)
+	}
 	if b := f.bodies["PUT /v1/preorder-settings"]; b["payment"].(map[string]any)["doorFee"].(map[string]any)["USD"] != float64(899) {
 		t.Fatalf("settings body = %v", b)
 	}
@@ -318,11 +373,11 @@ func TestStaffPreordersConformance(t *testing.T) {
 	do("ops", "POST", "/v1/staff/preorders/areas", map[string]any{"key": "Texas"}, 422)
 	do("ops", "PATCH", "/v1/staff/preorders/areas", map[string]any{"keys": []string{"US/TX", "US/OK"}, "on": false}, 200)
 	do("cs", "PATCH", "/v1/staff/preorders/areas", map[string]any{"keys": []string{"US/TX"}, "on": false}, 403)
-	do("ops", "DELETE", "/v1/staff/preorders/areas?key=US/TX/Midland", nil, 204)
+	do("ops", "DELETE", "/v1/staff/preorders/areas/US%2FTX%2FMidland", nil, 200)
 	if !containsPath(f, "DELETE /v1/preorder-areas/US%2FTX%2FMidland") {
 		t.Fatalf("area delete path = %v", f.paths)
 	}
-	if items := jsonOf(t, do("ops", "GET", "/v1/staff/preorders/places?q=lub", nil, 200))["items"].([]any); len(items) != 1 {
+	if items := jsonOf(t, do("ops", "GET", "/v1/staff/preorders/places/search?country=US&q=lub", nil, 200))["items"].([]any); len(items) != 1 {
 		t.Fatalf("places = %v", items)
 	}
 
@@ -330,7 +385,7 @@ func TestStaffPreordersConformance(t *testing.T) {
 		"pauseStaffPreorder", "resumeStaffPreorder", "putStaffPreorderCreative", "deleteStaffPreorderCreative", "listStaffPreorderOrders",
 		"getStaffPreorderSummary", "exportStaffPreorder", "addStaffPreorderLateOrder", "getStaffPreorderSettings", "updateStaffPreorderSettings",
 		"listStaffPreorderAreas", "addStaffPreorderArea", "toggleStaffPreorderAreas", "deleteStaffPreorderArea", "searchStaffPreorderPlaces",
-		"searchStaffCustomers"} {
+		"searchStaffCustomers", "listStaffPreorderProducts", "verifyStaffPreorderAddress", "requestStaffPreorderUpload"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not exercised", op)
 		}

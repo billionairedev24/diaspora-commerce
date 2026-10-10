@@ -42,6 +42,7 @@ import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db
 import { createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
+import { preorderHandlers } from './preorders';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
 import { MockRenderError, renderPart, type TemplatePart } from './template-render';
 
@@ -170,11 +171,12 @@ const display = (v: Scalar): string => (v === null ? '—' : typeof v === 'boole
 function filtered(ctx: Ctx, resource: ResourceKey, q: string, status: string): MockRecord[] {
   const def = RESOURCES[resource];
   const needle = q.trim().toLowerCase();
-  return records(ctx, resource).filter((r) => {
+  const rows = records(ctx, resource).filter((r) => {
     if (status && def.statusKey && r.fields[def.statusKey] !== status) return false;
     if (needle && def.search && !def.search.some((k) => String(r.fields[k] ?? '').toLowerCase().includes(needle))) return false;
     return true;
   });
+  return def.sort ? [...rows].sort(def.sort) : rows;
 }
 
 function actionView(ctx: Ctx, resource: ResourceKey, r: MockRecord, a: MockAction): RecordAction {
@@ -1001,6 +1003,8 @@ export const staffHandlers = [
       return { to: ctx.db.user.email, channel: b.channel, provider: 'log' };
     })
   ),
+  /* ── pre-orders (S274): delivery-runs' staff API through the BFF ── */
+  ...preorderHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Anything else under /v1/staff is not part of the contract. */
   http.all(`${W}/*`, () => problemResponse(notFound('No such staff route.')))
 ];

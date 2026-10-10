@@ -3,6 +3,7 @@ package httpapi
 import (
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 )
@@ -69,8 +70,11 @@ func (h *handlersImpl) registerStaffPreorders(route func(pattern string, fn http
 	route("GET /v1/staff/preorders/areas", h.staffPreorderAreas)
 	route("POST /v1/staff/preorders/areas", h.staffAddPreorderArea)
 	route("PATCH /v1/staff/preorders/areas", h.staffTogglePreorderAreas)
-	route("DELETE /v1/staff/preorders/areas", h.staffDeletePreorderArea)
-	route("GET /v1/staff/preorders/places", h.staffPreorderPlaces)
+	route("DELETE /v1/staff/preorders/areas/{key}", h.staffDeletePreorderArea)
+	route("GET /v1/staff/preorders/places/search", h.staffPreorderPlaces)
+	route("POST /v1/staff/preorders/address-verify", h.staffVerifyPreorderAddress)
+	route("POST /v1/staff/preorders/uploads", h.staffPreorderUpload)
+	route("GET /v1/staff/preorders/{id}/products", h.staffPreorderProducts)
 	route("GET /v1/staff/preorders/{id}", h.staffPreorder)
 	route("PUT /v1/staff/preorders/{id}", h.staffUpdatePreorder)
 	route("POST /v1/staff/preorders/{id}/{action}", h.staffPreorderAction)
@@ -109,6 +113,7 @@ func (h *handlersImpl) staffCreatePreorder(w http.ResponseWriter, r *http.Reques
 
 func (h *handlersImpl) staffPreorder(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Preorders.Get(r.Context(), callerFrom(r.Context()), r.PathValue("id"))
+	setVersionETag(w, v)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -119,6 +124,7 @@ func (h *handlersImpl) staffUpdatePreorder(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	v, err := h.s.Staff.Preorders.Update(r.Context(), callerFrom(r.Context()), r.PathValue("id"), r.Header.Get("If-Match"), b)
+	setVersionETag(w, v)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -183,6 +189,7 @@ func (h *handlersImpl) staffPreorderLateOrder(w http.ResponseWriter, r *http.Req
 
 func (h *handlersImpl) staffPreorderSettings(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Preorders.Settings(r.Context(), callerFrom(r.Context()))
+	setVersionETag(w, v)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -193,6 +200,7 @@ func (h *handlersImpl) staffUpdatePreorderSettings(w http.ResponseWriter, r *htt
 		return
 	}
 	v, err := h.s.Staff.Preorders.UpdateSettings(r.Context(), callerFrom(r.Context()), r.Header.Get("If-Match"), b)
+	setVersionETag(w, v)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
@@ -222,16 +230,58 @@ func (h *handlersImpl) staffTogglePreorderAreas(w http.ResponseWriter, r *http.R
 }
 
 func (h *handlersImpl) staffDeletePreorderArea(w http.ResponseWriter, r *http.Request) {
-	err := h.s.Staff.Preorders.DeleteArea(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("key"))
-	h.reply(w, r, http.StatusNoContent, nil, err)
+	v, err := h.s.Staff.Preorders.DeleteArea(r.Context(), callerFrom(r.Context()), r.PathValue("key"))
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) staffPreorderPlaces(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Staff.Preorders.Places(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("q"))
+	v, err := h.s.Staff.Preorders.Places(r.Context(), callerFrom(r.Context()), r.URL.Query())
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) staffCustomerSearch(w http.ResponseWriter, r *http.Request) {
-	v, err := h.s.Staff.Preorders.Customers(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("q"))
+	v, err := h.s.Staff.Preorders.Customers(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("q"), r.URL.Query().Get("windowId"))
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPreorderProducts(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.Products(r.Context(), callerFrom(r.Context()), r.PathValue("id"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffVerifyPreorderAddress(w http.ResponseWriter, r *http.Request) {
+	var b app.PreorderAddressInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.VerifyAddress(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPreorderUpload(w http.ResponseWriter, r *http.Request) {
+	var b app.PreorderUploadInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.RequestUpload(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+// setVersionETag answers the optimistic-lock version of a window or the settings as a strong ETag ("<version>");
+// the console sends it back as If-Match.
+func setVersionETag(w http.ResponseWriter, v any) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return
+	}
+	switch n := m["version"].(type) {
+	case float64:
+		w.Header().Set("ETag", `"`+strconv.FormatInt(int64(n), 10)+`"`)
+	case string:
+		if n != "" {
+			w.Header().Set("ETag", `"`+n+`"`)
+		}
+	}
 }

@@ -806,7 +806,7 @@ paths:
       summary: Platform pre-order settings (master switch, fallback, placements, payment setup)
       description: delivery-runs `GET /v1/preorder-settings`. Needs VIEW on preorders.
       responses:
-        '200': {description: Settings, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderSettings'}}}}
+        '200': {description: Settings, headers: {ETag: {description: 'Optimistic-lock version ("<version>"); send it back as If-Match', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderSettings'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
@@ -824,7 +824,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderSettings'}}}
       responses:
-        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderSettings'}}}}
+        '200': {description: Saved, headers: {ETag: {description: 'Optimistic-lock version ("<version>"); send it back as If-Match', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderSettings'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
@@ -893,37 +893,136 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/areas/{key}:
     delete:
       tags: [Pre-orders]
       operationId: deleteStaffPreorderArea
       security: [{sessionCookie: []}]
       summary: Remove a coverage area
       description: |
-        delivery-runs `DELETE /v1/preorder-areas/{key}` (the key path-escaped, `/` as `%2F`; preorders:manage, EDIT).
-        The key is a query parameter here because it contains slashes.
+        delivery-runs `DELETE /v1/preorder-areas/{key}` (preorders:manage, EDIT). The key is one path segment with its
+        slashes encoded (`US%2FTX%2FLubbock`). Answers the refreshed area page.
       parameters:
-        - {name: key, in: query, required: true, schema: {type: string, examples: [US/TX/Lubbock]}}
+        - {name: key, in: path, required: true, schema: {type: string, examples: [US%2FTX%2FLubbock]}}
       responses:
-        '204': {description: Removed}
+        '200': {description: Areas after the removal, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderAreas'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
-  /v1/staff/preorders/places:
+  /v1/staff/preorders/places/search:
     get:
       tags: [Pre-orders]
       operationId: searchStaffPreorderPlaces
       security: [{sessionCookie: []}]
       summary: Country / region / city suggestions for the area picker
-      description: delivery-runs `GET /v1/places/search?q=` (geo-service backed, built-in list fallback).
+      description: delivery-runs `GET /v1/places/search?country=&region=&q=` (geo-service backed, built-in list fallback) → {items, regionLabel}.
       parameters:
-        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 80}}
+        - {name: country, in: query, schema: {type: string, maxLength: 2}}
+        - {name: region, in: query, schema: {type: string, maxLength: 3}}
+        - {name: q, in: query, schema: {type: string, maxLength: 80}}
       responses:
         '200': {description: Places, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderItems'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/address-verify:
+    post:
+      tags: [Pre-orders]
+      operationId: verifyStaffPreorderAddress
+      security: [{sessionCookie: []}]
+      summary: Verify a new late-add address (geo, Google Places with Nominatim fallback)
+      description: |
+        geo `POST /v1/addresses/validate`. `verified` for VALID or CORRECTED; `placeId` is geo's place id, else a stable
+        reference of the standardised address (delivery-runs re-verifies it). Needs the late-add ability.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [line1, zip]
+              properties:
+                line1: {type: string, maxLength: 200}
+                zip: {type: string, maxLength: 12}
+                city: {type: string, maxLength: 80}
+                region: {type: string, maxLength: 3}
+                country: {type: string, maxLength: 2}
+      responses:
+        '200':
+          description: Verification
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [verified, placeId, formatted]
+                properties:
+                  verified: {type: boolean}
+                  placeId: {type: [string, 'null']}
+                  formatted: {type: [string, 'null']}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/uploads:
+    post:
+      tags: [Pre-orders]
+      operationId: requestStaffPreorderUpload
+      security: [{sessionCookie: []}]
+      summary: Sign a direct media upload for a creative
+      description: |
+        media `POST /v1/uploads` (purpose storefront; JPEG, PNG or WebP up to 10 MB). The console PUTs the file to
+        `upload.url`, then sets the slot (`PUT /v1/staff/preorders/{id}/creatives/{slot} {assetId}`), where the BFF
+        finalises the asset with media and delivery-runs verifies it. Needs EDIT and preorders:manage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, contentType, size]
+              properties:
+                fileName: {type: string, maxLength: 200}
+                contentType: {type: string, enum: [image/jpeg, image/png, image/webp]}
+                size: {type: integer, minimum: 1, maximum: 10485760}
+                width: {type: integer}
+                height: {type: integer}
+      responses:
+        '201':
+          description: Upload ticket
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [assetId, upload]
+                properties:
+                  assetId: {type: string}
+                  upload:
+                    type: object
+                    required: [method, url, headers]
+                    properties:
+                      method: {type: string, enum: [PUT, POST]}
+                      url: {type: string}
+                      headers: {type: object, additionalProperties: {type: string}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/preorders/{preorderId}/products:
+    get:
+      tags: [Pre-orders]
+      operationId: listStaffPreorderProducts
+      security: [{sessionCookie: []}]
+      summary: The window's products (late-add item list)
+      description: delivery-runs `GET /v1/preorders/{id}/products` → items [{atin, name, price (minor units), sellerName}].
+      parameters: [{$ref: '#/components/parameters/PreorderId'}]
+      responses:
+        '200': {description: Products, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderItems'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/preorders/{preorderId}:
     get:
@@ -934,7 +1033,7 @@ paths:
       description: delivery-runs `GET /v1/preorders/{id}`.
       parameters: [{$ref: '#/components/parameters/PreorderId'}]
       responses:
-        '200': {description: Window, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderWindow'}}}}
+        '200': {description: Window, headers: {ETag: {description: 'Optimistic-lock version ("<version>"); send it back as If-Match', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderWindow'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
@@ -952,7 +1051,7 @@ paths:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderDraft'}}}
       responses:
-        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderWindow'}}}}
+        '200': {description: Saved, headers: {ETag: {description: 'Optimistic-lock version ("<version>"); send it back as If-Match', schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/StaffPreorderWindow'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
@@ -1138,13 +1237,17 @@ paths:
       description: |
         identity `GET /v1/admin/users?q=&size=10` (customers only) and, per hit, `GET /v1/admin/users/{id}/addresses`
         (best effort: `addressesUnavailable` when identity can't list them — enter a new address). Needs the late-add
-        ability on preorders.
+        ability on preorders. Fewer than 2 characters answer no one. `windowId` is the window the late add is for
+        (validated; reserved for ranking customers of the window's areas first). Addresses are default first; the
+        customer's city / region / country are the default address's.
       parameters:
-        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 120}}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: windowId, in: query, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'}}
       responses:
         '200': {description: Customers, content: {application/json: {schema: {$ref: '#/components/schemas/LateAddCustomers'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
 components:
@@ -1202,8 +1305,8 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     StaffModuleKey:
       type: string
-      description: Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived).
-      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, preorders, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications]
+      description: Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
+      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications, preorders]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -2185,8 +2288,10 @@ components:
         code: {type: string, examples: [LBK-7]}
         name: {type: string}
         status: {type: string, description: 'DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED (derived)'}
-        doorFee: {type: [integer, 'null'], description: Effective door fee (override or settings)}
-        pickupFee: {type: [integer, 'null']}
+        doorFeeOverride: {type: [integer, 'null'], description: Window override in minor units (null = the settings' fee for its currency)}
+        pickupFeeOverride: {type: [integer, 'null']}
+        effectiveDoorFee: {type: integer, description: 'Door fee shoppers pay (override, else settings), minor units'}
+        effectivePickupFee: {type: integer}
         currency: {type: string}
         pickupWindow: {type: [string, 'null']}
         allowedMethods: {type: array, items: {type: string, enum: [CARD, WALLET, ACH]}}
@@ -2199,7 +2304,7 @@ components:
       additionalProperties: true
       description: |
         Platform settings (delivery-runs): enabled, fallback (SHIP | WAITLIST), placements {ribbon, hero, badge, pdp,
-        cart, family}, payment {doorFee (per currency, minor units), pickupFee, pickupWindow, allowedMethods
+        cart, family}, payment {doorFee and pickupFee (per currency, minor units), pickupWindow, allowedMethods
         [CARD, WALLET, ACH], lateAdd {savedCard, paymentLink, linkExpiryHours}, missedDelivery {offerRefund,
         offerNewDate}}. Answers carry `can`.
       properties:
@@ -2210,8 +2315,8 @@ components:
           type: object
           additionalProperties: true
           properties:
-            doorFee: {type: object, additionalProperties: {type: integer}, examples: [{USD: 799}]}
-            pickupFee: {type: integer}
+            doorFee: {type: object, additionalProperties: {type: integer}, description: Minor units per currency, examples: [{USD: 799, CAD: 999}]}
+            pickupFee: {type: object, additionalProperties: {type: integer}, description: Minor units per currency, examples: [{USD: 0, CAD: 0}]}
             pickupWindow: {type: string, examples: [10am–2pm]}
             allowedMethods: {type: array, items: {type: string, enum: [CARD, WALLET, ACH]}}
             lateAdd:
@@ -2263,17 +2368,14 @@ components:
         note: {type: string, maxLength: 500}
     LateAddAddress:
       type: object
-      required: [id, label, line1, line2, city, region, postalCode, country, default]
+      required: [id, label, line1, city, region, zip]
       properties:
         id: {type: string}
-        label: {type: [string, 'null']}
+        label: {type: string}
         line1: {type: string}
-        line2: {type: [string, 'null']}
         city: {type: string}
         region: {type: string}
-        postalCode: {type: string}
-        country: {type: string}
-        default: {type: boolean}
+        zip: {type: string}
     LateAddCustomers:
       type: object
       required: [items]
@@ -2282,12 +2384,14 @@ components:
           type: array
           items:
             type: object
-            required: [id, name, email, phone, enabled, addresses, addressesUnavailable]
+            required: [id, name, phone, email, city, region, country, addresses]
             properties:
               id: {type: string}
               name: {type: string}
+              phone: {type: string}
               email: {type: string}
-              phone: {type: [string, 'null']}
-              enabled: {type: boolean}
+              city: {type: string}
+              region: {type: string}
+              country: {type: string}
               addresses: {type: array, items: {$ref: '#/components/schemas/LateAddAddress'}}
-              addressesUnavailable: {type: boolean}
+              addressesUnavailable: {type: boolean, description: identity could not list the addresses (enter a new one)}

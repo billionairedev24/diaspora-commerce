@@ -40,6 +40,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			Retail: upstreams.NewStaffUpstream(client("retail", up.Retail)), Fulfilment: upstreams.NewStaffUpstream(client("fulfilment", up.Fulfilment)),
 			Content: upstreams.NewStaffUpstream(client("content", up.Content)), Notifications: upstreams.NewStaffUpstream(client("notifications", up.Notifications)),
 			Bookings: upstreams.NewStaffUpstream(client("bookings", up.Bookings)), DeliveryRuns: upstreams.NewStaffUpstream(sc.deliveryRuns),
+			Media: upstreams.NewStaffUpstream(media), Geo: upstreams.NewStaffUpstream(client("geo", up.Geo)),
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
 		Jobs: valkey.NewExportJobs(rdb), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,

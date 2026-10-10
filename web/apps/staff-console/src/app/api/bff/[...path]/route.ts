@@ -9,7 +9,7 @@ import { bffOrigin, mocksEnabled } from '@/lib/config';
 
 export const dynamic = 'force-dynamic';
 
-const FORWARD_REQUEST = ['accept', 'accept-language', 'content-type', 'cookie', 'idempotency-key', 'if-none-match', 'origin', 'user-agent', 'x-request-id'];
+const FORWARD_REQUEST = ['accept', 'accept-language', 'content-type', 'cookie', 'idempotency-key', 'if-match', 'if-none-match', 'origin', 'user-agent', 'x-request-id'];
 const FORWARD_RESPONSE = ['cache-control', 'content-disposition', 'content-type', 'etag', 'location', 'retry-after', 'x-request-id'];
 
 async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] }> }): Promise<Response> {
