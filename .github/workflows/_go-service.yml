@@ -1,8 +1,9 @@
 # Reusable pipeline for ONE Go service (go/services/<service>, its own module). Called by go-<service>.yml,
 # which is path-filtered so a change to one service only builds that service.
-#   verify   : golangci-lint (go/.golangci.yml), go vet, go test -race incl. Testcontainers integration tests
+#   verify   : golangci-lint (go/.golangci.yml), go vet, go test -race incl. Testcontainers integration tests,
+#              coverage gate (tools/quality/coverage_report.sh, thresholds in coverage-thresholds.conf)
 #   contract : api/openapi.yaml == contracts/openapi/<svc>.yaml, breaking-change diff vs base (oasdiff)
-#   security : gitleaks, Trivy filesystem scan, govulncheck, optional CodeQL
+#   security : gitleaks, Trivy filesystem scan (HIGH/CRITICAL), govulncheck, Semgrep, optional CodeQL
 #   helm     : chart lint + template (dev/uat/prod x none/aws/gcp/azure) + kubeconform
 #   image    : multi-arch build (context go/) -> GHCR, Trivy image scan, Syft SBOM, cosign keyless (main only)
 name: _go-service
@@ -47,7 +48,7 @@ jobs:
     outputs:
       exists: ${{ steps.check.outputs.exists }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: check
         run: |
           if [[ -f "$SERVICE_DIR/go.mod" ]]; then
@@ -64,15 +65,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: |
             ${{ env.SERVICE_DIR }}/go.sum
             go/pkg/go.sum
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14.0
           # Build the linter with the job's Go 1.27.2 so it understands the module's go directive.
@@ -84,15 +85,20 @@ jobs:
         run: go vet ./...
       - name: go test -race (unit + Testcontainers integration)
         working-directory: ${{ env.SERVICE_DIR }}
-        run: go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./...
-      - name: Coverage summary
-        working-directory: ${{ env.SERVICE_DIR }}
-        run: go tool cover -func=coverage.out | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+        run: |
+          mkdir -p ../../.coverage
+          go test -race -count=1 -covermode=atomic -coverpkg=./... -coverprofile="../../.coverage/${SERVICE}.out" ./...
+      - name: Coverage gate (tools/quality/coverage-thresholds.conf)
+        # Total (cmd/ and testkit/ excluded) and internal/domain statement coverage vs the service's threshold;
+        # writes the table to the step summary and fails below it (docs/engineering/testing.md section 5).
+        run: tools/quality/coverage_report.sh --service "$SERVICE"
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-${{ inputs.service }}
-          path: ${{ env.SERVICE_DIR }}/coverage.out
+          path: |
+            go/.coverage/${{ inputs.service }}.out
+            build/coverage/coverage-summary.json
           if-no-files-found: ignore
           retention-days: 14
 
@@ -102,7 +108,7 @@ jobs:
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Service copy matches contracts/
@@ -131,7 +137,7 @@ jobs:
             breaking /specs/base.yaml /specs/head.yaml --fail-on ERR --format githubactions
 
   security:
-    name: security (gitleaks, trivy fs, govulncheck)
+    name: security (gitleaks, trivy fs, govulncheck, semgrep)
     needs: meta
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
@@ -139,8 +145,8 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ env.SERVICE_DIR }}/go.sum
@@ -158,11 +164,26 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
-      - name: govulncheck
-        working-directory: ${{ env.SERVICE_DIR }}
+      - name: govulncheck (reachable vulnerabilities, stdlib included)
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          "$(go env GOPATH)/bin/govulncheck" ./...
+          go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+          tools/security/govulncheck.sh "$SERVICE"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Semgrep (tools/security/semgrep.yml; ERROR fails)
+        run: |
+          pip install --quiet semgrep==1.180.0
+          tools/security/run_semgrep.sh -- "$SERVICE_DIR"
+      - name: Semgrep registry packs (report only until the first full scan is triaged)
+        continue-on-error: true
+        run: tools/security/run_semgrep.sh --registry --sarif semgrep.sarif -- "$SERVICE_DIR"
+      - name: Upload Semgrep SARIF
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep-${{ inputs.service }}
       - name: CodeQL init
         if: inputs.codeql
         uses: github/codeql-action/init@v4
@@ -182,7 +203,7 @@ jobs:
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/helm-check
         with:
           chart: ${{ env.SERVICE_DIR }}/deploy/helm
@@ -202,7 +223,7 @@ jobs:
       tag: ${{ steps.publish.outputs.tag }}
       digest: ${{ steps.publish.outputs.digest }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: publish
         uses: ./.github/actions/publish-image
         with:
@@ -210,3 +231,6 @@ jobs:
           context: go
           dockerfile: go/services/${{ inputs.service }}/Dockerfile
           push: ${{ inputs.publish }}
+          # S010: distroless/static:nonroot, under 60 MB, prod defaults on port 8080.
+          max-size-mb: "60"
+          required-env: APP_ENV=prod PORT=8080

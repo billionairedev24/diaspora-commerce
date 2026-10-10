@@ -1,5 +1,6 @@
 # Reusable pipeline for ONE web app (web/apps/<app>): lint, typecheck, test, Next.js build, OpenNext
-# (Cloudflare adapter) build, then deploy to Cloudflare Workers:
+# (Cloudflare adapter) build, security (gitleaks, Semgrep, osv-scanner on pnpm-lock.yaml; a finding blocks the
+# deploy), then deploy to Cloudflare Workers:
 #   target=preview -> `wrangler versions upload --preview-alias pr-<n>` (preview URL commented on the PR)
 #   target=dev|uat|prod -> `wrangler deploy --name <app>-<env>` (Workers routes from infra/cloudflare)
 # Vercel fallback (input `vercel`): the same app deployed with the Vercel CLI (prebuilt output).
@@ -46,7 +47,7 @@ jobs:
     outputs:
       exists: ${{ steps.check.outputs.exists }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: check
         run: |
           if [[ -f "$APP_DIR/package.json" ]]; then echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -62,9 +63,9 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -80,7 +81,7 @@ jobs:
       - name: OpenNext build (Cloudflare Workers)
         working-directory: ${{ env.APP_DIR }}
         run: pnpm exec opennextjs-cloudflare build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-${{ inputs.app }}
           path: |
@@ -89,9 +90,53 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
+  security:
+    name: security (gitleaks, semgrep, osv-scanner)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      OSV_SCANNER_VERSION: v2.6.0
+    steps:
+      - uses: actions/checkout@v7
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            dir /repo/web --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Semgrep (tools/security/semgrep.yml; ERROR fails)
+        run: |
+          pip install --quiet semgrep==1.180.0
+          tools/security/run_semgrep.sh -- "$APP_DIR" web/packages
+      - name: Semgrep registry packs (report only until the first full scan is triaged)
+        continue-on-error: true
+        run: tools/security/run_semgrep.sh --registry --sarif semgrep.sarif -- "$APP_DIR" web/packages
+      - name: Upload Semgrep SARIF
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep-web-${{ inputs.app }}
+      - name: osv-scanner (pnpm-lock.yaml; CRITICAL = CVSS >= 9 fails)
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/osv-scanner" \
+            "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          chmod +x "$RUNNER_TEMP/osv-scanner"
+          # osv-scanner exits 1 on any finding, so the gate is on the highest severity per advisory group.
+          "$RUNNER_TEMP/osv-scanner" scan source --config tools/security/osv-scanner.toml --lockfile pnpm-lock.yaml \
+            --format json --output osv.json || true
+          jq -r '.results[]?.packages[]? as $p | $p.groups[]? | "\(.max_severity // "?")\t\($p.package.name)@\($p.package.version)\t\(.ids | join(","))"' \
+            osv.json | sort -rn | tee -a "$GITHUB_STEP_SUMMARY"
+          jq -e '[.results[]?.packages[]?.groups[]? | select((.max_severity // "0" | tonumber? // 0) >= 9)] | length == 0' osv.json
+
   cloudflare:
     name: Cloudflare Workers (${{ inputs.target }})
-    needs: [meta, build]
+    needs: [meta, build, security]
     if: needs.meta.outputs.exists == 'true' && inputs.target != ''
     runs-on: ubuntu-latest
     environment:
@@ -107,8 +152,8 @@ jobs:
       - name: Cloudflare not configured
         if: env.HAS_CF != 'true'
         run: echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set for this environment; not deployed."
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: web-${{ inputs.app }}
           path: ${{ env.APP_DIR }}
@@ -134,7 +179,7 @@ jobs:
       - name: Deploy
         id: deploy
         if: env.HAS_CF == 'true'
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -159,7 +204,7 @@ jobs:
 
   vercel:
     name: Vercel fallback (${{ inputs.target }})
-    needs: [meta, build]
+    needs: [meta, build, security]
     if: needs.meta.outputs.exists == 'true' && inputs.vercel && inputs.target != ''
     runs-on: ubuntu-latest
     environment:
@@ -170,9 +215,9 @@ jobs:
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_ENV: ${{ inputs.target == 'prod' && 'production' || 'preview' }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Build and deploy (prebuilt)

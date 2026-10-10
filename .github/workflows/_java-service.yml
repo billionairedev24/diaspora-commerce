@@ -1,8 +1,9 @@
 # Reusable pipeline for ONE Java service (java/services/<service>). Called by java-<service>.yml, which is
 # path-filtered so a change to one service only builds that service.
-#   verify   : Checkstyle/Spotless + unit + ArchUnit + Testcontainers ITs (./mvnw verify), JaCoCo report
+#   verify   : Checkstyle/Spotless + unit + ArchUnit + Testcontainers ITs (./mvnw verify), JaCoCo report,
+#              coverage gate (tools/quality/coverage_report.sh, thresholds in coverage-thresholds.conf)
 #   contract : OpenAPI breaking-change diff vs the base branch (oasdiff)
-#   security : gitleaks, Trivy filesystem scan, optional CodeQL
+#   security : gitleaks, Trivy filesystem scan (HIGH/CRITICAL), Semgrep, optional CodeQL
 #   helm     : chart lint + template (dev/uat/prod x none/aws/gcp/azure) + kubeconform
 #   image    : multi-arch build -> GHCR, Trivy image scan, Syft SBOM, cosign keyless sign (main only)
 name: _java-service
@@ -51,7 +52,7 @@ jobs:
     outputs:
       exists: ${{ steps.check.outputs.exists }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: check
         run: |
           if [[ -f "$SERVICE_DIR/pom.xml" ]]; then
@@ -68,8 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "25"
@@ -82,9 +83,12 @@ jobs:
       - name: Verify ${{ inputs.service }}
         working-directory: java
         run: ./mvnw -B -ntp -f "services/${SERVICE}/pom.xml" verify
+      - name: Coverage gate (tools/quality/coverage-thresholds.conf)
+        # JaCoCo line coverage (total and .../domain packages) vs the service's threshold; fails below it.
+        run: tools/quality/coverage_report.sh --service "$SERVICE"
       - name: Test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reports-${{ inputs.service }}
           path: |
@@ -100,7 +104,7 @@ jobs:
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Breaking changes vs base branch
@@ -122,7 +126,7 @@ jobs:
             breaking /specs/base.yaml /specs/head.yaml --fail-on ERR --format githubactions
 
   security:
-    name: security (gitleaks, trivy fs${{ inputs.codeql && ', codeql' || '' }})
+    name: security (gitleaks, trivy fs, semgrep${{ inputs.codeql && ', codeql' || '' }})
     needs: meta
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
@@ -130,7 +134,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: gitleaks
@@ -147,6 +151,22 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Semgrep (tools/security/semgrep.yml; ERROR fails)
+        run: |
+          pip install --quiet semgrep==1.180.0
+          tools/security/run_semgrep.sh -- "$SERVICE_DIR" java/libs
+      - name: Semgrep registry packs (report only until the first full scan is triaged)
+        continue-on-error: true
+        run: tools/security/run_semgrep.sh --registry --sarif semgrep.sarif -- "$SERVICE_DIR" java/libs
+      - name: Upload Semgrep SARIF
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep-${{ inputs.service }}
       - name: CodeQL init
         if: inputs.codeql
         uses: github/codeql-action/init@v4
@@ -165,7 +185,7 @@ jobs:
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/helm-check
         with:
           chart: ${{ env.SERVICE_DIR }}/deploy/helm
@@ -185,7 +205,7 @@ jobs:
       tag: ${{ steps.publish.outputs.tag }}
       digest: ${{ steps.publish.outputs.digest }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: publish
         uses: ./.github/actions/publish-image
         with:
@@ -194,3 +214,7 @@ jobs:
           dockerfile: java/Dockerfile
           build-args: SERVICE=${{ inputs.service }}
           push: ${{ inputs.publish }}
+          # S010: layered jar on eclipse-temurin:25-jre, uid 1000, prod profile; the budget is a guard rail
+          # (JRE ~280 MB + the largest fat jar ~80 MB measured 2026-10-10).
+          max-size-mb: "450"
+          required-env: SPRING_PROFILES_ACTIVE=prod

@@ -12,7 +12,7 @@ File classes (anything else is not scanned):
            and non-test source (.java .kt .go .ts .tsx .js .jsx .mjs .cjs .sql)
            -> NO AfroTransact host at all (use PUBLIC_WEB_URL, AUTH_ISSUER_URL, ... with a localhost default)
   dev/uat  application-<env>.yml, config/<env>.yaml, values-<env>.yaml, infra/argocd/envs/<env>/**,
-           infra/k8s/platform/envs/<env>/**
+           infra/k8s/platform/envs/<env>/**, infra/k8s/platform/<layer>/overlays/<env>/**
            -> only hosts of that environment (a prod or other-env host fails)
   prod     the same files for prod, .env.production -> no dev/uat host
   multi    files that hold every environment side by side: web wrangler.jsonc / wrangler.toml (vars per Worker
@@ -142,7 +142,8 @@ def classify(rel: str) -> str | None:
     m = re.fullmatch(r"values-(\w+)\.ya?ml", name)
     if m:
         return m.group(1) if m.group(1) in ENVS else None
-    m = re.match(r"infra/argocd/envs/(dev|uat|prod)/", rel) or re.match(r"infra/k8s/platform/envs/(dev|uat|prod)/", rel)
+    m = re.match(r"infra/argocd/envs/(dev|uat|prod)/", rel) or \
+        re.match(r"infra/k8s/platform/(?:envs|[\w-]+/overlays)/(dev|uat|prod)/", rel)
     if m and rel.endswith((".yaml", ".yml")):
         return m.group(1)
     if rel.startswith("infra/k8s/platform/values/") and rel.endswith((".yaml", ".yml")):

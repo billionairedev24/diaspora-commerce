@@ -9,7 +9,7 @@ on:
       service:
         description: Service
         type: choice
-        options: [identity, catalog, offers, inventory, orders, payments, seller, retail, fulfilment, bookings, trust-ops, tax-returns, content, ai-gateway, mcp-server, gateway-bff, search, indexer, cart, promise, geo, storefront, media, notifications, carrier-gateway, authz-sync]
+        options: [identity, catalog, offers, inventory, orders, payments, seller, retail, fulfilment, bookings, trust-ops, tax-returns, content, ai-gateway, mcp-server, gateway-bff, search, indexer, cart, promise, geo, storefront, media, notifications, carrier-gateway, authz-sync, delivery-runs]
       environment:
         description: Target environment
         type: choice
@@ -29,7 +29,7 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: tag
         env:
           SERVICE: ${{ inputs.service }}

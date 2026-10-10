@@ -1,13 +1,17 @@
-# Fails when a production host (or another environment's host) is hard-coded where it shouldn't be (S251).
-# See docs/engineering/environments.md.
+# Environment configuration guards (docs/engineering/environments.md):
+#   env-urls   : fails when a production host (or another environment's host) is hard-coded where it shouldn't be (S251)
+#   env-config : every service has its local/dev/uat/prod profiles, API reference pages on in local/dev/uat and off in
+#                prod, trace sampling 100/50/10%, and the per-environment sizing rules (S188, S182)
 name: env-urls
 
 on:
   push:
     branches: [main]
-    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, .github/workflows/env-urls.yml]
+    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py,
+            .github/workflows/env-urls.yml]
   pull_request:
-    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, .github/workflows/env-urls.yml]
+    paths: [java/**, go/**, web/**, mobile/**, infra/**, tools/ci/check_env_urls.py, tools/ci/check_env_config.py,
+            .github/workflows/env-urls.yml]
 
 permissions:
   contents: read
@@ -17,6 +21,18 @@ jobs:
     name: environment URL guard
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: No hard-coded environment hosts
         run: python3 tools/ci/check_env_urls.py --format github
+
+  env-config:
+    name: environment configuration guard
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install --quiet pyyaml==6.0.3
+      - name: Profiles, docs pages, trace sampling, sizing per environment
+        run: python3 tools/ci/check_env_config.py --format github

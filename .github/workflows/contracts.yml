@@ -23,13 +23,13 @@ jobs:
     name: lint, generated clients, merged AsyncAPI (tools/contracts)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - run: pip install pyyaml==6.0.2
@@ -45,10 +45,10 @@ jobs:
     name: OpenAPI lint + diff
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           package-manager-cache: false
           node-version: "22"
@@ -94,8 +94,8 @@ jobs:
     name: AsyncAPI validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           package-manager-cache: false
           node-version: "22"

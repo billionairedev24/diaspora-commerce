@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+"""Per-environment configuration guard (S188 environment configuration, S182 sizing defaults).
+
+Checks every service against the environment rules in docs/engineering/environments.md:
+
+  profiles     Java: application.yml + application-{local,dev,uat,prod}.yml; Go: config/{local,dev,uat,prod}.yaml;
+               Helm: values.yaml + values-{dev,uat,prod}.yaml with `env:` matching the file.
+  docs pages   API reference pages (Swagger UI, Scalar, Redoc) on in local/dev/uat, off in prod:
+               Java at.api-docs.enabled (+ springdoc api-docs / swagger-ui disabled in prod), Go docsEnabled.
+  sampling     trace sampling 100% dev (and local), 50% uat, 10% prod: Java management.tracing.sampling.probability
+               (literal or the ${TRACE_SAMPLING:<default>} default), Go telemetry.sampleRatio, Helm telemetry.sampling
+               (injected as TRACE_SAMPLING, so it wins over the profile default).
+  sizing       (S182) dev: 1 replica, no HPA, tolerates the spot pool; uat: tolerates the spot pool; prod: no spot
+               toleration, at least 2 replicas or an HPA with min >= 2; every env sets CPU/memory requests and a
+               memory limit.
+  image        no `latest` tag in any values file.
+
+  python3 tools/ci/check_env_config.py                 # whole repository; exit 1 on violations
+  python3 tools/ci/check_env_config.py --format github # ::error annotations
+  python3 tools/ci/check_env_config.py --service cart  # one service (repeatable)
+
+Standard library + PyYAML. Exit 0 clean, 1 violations, 2 usage error.
+"""
+from __future__ import annotations
+
+import argparse
+import pathlib
+import re
+import sys
+
+import yaml
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+ENVS = ["local", "dev", "uat", "prod"]
+DEPLOYED = ["dev", "uat", "prod"]
+SAMPLING = {"local": 1.0, "dev": 1.0, "uat": 0.5, "prod": 0.1}
+DOCS_ON = {"local": True, "dev": True, "uat": True, "prod": False}
+SPOT_KEY = "afrotransact.com/spot"
+PLACEHOLDER = re.compile(r"^\$\{([A-Z0-9_]+)(?::([^}]*))?\}$")
+
+
+class Report:
+    def __init__(self, fmt: str) -> None:
+        self.fmt = fmt
+        self.errors: list[tuple[str, str]] = []
+        self.checked = 0
+
+    def error(self, path: pathlib.Path, msg: str) -> None:
+        self.errors.append((str(path.relative_to(ROOT)), msg))
+
+    def emit(self) -> int:
+        for path, msg in self.errors:
+            if self.fmt == "github":
+                print(f"::error file={path}::{msg}")
+            else:
+                print(f"{path}: {msg}")
+        status = "OK" if not self.errors else "FAIL"
+        print(f"check_env_config: {status} - {len(self.errors)} violation(s) in {self.checked} service(s)")
+        return 1 if self.errors else 0
+
+
+def load(path: pathlib.Path) -> dict:
+    try:
+        docs = [d for d in yaml.safe_load_all(path.read_text(encoding="utf-8")) if d]
+    except yaml.YAMLError as err:
+        raise SystemExit(f"{path}: invalid YAML: {err}")
+    merged: dict = {}
+    for d in docs:  # Spring allows several documents; later ones override
+        if isinstance(d, dict):
+            merged = deep_merge(merged, d)
+    return merged
+
+
+def deep_merge(a: dict, b: dict) -> dict:
+    out = dict(a)
+    for k, v in b.items():
+        out[k] = deep_merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def get(d: dict, dotted: str):
+    """Spring-style lookup: nested keys or flattened 'a.b' keys at any level."""
+    parts = dotted.split(".")
+    for i in range(len(parts), 0, -1):
+        head, rest = ".".join(parts[:i]), parts[i:]
+        if isinstance(d, dict) and head in d:
+            return get(d[head], ".".join(rest)) if rest else d[head]
+    return None
+
+
+def resolve(value):
+    """Literal value or the default of a ${ENV:default} placeholder (None when there is no default)."""
+    if isinstance(value, str):
+        m = PLACEHOLDER.match(value.strip())
+        if m:
+            return yaml.safe_load(m.group(2)) if m.group(2) is not None else None
+    return value
+
+
+def as_bool(value) -> bool | None:
+    value = resolve(value)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str) and value.lower() in ("true", "false"):
+        return value.lower() == "true"
+    return None
+
+
+def as_float(value) -> float | None:
+    value = resolve(value)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+# ------------------------------------------------------------------------------------------------ Java
+def check_java(svc_dir: pathlib.Path, rep: Report) -> None:
+    res = svc_dir / "src/main/resources"
+    base_file = res / "application.yml"
+    if not base_file.exists():
+        rep.error(svc_dir, "missing src/main/resources/application.yml")
+        return
+    base = load(base_file)
+    for env in ENVS:
+        f = res / f"application-{env}.yml"
+        if not f.exists():
+            rep.error(f, f"missing Spring profile application-{env}.yml")
+            continue
+        eff = deep_merge(base, load(f))
+        docs = as_bool(get(eff, "at.api-docs.enabled"))
+        docs = True if docs is None else docs  # the platform default is on
+        if docs != DOCS_ON[env]:
+            rep.error(f, f"at.api-docs.enabled is {str(docs).lower()}; API reference pages must be "
+                         f"{'on' if DOCS_ON[env] else 'off'} in {env}")
+        if env == "prod":
+            for key in ("springdoc.api-docs.enabled", "springdoc.swagger-ui.enabled"):
+                if as_bool(get(eff, key)) is not False:
+                    rep.error(f, f"{key} must be false in prod")
+        prob = as_float(get(eff, "management.tracing.sampling.probability"))
+        if prob is None or abs(prob - SAMPLING[env]) > 1e-9:
+            rep.error(f, f"management.tracing.sampling.probability resolves to {prob}; {env} samples {SAMPLING[env]}")
+
+
+# ------------------------------------------------------------------------------------------------ Go
+def check_go(svc_dir: pathlib.Path, rep: Report) -> None:
+    for env in ENVS:
+        f = svc_dir / "config" / f"{env}.yaml"
+        if not f.exists():
+            rep.error(svc_dir, f"missing config/{env}.yaml")
+            continue
+        cfg = load(f)
+        docs = as_bool(cfg.get("docsEnabled"))
+        if docs != DOCS_ON[env]:
+            rep.error(f, f"docsEnabled is {docs}; API reference pages must be {'on' if DOCS_ON[env] else 'off'} in {env}")
+        ratio = as_float(get(cfg, "telemetry.sampleRatio"))
+        if ratio is None or abs(ratio - SAMPLING[env]) > 1e-9:
+            rep.error(f, f"telemetry.sampleRatio is {ratio}; {env} samples {SAMPLING[env]}")
+
+
+# ------------------------------------------------------------------------------------------------ Helm
+def tolerates_spot(values: dict) -> bool:
+    return any(isinstance(t, dict) and t.get("key") == SPOT_KEY for t in values.get("tolerations") or [])
+
+
+def check_helm(chart: pathlib.Path, rep: Report) -> None:
+    base_file = chart / "values.yaml"
+    if not base_file.exists():
+        rep.error(chart, "missing deploy/helm/values.yaml")
+        return
+    base = load(base_file)
+    for f in [base_file] + sorted(chart.glob("values-*.yaml")):
+        tag = str(get(load(f), "image.tag") or "")
+        if tag == "latest":
+            rep.error(f, "image.tag must never be latest (Trivy KSV-0013; the deploy pipeline writes the git sha)")
+    for env in DEPLOYED:
+        f = chart / f"values-{env}.yaml"
+        if not f.exists():
+            rep.error(chart, f"missing deploy/helm/values-{env}.yaml")
+            continue
+        own = load(f)
+        v = deep_merge(base, own)
+        if own.get("env") != env:
+            rep.error(f, f"env is {own.get('env')!r}; must be {env!r}")
+        sampling = as_float(get(v, "telemetry.sampling"))
+        if sampling is None or abs(sampling - SAMPLING[env]) > 1e-9:
+            rep.error(f, f"telemetry.sampling is {sampling}; {env} samples {SAMPLING[env]}")
+        res = v.get("resources") or {}
+        req, lim = res.get("requests") or {}, res.get("limits") or {}
+        if not req.get("cpu") or not req.get("memory") or not lim.get("memory"):
+            rep.error(f, "resources must set requests.cpu, requests.memory and limits.memory")
+        hpa = v.get("autoscaling") or {}
+        replicas = int(v.get("replicas") or 0)
+        if env == "dev":
+            if hpa.get("enabled"):
+                rep.error(f, "dev runs a fixed single replica: autoscaling.enabled must be false")
+            if replicas != 1:
+                rep.error(f, f"dev runs 1 replica (found {replicas})")
+            if not tolerates_spot(v):
+                rep.error(f, f"dev workloads must tolerate the spot pool ({SPOT_KEY})")
+        elif env == "uat":
+            if not tolerates_spot(v):
+                rep.error(f, f"uat workloads must tolerate the spot pool ({SPOT_KEY})")
+        else:
+            if tolerates_spot(v):
+                rep.error(f, f"prod must not tolerate the spot pool ({SPOT_KEY}); spot capacity is for dev/uat")
+            floor = int(hpa.get("min") or 0) if hpa.get("enabled") else replicas
+            if floor < 2:
+                rep.error(f, f"prod needs at least 2 replicas (HPA min or replicas; found {floor})")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--format", choices=["text", "github"], default="text")
+    ap.add_argument("--service", action="append", default=[])
+    args = ap.parse_args()
+    rep = Report(args.format)
+    services = sorted(ROOT.glob("java/services/*/pom.xml")) + sorted(ROOT.glob("go/services/*/go.mod"))
+    for marker in services:
+        svc_dir = marker.parent
+        if args.service and svc_dir.name not in args.service:
+            continue
+        rep.checked += 1
+        (check_java if marker.name == "pom.xml" else check_go)(svc_dir, rep)
+        chart = svc_dir / "deploy/helm"
+        if chart.is_dir():
+            check_helm(chart, rep)
+        else:
+            rep.error(svc_dir, "missing deploy/helm chart")
+    if args.service and rep.checked == 0:
+        print(f"no such service: {', '.join(args.service)}", file=sys.stderr)
+        return 2
+    return rep.emit()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

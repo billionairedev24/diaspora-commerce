@@ -37,14 +37,14 @@ jobs:
       # Until the Cloudflare secrets are configured the portal is built but not deployed.
       HAS_CF: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: exists
         run: |
           if [[ -f "$PORTAL/package.json" ]]; then echo "exists=true" >> "$GITHUB_OUTPUT"
           else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "::notice::$PORTAL does not exist yet."; fi
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.exists.outputs.exists == 'true'
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         if: steps.exists.outputs.exists == 'true'
         with:
           node-version: "22"
@@ -55,7 +55,7 @@ jobs:
       - name: Deploy to Cloudflare Pages
         id: pages
         if: steps.exists.outputs.exists == 'true' && env.HAS_CF == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

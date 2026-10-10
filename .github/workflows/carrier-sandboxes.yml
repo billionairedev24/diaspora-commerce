@@ -1,0 +1,145 @@
+# Carrier sandbox smoke (S204), manual only: rates, address validation, label (+ idempotent replay, document),
+# tracking, void and signed FedEx/DHL webhooks against the USPS, UPS, FedEx and DHL Express sandboxes.
+#   target=ephemeral : builds carrier-gateway from this commit and runs it on the runner (APP_ENV=local: sandbox hosts,
+#                      auth off, Kafka off, labels on disk) with Postgres + Valkey service containers and the sandbox
+#                      credentials of the GitHub environment "carrier-sandbox".
+#   target=dev       : calls the deployed dev carrier-gateway (its sandbox credentials live in the dev secret store)
+#                      with a client-credentials token of the smoke client.
+# Runbook: docs/runbooks/carrier-sandboxes.md. Script: tools/smoke/carriers.sh.
+name: carrier-sandboxes
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Where carrier-gateway runs
+        type: choice
+        options: [ephemeral, dev]
+        default: ephemeral
+      carriers:
+        description: Carriers to test (space separated)
+        type: string
+        default: usps ups fedex dhl
+      rates_only:
+        description: Only rates and address validation (no labels bought)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: carrier-sandboxes
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.27.2"
+  GOTOOLCHAIN: local
+
+jobs:
+  smoke:
+    name: carrier sandboxes (${{ inputs.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.target == 'dev' && 'dev' || 'carrier-sandbox' }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: carriers
+          POSTGRES_PASSWORD: carriers
+          POSTGRES_DB: carriers
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U carriers" --health-interval 5s --health-timeout 5s --health-retries 20
+      valkey:
+        image: valkey/valkey:8
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "valkey-cli ping" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      CARRIERS: ${{ inputs.carriers }}
+      RATES_ONLY: ${{ inputs.rates_only }}
+      FEDEX_WEBHOOK_SECRET: ${{ secrets.FEDEX_WEBHOOK_SECRET }}
+      DHL_WEBHOOK_SECRET: ${{ secrets.DHL_WEBHOOK_SECRET }}
+      SMOKE_REPORT: carrier-smoke.jsonl
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        if: inputs.target == 'ephemeral'
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: go/services/carrier-gateway/go.sum
+
+      - name: Start carrier-gateway (sandbox credentials, APP_ENV=local)
+        if: inputs.target == 'ephemeral'
+        working-directory: go/services/carrier-gateway
+        env:
+          APP_ENV: local
+          PORT: "8209"
+          GOWORK: "off"
+          DB_URL: postgres://carriers:carriers@localhost:5432/carriers?sslmode=disable
+          REDIS_URL: redis://localhost:6379/0
+          KAFKA_ENABLED: "false"
+          AUTH_ENABLED: "false"
+          LABEL_STORE: fs
+          RATE_BUDGET: 5s       # sandboxes are slower than production; prod keeps the 1.5 s fan-out budget
+          LABEL_DIR: ${{ runner.temp }}/labels
+          USPS_CLIENT_ID: ${{ secrets.USPS_CLIENT_ID }}
+          USPS_CLIENT_SECRET: ${{ secrets.USPS_CLIENT_SECRET }}
+          USPS_PAYMENT_TOKEN: ${{ secrets.USPS_PAYMENT_TOKEN }}
+          UPS_CLIENT_ID: ${{ secrets.UPS_CLIENT_ID }}
+          UPS_CLIENT_SECRET: ${{ secrets.UPS_CLIENT_SECRET }}
+          UPS_ACCOUNT: ${{ secrets.UPS_ACCOUNT }}
+          UPS_WEBHOOK_CREDENTIAL: ${{ secrets.UPS_WEBHOOK_CREDENTIAL }}
+          FEDEX_CLIENT_ID: ${{ secrets.FEDEX_CLIENT_ID }}
+          FEDEX_CLIENT_SECRET: ${{ secrets.FEDEX_CLIENT_SECRET }}
+          FEDEX_ACCOUNT: ${{ secrets.FEDEX_ACCOUNT }}
+          DHL_USERNAME: ${{ secrets.DHL_USERNAME }}
+          DHL_PASSWORD: ${{ secrets.DHL_PASSWORD }}
+          DHL_ACCOUNT: ${{ secrets.DHL_ACCOUNT }}
+        run: |
+          mkdir -p "$LABEL_DIR"
+          go build -o "$RUNNER_TEMP/carrier-gateway" ./cmd/carrier-gateway
+          nohup "$RUNNER_TEMP/carrier-gateway" > "$RUNNER_TEMP/carrier-gateway.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -fsS http://localhost:8209/readyz >/dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          echo "::error::carrier-gateway did not become ready"; cat "$RUNNER_TEMP/carrier-gateway.log"; exit 1
+
+      - name: Smoke (ephemeral)
+        if: inputs.target == 'ephemeral'
+        env:
+          CARRIER_GATEWAY_URL: http://localhost:8209
+        run: |
+          args=(--carriers "$CARRIERS")
+          [[ "$RATES_ONLY" == true ]] && args+=(--rates-only)
+          tools/smoke/carriers.sh "${args[@]}"
+
+      - name: Smoke (dev)
+        if: inputs.target == 'dev'
+        env:
+          BASE_DOMAIN: ${{ vars.DEV_BASE_DOMAIN }}
+          SMOKE_CLIENT_ID: ${{ secrets.SMOKE_CLIENT_ID }}
+          SMOKE_CLIENT_SECRET: ${{ secrets.SMOKE_CLIENT_SECRET }}
+        run: |
+          [[ -n "$BASE_DOMAIN" ]] || { echo "::error::repository variable DEV_BASE_DOMAIN is not set"; exit 1; }
+          export CARRIER_GATEWAY_URL="https://api.${BASE_DOMAIN}/carrier-gateway"
+          export AUTH_TOKEN_URL="https://auth.${BASE_DOMAIN}/oauth2/token"
+          args=(--carriers "$CARRIERS")
+          [[ "$RATES_ONLY" == true ]] && args+=(--rates-only)
+          tools/smoke/carriers.sh "${args[@]}"
+
+      - name: carrier-gateway log
+        if: always() && inputs.target == 'ephemeral'
+        run: tail -n 300 "$RUNNER_TEMP/carrier-gateway.log" || true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: carrier-smoke-${{ inputs.target }}
+          path: carrier-smoke.jsonl
+          if-no-files-found: ignore
+          retention-days: 30

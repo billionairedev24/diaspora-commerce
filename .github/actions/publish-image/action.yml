@@ -1,8 +1,9 @@
 name: Publish signed image
 description: >
-  Multi-arch (linux/amd64 + linux/arm64) build and push to GHCR, Trivy image scan (CRITICAL fails),
-  Syft SPDX SBOM (artifact + cosign attestation), cosign keyless signature. Requires the job to have
-  `packages: write` and `id-token: write`.
+  Multi-arch (linux/amd64 + linux/arm64) reproducible build (SOURCE_DATE_EPOCH = commit time, layer timestamps
+  rewritten) and push to GHCR, image policy check (non-root user, port 8080, prod defaults, size budget),
+  Trivy image scan (CRITICAL fails), Syft SPDX SBOM (artifact + cosign attestation), cosign keyless signature.
+  Requires the job to have `packages: write` and `id-token: write`.
 inputs:
   service:
     description: Service name (image repository).
@@ -21,6 +22,16 @@ inputs:
     description: Push, scan, SBOM and sign (false = build only, e.g. on pull requests).
     required: false
     default: "true"
+  max-size-mb:
+    description: >
+      Size budget of the linux/amd64 image in MB (uncompressed, as `docker image ls` shows it); empty = no budget.
+      Go services: 60 (S010). Checked on every build, pull requests included.
+    required: false
+    default: ""
+  required-env:
+    description: Environment defaults the image must declare (space separated NAME=value), e.g. APP_ENV=prod.
+    required: false
+    default: ""
 outputs:
   image:
     description: Image repository without tag.
@@ -46,15 +57,24 @@ runs:
         echo "image=${image}" >> "$GITHUB_OUTPUT"
         echo "tag=${SHA}" >> "$GITHUB_OUTPUT"
 
-    - uses: docker/setup-qemu-action@v3
+    - uses: docker/setup-qemu-action@v4
       with:
         platforms: arm64
 
-    - uses: docker/setup-buildx-action@v3
+    - uses: docker/setup-buildx-action@v4
+
+    - name: Reproducible build timestamp
+      id: epoch
+      shell: bash
+      run: |
+        # SOURCE_DATE_EPOCH = the commit time, so the same commit always yields the same image digest: BuildKit
+        # uses it for the image config/history and (rewrite-timestamp) clamps every file mtime in the layers.
+        # Verified locally: two --no-cache builds of go/services/cart produce an identical OCI manifest digest.
+        echo "epoch=$(git log -1 --format=%ct HEAD)" >> "$GITHUB_OUTPUT"
 
     - name: Log in to GHCR
       if: inputs.push == 'true'
-      uses: docker/login-action@v3
+      uses: docker/login-action@v4
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
@@ -62,7 +82,7 @@ runs:
 
     - name: Labels
       id: labels
-      uses: docker/metadata-action@v5
+      uses: docker/metadata-action@v6
       with:
         images: ${{ steps.meta.outputs.image }}
         tags: |
@@ -75,7 +95,7 @@ runs:
 
     - name: Build and push
       id: build
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@v7
       with:
         context: ${{ inputs.context }}
         file: ${{ inputs.dockerfile }}
@@ -83,12 +103,62 @@ runs:
           VERSION=${{ steps.meta.outputs.tag }}
           ${{ inputs.build-args }}
         platforms: linux/amd64,linux/arm64
-        push: ${{ inputs.push == 'true' }}
+        outputs: type=image,push=${{ inputs.push == 'true' }},rewrite-timestamp=true
         tags: ${{ steps.labels.outputs.tags }}
         labels: ${{ steps.labels.outputs.labels }}
         provenance: mode=max
         cache-from: type=gha,scope=${{ inputs.service }}
         cache-to: type=gha,scope=${{ inputs.service }},mode=max
+      env:
+        SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+
+    - name: Load linux/amd64 image for the policy check
+      uses: docker/build-push-action@v7
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        build-args: |
+          VERSION=${{ steps.meta.outputs.tag }}
+          ${{ inputs.build-args }}
+        platforms: linux/amd64
+        load: true
+        tags: local/${{ inputs.service }}:policy-check
+        cache-from: type=gha,scope=${{ inputs.service }}
+      env:
+        SOURCE_DATE_EPOCH: ${{ steps.epoch.outputs.epoch }}
+
+    - name: Image policy (non-root, port 8080, prod defaults, size budget)
+      shell: bash
+      env:
+        IMAGE: local/${{ inputs.service }}:policy-check
+        MAX_MB: ${{ inputs.max-size-mb }}
+        REQUIRED_ENV: ${{ inputs.required-env }}
+      run: |
+        set -euo pipefail
+        fail=0
+        user="$(docker image inspect --format '{{.Config.User}}' "$IMAGE")"
+        case "${user%%:*}" in
+          ""|root|0) echo "::error title=image policy::$IMAGE runs as root (USER '${user}'); set a non-root USER"; fail=1 ;;
+        esac
+        ports="$(docker image inspect --format '{{json .Config.ExposedPorts}}' "$IMAGE")"
+        [[ "$ports" == *'"8080/tcp"'* ]] || { echo "::error title=image policy::$IMAGE does not EXPOSE 8080 ($ports)"; fail=1; }
+        envs="$(docker image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$IMAGE")"
+        for kv in $REQUIRED_ENV; do
+          grep -qxF "$kv" <<<"$envs" || { echo "::error title=image policy::$IMAGE lacks ENV $kv"; fail=1; }
+        done
+        bytes="$(docker image inspect --format '{{.Size}}' "$IMAGE")"
+        mb="$(awk -v b="$bytes" 'BEGIN { printf "%.1f", b / 1000000 }')"
+        {
+          echo "### Image policy: ${{ inputs.service }}"
+          echo "| user | exposed | size (linux/amd64, uncompressed) | budget |"
+          echo "|---|---|---|---|"
+          echo "| \`${user}\` | \`${ports}\` | ${mb} MB | ${MAX_MB:-none} MB |"
+        } >> "$GITHUB_STEP_SUMMARY"
+        if [[ -n "$MAX_MB" ]] && awk -v m="$mb" -v x="$MAX_MB" 'BEGIN { exit !(m > x) }'; then
+          echo "::error title=image size::$IMAGE is ${mb} MB, over the ${MAX_MB} MB budget"; fail=1
+        fi
+        docker image rm "$IMAGE" >/dev/null
+        exit "$fail"
 
     - name: Trivy image scan (CRITICAL fails)
       if: inputs.push == 'true'

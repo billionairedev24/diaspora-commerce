@@ -54,8 +54,8 @@ jobs:
     name: fmt, validate, tflint, policy tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: opentofu/setup-opentofu@v1
+      - uses: actions/checkout@v7
+      - uses: opentofu/setup-opentofu@v2
         with:
           tofu_wrapper: false
       - name: tofu fmt
@@ -83,7 +83,7 @@ jobs:
               echo "::endgroup::"
             done
           done
-      - uses: terraform-linters/setup-tflint@v4
+      - uses: terraform-linters/setup-tflint@v6
         with:
           tflint_version: ${{ env.TFLINT_VERSION }}
       - name: tflint (modules + bootstrap; env roots use OpenTofu provider for_each which tflint cannot parse)
@@ -148,11 +148,12 @@ jobs:
       EC_API_KEY: ${{ secrets.EC_API_KEY }}
       CONFLUENT_CLOUD_API_KEY: ${{ secrets.CONFLUENT_CLOUD_API_KEY }}
       CONFLUENT_CLOUD_API_SECRET: ${{ secrets.CONFLUENT_CLOUD_API_SECRET }}
+      TEMPORAL_CLOUD_API_KEY: ${{ secrets.TEMPORAL_CLOUD_API_KEY }}
     defaults:
       run:
         working-directory: infra/terraform/envs/${{ matrix.env }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Target
         id: target
         run: |
@@ -230,7 +231,7 @@ jobs:
       run:
         working-directory: infra/cloudflare
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Target
         id: target
         run: echo "cloud=$(jq -r '.cloud' <<<"$TARGET")" >> "$GITHUB_OUTPUT"

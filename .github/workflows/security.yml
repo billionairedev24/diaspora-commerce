@@ -1,8 +1,14 @@
 # Repo-wide security scanning (S201). Per-service pipelines already gate each PR with gitleaks, Trivy fs,
-# Trivy image (CRITICAL fails) and SBOMs; this workflow adds the whole-repo, scheduled view:
+# Semgrep, govulncheck (Go), osv-scanner (web), Trivy image (CRITICAL fails) and SBOMs; this workflow adds the
+# whole-repo, scheduled view (docs/engineering/security-scanning.md section 3):
 #   CodeQL (java-kotlin, go, javascript-typescript, actions) -> code scanning alerts
-#   Trivy repo scan (vulns, secrets, IaC misconfig) -> SARIF
+#   Trivy repo scan (vulns, secrets, IaC misconfig) -> SARIF; CRITICAL vulns/secrets fail;
+#     Trivy IaC (infra/) CRITICAL/HIGH fail
+#   Semgrep (our rules + registry packs) over the whole tree -> SARIF; ERROR fails
+#   govulncheck over every Go module (reachable vulnerabilities fail)
+#   osv-scanner over every lockfile -> SARIF (report; CRITICAL fails)
 #   gitleaks over the full git history
+#   OWASP Dependency-Check for the Maven reactor (weekly / manual; needs the NVD_API_KEY secret)
 #   OWASP ZAP baseline against the dev environment (scheduled / manual)
 name: security
 
@@ -12,6 +18,9 @@ on:
   pull_request:
     paths:
       - .github/workflows/security.yml
+      - trivy.yaml
+      - .gitleaks.toml
+      - tools/security/**
   schedule:
     - cron: "17 3 * * 1" # weekly, Monday 03:17 UTC
   workflow_dispatch:
@@ -41,8 +50,8 @@ jobs:
           - language: actions
             build-mode: none
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         if: matrix.language == 'go'
         with:
           go-version: "1.27.2"
@@ -70,7 +79,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
           trivy-config: trivy.yaml
@@ -100,11 +109,134 @@ jobs:
           skip-dirs: design
           skip-setup-trivy: true
 
+  trivy-iac:
+    name: Trivy IaC (infra, CRITICAL/HIGH fail)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: azure/setup-helm@v5
+      - name: Build Helm chart dependencies (charts are rendered with the prod platform values)
+        run: |
+          for chart in java/services/*/deploy/helm go/services/*/deploy/helm; do
+            [[ -f "$chart/Chart.yaml" ]] && helm dependency build "$chart" >/dev/null
+          done
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          trivy-config: trivy.yaml
+          scan-type: config
+          scan-ref: infra
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+  semgrep:
+    name: Semgrep (repo)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: pip install --quiet semgrep==1.180.0
+      - name: Rule self-test (tools/security/semgrep-tests)
+        run: tools/security/run_semgrep.sh --self-test
+      - name: Semgrep (our rules; ERROR fails)
+        run: tools/security/run_semgrep.sh
+      - name: Semgrep + p/java p/golang p/typescript p/react p/secrets (SARIF; report only until triaged)
+        continue-on-error: true
+        run: tools/security/run_semgrep.sh --registry --sarif semgrep.sarif
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('semgrep.sarif') != ''
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  govulncheck:
+    name: govulncheck (every Go module)
+    runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.2"
+          cache-dependency-path: go/**/go.sum
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+      - run: tools/security/govulncheck.sh
+
+  osv-scanner:
+    name: osv-scanner (every lockfile)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      OSV_SCANNER_VERSION: v2.6.0
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install osv-scanner
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/osv-scanner" \
+            "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          chmod +x "$RUNNER_TEMP/osv-scanner"
+      - name: Scan (SARIF report)
+        run: |
+          "$RUNNER_TEMP/osv-scanner" scan source --config tools/security/osv-scanner.toml -r \
+            --format sarif --output osv.sarif . || true
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always() && hashFiles('osv.sarif') != ''
+        with:
+          sarif_file: osv.sarif
+          category: osv-scanner
+      - name: Fail on CRITICAL (CVSS >= 9)
+        run: |
+          "$RUNNER_TEMP/osv-scanner" scan source --config tools/security/osv-scanner.toml -r \
+            --format json --output osv.json . || true
+          jq -e '[.results[]?.packages[]?.groups[]? | select((.max_severity // "0" | tonumber? // 0) >= 9)] | length == 0' osv.json
+
+  dependency-check:
+    name: OWASP Dependency-Check (Maven, weekly)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+    steps:
+      - name: NVD key not configured
+        if: env.NVD_API_KEY == ''
+        run: echo "::notice::NVD_API_KEY is not set; OWASP Dependency-Check skipped (see docs/engineering/security-scanning.md)."
+      - uses: actions/checkout@v7
+        if: env.NVD_API_KEY != ''
+      - uses: actions/setup-java@v6
+        if: env.NVD_API_KEY != ''
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+      - name: Dependency-Check (CVSS >= 9 fails)
+        if: env.NVD_API_KEY != ''
+        working-directory: java
+        run: |
+          ./mvnw -B -ntp org.owasp:dependency-check-maven:12.1.0:aggregate -DnvdApiKey="$NVD_API_KEY" \
+            -DfailBuildOnCVSS=9 -Dformats=SARIF,HTML \
+            -DsuppressionFile=../tools/security/dependency-check-suppressions.xml
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always() && env.NVD_API_KEY != '' && hashFiles('java/target/dependency-check-report.sarif') != ''
+        with:
+          sarif_file: java/target/dependency-check-report.sarif
+          category: dependency-check
+
   gitleaks:
     name: gitleaks (full history)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: gitleaks
