@@ -494,19 +494,19 @@
 - Links expire after 24 hours","E25","","Medium","8","staff-console exports","staff-console","To Do"
 "S162","Story","Customer support console","Order, payment and delivery timeline with refunds within role limits; Zendesk/Freshdesk integration.","- Refund limits per role enforced
 - Ticket links back to the order","E25","","Medium","5","staff-console support","staff-console","To Do"
-"E26","Epic","Customer mobile app","Expo / React Native customer app: sign-in first, Face ID, shopping, tracking, returns, bookings and Lola.","","","Customer mobile app","High","","mobile","mobile","To Do"
+"E26","Epic","Customer mobile app","Expo / React Native customer app: sign-in first, Face ID, shopping, tracking, returns, bookings and Lola.","","","Customer mobile app","High","","mobile","mobile","In Progress"
 "S163","Story","App shell with sign-in, Face ID and passcode","App opens on sign-in; Face ID and passcode set up after first sign-in; unlock on reopen.","- Five wrong passcodes force full sign-in
 - Sign out removes Face ID and passcode from the device
-- Logo on sign-in, sign-up, unlock, home and side panel","E26","","High","8","mobile","mobile","To Do"
+- Logo on sign-in, sign-up, unlock, home and side panel","E26","","High","8","mobile","mobile","In Progress"
 "S164","Story","Fixed headers and tab bar (no page scrolling)","Only screen content scrolls; status area has its own solid strip.","- Inner pages pin title and back button
-- No horizontal scroll","E26","","High","2","mobile","mobile","To Do"
+- No horizontal scroll","E26","","High","2","mobile","mobile","In Progress"
 "S165","Story","Shopping, cart and checkout with Stripe","Browse, search, PDP, cart grouped by shipper, checkout with Apple/Google Pay and Stripe payment sheet.","- Add payment method supports card (with ZIP) and US bank (ACH)
-- Orders over $100 ask for Face ID","E26","","High","8","mobile checkout","mobile","To Do"
+- Orders over $100 ask for Face ID","E26","","High","8","mobile checkout","mobile","In Progress"
 "S166","Story","Orders, tracking and returns","Tracking with delivery code and driver, buy again, returns with QR code.","- Delivery code shown for hand-delivery and perishables
-- Return flow produces a QR code","E26","","High","5","mobile","mobile","To Do"
-"S167","Story","Bookings in the app","Book, reschedule and cancel services synced with provider calendars.","- Exact refund shown before cancelling","E26","","Medium","5","mobile bookings","mobile","To Do"
+- Return flow produces a QR code","E26","","High","5","mobile","mobile","In Progress"
+"S167","Story","Bookings in the app","Book, reschedule and cancel services synced with provider calendars.","- Exact refund shown before cancelling","E26","","Medium","5","mobile bookings","mobile","In Progress"
 "S168","Story","Push notifications with deep links","FCM/APNs push for orders, deliveries and bookings.","- Tapping a notification opens the right screen
-- Preferences per category respected","E26","","Medium","5","mobile notifications","mobile","To Do"
+- Preferences per category respected","E26","","Medium","5","mobile notifications","mobile","In Progress"
 "E27","Epic","API docs & developer portal","Contract-first APIs with Swagger UI, Scalar, Redoc, Docusaurus portal and AsyncAPI event catalog.","","","API docs & developer portal","High","","docs","docs","In Progress"
 "S169","Story","OpenAPI 3.1 contracts for every service","contracts/openapi/<service>.yaml as source of truth; CI fails on breaking changes.","- Each service has a contract file
 - openapi-diff gate blocks breaking changes without a version bump
