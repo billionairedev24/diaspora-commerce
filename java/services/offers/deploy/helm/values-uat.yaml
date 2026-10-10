@@ -17,3 +17,4 @@ tolerations:
   - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
 extraEnv:
   CATALOG_URL: http://catalog:8080
+  SELLER_URL: http://seller:8080

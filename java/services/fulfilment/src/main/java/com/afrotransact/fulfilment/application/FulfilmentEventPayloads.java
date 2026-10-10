@@ -22,6 +22,17 @@ public final class FulfilmentEventPayloads {
                              String vehicleId, String status, int stops, int packages, Instant at) {
     }
 
+    /**
+     * fulfilment.pickup.auto_assigned / dispatch_assigned (S255, key = shipment id).
+     *
+     * @param mode AUTO_NEAREST or DISPATCH_OVERRIDE
+     */
+    public record PickupAssigned(String shipmentId, String orderId, String orderNumber, String sellerOrgId,
+                                 String pickupLocationId, String routeId, String driverId, String mode,
+                                 String reason, String previousRouteId, Double straightLineMiles, Double roadMiles,
+                                 Double durationMinutes, String distanceMethod, Instant at) {
+    }
+
     /** fulfilment.stop.* (key = route id). */
     public record StopEvent(String routeId, String stopId, String driverId, String kind, String status,
                             List<String> shipmentIds, String reason, String handoverMethod, String targetRouteId,

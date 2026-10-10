@@ -401,7 +401,7 @@ class PaymentServiceImpl implements PaymentService {
                 Money zero = Money.zero(p.currency());
                 RefundLine rl = RefundLine.allocate(pl, Objects.requireNonNullElse(l.items(), zero),
                         Objects.requireNonNullElse(l.shipping(), zero), Objects.requireNonNullElse(l.tax(), zero),
-                        schedule.reverseCommissionOnRefund());
+                        schedule.reverseCommissionOnRefund(), cmd.faultOrDefault());
                 lines.add(rl);
                 working = working.refund(new Refund(refundId, p.id(), p.orderId(), null, rl.total(),
                         RefundStatus.PENDING, null, List.of(rl), null, null), Instant.now(clock));

@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -18,6 +19,7 @@ import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.HandoverPolicy;
+import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.OrdersStateConflict;
@@ -31,6 +33,7 @@ import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.OrderCouponRepository;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.PaymentsClient;
+import com.afrotransact.orders.port.PickupLocations;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.PromiseClient;
 import com.afrotransact.orders.port.TaxCalculator;
@@ -63,6 +66,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final OrderCouponRepository orderCoupons;
     private final OrderRepository orderRepository;
     private final OrderPlacementService placement;
+    private final LocalDeliveryQuotes localDelivery;
     private final OrdersSettings settings;
     private final Clock clock;
 
@@ -71,7 +75,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                            HandoverPolicy handover, HandoverCodeVault vault, InventoryClient inventory,
                            PaymentsClient payments, CartClient cart, CouponsClient coupons,
                            OrderCouponRepository orderCoupons, OrderRepository orderRepository,
-                           OrderPlacementService placement, OrdersSettings settings, Clock clock) {
+                           OrderPlacementService placement, LocalDeliveryQuotes localDelivery,
+                           OrdersSettings settings, Clock clock) {
         this.markets = markets;
         this.catalog = catalog;
         this.promises = promises;
@@ -87,6 +92,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.orderCoupons = orderCoupons;
         this.orderRepository = orderRepository;
         this.placement = placement;
+        this.localDelivery = localDelivery;
         this.settings = settings;
         this.clock = clock;
     }
@@ -126,9 +132,18 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         Map<String, Integer> promised = promises.days(to.postalCode(), items.stream()
                 .map(i -> new PromiseClient.Item(i.variantAtin(), i.fulfilment(), i.sellerOrgId())).toList());
 
+        // S255: AfroTransact Delivery offers are collected at the seller's pickup location; one package per location.
+        Map<String, PickupLocations.PickupLocation> pickups = new HashMap<>();
+        for (CartClient.Item i : items) {
+            if (fromSellerStore(i)) {
+                pickups.computeIfAbsent(offerKey(i), k -> localDelivery.pickupFor(i));
+            }
+        }
         Map<String, List<CartClient.Item>> byPackage = new LinkedHashMap<>();
         for (CartClient.Item i : items) {
-            byPackage.computeIfAbsent(packageId(i), k -> new ArrayList<>()).add(i);
+            String key = fromSellerStore(i) ? packageId(i) + ":" + pickups.get(offerKey(i)).locationId()
+                    : packageId(i);
+            byPackage.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
         }
         Map<String, CheckoutInput.Selection> selections = new LinkedHashMap<>();
         for (CheckoutInput.Selection s : in.selections()) {
@@ -140,8 +155,19 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         int lineNo = 0;
         for (Map.Entry<String, List<CartClient.Item>> e : byPackage.entrySet()) {
             CartClient.Item first = e.getValue().getFirst();
-            CheckoutInput.Selection sel = selections.get(e.getKey());
+            boolean sellerStore = fromSellerStore(first);
+            // Clients key selections by the cart's package (seller + fulfilment); a store's package inherits it.
+            CheckoutInput.Selection sel = selections.getOrDefault(e.getKey(), selections.get(packageId(first)));
             DeliveryMethod method = method(sel);
+            if (sellerStore) {
+                if (sel != null && sel.option() != null && !sel.option().isBlank()
+                        && method != DeliveryMethod.AFROTRANSACT_DELIVERY) {
+                    throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION, (first.sellerName() == null
+                            ? first.sellerOrgId() : first.sellerName()) + " delivers this package with AfroTransact "
+                            + "Delivery from its store; choose afrotransact_delivery");
+                }
+                method = DeliveryMethod.AFROTRANSACT_DELIVERY;
+            }
             String level = sel != null && sel.serviceLevel() != null && !sel.serviceLevel().isBlank()
                     ? sel.serviceLevel().trim().toLowerCase(Locale.ROOT)
                     : sel != null && "express".equalsIgnoreCase(sel.option()) ? "express"
@@ -169,9 +195,11 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                         f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
                         i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0));
             }
+            LocalDelivery quoted = sellerStore ? localDelivery.quote(first.sellerOrgId(), first.sellerName(),
+                    pickups.get(offerKey(first)), to) : null;
             packages.add(new CheckoutPlan.Package(e.getKey(), first.sellerOrgId(), first.sellerName(),
                     fulfilmentType(first), method, level, method == DeliveryMethod.PICKUP ? pickup.trim() : null,
-                    prefs, days, lines));
+                    prefs, days, lines, quoted));
         }
         return new CheckoutPlan(in.currency(), packages);
     }
@@ -236,8 +264,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 shipments.add(new OrderDraft.DraftShipment(id, seq, p.sellerOrgId(), p.sellerName(),
                         p.fulfilmentType(), group.getKey().isEmpty() ? null : group.getKey(), p.method(),
                         p.serviceLevel(), p.pickupLocationId(), p.preferences(), perishable, codeNeeded, hash, sealed,
-                        shipping.fee(p.method(), p.serviceLevel(), items), BusinessDays.add(today, days),
-                        BusinessDays.add(today, days + slack), lines));
+                        shippingOf(p, items), BusinessDays.add(today, days), BusinessDays.add(today, days + slack),
+                        lines, p.localDelivery()));
             }
         }
         return checkoutTax.tax(new OrderDraft(in.orderId(), in.orderNumber(), in.customerId(), in.workflowId(),
@@ -253,7 +281,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             List<CouponsClient.Line> lines = new ArrayList<>();
             for (CheckoutPlan.Package p : plan.packages()) {
                 long items = p.lines().stream().mapToLong(CheckoutPlan.Line::itemsMinor).sum();
-                shippingEstimate += shipping.fee(p.method(), p.serviceLevel(), items);
+                shippingEstimate += shippingOf(p, items);
                 p.lines().stream().filter(l -> l.offerId() != null)
                         .forEach(l -> lines.add(new CouponsClient.Line(l.offerId(), l.quantity())));
             }
@@ -441,12 +469,26 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
 
     // ------------------------------------------------------------------ helpers
 
+    /** The quoted AfroTransact Delivery charge for a seller's store (S255), else the shipping policy's fee. */
+    private long shippingOf(CheckoutPlan.Package p, long itemsMinor) {
+        return p.localDelivery() != null ? p.localDelivery().customerChargeMinor()
+                : shipping.fee(p.method(), p.serviceLevel(), itemsMinor);
+    }
+
+    private static boolean fromSellerStore(CartClient.Item i) {
+        return LocalDeliveryQuotes.FULFILMENT.equalsIgnoreCase(i.fulfilment());
+    }
+
+    private static String offerKey(CartClient.Item i) {
+        return i.offerId() == null ? "" : i.offerId();
+    }
+
     private String packageId(CartClient.Item i) {
         return i.sellerOrgId() + ":" + (i.fulfilment() == null ? "SELLER" : i.fulfilment().toUpperCase(Locale.ROOT));
     }
 
     private FulfilmentType fulfilmentType(CartClient.Item i) {
-        if (i.fulfilment() == null || "SELLER".equalsIgnoreCase(i.fulfilment())) {
+        if (i.fulfilment() == null || "SELLER".equalsIgnoreCase(i.fulfilment()) || fromSellerStore(i)) {
             return FulfilmentType.SELLER_FULFILLED;
         }
         boolean platform = "PLATFORM".equalsIgnoreCase(i.sellerKind())

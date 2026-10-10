@@ -32,7 +32,8 @@ use the **manual payout schedule**; sellers are paid **on request**.
 
 `1000` Stripe clearing · `1100` Chargeback receivable · `1200:<org>` Provider fees receivable · `2000:<org>` Seller payable · `2100:<jurisdiction>` Sales tax
 payable (attributed to the seller) · `2200` Customer refunds payable · `2300:<org>` Chargeback reserve · `2400` Carrier
-labels payable · `4000` Commission · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA lines) ·
+labels payable · `4000` Commission · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA and
+AfroTransact Delivery lines) · `4250` Local delivery fees (sellers' AfroTransact Delivery pickup fees, S255) ·
 `4300` Provider late-cancellation fees · `4400` AfroTransact Retail sales · `4500` Shipping label handling · `5000`
 Stripe fees · `5100` Chargeback losses.
 
@@ -42,8 +43,8 @@ a transfer, a reversal or a payout for it. Staff see Retail revenue as its own `
 
 | Event | Journal |
 |---|---|
-| Capture (per shipment) | Dr 1000 (charge − fee), Dr 5000 (AfroTransact's fee share) / Cr 2000 sellers' net, Cr 4400 Retail's net, Cr 2100 tax, Cr 4000, Cr 4100, Cr 4200 |
-| Refund | Dr 2100 tax, Dr 2000 (items + own shipping − commission returned), Dr 4000 (commission returned), Dr 4200 / Cr 2200; Retail lines: Dr 4400 (items + shipping), Dr 2100 / Cr 2200 |
+| Capture (per shipment) | Dr 1000 (charge − fee), Dr 5000 (AfroTransact's fee share) / Cr 2000 sellers' net, Cr 4400 Retail's net, Cr 2100 tax, Cr 4000, Cr 4100, Cr 4200, Cr 4250 |
+| Refund | Dr 2100 tax, Dr 2000 (items + own shipping − commission returned − delivery fee returned), Dr 4000 (commission returned), Dr 4200, Dr 4250 (delivery fee returned, customer fault) / Cr 2200; Retail lines: Dr 4400 (items + shipping), Dr 2100 / Cr 2200 |
 | Refund paid by Stripe | Dr 2200 / Cr 1000 |
 | Transfer after the hold | Dr 2000 / Cr 1000 · reversal: Dr 1000 / Cr 2000 |
 | Chargeback opened | Dr 1100 + Dr 5100 (dispute fee) / Cr 1000; Dr 2000 / Cr 2300 per responsible seller (Retail's part stays in 1100) |
@@ -65,11 +66,22 @@ charge uses the prefix `<order>:os:<paymentId>` instead of `<order>` so its keys
 
 ## Payment split (S054)
 
-Per recipient: items, shipping (a marketplace seller's FBA shipping → AfroTransact), tax (collected and remitted by
-AfroTransact as marketplace facilitator, attributed to the seller), commission (category rate, seller override first,
-half-up per line), FBA fee per unit, and a share of the Stripe fee pro rata to each recipient's part of the charge
-(largest-remainder; AfroTransact wins ties and takes any leftover cent). Invariant, checked on every split and by
-5 000 random property cases (including Retail lines): `Σ nets + tax = charge − Stripe fee`.
+Per recipient: items, shipping (a marketplace seller's FBA or AfroTransact Delivery shipping → AfroTransact), tax
+(collected and remitted by AfroTransact as marketplace facilitator, attributed to the seller), commission (category
+rate, seller override first, half-up per line), FBA fee per unit, AfroTransact Delivery seller fee, and a share of the
+Stripe fee pro rata to each recipient's part of the charge (largest-remainder; AfroTransact wins ties and takes any
+leftover cent). Invariant, checked on every split and by 5 000 random property cases (all three fulfilment modes,
+including Retail lines): `Σ nets + tax = charge − Stripe fee`.
+
+Three fulfilment modes per line:
+
+| `fulfilment` | Who ships | Customer's shipping | Seller pays |
+|---|---|---|---|
+| `FBA` | AfroTransact FC | AfroTransact (4200) | commission + FBA fee per unit (4100) + Stripe share |
+| `SELF` | the seller (carrier / own) | the seller | commission + Stripe share |
+| `AFROTRANSACT_DELIVERY` (S255) | the seller packs, the nearest AfroTransact driver collects from the seller's store / warehouse | AfroTransact (4200) | commission + the **seller delivery fee** quoted at checkout (`deliveryFeeMinor` on the line, 4250) + Stripe share; no FBA fee |
+
+AfroTransact Retail keeps its shipping and pays no seller delivery fee in every mode.
 
 **AfroTransact Retail** (`RETAIL_ORG_ID`, recipient kind `RETAIL`) is the merchant of record, not a marketplace
 seller. Commission, FBA fees, seller fees, plans, metered billing and ads charges never apply to it (even with a
@@ -103,6 +115,77 @@ Charge 11 435, Stripe fee 362 (2.9 % + 30¢).
 debits 4400 by 1 600, 2000:org_a by 920 (1 000 − 80 commission returned, Stripe reversal of 920 from org_a's transfer),
 4000 by 80 and 2100 by 99. No reversal is attempted for Retail.
 
+## AfroTransact Delivery from the seller's store (S255)
+
+### Delivery pricing (fee schedule section)
+
+Each fee-schedule version may carry a **delivery pricing** section (immutable with its version; `POST /v1/fee-schedules`
+`deliveryPricing`; omitted = carried over from the latest live version; `enabled: false` = not offered):
+
+- `maxRadiusMiles` (0 < r ≤ 200): beyond it the option is unavailable (`BEYOND_MAX_RADIUS`).
+- `customerCharge` — what the shopper pays (booked to **4200**), and `sellerFee` — what the seller pays for the
+  pickup-delivery (booked to **4250**), each a tariff; either can be zero:
+  - `FLAT`: `flatPerPackageMinor × packages`;
+  - `DISTANCE` (per trip, packages don't count): the fee of the band covering the miles (`bands: [{fromMiles,
+    toMiles, feeMinor}]`, from inclusive, to exclusive, non-overlapping) else `baseMinor + perMileMinor × miles`
+    (half up), then raised to `minMinor` and capped at `maxMinor` (omit = no cap).
+- `sellerOverrides: [{orgId, sellerFee}]` — negotiated seller fees, like commission overrides.
+- **AfroTransact Retail never pays a seller fee** (source `RETAIL`), whatever the overrides say.
+
+The seed version (V9) carries the launch defaults: customer `DISTANCE` $4.99 + $0.85/mi, min $5.99, max $24.99, within
+25 miles; seller `FLAT` $2.00 per package. A version without the section quotes `NOT_CONFIGURED`.
+
+`POST /v1/delivery-pricing/quote {sellerOrgId, distanceMiles, packages?, at?}` → `{available, unavailableReason,
+customerChargeMinor, sellerFeeMinor, sellerFeeSource (DEFAULT · OVERRIDE · RETAIL), scheduleVersion, scheduleId,
+currency, maxRadiusMiles}` — orders-service at checkout (`payments:service`), services with `payments:fees.read`, staff
+`payments:read`. `distanceMiles` is geo's `roadMiles` (routing provider: Google Routes API / OSRM; geodesic × detour only as the last resort). The version in force at `at` (default now) applies, so
+checkout and the payment (`placedAt`) price under the same version. `GET /v1/fee-schedules` (and `/active`, `POST`)
+return the section as `deliveryPricing` for the staff fee editor.
+
+### Split, ledger and the worked example
+
+orders sends AfroTransact Delivery lines with `fulfilment: AFROTRANSACT_DELIVERY`, the quoted customer charge as the
+package's shipping (on its first line) and the quoted seller fee spread over the package's lines by items
+(`deliveryFeeMinor`). Payments snapshots both on `payment_line`; capture credits the fee to 4250 (`deliveryFeesMinor`
+per recipient and `deliveryFeeMinor` per line in `GET /v1/orders/{id}/split`).
+
+Example (seed schedule, Groceries 8 %, card 2.9 % + 30¢). org_c's store is 7.4 road miles from the shopper: customer
+charge 499 + 85 × 7.4 = **1 128**, seller fee **200**. org_a ships its own line.
+
+| Line | Org | Fulfilment | Qty | Items | Shipping | Tax | Seller fee |
+|---|---|---|---|---|---|---|---|
+| D1 Groceries | org_c | AFROTRANSACT_DELIVERY | 2 | 3 000 | 1 128 | 248 | 200 |
+| A1 Groceries | org_a | SELF | 1 | 1 500 | 500 | 124 | – |
+
+Charge 6 500, Stripe fee 219 (189 + 30); weights 1 128 / 3 248 / 2 124 → shares 38 / 109 / 72.
+
+| Recipient | Items | Shipping | Tax | Commission | Delivery fee | Stripe share | Net | Booked to |
+|---|---|---|---|---|---|---|---|---|
+| AfroTransact | – | 1 128 (D1) | – | +360 | +200 | 38 | 1 650 | Cr 4200 1 128, 4000 360, 4250 200; Dr 5000 38 |
+| org_c | 3 000 | 0 | 248 | 240 | 200 | 109 | 2 451 | Cr 2000:org_c |
+| org_a | 1 500 | 500 | 124 | 120 | – | 72 | 1 808 | Cr 2000:org_a |
+
+Σ nets 5 909 + tax 372 = 6 281 = 6 500 − 219. No FBA fee anywhere (4100 untouched).
+
+### Refunds: who pays for the trip (decision)
+
+Lines are captured when the driver collects them, so the trip has been made by the time anything is refunded. It is
+paid **once, by whoever is at fault** (`fault` on `POST /v1/payments/{id}/refunds` and `POST /v1/orders/{id}/refunds`;
+other lines are unaffected):
+
+- **`SELLER`** (default — wrong, damaged or missing item, seller cancellation after pickup): the customer can get the
+  delivery charge back (Dr 4200), AfroTransact **keeps the seller fee** (4250 untouched). Full refund of D1:
+  Dr 2100 248, Dr 2000:org_c 2 760 (3 000 − 240 commission returned), Dr 4000 240, Dr 4200 1 128 / Cr 2200 4 376.
+- **`CUSTOMER`** (changed their mind, refused the delivery): the **delivery charge is not refundable** (`422
+  payments.delivery-charge-not-refundable` if `shippingMinor` > 0 on such a line; the order-level allocator leaves it
+  out of the spread) and the seller **gets its fee back in proportion to the items refunded**, cumulatively like
+  commission (`deliveryFeeReversedMinor`). Half of D1: Dr 2100 124, Dr 2000:org_c 1 280 (1 500 − 120 − 100),
+  Dr 4000 120, Dr 4250 100 / Cr 2200 1 624.
+
+Why: the customer charge pays AfroTransact's driver; when the seller caused the failure the seller's fee covers the
+wasted trip instead, so AfroTransact is never paid twice and the innocent party never pays. Nothing is charged for
+shipments cancelled before pickup (no capture). Transfer reversals follow the seller debit as usual.
+
 ## API
 
 RFC 9457 problems with `code` `payments.*`. Reference pages `/swagger-ui.html`, `/docs`, `/redoc`. Contract:
@@ -119,6 +202,7 @@ RFC 9457 problems with `code` `payments.*`. Reference pages `/swagger-ui.html`, 
 | `GET /v1/orders/{orderId}/split` · `GET /v1/ledger/balances` · `/v1/ledger/orgs/{orgId}/balances` · `/v1/ledger/journals?orderId=` | staff `payments:read` |
 | `GET /v1/fee-schedules` · `/active?at=` · `POST /v1/fee-schedules` | read / `payments:configure` (Super Admin, Finance) |
 | `POST /v1/fee-schedules/{id}/cancel {reason}` | `payments:configure`: only before `effectiveFrom` (`409 payments.fee-schedule-in-force` after, `409 payments.fee-schedule-cancelled` twice). Marks the version cancelled (`cancelledAt/By`, `cancelReason`), never deletes it; cancelled versions never apply and don't block the next version's date. Audited (row + `audit.payments.fee-schedules` log) |
+| `POST /v1/delivery-pricing/quote` | orders (`payments:service`), services `payments:fees.read`, staff `payments:read`: AfroTransact Delivery customer charge + seller fee (S255) |
 | `GET /v1/fee-schedules/effective?category=&orgId=&at=` | services (`payments:service`) or staff `payments:read`: commission bps (override / category / default / retail), card fee estimate |
 | `GET /v1/payouts/balance` · `POST /v1/payouts/requests` | org members / owner & finance roles with `payouts:request` |
 | `GET /v1/payouts/provider-fees?orgId=` | org members (own org) / staff |
@@ -268,7 +352,7 @@ Local: `local` profile uses Stripe **test mode** on api.stripe.com — export a 
 
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64
-cd java && ./mvnw -B -f services/payments/pom.xml verify   # checkstyle, 65 unit + ArchUnit, 38 Testcontainers ITs
+cd java && ./mvnw -B -f services/payments/pom.xml verify   # checkstyle, unit + ArchUnit, Testcontainers ITs
 helm dependency build java/services/payments/deploy/helm
 helm template x java/services/payments/deploy/helm -f java/services/payments/deploy/helm/values-prod.yaml \
   | kubeconform -strict -ignore-missing-schemas

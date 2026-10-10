@@ -22,6 +22,8 @@ perishables, and applies its forward-only state machine).
 | `delivery_shipment` | Dispatch pool: every AFROTRANSACT_DELIVERY shipment, origin `FC` (load-out) or `SELLER` (pickup stop), ZIP, perishable, handover code required, ATS label, status `AWAITING_ROUTE · ROUTED · DELIVERED · FAILED · CANCELLED` |
 | `delivery_route` · `route_stop` · `route_package` | Route aggregate: zone, day, depot, driver, vehicle, status `PLANNED → ASSIGNED → IN_PROGRESS → COMPLETED` (`CANCELLED`), inspection result, blocked flag, odometers; stops (`PICKUP`/`DROPOFF`, status `PENDING · ARRIVED · DONE · FAILED · RETRY · SKIPPED · REASSIGNED · CANCELLED`, contact log, reattempts, handover method, POD distance); packages (label, origin, status `EXPECTED · LOADED · PICKED_UP · NOT_PICKED_UP · DELIVERED · FAILED · TO_PICKUP_POINT · MISSING · RETURNED · REASSIGNED · CANCELLED`, scan flags, `manual_entry`) |
 | `vehicle_inspection` · `vehicle_odometer` · `vehicle_defect` | Inspections (report + outcome), odometer history per vehicle, defects raised to dispatch |
+| `driver_position` | Last known position per driver (S255, V3): PostGIS `geography(Point)`, time, accuracy, source `SYNC` / `PING`; GiST index for KNN |
+| `pickup_assignment` | Who got a seller pickup and why: `AUTO_NEAREST` (distances) or `DISPATCH_OVERRIDE` (reason, previous route, actor) |
 | `driver_access` | Last known access per driver (`ACTIVE`/`REVOKED`, when, why, source `IDENTITY · TOKEN · DISPATCH`) |
 | `driver_device` · `driver_event` | Per-device sync cursor (`last_sequence`) and every driver event received with its outcome (idempotency by event id; handover codes redacted) |
 | `sos_alert` | SOS alerts (one per app event id) until dispatch acknowledges |
@@ -68,6 +70,38 @@ get a `shipment.cancelled` stream alert).
   `driver.sos_acknowledged`. Pushed right after commit; in-process per replica (consoles reconnect and re-read).
 - **Drivers**: `POST /v1/dispatch/drivers/{id}/suspend|reinstate` (immediate sign-out, see S081).
 - `GET /v1/dispatch/shipments?nodeId` (pool), `GET /v1/dispatch/forward-failures` (orders calls that failed).
+
+## Nearest driver for seller pickups (S255)
+
+AfroTransact Delivery from the seller's store: the seller packs, an AfroTransact driver collects at the seller's
+pickup location (`orders.order.placed` `shipments[].pickup {locationId, lat, lng}`, stored on the dispatch-pool entry
+and as the position of the route's PICKUP stop).
+
+- **Positions.** Every synced driver event carries the device GPS: the newest fix of each `POST /v1/driver/sync` batch
+  (captured before any revocation) becomes the driver's last known position; the app can also ping
+  `POST /v1/driver/location {deviceId, lat, lon, accuracyM, capturedAt}` (`delivery:operate`). Stored as PostGIS
+  geography with its time; an older fix never overwrites a newer one; fixes more than 2 minutes in the future are
+  refused. Positions older than `DRIVER_POSITION_STALE_AFTER` (10 min) are ignored.
+- **Candidates.** For a SELLER-origin pickup: its delivery zone (geo `GET /v1/zones/covering`); the 200 nearest fresh
+  positions by **KNN** (`position <-> pickup` on the GiST index); kept when the driver's access is not revoked and they
+  drive an `ASSIGNED` or `IN_PROGRESS` route **today** (`DISPATCH_ZONE`, America/Chicago) **in that zone**, not blocked,
+  with a **passed vehicle inspection** (`PASSED` / `PASSED_WITH_DEFECTS`) and **room** (fewer than
+  `ROUTE_MAX_PACKAGES` = 40 packages expected / loaded / picked up). One row per driver (their route with most room),
+  the nearest `NEAREST_DRIVER_CANDIDATES` (20) by air.
+- **Ranking.** The candidates are re-ranked by **road distance** from geo (`POST /v1/distance/batch`, pickup → each
+  driver position: geo's routing providers, Google Routes API / OSRM, with PostGIS geodesic × detour as geo's last
+  resort); when geo is down, by straight-line distance (`STRAIGHT_LINE`). Ties: straight line, then driver id.
+- **Auto-assignment.** When the pickup is created (`orders.order.placed`, `NEAREST_DRIVER_ENABLED`), it joins the best
+  candidate's route (pickup stop at the store, before its drop-offs), is `ROUTED`, logged (`AUTO_NEAREST` with the
+  distances) and published as `fulfilment.pickup.auto_assigned`; the driver gets `route.updated` on their stream and
+  dispatch `pickup.auto_assigned`. No position, no zone or no candidate ⇒ it stays `AWAITING_ROUTE` and the **zone
+  route builder** remains the fallback.
+- **Dispatch.** `GET /v1/dispatch/pickups/{id}/driver-suggestions` → top 5 `{driverId, routeId, routeName, zone,
+  straightLineMiles, roadMiles, durationMinutes, distanceMethod, positionAt, packagesOnRoute, capacityLeft}`.
+  `POST /v1/dispatch/pickups/{id}/assign {routeId, reason (5+ chars)}` overrides — from the pool, or from another route
+  while the package was not collected and its drop-off carries only this shipment (`409 fulfilment.pickup-not-movable`)
+  — logged as `DISPATCH_OVERRIDE` (reason, previous route, dispatcher) and published as
+  `fulfilment.pickup.dispatch_assigned`. `GET /v1/dispatch/pickups/{id}/assignments` lists the history.
 
 ## Driver app integration
 
@@ -151,6 +185,7 @@ POST /v1/driver/sync
 `fulfilment.task.created|picked|pick_exception|packed|ready|cancelled`,
 `fulfilment.route.planned|assigned|started|completed|cancelled`, `fulfilment.stop.delivered|failed|skipped|reassigned`,
 `fulfilment.vehicle.defect_reported`, `fulfilment.driver.sos_raised` (priority HIGH),
+`fulfilment.pickup.auto_assigned|dispatch_assigned` (S255),
 `fulfilment.driver.access_revoked`, `fulfilment.orders.forward_failed` — see
 [`contracts/asyncapi/fragments/fulfilment.yaml`](../../../contracts/asyncapi/fragments/fulfilment.yaml).
 
@@ -183,7 +218,8 @@ location API yet.
 `application.yml` + `application-{local,dev,uat,prod}.yml`. Secrets only from the environment: `DB_URL`, `DB_USER`,
 `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `FULFILMENT_CLIENT_SECRET`. Other knobs: `AUTH_ISSUER_URL`, `ORDERS_URL`,
 `INVENTORY_URL`, `GEO_URL`, `UPSTREAM_TIMEOUT`, `FULFILMENT_DEFAULT_NODE`, `POD_MAX_DISTANCE_METERS` (150),
-`REATTEMPT_WAIT` (5m), `MAX_REATTEMPTS` (2), `ORDERS_RELAY_INTERVAL` (5s), `ORDERS_RELAY_MAX_ATTEMPTS` (20),
+`REATTEMPT_WAIT` (5m), `MAX_REATTEMPTS` (2), `NEAREST_DRIVER_ENABLED` (true), `DRIVER_POSITION_STALE_AFTER` (10m),
+`ROUTE_MAX_PACKAGES` (40), `NEAREST_DRIVER_CANDIDATES` (20), `DISPATCH_ZONE` (America/Chicago), `ORDERS_RELAY_INTERVAL` (5s), `ORDERS_RELAY_MAX_ATTEMPTS` (20),
 `FULFILMENT_JOBS_ENABLED`, `CONSUMERS_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACE_SAMPLING`.
 Profiles: `local` (security off, local client secret), `dev`, `uat`, `prod` (API reference pages off).
 
@@ -203,6 +239,7 @@ reattempt policy (`DefaultReattemptPolicyTest`), sync ordering and access (`Defa
 workflow (`DeliveryRouteTest`), zone planner; integration tests with PostgreSQL (PostGIS image) and WireMock for
 identity, orders, inventory and geo: pick/pack ↔ orders (`PickPackIT`), a full driver day through `/v1/driver/sync`
 incl. replay, gap and SOS on the live stream (`DriverDayIT`), access and revocation (`DriverAccessIT`),
-reassignment and forwarding while orders is down (`ReassignAndOfflineIT`).
+reassignment and forwarding while orders is down (`ReassignAndOfflineIT`), positions, KNN availability filters,
+road-distance ranking, auto-assignment, override and builder fallback against PostGIS (`NearestDriverIT`).
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

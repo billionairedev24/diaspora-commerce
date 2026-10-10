@@ -110,7 +110,10 @@ components:
         shippingMinor: {type: integer, format: int64}
         landedPriceMinor: {type: integer, format: int64, description: price + shipping}
         currency: {type: string, examples: [USD]}
-        fulfilment: {type: string, enum: [AFROTRANSACT, SELLER]}
+        fulfilment:
+          type: string
+          enum: [AFROTRANSACT, SELLER, AFROTRANSACT_DELIVERY]
+          description: AFROTRANSACT_DELIVERY (S255) = seller-packed, collected by an AfroTransact driver at shipFrom.locationId
         handlingDays: {type: integer}
         shipFrom:
           type: [object, 'null']
@@ -119,6 +122,7 @@ components:
             region: {type: [string, 'null']}
             country: {type: [string, 'null']}
             postalCode: {type: [string, 'null']}
+            locationId: {type: [string, 'null'], description: seller-service ship-from location (AFROTRANSACT_DELIVERY pickup)}
         status: {type: string, enum: [ACTIVE, PAUSED, WITHDRAWN]}
         productLive: {type: boolean}
     OffersBuyBoxChanged:
@@ -136,7 +140,7 @@ components:
         listPriceMinor: {type: [integer, 'null'], format: int64}
         shippingMinor: {type: [integer, 'null'], format: int64}
         landedPriceMinor: {type: [integer, 'null'], format: int64}
-        fulfilment: {type: [string, 'null'], enum: [AFROTRANSACT, SELLER, null]}
+        fulfilment: {type: [string, 'null'], enum: [AFROTRANSACT, SELLER, AFROTRANSACT_DELIVERY, null]}
         availableQty: {type: [integer, 'null']}
         offerCount: {type: integer, description: Listed offers (winner included)}
         minLandedPriceMinor: {type: [integer, 'null'], format: int64}

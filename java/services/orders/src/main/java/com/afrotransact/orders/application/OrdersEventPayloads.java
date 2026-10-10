@@ -5,6 +5,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.function.Function;
 
+import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
 import com.afrotransact.orders.domain.ShipTo;
@@ -45,20 +46,40 @@ public final class OrdersEventPayloads {
      * One shipment of a placed order. {@code nodeId} is the fulfilment node of AfroTransact-fulfilled shipments;
      * the ship-to street line and position let fulfilment route AfroTransact Delivery stops (lat/lng null when
      * the address has no known position). {@code shippingMinor} is the shipment's shipping (charged on its first
-     * line); {@code shipBy} the date it must be handed over by (seller health lateness).
+     * line); {@code shipBy} the date it must be handed over by (seller health lateness). {@code pickup} is set for
+     * AfroTransact Delivery from the seller's store (S255): where the driver collects and the checkout snapshot.
      */
     public record ShipmentSummary(String shipmentId, String sellerOrgId, String sellerName, String fulfilmentType,
                                   String deliveryMethod, String serviceLevel, LocalDate promisedBy,
                                   boolean handoverRequired, long totalMinor, List<LineSummary> lines, String nodeId,
                                   boolean perishable, String shipToLine1, String shipToLine2, Double lat,
-                                  Double lng, long shippingMinor, LocalDate shipBy, LocalDate promisedFrom) {
+                                  Double lng, long shippingMinor, LocalDate shipBy, LocalDate promisedFrom,
+                                  SellerPickup pickup) {
 
         static ShipmentSummary of(Shipment s, ShipTo to, LocalDate shipBy) {
             return new ShipmentSummary(s.id(), s.sellerOrgId(), s.sellerName(), s.fulfilmentType().name(),
                     s.deliveryMethod().name(), s.serviceLevel(), s.promisedBy(), s.handoverRequired(),
                     s.totalMinor(), s.lines().stream().map(LineSummary::of).toList(), s.nodeId(), s.perishable(),
                     to == null ? null : to.line1(), to == null ? null : to.line2(), to == null ? null : to.lat(),
-                    to == null ? null : to.lng(), s.shippingMinor(), shipBy, s.promisedFrom());
+                    to == null ? null : to.lng(), s.shippingMinor(), shipBy, s.promisedFrom(),
+                    SellerPickup.of(s.localDelivery()));
+        }
+    }
+
+    /**
+     * AfroTransact Delivery pickup at the seller's store (S255).
+     *
+     * @param roadMiles      road miles pickup → customer (geo routing provider)
+     * @param sellerFeeMinor seller's pickup-delivery fee snapshotted at checkout
+     */
+    public record SellerPickup(String locationId, double lat, double lng, double roadMiles, double straightLineMiles,
+                               double durationMinutes, String distanceMethod, long customerChargeMinor,
+                               long sellerFeeMinor, int pricingVersion) {
+
+        static SellerPickup of(LocalDelivery d) {
+            return d == null ? null : new SellerPickup(d.shipFromLocationId(), d.pickupLat(), d.pickupLng(),
+                    d.distanceMiles(), d.straightLineMiles(), d.durationMinutes(), d.distanceMethod(),
+                    d.customerChargeMinor(), d.sellerFeeMinor(), d.pricingVersion());
         }
     }
 

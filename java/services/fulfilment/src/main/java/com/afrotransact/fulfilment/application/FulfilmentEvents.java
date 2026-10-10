@@ -32,6 +32,11 @@ public final class FulfilmentEvents {
     /** A shipment left its origin (seller pickup or FC load-out) with its ship-by date (key = shipment id). */
     public static final String SHIPMENT_HANDED_OVER = "fulfilment.shipment.handed_over";
 
+    /** S255: a seller pickup joined the nearest available driver's route (key = shipment id). */
+    public static final String PICKUP_AUTO_ASSIGNED = "fulfilment.pickup.auto_assigned";
+    /** S255: dispatch put a seller pickup on a route by hand, with a reason (key = shipment id). */
+    public static final String PICKUP_DISPATCH_ASSIGNED = "fulfilment.pickup.dispatch_assigned";
+
     public static final String VEHICLE_DEFECT = "fulfilment.vehicle.defect_reported";
     /** High priority: dispatch must react now. */
     public static final String SOS_RAISED = "fulfilment.driver.sos_raised";

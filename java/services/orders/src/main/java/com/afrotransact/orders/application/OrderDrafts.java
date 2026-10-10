@@ -21,7 +21,7 @@ final class OrderDrafts {
                 s.pickupLocationId(), s.preferences(), s.perishable(), s.handoverRequired(), s.handoverCodeHash(),
                 s.handoverCodeSealed(), ShipmentStatus.PENDING_PAYMENT, s.shippingMinor(), null, null,
                 s.promisedFrom(), s.promisedBy(), null, null, null, null, d.createdAt(),
-                s.lines().stream().map(OrderDrafts::line).toList(), 0)).toList();
+                s.lines().stream().map(OrderDrafts::line).toList(), 0, s.localDelivery())).toList();
         return new Order(d.orderId(), d.orderNumber(), d.customerId(), d.currency(), OrderStatus.PENDING_PAYMENT,
                 OrderTotals.ofShipments(shipments), d.shipTo(), paymentId, d.workflowId(), null, null, d.createdAt(),
                 shipments, 0);

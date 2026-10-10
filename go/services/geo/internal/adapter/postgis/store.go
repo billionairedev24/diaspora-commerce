@@ -97,6 +97,37 @@ func (s *storeImpl) Containing(ctx context.Context, lat, lon float64, t domain.Z
 	return collect(rows)
 }
 
+func (s *storeImpl) Within(ctx context.Context, lat, lon float64, t domain.ZoneType, metres float64) ([]domain.ZoneMatch, error) {
+	rows, err := s.pool.Query(ctx, `
+		with p as (select ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography as g),
+		     z as (select zone.*, case when area is not null then ST_Distance(area, p.g)
+		                               else greatest(ST_Distance(center, p.g) - radius_m, 0) end as gap
+		         from zone, p
+		         where active and ($3 = '' or type = $3)
+		           and ((area is not null and ST_DWithin(area, p.g, $4))
+		             or (center is not null and ST_DWithin(center, p.g, radius_m + $4))))
+		select `+cols+`, gap from z order by gap, name`, lat, lon, string(t), metres)
+	if err != nil {
+		return nil, fmt.Errorf("zones near point: %w", err)
+	}
+	defer rows.Close()
+	out := []domain.ZoneMatch{}
+	for rows.Next() {
+		var z domain.Zone
+		var radiusM, gap float64
+		if err := rows.Scan(&z.ID, &z.Type, &z.OwnerID, &z.Name, &z.GeoJSON, &z.CenterLat, &z.CenterLon, &radiusM,
+			&z.Active, &gap); err != nil {
+			return nil, fmt.Errorf("scan zone: %w", err)
+		}
+		z.RadiusMiles = radiusM / metresPerMile
+		out = append(out, domain.ZoneMatch{Zone: z, Inside: gap <= 0, DistanceMiles: domain.MetresToMiles(gap)})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+	return out, nil
+}
+
 func (s *storeImpl) Ping(ctx context.Context) error {
 	if err := s.pool.Ping(ctx); err != nil {
 		return fmt.Errorf("postgres ping: %w", err)

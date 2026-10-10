@@ -29,12 +29,16 @@ final class PublicDtos {
                                OfferCondition condition, long priceMinor, Long listPriceMinor, long shippingMinor,
                                @Schema(description = "price + shipping") long landedPriceMinor, String currency,
                                @Schema(description = "AFROTRANSACT = Fulfilled by AfroTransact; SELLER = Ships from "
-                                       + "seller") Fulfilment fulfilment,
+                                       + "seller; AFROTRANSACT_DELIVERY = packed by the seller, delivered by an "
+                                       + "AfroTransact driver from the seller's store (S255)") Fulfilment fulfilment,
                                int availableQty, StockStatus stockStatus, int handlingDays,
                                @Schema(description = "Handling + transit estimate used by the buy box")
                                int deliveryDays, String shipsFrom, String soldBy,
                                @Schema(description = "1 = buy box winner; 0 = listed, not eligible for the buy box")
-                               int buyBoxRank, double score, List<OfferBadge> badges) {
+                               int buyBoxRank, double score, List<OfferBadge> badges,
+                               @Schema(description = "AFROTRANSACT_DELIVERY offers: the seller's pickup location id "
+                                       + "(seller-service); checkout measures the delivery distance from it")
+                               String shipFromLocationId) {
 
         static PublicOfferResponse of(ListedOffer l) {
             Offer o = l.view().offer();
@@ -46,7 +50,8 @@ final class PublicDtos {
                     new SellerDto(o.sellerOrgId(), name, o.sellerKind(), city), o.condition(), o.priceMinor(),
                     o.listPriceMinor(), o.shippingMinor(), l.landedPriceMinor(), o.currency(), o.fulfilment(),
                     l.view().availableQty(), l.view().stockStatus(), o.handlingDays(), l.view().deliveryDays(),
-                    shipsFrom, name, l.buyBoxRank(), l.score(), l.badges());
+                    shipsFrom, name, l.buyBoxRank(), l.score(), l.badges(),
+                    o.shipFrom() == null ? null : o.shipFrom().locationId());
         }
     }
 

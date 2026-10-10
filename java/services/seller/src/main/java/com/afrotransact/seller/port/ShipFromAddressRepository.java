@@ -14,6 +14,9 @@ public interface ShipFromAddressRepository {
 
     Optional<ShipFromAddress> find(String orgId, UUID id);
 
+    /** A location by id, whatever its organisation (service lookups). */
+    Optional<ShipFromAddress> findById(UUID id);
+
     void insert(ShipFromAddress address);
 
     /** Returns false when the stored version differs from {@code address.version()} (someone changed it). */

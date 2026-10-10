@@ -18,11 +18,14 @@ class DriverSyncServiceImpl implements DriverSyncService {
     private final DriverAccessService access;
     private final DriverEventApplier applier;
     private final SequencePolicy sequences;
+    private final DriverLocationService locations;
 
-    DriverSyncServiceImpl(DriverAccessService access, DriverEventApplier applier, SequencePolicy sequences) {
+    DriverSyncServiceImpl(DriverAccessService access, DriverEventApplier applier, SequencePolicy sequences,
+                          DriverLocationService locations) {
         this.access = access;
         this.applier = applier;
         this.sequences = sequences;
+        this.locations = locations;
     }
 
     @Override
@@ -63,6 +66,8 @@ class DriverSyncServiceImpl implements DriverSyncService {
             results.add(r);
             held = EventResult.DEFERRED.equals(r.outcome());
         }
+        // S255: the newest GPS fix of the batch is the driver's last known position (nearest-driver search).
+        locations.fromSync(driver, deviceId, events);
         long last = applier.lastSequence(deviceId);
         boolean revoked = driver.access().status() == DriverAccessStatus.REVOKED;
         return new SyncResult(deviceId, last, last + 1, driver.signOut(),

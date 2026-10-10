@@ -17,6 +17,7 @@ channels:
     messages:
       sellerOrgApproved: {$ref: '#/components/messages/sellerOrgApproved'}
       sellerOrgUpdated: {$ref: '#/components/messages/sellerOrgUpdated'}
+      sellerPickupLocationUpdated: {$ref: '#/components/messages/sellerPickupLocationUpdated'}
   sellerComplianceEvents:
     address: at.seller-compliance.events
     description: >-
@@ -52,7 +53,9 @@ operations:
       Hub). seller.org.updated: indexer refreshes the seller display name on indexed documents (and its directory,
       which it warms on start from GET /v1/orgs/directory, scope sellers:directory), cart refreshes it;
       identity mirrors name, status and market. Also published when Trust and Safety suspends (status SUSPENDED) or
-      reinstates (status back to APPROVED) an organisation.
+      reinstates (status back to APPROVED) an organisation. seller.pickup_location.updated (S255): an AfroTransact
+      Delivery pickup location was enabled, moved, disabled or deleted; offers and fulfilment may follow it (checkout
+      re-reads the location from GET /v1/ship-from-locations/{id} anyway).
   receiveSellerIdentityRoleEvents:
     action: receive
     channel: {$ref: '#/channels/identityEvents'}
@@ -115,6 +118,11 @@ components:
       title: Organisation name or status changed (display name for search and carts)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/SellerOrgEvent'}
+    sellerPickupLocationUpdated:
+      name: seller.pickup_location.updated
+      title: AfroTransact Delivery pickup location enabled, moved, disabled or deleted (S255)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerPickupLocationUpdated'}
     sellerComplianceChanged:
       name: seller.compliance.changed
       title: Stripe requirements or account health changed
@@ -154,6 +162,31 @@ components:
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/SellerSubscriptionChanged'}
   schemas:
+    SellerPickupLocationUpdated:
+      type: object
+      required: [orgId, locationId, enabled, deleted, occurredAt]
+      properties:
+        orgId: {type: string}
+        locationId: {type: string, format: uuid, description: Ship-from address id (offers reference it)}
+        label: {type: string}
+        enabled: {type: boolean, description: AfroTransact pickup is on (false when disabled or deleted)}
+        deleted: {type: boolean}
+        lat: {type: [number, 'null']}
+        lng: {type: [number, 'null']}
+        zoneName: {type: [string, 'null'], description: DELIVERY zone covering or nearest to the location}
+        city: {type: string}
+        state: {type: string}
+        postalCode: {type: string}
+        country: {type: string}
+        hours:
+          type: array
+          items:
+            type: object
+            properties:
+              day: {type: string, enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]}
+              opens: {type: string, description: 'Local time HH:MM', example: '09:00'}
+              closes: {type: string, description: 'Local time HH:MM', example: '17:00'}
+        occurredAt: {type: string, format: date-time}
     SellerApplicationEvent:
       type: object
       required: [applicationId, reference, orgId, kind, applicantUserId, status, action, actorId, occurredAt]

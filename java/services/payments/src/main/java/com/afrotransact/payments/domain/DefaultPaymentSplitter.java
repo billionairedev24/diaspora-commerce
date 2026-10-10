@@ -14,6 +14,9 @@ import java.util.Objects;
  *   <li>FBA fee = units × fee per unit on marketplace sellers' FBA lines;</li>
  *   <li>shipping of a marketplace seller's FBA line is AfroTransact revenue (4200), seller-shipped lines keep their
  *       shipping;</li>
+ *   <li>AfroTransact Delivery from the seller's store (S255): the customer's delivery charge (the line's shipping) is
+ *       AfroTransact revenue (4200), the seller pays commission + the pickup-delivery fee quoted at checkout (4250
+ *       Local delivery fees) + its Stripe share, and no FBA fee;</li>
  *   <li>AfroTransact Retail is the merchant of record, not a marketplace seller: no commission (even with an
  *       override), no FBA fee, and it keeps the shipping of all its lines, FBA or not, so
  *       {@code Retail net = items + shipping − Stripe-fee share} (booked to 4400 Retail sales);</li>
@@ -55,19 +58,22 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
             Money commission = line.items().basisPoints(bps);
             boolean fba = line.fulfilment() == Fulfilment.FBA;
             Money fbaFee = fba && !retail ? schedule.fbaPerUnit().times(line.quantity()) : zero;
-            boolean shippingToPlatform = fba && !retail;
+            Money deliveryFee = line.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY && !retail
+                    ? line.deliveryFee() : zero;
+            boolean shippingToPlatform = line.fulfilment().platformShips() && !retail;
             acc.items = acc.items.plus(line.items());
             acc.tax = acc.tax.plus(line.tax());
             acc.taxByJurisdiction.merge(line.taxJurisdiction(), line.tax(), Money::plus);
             acc.commission = acc.commission.plus(commission);
             acc.fba = acc.fba.plus(fbaFee);
+            acc.delivery = acc.delivery.plus(deliveryFee);
             if (shippingToPlatform) {
                 platform.shipping = platform.shipping.plus(line.shipping());
             } else {
                 acc.shipping = acc.shipping.plus(line.shipping());
             }
             lineSplits.add(new LineSplit(line.lineId(), line.sellerOrg(), bps, commission, fbaFee,
-                    shippingToPlatform));
+                    shippingToPlatform, deliveryFee));
         }
 
         List<Acc> ordered = new ArrayList<>(accs.values());
@@ -82,10 +88,12 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
 
         Money commissionTotal = zero;
         Money fbaTotal = zero;
+        Money deliveryTotal = zero;
         for (Acc a : ordered) {
             if (a != platform) {
                 commissionTotal = commissionTotal.plus(a.commission);
                 fbaTotal = fbaTotal.plus(a.fba);
+                deliveryTotal = deliveryTotal.plus(a.delivery);
             }
         }
         List<RecipientShare> shares = new ArrayList<>();
@@ -93,13 +101,13 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
             Acc a = ordered.get(i);
             Money fee = Money.of(feeShares[i], currency);
             if (a == platform) {
-                Money net = a.shipping.plus(commissionTotal).plus(fbaTotal).minus(fee);
+                Money net = a.shipping.plus(commissionTotal).plus(fbaTotal).plus(deliveryTotal).minus(fee);
                 shares.add(new RecipientShare(a.id, a.kind, zero, a.shipping, zero, Map.of(), commissionTotal,
-                        fbaTotal, fee, net));
+                        fbaTotal, deliveryTotal, fee, net));
             } else {
-                Money net = a.items.plus(a.shipping).minus(a.commission).minus(a.fba).minus(fee);
+                Money net = a.items.plus(a.shipping).minus(a.commission).minus(a.fba).minus(a.delivery).minus(fee);
                 shares.add(new RecipientShare(a.id, a.kind, a.items, a.shipping, a.tax, a.taxByJurisdiction,
-                        a.commission, a.fba, fee, net));
+                        a.commission, a.fba, a.delivery, fee, net));
             }
         }
         return new PaymentSplit(charge, stripeFee, shares, lineSplits);
@@ -115,6 +123,7 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
         private Money tax;
         private Money commission;
         private Money fba;
+        private Money delivery;
 
         private Acc(String id, RecipientKind kind, Money zero) {
             this.id = id;
@@ -124,6 +133,7 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
             this.tax = zero;
             this.commission = zero;
             this.fba = zero;
+            this.delivery = zero;
         }
 
         private Money gross() {

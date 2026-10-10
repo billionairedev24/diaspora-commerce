@@ -16,10 +16,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param jobs          scheduled jobs switch
  * @param metering      usage sources of metered billing (S206) and the seller-service client credentials
  * @param retailOrgId   AfroTransact Retail (1P merchant of record): no plan, no metered billing, no suspension
+ * @param geo           geo-service (geocoding ship-from addresses, delivery zones for AfroTransact pickup, S255)
  */
 @ConfigurationProperties(prefix = "at.seller")
 public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto crypto, Media media, Jobs jobs,
-                               Metering metering, String retailOrgId) {
+                               Metering metering, String retailOrgId, Geo geo) {
 
     public SellerProperties {
         liveCountries = liveCountries == null || liveCountries.isEmpty() ? List.of("US") : List.copyOf(liveCountries);
@@ -29,6 +30,21 @@ public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto
         jobs = jobs == null ? new Jobs(null) : jobs;
         metering = metering == null ? new Metering(null, null, null, null, null, null, null) : metering;
         retailOrgId = retailOrgId == null || retailOrgId.isBlank() ? "org_afrotransact_retail" : retailOrgId.trim();
+        geo = geo == null ? new Geo(null, null, null) : geo;
+    }
+
+    /**
+     * geo-service client and the AfroTransact pickup rule.
+     *
+     * @param pickupMaxRadiusMiles pickup locations must be inside an active DELIVERY zone or at most this far from one
+     */
+    public record Geo(String baseUrl, Duration timeout, Double pickupMaxRadiusMiles) {
+
+        public Geo {
+            baseUrl = baseUrl == null ? "http://localhost:8205" : baseUrl;
+            timeout = timeout == null ? Duration.ofSeconds(3) : timeout;
+            pickupMaxRadiusMiles = pickupMaxRadiusMiles == null ? 25.0 : pickupMaxRadiusMiles;
+        }
     }
 
     /** Usage sources (inventory, content, ai-gateway) called with the seller-service client-credentials token. */

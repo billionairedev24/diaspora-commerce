@@ -23,6 +23,12 @@ public enum Chart {
     COMMISSION_REVENUE("4000", "Commission revenue", AccountType.REVENUE, Scope.NONE),
     FBA_FEE_REVENUE("4100", "FBA fee revenue", AccountType.REVENUE, Scope.NONE),
     SHIPPING_REVENUE("4200", "AfroTransact shipping revenue", AccountType.REVENUE, Scope.NONE),
+    /**
+     * Pickup-delivery fees sellers pay for AfroTransact Delivery from their store or warehouse (S255): the seller packs,
+     * an AfroTransact driver collects and delivers. The customer's delivery charge of those lines goes to 4200.
+     */
+    LOCAL_DELIVERY_FEE_REVENUE("4250", "Local delivery fees (AfroTransact Delivery from seller stores)",
+            AccountType.REVENUE, Scope.NONE),
     PROVIDER_FEE_REVENUE("4300", "Provider late-cancellation fees", AccountType.REVENUE, Scope.NONE),
     /**
      * AfroTransact Retail (1P, merchant of record) sales: items + shipping of Retail lines net of their Stripe-fee

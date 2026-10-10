@@ -12,10 +12,25 @@ import java.util.regex.Pattern;
  * addresses need a two-letter state and a ZIP or ZIP+4.
  *
  * @param isDefault the address the label form preselects (exactly one per organisation once any exists)
+ * @param position  geocoded position (geo-service), null when not geocoded yet
+ * @param pickup    AfroTransact Delivery pickup at this location (S255); never null
  */
 public record ShipFromAddress(UUID id, String orgId, String label, String name, String company, String phone,
                               String line1, String line2, String city, String state, String postalCode,
-                              String country, boolean isDefault, Instant createdAt, Instant updatedAt, long version) {
+                              String country, boolean isDefault, Instant createdAt, Instant updatedAt, long version,
+                              GeoPosition position, AfrotransactPickup pickup) {
+
+    public ShipFromAddress {
+        pickup = pickup == null ? AfrotransactPickup.DISABLED : pickup;
+    }
+
+    /** An address that is neither geocoded nor a pickup location. */
+    public ShipFromAddress(UUID id, String orgId, String label, String name, String company, String phone,
+                           String line1, String line2, String city, String state, String postalCode, String country,
+                           boolean isDefault, Instant createdAt, Instant updatedAt, long version) {
+        this(id, orgId, label, name, company, phone, line1, line2, city, state, postalCode, country, isDefault,
+                createdAt, updatedAt, version, null, null);
+    }
 
     /** Most addresses an organisation can keep. */
     public static final int MAX_PER_ORG = 20;
@@ -30,7 +45,8 @@ public record ShipFromAddress(UUID id, String orgId, String label, String name, 
         String c = upper(country, "US");
         ShipFromAddress a = new ShipFromAddress(id, orgId, trim(label, "Warehouse"), trim(name, null),
                 trim(company, null), trim(phone, null), trim(line1, null), trim(line2, null), trim(city, null),
-                upper(state, null), trim(postalCode, null), c, isDefault, createdAt, updatedAt, version);
+                upper(state, null), trim(postalCode, null), c, isDefault, createdAt, updatedAt, version, position,
+                pickup);
         Map<String, String> errors = new LinkedHashMap<>();
         length(errors, "label", a.label, 1, 60);
         length(errors, "name", a.name, 1, 120);
@@ -64,7 +80,27 @@ public record ShipFromAddress(UUID id, String orgId, String label, String name, 
     /** The same address marked (or unmarked) as the default. */
     public ShipFromAddress withDefault(boolean value, Instant now) {
         return new ShipFromAddress(id, orgId, label, name, company, phone, line1, line2, city, state, postalCode,
-                country, value, createdAt, now, version);
+                country, value, createdAt, now, version, position, pickup);
+    }
+
+    public ShipFromAddress withPosition(GeoPosition value) {
+        return new ShipFromAddress(id, orgId, label, name, company, phone, line1, line2, city, state, postalCode,
+                country, isDefault, createdAt, updatedAt, version, value, pickup);
+    }
+
+    public ShipFromAddress withPickup(AfrotransactPickup value, Instant now) {
+        return new ShipFromAddress(id, orgId, label, name, company, phone, line1, line2, city, state, postalCode,
+                country, isDefault, createdAt, now, version, position, value);
+    }
+
+    /** Whether the street address differs from {@code other} (a new geocode is needed). */
+    public boolean movedFrom(ShipFromAddress other) {
+        return !(eq(line1, other.line1) && eq(line2, other.line2) && eq(city, other.city) && eq(state, other.state)
+                && eq(postalCode, other.postalCode) && eq(country, other.country));
+    }
+
+    private static boolean eq(String a, String b) {
+        return a == null ? b == null : a.equalsIgnoreCase(b);
     }
 
     private static void length(Map<String, String> errors, String field, String value, int min, int max) {

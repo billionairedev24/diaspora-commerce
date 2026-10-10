@@ -166,7 +166,10 @@ class PaymentController {
     @Operation(summary = "Refund captured lines (partially)",
             description = "Reverses the seller payable, tax and — per fee policy — commission of each line; FBA "
                     + "fees and Stripe fee shares are kept. If the seller's net was already transferred, a Stripe "
-                    + "transfer reversal takes it back.")
+                    + "transfer reversal takes it back. AfroTransact Delivery lines (S255) follow `fault`: SELLER "
+                    + "(default) keeps the seller's pickup-delivery fee and may refund the delivery charge; CUSTOMER "
+                    + "returns the fee to the seller pro rata to items refunded and refuses a delivery-charge refund "
+                    + "(422 payments.delivery-charge-not-refundable).")
     @PostMapping("/v1/payments/{id}/refunds")
     ResponseEntity<RefundResponse> refund(
             @PathVariable UUID id,
@@ -176,7 +179,7 @@ class PaymentController {
         RefundResult result = payments.refund(id, new RefundCommand(body.lines().stream()
                 .map(l -> new RefundCommand.Line(l.lineId(), money(l.itemsMinor(), currency),
                         money(l.shippingMinor(), currency), money(l.taxMinor(), currency))).toList(),
-                body.reason()), idempotencyKey);
+                body.reason(), body.fault()), idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(RefundResponse.of(result.refund(), result.reversals(), result.replayed()));
     }
@@ -184,14 +187,15 @@ class PaymentController {
     @Operation(summary = "Refund by order and line ids (payments:service; e.g. trust-ops claims)",
             description = "Finds the order's payment and spreads amountMinor (default: everything still refundable) "
                     + "over the lines' remaining items, shipping and tax with the largest-remainder method, then "
-                    + "refunds like POST /v1/payments/{id}/refunds. Idempotent per Idempotency-Key.")
+                    + "refunds like POST /v1/payments/{id}/refunds. Idempotent per Idempotency-Key. With fault "
+                    + "CUSTOMER the delivery charge of AfroTransact Delivery lines is left out of the spread.")
     @PostMapping("/v1/orders/{orderId}/refunds")
     ResponseEntity<RefundResponse> refundByOrder(
             @PathVariable String orderId,
             @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
             @Valid @RequestBody OrderRefundRequest body) {
         RefundResult result = orderRefunds.refundByOrder(new OrderRefundCommand(orderId, body.lineIds(),
-                body.amountMinor(), body.reason()), idempotencyKey);
+                body.amountMinor(), body.reason(), body.fault()), idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(RefundResponse.of(result.refund(), result.reversals(), result.replayed()));
     }

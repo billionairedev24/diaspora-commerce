@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.util.Set;
 
 import com.afrotransact.seller.adapter.out.crypto.AesGcmFieldCipher;
+import com.afrotransact.seller.adapter.out.geo.HttpGeoClient;
 import com.afrotransact.seller.adapter.out.media.HttpMediaClient;
 import com.afrotransact.seller.adapter.out.phone.LibPhoneNumbers;
 import com.afrotransact.seller.adapter.out.stripe.StripeBillingAdapter;
@@ -53,7 +54,12 @@ class SellerConfiguration {
     @Bean
     SellerSettings sellerSettings(SellerProperties props) {
         return new SellerSettings(Set.copyOf(props.liveCountries()), props.stripe().sessionComponents(),
-                props.retailOrgId());
+                props.retailOrgId(), props.geo().pickupMaxRadiusMiles());
+    }
+
+    @Bean
+    HttpGeoClient geoClient(SellerProperties props, Clock clock) {
+        return new HttpGeoClient(props.geo().baseUrl(), props.geo().timeout(), clock);
     }
 
     @Bean

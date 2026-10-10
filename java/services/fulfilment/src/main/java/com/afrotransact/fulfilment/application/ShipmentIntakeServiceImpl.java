@@ -50,13 +50,14 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
     private final IdIssuer ids;
     private final DomainEventPublisher events;
     private final DispatchFeed feed;
+    private final PickupAssignmentService pickups;
     private final Clock clock;
     private final String defaultNode;
 
     ShipmentIntakeServiceImpl(InboxDeduplicator inbox, TaskRepository tasks, DeliveryShipmentRepository shipments,
                               RouteRepository routes, InventoryClient inventory, IdIssuer ids,
-                              DomainEventPublisher events, DispatchFeed feed, Clock clock,
-                              @Value("${at.fulfilment.default-node:}") String defaultNode) {
+                              DomainEventPublisher events, DispatchFeed feed, PickupAssignmentService pickups,
+                              Clock clock, @Value("${at.fulfilment.default-node:}") String defaultNode) {
         this.inbox = inbox;
         this.tasks = tasks;
         this.shipments = shipments;
@@ -65,6 +66,7 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
         this.ids = ids;
         this.events = events;
         this.feed = feed;
+        this.pickups = pickups;
         this.clock = clock;
         this.defaultNode = defaultNode == null || defaultNode.isBlank() ? null : defaultNode;
     }
@@ -101,15 +103,21 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
             }
             if (s.afrotransactDelivery()) {
                 int units = s.lines().stream().mapToInt(PlacedOrder.PlacedLine::quantity).sum();
+                PlacedOrder.SellerPickup pickup = fc ? null : s.pickup();
                 DeliveryShipment ds = new DeliveryShipment(s.shipmentId(), order.orderId(), order.orderNumber(),
                         order.customerId(), s.sellerOrgId(), s.sellerName(), s.fulfilmentType(),
                         fc ? PackageOrigin.FC : PackageOrigin.SELLER, node, label, order.shipToCity(),
                         order.shipToState(), zip5(order.shipToPostalCode()), order.shipToCountry(),
                         GeoPoint.of(order.shipToLat(), order.shipToLon()), Boolean.TRUE.equals(s.perishable()),
                         s.handoverRequired(), units, DeliveryShipmentStatus.AWAITING_ROUTE, null, s.promisedBy(),
-                        now, s.shipBy());
+                        now, s.shipBy(), pickup == null ? null : pickup.locationId(),
+                        pickup == null ? null : GeoPoint.of(pickup.lat(), pickup.lng()));
                 if (shipments.insert(ds)) {
                     created++;
+                    // S255: a seller pickup goes to the nearest available driver; else it waits for the route builder.
+                    if (ds.origin() == PackageOrigin.SELLER) {
+                        pickups.autoAssign(ds);
+                    }
                 }
             }
         }

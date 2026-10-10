@@ -1,6 +1,9 @@
 package com.afrotransact.fulfilment.config;
 
 import java.time.Duration;
+import java.time.ZoneId;
+
+import com.afrotransact.fulfilment.application.NearestDriverSettings;
 
 import com.afrotransact.fulfilment.domain.DefaultInspectionPolicy;
 import com.afrotransact.fulfilment.domain.DefaultPickupPolicy;
@@ -47,6 +50,16 @@ class FulfilmentConfiguration {
     @Bean
     SequencePolicy sequencePolicy() {
         return new DefaultSequencePolicy();
+    }
+
+    @Bean
+    NearestDriverSettings nearestDriverSettings(
+            @Value("${at.fulfilment.nearest-driver.enabled:true}") boolean enabled,
+            @Value("${at.fulfilment.nearest-driver.stale-after:10m}") Duration staleAfter,
+            @Value("${at.fulfilment.nearest-driver.max-packages-per-route:40}") int maxPackages,
+            @Value("${at.fulfilment.nearest-driver.candidates:20}") int candidates,
+            @Value("${at.fulfilment.nearest-driver.zone:America/Chicago}") String zone) {
+        return new NearestDriverSettings(enabled, staleAfter, maxPackages, candidates, ZoneId.of(zone));
     }
 
     @Bean

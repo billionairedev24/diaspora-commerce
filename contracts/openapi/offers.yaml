@@ -816,6 +816,7 @@ components:
           enum:
           - AFROTRANSACT
           - SELLER
+          - AFROTRANSACT_DELIVERY
         quantity:
           type: integer
           format: int32
@@ -835,7 +836,9 @@ components:
       - sellerSku
     ShipFrom:
       type: object
-      description: Where a seller-fulfilled order ships from
+      description: 'Where a seller-fulfilled order ships from. AFROTRANSACT_DELIVERY offers give only locationId: one of the
+        seller''s ship-from locations with AfroTransact pickup enabled (seller-service); city, region, country and ZIP are
+        copied from it'
       properties:
         city:
           type: string
@@ -855,6 +858,11 @@ components:
           type: string
           example: '77002'
           maxLength: 12
+          minLength: 0
+        locationId:
+          type: string
+          description: seller-service ship-from location id (required for AFROTRANSACT_DELIVERY)
+          maxLength: 64
           minLength: 0
     Offer:
       type: object
@@ -916,6 +924,7 @@ components:
           enum:
           - AFROTRANSACT
           - SELLER
+          - AFROTRANSACT_DELIVERY
         quantity:
           type: integer
           format: int32
@@ -1322,6 +1331,7 @@ components:
           enum:
           - AFROTRANSACT
           - SELLER
+          - AFROTRANSACT_DELIVERY
         quantity:
           type: integer
           format: int32
@@ -1432,10 +1442,12 @@ components:
           type: string
         fulfilment:
           type: string
-          description: AFROTRANSACT = Fulfilled by AfroTransact; SELLER = Ships from seller
+          description: AFROTRANSACT = Fulfilled by AfroTransact; SELLER = Ships from seller; AFROTRANSACT_DELIVERY = packed
+            by the seller, delivered by an AfroTransact driver from the seller's store (S255)
           enum:
           - AFROTRANSACT
           - SELLER
+          - AFROTRANSACT_DELIVERY
         availableQty:
           type: integer
           format: int32
@@ -1473,10 +1485,15 @@ components:
             - FASTEST_DELIVERY
             - FULFILLED_BY_AFROTRANSACT
             - SHIPS_FROM_SELLER
+            - AFROTRANSACT_DELIVERY
             - SOLD_BY_AFROTRANSACT
             - LOW_STOCK
             - RENEWED
             - USED
+        shipFromLocationId:
+          type: string
+          description: 'AFROTRANSACT_DELIVERY offers: the seller''s pickup location id (seller-service); checkout measures
+            the delivery distance from it'
     PublicOfferDetail:
       type: object
       description: One offer for add-to-cart (works for non-buy-box offers)
@@ -1702,6 +1719,7 @@ components:
           enum:
           - AFROTRANSACT
           - SELLER
+          - AFROTRANSACT_DELIVERY
         condition:
           type: string
           enum:

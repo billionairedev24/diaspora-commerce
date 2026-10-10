@@ -22,7 +22,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     "at.events.relay-enabled=false", "spring.kafka.bootstrap-servers=localhost:1", "at.consumers.enabled=false",
     "at.offers.retail-org-id=" + OffersIntegrationTest.RETAIL_ORG})
 @ActiveProfiles("local")
-@Import({TestActors.class, StubCatalog.class})
+@Import({TestActors.class, StubCatalog.class, StubPickupLocations.class})
 public abstract class OffersIntegrationTest {
 
     public static final String RETAIL_ORG = "org_afrotransactretail01";

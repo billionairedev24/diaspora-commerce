@@ -783,3 +783,5 @@
 - FC receives against the plan with discrepancies reported
 - Received stock becomes available and the offer shows Fulfilled by AfroTransact
 - A seller can sell the same product from their own store and from FBA","E09","","High","8","inventory fulfilment seller-center offers","inventory","To Do"
+"S258","Story","Fix flaky DriverDayIT handover-code assertion","fulfilment DriverDayIT checks for the handover code anywhere in stored payloads and can match random ids.","- Assertion targets the specific field
+- Test passes 20 consecutive runs","E33","","Low","1","fulfilment test","quality","To Do"

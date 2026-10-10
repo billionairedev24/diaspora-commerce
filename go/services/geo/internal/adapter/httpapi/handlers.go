@@ -22,13 +22,15 @@ type handlersImpl struct {
 	addresses app.AddressService
 	reverse   app.ReverseService
 	zones     app.ZoneService
+	distances app.DistanceService
 }
 
 var _ Handlers = (*handlersImpl)(nil)
 
 // New returns the HTTP handlers.
-func New(addresses app.AddressService, reverse app.ReverseService, zones app.ZoneService) Handlers {
-	return &handlersImpl{addresses: addresses, reverse: reverse, zones: zones}
+func New(addresses app.AddressService, reverse app.ReverseService, zones app.ZoneService,
+	distances app.DistanceService) Handlers {
+	return &handlersImpl{addresses: addresses, reverse: reverse, zones: zones, distances: distances}
 }
 
 // ZonesWrite is the permission needed to create or change zones.
@@ -41,6 +43,9 @@ func (h *handlersImpl) Register(mux *http.ServeMux, public, authenticated func(h
 	mux.Handle("GET /v1/zip/{zip}", public(http.HandlerFunc(h.zip)))
 	mux.Handle("GET /v1/reverse", public(http.HandlerFunc(h.reverseGeocode)))
 	mux.Handle("GET /v1/zones/covering", public(http.HandlerFunc(h.covering)))
+	mux.Handle("POST /v1/distance", public(http.HandlerFunc(h.distance)))
+	mux.Handle("POST /v1/distance/batch", public(http.HandlerFunc(h.distanceBatch)))
+	mux.Handle("POST /v1/geocode", public(http.HandlerFunc(h.geocode)))
 	mux.Handle("GET /v1/zones", authenticated(http.HandlerFunc(h.listZones)))
 	mux.Handle("POST /v1/zones", authenticated(auth.Require(ZonesWrite, h.saveZone)))
 }
@@ -118,12 +123,110 @@ func (h *handlersImpl) covering(w http.ResponseWriter, r *http.Request) {
 		problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.invalid-point", "lat and lon are required numbers"))
 		return
 	}
+	if raw := q.Get("withinMiles"); raw != "" {
+		within, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.invalid-radius", "withinMiles must be a number"))
+			return
+		}
+		near, err := h.zones.Near(r.Context(), lat, lon, domain.ZoneType(q.Get("type")), within)
+		if err != nil {
+			writeErr(w, r, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"zones": near})
+		return
+	}
 	zs, err := h.zones.Covering(r.Context(), lat, lon, domain.ZoneType(q.Get("type")))
 	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"zones": zs})
+}
+
+type distanceRequest struct {
+	From domain.Place `json:"from"`
+	To   domain.Place `json:"to"`
+}
+
+type batchRequest struct {
+	From domain.Place   `json:"from"`
+	To   []domain.Place `json:"to"`
+}
+
+type batchItem struct {
+	Index int `json:"index"`
+	*domain.Distance
+	Error *problemBody `json:"error,omitempty"`
+}
+
+type problemBody struct {
+	Code   string `json:"code"`
+	Detail string `json:"detail"`
+}
+
+func (h *handlersImpl) distance(w http.ResponseWriter, r *http.Request) {
+	var body distanceRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&body); err != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.invalid-json", "Body must be {from, to}"))
+		return
+	}
+	d, err := h.distances.Distance(r.Context(), body.From, body.To)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (h *handlersImpl) distanceBatch(w http.ResponseWriter, r *http.Request) {
+	var body batchRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&body); err != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.invalid-json", "Body must be {from, to: [...]}"))
+		return
+	}
+	results, err := h.distances.Batch(r.Context(), body.From, body.To)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	items := make([]batchItem, len(results))
+	for i, res := range results {
+		items[i] = batchItem{Index: res.Index, Distance: res.Distance}
+		if res.Err != nil {
+			code, detail := placeError(res.Err)
+			items[i].Error = &problemBody{Code: code, Detail: detail}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": items})
+}
+
+func (h *handlersImpl) geocode(w http.ResponseWriter, r *http.Request) {
+	var a domain.Address
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10)).Decode(&a); err != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.invalid-json", "Body must be an address object"))
+		return
+	}
+	l, err := h.distances.Geocode(r.Context(), a)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, l)
+}
+
+// placeError maps a per-destination batch failure to a problem code.
+func placeError(err error) (string, string) {
+	switch {
+	case errors.Is(err, domain.ErrInvalidPlace), errors.Is(err, domain.ErrInvalidPoint),
+		errors.Is(err, domain.ErrInvalidAddress):
+		return "geo.invalid-place", err.Error()
+	case errors.Is(err, app.ErrNotFound):
+		return "geo.place-not-found", "The place could not be located"
+	default:
+		return "geo.provider-unavailable", "Address lookup is temporarily unavailable"
+	}
 }
 
 func (h *handlersImpl) listZones(w http.ResponseWriter, r *http.Request) {
@@ -152,6 +255,11 @@ func (h *handlersImpl) saveZone(w http.ResponseWriter, r *http.Request) {
 
 func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, domain.ErrInvalidPlace):
+		problem.Write(w, r, &problem.Error{Status: http.StatusBadRequest, Code: "geo.invalid-place", Detail: err.Error()})
+	case errors.Is(err, app.ErrTooManyDestinations):
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.too-many-destinations",
+			"At most 100 destinations per batch"))
 	case errors.Is(err, domain.ErrInvalidPoint):
 		problem.Write(w, r, &problem.Error{Status: http.StatusBadRequest, Code: "geo.invalid-point", Detail: "lat must be within ±90 and lng within ±180"})
 	case errors.Is(err, domain.ErrInvalidAddress), errors.Is(err, domain.ErrInvalidZone):

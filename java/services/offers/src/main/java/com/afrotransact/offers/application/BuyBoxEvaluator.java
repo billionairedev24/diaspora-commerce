@@ -60,7 +60,7 @@ class BuyBoxEvaluator {
         List<OfferView> out = new ArrayList<>();
         for (Offer o : offers) {
             SellerStanding s = byOrg.getOrDefault(o.sellerOrgId(), SellerStanding.unknown(o.sellerOrgId()));
-            int qty = o.fulfilment() == Fulfilment.AFROTRANSACT
+            int qty = !o.fulfilment().sellerStock()
                     ? available.getOrDefault(new StockKey(o.sellerOrgId(), o.inventorySku()), 0)
                     : o.sellerQuantity();
             out.add(new OfferView(o, sellerName(o, s), qty, StockStatus.of(qty, settings.lowStockThreshold()),
@@ -138,8 +138,11 @@ class BuyBoxEvaluator {
         if (ev.listable() && v.deliveryDays() == fastest) {
             badges.add(OfferBadge.FASTEST_DELIVERY);
         }
-        badges.add(o.fulfilment() == Fulfilment.AFROTRANSACT ? OfferBadge.FULFILLED_BY_AFROTRANSACT
-                : OfferBadge.SHIPS_FROM_SELLER);
+        badges.add(switch (o.fulfilment()) {
+            case AFROTRANSACT -> OfferBadge.FULFILLED_BY_AFROTRANSACT;
+            case AFROTRANSACT_DELIVERY -> OfferBadge.AFROTRANSACT_DELIVERY;
+            case SELLER -> OfferBadge.SHIPS_FROM_SELLER;
+        });
         if (o.sellerKind() == SellerKind.PLATFORM) {
             badges.add(OfferBadge.SOLD_BY_AFROTRANSACT);
         }
@@ -156,8 +159,11 @@ class BuyBoxEvaluator {
     }
 
     int deliveryDays(Offer o) {
-        return o.handlingDays() + (o.fulfilment() == Fulfilment.AFROTRANSACT ? settings.afrotransactTransitDays()
-                : settings.sellerTransitDays());
+        return o.handlingDays() + switch (o.fulfilment()) {
+            case AFROTRANSACT -> settings.afrotransactTransitDays();
+            case AFROTRANSACT_DELIVERY -> settings.afrotransactDeliveryTransitDays();
+            case SELLER -> settings.sellerTransitDays();
+        };
     }
 
     private String sellerName(Offer o, SellerStanding s) {

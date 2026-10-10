@@ -59,7 +59,17 @@ public record OrderView(String id, String orderNumber, String status, String cus
                                String carrier, String trackingNumber, LocalDate promisedFrom, LocalDate promisedBy,
                                Instant deliveredAt, boolean captured, boolean cancellable, List<String> nextActions,
                                List<LineView> lines, List<TimelineEntry> timeline, boolean returnable,
-                               Instant returnWindowEndsAt, boolean problemReportOnly, ReturnLinks returns) {
+                               Instant returnWindowEndsAt, boolean problemReportOnly, ReturnLinks returns,
+                               LocalDeliveryView localDelivery) {
+    }
+
+    /**
+     * AfroTransact Delivery from the seller's store (S255): distance and, for the seller and staff, the seller's
+     * pickup-delivery fee (customers see the delivery charge as shippingMinor; the fee is hidden from them).
+     */
+    public record LocalDeliveryView(String shipFromLocationId, double roadMiles, double durationMinutes,
+                                    String distanceMethod, long customerChargeMinor, Long sellerFeeMinor,
+                                    int pricingVersion) {
     }
 
     /**

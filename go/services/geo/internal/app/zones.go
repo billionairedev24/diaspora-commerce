@@ -14,6 +14,9 @@ type ZoneService interface {
 	List(ctx context.Context, t domain.ZoneType, ownerID string) ([]domain.Zone, error)
 	// Covering returns the active zones of type t that contain the point (all types when t is empty).
 	Covering(ctx context.Context, lat, lon float64, t domain.ZoneType) ([]domain.Zone, error)
+	// Near returns active zones of type t that contain the point or are at most withinMiles from it, nearest first
+	// (seller pickup locations just outside a delivery zone).
+	Near(ctx context.Context, lat, lon float64, t domain.ZoneType, withinMiles float64) ([]domain.ZoneMatch, error)
 }
 
 type zoneServiceImpl struct {
@@ -51,6 +54,20 @@ func (s *zoneServiceImpl) Covering(ctx context.Context, lat, lon float64, t doma
 	zs, err := s.store.Containing(ctx, lat, lon, t)
 	if err != nil {
 		return nil, fmt.Errorf("covering zones: %w", err)
+	}
+	return zs, nil
+}
+
+func (s *zoneServiceImpl) Near(ctx context.Context, lat, lon float64, t domain.ZoneType, withinMiles float64) ([]domain.ZoneMatch, error) {
+	if err := domain.CheckPoint(lat, lon); err != nil {
+		return nil, fmt.Errorf("near zones: %w", err)
+	}
+	if withinMiles < 0 || withinMiles > 200 {
+		return nil, fmt.Errorf("withinMiles must be 0–200: %w", domain.ErrInvalidZone)
+	}
+	zs, err := s.store.Within(ctx, lat, lon, t, withinMiles*domain.MetresPerMile)
+	if err != nil {
+		return nil, fmt.Errorf("near zones: %w", err)
 	}
 	return zs, nil
 }

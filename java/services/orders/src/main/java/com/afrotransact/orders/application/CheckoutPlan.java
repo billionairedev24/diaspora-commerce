@@ -5,14 +5,29 @@ import java.util.List;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
+import com.afrotransact.orders.domain.LocalDelivery;
 
 /** Validated, priced and taxed checkout, one package per seller and fulfilment type (before node split). */
 public record CheckoutPlan(String currency, List<Package> packages) {
 
-    /** One package with its delivery choice. */
+    /**
+     * One package with its delivery choice.
+     *
+     * @param localDelivery AfroTransact Delivery from the seller's store (S255): pickup, distance and quote; null
+     *                      otherwise
+     */
     public record Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
                           DeliveryMethod method, String serviceLevel, String pickupLocationId,
-                          DeliveryPreferences preferences, int promiseDays, List<Line> lines) {
+                          DeliveryPreferences preferences, int promiseDays, List<Line> lines,
+                          LocalDelivery localDelivery) {
+
+        /** A package that is not AfroTransact Delivery from a seller's store. */
+        public Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
+                       DeliveryMethod method, String serviceLevel, String pickupLocationId,
+                       DeliveryPreferences preferences, int promiseDays, List<Line> lines) {
+            this(packageId, sellerOrgId, sellerName, fulfilmentType, method, serviceLevel, pickupLocationId,
+                    preferences, promiseDays, lines, null);
+        }
     }
 
     /**

@@ -24,8 +24,8 @@ tags:
   description: Account health for sellers (owner / finance) and the staff compliance console (compliance:remind, compliance:hold).
     Stripe is the source of truth; answers are forwarded to Stripe and verified there.
 - name: Ship-from addresses
-  description: Where a seller ships its own orders from (label purchase, rates). Members read; owner, admin and fulfilment
-    members change them.
+  description: Where a seller ships its own orders from (label purchase, rates, AfroTransact Delivery pickup). Members read;
+    owner, admin and fulfilment members change them. Addresses are geocoded with geo-service when saved (position).
 - name: Onboarding
   description: 'The applicant''s resumable application: start (prefilled from the signed-in account), autosave each step,
     Stripe verification, submit. No back-office access until final approval.'
@@ -1015,6 +1015,42 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ShipFromAddress'
+  /v1/orgs/{orgId}/ship-from-addresses/{id}/afrotransact-pickup:
+    put:
+      tags:
+      - Ship-from addresses
+      summary: Turn AfroTransact Delivery pickup on or off for a location (S255)
+      description: Enabling needs an approved organisation (409 seller.org-not-approved), at least one pickup window (422
+        seller.invalid-pickup-hours), a street-level geocoded position (422 seller.ship-from-not-geocoded) and a location
+        inside an active AfroTransact DELIVERY zone or within PICKUP_MAX_RADIUS_MILES of one (422 seller.pickup-outside-delivery-area);
+        503 seller.geo-unavailable when geo-service is down. Publishes seller.pickup_location.updated. Offers with fulfilment
+        AFROTRANSACT_DELIVERY reference the location by id.
+      operationId: pickupShipFrom
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AfrotransactPickupRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ShipFromAddress'
   /v1/orgs/{orgId}/ship-from-addresses/{id}/default:
     post:
       tags:
@@ -1105,6 +1141,29 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ReasonCode'
+  /v1/ship-from-locations/{id}:
+    get:
+      tags:
+      - Ship-from addresses
+      summary: 'One ship-from location by id (services: sellers:ship-from.read)'
+      description: For offers-service (an AFROTRANSACT_DELIVERY offer must reference a location with pickup enabled), orders-service
+        (checkout distance from the location's position) and fulfilment (pickup stop address). Staff with seller:ship-from
+        and the organisation's members can read it too.
+      operationId: shipFromLocation
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ShipFromAddress'
   /v1/webhooks/stripe-billing:
     post:
       tags:
@@ -1224,6 +1283,70 @@ components:
       - name
       - postalCode
       - state
+    AfrotransactPickup:
+      type: object
+      description: 'AfroTransact Delivery from this location: the seller packs, the nearest AfroTransact driver collects during
+        the pickup hours'
+      properties:
+        enabled:
+          type: boolean
+        hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/PickupWindow'
+        zoneName:
+          type: string
+          description: Delivery zone covering (or nearest to) the location
+        enabledAt:
+          type: string
+          format: date-time
+    GeoPosition:
+      type: object
+      description: Where the address is (geo-service geocoding)
+      properties:
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        precision:
+          type: string
+          enum:
+          - ADDRESS
+          - ZIP
+          - POINT
+        geocodedAt:
+          type: string
+          format: date-time
+    PickupWindow:
+      type: object
+      description: 'One pickup window: day of the week and 24-hour local times (HH:MM, opens before closes)'
+      properties:
+        day:
+          type: string
+          enum:
+          - MONDAY
+          - TUESDAY
+          - WEDNESDAY
+          - THURSDAY
+          - FRIDAY
+          - SATURDAY
+          - SUNDAY
+        opens:
+          type: string
+          description: Opening time, HH:MM
+          minLength: 1
+          pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+        closes:
+          type: string
+          description: Closing time, HH:MM
+          minLength: 1
+          pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+      required:
+      - closes
+      - day
+      - opens
     ShipFromAddress:
       type: object
       properties:
@@ -1263,6 +1386,30 @@ components:
         version:
           type: integer
           format: int64
+        position:
+          $ref: '#/components/schemas/GeoPosition'
+          description: Geocoded position; null until geo-service located it
+        afrotransactPickup:
+          $ref: '#/components/schemas/AfrotransactPickup'
+    AfrotransactPickupRequest:
+      type: object
+      description: Turn AfroTransact Delivery pickup on or off for a ship-from location (S255)
+      properties:
+        enabled:
+          type: boolean
+        hours:
+          type: array
+          description: Pickup windows; at least one to enable
+          items:
+            $ref: '#/components/schemas/PickupWindow'
+          maxItems: 14
+          minItems: 0
+        version:
+          type: integer
+          format: int64
+          description: Version being edited; 409 when it changed
+      required:
+      - enabled
     BusinessStep:
       type: object
       description: Step 'business'. Non-live countries return 422 seller.country-not-live.

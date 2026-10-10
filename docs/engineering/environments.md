@@ -117,6 +117,24 @@ origins, storefront origin, OIDC issuer and callback (`<PUBLIC_WEB_URL>/api/bff/
 | `at.api-docs.contact-url` | the developer portal | every Java service (OpenAPI info) |
 | `OFF_USER_AGENT`, `NOMINATIM_USER_AGENT`, `EMAIL_FROM`, `EMAIL_REPLY_TO`, `EMAIL_UNSUBSCRIBE_MAILTO` | contact addresses in config | catalog, geo, notifications |
 
+### Road routing (geo, S255 AfroTransact Delivery)
+
+Road distance and duration for delivery pricing, checkout snapshots and nearest-driver suggestions come from routing
+providers in priority order; PostGIS geodesic × detour factor is only the last resort. A provider is enabled only
+when its key / URL is present, so **every environment starts disabled** and is switched on by adding secrets.
+
+| Env var | local | dev | uat | prod |
+|---|---|---|---|---|
+| `GEO_ROUTING_PROVIDERS` (priority order) | empty (`config/local.yaml`: no vendor calls) | `google,osrm` | `google,osrm` | `google,osrm` |
+| `GOOGLE_MAPS_API_KEY` (secret `afrotransact/<env>/geo`; Routes API, falls back to `GOOGLE_PLACES_API_KEY`) | unset | unset until provisioned | unset until provisioned | unset until provisioned |
+| `OSRM_URL` (self-hosted OSRM, e.g. `http://osrm:5000`) | unset | unset until deployed | unset until deployed | unset until deployed |
+| `GEO_ROUTING_TIMEOUT` | `2s` | `2s` | `2s` | `2s` |
+| `GEO_ROUTE_CACHE_TTL` / `GEO_ROUTE_CACHE_PRECISION_METERS` | `24h` / `50` | same | same | same |
+| `GEO_DETOUR_FACTOR` / `GEO_FALLBACK_SPEED_MPH` (last resort) | `1.3` / `25` | same | same | same |
+
+Consumers: orders-service (`GEO_URL`, checkout distance), seller-service (`GEO_URL`, geocoding and pickup zones),
+fulfilment-service (`GEO_URL`, driver suggestions).
+
 Renamed in this change (old names are no longer read): `AUTH_ISSUER_URI` and identity's `AUTH_ISSUER` ->
 `AUTH_ISSUER_URL`; `AUTH_TOKEN_URI` -> `AUTH_TOKEN_URL`; identity's `STOREFRONT_URL` -> `PUBLIC_WEB_URL` and
 `BFF_URL` -> `API_BASE_URL`; notifications' `LINKS_STOREFRONT` / `LINKS_SELLER_CENTER` / `LINKS_PROVIDER_HUB` ->

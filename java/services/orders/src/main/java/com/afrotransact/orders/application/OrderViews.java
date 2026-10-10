@@ -84,7 +84,12 @@ class OrderViews {
                 s.lines().stream().map(OrderViews::line).toList(),
                 history.stream().map(h -> new OrderView.TimelineEntry(h.from() == null ? null : h.from().wire(),
                         h.to().wire(), h.actorKind().name(), h.source().wire(), h.reason(), h.occurredAt())).toList(),
-                returnable, windowEnds, returnWindows.problemReportOnly(s), links);
+                returnable, windowEnds, returnWindows.problemReportOnly(s), links,
+                s.localDelivery() == null ? null : new OrderView.LocalDeliveryView(
+                        s.localDelivery().shipFromLocationId(), s.localDelivery().distanceMiles(),
+                        s.localDelivery().durationMinutes(), s.localDelivery().distanceMethod(),
+                        s.localDelivery().customerChargeMinor(), viewer.kind() == Viewer.Kind.CUSTOMER ? null
+                        : s.localDelivery().sellerFeeMinor(), s.localDelivery().pricingVersion()));
     }
 
     private static OrderView.LineView line(OrderLine l) {

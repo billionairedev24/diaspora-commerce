@@ -93,6 +93,7 @@ abstract class SellerIntegrationTest {
         registry.add("at.seller.stripe.api-base", STRIPE::baseUrl);
         registry.add("at.seller.stripe.files-base", STRIPE::baseUrl);
         registry.add("at.seller.media.base-url", STRIPE::baseUrl);
+        registry.add("at.seller.geo.base-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.inventory-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.content-url", STRIPE::baseUrl);
         registry.add("at.seller.metering.ai-url", STRIPE::baseUrl);

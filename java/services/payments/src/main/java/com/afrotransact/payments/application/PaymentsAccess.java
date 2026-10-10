@@ -52,6 +52,19 @@ class PaymentsAccess {
         return reader();
     }
 
+    /**
+     * AfroTransact Delivery quotes (S255): orders-service at checkout (payments:service), services holding
+     * payments:fees.read, and staff readers (fee editor preview).
+     */
+    Actor deliveryQuoter() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE
+                && (actor.can(PaymentsPermissions.SERVICE) || actor.can(PaymentsPermissions.FEES_READ))) {
+            return actor;
+        }
+        return reader();
+    }
+
     Actor configure() {
         Actor actor = permissions.require(PaymentsPermissions.CONFIGURE);
         if (!isStaff(actor)) {

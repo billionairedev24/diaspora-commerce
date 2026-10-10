@@ -11,6 +11,9 @@ at:
     catalog:
       # In-cluster service name of catalog-service (Helm chart `catalog`, port 8080).
       base-url: ${CATALOG_URL:http://catalog:8080}
+    seller:
+      # In-cluster service name of seller-service (AfroTransact Delivery pickup locations, S255).
+      base-url: ${SELLER_URL:http://seller:8080}
   api-docs:
     enabled: true
 spring:

@@ -7,6 +7,8 @@ public enum OfferBadge {
     FASTEST_DELIVERY,
     FULFILLED_BY_AFROTRANSACT,
     SHIPS_FROM_SELLER,
+    /** S255: packed by the seller, delivered by an AfroTransact driver from the seller's store. */
+    AFROTRANSACT_DELIVERY,
     SOLD_BY_AFROTRANSACT,
     LOW_STOCK,
     RENEWED,

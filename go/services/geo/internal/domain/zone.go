@@ -46,3 +46,10 @@ func (z Zone) Validate() error {
 	}
 	return nil
 }
+
+// ZoneMatch is a zone near a point: Inside when it contains the point, else DistanceMiles to its edge.
+type ZoneMatch struct {
+	Zone
+	Inside        bool    `json:"inside"`
+	DistanceMiles float64 `json:"distanceMiles"`
+}

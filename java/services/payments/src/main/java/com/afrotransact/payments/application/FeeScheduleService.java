@@ -1,9 +1,11 @@
 package com.afrotransact.payments.application;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.payments.domain.DeliveryQuote;
 import com.afrotransact.payments.domain.EffectiveFees;
 import com.afrotransact.payments.domain.FeeSchedule;
 
@@ -22,6 +24,14 @@ public interface FeeScheduleService {
      * FBA fee. Readable by calling services (payments:service) and staff.
      */
     EffectiveFees effective(String category, String orgId, Instant at);
+
+    /**
+     * Prices one AfroTransact Delivery trip (S255) under the version in force at {@code at} (null = now): the
+     * customer's delivery charge and the seller's pickup-delivery fee (override first; none for AfroTransact Retail).
+     * Unavailable beyond the version's service radius or when it has no delivery pricing. orders-service
+     * (payments:service) at checkout, services with payments:fees.read, staff readers.
+     */
+    DeliveryQuote quoteDelivery(String sellerOrgId, BigDecimal distanceMiles, int packages, Instant at);
 
     /** Super Admin / Finance (payments:configure): a new version for orders placed from its effective date. */
     FeeSchedule create(NewFeeScheduleCommand command);

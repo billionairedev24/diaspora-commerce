@@ -203,6 +203,10 @@ channels:
         $ref: '#/components/messages/fulfilmentOrdersForwardFailed'
       fulfilmentShipmentHandedOver:
         $ref: '#/components/messages/fulfilmentShipmentHandedOver'
+      fulfilmentPickupAutoAssigned:
+        $ref: '#/components/messages/fulfilmentPickupAutoAssigned'
+      fulfilmentPickupDispatchAssigned:
+        $ref: '#/components/messages/fulfilmentPickupDispatchAssigned'
       fulfilmentReturnPickupScheduled:
         $ref: '#/components/messages/fulfilmentReturnPickupScheduled'
       fulfilmentReturnPickupRouted:
@@ -642,6 +646,8 @@ channels:
         $ref: '#/components/messages/sellerOrgApproved'
       sellerOrgUpdated:
         $ref: '#/components/messages/sellerOrgUpdated'
+      sellerPickupLocationUpdated:
+        $ref: '#/components/messages/sellerPickupLocationUpdated'
   sellerComplianceEvents:
     address: at.seller-compliance.events
     description: Stripe Connect compliance mirror and automatic enforcement, plus Trust and Safety suspension holds (key =
@@ -1189,6 +1195,20 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/FulfilmentForwardFailed'
+    fulfilmentPickupAutoAssigned:
+      name: fulfilment.pickup.auto_assigned
+      title: A seller pickup joined the nearest available driver's route (S255)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentPickupAssigned'
+    fulfilmentPickupDispatchAssigned:
+      name: fulfilment.pickup.dispatch_assigned
+      title: Dispatch put a seller pickup on a route by hand, with a reason (S255)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentPickupAssigned'
     fulfilmentShipmentHandedOver:
       name: fulfilment.shipment.handed_over
       title: A shipment left its origin (seller pickup or FC load-out) with its ship-by date and lateness
@@ -2018,6 +2038,13 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/SellerOrgEvent'
+    sellerPickupLocationUpdated:
+      name: seller.pickup_location.updated
+      title: AfroTransact Delivery pickup location enabled, moved, disabled or deleted (S255)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SellerPickupLocationUpdated'
     sellerComplianceChanged:
       name: seller.compliance.changed
       title: Stripe requirements or account health changed
@@ -3383,6 +3410,73 @@ components:
         submittedAt:
           type: string
           format: date-time
+    FulfilmentPickupAssigned:
+      type: object
+      required:
+      - shipmentId
+      - routeId
+      - mode
+      - at
+      properties:
+        shipmentId:
+          type: string
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        sellerOrgId:
+          type: string
+        pickupLocationId:
+          type:
+          - string
+          - 'null'
+          description: seller-service ship-from location
+        routeId:
+          type: string
+        driverId:
+          type:
+          - string
+          - 'null'
+        mode:
+          type: string
+          enum:
+          - AUTO_NEAREST
+          - DISPATCH_OVERRIDE
+        reason:
+          type:
+          - string
+          - 'null'
+          description: Required for DISPATCH_OVERRIDE
+        previousRouteId:
+          type:
+          - string
+          - 'null'
+        straightLineMiles:
+          type:
+          - number
+          - 'null'
+          description: Geodesic miles driver → pickup (auto only)
+        roadMiles:
+          type:
+          - number
+          - 'null'
+          description: geo road miles (auto only)
+        durationMinutes:
+          type:
+          - number
+          - 'null'
+        distanceMethod:
+          type:
+          - string
+          - 'null'
+          examples:
+          - ROAD_GOOGLE
+          - ROAD_OSRM
+          - GEODESIC_DETOUR
+          - STRAIGHT_LINE
+        at:
+          type: string
+          format: date-time
     FulfilmentShipmentHandedOver:
       type: object
       required:
@@ -4735,6 +4829,8 @@ components:
           enum:
           - AFROTRANSACT
           - SELLER
+          - AFROTRANSACT_DELIVERY
+          description: AFROTRANSACT_DELIVERY (S255) = seller-packed, collected by an AfroTransact driver at shipFrom.locationId
         handlingDays:
           type: integer
         shipFrom:
@@ -4758,6 +4854,11 @@ components:
               type:
               - string
               - 'null'
+            locationId:
+              type:
+              - string
+              - 'null'
+              description: seller-service ship-from location (AFROTRANSACT_DELIVERY pickup)
         status:
           type: string
           enum:
@@ -4833,6 +4934,7 @@ components:
           enum:
           - AFROTRANSACT
           - SELLER
+          - AFROTRANSACT_DELIVERY
           - null
         availableQty:
           type:
@@ -5212,6 +5314,45 @@ components:
                 - string
                 - 'null'
                 format: date
+              pickup:
+                type:
+                - object
+                - 'null'
+                description: 'S255 AfroTransact Delivery from the seller''s store (SELLER_FULFILLED + AFROTRANSACT_DELIVERY):
+                  where the driver collects (fulfilment creates a SELLER-origin pickup and prefers the nearest driver) and
+                  the checkout snapshot. Null for every other shipment.'
+                properties:
+                  locationId:
+                    type: string
+                    description: seller-service ship-from location
+                  lat:
+                    type: number
+                  lng:
+                    type: number
+                  roadMiles:
+                    type: number
+                    description: geo routing provider road miles pickup → customer
+                  straightLineMiles:
+                    type: number
+                  durationMinutes:
+                    type: number
+                  distanceMethod:
+                    type: string
+                    enum:
+                    - ROAD_GOOGLE
+                    - ROAD_OSRM
+                    - GEODESIC_DETOUR
+                  customerChargeMinor:
+                    type: integer
+                    format: int64
+                    description: Delivery charge (= shippingMinor)
+                  sellerFeeMinor:
+                    type: integer
+                    format: int64
+                    description: Seller pickup-delivery fee
+                  pricingVersion:
+                    type: integer
+                    description: Fee-schedule version that priced it
               lines:
                 type: array
                 items:
@@ -6716,6 +6857,75 @@ components:
         occurredAt:
           type: string
           format: date-time
+    SellerPickupLocationUpdated:
+      type: object
+      required:
+      - orgId
+      - locationId
+      - enabled
+      - deleted
+      - occurredAt
+      properties:
+        orgId:
+          type: string
+        locationId:
+          type: string
+          format: uuid
+          description: Ship-from address id (offers reference it)
+        label:
+          type: string
+        enabled:
+          type: boolean
+          description: AfroTransact pickup is on (false when disabled or deleted)
+        deleted:
+          type: boolean
+        lat:
+          type:
+          - number
+          - 'null'
+        lng:
+          type:
+          - number
+          - 'null'
+        zoneName:
+          type:
+          - string
+          - 'null'
+          description: DELIVERY zone covering or nearest to the location
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+        hours:
+          type: array
+          items:
+            type: object
+            properties:
+              day:
+                type: string
+                enum:
+                - MONDAY
+                - TUESDAY
+                - WEDNESDAY
+                - THURSDAY
+                - FRIDAY
+                - SATURDAY
+                - SUNDAY
+              opens:
+                type: string
+                description: Local time HH:MM
+                example: 09:00
+              closes:
+                type: string
+                description: Local time HH:MM
+                example: '17:00'
+        occurredAt:
+          type: string
+          format: date-time
     SellerApplicationEvent:
       type: object
       required:
@@ -7995,15 +8205,19 @@ operations:
       and orders-service calls that could not be applied. Dispatch consoles also get the same updates live over GET /v1/dispatch/stream
       (server-sent events). fulfilment.shipment.handed_over (key shipment id) carries the ship-by date when a seller hands
       a shipment to the driver or the FC loads it out (trust-ops seller health); fulfilment.return_pickup.* (key RMA id) follow
-      return pickups scheduled by tax-returns-service.'
+      return pickups scheduled by tax-returns-service. fulfilment.pickup.auto_assigned / dispatch_assigned (S255, key shipment
+      id): a seller pickup (AfroTransact Delivery from the seller''s store) joined the nearest available driver''s route,
+      or dispatch moved it with a logged reason.'
   receiveFulfilmentOrderEvents:
     action: receive
     channel:
       $ref: '#/channels/ordersOrderEvents'
     summary: 'fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) handles orders.order.placed: a pick
       / pack task per FBA_AFROTRANSACT or RETAIL_1P shipment (node from inventory''s reservation), and an entry in the dispatch
-      pool per AFROTRANSACT_DELIVERY shipment (FC load-out or seller pickup), each with one ATS package label. orders.shipment.cancelled
-      cancels the task and takes the shipment off a route that has not started. Other order events are ignored.'
+      pool per AFROTRANSACT_DELIVERY shipment (FC load-out or seller pickup), each with one ATS package label. A seller pickup
+      with a pickup position (shipments[].pickup, S255) goes to the nearest available driver''s route at once (fulfilment.pickup.auto_assigned);
+      otherwise it waits for the zone route builder. orders.shipment.cancelled cancels the task and takes the shipment off
+      a route that has not started. Other order events are ignored.'
   receiveFulfilmentIdentityEvents:
     action: receive
     channel:
@@ -8308,7 +8522,9 @@ operations:
       role, so the next token carries the org claim (unlocking Seller Center / Provider Hub). seller.org.updated: indexer
       refreshes the seller display name on indexed documents (and its directory, which it warms on start from GET /v1/orgs/directory,
       scope sellers:directory), cart refreshes it; identity mirrors name, status and market. Also published when Trust and
-      Safety suspends (status SUSPENDED) or reinstates (status back to APPROVED) an organisation.'
+      Safety suspends (status SUSPENDED) or reinstates (status back to APPROVED) an organisation. seller.pickup_location.updated
+      (S255): an AfroTransact Delivery pickup location was enabled, moved, disabled or deleted; offers and fulfilment may
+      follow it (checkout re-reads the location from GET /v1/ship-from-locations/{id} anyway).'
   receiveSellerIdentityRoleEvents:
     action: receive
     channel:

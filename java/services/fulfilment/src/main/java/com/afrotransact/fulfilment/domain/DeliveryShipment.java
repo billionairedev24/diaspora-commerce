@@ -29,13 +29,27 @@ import java.time.LocalDate;
  * @param promisedBy       promised delivery date
  * @param createdAt        when it was received
  * @param shipBy           date the shipment must leave its origin by (from orders; null for older orders)
+ * @param pickupLocationId seller ship-from location where the driver collects (SELLER origin, S255)
+ * @param pickupPoint      its position (null when orders sent none: no nearest-driver assignment)
  */
 public record DeliveryShipment(String shipmentId, String orderId, String orderNumber, String customerId,
                                String sellerOrgId, String sellerName, String fulfilmentType, PackageOrigin origin,
                                String nodeId, String label, String city, String state, String postalCode,
                                String country, GeoPoint location, boolean perishable, boolean handoverRequired,
                                int units, DeliveryShipmentStatus status, String routeId, LocalDate promisedBy,
-                               Instant createdAt, LocalDate shipBy) {
+                               Instant createdAt, LocalDate shipBy, String pickupLocationId, GeoPoint pickupPoint) {
+
+    /** A shipment without a known pickup location. */
+    public DeliveryShipment(String shipmentId, String orderId, String orderNumber, String customerId,
+                            String sellerOrgId, String sellerName, String fulfilmentType, PackageOrigin origin,
+                            String nodeId, String label, String city, String state, String postalCode,
+                            String country, GeoPoint location, boolean perishable, boolean handoverRequired,
+                            int units, DeliveryShipmentStatus status, String routeId, LocalDate promisedBy,
+                            Instant createdAt, LocalDate shipBy) {
+        this(shipmentId, orderId, orderNumber, customerId, sellerOrgId, sellerName, fulfilmentType, origin, nodeId,
+                label, city, state, postalCode, country, location, perishable, handoverRequired, units, status,
+                routeId, promisedBy, createdAt, shipBy, null, null);
+    }
 
     /** A shipment without ship-by date. */
     public DeliveryShipment(String shipmentId, String orderId, String orderNumber, String customerId,

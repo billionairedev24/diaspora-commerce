@@ -30,6 +30,8 @@ channels:
       fulfilmentDriverAccessRevoked: {$ref: '#/components/messages/fulfilmentDriverAccessRevoked'}
       fulfilmentOrdersForwardFailed: {$ref: '#/components/messages/fulfilmentOrdersForwardFailed'}
       fulfilmentShipmentHandedOver: {$ref: '#/components/messages/fulfilmentShipmentHandedOver'}
+      fulfilmentPickupAutoAssigned: {$ref: '#/components/messages/fulfilmentPickupAutoAssigned'}
+      fulfilmentPickupDispatchAssigned: {$ref: '#/components/messages/fulfilmentPickupDispatchAssigned'}
       fulfilmentReturnPickupScheduled: {$ref: '#/components/messages/fulfilmentReturnPickupScheduled'}
       fulfilmentReturnPickupRouted: {$ref: '#/components/messages/fulfilmentReturnPickupRouted'}
       fulfilmentReturnPickupCollected: {$ref: '#/components/messages/fulfilmentReturnPickupCollected'}
@@ -46,6 +48,9 @@ operations:
       live over GET /v1/dispatch/stream (server-sent events). fulfilment.shipment.handed_over (key shipment id) carries
       the ship-by date when a seller hands a shipment to the driver or the FC loads it out (trust-ops seller health);
       fulfilment.return_pickup.* (key RMA id) follow return pickups scheduled by tax-returns-service.
+      fulfilment.pickup.auto_assigned / dispatch_assigned (S255, key shipment id): a seller pickup (AfroTransact
+      Delivery from the seller's store) joined the nearest available driver's route, or dispatch moved it with a
+      logged reason.
   receiveFulfilmentOrderEvents:
     action: receive
     channel: {$ref: '#/channels/ordersOrderEvents'}
@@ -53,6 +58,8 @@ operations:
       fulfilment-service (consumer group fulfilment-service, inbox-deduplicated) handles orders.order.placed: a pick /
       pack task per FBA_AFROTRANSACT or RETAIL_1P shipment (node from inventory's reservation), and an entry in the
       dispatch pool per AFROTRANSACT_DELIVERY shipment (FC load-out or seller pickup), each with one ATS package label.
+      A seller pickup with a pickup position (shipments[].pickup, S255) goes to the nearest available driver's route
+      at once (fulfilment.pickup.auto_assigned); otherwise it waits for the zone route builder.
       orders.shipment.cancelled cancels the task and takes the shipment off a route that has not started. Other order
       events are ignored.
   receiveFulfilmentIdentityEvents:
@@ -161,6 +168,16 @@ components:
       title: orders-service refused or never accepted a transition / courier event / tracking call
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/FulfilmentForwardFailed'}
+    fulfilmentPickupAutoAssigned:
+      name: fulfilment.pickup.auto_assigned
+      title: A seller pickup joined the nearest available driver's route (S255)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentPickupAssigned'}
+    fulfilmentPickupDispatchAssigned:
+      name: fulfilment.pickup.dispatch_assigned
+      title: Dispatch put a seller pickup on a route by hand, with a reason (S255)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentPickupAssigned'}
     fulfilmentShipmentHandedOver:
       name: fulfilment.shipment.handed_over
       title: A shipment left its origin (seller pickup or FC load-out) with its ship-by date and lateness
@@ -192,6 +209,25 @@ components:
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/FulfilmentReturnPickupEvent'}
   schemas:
+    FulfilmentPickupAssigned:
+      type: object
+      required: [shipmentId, routeId, mode, at]
+      properties:
+        shipmentId: {type: string}
+        orderId: {type: string}
+        orderNumber: {type: string}
+        sellerOrgId: {type: string}
+        pickupLocationId: {type: [string, 'null'], description: seller-service ship-from location}
+        routeId: {type: string}
+        driverId: {type: [string, 'null']}
+        mode: {type: string, enum: [AUTO_NEAREST, DISPATCH_OVERRIDE]}
+        reason: {type: [string, 'null'], description: Required for DISPATCH_OVERRIDE}
+        previousRouteId: {type: [string, 'null']}
+        straightLineMiles: {type: [number, 'null'], description: Geodesic miles driver → pickup (auto only)}
+        roadMiles: {type: [number, 'null'], description: geo road miles (auto only)}
+        durationMinutes: {type: [number, 'null']}
+        distanceMethod: {type: [string, 'null'], examples: [ROAD_GOOGLE, ROAD_OSRM, GEODESIC_DETOUR, STRAIGHT_LINE]}
+        at: {type: string, format: date-time}
     FulfilmentShipmentHandedOver:
       type: object
       required: [shipmentId, orderId, origin, handedOverAt]

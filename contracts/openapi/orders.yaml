@@ -639,6 +639,28 @@ components:
           type: string
         productType:
           type: string
+    LocalDeliveryView:
+      type: object
+      properties:
+        shipFromLocationId:
+          type: string
+        roadMiles:
+          type: number
+          format: double
+        durationMinutes:
+          type: number
+          format: double
+        distanceMethod:
+          type: string
+        customerChargeMinor:
+          type: integer
+          format: int64
+        sellerFeeMinor:
+          type: integer
+          format: int64
+        pricingVersion:
+          type: integer
+          format: int32
     OrderView:
       type: object
       properties:
@@ -820,6 +842,8 @@ components:
           type: boolean
         returns:
           $ref: '#/components/schemas/ReturnLinks'
+        localDelivery:
+          $ref: '#/components/schemas/LocalDeliveryView'
     TimelineEntry:
       type: object
       properties:

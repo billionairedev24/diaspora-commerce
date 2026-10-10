@@ -8,6 +8,8 @@ import com.afrotransact.payments.adapter.in.web.PaymentsDtos.BalanceResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.CancelFeeScheduleRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ConnectedAccountRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ConnectedAccountResponse;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.DeliveryQuoteRequest;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.DeliveryQuoteResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.EffectiveFeesResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.FeeScheduleRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.FeeScheduleResponse;
@@ -97,7 +99,21 @@ class FinanceController {
         return FeeScheduleResponse.of(fees.create(new NewFeeScheduleCommand(body.effectiveFrom(), body.currency(),
                 body.categoryBps(), body.defaultCommissionBps(), body.overrides() == null ? List.of()
                 : body.overrides().stream().map(OverrideRequest::toOverride).toList(), body.cardPctBps(),
-                body.cardFixedMinor(), body.fbaPerUnitMinor(), !Boolean.FALSE.equals(body.reverseCommissionOnRefund()), body.note())));
+                body.cardFixedMinor(), body.fbaPerUnitMinor(), !Boolean.FALSE.equals(body.reverseCommissionOnRefund()),
+                body.note(), body.deliveryPricing() == null ? null : body.deliveryPricing().toCommand())));
+    }
+
+    @Operation(summary = "Price an AfroTransact Delivery trip from a seller's store (S255)",
+            description = "Under the fee-schedule version in force at `at` (default now): the customer's delivery "
+                    + "charge and the seller's pickup-delivery fee (seller override first; 0 for AfroTransact Retail, "
+                    + "source RETAIL). `available=false` with BEYOND_MAX_RADIUS beyond the version's service radius "
+                    + "(the offer is not deliverable to that address) or NOT_CONFIGURED when the version has no "
+                    + "delivery pricing. FLAT tariffs count packages; DISTANCE tariffs price the trip. "
+                    + "orders-service (payments:service), services with payments:fees.read, staff payments:read.")
+    @PostMapping("/v1/delivery-pricing/quote")
+    DeliveryQuoteResponse quoteDelivery(@Valid @RequestBody DeliveryQuoteRequest body) {
+        return DeliveryQuoteResponse.of(fees.quoteDelivery(body.sellerOrgId(), body.distanceMiles(),
+                body.packages() == null ? 1 : body.packages(), body.at()));
     }
 
     @Operation(summary = "Cancel a scheduled fee schedule version (Super Admin / Finance, payments:configure)",

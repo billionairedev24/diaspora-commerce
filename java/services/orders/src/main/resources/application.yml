@@ -167,7 +167,7 @@ at:
       token-path: /oauth2/token
       client-id: ${ORDERS_CLIENT_ID:orders-service}
       client-secret: ${ORDERS_CLIENT_SECRET:local-orders-service-secret}
-      scopes: payments:service inventory:reserve cart:service tax:quote
+      scopes: payments:service inventory:reserve cart:service tax:quote sellers:ship-from.read
     upstreams:
       timeout: ${UPSTREAM_TIMEOUT:5s}
       promise-timeout: ${PROMISE_TIMEOUT:800ms}
@@ -179,6 +179,10 @@ at:
       content-url: ${CONTENT_URL:http://localhost:8112}
       catalog-url: ${CATALOG_URL:http://localhost:8101}
       offers-url: ${OFFERS_URL:http://localhost:8102}
+      # S255 AfroTransact Delivery from seller stores: pickup locations (seller, sellers:ship-from.read) and
+      # distances (geo, public).
+      seller-url: ${SELLER_URL:http://localhost:8106}
+      geo-url: ${GEO_URL:http://localhost:8205}
       tax-returns-url: ${TAX_RETURNS_URL:http://localhost:8111}
       tax-timeout: ${TAX_QUOTE_TIMEOUT:2s}
     topics:

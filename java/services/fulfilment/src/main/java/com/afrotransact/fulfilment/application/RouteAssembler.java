@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import com.afrotransact.fulfilment.domain.DeliveryRoute;
 import com.afrotransact.fulfilment.domain.DeliveryShipment;
+import com.afrotransact.fulfilment.domain.GeoPoint;
 import com.afrotransact.fulfilment.domain.PackageOrigin;
 import com.afrotransact.fulfilment.domain.PackageStatus;
 import com.afrotransact.fulfilment.domain.RoutePackage;
@@ -49,7 +50,7 @@ class RouteAssembler {
             for (DeliveryShipment s : group) {
                 String pickupStopId = null;
                 if (s.origin() == PackageOrigin.SELLER) {
-                    pickupStopId = pickupStop(route, s.sellerOrgId(), s.sellerName(), now).id();
+                    pickupStopId = pickupStop(route, s.sellerOrgId(), s.sellerName(), s.pickupPoint(), now).id();
                 }
                 pkgs.add(new RoutePackage(UUID.randomUUID().toString(), s.label() == null ? ids.packageLabel()
                         : s.label(), s.shipmentId(), s.orderNumber(), s.origin(), pickupStopId, drop.id(),
@@ -77,7 +78,7 @@ class RouteAssembler {
                 DeliveryShipment s = shipmentsById.get(p.shipmentId());
                 origin = PackageOrigin.SELLER;
                 pickupStopId = pickupStop(target, s == null ? null : s.sellerOrgId(), s == null ? null
-                        : s.sellerName(), now).id();
+                        : s.sellerName(), s == null ? null : s.pickupPoint(), now).id();
             }
             pkgs.add(new RoutePackage(UUID.randomUUID().toString(), p.label(), p.shipmentId(), p.orderNumber(),
                     origin, pickupStopId, drop.id(), p.perishable(), PackageStatus.EXPECTED, false, false, false,
@@ -87,13 +88,14 @@ class RouteAssembler {
         return drop;
     }
 
-    private RouteStop pickupStop(DeliveryRoute route, String sellerOrgId, String sellerName, Instant now) {
+    private RouteStop pickupStop(DeliveryRoute route, String sellerOrgId, String sellerName, GeoPoint point,
+                                 Instant now) {
         Optional<RouteStop> open = route.openPickupFor(sellerOrgId);
         if (open.isPresent()) {
             return open.get();
         }
         RouteStop pickup = RouteStop.pending(UUID.randomUUID().toString(), StopKind.PICKUP, 0,
-                sellerName == null ? "Seller " + sellerOrgId : sellerName, sellerOrgId, null, null, null, null, null,
+                sellerName == null ? "Seller " + sellerOrgId : sellerName, sellerOrgId, null, null, null, null, point,
                 route.window(), false, false, now);
         route.addPickupStop(pickup);
         return pickup;

@@ -38,18 +38,43 @@ public interface PaymentsClient {
     /** {@code GET /v1/orders/{orderId}/split}. */
     Split split(String orderId);
 
+    /**
+     * {@code POST /v1/delivery-pricing/quote} (S255): AfroTransact Delivery customer charge and seller fee for a trip
+     * of {@code distanceMiles} from the seller's pickup location, under the fee schedule in force now.
+     */
+    DeliveryQuote quoteDelivery(String sellerOrgId, double distanceMiles, int packages);
+
+    /**
+     * A delivery quote.
+     *
+     * @param unavailableReason NOT_CONFIGURED or BEYOND_MAX_RADIUS when not available
+     */
+    record DeliveryQuote(boolean available, String unavailableReason, long customerChargeMinor, long sellerFeeMinor,
+                         int scheduleVersion) {
+    }
+
     /** Intent to create. */
     record NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
                      Map<String, String> metadata, List<Line> lines) {
     }
 
     /**
-     * One payment line: fulfilment FBA (AfroTransact-fulfilled) or SELF (seller-fulfilled).
+     * One payment line: fulfilment FBA (AfroTransact-fulfilled), SELF (seller-fulfilled) or AFROTRANSACT_DELIVERY
+     * (seller-packed, AfroTransact driver from the seller's store, S255).
      *
      * @param shippingTaxMinor part of taxMinor charged on shipping (payments keeps it apart)
+     * @param deliveryFeeMinor AFROTRANSACT_DELIVERY: the seller's pickup-delivery fee allocated to this line
      */
     record Line(String lineId, String sellerOrg, String category, String fulfilment, int quantity, long itemsMinor,
-                long shippingMinor, long taxMinor, String taxJurisdiction, long shippingTaxMinor) {
+                long shippingMinor, long taxMinor, String taxJurisdiction, long shippingTaxMinor,
+                long deliveryFeeMinor) {
+
+        public Line(String lineId, String sellerOrg, String category, String fulfilment, int quantity,
+                    long itemsMinor, long shippingMinor, long taxMinor, String taxJurisdiction,
+                    long shippingTaxMinor) {
+            this(lineId, sellerOrg, category, fulfilment, quantity, itemsMinor, shippingMinor, taxMinor,
+                    taxJurisdiction, shippingTaxMinor, 0);
+        }
 
         public Line(String lineId, String sellerOrg, String category, String fulfilment, int quantity,
                     long itemsMinor, long shippingMinor, long taxMinor, String taxJurisdiction) {

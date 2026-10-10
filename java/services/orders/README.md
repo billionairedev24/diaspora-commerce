@@ -4,7 +4,7 @@ Checkout saga, orders split into shipments (sub-orders) and the shipment state m
 Spring Boot 4.1 · Java 25 · PostgreSQL `orders` · Temporal · port **8104**.
 Architecture: §5 (checkout saga, idempotency, outbox, concurrency), §17b (one charge, many transfers) and §17c
 (shipment state machine, "Who can do what", AfroTransact Delivery) of `design/AfroTransact Architecture.dc.html`.
-Stories S046, S050 (server side), S058, S059, S060 (API side), S061 (server side).
+Stories S046, S050 (server side), S058, S059, S060 (API side), S061 (server side), S255 (checkout side).
 
 ## Model
 
@@ -50,11 +50,38 @@ on its first payments line, so captures and refunds use the same allocation.
 6. **place** — `POST /v1/reservations/{id}/confirm`, shipments → `placed` (actor SYSTEM), order `PLACED`,
    `orders.order.placed`; **clearCart** `POST /v1/carts/{customerId}/ordered` (`cart:service`).
 
+**AfroTransact Delivery from the seller's store (S255)** — cart lines whose offer fulfilment is
+`AFROTRANSACT_DELIVERY`, priced inside **prepare** (an activity: no new workflow steps, histories replay unchanged):
+
+- the offer's pickup location: offers `GET /v1/public/offers/{offerId}` → `shipFromLocationId`, then seller
+  `GET /v1/ship-from-locations/{id}` (service token, `sellers:ship-from.read`): same seller, AfroTransact pickup
+  enabled, geocoded — else `422 orders.delivery-pickup-unavailable`. One package (shipment) per seller **and pickup
+  location**; selections keyed by the cart's package (`<org>:AFROTRANSACT_DELIVERY`) still apply. The method is always
+  AfroTransact Delivery (`422 orders.invalid-delivery-selection` if the client asks for carrier / pickup);
+  fulfilment type `SELLER_FULFILLED` (the seller packs, no inventory reservation);
+- the **road distance** pickup → customer: geo `POST /v1/distance` (`roadMiles` from the routing providers — Google
+  Routes API / OSRM — with PostGIS geodesic × detour only as geo's last resort). The address book's coordinates flow
+  through as `to: {lat, lng}`; without them the street address is sent and geo geocodes it
+  (`422 orders.delivery-address-not-located` when it can't);
+- the **price**: payments `POST /v1/delivery-pricing/quote {sellerOrgId, distanceMiles: roadMiles, packages: 1}`.
+  Beyond the version's radius the offer is **not deliverable to that address**: `422 orders.delivery-out-of-range`
+  ("Ama's Market is 31 miles from Houston, TX: too far …"); `422 orders.delivery-unavailable` when the version offers
+  no AfroTransact Delivery from stores;
+- the quoted **customer charge is the shipment's shipping** (coupons' free-shipping applies to it); the shipment keeps
+  a `local_delivery` snapshot (V4): location id and position, straight-line and road miles, duration, method, customer
+  charge, **seller fee**, pricing version. Order views show it as `localDelivery` (seller fee hidden from customers).
+  The payment lines are `fulfilment: AFROTRANSACT_DELIVERY` with the seller fee spread over the shipment's lines by
+  items (`deliveryFeeMinor`, largest remainder), and `orders.order.placed` carries `pickup {locationId, lat, lng,
+  roadMiles, …}` per shipment for fulfilment's nearest-driver assignment.
+
+Seller offers that stay `SELLER` keep the customer's choice of AfroTransact Delivery as before (priced by the shipping
+policy, shipping kept by the seller); sellers move to the new mode by switching the offer.
+
 Failures run the compensations in reverse: cancel the PaymentIntent, release the reservation (skipped when the
 reservation itself was refused), void the order (`CANCELLED` + reason, `orders.order.cancelled` with
 `wasPlaced=false`). The same key replays the same result: the same order, or the same problem
 (`409 orders.insufficient-stock`, `402 orders.payment-failed|payment-timeout`, `422 orders.cart-*`,
-`orders.market-disabled`, `503 orders.upstream-unavailable`). Same key with a different body ⇒
+`orders.market-disabled`, `orders.delivery-*`, `503 orders.upstream-unavailable`). Same key with a different body ⇒
 `409 orders.idempotency-key-reused`.
 
 ## Shipment state machine (S059)
@@ -153,7 +180,8 @@ pods out of service. `LiveFeedFanoutIT` runs two application contexts against on
 ## Upstreams (ports → RestClient adapters)
 
 Service calls use the `orders-service` client-credentials token (`/oauth2/token`, scopes
-`payments:service inventory:reserve cart:service`, cached until a minute before expiry). Cart and address book are
+`payments:service inventory:reserve cart:service tax:quote sellers:ship-from.read`, cached until a minute before
+expiry). geo-service (`GEO_URL`) and offers' public offer endpoint are called without a token. Cart and address book are
 read with the customer's token. 4xx = refusal (not retried), 5xx / 408 / 429 / I/O = retried.
 
 ## Configuration
@@ -162,7 +190,8 @@ read with the customer's token. 4xx = refusal (not retried), 5xx / 408 / 429 / I
 `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `ORDERS_CLIENT_SECRET`, `TEMPORAL_TLS_CERT`, `TEMPORAL_TLS_KEY`,
 `HANDOVER_CODE_KEY`. Temporal: `TEMPORAL_TARGET` (local `localhost:7233`), `TEMPORAL_NAMESPACE` (one per
 environment, `afrotransact-<env>` on Temporal Cloud with mTLS in dev / uat / prod), `TEMPORAL_START_WORKERS`.
-Other knobs: `CHECKOUT_PAYMENT_TIMEOUT` (15m), upstream URLs (`CART_URL`, `INVENTORY_URL`, `PAYMENTS_URL`, `OFFERS_URL`, …),
+Other knobs: `CHECKOUT_PAYMENT_TIMEOUT` (15m), upstream URLs (`CART_URL`, `INVENTORY_URL`, `PAYMENTS_URL`, `OFFERS_URL`,
+`SELLER_URL`, `GEO_URL`, …),
 `ORDERS_JOBS_ENABLED`, `ORDERS_CONSUMERS_ENABLED`, per-state tax table and shipping fees under `at.orders.*`.
 
 ## Run and test

@@ -1,6 +1,9 @@
 package com.afrotransact.fulfilment.adapter.out.http;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import com.afrotransact.fulfilment.domain.GeoPoint;
@@ -40,6 +43,39 @@ class HttpGeoClient implements GeoClient {
         } catch (UpstreamFailure f) {
             LOG.debug("ZIP {} not located: {}", zip, f.getMessage());
             return Optional.empty();
+        }
+    }
+
+    @Override
+    public List<Optional<RoadDistance>> roadDistances(GeoPoint from, List<GeoPoint> to) {
+        if (to.isEmpty()) {
+            return List.of();
+        }
+        Map<String, Object> body = Map.of("from", Map.of("lat", from.lat(), "lng", from.lon()),
+                "to", to.stream().map(p -> Map.of("lat", p.lat(), "lng", p.lon())).toList());
+        try {
+            JsonNode r = geo.call(c -> c.post().uri("/v1/distance/batch").body(body).retrieve()
+                    .body(JsonNode.class));
+            List<Optional<RoadDistance>> out = new ArrayList<>();
+            for (int i = 0; i < to.size(); i++) {
+                out.add(Optional.empty());
+            }
+            if (r == null) {
+                return List.of();
+            }
+            for (JsonNode item : r.path("results")) {
+                int i = item.path("index").asInt(-1);
+                JsonNode miles = item.path("roadMiles").isNumber() ? item.path("roadMiles")
+                        : item.path("estimatedRoadMiles");
+                if (i >= 0 && i < to.size() && miles.isNumber()) {
+                    out.set(i, Optional.of(new RoadDistance(miles.asDouble(), item.path("durationMinutes").asDouble(0),
+                            item.path("method").asString("GEODESIC_DETOUR"))));
+                }
+            }
+            return out;
+        } catch (UpstreamFailure f) {
+            LOG.debug("Road distances unavailable: {}", f.getMessage());
+            return List.of();
         }
     }
 

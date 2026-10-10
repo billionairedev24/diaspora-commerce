@@ -13,7 +13,15 @@ public interface RefundAllocator {
      * @param amount total to refund; null = everything still refundable on the lines
      * @return one share per line with a positive amount
      */
-    List<Share> allocate(List<PaymentLine> lines, Money amount);
+    default List<Share> allocate(List<PaymentLine> lines, Money amount) {
+        return allocate(lines, amount, RefundFault.SELLER);
+    }
+
+    /**
+     * Like {@link #allocate(List, Money)}; with {@link RefundFault#CUSTOMER} the delivery charge (shipping) of
+     * AfroTransact Delivery lines is not refundable and is left out of the spread.
+     */
+    List<Share> allocate(List<PaymentLine> lines, Money amount, RefundFault fault);
 
     /** What to refund of one line. */
     record Share(String lineId, Money items, Money shipping, Money tax) {

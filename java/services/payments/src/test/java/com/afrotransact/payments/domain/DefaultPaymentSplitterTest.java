@@ -3,10 +3,12 @@ package com.afrotransact.payments.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +55,72 @@ class DefaultPaymentSplitterTest {
         assertThat(platform.net().minor()).isEqualTo(1495);
         assertThat(split.totalTax().minor()).isEqualTo(496);
         assertThat(a.taxByJurisdiction()).containsEntry("US-TX", Fixtures.usd(165));
+    }
+
+    /**
+     * The README's AfroTransact Delivery example (S255): org_c's groceries collected from its store 7.4 road miles
+     * from the customer (customer charge 499 + 85 × 7.4 = 1128, seller fee 200), next to org_a's self-shipped line.
+     */
+    @Test
+    void afroTransactDeliveryWorkedExample() {
+        FeeSchedule schedule = Fixtures.scheduleWithDelivery(Fixtures.launchDelivery(List.of()));
+        DeliveryQuote quote = schedule.quoteDelivery("org_c", new BigDecimal("7.4"), 1, Fixtures.RETAIL);
+        assertThat(quote.customerCharge().minor()).isEqualTo(1128);
+        assertThat(quote.sellerFee().minor()).isEqualTo(200);
+        List<OrderLine> lines = List.of(
+                Fixtures.deliveryLine("D1", "org_c", "Groceries", 2, 3000, 1128, 248, 200),
+                Fixtures.line("A1", "org_a", "Groceries", Fulfilment.SELF, 1, 1500, 500, 124));
+        Money fee = schedule.estimateCardFee(Fixtures.usd(6500));
+        assertThat(fee.minor()).isEqualTo(219);
+
+        PaymentSplit split = splitter.split(lines, schedule, fee);
+
+        RecipientShare platform = split.platform();
+        RecipientShare c = share(split, "org_c");
+        RecipientShare a = share(split, "org_a");
+        assertThat(platform.shipping().minor()).isEqualTo(1128);
+        assertThat(platform.deliveryFees().minor()).isEqualTo(200);
+        assertThat(c.shipping().minor()).isZero();
+        assertThat(c.commission().minor()).isEqualTo(240);
+        assertThat(c.fbaFees().minor()).isZero();
+        assertThat(c.deliveryFees().minor()).isEqualTo(200);
+        // Weights 1128 / 3248 / 2124: exact 38.00 / 109.43 / 71.56 → floors 218, the leftover cent to org_a.
+        assertThat(platform.stripeFee().minor()).isEqualTo(38);
+        assertThat(c.stripeFee().minor()).isEqualTo(109);
+        assertThat(a.stripeFee().minor()).isEqualTo(72);
+        assertThat(c.net().minor()).isEqualTo(3000 - 240 - 200 - 109);
+        assertThat(a.net().minor()).isEqualTo(1500 + 500 - 120 - 72);
+        assertThat(platform.net().minor()).isEqualTo(1128 + 360 + 200 - 38);
+        assertThat(split.line("D1").orElseThrow().shippingToPlatform()).isTrue();
+        assertThat(split.line("D1").orElseThrow().deliveryFee().minor()).isEqualTo(200);
+        assertThat(split.line("A1").orElseThrow().deliveryFee().minor()).isZero();
+
+        Journal capture = Postings.capture(UUID.randomUUID(), Instant.EPOCH, "k", "o1", "p1", "ch", split);
+        assertThat(capture.lines()).anySatisfy(l -> {
+            assertThat(l.account().chart().code()).isEqualTo("4250");
+            assertThat(l.amount().minor()).isEqualTo(200);
+            assertThat(l.side()).isEqualTo(EntrySide.CREDIT);
+        });
+        assertThat(capture.lines()).anySatisfy(l -> {
+            assertThat(l.account().chart().code()).isEqualTo("4200");
+            assertThat(l.amount().minor()).isEqualTo(1128);
+        });
+    }
+
+    @Test
+    void afroTransactRetailNeverPaysTheSellerDeliveryFee() {
+        FeeSchedule schedule = Fixtures.scheduleWithDelivery(Fixtures.launchDelivery(List.of(
+                new SellerDeliveryOverride(Fixtures.RETAIL, DeliveryTariff.flat(Fixtures.usd(900))))));
+        DeliveryQuote quote = schedule.quoteDelivery(Fixtures.RETAIL, BigDecimal.ONE, 2, Fixtures.RETAIL);
+        assertThat(quote.sellerFee().minor()).isZero();
+        assertThat(quote.sellerFeeSource()).isEqualTo("RETAIL");
+        PaymentSplit split = splitter.split(List.of(Fixtures.deliveryLine("R1", Fixtures.RETAIL, "Groceries", 1, 1000,
+                599, 83, 200)), schedule, Fixtures.usd(60));
+        RecipientShare retail = share(split, Fixtures.RETAIL);
+        assertThat(retail.deliveryFees().minor()).isZero();
+        assertThat(retail.shipping().minor()).isEqualTo(599);
+        assertThat(split.platform().shipping().minor()).isZero();
+        assertThat(retail.net().minor()).isEqualTo(1000 + 599 - retail.stripeFee().minor());
     }
 
     /**
@@ -192,10 +260,15 @@ class DefaultPaymentSplitterTest {
             for (int i = 0; i < n; i++) {
                 // Every other order has at least one Retail line.
                 String org = i == 0 && run % 2 == 0 ? Fixtures.RETAIL : orgs[random.nextInt(orgs.length)];
-                lines.add(Fixtures.line("L" + i, org,
-                        categories[random.nextInt(categories.length)],
-                        random.nextBoolean() ? Fulfilment.FBA : Fulfilment.SELF, 1 + random.nextInt(5),
-                        random.nextInt(50_000), random.nextInt(2_000), random.nextInt(4_000)));
+                Fulfilment f = Fulfilment.values()[random.nextInt(Fulfilment.values().length)];
+                String category = categories[random.nextInt(categories.length)];
+                int qty = 1 + random.nextInt(5);
+                long items = random.nextInt(50_000);
+                long ship = random.nextInt(2_000);
+                long lineTax = random.nextInt(4_000);
+                lines.add(f == Fulfilment.AFROTRANSACT_DELIVERY
+                        ? Fixtures.deliveryLine("L" + i, org, category, qty, items, ship, lineTax, random.nextInt(1_500))
+                        : Fixtures.line("L" + i, org, category, f, qty, items, ship, lineTax));
             }
             long charge = lines.stream().mapToLong(l -> l.total().minor()).sum();
             long fee = charge == 0 ? random.nextInt(50) : random.nextLong(Math.max(1, charge / 10));
@@ -219,20 +292,37 @@ class DefaultPaymentSplitterTest {
                             .mapToLong(l -> l.shipping().minor()).sum();
                     assertThat(r.commission().minor()).isZero();
                     assertThat(r.fbaFees().minor()).isZero();
+                    assertThat(r.deliveryFees().minor()).isZero();
                     assertThat(r.net().minor()).isEqualTo(items + shipping - r.stripeFee().minor());
+                } else if (r.kind() == RecipientKind.SELLER) {
+                    long deliveryFees = lines.stream().filter(l -> l.sellerOrg().equals(r.recipientId())
+                            && l.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY)
+                            .mapToLong(l -> l.deliveryFee().minor()).sum();
+                    assertThat(r.deliveryFees().minor()).isEqualTo(deliveryFees);
+                    assertThat(r.net().minor()).isEqualTo(r.items().minor() + r.shipping().minor()
+                            - r.commission().minor() - r.fbaFees().minor() - deliveryFees - r.stripeFee().minor());
                 }
             }
             long platformIncome = split.sellers().stream()
-                    .mapToLong(r -> r.commission().minor() + r.fbaFees().minor()).sum();
-            assertThat(split.platform().commission().minor() + split.platform().fbaFees().minor())
-                    .isEqualTo(platformIncome);
-            long sellerFbaShipping = lines.stream().filter(l -> l.fulfilment() == Fulfilment.FBA
+                    .mapToLong(r -> r.commission().minor() + r.fbaFees().minor() + r.deliveryFees().minor()).sum();
+            assertThat(split.platform().commission().minor() + split.platform().fbaFees().minor()
+                    + split.platform().deliveryFees().minor()).isEqualTo(platformIncome);
+            // Marketplace sellers' FBA and AfroTransact Delivery shipping is AfroTransact's (4200); never Retail's.
+            long platformShipping = lines.stream().filter(l -> l.fulfilment().platformShips()
                     && !l.sellerOrg().equals(Fixtures.RETAIL)).mapToLong(l -> l.shipping().minor()).sum();
-            assertThat(split.platform().shipping().minor()).isEqualTo(sellerFbaShipping);
+            assertThat(split.platform().shipping().minor()).isEqualTo(platformShipping);
+            assertThat(split.lines()).filteredOn(l -> !l.sellerOrg().equals(Fixtures.RETAIL)
+                            && lines.stream().anyMatch(x -> x.lineId().equals(l.lineId())
+                            && x.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY))
+                    .allSatisfy(l -> assertThat(l.fbaFee().minor()).isZero());
+            Journal journal = Postings.capture(UUID.randomUUID(), Instant.EPOCH, "k" + run, "o", "p", "c",
+                    split);
+            assertThat(journal.lines()).isNotEmpty();
             assertThat(split.lines()).filteredOn(l -> l.sellerOrg().equals(Fixtures.RETAIL))
                     .allSatisfy(l -> {
                         assertThat(l.commission().minor()).isZero();
                         assertThat(l.fbaFee().minor()).isZero();
+                        assertThat(l.deliveryFee().minor()).isZero();
                         assertThat(l.shippingToPlatform()).isFalse();
                     });
         }

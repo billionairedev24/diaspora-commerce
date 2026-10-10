@@ -1,5 +1,6 @@
 package com.afrotransact.payments.application;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
@@ -8,6 +9,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.payments.domain.DeliveryPricing;
+import com.afrotransact.payments.domain.DeliveryQuote;
 import com.afrotransact.payments.domain.EffectiveFees;
 import com.afrotransact.payments.domain.FeeSchedule;
 import com.afrotransact.payments.domain.Money;
@@ -65,6 +68,23 @@ class FeeScheduleServiceImpl implements FeeScheduleService {
     }
 
     @Override
+    public DeliveryQuote quoteDelivery(String sellerOrgId, BigDecimal distanceMiles, int packages, Instant at) {
+        access.deliveryQuoter();
+        if (sellerOrgId == null || sellerOrgId.isBlank()) {
+            throw new PaymentsRuleViolation("payments.invalid-request", "sellerOrgId is required",
+                    Map.of("sellerOrgId", "Required"));
+        }
+        if (distanceMiles == null) {
+            throw new PaymentsRuleViolation("payments.invalid-request", "distanceMiles is required",
+                    Map.of("distanceMiles", "Required"));
+        }
+        Instant when = at == null ? Instant.now(clock) : at;
+        FeeSchedule schedule = FeeSchedule.activeAt(schedules.all(), when).orElseThrow(() -> new NotFoundException(
+                "payments.no-fee-schedule", "No fee schedule in force at " + when));
+        return schedule.quoteDelivery(sellerOrgId.trim(), distanceMiles, packages, settings.retailOrgId());
+    }
+
+    @Override
     public FeeSchedule create(NewFeeScheduleCommand cmd) {
         Actor actor = access.configure();
         return tx.serializable(() -> {
@@ -74,11 +94,14 @@ class FeeScheduleServiceImpl implements FeeScheduleService {
             Optional<FeeSchedule> latest = FeeSchedule.latestLive(history);
             FeeSchedule.requireValidSuccessor(effective, latest, now);
             String currency = cmd.currency() == null ? "USD" : cmd.currency();
+            DeliveryPricing delivery = cmd.deliveryPricing() != null ? cmd.deliveryPricing().toPricing(currency)
+                    : latest.map(FeeSchedule::deliveryPricing)
+                    .filter(d -> d.currency().equals(Money.zero(currency).currency())).orElse(null);
             FeeSchedule schedule = new FeeSchedule(UUID.randomUUID(), FeeSchedule.nextVersion(history),
                     effective, currency, cmd.categoryBps(), cmd.defaultCommissionBps(), cmd.overrides(),
                     cmd.cardPctBps(), Money.of(cmd.cardFixedMinor(), currency),
                     Money.of(cmd.fbaPerUnitMinor(), currency), cmd.reverseCommissionOnRefund(), cmd.note(),
-                    actor.subject(), now);
+                    actor.subject(), now, null, delivery);
             schedules.insert(schedule);
             AUDIT.info("fee schedule v{} ({}) created by {}, effective {}", schedule.version(), schedule.id(),
                     actor.subject(), schedule.effectiveFrom());

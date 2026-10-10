@@ -13,9 +13,20 @@ import java.util.Objects;
  * @param taxJurisdiction jurisdiction code of the tax (e.g. US-TX-48201)
  * @param shippingTax     the part of {@code tax} charged on shipping (states that tax delivery charges); 0 when
  *                        none or unknown
+ * @param deliveryFee     the seller's AfroTransact Delivery pickup-delivery fee allocated to this line (S255),
+ *                        quoted at checkout and snapshotted by orders; only on {@link Fulfilment#AFROTRANSACT_DELIVERY}
+ *                        lines, 0 otherwise
  */
 public record OrderLine(String lineId, String sellerOrg, String category, Fulfilment fulfilment, int quantity,
-                        Money items, Money shipping, Money tax, String taxJurisdiction, Money shippingTax) {
+                        Money items, Money shipping, Money tax, String taxJurisdiction, Money shippingTax,
+                        Money deliveryFee) {
+
+    /** A line without a seller delivery fee. */
+    public OrderLine(String lineId, String sellerOrg, String category, Fulfilment fulfilment, int quantity,
+                     Money items, Money shipping, Money tax, String taxJurisdiction, Money shippingTax) {
+        this(lineId, sellerOrg, category, fulfilment, quantity, items, shipping, tax, taxJurisdiction, shippingTax,
+                null);
+    }
 
     /** A line whose tax is all on the items. */
     public OrderLine(String lineId, String sellerOrg, String category, Fulfilment fulfilment, int quantity,
@@ -45,6 +56,16 @@ public record OrderLine(String lineId, String sellerOrg, String category, Fulfil
         if (shippingTax.isNegative() || shippingTax.greaterThan(tax)) {
             throw new PaymentsRuleViolation("payments.invalid-line", "Line " + lineId
                     + " has a shipping tax outside 0 … tax");
+        }
+        deliveryFee = deliveryFee == null ? Money.zero(items.currency()) : deliveryFee;
+        items.requireSameCurrency(deliveryFee);
+        if (deliveryFee.isNegative()) {
+            throw new PaymentsRuleViolation("payments.invalid-line", "Line " + lineId
+                    + " has a negative delivery fee");
+        }
+        if (deliveryFee.isPositive() && fulfilment != Fulfilment.AFROTRANSACT_DELIVERY) {
+            throw new PaymentsRuleViolation("payments.invalid-line", "Line " + lineId
+                    + " has a delivery fee but is not AFROTRANSACT_DELIVERY");
         }
     }
 

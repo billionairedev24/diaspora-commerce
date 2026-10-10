@@ -23,6 +23,8 @@ at:
       content-url: ${CONTENT_URL:http://content}
       catalog-url: ${CATALOG_URL:http://catalog}
       offers-url: ${OFFERS_URL:http://offers}
+      seller-url: ${SELLER_URL:http://seller}
+      geo-url: ${GEO_URL:http://geo}
 management:
   tracing:
     sampling:

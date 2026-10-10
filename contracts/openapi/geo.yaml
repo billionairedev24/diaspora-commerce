@@ -6,7 +6,9 @@ info:
     Address autocomplete for every address field (Google Places API (New) when a key is configured, OpenStreetMap
     Nominatim otherwise, with automatic fallback), structured resolution, USPS-grade validation through Smarty
     (missing unit, undeliverable, corrections suggested — never silently applied), ZIP lookup for the
-    deliver-to picker, and PostGIS delivery zones / FC catchments / provider service areas.
+    deliver-to picker, PostGIS delivery zones / FC catchments / provider service areas, and road distances for
+    AfroTransact Delivery pricing and dispatch (routing providers Google Routes API / OSRM in priority order, PostGIS
+    geodesic × detour factor as the last resort).
     Provider keys never reach clients: browsers and apps call this API.
 servers:
   - {url: 'http://localhost:8205', description: local}
@@ -18,6 +20,8 @@ tags:
     description: Autocomplete, resolution, validation and ZIP lookup for address fields
   - name: Zones
     description: Delivery zones, FC catchments and provider service areas
+  - name: Distance
+    description: Distances between places (AfroTransact Delivery pricing, nearest drivers) and forward geocoding
 paths:
   /v1/addresses/autocomplete:
     get:
@@ -102,11 +106,78 @@ paths:
         - {name: lat, in: query, required: true, schema: {type: number}}
         - {name: lon, in: query, required: true, schema: {type: number}}
         - {name: type, in: query, schema: {$ref: '#/components/schemas/ZoneType'}}
+        - name: withinMiles
+          in: query
+          description: >-
+            Also return zones whose edge is at most this many miles away (0–200), nearest first, each with `inside` and
+            `distanceMiles` (seller pickup locations just outside a delivery zone).
+          schema: {type: number, minimum: 0, maximum: 200}
       responses:
         '200':
           description: Zones
-          content: {application/json: {schema: {type: object, properties: {zones: {type: array, items: {$ref: '#/components/schemas/Zone'}}}}}}
+          content: {application/json: {schema: {type: object, properties: {zones: {type: array, items: {$ref: '#/components/schemas/ZoneMatch'}}}}}}
         '400': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/distance:
+    post:
+      tags: [Distance]
+      operationId: distance
+      summary: Distance between two places
+      description: >-
+        Each end is coordinates (`lat`/`lng`, e.g. stored on an address), a provider address id (`addressId`, from
+        autocomplete), a `zip` (centroid) or a street `address` (geocoded with the provider chain, ZIP centroid as a
+        fallback). `roadMiles` and `durationMinutes` are driving distance and time from the first routing provider
+        that answers, in the configured priority order (`GEO_ROUTING_PROVIDERS`, e.g. google then osrm; each enabled
+        only when its key / URL is set; a failure or timeout moves to the next): method `ROAD_GOOGLE` (Routes API
+        computeRouteMatrix) or `ROAD_OSRM` (OSRM table service). Only when no provider is configured or all fail:
+        PostGIS geodesic distance × detour factor (default 1.3) at 25 mph, method `GEODESIC_DETOUR`. Provider results
+        are cached by origin / destination rounded to ~50 m (`cached: true`). `straightLineMiles` is always the
+        PostGIS geodesic distance (WGS84 spheroid). `estimatedRoadMiles` repeats `roadMiles` (deprecated alias).
+        Miles are rounded to 2 decimals, minutes to 1.
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DistanceRequest'}}}
+      responses:
+        '200': {description: Distance, content: {application/json: {schema: {$ref: '#/components/schemas/Distance'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+  /v1/distance/batch:
+    post:
+      tags: [Distance]
+      operationId: distanceBatch
+      summary: One origin, many destinations (at most 100)
+      description: >-
+        Results keep the destinations' order. A destination that cannot be located gets its own `error` (codes
+        `geo.invalid-place`, `geo.place-not-found`, `geo.provider-unavailable`); the others are still measured.
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DistanceBatchRequest'}}}
+      responses:
+        '200': {description: Distances, content: {application/json: {schema: {$ref: '#/components/schemas/DistanceBatch'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+  /v1/geocode:
+    post:
+      tags: [Distance]
+      operationId: geocode
+      summary: Position of a street address (seller ship-from and customer addresses)
+      description: >-
+        Coordinates already on the address are returned as they are (precision `POINT`). Otherwise the address is
+        geocoded with the autocomplete provider chain (precision `ADDRESS`), falling back to the ZIP centroid
+        (`ZIP`). 404 `geo.not-found` when nothing matches.
+      security: []
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/GeocodeRequest'}}}
+      responses:
+        '200': {description: Position, content: {application/json: {schema: {$ref: '#/components/schemas/Located'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
   /v1/zones:
     get:
       tags: [Zones]
@@ -181,3 +252,86 @@ components:
         centerLon: {type: number}
         radiusMiles: {type: number, maximum: 200}
         active: {type: boolean}
+    ZoneMatch:
+      allOf:
+        - {$ref: '#/components/schemas/Zone'}
+        - type: object
+          properties:
+            inside: {type: boolean, description: Only with withinMiles - the zone contains the point}
+            distanceMiles: {type: number, description: Only with withinMiles - miles to the zone edge (0 inside)}
+    GeocodeRequest:
+      type: object
+      description: A street address; line1 or postalCode is required
+      properties:
+        line1: {type: string, example: 9800 Bissonnet St}
+        line2: {type: string}
+        city: {type: string, example: Houston}
+        state: {type: string, example: TX}
+        postalCode: {type: string, example: '77036'}
+        country: {type: string, default: US}
+        lat: {type: number}
+        lon: {type: number}
+    Place:
+      type: object
+      description: One of lat + lng, addressId, zip or address (first match wins in that order)
+      properties:
+        lat: {type: number, minimum: -90, maximum: 90}
+        lng: {type: number, minimum: -180, maximum: 180}
+        addressId: {type: string, description: 'Provider address id from autocomplete (g:…, o:…, f:…)'}
+        zip: {type: string, example: '77002'}
+        address: {$ref: '#/components/schemas/GeocodeRequest'}
+    Located:
+      type: object
+      required: [lat, lng, precision]
+      properties:
+        lat: {type: number}
+        lng: {type: number}
+        precision: {type: string, enum: [POINT, ADDRESS, ZIP]}
+    DistanceRequest:
+      type: object
+      required: [from, to]
+      properties:
+        from: {$ref: '#/components/schemas/Place'}
+        to: {$ref: '#/components/schemas/Place'}
+    DistanceMethod:
+      type: string
+      enum: [ROAD_GOOGLE, ROAD_OSRM, GEODESIC_DETOUR]
+      description: Which routing provider produced roadMiles / durationMinutes (GEODESIC_DETOUR = last-resort estimate)
+    Distance:
+      type: object
+      required: [straightLineMiles, roadMiles, durationMinutes, method]
+      properties:
+        straightLineMiles: {type: number, example: 12.23}
+        roadMiles: {type: number, example: 15.53}
+        durationMinutes: {type: number, example: 25}
+        method: {$ref: '#/components/schemas/DistanceMethod'}
+        cached: {type: boolean, description: Served from the route cache (no provider call)}
+        estimatedRoadMiles: {type: number, deprecated: true, description: Same as roadMiles}
+        from: {$ref: '#/components/schemas/Located'}
+        to: {$ref: '#/components/schemas/Located'}
+    DistanceBatchRequest:
+      type: object
+      required: [from, to]
+      properties:
+        from: {$ref: '#/components/schemas/Place'}
+        to: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Place'}}
+    DistanceBatchItem:
+      type: object
+      required: [index]
+      properties:
+        index: {type: integer}
+        straightLineMiles: {type: number}
+        roadMiles: {type: number}
+        durationMinutes: {type: number}
+        method: {$ref: '#/components/schemas/DistanceMethod'}
+        cached: {type: boolean}
+        estimatedRoadMiles: {type: number, deprecated: true}
+        from: {$ref: '#/components/schemas/Located'}
+        to: {$ref: '#/components/schemas/Located'}
+        error:
+          type: object
+          properties: {code: {type: string}, detail: {type: string}}
+    DistanceBatch:
+      type: object
+      properties:
+        results: {type: array, items: {$ref: '#/components/schemas/DistanceBatchItem'}}

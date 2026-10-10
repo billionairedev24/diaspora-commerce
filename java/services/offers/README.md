@@ -12,6 +12,14 @@ coupons & promotions. Spring Boot 4.1 · Java 25 · PostgreSQL `offers` · local
   - `AFROTRANSACT`: "Fulfilled by AfroTransact". Quantity is the inventory-service availability of the offer's
     `inventorySku` owned by the seller org, which covers FBA stock or Retail's own stock.
   - `SELLER`: "Ships from seller". Quantity is declared on the offer, and a ship-from location is required.
+  - `AFROTRANSACT_DELIVERY` (S255): "AfroTransact Delivery from the seller's store". The seller packs, the nearest
+    AfroTransact driver collects and delivers. Quantity is declared on the offer (seller stock, `PUT /v1/offers/stock`
+    works), and `shipFrom.locationId` must name one of the seller's ship-from locations **with AfroTransact pickup
+    enabled** — checked against seller-service `GET /v1/ship-from-locations/{id}` (offers' client-credentials token,
+    scope `sellers:ship-from.read`) on create and on every update; city, region, country and ZIP are copied from the
+    location (`422 offers.rule-violation` with `fieldErrors["shipFrom.locationId"]`, `503 offers.seller-unavailable`).
+    Backward compatible: existing `SELLER` / `AFROTRANSACT` offers and requests are unchanged, `locationId` is optional
+    for them. Public offers return `shipFromLocationId` so checkout can price the delivery by distance.
 - **Attaching to the catalog.** An offer is created on an existing live variant by ATIN or GTIN through the
   `CatalogClient` port, whose HTTP adapter calls catalog's `GET /v1/public/variants/{atin}`. GTIN lookups use
   `GET /v1/identifiers/gtin/{code}` with offers' own client-credentials token (client `offers-service`, scope
@@ -41,8 +49,8 @@ coupons & promotions. Spring Boot 4.1 · Java 25 · PostgreSQL `offers` · local
    | Factor | Points |
    |---|---|
    | Landed price | 600 × lowest landed / this landed |
-   | Fulfilled by AfroTransact | +100 |
-   | Delivery speed | 100 × fastest / this. Days = handling + transit (2 days AfroTransact, 4 days seller) |
+   | Fulfilled by AfroTransact | +100 (FBA only; AfroTransact Delivery from a seller's store is seller-fulfilled) |
+   | Delivery speed | 100 × fastest / this. Days = handling + transit (2 days AfroTransact, 1 day AfroTransact Delivery, 4 days seller) |
    | Seller health | 150 × (0.4·rating/5 + 0.3·on-time + 0.3·(1 − defect/2%)). New sellers count as 4.0★ and 95% on time |
    | Stock depth | 50 × min(1, available / 10) |
 
@@ -99,7 +107,7 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 - `offerId`
 - `seller{id,name,kind,city}`
 - `priceMinor`, `listPriceMinor`, `currency`
-- `fulfilment` (`AFROTRANSACT|SELLER`)
+- `fulfilment` (`AFROTRANSACT|SELLER|AFROTRANSACT_DELIVERY`; badge `AFROTRANSACT_DELIVERY`) and `shipFromLocationId`
 - `availableQty`
 - `stockStatus` (`IN_STOCK|LOW_STOCK|OUT_OF_STOCK`, where low stock is 1–5 units)
 
@@ -127,7 +135,8 @@ Consumers de-duplicate on `event-id` with the platform inbox. See
 | `KAFKA_BOOTSTRAP`, `KAFKA_GROUP` | Kafka outbox relay and consumers (group `offers-service`) |
 | `AUTH_ISSUER_URL` | identity service issuer (JWT validation) |
 | `CATALOG_URL`, `CATALOG_TIMEOUT` | catalog-service base URL (local `http://localhost:8101`, cluster `http://catalog:8080`) |
-| `OFFERS_CLIENT_ID`, `OFFERS_CLIENT_SECRET` | client credentials for catalog GTIN lookups (`offers-service`, scope `catalog:read`; `at.offers.oauth.*`) |
+| `SELLER_URL`, `SELLER_TIMEOUT` | seller-service base URL for pickup locations (local `http://localhost:8106`, cluster `http://seller:8080`) |
+| `OFFERS_CLIENT_ID`, `OFFERS_CLIENT_SECRET` | client credentials for catalog GTIN lookups and seller pickup locations (`offers-service`, scopes `catalog:read sellers:ship-from.read`; `at.offers.oauth.*`) |
 | `RETAIL_ORG_ID` | organisation id of AfroTransact Retail (seller kind `PLATFORM`) |
 | `CONSUMERS_ENABLED` | turn the Kafka listeners off |
 | `FGA_ENABLED`, `FGA_ENFORCE`, `FGA_API_URL`, `FGA_API_TOKEN`, `FGA_STORE_NAME` / `FGA_STORE_ID`, `FGA_MODEL_ID`, `FGA_TIMEOUT`, `FGA_CACHE_TTL` | OpenFGA relationship checks (`at.security.fga.*`, S022; see below) |

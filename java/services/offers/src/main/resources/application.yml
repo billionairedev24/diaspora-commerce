@@ -98,17 +98,24 @@ at:
     default-handling-days: 2
     afrotransact-transit-days: 2
     seller-transit-days: 4
+    # S255: AfroTransact Delivery from the seller's store (local, collected and delivered by our driver).
+    afrotransact-delivery-transit-days: 1
     low-stock-threshold: 5
     catalog:
       base-url: ${CATALOG_URL:http://localhost:8101}
       timeout: ${CATALOG_TIMEOUT:3s}
-    # offers-service's own client-credentials token (GTIN lookups at catalog need catalog:read).
+    # S255: seller-service GET /v1/ship-from-locations/{id} (AFROTRANSACT_DELIVERY offers need a pickup location).
+    seller:
+      base-url: ${SELLER_URL:http://localhost:8106}
+      timeout: ${SELLER_TIMEOUT:3s}
+    # offers-service's own client-credentials token (GTIN lookups at catalog need catalog:read; pickup locations at
+    # seller need sellers:ship-from.read).
     oauth:
       issuer-url: ${AUTH_ISSUER_URL:http://localhost:8100}
       token-path: /oauth2/token
       client-id: ${OFFERS_CLIENT_ID:offers-service}
       client-secret: ${OFFERS_CLIENT_SECRET:local-offers-service-secret}
-      scopes: catalog:read
+      scopes: catalog:read sellers:ship-from.read
     consumers:
       catalog-topic: at.product.events
       inventory-topic: at.inventory.events

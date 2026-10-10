@@ -22,6 +22,8 @@ import com.afrotransact.offers.port.CatalogClient.CatalogVariant;
 import com.afrotransact.offers.port.OfferRepository;
 import com.afrotransact.offers.port.OfferRepository.OfferPage;
 import com.afrotransact.offers.port.OfferRepository.OfferQuery;
+import com.afrotransact.offers.port.PickupLocationClient;
+import com.afrotransact.offers.port.PickupLocationClient.PickupLocation;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
@@ -39,6 +41,7 @@ class OfferServiceImpl implements OfferService {
 
     private final OfferRepository offers;
     private final CatalogClient catalog;
+    private final PickupLocationClient pickupLocations;
     private final BuyBoxService buyBox;
     private final BuyBoxEvaluator evaluator;
     private final PermissionChecker permissions;
@@ -47,11 +50,12 @@ class OfferServiceImpl implements OfferService {
     private final OffersSettings settings;
     private final Clock clock;
 
-    OfferServiceImpl(OfferRepository offers, CatalogClient catalog, BuyBoxService buyBox, BuyBoxEvaluator evaluator,
-                     PermissionChecker permissions, ResourceAccessChecker access, DomainEventPublisher events,
-                     OffersSettings settings, Clock clock) {
+    OfferServiceImpl(OfferRepository offers, CatalogClient catalog, PickupLocationClient pickupLocations,
+                     BuyBoxService buyBox, BuyBoxEvaluator evaluator, PermissionChecker permissions,
+                     ResourceAccessChecker access, DomainEventPublisher events, OffersSettings settings, Clock clock) {
         this.offers = offers;
         this.catalog = catalog;
+        this.pickupLocations = pickupLocations;
         this.buyBox = buyBox;
         this.evaluator = evaluator;
         this.permissions = permissions;
@@ -68,6 +72,8 @@ class OfferServiceImpl implements OfferService {
         String org = sellerOrg(actor, cmd.sellerOrgId());
         access.requireForOrg(OffersPermissions.WRITE, OffersRelations.ORG_MANAGE_PRODUCTS, org);
         validateCreate(cmd);
+        ShipFrom shipFrom = cmd.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY
+                ? pickupShipFrom(org, cmd.shipFrom()) : cmd.shipFrom();
 
         CatalogVariant variant = resolve(cmd);
         OfferCondition condition = cmd.condition() == null ? OfferCondition.NEW : cmd.condition();
@@ -87,7 +93,7 @@ class OfferServiceImpl implements OfferService {
                 variant.productId(), variant.gtin(), variant.categoryId(), org, kindOf(org), sku, inventorySku,
                 condition, cmd.priceMinor(), cmd.listPriceMinor(), currency(cmd.currency()), cmd.shippingMinor(),
                 cmd.fulfilment(), cmd.quantity() == null ? 0 : cmd.quantity(),
-                cmd.handlingDays() == null ? settings.defaultHandlingDays() : cmd.handlingDays(), cmd.shipFrom(),
+                cmd.handlingDays() == null ? settings.defaultHandlingDays() : cmd.handlingDays(), shipFrom,
                 OfferStatus.ACTIVE, true, now, now, 0));
         publish(OffersEvents.OFFER_CREATED, offer);
         buyBox.recompute(List.of(offer.atin()), OffersEvents.OFFER_CREATED);
@@ -101,7 +107,7 @@ class OfferServiceImpl implements OfferService {
             Offer.Terms t = o.terms();
             Long listPrice = cmd.listPriceMinor() == null ? t.listPriceMinor()
                     : cmd.listPriceMinor() == 0 ? null : cmd.listPriceMinor();
-            Offer.Terms next = new Offer.Terms(
+            Offer.Terms proposed = new Offer.Terms(
                     cmd.condition() == null ? t.condition() : cmd.condition(),
                     cmd.priceMinor() == null ? t.priceMinor() : cmd.priceMinor(),
                     listPrice,
@@ -112,18 +118,27 @@ class OfferServiceImpl implements OfferService {
                     cmd.shipFrom() == null ? t.shipFrom() : cmd.shipFrom(),
                     cmd.inventorySku() == null || cmd.inventorySku().isBlank() ? t.inventorySku()
                             : cmd.inventorySku().trim().toUpperCase(Locale.ROOT));
-            if (next.fulfilment() == Fulfilment.SELLER) {
-                requireShipFrom(next.shipFrom(), new LinkedHashMap<>(), true);
+            if (proposed.fulfilment() == Fulfilment.SELLER) {
+                requireShipFrom(proposed.shipFrom(), new LinkedHashMap<>(), true);
             }
-            if (next.condition() != t.condition()) {
-                offers.findOpen(o.sellerOrgId(), o.atin(), next.condition())
+            Offer.Terms next = proposed;
+            if (proposed.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY) {
+                // Re-checked on every change: the location may have been disabled since the offer was created.
+                next = new Offer.Terms(proposed.condition(), proposed.priceMinor(), proposed.listPriceMinor(),
+                        proposed.shippingMinor(), proposed.fulfilment(), proposed.sellerQuantity(),
+                        proposed.handlingDays(), pickupShipFrom(o.sellerOrgId(), proposed.shipFrom()),
+                        proposed.inventorySku());
+            }
+            Offer.Terms checked = next;
+            if (checked.condition() != t.condition()) {
+                offers.findOpen(o.sellerOrgId(), o.atin(), checked.condition())
                         .filter(other -> !other.id().equals(o.id()))
                         .ifPresent(other -> {
                             throw new ConflictException("offers.offer-exists", "You already have a "
-                                    + next.condition() + " offer on " + o.atin());
+                                    + checked.condition() + " offer on " + o.atin());
                         });
             }
-            return o.revise(next, Instant.now(clock));
+            return o.revise(checked, Instant.now(clock));
         }, OffersEvents.OFFER_UPDATED);
     }
 
@@ -160,7 +175,7 @@ class OfferServiceImpl implements OfferService {
         if (owned.isEmpty()) {
             throw new NotFoundException("offers.sku-not-found", "None of your open offers uses SKU " + sku);
         }
-        if (owned.stream().anyMatch(o -> o.fulfilment() != Fulfilment.SELLER)) {
+        if (owned.stream().anyMatch(o -> !o.fulfilment().sellerStock())) {
             throw new ConflictException("offers.stock-managed-by-inventory", "SKU " + sku
                     + " is Fulfilled by AfroTransact; its stock comes from the fulfilment centre");
         }
@@ -245,10 +260,39 @@ class OfferServiceImpl implements OfferService {
                 errors.put("quantity", "Required for seller-fulfilled offers");
             }
             requireShipFrom(cmd.shipFrom(), errors, false);
+        } else if (cmd.fulfilment() == Fulfilment.AFROTRANSACT_DELIVERY) {
+            if (cmd.quantity() == null) {
+                errors.put("quantity", "Required for AfroTransact Delivery offers (the seller keeps the stock)");
+            }
+            if (cmd.shipFrom() == null || cmd.shipFrom().locationId() == null
+                    || cmd.shipFrom().locationId().isBlank()) {
+                errors.put("shipFrom.locationId", "AfroTransact Delivery offers name the pickup location");
+            }
         }
         if (!errors.isEmpty()) {
             throw new OfferRuleViolation("The offer is not valid", errors);
         }
+    }
+
+    /**
+     * The ship-from of an AFROTRANSACT_DELIVERY offer: one of the seller's own locations with AfroTransact pickup
+     * enabled (seller-service); city, region, country and ZIP come from the location.
+     */
+    private ShipFrom pickupShipFrom(String org, ShipFrom requested) {
+        String locationId = requested == null || requested.locationId() == null ? "" : requested.locationId().trim();
+        if (locationId.isEmpty()) {
+            throw new OfferRuleViolation("The offer is not valid", Map.of("shipFrom.locationId",
+                    "AfroTransact Delivery offers name the pickup location"));
+        }
+        PickupLocation l = pickupLocations.find(locationId).filter(p -> org.equals(p.orgId()))
+                .orElseThrow(() -> new OfferRuleViolation("The offer is not valid", Map.of("shipFrom.locationId",
+                        "Not one of your ship-from locations")));
+        if (!l.pickupEnabled()) {
+            throw new OfferRuleViolation("The offer is not valid", Map.of("shipFrom.locationId",
+                    "Enable AfroTransact pickup at this location first"));
+        }
+        return new ShipFrom(l.city(), l.region(), l.country() == null ? "US" : l.country(), l.postalCode(),
+                l.id() == null ? locationId : l.id());
     }
 
     private static void requireShipFrom(ShipFrom shipFrom, Map<String, String> errors, boolean throwNow) {

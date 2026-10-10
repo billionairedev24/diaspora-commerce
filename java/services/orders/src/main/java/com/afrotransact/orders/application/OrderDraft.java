@@ -7,6 +7,7 @@ import java.util.List;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
+import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.ShipTo;
 
 /**
@@ -46,13 +47,24 @@ public record OrderDraft(String orderId, String orderNumber, String customerId, 
                                 String serviceLevel, String pickupLocationId, DeliveryPreferences preferences,
                                 boolean perishable, boolean handoverRequired, String handoverCodeHash,
                                 String handoverCodeSealed, long shippingMinor, LocalDate promisedFrom,
-                                LocalDate promisedBy, List<CheckoutPlan.Line> lines) {
+                                LocalDate promisedBy, List<CheckoutPlan.Line> lines, LocalDelivery localDelivery) {
+
+        /** A shipment that is not AfroTransact Delivery from a seller's store (tests, older workflow histories). */
+        public DraftShipment(String id, int seq, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
+                             String nodeId, DeliveryMethod method, String serviceLevel, String pickupLocationId,
+                             DeliveryPreferences preferences, boolean perishable, boolean handoverRequired,
+                             String handoverCodeHash, String handoverCodeSealed, long shippingMinor,
+                             LocalDate promisedFrom, LocalDate promisedBy, List<CheckoutPlan.Line> lines) {
+            this(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel, pickupLocationId,
+                    preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed, shippingMinor,
+                    promisedFrom, promisedBy, lines, null);
+        }
 
         /** The shipment with other lines and shipping (coupon discounts). */
         public DraftShipment with(List<CheckoutPlan.Line> newLines, long newShippingMinor) {
             return new DraftShipment(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel,
                     pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
-                    handoverCodeSealed, newShippingMinor, promisedFrom, promisedBy, newLines);
+                    handoverCodeSealed, newShippingMinor, promisedFrom, promisedBy, newLines, localDelivery);
         }
     }
 }

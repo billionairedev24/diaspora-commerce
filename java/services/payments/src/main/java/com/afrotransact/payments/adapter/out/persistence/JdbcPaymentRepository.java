@@ -75,9 +75,9 @@ class JdbcPaymentRepository implements PaymentRepository {
             jdbc.sql("""
                     insert into payment_line (payment_id, line_no, line_id, seller_org, category, fulfilment,
                         quantity, items_minor, shipping_minor, tax_minor, tax_jurisdiction, shipping_to_platform,
-                        shipping_tax_minor)
+                        shipping_tax_minor, delivery_fee_minor)
                     values (:pid, :no, :lineId, :org, :category, :fulfilment, :qty, :items, :shipping, :tax,
-                        :jurisdiction, :toPlatform, :shippingTax)
+                        :jurisdiction, :toPlatform, :shippingTax, :deliveryFee)
                     """)
                     .param("pid", p.id()).param("no", ++lineNo).param("lineId", l.lineId())
                     .param("org", l.sellerOrg()).param("category", l.category())
@@ -85,6 +85,7 @@ class JdbcPaymentRepository implements PaymentRepository {
                     .param("items", l.items().minor()).param("shipping", l.shipping().minor())
                     .param("tax", l.tax().minor()).param("jurisdiction", l.taxJurisdiction())
                     .param("toPlatform", pl.shippingToPlatform()).param("shippingTax", l.shippingTax().minor())
+                    .param("deliveryFee", l.deliveryFee().minor())
                     .update();
         }
         return true;
@@ -148,13 +149,15 @@ class JdbcPaymentRepository implements PaymentRepository {
             jdbc.sql("""
                     update payment_line set capture_id = :capture, commission_minor = :commission,
                         fba_fee_minor = :fba, shipping_to_platform = :toPlatform, refunded_items_minor = :ri,
-                        refunded_shipping_minor = :rs, refunded_tax_minor = :rt, commission_reversed_minor = :cr
+                        refunded_shipping_minor = :rs, refunded_tax_minor = :rt, commission_reversed_minor = :cr,
+                        delivery_fee_charged_minor = :dfc, delivery_fee_reversed_minor = :dfr
                     where payment_id = :pid and line_id = :lineId
                     """)
                     .param("capture", pl.captureId()).param("commission", pl.commission().minor())
                     .param("fba", pl.fbaFee().minor()).param("toPlatform", pl.shippingToPlatform())
                     .param("ri", pl.refundedItems().minor()).param("rs", pl.refundedShipping().minor())
                     .param("rt", pl.refundedTax().minor()).param("cr", pl.commissionReversed().minor())
+                    .param("dfc", pl.deliveryFee().minor()).param("dfr", pl.deliveryFeeReversed().minor())
                     .param("pid", p.id()).param("lineId", pl.lineId())
                     .update();
         }
@@ -173,14 +176,17 @@ class JdbcPaymentRepository implements PaymentRepository {
                             rs.getInt("quantity"), Money.of(rs.getLong("items_minor"), currency),
                             Money.of(rs.getLong("shipping_minor"), currency),
                             Money.of(rs.getLong("tax_minor"), currency), rs.getString("tax_jurisdiction"),
-                            Money.of(rs.getLong("shipping_tax_minor"), currency));
+                            Money.of(rs.getLong("shipping_tax_minor"), currency),
+                            Money.of(rs.getLong("delivery_fee_minor"), currency));
                     return new PaymentLine(line, rs.getObject("capture_id", UUID.class),
                             Money.of(rs.getLong("commission_minor"), currency),
                             Money.of(rs.getLong("fba_fee_minor"), currency), rs.getBoolean("shipping_to_platform"),
                             Money.of(rs.getLong("refunded_items_minor"), currency),
                             Money.of(rs.getLong("refunded_shipping_minor"), currency),
                             Money.of(rs.getLong("refunded_tax_minor"), currency),
-                            Money.of(rs.getLong("commission_reversed_minor"), currency));
+                            Money.of(rs.getLong("commission_reversed_minor"), currency),
+                            Money.of(rs.getLong("delivery_fee_charged_minor"), currency),
+                            Money.of(rs.getLong("delivery_fee_reversed_minor"), currency));
                 })
                 .list();
     }
@@ -294,17 +300,19 @@ class JdbcPaymentRepository implements PaymentRepository {
 
     /** Stored form of a refund line (plain numbers). */
     record RefundLineRow(String lineId, String sellerOrg, String taxJurisdiction, boolean shippingToPlatform,
-                         long itemsMinor, long shippingMinor, long taxMinor, long commissionReversedMinor) {
+                         long itemsMinor, long shippingMinor, long taxMinor, long commissionReversedMinor,
+                         long deliveryFeeReversedMinor) {
 
         static RefundLineRow of(RefundLine l) {
             return new RefundLineRow(l.lineId(), l.sellerOrg(), l.taxJurisdiction(), l.shippingToPlatform(),
-                    l.items().minor(), l.shipping().minor(), l.tax().minor(), l.commissionReversed().minor());
+                    l.items().minor(), l.shipping().minor(), l.tax().minor(), l.commissionReversed().minor(),
+                    l.deliveryFeeReversed().minor());
         }
 
         RefundLine toLine(String currency) {
             return new RefundLine(lineId, sellerOrg, taxJurisdiction, shippingToPlatform,
                     Money.of(itemsMinor, currency), Money.of(shippingMinor, currency), Money.of(taxMinor, currency),
-                    Money.of(commissionReversedMinor, currency));
+                    Money.of(commissionReversedMinor, currency), Money.of(deliveryFeeReversedMinor, currency));
         }
     }
 

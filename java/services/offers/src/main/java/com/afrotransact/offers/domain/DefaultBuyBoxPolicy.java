@@ -192,7 +192,7 @@ public class DefaultBuyBoxPolicy implements BuyBoxPolicy {
         if (a.landedPriceMinor() != b.landedPriceMinor()) {
             return "lower landed price";
         }
-        if (a.fulfilment() != b.fulfilment()) {
+        if ((a.fulfilment() == Fulfilment.AFROTRANSACT) != (b.fulfilment() == Fulfilment.AFROTRANSACT)) {
             return "Fulfilled by AfroTransact";
         }
         if (a.deliveryDays() != b.deliveryDays()) {

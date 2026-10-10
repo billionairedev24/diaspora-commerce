@@ -104,6 +104,11 @@ at:
     media:
       base-url: ${MEDIA_BASE_URL:http://localhost:8207}
       service-token: ${MEDIA_SERVICE_TOKEN:}
+    # S255: geocoding ship-from addresses and AfroTransact pickup validation (DELIVERY zones, public geo endpoints).
+    geo:
+      base-url: ${GEO_URL:http://localhost:8205}
+      timeout: ${GEO_TIMEOUT:3s}
+      pickup-max-radius-miles: ${PICKUP_MAX_RADIUS_MILES:25}
     consumers:
       # identity.role.granted / revoked (S236: org_member mirrors identity). Off in tests without a broker.
       enabled: ${SELLER_CONSUMERS_ENABLED:true}

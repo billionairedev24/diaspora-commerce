@@ -16,4 +16,5 @@ telemetry:
 tolerations: []
 extraEnv:
   MEDIA_BASE_URL: http://media:8080
+  GEO_URL: http://geo:8080
   SELLER_LIVE_COUNTRIES: US

@@ -17,6 +17,7 @@ import com.afrotransact.orders.domain.CourierProof;
 import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
+import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
 import com.afrotransact.orders.domain.OrderStatus;
@@ -45,7 +46,7 @@ class JdbcOrderRepository implements OrderRepository {
             s.service_level, s.pickup_location_id, s.preferences::text as preferences, s.perishable,
             s.handover_required, s.handover_code_hash, s.handover_code_sealed, s.status, s.shipping_minor, s.carrier,
             s.tracking_number, s.promised_from, s.promised_by, s.capture_id, s.captured_at, s.delivered_at,
-            s.last_external_event_at, s.status_changed_at, s.version""";
+            s.last_external_event_at, s.status_changed_at, s.version, s.local_delivery::text as local_delivery""";
 
     private final JdbcClient jdbc;
     private final JsonCodec json;
@@ -82,11 +83,11 @@ class JdbcOrderRepository implements OrderRepository {
                         delivery_method, service_level, pickup_location_id, preferences, perishable, handover_required,
                         handover_code_hash, handover_code_sealed, status, shipping_minor, carrier, tracking_number,
                         promised_from, promised_by, capture_id, captured_at, delivered_at, last_external_event_at,
-                        status_changed_at, created_at, updated_at, version)
+                        status_changed_at, created_at, updated_at, version, local_delivery)
                     values (:id, :order, :seq, :seller, :sellerName, :type, :node, :method, :level, :pickup,
                         cast(:prefs as jsonb), :perishable, :handover, :hash, :sealed, :status, :shipping, :carrier,
                         :tracking, :from, :by, :capture, :capturedAt, :deliveredAt, :lastExternal, :changedAt, :now,
-                        :now, 0)
+                        :now, 0, cast(:localDelivery as jsonb))
                     """)
                     .param("id", Sql.uuid(s.id())).param("order", Sql.uuid(o.id())).param("seq", s.seq())
                     .param("seller", s.sellerOrgId()).param("sellerName", s.sellerName())
@@ -101,6 +102,7 @@ class JdbcOrderRepository implements OrderRepository {
                     .param("capturedAt", Sql.ts(s.capturedAt())).param("deliveredAt", Sql.ts(s.deliveredAt()))
                     .param("lastExternal", Sql.ts(s.lastExternalEventAt()))
                     .param("changedAt", Sql.ts(s.statusChangedAt())).param("now", Sql.ts(now))
+                    .param("localDelivery", s.localDelivery() == null ? null : json.write(s.localDelivery()))
                     .update();
             for (OrderLine l : s.lines()) {
                 jdbc.sql("""
@@ -384,13 +386,14 @@ class JdbcOrderRepository implements OrderRepository {
                                boolean handoverRequired, String hash, String sealed, ShipmentStatus status,
                                long shippingMinor, String carrier, String trackingNumber, LocalDate promisedFrom,
                                LocalDate promisedBy, String captureId, Instant capturedAt, Instant deliveredAt,
-                               Instant lastExternalEventAt, Instant statusChangedAt, long version) {
+                               Instant lastExternalEventAt, Instant statusChangedAt, long version,
+                               LocalDelivery localDelivery) {
 
         Shipment build(List<OrderLine> lines) {
             return new Shipment(id.toString(), orderId.toString(), seq, sellerOrgId, sellerName, type, nodeId, method,
                     serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, hash, sealed, status,
                     shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy, captureId, capturedAt,
-                    deliveredAt, lastExternalEventAt, statusChangedAt, lines, version);
+                    deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery);
         }
     }
 
@@ -405,6 +408,8 @@ class JdbcOrderRepository implements OrderRepository {
                 rs.getLong("shipping_minor"), rs.getString("carrier"), rs.getString("tracking_number"),
                 Sql.date(rs, "promised_from"), Sql.date(rs, "promised_by"), rs.getString("capture_id"),
                 Sql.instant(rs, "captured_at"), Sql.instant(rs, "delivered_at"),
-                Sql.instant(rs, "last_external_event_at"), Sql.instant(rs, "status_changed_at"), rs.getLong("version"));
+                Sql.instant(rs, "last_external_event_at"), Sql.instant(rs, "status_changed_at"), rs.getLong("version"),
+                rs.getString("local_delivery") == null ? null
+                        : json.read(rs.getString("local_delivery"), LocalDelivery.class));
     }
 }

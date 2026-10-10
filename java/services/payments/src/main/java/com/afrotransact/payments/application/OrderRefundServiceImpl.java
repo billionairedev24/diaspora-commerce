@@ -55,8 +55,10 @@ class OrderRefundServiceImpl implements OrderRefundService {
                     "Order " + cmd.orderId() + " has no line " + lineId, Map.of("lineIds", "Unknown " + lineId))));
         }
         Money amount = cmd.amountMinor() == null ? null : Money.of(cmd.amountMinor(), payment.currency());
-        List<RefundCommand.Line> refundLines = allocator.allocate(lines, amount).stream()
+        RefundCommand probe = new RefundCommand(List.of(), cmd.reason(), cmd.fault());
+        List<RefundCommand.Line> refundLines = allocator.allocate(lines, amount, probe.faultOrDefault()).stream()
                 .map(s -> new RefundCommand.Line(s.lineId(), s.items(), s.shipping(), s.tax())).toList();
-        return paymentService.refund(payment.id(), new RefundCommand(refundLines, cmd.reason()), idempotencyKey);
+        return paymentService.refund(payment.id(), new RefundCommand(refundLines, cmd.reason(), cmd.fault()),
+                idempotencyKey);
     }
 }

@@ -19,9 +19,10 @@ class OffersConfiguration {
                                   @Value("${at.offers.default-handling-days:2}") int defaultHandlingDays,
                                   @Value("${at.offers.afrotransact-transit-days:2}") int afrotransactTransitDays,
                                   @Value("${at.offers.seller-transit-days:4}") int sellerTransitDays,
-                                  @Value("${at.offers.low-stock-threshold:5}") int lowStockThreshold) {
+                                  @Value("${at.offers.low-stock-threshold:5}") int lowStockThreshold,
+                                  @Value("${at.offers.afrotransact-delivery-transit-days:1}") int deliveryTransitDays) {
         return new OffersSettings(retailOrgId, defaultHandlingDays, afrotransactTransitDays, sellerTransitDays,
-                lowStockThreshold);
+                lowStockThreshold, deliveryTransitDays);
     }
 
     @Bean

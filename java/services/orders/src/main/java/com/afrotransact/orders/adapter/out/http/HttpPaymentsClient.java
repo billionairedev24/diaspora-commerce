@@ -51,6 +51,9 @@ class HttpPaymentsClient implements PaymentsClient {
             m.put("taxMinor", l.taxMinor());
             m.put("taxJurisdiction", l.taxJurisdiction());
             m.put("shippingTaxMinor", l.shippingTaxMinor());
+            if (l.deliveryFeeMinor() > 0) {
+                m.put("deliveryFeeMinor", l.deliveryFeeMinor());
+            }
             return m;
         }).toList());
         return intent(payments.call(c -> c.post().uri("/v1/payments")
@@ -60,6 +63,25 @@ class HttpPaymentsClient implements PaymentsClient {
                 })
                 .body(body)
                 .retrieve().body(JsonNode.class)));
+    }
+
+    @Override
+    public DeliveryQuote quoteDelivery(String sellerOrgId, double distanceMiles, int packages) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("sellerOrgId", sellerOrgId);
+        body.put("distanceMiles", distanceMiles);
+        body.put("packages", packages);
+        JsonNode q = payments.call(c -> c.post().uri("/v1/delivery-pricing/quote")
+                .headers(h -> h.setBearerAuth(tokens.token()))
+                .body(body)
+                .retrieve().body(JsonNode.class));
+        if (q == null) {
+            throw new UpstreamFailure("payments", 0, "payments.invalid-response", "Empty delivery quote", true,
+                    List.of(), null);
+        }
+        return new DeliveryQuote(q.path("available").asBoolean(false), q.path("unavailableReason").asString(null),
+                q.path("customerChargeMinor").asLong(), q.path("sellerFeeMinor").asLong(),
+                q.path("scheduleVersion").asInt());
     }
 
     @Override

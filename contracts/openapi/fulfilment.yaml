@@ -231,6 +231,77 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ForwardFailure'
+  /v1/dispatch/pickups/{id}/assign:
+    post:
+      tags:
+      - Dispatch
+      summary: 'Override: put a seller pickup on a route'
+      description: From the pool, or from another route while it is not collected yet and its drop-off carries only this shipment
+        (409 fulfilment.pickup-not-movable otherwise). The reason is logged (pickup assignments) and fulfilment.pickup.dispatch_assigned
+        is published. delivery:dispatch.
+      operationId: pickupAssign
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PickupAssignRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/pickups/{id}/assignments:
+    get:
+      tags:
+      - Dispatch
+      summary: Assignments of a seller pickup (auto and overrides)
+      operationId: pickupAssignments
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PickupAssignment'
+  /v1/dispatch/pickups/{id}/driver-suggestions:
+    get:
+      tags:
+      - Dispatch
+      summary: Nearest available drivers for a seller pickup
+      description: 'Top 5: fresh position (KNN <-> on PostGIS), access active, an ASSIGNED or IN_PROGRESS route today in the
+        pickup''s delivery zone, not blocked, vehicle inspection passed, room left; ranked by geo road distance (straight
+        line when geo is down). delivery:dispatch.'
+      operationId: pickupDriverSuggestions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DriverSuggestions'
   /v1/dispatch/routes:
     get:
       tags:
@@ -560,6 +631,28 @@ paths:
             text/event-stream:
               schema:
                 $ref: '#/components/schemas/SseEmitter'
+  /v1/driver/location:
+    post:
+      tags:
+      - Driver app
+      summary: Report my current position
+      description: Stored as the driver's last known position (PostGIS geography + time) for the nearest-driver preference
+        of seller pickups; an older fix never overwrites a newer one. Synced events with lat/lon update it too. Positions
+        older than DRIVER_POSITION_STALE_AFTER (10 min) are ignored. 403 like /v1/driver/me without delivery:operate.
+      operationId: driverLocation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverLocationPing'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DriverPosition'
   /v1/driver/me:
     get:
       tags:
@@ -1541,6 +1634,58 @@ components:
       required:
       - deviceId
       - event
+    DriverLocationPing:
+      type: object
+      description: The device's current GPS fix
+      properties:
+        deviceId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        lat:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+        lon:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+        accuracyM:
+          type: number
+          format: double
+          minimum: 0
+        capturedAt:
+          type: string
+          format: date-time
+          description: Device time of the fix; default now
+      required:
+      - lat
+      - lon
+    DriverPosition:
+      type: object
+      description: The driver's last known position
+      properties:
+        driverId:
+          type: string
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+        accuracyM:
+          type: number
+          format: double
+        recordedAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum:
+          - SYNC
+          - PING
     CreateRouteRequest:
       type: object
       properties:
@@ -1810,6 +1955,21 @@ components:
       required:
       - depotNodeId
       - serviceDate
+    PickupAssignRequest:
+      type: object
+      description: Dispatch override of the nearest-driver assignment
+      properties:
+        routeId:
+          type: string
+          maxLength: 20
+          minLength: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 5
+      required:
+      - reason
+      - routeId
     DriverAccess:
       type: object
       properties:
@@ -1928,6 +2088,87 @@ components:
         promisedBy:
           type: string
           format: date
+        createdAt:
+          type: string
+          format: date-time
+    DriverSuggestion:
+      type: object
+      description: An available driver for a seller pickup, nearest first
+      properties:
+        driverId:
+          type: string
+        routeId:
+          type: string
+        routeName:
+          type: string
+        zone:
+          type: string
+        routeStatus:
+          type: string
+        straightLineMiles:
+          type: number
+          format: double
+          description: PostGIS geodesic miles from the driver's last position
+        roadMiles:
+          type: number
+          format: double
+          description: Road miles from geo's routing provider (null when geo is down)
+        durationMinutes:
+          type: number
+          format: double
+        distanceMethod:
+          type: string
+          description: ROAD_GOOGLE, ROAD_OSRM, GEODESIC_DETOUR or STRAIGHT_LINE
+        positionAt:
+          type: string
+          format: date-time
+        packagesOnRoute:
+          type: integer
+          format: int32
+        capacityLeft:
+          type: integer
+          format: int32
+    DriverSuggestions:
+      type: object
+      properties:
+        shipmentId:
+          type: string
+        drivers:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriverSuggestion'
+    PickupAssignment:
+      type: object
+      description: One assignment of a seller pickup
+      properties:
+        id:
+          type: string
+          format: uuid
+        shipmentId:
+          type: string
+        routeId:
+          type: string
+        driverId:
+          type: string
+        mode:
+          type: string
+          enum:
+          - AUTO_NEAREST
+          - DISPATCH_OVERRIDE
+        reason:
+          type: string
+        previousRouteId:
+          type: string
+        straightMiles:
+          type: number
+          format: double
+        roadMiles:
+          type: number
+          format: double
+        distanceMethod:
+          type: string
+        actor:
+          type: string
         createdAt:
           type: string
           format: date-time

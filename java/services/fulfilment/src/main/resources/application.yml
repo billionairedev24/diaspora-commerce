@@ -88,6 +88,17 @@ at:
     default-node: ${FULFILMENT_DEFAULT_NODE:}
     pod:
       max-distance-meters: ${POD_MAX_DISTANCE_METERS:150}
+    # S255: nearest available driver for seller pickups (AfroTransact Delivery from the seller's store).
+    nearest-driver:
+      enabled: ${NEAREST_DRIVER_ENABLED:true}
+      # Driver positions older than this are ignored (driver app sync events and POST /v1/driver/location).
+      stale-after: ${DRIVER_POSITION_STALE_AFTER:10m}
+      # Packages still to deliver (expected, loaded, picked up) a route can carry before it is "full".
+      max-packages-per-route: ${ROUTE_MAX_PACKAGES:40}
+      # Nearest candidates (KNN) re-ranked by geo road distance; the top 5 are suggested to dispatch.
+      candidates: ${NEAREST_DRIVER_CANDIDATES:20}
+      # Service day of routes ("today") is taken in this time zone.
+      zone: ${DISPATCH_ZONE:America/Chicago}
     reattempt:
       wait: ${REATTEMPT_WAIT:5m}
       max-reattempts: ${MAX_REATTEMPTS:2}

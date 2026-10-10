@@ -16,6 +16,14 @@ public final class CheckoutCodes {
     public static final String UPSTREAM_REJECTED = "orders.upstream-rejected";
     public static final String COUPON_NOT_APPLICABLE = "orders.coupon-not-applicable";
     public static final String UPSTREAM_UNAVAILABLE = "orders.upstream-unavailable";
+    /** S255: the customer is beyond the delivery radius of the seller's pickup location (offer not deliverable). */
+    public static final String DELIVERY_OUT_OF_RANGE = "orders.delivery-out-of-range";
+    /** S255: the fee schedule in force offers no AfroTransact Delivery from seller stores. */
+    public static final String DELIVERY_UNAVAILABLE = "orders.delivery-unavailable";
+    /** S255: the offer's pickup location is unknown, not geocoded or no longer enabled for AfroTransact pickup. */
+    public static final String DELIVERY_PICKUP_UNAVAILABLE = "orders.delivery-pickup-unavailable";
+    /** S255: geo could not locate the delivery address to measure the distance. */
+    public static final String DELIVERY_ADDRESS_NOT_LOCATED = "orders.delivery-address-not-located";
 
     private CheckoutCodes() {
     }

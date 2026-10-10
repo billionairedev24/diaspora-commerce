@@ -3,6 +3,7 @@ package com.afrotransact.seller.adapter.in.web;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.seller.adapter.in.web.ShipFromDtos.PickupRequest;
 import com.afrotransact.seller.adapter.in.web.ShipFromDtos.ShipFromAddressRequest;
 import com.afrotransact.seller.adapter.in.web.ShipFromDtos.ShipFromAddressResponse;
 import com.afrotransact.seller.application.ShipFromAddressService;
@@ -20,8 +21,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Ship-from addresses", description = "Where a seller ships its own orders from (label purchase, rates). "
-        + "Members read; owner, admin and fulfilment members change them.")
+@Tag(name = "Ship-from addresses", description = "Where a seller ships its own orders from (label purchase, rates, "
+        + "AfroTransact Delivery pickup). Members read; owner, admin and fulfilment members change them. Addresses are "
+        + "geocoded with geo-service when saved (position).")
 @RestController
 @RequestMapping("/v1/orgs/{orgId}/ship-from-addresses")
 class ShipFromAddressController {
@@ -53,6 +55,19 @@ class ShipFromAddressController {
     ShipFromAddressResponse updateShipFrom(@PathVariable String orgId, @PathVariable UUID id,
                                            @Valid @RequestBody ShipFromAddressRequest body) {
         return ShipFromAddressResponse.of(addresses.update(orgId, id, body.toInput()));
+    }
+
+    @Operation(summary = "Turn AfroTransact Delivery pickup on or off for a location (S255)",
+            description = "Enabling needs an approved organisation (409 seller.org-not-approved), at least one pickup "
+                    + "window (422 seller.invalid-pickup-hours), a street-level geocoded position (422 "
+                    + "seller.ship-from-not-geocoded) and a location inside an active AfroTransact DELIVERY zone or "
+                    + "within PICKUP_MAX_RADIUS_MILES of one (422 seller.pickup-outside-delivery-area); 503 "
+                    + "seller.geo-unavailable when geo-service is down. Publishes seller.pickup_location.updated. "
+                    + "Offers with fulfilment AFROTRANSACT_DELIVERY reference the location by id.")
+    @PutMapping("/{id}/afrotransact-pickup")
+    ShipFromAddressResponse pickupShipFrom(@PathVariable String orgId, @PathVariable UUID id,
+                                           @Valid @RequestBody PickupRequest body) {
+        return ShipFromAddressResponse.of(addresses.setPickup(orgId, id, body.toInput()));
     }
 
     @Operation(summary = "Make an address the default; returns every address")

@@ -26,6 +26,8 @@ type ZoneStore interface {
 	Save(ctx context.Context, z domain.Zone) (domain.Zone, error)
 	List(ctx context.Context, t domain.ZoneType, ownerID string) ([]domain.Zone, error)
 	Containing(ctx context.Context, lat, lon float64, t domain.ZoneType) ([]domain.Zone, error)
+	// Within returns active zones that contain the point or whose edge is at most metres away, nearest first.
+	Within(ctx context.Context, lat, lon float64, t domain.ZoneType, metres float64) ([]domain.ZoneMatch, error)
 	Ping(ctx context.Context) error
 }
 
@@ -34,4 +36,26 @@ type ZoneStore interface {
 type ReverseGeocoder interface {
 	Name() string
 	Reverse(ctx context.Context, lat, lon float64) (domain.Address, error)
+}
+
+// DistanceCalculator measures geodesic distances (PostGIS geography, metres). One origin, many destinations, so a
+// checkout or a dispatch screen costs one round trip.
+type DistanceCalculator interface {
+	Geodesic(ctx context.Context, from domain.Point, to []domain.Point) ([]float64, error)
+}
+
+// RoadRouter is a routing provider (Google Routes API computeRouteMatrix, OSRM table service): driving distance and
+// duration from one origin to each destination, in the destinations' order. Any error (including a destination
+// without a route) makes the caller try the next provider.
+type RoadRouter interface {
+	Name() string
+	Method() domain.DistanceMethod
+	Routes(ctx context.Context, from domain.Point, to []domain.Point) ([]domain.Route, error)
+}
+
+// RouteCache keeps provider results by rounded origin / destination (about 50 m) for a TTL, so repeated checkouts and
+// dispatch screens don't pay for the same route twice.
+type RouteCache interface {
+	Get(from, to domain.Point) (domain.CachedRoute, bool)
+	Put(from, to domain.Point, r domain.CachedRoute)
 }

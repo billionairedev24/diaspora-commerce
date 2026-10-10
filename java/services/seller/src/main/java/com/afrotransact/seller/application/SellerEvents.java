@@ -26,6 +26,8 @@ public final class SellerEvents {
     public static final String LISTINGS_HIDDEN = "seller.listings.hidden";
     public static final String LISTINGS_RESTORED = "seller.listings.restored";
     public static final String SUBSCRIPTION_CHANGED = "seller.subscription.changed";
+    /** S255: an AfroTransact Delivery pickup location was enabled, changed, disabled or deleted (at.seller-org.events). */
+    public static final String PICKUP_LOCATION_UPDATED = "seller.pickup_location.updated";
 
     /** EnforcementPayload reason while a Trust &amp; Safety suspension holds payouts and hides listings. */
     public static final String REASON_SUSPENDED = "SUSPENDED";

@@ -37,6 +37,8 @@ import java.util.Objects;
  * @param statusChangedAt     time of the last transition
  * @param lines               ordered lines
  * @param version             optimistic lock version
+ * @param localDelivery       AfroTransact Delivery from the seller's store (S255): pickup, distance and quote
+ *                            snapshot; null for every other shipment
  */
 public record Shipment(String id, String orderId, int seq, String sellerOrgId, String sellerName,
                        FulfilmentType fulfilmentType, String nodeId, DeliveryMethod deliveryMethod,
@@ -45,7 +47,22 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                        String handoverCodeSealed, ShipmentStatus status, long shippingMinor, String carrier,
                        String trackingNumber, LocalDate promisedFrom, LocalDate promisedBy, String captureId,
                        Instant capturedAt, Instant deliveredAt, Instant lastExternalEventAt, Instant statusChangedAt,
-                       List<OrderLine> lines, long version) {
+                       List<OrderLine> lines, long version, LocalDelivery localDelivery) {
+
+    /** A shipment that is not AfroTransact Delivery from a seller's store. */
+    public Shipment(String id, String orderId, int seq, String sellerOrgId, String sellerName,
+                    FulfilmentType fulfilmentType, String nodeId, DeliveryMethod deliveryMethod, String serviceLevel,
+                    String pickupLocationId, DeliveryPreferences preferences, boolean perishable,
+                    boolean handoverRequired, String handoverCodeHash, String handoverCodeSealed,
+                    ShipmentStatus status, long shippingMinor, String carrier, String trackingNumber,
+                    LocalDate promisedFrom, LocalDate promisedBy, String captureId, Instant capturedAt,
+                    Instant deliveredAt, Instant lastExternalEventAt, Instant statusChangedAt, List<OrderLine> lines,
+                    long version) {
+        this(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, deliveryMethod, serviceLevel,
+                pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed,
+                status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy, captureId, capturedAt,
+                deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, null);
+    }
 
     public Shipment {
         Objects.requireNonNull(id, "id");
@@ -68,6 +85,15 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         if (handoverRequired && (handoverCodeHash == null || handoverCodeHash.isBlank())) {
             throw new IllegalArgumentException("a required handover code needs its hash");
         }
+        if (localDelivery != null && (deliveryMethod != DeliveryMethod.AFROTRANSACT_DELIVERY
+                || fulfilmentType != FulfilmentType.SELLER_FULFILLED)) {
+            throw new IllegalArgumentException("local delivery snapshots belong to seller-packed AfroTransact Delivery");
+        }
+    }
+
+    /** AfroTransact Delivery from the seller's store (S255): seller-packed, collected by an AfroTransact driver. */
+    public boolean deliveredFromSellerStore() {
+        return localDelivery != null;
     }
 
     public long itemsMinor() {
@@ -125,7 +151,7 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                 deliveryMethod, serviceLevel, pickupLocationId, preferences, perishable, handoverRequired,
                 handoverCodeHash, handoverCodeSealed, to, shippingMinor, carrier, trackingNumber, promisedFrom,
                 promisedBy, captureId, capturedAt, to == ShipmentStatus.DELIVERED ? eventTime : deliveredAt,
-                external ? eventTime : lastExternalEventAt, at, lines, version);
+                external ? eventTime : lastExternalEventAt, at, lines, version, localDelivery);
         StatusChange change = new StatusChange(id, eventId, status, to, actor.kind(), actor.id(), actor.orgId(),
                 reason == null || reason.isBlank() ? null : reason.trim(), source, eventTime);
         return new TransitionResult(next, change, TransitionDecision.Kind.ALLOW, null);
@@ -142,7 +168,8 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         return new Shipment(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, deliveryMethod,
                 serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
                 handoverCodeSealed, status, shippingMinor, newCarrier, newTrackingNumber, promisedFrom, promisedBy,
-                captureId, capturedAt, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version);
+                captureId, capturedAt, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version,
+                localDelivery);
     }
 
     /** Marks this shipment's amount captured by payments. */
@@ -150,6 +177,6 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         return new Shipment(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, deliveryMethod,
                 serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
                 handoverCodeSealed, status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy,
-                newCaptureId, at, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version);
+                newCaptureId, at, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery);
     }
 }

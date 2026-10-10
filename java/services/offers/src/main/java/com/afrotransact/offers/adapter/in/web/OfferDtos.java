@@ -33,18 +33,23 @@ final class OfferDtos {
     private OfferDtos() {
     }
 
-    @Schema(name = "ShipFrom", description = "Where a seller-fulfilled order ships from")
+    @Schema(name = "ShipFrom", description = "Where a seller-fulfilled order ships from. AFROTRANSACT_DELIVERY "
+            + "offers give only locationId: one of the seller's ship-from locations with AfroTransact pickup enabled "
+            + "(seller-service); city, region, country and ZIP are copied from it")
     record ShipFromDto(@Size(max = 80) @Schema(example = "Houston") String city,
                        @Size(max = 80) @Schema(example = "TX") String region,
                        @Pattern(regexp = "[A-Z]{2}") @Schema(example = "US") String country,
-                       @Size(max = 12) @Schema(example = "77002") String postalCode) {
+                       @Size(max = 12) @Schema(example = "77002") String postalCode,
+                       @Size(max = 64) @Schema(description = "seller-service ship-from location id (required for "
+                               + "AFROTRANSACT_DELIVERY)") String locationId) {
 
         ShipFrom toDomain() {
-            return new ShipFrom(city, region, country, postalCode);
+            return new ShipFrom(city, region, country, postalCode, locationId);
         }
 
         static ShipFromDto of(ShipFrom s) {
-            return s == null ? null : new ShipFromDto(s.city(), s.region(), s.country(), s.postalCode());
+            return s == null ? null
+                    : new ShipFromDto(s.city(), s.region(), s.country(), s.postalCode(), s.locationId());
         }
     }
 

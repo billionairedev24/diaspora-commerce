@@ -3,6 +3,7 @@ package com.afrotransact.offers.adapter.in.web;
 import com.afrotransact.offers.domain.CouponNotApplicable;
 import com.afrotransact.offers.domain.OfferRuleViolation;
 import com.afrotransact.offers.port.CatalogClient.CatalogUnavailableException;
+import com.afrotransact.offers.port.PickupLocationClient.SellerUnavailableException;
 import com.afrotransact.platform.web.error.ProblemTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,13 @@ class OffersErrorAdvice {
         LOG.warn("catalog-service unavailable: {}", ex.getMessage());
         return problem(HttpStatus.SERVICE_UNAVAILABLE, "offers.catalog-unavailable",
                 "The catalog could not be reached; retry shortly");
+    }
+
+    @ExceptionHandler(SellerUnavailableException.class)
+    ProblemDetail sellerUnavailable(SellerUnavailableException ex) {
+        LOG.warn("seller-service unavailable: {}", ex.getMessage());
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "offers.seller-unavailable",
+                "The seller's pickup location could not be checked; retry shortly");
     }
 
     @ExceptionHandler(IllegalStateException.class)

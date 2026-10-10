@@ -1,5 +1,6 @@
 package com.afrotransact.payments.adapter.in.web;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -8,12 +9,17 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 import com.afrotransact.payments.application.CaptureResult;
+import com.afrotransact.payments.application.DeliveryPricingCommand;
 import com.afrotransact.payments.application.OrderSplit;
 import com.afrotransact.payments.application.RefundResult;
 import com.afrotransact.payments.application.WalletMethod;
 import com.afrotransact.payments.domain.AccountBalance;
 import com.afrotransact.payments.domain.Capture;
 import com.afrotransact.payments.domain.CommissionOverride;
+import com.afrotransact.payments.domain.DeliveryMode;
+import com.afrotransact.payments.domain.DeliveryPricing;
+import com.afrotransact.payments.domain.DeliveryQuote;
+import com.afrotransact.payments.domain.DeliveryTariff;
 import com.afrotransact.payments.domain.EffectiveFees;
 import com.afrotransact.payments.domain.FeeSchedule;
 import com.afrotransact.payments.domain.Fulfilment;
@@ -30,11 +36,14 @@ import com.afrotransact.payments.domain.ProviderFee;
 import com.afrotransact.payments.domain.ReconciliationReport;
 import com.afrotransact.payments.domain.RecipientShare;
 import com.afrotransact.payments.domain.Refund;
+import com.afrotransact.payments.domain.RefundFault;
 import com.afrotransact.payments.domain.Settlement;
 import com.afrotransact.payments.domain.ShipmentSettlement;
 import com.afrotransact.payments.domain.StatementLine;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -85,13 +94,18 @@ final class PaymentsDtos {
             @PositiveOrZero Long taxMinor,
             @Size(max = 40) String taxJurisdiction,
             @Schema(description = "Part of taxMinor charged on shipping (states that tax delivery); default 0")
-            @PositiveOrZero Long shippingTaxMinor) {
+            @PositiveOrZero Long shippingTaxMinor,
+            @Schema(description = "AFROTRANSACT_DELIVERY lines (S255): the seller's pickup-delivery fee allocated to "
+                    + "this line, as quoted at checkout (POST /v1/delivery-pricing/quote) and snapshotted by orders. "
+                    + "Credited to 4250 at capture; ignored for AfroTransact Retail; must be 0 on other lines")
+            @PositiveOrZero Long deliveryFeeMinor) {
 
         OrderLine toLine(String currency) {
             return new OrderLine(lineId, sellerOrg, category, fulfilment, quantity, Money.of(itemsMinor, currency),
                     Money.of(shippingMinor == null ? 0 : shippingMinor, currency),
                     Money.of(taxMinor == null ? 0 : taxMinor, currency), taxJurisdiction,
-                    Money.of(shippingTaxMinor == null ? 0 : shippingTaxMinor, currency));
+                    Money.of(shippingTaxMinor == null ? 0 : shippingTaxMinor, currency),
+                    Money.of(deliveryFeeMinor == null ? 0 : deliveryFeeMinor, currency));
         }
     }
 
@@ -127,7 +141,13 @@ final class PaymentsDtos {
                         @Schema(description = "taxMinor − shippingTaxMinor") long itemsTaxMinor,
                         long refundedItemsMinor, long refundedShippingMinor, long refundedTaxMinor,
                         @Schema(description = "Captured and not refunded yet (0 before capture)")
-                        long refundableMinor) {
+                        long refundableMinor,
+                        @Schema(description = "Seller pickup-delivery fee quoted for the line (AFROTRANSACT_DELIVERY)")
+                        long deliveryFeeMinor,
+                        @Schema(description = "Delivery fee charged at capture (0 for AfroTransact Retail)")
+                        long deliveryFeeChargedMinor,
+                        @Schema(description = "Delivery fee given back by customer-fault refunds")
+                        long deliveryFeeReversedMinor) {
 
         static LineResponse of(PaymentLine pl) {
             OrderLine l = pl.line();
@@ -135,7 +155,8 @@ final class PaymentsDtos {
                     l.items().minor(), l.shipping().minor(), l.tax().minor(), l.taxJurisdiction(), pl.captureId(),
                     pl.commission().minor(), pl.fbaFee().minor(), pl.refundedTotal().minor(),
                     l.shippingTax().minor(), l.itemsTax().minor(), pl.refundedItems().minor(),
-                    pl.refundedShipping().minor(), pl.refundedTax().minor(), pl.refundable().minor());
+                    pl.refundedShipping().minor(), pl.refundedTax().minor(), pl.refundable().minor(),
+                    l.deliveryFee().minor(), pl.deliveryFee().minor(), pl.deliveryFeeReversed().minor());
         }
     }
 
@@ -184,7 +205,10 @@ final class PaymentsDtos {
 
     @Schema(description = "Line-level partial refund")
     record RefundRequest(@NotEmpty @Size(max = 200) List<@Valid RefundLineRequest> lines,
-                         @Size(max = 500) String reason) {
+                         @Size(max = 500) String reason,
+                         @Schema(description = "Who caused the refund, for AfroTransact Delivery lines: SELLER "
+                                 + "(default) keeps the seller's delivery fee; CUSTOMER returns it pro rata and the "
+                                 + "delivery charge is not refundable") RefundFault fault) {
     }
 
     record RefundLineRequest(@NotBlank String lineId, @PositiveOrZero Long itemsMinor,
@@ -197,7 +221,8 @@ final class PaymentsDtos {
             @NotEmpty @Size(max = 200) List<@NotBlank @Size(max = 80) String> lineIds,
             @Schema(description = "Total to refund; omit to refund everything still refundable on the lines")
             @Positive Long amountMinor,
-            @Size(max = 500) String reason) {
+            @Size(max = 500) String reason,
+            @Schema(description = "SELLER (default) or CUSTOMER; see POST /v1/payments/{id}/refunds") RefundFault fault) {
     }
 
     record RefundResponse(UUID id, UUID paymentId, String orderId, String stripeRefundId, long amountMinor,
@@ -209,13 +234,16 @@ final class PaymentsDtos {
             return new RefundResponse(r.id(), r.paymentId(), r.orderId(), r.stripeRefundId(), r.amount().minor(),
                     r.amount().currency(), r.status().name(), r.reason(), r.lines().stream()
                     .map(l -> new RefundLineResponse(l.lineId(), l.sellerOrg(), l.items().minor(),
-                            l.shipping().minor(), l.tax().minor(), l.commissionReversed().minor())).toList(),
+                            l.shipping().minor(), l.tax().minor(), l.commissionReversed().minor(),
+                            l.deliveryFeeReversed().minor())).toList(),
                     reversals, r.createdAt(), r.settledAt(), replayed);
         }
     }
 
     record RefundLineResponse(String lineId, String sellerOrg, long itemsMinor, long shippingMinor, long taxMinor,
-                              long commissionReversedMinor) {
+                              long commissionReversedMinor,
+                              @Schema(description = "AfroTransact Delivery fee returned to the seller (customer fault)")
+                              long deliveryFeeReversedMinor) {
     }
 
     // ------------------------------------------------------------------ split & fees
@@ -232,31 +260,32 @@ final class PaymentsDtos {
         }
     }
 
-    @Schema(description = "One recipient. For sellers commission, FBA fees and Stripe fee are deductions; for the "
-            + "AfroTransact platform row they are the totals earned. AfroTransact Retail (kind RETAIL) pays no "
+    @Schema(description = "One recipient. For sellers commission, FBA fees, delivery fees and Stripe fee are "
+            + "deductions; for the AfroTransact platform row they are the totals earned. AfroTransact Retail (kind RETAIL) pays no "
             + "commission and no FBA fee: its net (items + shipping − Stripe fee share) is AfroTransact revenue "
             + "(4400 Retail sales), never transferred or paid out. Tax is collected and remitted by AfroTransact.")
     record RecipientResponse(String recipient,
                              @Schema(allowableValues = {"SELLER", "RETAIL", "PLATFORM"}) String kind,
                              long itemsMinor, long shippingMinor, long taxMinor,
                              Map<String, Long> taxByJurisdiction, long commissionMinor, long fbaFeesMinor,
-                             long stripeFeeMinor, long netMinor) {
+                             @Schema(description = "AfroTransact Delivery pickup-delivery fees (4250)")
+                             long deliveryFeesMinor, long stripeFeeMinor, long netMinor) {
 
         static RecipientResponse of(RecipientShare r) {
             Map<String, Long> tax = new TreeMap<>();
             r.taxByJurisdiction().forEach((k, v) -> tax.put(k, v.minor()));
             return new RecipientResponse(r.recipientId(), r.kind().name(), r.items().minor(), r.shipping().minor(),
-                    r.tax().minor(), tax, r.commission().minor(), r.fbaFees().minor(), r.stripeFee().minor(),
-                    r.net().minor());
+                    r.tax().minor(), tax, r.commission().minor(), r.fbaFees().minor(), r.deliveryFees().minor(),
+                    r.stripeFee().minor(), r.net().minor());
         }
     }
 
     record LineSplitResponse(String lineId, String sellerOrg, int commissionBps, long commissionMinor,
-                             long fbaFeeMinor, boolean shippingToPlatform) {
+                             long fbaFeeMinor, boolean shippingToPlatform, long deliveryFeeMinor) {
 
         static LineSplitResponse of(LineSplit l) {
             return new LineSplitResponse(l.lineId(), l.sellerOrg(), l.commissionBps(), l.commission().minor(),
-                    l.fbaFee().minor(), l.shippingToPlatform());
+                    l.fbaFee().minor(), l.shippingToPlatform(), l.deliveryFee().minor());
         }
     }
 
@@ -273,7 +302,110 @@ final class PaymentsDtos {
             @PositiveOrZero long cardFixedMinor,
             @PositiveOrZero long fbaPerUnitMinor,
             Boolean reverseCommissionOnRefund,
-            @Size(max = 500) String note) {
+            @Size(max = 500) String note,
+            @Valid @Schema(description = "AfroTransact Delivery pricing (S255). Omit to carry the latest version's "
+                    + "section over; send enabled=false to stop offering AfroTransact Delivery from seller stores")
+            DeliveryPricingRequest deliveryPricing) {
+    }
+
+    @Schema(description = "AfroTransact Delivery from seller stores: the customer's delivery charge (to 4200), the "
+            + "seller's pickup-delivery fee (to 4250) with per-seller overrides, and the service radius")
+    record DeliveryPricingRequest(
+            @Schema(description = "false = not offered under this version", defaultValue = "true") Boolean enabled,
+            @DecimalMin(value = "0", inclusive = false) @DecimalMax("200")
+            @Schema(description = "Beyond this (estimated road miles) the option is unavailable", example = "25")
+            BigDecimal maxRadiusMiles,
+            @Valid @Schema(description = "What the customer pays (FLAT or DISTANCE); omitted = free")
+            TariffRequest customerCharge,
+            @Valid @Schema(description = "What the seller pays (FLAT or DISTANCE); omitted = no fee")
+            TariffRequest sellerFee,
+            @Size(max = 500) List<@Valid SellerFeeOverrideRequest> sellerOverrides) {
+
+        DeliveryPricingCommand toCommand() {
+            boolean on = !Boolean.FALSE.equals(enabled);
+            return new DeliveryPricingCommand(on, maxRadiusMiles, customerCharge == null ? null
+                    : customerCharge.toCommand(), sellerFee == null ? null : sellerFee.toCommand(),
+                    sellerOverrides == null ? List.of() : sellerOverrides.stream()
+                            .map(o -> new DeliveryPricingCommand.Override(o.orgId(), o.sellerFee() == null ? null
+                                    : o.sellerFee().toCommand())).toList());
+        }
+    }
+
+    @Schema(name = "DeliveryTariff", description = "FLAT: flatPerPackageMinor × packages. DISTANCE (per trip): the fee "
+            + "of the band covering the distance, else baseMinor + perMileMinor × miles (half up), then at least "
+            + "minMinor and at most maxMinor")
+    record TariffRequest(
+            @NotNull DeliveryMode mode,
+            @PositiveOrZero Long flatPerPackageMinor,
+            @PositiveOrZero Long baseMinor,
+            @PositiveOrZero @Schema(description = "Minor units per mile (85 = $0.85 / mi)") Long perMileMinor,
+            @Size(max = 20) List<@Valid BandRequest> bands,
+            @PositiveOrZero Long minMinor,
+            @PositiveOrZero @Schema(description = "Cap; omit for none") Long maxMinor) {
+
+        DeliveryPricingCommand.Tariff toCommand() {
+            return new DeliveryPricingCommand.Tariff(mode, nz(flatPerPackageMinor), nz(baseMinor), nz(perMileMinor),
+                    bands == null ? List.of() : bands.stream().map(b -> new DeliveryPricingCommand.Band(b.fromMiles(),
+                            b.toMiles(), b.feeMinor())).toList(), nz(minMinor), maxMinor);
+        }
+
+        static TariffRequest of(DeliveryTariff t) {
+            return new TariffRequest(t.mode(), t.flatPerPackage().minor(), t.base().minor(), t.perMileMinor(),
+                    t.bands().stream().map(b -> new BandRequest(b.fromMiles(), b.toMiles(), b.fee().minor()))
+                            .toList(), t.min().minor(), t.max() == null ? null : t.max().minor());
+        }
+
+        private static long nz(Long v) {
+            return v == null ? 0 : v;
+        }
+    }
+
+    @Schema(name = "DeliveryBand", description = "Trips of fromMiles (inclusive) up to toMiles (exclusive) cost feeMinor")
+    record BandRequest(@NotNull @DecimalMin("0") BigDecimal fromMiles, @NotNull BigDecimal toMiles,
+                       @NotNull @PositiveOrZero Long feeMinor) {
+    }
+
+    @Schema(name = "SellerDeliveryFeeOverride", description = "Negotiated seller pickup-delivery fee of one organisation")
+    record SellerFeeOverrideRequest(@NotBlank @Size(max = 80) String orgId, @Valid @NotNull TariffRequest sellerFee) {
+    }
+
+    @Schema(name = "DeliveryPricing", description = "AfroTransact Delivery pricing of a fee-schedule version")
+    record DeliveryPricingResponse(boolean enabled, BigDecimal maxRadiusMiles, TariffRequest customerCharge,
+                                   TariffRequest sellerFee, List<SellerFeeOverrideRequest> sellerOverrides) {
+
+        static DeliveryPricingResponse of(DeliveryPricing d) {
+            if (d == null) {
+                return new DeliveryPricingResponse(false, null, null, null, List.of());
+            }
+            return new DeliveryPricingResponse(true, d.maxRadiusMiles(), TariffRequest.of(d.customerCharge()),
+                    TariffRequest.of(d.sellerFee()), d.sellerOverrides().stream()
+                    .map(o -> new SellerFeeOverrideRequest(o.orgId(), TariffRequest.of(o.sellerFee()))).toList());
+        }
+    }
+
+    @Schema(name = "DeliveryQuoteRequest", description = "Price one AfroTransact Delivery trip")
+    record DeliveryQuoteRequest(
+            @NotBlank @Size(max = 80) String sellerOrgId,
+            @NotNull @DecimalMin("0") @Schema(description = "Road miles (geo POST /v1/distance roadMiles)",
+                    example = "7.4") BigDecimal distanceMiles,
+            @Min(1) @Max(50) @Schema(defaultValue = "1") Integer packages,
+            @Schema(description = "Fee-schedule version in force at this time; default now") Instant at) {
+    }
+
+    @Schema(name = "DeliveryQuote", description = "customerChargeMinor goes on the order as the package's shipping "
+            + "(4200); sellerFeeMinor is snapshotted and deducted from the seller at capture (4250)")
+    record DeliveryQuoteResponse(boolean available,
+                                 @Schema(allowableValues = {"NOT_CONFIGURED", "BEYOND_MAX_RADIUS"})
+                                 String unavailableReason, long customerChargeMinor, long sellerFeeMinor,
+                                 @Schema(allowableValues = {"DEFAULT", "OVERRIDE", "RETAIL"}) String sellerFeeSource,
+                                 String currency, UUID scheduleId, int scheduleVersion, BigDecimal distanceMiles,
+                                 int packages, BigDecimal maxRadiusMiles) {
+
+        static DeliveryQuoteResponse of(DeliveryQuote q) {
+            return new DeliveryQuoteResponse(q.available(), q.unavailableReason(), q.customerCharge().minor(),
+                    q.sellerFee().minor(), q.sellerFeeSource(), q.currency(), q.scheduleId(), q.scheduleVersion(),
+                    q.distanceMiles(), q.packages(), q.maxRadiusMiles());
+        }
     }
 
     record OverrideRequest(@NotBlank String orgId, String category, @Min(0) @Max(10000) int commissionBps) {
@@ -291,7 +423,9 @@ final class PaymentsDtos {
                                @Schema(description = "Set when the version was cancelled before it took effect "
                                        + "(it never applies)") Instant cancelledAt,
                                @Schema(description = "Who cancelled the version") String cancelledBy,
-                               @Schema(description = "Why the version was cancelled") String cancelReason) {
+                               @Schema(description = "Why the version was cancelled") String cancelReason,
+                               @Schema(description = "AfroTransact Delivery pricing (S255)")
+                               DeliveryPricingResponse deliveryPricing) {
 
         static FeeScheduleResponse of(FeeSchedule s) {
             FeeSchedule.Cancellation c = s.cancellation();
@@ -300,7 +434,7 @@ final class PaymentsDtos {
                     .map(o -> new OverrideRequest(o.orgId(), o.category(), o.commissionBps())).toList(),
                     s.cardPctBps(), s.cardFixed().minor(), s.fbaPerUnit().minor(), s.reverseCommissionOnRefund(),
                     s.note(), s.createdBy(), s.createdAt(), c == null ? null : c.at(), c == null ? null : c.by(),
-                    c == null ? null : c.reason());
+                    c == null ? null : c.reason(), DeliveryPricingResponse.of(s.deliveryPricing()));
         }
     }
 

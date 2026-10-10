@@ -178,6 +178,30 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/SetupIntentResponse'
+  /v1/delivery-pricing/quote:
+    post:
+      tags:
+      - Finance
+      summary: Price an AfroTransact Delivery trip from a seller's store (S255)
+      description: 'Under the fee-schedule version in force at `at` (default now): the customer''s delivery charge and the
+        seller''s pickup-delivery fee (seller override first; 0 for AfroTransact Retail, source RETAIL). `available=false`
+        with BEYOND_MAX_RADIUS beyond the version''s service radius (the offer is not deliverable to that address) or NOT_CONFIGURED
+        when the version has no delivery pricing. FLAT tariffs count packages; DISTANCE tariffs price the trip. orders-service
+        (payments:service), services with payments:fees.read, staff payments:read.'
+      operationId: quoteDelivery
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveryQuoteRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryQuote'
   /v1/fee-schedules:
     get:
       tags:
@@ -361,7 +385,8 @@ paths:
       summary: Refund by order and line ids (payments:service; e.g. trust-ops claims)
       description: 'Finds the order''s payment and spreads amountMinor (default: everything still refundable) over the lines''
         remaining items, shipping and tax with the largest-remainder method, then refunds like POST /v1/payments/{id}/refunds.
-        Idempotent per Idempotency-Key.'
+        Idempotent per Idempotency-Key. With fault CUSTOMER the delivery charge of AfroTransact Delivery lines is left out
+        of the spread.'
       operationId: refundByOrder
       parameters:
       - name: orderId
@@ -662,8 +687,11 @@ paths:
       tags:
       - Payments
       summary: Refund captured lines (partially)
-      description: Reverses the seller payable, tax and — per fee policy — commission of each line; FBA fees and Stripe fee
-        shares are kept. If the seller's net was already transferred, a Stripe transfer reversal takes it back.
+      description: 'Reverses the seller payable, tax and — per fee policy — commission of each line; FBA fees and Stripe fee
+        shares are kept. If the seller''s net was already transferred, a Stripe transfer reversal takes it back. AfroTransact
+        Delivery lines (S255) follow `fault`: SELLER (default) keeps the seller''s pickup-delivery fee and may refund the
+        delivery charge; CUSTOMER returns the fee to the seller pro rata to items refunded and refuses a delivery-charge refund
+        (422 payments.delivery-charge-not-refundable).'
       operationId: refund
       parameters:
       - name: id
@@ -1430,6 +1458,7 @@ components:
           enum:
           - FBA
           - SELF
+          - AFROTRANSACT_DELIVERY
         quantity:
           type: integer
           format: int32
@@ -1454,6 +1483,13 @@ components:
           type: integer
           format: int64
           description: Part of taxMinor charged on shipping (states that tax delivery); default 0
+          minimum: 0
+        deliveryFeeMinor:
+          type: integer
+          format: int64
+          description: 'AFROTRANSACT_DELIVERY lines (S255): the seller''s pickup-delivery fee allocated to this line, as quoted
+            at checkout (POST /v1/delivery-pricing/quote) and snapshotted by orders. Credited to 4250 at capture; ignored
+            for AfroTransact Retail; must be 0 on other lines'
           minimum: 0
       required:
       - fulfilment
@@ -1520,6 +1556,18 @@ components:
           type: integer
           format: int64
           description: Captured and not refunded yet (0 before capture)
+        deliveryFeeMinor:
+          type: integer
+          format: int64
+          description: Seller pickup-delivery fee quoted for the line (AFROTRANSACT_DELIVERY)
+        deliveryFeeChargedMinor:
+          type: integer
+          format: int64
+          description: Delivery fee charged at capture (0 for AfroTransact Retail)
+        deliveryFeeReversedMinor:
+          type: integer
+          format: int64
+          description: Delivery fee given back by customer-fault refunds
     PaymentResponse:
       type: object
       properties:
@@ -1617,6 +1665,13 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+        fault:
+          type: string
+          description: 'Who caused the refund, for AfroTransact Delivery lines: SELLER (default) keeps the seller''s delivery
+            fee; CUSTOMER returns it pro rata and the delivery charge is not refundable'
+          enum:
+          - SELLER
+          - CUSTOMER
       required:
       - lines
     RefundLineResponse:
@@ -1638,6 +1693,10 @@ components:
         commissionReversedMinor:
           type: integer
           format: int64
+        deliveryFeeReversedMinor:
+          type: integer
+          format: int64
+          description: AfroTransact Delivery fee returned to the seller (customer fault)
     RefundResponse:
       type: object
       properties:
@@ -1802,8 +1861,98 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+        fault:
+          type: string
+          description: SELLER (default) or CUSTOMER; see POST /v1/payments/{id}/refunds
+          enum:
+          - SELLER
+          - CUSTOMER
       required:
       - lineIds
+    DeliveryBand:
+      type: object
+      description: Trips of fromMiles (inclusive) up to toMiles (exclusive) cost feeMinor
+      properties:
+        fromMiles:
+          type: number
+          minimum: 0
+        toMiles:
+          type: number
+        feeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - feeMinor
+      - fromMiles
+      - toMiles
+    DeliveryPricingRequest:
+      type: object
+      description: 'AfroTransact Delivery from seller stores: the customer''s delivery charge (to 4200), the seller''s pickup-delivery
+        fee (to 4250) with per-seller overrides, and the service radius'
+      properties:
+        enabled:
+          type: boolean
+          default: true
+          description: false = not offered under this version
+        maxRadiusMiles:
+          type: number
+          description: Beyond this (estimated road miles) the option is unavailable
+          example: 25
+          exclusiveMinimum: 0
+          maximum: 200
+        customerCharge:
+          $ref: '#/components/schemas/DeliveryTariff'
+          description: What the customer pays (FLAT or DISTANCE); omitted = free
+        sellerFee:
+          $ref: '#/components/schemas/DeliveryTariff'
+          description: What the seller pays (FLAT or DISTANCE); omitted = no fee
+        sellerOverrides:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellerDeliveryFeeOverride'
+          maxItems: 500
+          minItems: 0
+    DeliveryTariff:
+      type: object
+      description: 'FLAT: flatPerPackageMinor × packages. DISTANCE (per trip): the fee of the band covering the distance,
+        else baseMinor + perMileMinor × miles (half up), then at least minMinor and at most maxMinor'
+      properties:
+        mode:
+          type: string
+          enum:
+          - FLAT
+          - DISTANCE
+        flatPerPackageMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        baseMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        perMileMinor:
+          type: integer
+          format: int64
+          description: Minor units per mile (85 = $0.85 / mi)
+          minimum: 0
+        bands:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryBand'
+          maxItems: 20
+          minItems: 0
+        minMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        maxMinor:
+          type: integer
+          format: int64
+          description: Cap; omit for none
+          minimum: 0
+      required:
+      - mode
     FeeScheduleRequest:
       type: object
       description: A new fee-schedule version (Super Admin / Finance)
@@ -1849,6 +1998,10 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+        deliveryPricing:
+          $ref: '#/components/schemas/DeliveryPricingRequest'
+          description: AfroTransact Delivery pricing (S255). Omit to carry the latest version's section over; send enabled=false
+            to stop offering AfroTransact Delivery from seller stores
       required:
       - categoryBps
     OverrideRequest:
@@ -1866,6 +2019,35 @@ components:
           minimum: 0
       required:
       - orgId
+    SellerDeliveryFeeOverride:
+      type: object
+      description: Negotiated seller pickup-delivery fee of one organisation
+      properties:
+        orgId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        sellerFee:
+          $ref: '#/components/schemas/DeliveryTariff'
+      required:
+      - orgId
+      - sellerFee
+    DeliveryPricing:
+      type: object
+      description: AfroTransact Delivery pricing of a fee-schedule version
+      properties:
+        enabled:
+          type: boolean
+        maxRadiusMiles:
+          type: number
+        customerCharge:
+          $ref: '#/components/schemas/DeliveryTariff'
+        sellerFee:
+          $ref: '#/components/schemas/DeliveryTariff'
+        sellerOverrides:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellerDeliveryFeeOverride'
     FeeScheduleResponse:
       type: object
       properties:
@@ -1920,6 +2102,9 @@ components:
         cancelReason:
           type: string
           description: Why the version was cancelled
+        deliveryPricing:
+          $ref: '#/components/schemas/DeliveryPricing'
+          description: AfroTransact Delivery pricing (S255)
     CancelFeeScheduleRequest:
       type: object
       description: Why a scheduled fee schedule version is withdrawn (audited)
@@ -1930,6 +2115,71 @@ components:
           minLength: 0
       required:
       - reason
+    DeliveryQuoteRequest:
+      type: object
+      description: Price one AfroTransact Delivery trip
+      properties:
+        sellerOrgId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        distanceMiles:
+          type: number
+          description: Road miles (geo POST /v1/distance roadMiles)
+          example: 7.4
+          minimum: 0
+        packages:
+          type: integer
+          format: int32
+          default: 1
+          maximum: 50
+          minimum: 1
+        at:
+          type: string
+          format: date-time
+          description: Fee-schedule version in force at this time; default now
+      required:
+      - distanceMiles
+      - sellerOrgId
+    DeliveryQuote:
+      type: object
+      description: customerChargeMinor goes on the order as the package's shipping (4200); sellerFeeMinor is snapshotted and
+        deducted from the seller at capture (4250)
+      properties:
+        available:
+          type: boolean
+        unavailableReason:
+          type: string
+          enum:
+          - NOT_CONFIGURED
+          - BEYOND_MAX_RADIUS
+        customerChargeMinor:
+          type: integer
+          format: int64
+        sellerFeeMinor:
+          type: integer
+          format: int64
+        sellerFeeSource:
+          type: string
+          enum:
+          - DEFAULT
+          - OVERRIDE
+          - RETAIL
+        currency:
+          type: string
+        scheduleId:
+          type: string
+          format: uuid
+        scheduleVersion:
+          type: integer
+          format: int32
+        distanceMiles:
+          type: number
+        packages:
+          type: integer
+          format: int32
+        maxRadiusMiles:
+          type: number
     SetupIntentRequest:
       type: object
       properties:
@@ -2204,12 +2454,15 @@ components:
           format: int64
         shippingToPlatform:
           type: boolean
+        deliveryFeeMinor:
+          type: integer
+          format: int64
     RecipientResponse:
       type: object
-      description: 'One recipient. For sellers commission, FBA fees and Stripe fee are deductions; for the AfroTransact platform
-        row they are the totals earned. AfroTransact Retail (kind RETAIL) pays no commission and no FBA fee: its net (items
-        + shipping − Stripe fee share) is AfroTransact revenue (4400 Retail sales), never transferred or paid out. Tax is
-        collected and remitted by AfroTransact.'
+      description: 'One recipient. For sellers commission, FBA fees, delivery fees and Stripe fee are deductions; for the
+        AfroTransact platform row they are the totals earned. AfroTransact Retail (kind RETAIL) pays no commission and no
+        FBA fee: its net (items + shipping − Stripe fee share) is AfroTransact revenue (4400 Retail sales), never transferred
+        or paid out. Tax is collected and remitted by AfroTransact.'
       properties:
         recipient:
           type: string
@@ -2239,6 +2492,10 @@ components:
         fbaFeesMinor:
           type: integer
           format: int64
+        deliveryFeesMinor:
+          type: integer
+          format: int64
+          description: AfroTransact Delivery pickup-delivery fees (4250)
         stripeFeeMinor:
           type: integer
           format: int64

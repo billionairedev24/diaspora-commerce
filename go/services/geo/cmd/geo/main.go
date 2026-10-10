@@ -25,6 +25,8 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/nominatim"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/places"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/postgis"
+	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/roadrouter"
+	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/routecache"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/smarty"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/config"
@@ -120,11 +122,50 @@ func run() error {
 		Checks: []httpserver.ReadinessCheck{readiness{store: store}}, Logger: log,
 	})
 	reverse := app.NewReverseService(reversers, log)
-	httpapi.New(addresses, reverse, zones).Register(srv.Mux(), auth.Middleware(verifier, true), auth.Middleware(verifier, false))
+	routers, err := routingProviders(cfg, httpClient, log)
+	if err != nil {
+		return err
+	}
+	distances := app.NewDistanceService(addresses, postgis.NewDistanceCalculator(pool), app.RoutingOptions{
+		Routers: routers, Timeout: cfg.Routing.Timeout, DetourFactor: cfg.Routing.DetourFactor,
+		FallbackSpeedMph: cfg.Routing.FallbackSpeedMph,
+		Cache: routecache.New(cfg.Routing.CacheTTL, cfg.Routing.CachePrecisionMeters, cfg.Routing.CacheMaxEntries,
+			nil),
+	}, log)
+	httpapi.New(addresses, reverse, zones, distances).Register(srv.Mux(), auth.Middleware(verifier, true), auth.Middleware(verifier, false))
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
 	return nil
+}
+
+// routingProviders builds the configured routing providers in priority order; a provider without its key or URL is
+// skipped (logged), so environments enable routing by setting secrets only.
+func routingProviders(cfg config.Config, client *http.Client, log *slog.Logger) ([]port.RoadRouter, error) {
+	out := make([]port.RoadRouter, 0, len(cfg.Routing.Providers))
+	for _, name := range cfg.Routing.Providers {
+		switch name {
+		case "google":
+			key := cfg.Routing.GoogleAPIKey
+			if key == "" {
+				key = cfg.Google.APIKey
+			}
+			if key == "" {
+				log.Info("routing provider google skipped: no GOOGLE_MAPS_API_KEY")
+				continue
+			}
+			out = append(out, roadrouter.NewGoogle(key, "", client))
+		case "osrm":
+			if cfg.Routing.OSRMURL == "" {
+				log.Info("routing provider osrm skipped: no OSRM_URL")
+				continue
+			}
+			out = append(out, roadrouter.NewOSRM(cfg.Routing.OSRMURL, client))
+		default:
+			return nil, fmt.Errorf("unknown routing provider %q", name)
+		}
+	}
+	return out, nil
 }
 
 type readiness struct{ store port.ZoneStore }

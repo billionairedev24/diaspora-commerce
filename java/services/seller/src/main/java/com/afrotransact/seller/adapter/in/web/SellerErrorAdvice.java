@@ -5,6 +5,7 @@ import com.afrotransact.seller.domain.SellerForbidden;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
 import com.afrotransact.seller.port.GatewayException;
+import com.afrotransact.seller.port.GeoUnavailableException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -47,6 +48,13 @@ class SellerErrorAdvice {
         }
         return problem(ex.rejected() ? HttpStatus.UNPROCESSABLE_CONTENT : HttpStatus.BAD_GATEWAY, ex.code(),
                 ex.rejected() ? "Rejected by Stripe" : "Upstream unavailable", ex.getMessage());
+    }
+
+    @ExceptionHandler(GeoUnavailableException.class)
+    ProblemDetail geo(GeoUnavailableException ex) {
+        LOG.warn("geo-service unavailable: {}", ex.getMessage());
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "seller.geo-unavailable", "Upstream unavailable",
+                "Address lookup is temporarily unavailable; try again shortly");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

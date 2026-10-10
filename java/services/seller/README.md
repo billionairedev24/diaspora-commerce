@@ -73,6 +73,29 @@ warms its seller names from it on start), `GET /v1/orgs/{id}/public` (no auth: d
 cart, storefront), `GET /v1/orgs/{id}`
 (members and reviewers), `PATCH /v1/orgs/{id} {displayName}` (owner, approved orgs) → `seller.org.updated`.
 
+## Ship-from addresses and AfroTransact pickup (S231, S255)
+
+`GET/POST /v1/orgs/{orgId}/ship-from-addresses`, `PUT/DELETE …/{id}`, `POST …/{id}/default` (members read; owner,
+admin and fulfilment members change; staff `seller:ship-from`). Up to 20 per organisation, one default.
+
+- **Geocoding.** Every create and every address change is geocoded with geo-service `POST /v1/geocode` (provider chain,
+  ZIP centroid fallback) and stored as `position {lat, lng, precision ADDRESS|ZIP, geocodedAt}` (V52). Best effort: when
+  geo is down the address is saved without a position and geocoded again on the next change.
+- **AfroTransact pickup** — `PUT …/{id}/afrotransact-pickup {enabled, hours: [{day, opens, closes}], version?}`: the
+  seller packs, the nearest AfroTransact driver collects here and delivers. Enabling needs
+  - an **approved** organisation (`409 seller.org-not-approved`);
+  - pickup hours: 1–14 non-overlapping windows, `HH:MM` local time, opens before closes (`422 seller.invalid-pickup-hours`);
+  - a **street-level** position (`422 seller.ship-from-not-geocoded`; a ZIP centroid is not enough for a driver);
+  - a location **inside an active AfroTransact `DELIVERY` zone, or within `PICKUP_MAX_RADIUS_MILES` (25) of one** (geo
+    `GET /v1/zones/covering?type=DELIVERY&withinMiles=`; `422 seller.pickup-outside-delivery-area`); the zone name is
+    stored. `503 seller.geo-unavailable` when geo can't be reached.
+
+  Moving an enabled location re-checks it (refused outside the area); disabling keeps the hours for next time. Each
+  enable, move, disable or delete of a pickup location publishes `seller.pickup_location.updated` (`at.seller-org.events`).
+- **Service lookup** — `GET /v1/ship-from-locations/{id}`: services with `sellers:ship-from.read` (offers-service checks
+  AFROTRANSACT_DELIVERY offers, orders-service measures checkout distance from the position, fulfilment-service
+  needs the pickup address), staff `seller:ship-from` and the organisation's members.
+
 ## Stripe compliance (S099–S102)
 
 `POST /v1/webhooks/stripe-connect` (secret `STRIPE_CONNECT_WEBHOOK_SECRET`): signature verified with
@@ -197,7 +220,7 @@ knows the organisation.
 | Topic (key) | Types | Consumers |
 |---|---|---|
 | `at.seller-application.events` (application id) | `seller.application.submitted / flagged / info_requested / approved / rejected` | notifications, staff console, trust-ops |
-| `at.seller-org.events` (org id) | `seller.org.approved`, `seller.org.updated` (also on suspend / reinstate); `kind` is `BOTH` when the organisation offers products and services, `primaryKind` the onboarding portal (S215) | identity (unlock back office, mirror org and status), indexer and cart (display name) |
+| `at.seller-org.events` (org id) | `seller.pickup_location.updated` (S255 AfroTransact pickup locations); `seller.org.approved`, `seller.org.updated` (also on suspend / reinstate); `kind` is `BOTH` when the organisation offers products and services, `primaryKind` the onboarding portal (S215) | identity (unlock back office, mirror org and status), indexer and cart (display name) |
 | `at.seller-compliance.events` (org id) | `seller.compliance.changed`, `seller.compliance.reminder`, `seller.payouts.paused / resumed`, `seller.listings.hidden / restored` (reasons `AUTO_PAST_DUE · MANUAL · DEAUTHORIZED · CHARGES_DISABLED · CLEARED · SUSPENDED · REINSTATED`; `accountId` is null for an organisation without a connected account) | notifications (email + SMS + in-app), payments (payout holds), catalog / offers / bookings / indexer (visibility), trust-ops (audit) |
 | `at.seller-subscription.events` (org id) | `seller.subscription.changed` | identity (plan limits), finance |
 
@@ -214,7 +237,8 @@ knows the organisation.
 `application.yml` + `application-{local,dev,uat,prod}.yml`. Secrets only from env: `DB_URL`, `DB_USER`,
 `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `STRIPE_SECRET_KEY`, `STRIPE_CONNECT_WEBHOOK_SECRET`,
 `STRIPE_BILLING_WEBHOOK_SECRET`, `FIELD_ENCRYPTION_KEY` (base64 32 bytes; `FIELD_ENCRYPTION_KEY_ID`, default `k1`).
-Other: `AUTH_ISSUER_URL`, `SELLER_LIVE_COUNTRIES` (`US`), `MEDIA_BASE_URL`, `MEDIA_SERVICE_TOKEN`,
+Other: `AUTH_ISSUER_URL`, `SELLER_LIVE_COUNTRIES` (`US`), `MEDIA_BASE_URL`, `MEDIA_SERVICE_TOKEN`, `GEO_URL`, `GEO_TIMEOUT`,
+`PICKUP_MAX_RADIUS_MILES` (25),
 `SELLER_JOBS_ENABLED`, `REMINDER_CRON`, `PLAN_CHANGE_CRON`, `ACTIVATION_RETRY_INTERVAL`. `at.seller.stripe.api-base` /
 `files-base` point stripe-java at another host (the ITs use WireMock). The local profile ships a well-known dev
 encryption key; every other environment must provide its own.

@@ -45,5 +45,6 @@ workloadIdentity:
   azure: {clientId: ""}
 extraEnv:
   CATALOG_URL: http://catalog:8080
+  SELLER_URL: http://seller:8080
 nodeSelector: {}
 tolerations: []

@@ -95,7 +95,8 @@ at:
         type: confidential
         secret: ${ORDERS_CLIENT_SECRET:local-orders-service-secret}
         grant-types: [client_credentials]
-        scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read, "tax:quote"]
+        scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read, "tax:quote",
+                 "sellers:ship-from.read"]
       - client-id: tax-returns-service
         name: Tax returns service
         type: confidential
@@ -149,7 +150,7 @@ at:
         type: confidential
         secret: ${OFFERS_CLIENT_SECRET:local-offers-service-secret}
         grant-types: [client_credentials]
-        scopes: [catalog:read]
+        scopes: [catalog:read, "sellers:ship-from.read"]
       - client-id: retail-service
         name: AfroTransact Retail service
         type: confidential

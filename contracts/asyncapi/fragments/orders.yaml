@@ -122,6 +122,23 @@ components:
                 description: Shipping of the shipment (charged on its first line, as payments allocates it)
               shipBy: {type: [string, 'null'], format: date, description: Date the shipment must be handed over by}
               promisedFrom: {type: [string, 'null'], format: date}
+              pickup:
+                type: [object, 'null']
+                description: >-
+                  S255 AfroTransact Delivery from the seller's store (SELLER_FULFILLED + AFROTRANSACT_DELIVERY): where
+                  the driver collects (fulfilment creates a SELLER-origin pickup and prefers the nearest driver) and
+                  the checkout snapshot. Null for every other shipment.
+                properties:
+                  locationId: {type: string, description: seller-service ship-from location}
+                  lat: {type: number}
+                  lng: {type: number}
+                  roadMiles: {type: number, description: geo routing provider road miles pickup → customer}
+                  straightLineMiles: {type: number}
+                  durationMinutes: {type: number}
+                  distanceMethod: {type: string, enum: [ROAD_GOOGLE, ROAD_OSRM, GEODESIC_DETOUR]}
+                  customerChargeMinor: {type: integer, format: int64, description: Delivery charge (= shippingMinor)}
+                  sellerFeeMinor: {type: integer, format: int64, description: Seller pickup-delivery fee}
+                  pricingVersion: {type: integer, description: Fee-schedule version that priced it}
               lines:
                 type: array
                 items:

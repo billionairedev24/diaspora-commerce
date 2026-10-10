@@ -1,5 +1,6 @@
 package com.afrotransact.payments.domain;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -23,12 +24,14 @@ import java.util.UUID;
  * @param reverseCommissionOnRefund refunds give the seller back the matching commission (otherwise retained)
  * @param cancellation              set when a scheduled version was withdrawn before it took effect (the version
  *                                  stays in the history but never applies); null otherwise
+ * @param deliveryPricing           AfroTransact Delivery from sellers' stores (S255): customer charge, seller fee,
+ *                                  seller overrides and service radius; null when the version does not offer it
  */
 public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String currency,
                           Map<String, Integer> categoryBps, int defaultCommissionBps,
                           List<CommissionOverride> overrides, int cardPctBps, Money cardFixed, Money fbaPerUnit,
                           boolean reverseCommissionOnRefund, String note, String createdBy, Instant createdAt,
-                          Cancellation cancellation) {
+                          Cancellation cancellation, DeliveryPricing deliveryPricing) {
 
     /**
      * Withdrawal of a scheduled version: who, when and why (append-only, like the version itself).
@@ -48,13 +51,22 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         }
     }
 
-    /** A version that has not been cancelled. */
+    /** A version that has not been cancelled and offers no AfroTransact Delivery pricing. */
     public FeeSchedule(UUID id, int version, Instant effectiveFrom, String currency, Map<String, Integer> categoryBps,
                        int defaultCommissionBps, List<CommissionOverride> overrides, int cardPctBps, Money cardFixed,
                        Money fbaPerUnit, boolean reverseCommissionOnRefund, String note, String createdBy,
                        Instant createdAt) {
         this(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides, cardPctBps, cardFixed,
-                fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt, null);
+                fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt, null, null);
+    }
+
+    /** A version without AfroTransact Delivery pricing. */
+    public FeeSchedule(UUID id, int version, Instant effectiveFrom, String currency, Map<String, Integer> categoryBps,
+                       int defaultCommissionBps, List<CommissionOverride> overrides, int cardPctBps, Money cardFixed,
+                       Money fbaPerUnit, boolean reverseCommissionOnRefund, String note, String createdBy,
+                       Instant createdAt, Cancellation cancellation) {
+        this(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides, cardPctBps, cardFixed,
+                fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt, cancellation, null);
     }
 
     public FeeSchedule {
@@ -77,6 +89,32 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         if (cardFixed.isNegative() || fbaPerUnit.isNegative()) {
             throw new PaymentsRuleViolation("payments.invalid-fee-schedule", "Fees cannot be negative");
         }
+        if (deliveryPricing != null && !deliveryPricing.currency().equals(currency)) {
+            throw new PaymentsRuleViolation("payments.currency-mismatch", "Delivery pricing is in "
+                    + deliveryPricing.currency() + " but the fee schedule is in " + currency);
+        }
+    }
+
+    /**
+     * Prices one AfroTransact Delivery trip from {@code sellerOrgId}'s pickup location (S255): the customer charge and
+     * the seller fee (seller override first; none for AfroTransact Retail). Unavailable (NOT_CONFIGURED) when this
+     * version has no delivery pricing, or (BEYOND_MAX_RADIUS) beyond the service radius.
+     */
+    public DeliveryQuote quoteDelivery(String sellerOrgId, BigDecimal miles, int packages, String retailOrgId) {
+        if (miles == null || miles.signum() < 0) {
+            throw new PaymentsRuleViolation("payments.invalid-request", "distanceMiles must be ≥ 0",
+                    Map.of("distanceMiles", "Must be ≥ 0"));
+        }
+        if (packages < 1) {
+            throw new PaymentsRuleViolation("payments.invalid-request", "packages must be ≥ 1",
+                    Map.of("packages", "At least 1"));
+        }
+        if (deliveryPricing == null) {
+            Money zero = Money.zero(currency);
+            return new DeliveryQuote(false, DeliveryQuote.NOT_CONFIGURED, id, version, currency, miles, packages, null,
+                    zero, zero, sellerOrgId != null && sellerOrgId.equals(retailOrgId) ? "RETAIL" : "DEFAULT");
+        }
+        return deliveryPricing.quote(this, sellerOrgId, miles, packages, retailOrgId);
     }
 
     static void requireBps(int bps, String what) {
@@ -151,7 +189,7 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         }
         return new FeeSchedule(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides,
                 cardPctBps, cardFixed, fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt,
-                new Cancellation(now, by, reason));
+                new Cancellation(now, by, reason), deliveryPricing);
     }
 
     /**
