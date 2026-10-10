@@ -74,16 +74,17 @@ class JdbcPaymentRepository implements PaymentRepository {
             OrderLine l = pl.line();
             jdbc.sql("""
                     insert into payment_line (payment_id, line_no, line_id, seller_org, category, fulfilment,
-                        quantity, items_minor, shipping_minor, tax_minor, tax_jurisdiction, shipping_to_platform)
+                        quantity, items_minor, shipping_minor, tax_minor, tax_jurisdiction, shipping_to_platform,
+                        shipping_tax_minor)
                     values (:pid, :no, :lineId, :org, :category, :fulfilment, :qty, :items, :shipping, :tax,
-                        :jurisdiction, :toPlatform)
+                        :jurisdiction, :toPlatform, :shippingTax)
                     """)
                     .param("pid", p.id()).param("no", ++lineNo).param("lineId", l.lineId())
                     .param("org", l.sellerOrg()).param("category", l.category())
                     .param("fulfilment", l.fulfilment().name()).param("qty", l.quantity())
                     .param("items", l.items().minor()).param("shipping", l.shipping().minor())
                     .param("tax", l.tax().minor()).param("jurisdiction", l.taxJurisdiction())
-                    .param("toPlatform", pl.shippingToPlatform())
+                    .param("toPlatform", pl.shippingToPlatform()).param("shippingTax", l.shippingTax().minor())
                     .update();
         }
         return true;
@@ -171,7 +172,8 @@ class JdbcPaymentRepository implements PaymentRepository {
                             rs.getString("category"), Fulfilment.valueOf(rs.getString("fulfilment")),
                             rs.getInt("quantity"), Money.of(rs.getLong("items_minor"), currency),
                             Money.of(rs.getLong("shipping_minor"), currency),
-                            Money.of(rs.getLong("tax_minor"), currency), rs.getString("tax_jurisdiction"));
+                            Money.of(rs.getLong("tax_minor"), currency), rs.getString("tax_jurisdiction"),
+                            Money.of(rs.getLong("shipping_tax_minor"), currency));
                     return new PaymentLine(line, rs.getObject("capture_id", UUID.class),
                             Money.of(rs.getLong("commission_minor"), currency),
                             Money.of(rs.getLong("fba_fee_minor"), currency), rs.getBoolean("shipping_to_platform"),

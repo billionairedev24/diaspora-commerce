@@ -103,7 +103,11 @@ class ReceivingServiceImpl implements ReceivingService {
                 Lot lot = receiveLot(changes, cmd, node, line, line.lotNo(), line.qtyGood());
                 created.add(lot);
                 if (decision.outcome() == ShelfLifeDecision.Outcome.QUARANTINE) {
-                    quarantined.add(quarantine(changes, cmd, lot, decision.reason()));
+                    String reason = line.holdReason() == null ? decision.reason()
+                            : decision.reason() + "; " + line.holdReason();
+                    quarantined.add(quarantine(changes, cmd, lot, reason));
+                } else if (line.holdReason() != null) {
+                    quarantined.add(quarantine(changes, cmd, lot, line.holdReason()));
                 }
             }
             if (line.qtyDamaged() > 0) {
@@ -222,6 +226,9 @@ class ReceivingServiceImpl implements ReceivingService {
             if (l.shelfLifeDays() != null && l.shelfLifeDays() <= 0) {
                 errors.put(p + "shelfLifeDays", "Must be positive");
             }
+            if (l.holdReason() != null && l.holdReason().length() > 500) {
+                errors.put(p + "holdReason", "At most 500 characters");
+            }
             String sku = l.sku() == null ? "" : l.sku().trim().toUpperCase(Locale.ROOT);
             String lotNo = l.lotNo() == null ? "" : l.lotNo().trim().toUpperCase(Locale.ROOT);
             if (!seen.add(sku + "|" + lotNo)) {
@@ -230,7 +237,8 @@ class ReceivingServiceImpl implements ReceivingService {
             lines.add(new ReceiveCommand.Line(sku, lotNo, l.mfgDate(), l.expDate(), l.qtyGood(), l.qtyDamaged(),
                     l.bin() == null || l.bin().isBlank() ? null : l.bin().trim().toUpperCase(Locale.ROOT),
                     l.unitLandedCostMinor(), l.currency() == null ? null : l.currency().toUpperCase(Locale.ROOT),
-                    l.shelfLifeDays()));
+                    l.shelfLifeDays(), l.holdReason() == null || l.holdReason().isBlank() ? null
+                    : l.holdReason().trim()));
         }
         if (!errors.isEmpty()) {
             throw new InventoryRuleViolation("inventory.invalid-request", "Invalid receipt", errors);

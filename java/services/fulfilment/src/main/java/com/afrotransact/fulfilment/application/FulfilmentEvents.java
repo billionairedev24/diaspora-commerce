@@ -23,6 +23,15 @@ public final class FulfilmentEvents {
     public static final String STOP_SKIPPED = "fulfilment.stop.skipped";
     public static final String STOP_REASSIGNED = "fulfilment.stop.reassigned";
 
+    /** Return pickups (key = RMA id). */
+    public static final String RETURN_PICKUP_SCHEDULED = "fulfilment.return_pickup.scheduled";
+    public static final String RETURN_PICKUP_ROUTED = "fulfilment.return_pickup.routed";
+    public static final String RETURN_PICKUP_COLLECTED = "fulfilment.return_pickup.collected";
+    public static final String RETURN_PICKUP_FAILED = "fulfilment.return_pickup.failed";
+    public static final String RETURN_PICKUP_CANCELLED = "fulfilment.return_pickup.cancelled";
+    /** A shipment left its origin (seller pickup or FC load-out) with its ship-by date (key = shipment id). */
+    public static final String SHIPMENT_HANDED_OVER = "fulfilment.shipment.handed_over";
+
     public static final String VEHICLE_DEFECT = "fulfilment.vehicle.defect_reported";
     /** High priority: dispatch must react now. */
     public static final String SOS_RAISED = "fulfilment.driver.sos_raised";

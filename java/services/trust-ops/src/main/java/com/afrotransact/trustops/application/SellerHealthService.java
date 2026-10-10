@@ -15,6 +15,12 @@ public interface SellerHealthService {
     /** Projects the shipments an orders event describes (inbox-deduplicated by event id). */
     void recordShipments(UUID eventId, List<ShipmentFact> facts);
 
+    /**
+     * Records seller handovers from fulfilment (fulfilment.shipment.handed_over, origin SELLER; inbox-deduplicated
+     * by event id): the handover time and ship-by date behind the late-shipment rate.
+     */
+    void recordHandovers(UUID eventId, List<ShipmentFact> facts);
+
     /** Live metrics for one seller (orgs:read). */
     SellerHealthView health(String orgId);
 

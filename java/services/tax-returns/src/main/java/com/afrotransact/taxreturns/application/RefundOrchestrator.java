@@ -79,8 +79,20 @@ class RefundOrchestrator {
         this.clock = clock;
     }
 
-    /** Estimate shown before payments is asked: from the order snapshot (shipping derived per shipment). */
+    /**
+     * Estimate shown before the refund is issued: from the lines as charged by payments-service, net of what was
+     * already refunded there (claims, cancellations); from the order snapshot when payments cannot answer.
+     */
     RefundBreakdown estimate(PlacedOrder order, List<RefundSelection> selections, int restockingFeeBps) {
+        try {
+            Optional<PaymentsGateway.ChargedPayment> charged = payments.paymentForOrder(order.orderId());
+            if (charged.isPresent()) {
+                return calculator.forReturn(charged(order.orderId(), charged.get()), selections, restockingFeeBps);
+            }
+        } catch (UpstreamException ex) {
+            LOG.debug("Estimate of order {} from the snapshot: payments unavailable ({})", order.orderNumber(),
+                    ex.status());
+        }
         Map<String, RefundedTotals> done = refunds.refundedTotals(order.orderId());
         List<RefundableLine> charged = new ArrayList<>();
         for (PlacedOrder.Shipment s : order.shipments()) {
@@ -88,7 +100,7 @@ class RefundOrchestrator {
             for (PlacedOrder.Line l : s.lines()) {
                 RefundedTotals t = done.getOrDefault(l.lineId(), RefundedTotals.NONE);
                 charged.add(new RefundableLine(l.lineId(), s.shipmentId().toString(), l.quantity(),
-                        l.unitPriceMinor() * l.quantity(), first ? s.shippingMinor() : 0L, l.taxMinor(), t.quantity(),
+                        l.itemsMinor(), first ? s.shippingMinor() : 0L, l.taxMinor(), t.quantity(),
                         t.itemsMinor(), t.shippingMinor(), t.taxMinor()));
                 first = false;
             }
@@ -226,11 +238,24 @@ class RefundOrchestrator {
                 .forEach(l -> shipmentOf.put(l.lineId(), s.shipmentId().toString()))));
         Map<String, RefundedTotals> done = refunds.refundedTotals(orderId);
         return payment.lines().stream().map(l -> {
-            RefundedTotals t = done.getOrDefault(l.lineId(), RefundedTotals.NONE);
+            RefundedTotals t = alreadyRefunded(l, done.getOrDefault(l.lineId(), RefundedTotals.NONE));
             return new RefundableLine(l.lineId(), shipmentOf.getOrDefault(l.lineId(), l.lineId()), l.quantity(),
                     l.itemsMinor(), l.shippingMinor(), l.taxMinor(), t.quantity(), t.itemsMinor(), t.shippingMinor(),
                     t.taxMinor());
         }).toList();
+    }
+
+    /**
+     * What a line already gave back: this service's refunds (pending ones included) or what payments-service reports
+     * as refunded on the line (cancellations, A-to-z claims, staff refunds), whichever is more — so refunds made
+     * elsewhere are never refunded twice. A line payments reports as fully refunded counts all its units.
+     */
+    static RefundedTotals alreadyRefunded(PaymentsGateway.ChargedLine l, RefundedTotals local) {
+        long items = Math.max(local.itemsMinor(), l.refundedItemsMinor());
+        long shipping = Math.max(local.shippingMinor(), l.refundedShippingMinor());
+        long tax = Math.max(local.taxMinor(), l.refundedTaxMinor());
+        int units = l.itemsMinor() > 0 && l.refundedItemsMinor() >= l.itemsMinor() ? l.quantity() : local.quantity();
+        return new RefundedTotals(units, items, shipping, tax);
     }
 
     private static void requireCaptured(PaymentsGateway.ChargedPayment payment, RefundBreakdown breakdown) {

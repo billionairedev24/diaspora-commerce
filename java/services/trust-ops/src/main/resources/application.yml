@@ -94,10 +94,15 @@ at:
       client-id: ${TRUSTOPS_CLIENT_ID:trust-ops-service}
       # Only from the environment (identity's trust-ops-service client secret). Blank = no token (local profile).
       client-secret: ${TRUSTOPS_CLIENT_SECRET}
-      scopes: catalog:moderate payments:service sellers:enforce offers:write ai:triage
+      scopes: catalog:moderate payments:service sellers:enforce offers:write ai:triage orders:lookup
       timeout: ${UPSTREAM_TIMEOUT:10s}
     catalog:
       base-url: ${CATALOG_URL:http://localhost:8101}
+    orders:
+      base-url: ${ORDERS_URL:http://localhost:8104}
+    # Claims are checked against orders-service's order lookup (claimant owns the order, shipment and seller match).
+    claims:
+      verify-ownership: ${TRUSTOPS_CLAIMS_VERIFY_OWNERSHIP:true}
     payments:
       base-url: ${PAYMENTS_URL:http://localhost:8105}
     seller:
@@ -118,6 +123,9 @@ at:
       export-max-rows: ${TRUSTOPS_AUDIT_EXPORT_MAX_ROWS:50000}
     seller-health:
       window: ${SELLER_HEALTH_WINDOW:90d}
+      # Late shipment = handed over (fulfilment.shipment.handed_over / orders picked_up) after the ship-by date in
+      # this zone; shipments without a ship-by date fall back to delivered after the promised date.
+      zone: ${SELLER_HEALTH_ZONE:America/Chicago}
       cron: ${SELLER_HEALTH_CRON:0 15 3 * * *}
       push-to-offers: ${SELLER_HEALTH_PUSH:true}
       late-shipment-threshold: 0.04
@@ -125,6 +133,7 @@ at:
       defect-threshold: 0.01
     consumers:
       product-topic: at.product.events
+      fulfilment-topic: at.fulfilment.events
       order-topic: at.order.events
       handoff-topic: at.ai-handoff.events
     jobs:

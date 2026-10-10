@@ -55,11 +55,13 @@ class JdbcReservationRepository implements ReservationRepository {
     public void insertLines(Reservation r) {
         for (ReservationLine line : r.lines()) {
             jdbc.sql("""
-                    insert into reservation_line (reservation_id, line_no, sku, node_id, qty)
-                    values (:id, :lineNo, :sku, :node, :qty)
+                    insert into reservation_line (reservation_id, line_no, sku, node_id, qty, group_key, status,
+                                                  stock_owner_org)
+                    values (:id, :lineNo, :sku, :node, :qty, :group, :status, :owner)
                     """)
                     .param("id", r.id()).param("lineNo", line.lineNo()).param("sku", line.sku())
-                    .param("node", line.nodeId()).param("qty", line.qty())
+                    .param("node", line.nodeId()).param("qty", line.qty()).param("group", line.group())
+                    .param("status", line.status().name()).param("owner", line.stockOwnerOrgId())
                     .update();
             for (LotAllocation a : line.allocations()) {
                 jdbc.sql("""
@@ -118,6 +120,14 @@ class JdbcReservationRepository implements ReservationRepository {
             throw new ConflictException("inventory.concurrent-update", "Reservation for order " + r.orderId()
                     + " changed concurrently");
         }
+        for (ReservationLine line : r.lines()) {
+            jdbc.sql("""
+                    update reservation_line set status = :status
+                    where reservation_id = :id and line_no = :lineNo and status <> :status
+                    """)
+                    .param("status", line.status().name()).param("id", r.id()).param("lineNo", line.lineNo())
+                    .update();
+        }
         return new Reservation(r.id(), r.orderId(), r.status(), r.idempotencyKey(), r.expiresAt(), r.createdAt(),
                 r.updatedAt(), r.lines(), r.version() + 1);
     }
@@ -143,7 +153,8 @@ class JdbcReservationRepository implements ReservationRepository {
                 });
         Map<UUID, List<ReservationLine>> lines = new LinkedHashMap<>();
         jdbc.sql("""
-                select reservation_id, line_no, sku, node_id, qty from reservation_line
+                select reservation_id, line_no, sku, node_id, qty, group_key, status, stock_owner_org
+                from reservation_line
                 where reservation_id in (:ids) order by reservation_id, line_no
                 """)
                 .param("ids", ids)
@@ -152,7 +163,9 @@ class JdbcReservationRepository implements ReservationRepository {
                     int lineNo = rs.getInt("line_no");
                     lines.computeIfAbsent(id, k -> new ArrayList<>()).add(new ReservationLine(lineNo,
                             rs.getString("sku"), rs.getString("node_id"), rs.getInt("qty"),
-                            allocations.getOrDefault(id + "#" + lineNo, List.of())));
+                            allocations.getOrDefault(id + "#" + lineNo, List.of()), rs.getString("group_key"),
+                            ReservationLine.LineStatus.valueOf(rs.getString("status")),
+                            rs.getString("stock_owner_org")));
                 });
         return headers.stream().map(h -> h.withLines(lines.getOrDefault(h.id(), List.of()))).toList();
     }

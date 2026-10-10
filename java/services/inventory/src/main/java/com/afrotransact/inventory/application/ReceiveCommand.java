@@ -22,8 +22,18 @@ public record ReceiveCommand(String receiptRef, String nodeId, String ownerOrg, 
      * @param qtyDamaged          units damaged on arrival (go to a separate {@code -DMG} quarantine lot)
      * @param unitLandedCostMinor FOB + freight, insurance, duty, fees per unit, in minor units
      * @param shelfLifeDays       product shelf life from manufacture (drives the short-dated rule)
+     * @param holdReason          receive the good units straight into QUARANTINE with this reason (e.g. a QC hold
+     *                            decided at the dock), so no separate quarantine call is needed; null = sellable
      */
     public record Line(String sku, String lotNo, LocalDate mfgDate, LocalDate expDate, int qtyGood, int qtyDamaged,
-                       String bin, long unitLandedCostMinor, String currency, Integer shelfLifeDays) {
+                       String bin, long unitLandedCostMinor, String currency, Integer shelfLifeDays,
+                       String holdReason) {
+
+        /** A line without hold reason. */
+        public Line(String sku, String lotNo, LocalDate mfgDate, LocalDate expDate, int qtyGood, int qtyDamaged,
+                    String bin, long unitLandedCostMinor, String currency, Integer shelfLifeDays) {
+            this(sku, lotNo, mfgDate, expDate, qtyGood, qtyDamaged, bin, unitLandedCostMinor, currency, shelfLifeDays,
+                    null);
+        }
     }
 }

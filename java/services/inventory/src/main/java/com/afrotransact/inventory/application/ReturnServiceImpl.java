@@ -16,9 +16,9 @@ import com.afrotransact.inventory.domain.LotAllocation;
 import com.afrotransact.inventory.domain.LotStatus;
 import com.afrotransact.inventory.domain.MarkdownFlag;
 import com.afrotransact.inventory.domain.MovementType;
+import com.afrotransact.inventory.domain.Node;
 import com.afrotransact.inventory.domain.Reservation;
 import com.afrotransact.inventory.domain.ReservationLine;
-import com.afrotransact.inventory.domain.ReservationStatus;
 import com.afrotransact.inventory.domain.ReturnCondition;
 import com.afrotransact.inventory.domain.StockPosition;
 import com.afrotransact.inventory.port.IdempotencyStore;
@@ -66,7 +66,7 @@ class ReturnServiceImpl implements ReturnService {
     @Override
     @Transactional
     public ReturnResult accept(ReturnCommand raw, String idempotencyKey) {
-        Actor actor = access.require(InventoryPermissions.ADJUST);
+        Actor actor = access.returner();
         ReturnCommand cmd = normalise(raw);
         Optional<ReturnResult> prior = idempotency.claim(SCOPE, idempotencyKey, Fingerprint.of(cmd),
                 ReturnResult.class);
@@ -75,11 +75,12 @@ class ReturnServiceImpl implements ReturnService {
         }
         Reservation order = reservations.lockByOrderId(cmd.orderId()).orElseThrow(() -> new NotFoundException(
                 "inventory.reservation-not-found", "No reservation for order " + cmd.orderId()));
-        if (order.status() != ReservationStatus.COMMITTED) {
+        if (order.committedLines().isEmpty()) {
             throw new InventoryStateConflict("inventory.order-not-shipped", "Order " + cmd.orderId() + " is "
                     + order.status() + "; only shipped orders can be returned");
         }
-        List<ReservationLine> lines = order.lines().stream().filter(l -> l.sku().equals(cmd.sku())).toList();
+        List<ReservationLine> lines = order.committedLines().stream().filter(l -> l.sku().equals(cmd.sku()))
+                .toList();
         int shipped = lines.stream().mapToInt(ReservationLine::qty).sum();
         int returned = ledger.sumQty(cmd.orderId(), cmd.sku(), RETURN_TYPES);
         if (shipped == 0 || returned + cmd.qty() > shipped) {
@@ -94,24 +95,57 @@ class ReturnServiceImpl implements ReturnService {
                         "Lot " + cmd.lotId() + " was not shipped on order " + cmd.orderId(), Map.of("lotId", "Unknown")));
 
         StockChanges changes = writer.begin(actor.subject());
+        Lot shippedLot = lots.lockById(source.lotId()).orElseThrow();
+        String node = cmd.receivingNodeId() == null ? shippedLot.nodeId() : cmd.receivingNodeId();
+        if (!node.equals(shippedLot.nodeId())) {
+            Node receiving = nodes.findById(node).orElseThrow(() -> new NotFoundException("inventory.node-not-found",
+                    "Unknown receiving node " + node));
+            if (!receiving.active()) {
+                throw new InventoryRuleViolation("inventory.node-inactive", "Node " + node + " is not active",
+                        Map.of("receivingNodeId", "Inactive"));
+            }
+            positions.ensureExists(cmd.sku(), node, shippedLot.ownerOrg(), changes.now());
+        }
         positions.lockBySkus(List.of(cmd.sku())).forEach(changes::track);
-        Lot lot = lots.lockById(source.lotId()).orElseThrow();
-        changes.trackLot(lot);
-        StockPosition position = changes.requirePosition(lot.sku(), lot.nodeId());
-        String why = "Return " + cmd.condition().name().toLowerCase(Locale.ROOT) + ": " + cmd.reason();
+        changes.trackLot(shippedLot);
+        StockPosition position = changes.requirePosition(shippedLot.sku(), node);
+        if (!position.ownerOrg().equals(shippedLot.ownerOrg())) {
+            throw new InventoryStateConflict("inventory.owner-mismatch", "SKU " + cmd.sku() + " at " + node
+                    + " belongs to another organisation; FBA stock is never mixed");
+        }
+        String why = "Return " + cmd.condition().name().toLowerCase(Locale.ROOT) + ": " + cmd.reason()
+                + (node.equals(shippedLot.nodeId()) ? "" : " (received at " + node + ")");
         Lot target;
         boolean created = false;
         if (cmd.condition() == ReturnCondition.RESTOCK) {
-            if (lot.status() != LotStatus.SELLABLE || lot.expiredOn(today(lot.nodeId()))) {
-                throw new InventoryRuleViolation("inventory.return-not-sellable", "Lot " + lot.lotNo() + " is "
-                        + lot.status() + "; record the return as DAMAGED", Map.of("condition", "Use DAMAGED"));
+            if (shippedLot.status() != LotStatus.SELLABLE || shippedLot.expiredOn(today(shippedLot.nodeId()))) {
+                throw new InventoryRuleViolation("inventory.return-not-sellable", "Lot " + shippedLot.lotNo() + " is "
+                        + shippedLot.status() + "; record the return as DAMAGED", Map.of("condition", "Use DAMAGED"));
             }
-            target = lot.add(cmd.qty());
+            Optional<Lot> here = node.equals(shippedLot.nodeId()) ? Optional.of(shippedLot)
+                    : lots.lockByKey(shippedLot.sku(), shippedLot.lotNo(), node);
+            if (here.isPresent() && here.get().status() != LotStatus.SELLABLE) {
+                throw new InventoryRuleViolation("inventory.return-not-sellable", "Lot " + shippedLot.lotNo() + " at "
+                        + node + " is " + here.get().status() + "; record the return as DAMAGED",
+                        Map.of("condition", "Use DAMAGED"));
+            }
+            if (here.isPresent()) {
+                changes.trackLot(here.get());
+                target = changes.lot(here.get().id()).add(cmd.qty());
+            } else {
+                target = new Lot(UUID.randomUUID(), shippedLot.sku(), shippedLot.lotNo(), node,
+                        shippedLot.ownerOrg(), null, cmd.qty(), 0, shippedLot.mfgDate(), shippedLot.expDate(),
+                        changes.now(), shippedLot.unitLandedCostMinor(), shippedLot.currency(), LotStatus.SELLABLE,
+                        "Returned to " + node, shippedLot.markdownFlag(), cmd.orderId(), 0);
+                changes.newLot(target);
+                created = true;
+            }
             changes.apply(MovementType.RETURN_RESTOCK, position.adjustSellable(cmd.qty()), target, cmd.qty(),
                     cmd.orderId(), why);
         } else {
+            Lot lot = shippedLot;
             String dmgNo = lot.isDamagedLot() ? lot.lotNo() : lot.lotNo() + Lot.DAMAGED_SUFFIX;
-            Optional<Lot> existing = lots.lockByKey(lot.sku(), dmgNo, lot.nodeId());
+            Optional<Lot> existing = lots.lockByKey(lot.sku(), dmgNo, node);
             if (existing.isPresent() && existing.get().status() != LotStatus.WRITTEN_OFF) {
                 changes.trackLot(existing.get());
                 target = existing.get().add(cmd.qty());
@@ -119,7 +153,7 @@ class ReturnServiceImpl implements ReturnService {
                 throw new InventoryStateConflict("inventory.invalid-lot-state", "Damaged lot " + dmgNo
                         + " was written off; write off the returned units directly");
             } else {
-                target = new Lot(UUID.randomUUID(), lot.sku(), dmgNo, lot.nodeId(), lot.ownerOrg(), null, cmd.qty(), 0,
+                target = new Lot(UUID.randomUUID(), lot.sku(), dmgNo, node, lot.ownerOrg(), null, cmd.qty(), 0,
                         lot.mfgDate(), lot.expDate(), changes.now(), lot.unitLandedCostMinor(), lot.currency(),
                         LotStatus.DAMAGED, "Damaged return", MarkdownFlag.NONE, cmd.orderId(), 0);
                 changes.newLot(target);
@@ -149,6 +183,7 @@ class ReturnServiceImpl implements ReturnService {
                     "orderId, sku, a positive qty, condition and reason are required");
         }
         return new ReturnCommand(c.orderId().trim(), c.sku().trim().toUpperCase(Locale.ROOT), c.lotId(), c.qty(),
-                c.condition(), c.reason().trim());
+                c.condition(), c.reason().trim(), c.receivingNodeId() == null || c.receivingNodeId().isBlank() ? null
+                : c.receivingNodeId().trim().toUpperCase(Locale.ROOT));
     }
 }

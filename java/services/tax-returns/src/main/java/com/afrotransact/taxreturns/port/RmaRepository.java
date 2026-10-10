@@ -43,6 +43,15 @@ public interface RmaRepository {
 
     void recordTransition(UUID rmaId, RmaStatus from, RmaStatus to, String actor, String note, Instant at);
 
+    /** The fulfilment pickup scheduled for a driver-pickup RMA. */
+    Optional<String> pickupId(UUID rmaId);
+
+    /** Records a pickup scheduling outcome: SCHEDULED (with the id), FAILED (counts an attempt) or CANCELLED. */
+    void recordPickup(UUID rmaId, String pickupId, String status, String error, Instant at);
+
+    /** Driver-pickup RMAs with a handover code whose pickup is not scheduled with fulfilment yet. */
+    List<Rma> pickupsToSchedule(int limit);
+
     /** Search filter; null fields are not filtered on. */
     record Filter(String customerId, String sellerOrgId, UUID orderId, RmaStatus status, int limit) {
     }

@@ -35,6 +35,11 @@ type LabelRecord struct {
 	TrackingState     ShipmentState `json:"trackingState,omitempty"`
 	CreatedAt         time.Time     `json:"createdAt"`
 	VoidedAt          *time.Time    `json:"voidedAt,omitempty"`
+	Kind              LabelKind     `json:"kind"`
+	RateChoice        RateChoice    `json:"rateChoice,omitempty"`
+	BoxFree           bool          `json:"boxFree"`
+	QRPayload         string        `json:"qrPayload,omitempty"`
+	DropOffNetwork    string        `json:"dropOffNetwork,omitempty"`
 }
 
 // CanVoid reports whether the label can still be voided: purchased and not yet accepted by the carrier.
@@ -52,9 +57,16 @@ func (l LabelRecord) CanVoid() error {
 
 // ObjectKey is where the label document is stored.
 func (l LabelRecord) ObjectKey() string {
-	ext := "pdf"
-	if l.Format == FormatZPL {
+	var ext string
+	switch l.Format {
+	case FormatZPL:
 		ext = "zpl"
+	case FormatPNG:
+		ext = "png"
+	case FormatPDF:
+		ext = "pdf"
+	default:
+		ext = "pdf"
 	}
 	return fmt.Sprintf("labels/%s/%s/%s.%s", l.Carrier, l.CreatedAt.UTC().Format("2006/01/02"), l.ID, ext)
 }

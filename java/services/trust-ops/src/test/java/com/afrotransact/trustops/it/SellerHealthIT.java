@@ -95,6 +95,40 @@ class SellerHealthIT extends TrustOpsIntegrationTest {
     }
 
     @Test
+    void lateShipmentsComeFromTheShipByDateAndTheSellersHandover() {
+        String org = orgId();
+        Instant placed = Instant.now().minus(Duration.ofDays(10));
+        LocalDate placedDay = LocalDate.ofInstant(placed, ZoneOffset.UTC);
+        LocalDate shipBy = placedDay.plusDays(2);
+        // 4 with a ship-by date: 3 handed over on time (one of them delivered after the promised date — not the
+        // seller's lateness), 1 handed over late (not delivered yet). 1 legacy shipment delivered late.
+        for (int i = 0; i < 4; i++) {
+            String shipment = UUID.randomUUID().toString();
+            health.recordShipments(UUID.randomUUID(), List.of(new ShipmentFact(shipment, "ord-sb-" + i, org, placed,
+                    placedDay.plusDays(4), null, null, null, "placed", shipBy, null)));
+            Instant handedOver = (i < 3 ? shipBy : shipBy.plusDays(2)).atTime(15, 0).atZone(ZoneOffset.UTC)
+                    .toInstant();
+            health.recordHandovers(UUID.randomUUID(), List.of(new ShipmentFact(shipment, "ord-sb-" + i, org, null,
+                    null, null, null, null, null, shipBy, handedOver)));
+            if (i == 0) {
+                health.recordShipments(UUID.randomUUID(), List.of(new ShipmentFact(shipment, null, org, null, null,
+                        placed.plus(Duration.ofDays(7)), null, null, "delivered")));
+            }
+        }
+        String legacy = UUID.randomUUID().toString();
+        health.recordShipments(UUID.randomUUID(), List.of(new ShipmentFact(legacy, "ord-legacy", org, placed,
+                placedDay.plusDays(3), null, null, null, "placed")));
+        health.recordShipments(UUID.randomUUID(), List.of(new ShipmentFact(legacy, null, org, null, null,
+                placed.plus(Duration.ofDays(6)), null, null, "delivered")));
+
+        TestSupport.as(TestSupport.trustSafety("sara"));
+        SellerHealthReport r = health.health(org).current();
+        assertThat(r.metrics().shipments()).isEqualTo(5);
+        assertThat(r.metrics().delivered()).isEqualTo(5);
+        assertThat(r.metrics().lateDeliveries()).isEqualTo(2);
+    }
+
+    @Test
     void suspendUsesTheSellerSuspensionHoldAndRestrictsTheBuyBoxThenReinstateLiftsBoth() {
         String org = orgId();
         TestSupport.as(TestSupport.trustSafety("sara"));

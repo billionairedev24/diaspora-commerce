@@ -11,6 +11,7 @@ import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutRequestBody;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ProviderFeeResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.SettlementResponse;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ShipmentSettlementResponse;
 import com.afrotransact.payments.application.PayoutCommand;
 import com.afrotransact.payments.application.PayoutService;
 import com.afrotransact.payments.application.ProviderFeeService;
@@ -55,6 +56,25 @@ class SettlementPayoutController {
                 : SettlementKind.valueOf(body.kind().trim().toUpperCase(Locale.ROOT));
         return SettlementResponse.of(settlements.markDelivered(orderId, body == null ? null : body.deliveredAt(),
                 kind));
+    }
+
+    @Operation(summary = "One shipment delivered: start that shipment's settlement hold (payments:service)",
+            description = "The seller net captured for the shipment becomes transferable after the hold, without "
+                    + "waiting for the order's other shipments; the order hold transfers whatever is left. "
+                    + "Idempotent per shipment.")
+    @PostMapping("/v1/settlements/{orderId}/shipments/{shipmentId}/delivered")
+    ShipmentSettlementResponse shipmentDelivered(@PathVariable String orderId, @PathVariable String shipmentId,
+                                                 @Valid @RequestBody(required = false) DeliveredRequest body) {
+        SettlementKind kind = body == null || body.kind() == null ? SettlementKind.PRODUCT
+                : SettlementKind.valueOf(body.kind().trim().toUpperCase(Locale.ROOT));
+        return ShipmentSettlementResponse.of(settlements.markShipmentDelivered(orderId, shipmentId,
+                body == null ? null : body.deliveredAt(), kind));
+    }
+
+    @Operation(summary = "Shipment settlement holds of an order")
+    @GetMapping("/v1/settlements/{orderId}/shipments")
+    List<ShipmentSettlementResponse> shipmentSettlements(@PathVariable String orderId) {
+        return settlements.shipments(orderId).stream().map(ShipmentSettlementResponse::of).toList();
     }
 
     @Operation(summary = "Settlement hold of an order")

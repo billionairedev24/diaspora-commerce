@@ -31,6 +31,14 @@ type WebhookReceiver interface {
 	ParseWebhook(body []byte) ([]domain.TrackingEvent, error)
 }
 
+// BoxFreeReturner is implemented by carriers whose integration offers label-free (box-free) QR drop-off for
+// returns: the customer shows a QR code at a carrier location, which packs and labels the item. The returned label
+// carries the QR payload, the drop-off network and the QR image as Data (FormatPNG). None of the current adapters
+// (USPS, UPS, FedEx, DHL Express) implement it, so box-free requests fail with domain.ErrUnsupported per carrier.
+type BoxFreeReturner interface {
+	BuyBoxFreeReturn(ctx context.Context, s domain.Shipment, service domain.ServiceCode) (domain.Label, error)
+}
+
 // TrackingSubscriber is implemented by carriers that need an explicit push subscription per tracking number
 // (UPS Track Alert).
 type TrackingSubscriber interface {

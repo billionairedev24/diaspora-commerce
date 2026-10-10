@@ -48,9 +48,19 @@ operations:
     action: receive
     channel: {$ref: '#/channels/ordersOrderEvents'}
     summary: >-
-      Consumer group trust-ops-service-seller-health: orders.order.placed (shipments, promisedBy),
+      Consumer group trust-ops-service-seller-health: orders.order.placed (shipments, promisedBy, shipBy),
       orders.shipment.delivered, orders.shipment.cancelled and orders.shipment.status_changed feed the per-shipment
-      projection behind seller health (late shipment, seller cancellation and order defect rates).
+      projection behind seller health (late shipment, seller cancellation and order defect rates). A status change to
+      picked_up records the seller's handover when fulfilment does not report one.
+  consumeTrustOpsFulfilmentEvents:
+    action: receive
+    channel: {$ref: '#/channels/fulfilmentEvents'}
+    summary: >-
+      Consumer group trust-ops-service-fulfilment (inbox consumer trust-ops:fulfilment): fulfilment.shipment.handed_over
+      with origin SELLER records when the shipment left the seller and its shipBy date. Seller health counts a
+      shipment late when it was handed over after its ship-by date (SELLER_HEALTH_ZONE, default America/Chicago);
+      shipments without a ship-by date fall back to delivered after promisedBy. FC-origin handovers and other
+      fulfilment events are ignored.
   consumeTrustOpsAiHandoffEvents:
     action: receive
     channel: {$ref: '#/channels/aiHandoffEvents'}

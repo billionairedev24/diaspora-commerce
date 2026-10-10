@@ -97,7 +97,7 @@ at:
         type: confidential
         secret: ${TAX_RETURNS_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [payments:service, inventory:adjust, "shipping:label", users:read]
+        scopes: [payments:service, inventory:adjust, "shipping:label", users:read, inventory:returns, orders:lookup, delivery:returns]
       - client-id: bookings-service
         name: Bookings service
         type: confidential
@@ -127,7 +127,7 @@ at:
         type: confidential
         secret: ${TRUSTOPS_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [catalog:moderate, payments:service, compliance:hold, offers:write, ai:triage, users:read]
+        scopes: [catalog:moderate, payments:service, compliance:hold, offers:write, ai:triage, users:read, orders:lookup, sellers:enforce]
       - client-id: search-service
         name: Search service
         type: confidential

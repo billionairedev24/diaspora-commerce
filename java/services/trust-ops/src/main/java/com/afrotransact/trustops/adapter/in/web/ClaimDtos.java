@@ -30,7 +30,8 @@ final class ClaimDtos {
             + "for a customer; evidence are media asset ids.")
     record OpenClaimRequest(@NotNull ClaimType type, @NotBlank @Size(max = 80) String orderId,
                             @Size(max = 40) String orderNumber, @Size(max = 80) String shipmentId,
-                            @NotBlank @Size(max = 80) String sellerOrgId, @Size(max = 120) String customerId,
+                            @Schema(description = "Optional: taken from the shipment / order (orders lookup)")
+                            @Size(max = 80) String sellerOrgId, @Size(max = 120) String customerId,
                             @Positive long amountMinor, @NotBlank @Size(min = 3, max = 3) String currency,
                             @NotBlank @Size(max = 4000) String description,
                             @Size(max = 20) List<@NotBlank @Size(max = 120) String> evidenceAssetIds) {
@@ -54,9 +55,12 @@ final class ClaimDtos {
                              @PositiveOrZero long shippingMinor, @PositiveOrZero long taxMinor) {
     }
 
-    @Schema(description = "Decision: REFUND (paymentId + refundLines, sum ≤ claimed amount) or DENY (note required)")
+    @Schema(description = "Decision: REFUND or DENY (note required). A REFUND without paymentId / refundLines is "
+            + "derived from the order: payments refunds refundAmountMinor (default the claimed amount) over the lines "
+            + "of the claim's shipment; with paymentId + refundLines those exact amounts (sum ≤ claimed amount)")
     record DecisionRequest(@NotNull ClaimOutcome outcome, @Size(max = 2000) String note, UUID paymentId,
-                           @Size(max = 200) List<@Valid RefundLineRequest> refundLines) {
+                           @Size(max = 200) List<@Valid RefundLineRequest> refundLines,
+                           @Positive Long refundAmountMinor) {
     }
 
     @Schema(description = "A dispute / A-to-z claim")

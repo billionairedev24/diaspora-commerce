@@ -26,10 +26,10 @@ class JdbcDeliveryShipmentRepository implements DeliveryShipmentRepository {
         return jdbc.sql("""
                 insert into delivery_shipment (shipment_id, order_id, order_number, customer_id, seller_org_id,
                     seller_name, fulfilment_type, origin, node_id, label, city, state, postal_code, country, lat,
-                    lon, perishable, handover_required, units, status, route_id, promised_by, created_at)
+                    lon, perishable, handover_required, units, status, route_id, promised_by, created_at, ship_by)
                 values (:id, :order, :number, :customer, :seller, :sellerName, :type, :origin, :node, :label, :city,
                     :state, :zip, :country, :lat, :lon, :perishable, :handover, :units, :status, :route, :promised,
-                    :created)
+                    :created, :shipBy)
                 on conflict (shipment_id) do nothing
                 """)
                 .param("id", s.shipmentId()).param("order", s.orderId()).param("number", s.orderNumber())
@@ -42,6 +42,7 @@ class JdbcDeliveryShipmentRepository implements DeliveryShipmentRepository {
                 .param("handover", s.handoverRequired()).param("units", s.units())
                 .param("status", s.status().name()).param("route", s.routeId())
                 .param("promised", Rows.date(s.promisedBy())).param("created", Rows.ts(s.createdAt()))
+                .param("shipBy", Rows.date(s.shipBy()))
                 .update() == 1;
     }
 
@@ -93,6 +94,6 @@ class JdbcDeliveryShipmentRepository implements DeliveryShipmentRepository {
                 rs.getString("city"), rs.getString("state"), rs.getString("postal_code"), rs.getString("country"),
                 Rows.point(rs, "lat", "lon"), rs.getBoolean("perishable"), rs.getBoolean("handover_required"),
                 rs.getInt("units"), DeliveryShipmentStatus.valueOf(rs.getString("status")), rs.getString("route_id"),
-                Rows.localDate(rs, "promised_by"), Rows.instant(rs, "created_at"));
+                Rows.localDate(rs, "promised_by"), Rows.instant(rs, "created_at"), Rows.localDate(rs, "ship_by"));
     }
 }

@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -144,7 +145,8 @@ class ReservationServiceImpl implements ReservationService {
                 changes.apply(MovementType.RESERVE, current, changes.lot(pick.lotId()).reserve(pick.qty()),
                         pick.qty(), cmd.orderId(), "Checkout hold line " + lineNo);
             }
-            lines.add(new ReservationLine(lineNo, line.sku(), nodeId, line.qty(), result.picks()));
+            lines.add(new ReservationLine(lineNo, line.sku(), nodeId, line.qty(), result.picks(), line.group(),
+                    ReservationLine.LineStatus.HELD, current.ownerOrg()));
         }
         if (!shortfalls.isEmpty()) {
             metrics.reservationOutcome("insufficient");
@@ -192,16 +194,10 @@ class ReservationServiceImpl implements ReservationService {
         if (r.expiredAt(Instant.now(clock))) {
             return expireAndThrow(r);
         }
+        List<ReservationLine> shipping = r.heldLines(null);
         Reservation committed = r.commit(Instant.now(clock));
         StockChanges changes = lockFor(List.of(r), actor.subject());
-        for (ReservationLine line : r.lines()) {
-            StockPosition current = changes.requirePosition(line.sku(), line.nodeId());
-            for (LotAllocation a : line.allocations()) {
-                current = current.ship(a.qty());
-                changes.apply(MovementType.SHIP, current, changes.lot(a.lotId()).ship(a.qty()), a.qty(), orderId,
-                        "Shipped line " + line.lineNo());
-            }
-        }
+        ship(shipping, changes, orderId);
         Reservation stored = reservations.update(committed);
         writer.flush(changes);
         CommitResult result = CommitResult.of(stored, false);
@@ -209,6 +205,92 @@ class ReservationServiceImpl implements ReservationService {
                 ReservationEventPayload.of(stored, result.cogs(), null));
         metrics.reservationOutcome("committed");
         return result;
+    }
+
+    @Override
+    @Transactional
+    public CommitResult commitGroups(String orderId, Set<String> groups) {
+        Actor actor = access.reserver();
+        Reservation r = reservations.lockByOrderId(orderId).orElseThrow(() -> notFound(orderId));
+        Set<String> wanted = requireKnownGroups(r, groups);
+        List<ReservationLine> shipping = r.heldLines(wanted);
+        if (!shipping.isEmpty() && r.expiredAt(Instant.now(clock))) {
+            return expireAndThrow(r);
+        }
+        Reservation committed = r.commitGroups(wanted, Instant.now(clock));
+        if (shipping.isEmpty()) {
+            return CommitResult.ofLines(r, r.committedLines().stream().filter(l -> l.inAny(wanted)).toList(), true);
+        }
+        StockChanges changes = lockFor(List.of(r), actor.subject());
+        ship(shipping, changes, orderId);
+        Reservation stored = reservations.update(committed);
+        writer.flush(changes);
+        List<ReservationLine> shipped = stored.lines().stream().filter(l -> l.inAny(wanted)).toList();
+        CommitResult result = CommitResult.ofLines(stored, shipped, false);
+        events.publish(InventoryEvents.RESERVATION_GROUP_COMMITTED, InventoryEvents.AGGREGATE_RESERVATION, orderId,
+                ReservationEventPayload.ofGroups(stored, shipped, wanted, result.cogs(), null));
+        metrics.reservationOutcome("group_committed");
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public Reservation releaseGroups(String orderId, Set<String> groups, String reason) {
+        Actor actor = access.reserver();
+        Reservation r = reservations.lockByOrderId(orderId).orElseThrow(() -> notFound(orderId));
+        Set<String> wanted = requireKnownGroups(r, groups);
+        List<ReservationLine> giving = r.heldLines(wanted);
+        Reservation released = r.releaseGroups(wanted, Instant.now(clock));
+        if (giving.isEmpty()) {
+            return r;
+        }
+        StockChanges changes = lockFor(List.of(r), actor.subject());
+        String why = reason == null || reason.isBlank() ? "Shipment cancelled" : reason.trim();
+        giveBack(giving, changes, orderId, why);
+        Reservation stored = reservations.update(released);
+        writer.flush(changes);
+        events.publish(InventoryEvents.RESERVATION_GROUP_RELEASED, InventoryEvents.AGGREGATE_RESERVATION, orderId,
+                ReservationEventPayload.ofGroups(stored, stored.lines().stream().filter(l -> l.inAny(wanted)).toList(),
+                        wanted, List.of(), why));
+        metrics.reservationOutcome("group_released");
+        return stored;
+    }
+
+    private Set<String> requireKnownGroups(Reservation r, Set<String> groups) {
+        Set<String> wanted = groups == null ? Set.of() : groups.stream().filter(Objects::nonNull).map(String::trim)
+                .filter(g -> !g.isEmpty()).collect(Collectors.toCollection(TreeSet::new));
+        if (wanted.isEmpty()) {
+            throw new InventoryRuleViolation("inventory.invalid-request", "Name at least one group",
+                    Map.of("groups", "Required"));
+        }
+        Set<String> unknown = r.unknownGroups(wanted);
+        if (!unknown.isEmpty()) {
+            throw new NotFoundException("inventory.group-not-found", "Order " + r.orderId()
+                    + " has no reserved lines for " + String.join(", ", new TreeSet<>(unknown)));
+        }
+        return wanted;
+    }
+
+    private static void ship(List<ReservationLine> lines, StockChanges changes, String orderId) {
+        for (ReservationLine line : lines) {
+            StockPosition current = changes.requirePosition(line.sku(), line.nodeId());
+            for (LotAllocation a : line.allocations()) {
+                current = current.ship(a.qty());
+                changes.apply(MovementType.SHIP, current, changes.lot(a.lotId()).ship(a.qty()), a.qty(), orderId,
+                        "Shipped line " + line.lineNo());
+            }
+        }
+    }
+
+    private static void giveBack(List<ReservationLine> lines, StockChanges changes, String orderId, String reason) {
+        for (ReservationLine line : lines) {
+            StockPosition current = changes.requirePosition(line.sku(), line.nodeId());
+            for (LotAllocation a : line.allocations()) {
+                current = current.release(a.qty());
+                changes.apply(MovementType.RELEASE, current, changes.lot(a.lotId()).release(a.qty()), a.qty(),
+                        orderId, reason);
+            }
+        }
     }
 
     @Override
@@ -222,7 +304,7 @@ class ReservationServiceImpl implements ReservationService {
         Reservation released = r.release(Instant.now(clock));
         StockChanges changes = lockFor(List.of(r), actor.subject());
         String why = reason == null || reason.isBlank() ? "Released by orders" : reason.trim();
-        Reservation stored = releaseAll(List.of(released), changes, why).getFirst();
+        Reservation stored = releaseAll(List.of(r), List.of(released), changes, why).getFirst();
         metrics.reservationOutcome("released");
         return stored;
     }
@@ -236,24 +318,22 @@ class ReservationServiceImpl implements ReservationService {
             return 0;
         }
         StockChanges changes = lockFor(due, "system:reservation-expiry");
-        releaseAll(due.stream().map(r -> r.expire(now)).toList(), changes, "Checkout hold expired");
+        releaseAll(due, due.stream().map(r -> r.expire(now)).toList(), changes, "Checkout hold expired");
         due.forEach(r -> metrics.reservationOutcome("expired"));
         LOG.info("Released {} expired checkout reservations", due.size());
         return due.size();
     }
 
-    /** Releases HELD (now RELEASED / EXPIRED) reservations whose positions and lots are locked in {@code changes}. */
-    private List<Reservation> releaseAll(List<Reservation> ended, StockChanges changes, String reason) {
+    /**
+     * Releases the held lines of HELD reservations ({@code before}, now {@code ended} RELEASED / EXPIRED) whose
+     * positions and lots are locked in {@code changes}.
+     */
+    private List<Reservation> releaseAll(List<Reservation> before, List<Reservation> ended, StockChanges changes,
+                                         String reason) {
         List<Reservation> stored = new ArrayList<>();
-        for (Reservation r : ended) {
-            for (ReservationLine line : r.lines()) {
-                StockPosition current = changes.requirePosition(line.sku(), line.nodeId());
-                for (LotAllocation a : line.allocations()) {
-                    current = current.release(a.qty());
-                    changes.apply(MovementType.RELEASE, current, changes.lot(a.lotId()).release(a.qty()), a.qty(),
-                            r.orderId(), reason);
-                }
-            }
+        for (int i = 0; i < ended.size(); i++) {
+            Reservation r = ended.get(i);
+            giveBack(before.get(i).heldLines(null), changes, r.orderId(), reason);
             stored.add(reservations.update(r));
         }
         writer.flush(changes);
@@ -336,7 +416,8 @@ class ReservationServiceImpl implements ReservationService {
             ReserveCommand.Line asked = cmd.lines().get(i);
             ReservationLine held = existing.lines().get(i);
             if (!held.sku().equals(asked.sku()) || held.qty() != asked.qty()
-                    || (asked.nodeId() != null && !asked.nodeId().equals(held.nodeId()))) {
+                    || (asked.nodeId() != null && !asked.nodeId().equals(held.nodeId()))
+                    || !Objects.equals(asked.group(), held.group())) {
                 return false;
             }
         }
@@ -362,9 +443,12 @@ class ReservationServiceImpl implements ReservationService {
             if (l.qty() <= 0) {
                 errors.put("lines[" + i + "].qty", "Must be at least 1");
             }
+            if (l.group() != null && l.group().trim().length() > 80) {
+                errors.put("lines[" + i + "].group", "At most 80 characters");
+            }
             lines.add(new ReserveCommand.Line(Objects.requireNonNullElse(l.sku(), "").trim().toUpperCase(Locale.ROOT),
                     l.nodeId() == null || l.nodeId().isBlank() ? null : l.nodeId().trim().toUpperCase(Locale.ROOT),
-                    l.qty()));
+                    l.qty(), l.group() == null || l.group().isBlank() ? null : l.group().trim()));
         }
         if (!errors.isEmpty()) {
             throw new InventoryRuleViolation("inventory.invalid-request", "Invalid reservation lines", errors);

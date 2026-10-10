@@ -95,6 +95,19 @@ class OrdersAccess {
                 "Only seller organisations have a shipment queue"));
     }
 
+    /** The order lookup: SERVICE principals with orders:lookup, or staff with orders:read. */
+    Actor lookupCaller() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(OrdersPermissions.LOOKUP)) {
+            return actor;
+        }
+        if (staff(actor)) {
+            return permissions.require(OrdersPermissions.READ);
+        }
+        throw new ForbiddenActionException("orders.lookup-forbidden", "The order lookup is for services (orders:lookup) "
+                + "and staff");
+    }
+
     /** Decides what the current actor may see of an order; 404 (not 403) when nothing, to avoid leaking it. */
     Viewer viewerOf(Order order) {
         Actor actor = actors.current();

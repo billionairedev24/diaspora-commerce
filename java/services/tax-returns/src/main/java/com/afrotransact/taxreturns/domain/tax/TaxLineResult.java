@@ -14,8 +14,16 @@ import java.math.BigDecimal;
  * @param jurisdiction      state jurisdiction ({@code US-TX})
  * @param localJurisdiction local jurisdiction ({@code US-TX-770}) or null
  * @param collectedBy       who collects
+ * @param shippingTaxMinor  the part of {@code taxMinor} charged on the line's shipping (0 where shipping is not
+ *                          taxable): tax on shipping alone rounded half up, never more than the line's tax
  */
 public record TaxLineResult(String lineId, String sellerOrgId, TaxCategory category, long taxableMinor,
                             BigDecimal rate, long taxMinor, String jurisdiction, String localJurisdiction,
-                            CollectedBy collectedBy) {
+                            CollectedBy collectedBy, long shippingTaxMinor) {
+
+    public TaxLineResult(String lineId, String sellerOrgId, TaxCategory category, long taxableMinor, BigDecimal rate,
+                         long taxMinor, String jurisdiction, String localJurisdiction, CollectedBy collectedBy) {
+        this(lineId, sellerOrgId, category, taxableMinor, rate, taxMinor, jurisdiction, localJurisdiction,
+                collectedBy, 0L);
+    }
 }

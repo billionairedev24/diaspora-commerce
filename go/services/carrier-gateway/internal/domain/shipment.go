@@ -232,14 +232,19 @@ type LabelFormat string
 const (
 	FormatPDF LabelFormat = "PDF"
 	FormatZPL LabelFormat = "ZPL"
+	FormatPNG LabelFormat = "PNG" // QR code image of a box-free return
 )
 
 // ContentType returns the MIME type for a label format.
 func (f LabelFormat) ContentType() string {
-	if f == FormatZPL {
+	switch f {
+	case FormatZPL:
 		return "application/x-zpl"
+	case FormatPNG:
+		return "image/png"
+	default:
+		return "application/pdf"
 	}
-	return "application/pdf"
 }
 
 // Label is a purchased shipping label as returned by a carrier.
@@ -252,6 +257,10 @@ type Label struct {
 	Currency          string      `json:"currency"`
 	Format            LabelFormat `json:"format"`
 	Data              []byte      `json:"-"`
+	// QRPayload is the code a box-free return shows at the drop-off location (empty for printed labels).
+	QRPayload string `json:"qrPayload,omitempty"`
+	// DropOffNetwork names where a box-free return is handed over (e.g. "UPS Store").
+	DropOffNetwork string `json:"dropOffNetwork,omitempty"`
 }
 
 // PickupRequest asks a carrier to collect parcels.

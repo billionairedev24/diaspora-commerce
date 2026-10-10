@@ -3,6 +3,7 @@ package com.afrotransact.fulfilment.application;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PermissionChecker;
+import com.afrotransact.platform.security.PrincipalType;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
 import org.springframework.stereotype.Component;
 
@@ -30,6 +31,20 @@ class FulfilmentAccess {
     /** Dispatchers (routes, drivers, SOS, live stream). */
     Actor dispatcher() {
         return permissions.require(FulfilmentPermissions.DISPATCH);
+    }
+
+    /** Schedules / cancels return pickups: a SERVICE with delivery:returns (tax-returns) or a dispatcher. */
+    Actor returnScheduler() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(FulfilmentPermissions.RETURNS)) {
+            return actor;
+        }
+        return permissions.require(FulfilmentPermissions.DISPATCH);
+    }
+
+    /** Reads a return pickup: the scheduling service or dispatch. */
+    Actor returnReader() {
+        return returnScheduler();
     }
 
     /** Either operators or dispatchers (read-only views shared by both consoles). */

@@ -26,6 +26,7 @@ import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
 import com.afrotransact.taxreturns.domain.returns.RefundBreakdown;
 import com.afrotransact.taxreturns.domain.returns.RefundSelection;
 import com.afrotransact.taxreturns.domain.returns.RefundState;
+import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import com.afrotransact.taxreturns.domain.returns.ReturnLineRequest;
 import com.afrotransact.taxreturns.domain.returns.ReturnMethod;
 import com.afrotransact.taxreturns.domain.returns.ReturnPolicy;
@@ -62,11 +63,14 @@ class ReturnServiceImpl implements ReturnService {
     private final Access access;
     private final TransactionOperations tx;
     private final Clock clock;
+    private final OrderIntakeService intake;
     private final SecureRandom random = new SecureRandom();
 
     ReturnServiceImpl(OrderSnapshotRepository orders, RmaRepository rmas, SellerPolicyRepository sellers,
                       ReturnPolicy policy, RefundOrchestrator refunds, ReturnWorkflow workflow, RmaEvents rmaEvents,
-                      InboxDeduplicator inbox, Access access, TransactionOperations tx, Clock clock) {
+                      InboxDeduplicator inbox, Access access, TransactionOperations tx, Clock clock,
+                      OrderIntakeService intake) {
+        this.intake = intake;
         this.orders = orders;
         this.rmas = rmas;
         this.sellers = sellers;
@@ -141,9 +145,15 @@ class ReturnServiceImpl implements ReturnService {
             eligibility.put(l.lineId(), policy.eligibility(d, shipment.fulfilment(), shipment.delivery(), seller, now));
         }
         policy.validate(c.method(), c.lines(), eligibility, delivered);
-        if (c.method() == ReturnMethod.DROP_OFF && (c.returnFrom() == null || !c.returnFrom().complete())) {
-            throw new ReturnRuleViolation("returns.address-required", "Give the address the parcel ships from",
-                    Map.of("returnFrom", "Street, city and ZIP are required for a drop-off label"));
+        // The parcel leaves from the order's delivery address (orders.order.placed / orders lookup); an address the
+        // customer gives (staff on their behalf, e.g. they moved) still wins.
+        ReturnAddress from = c.returnFrom() != null && c.returnFrom().complete() ? c.returnFrom()
+                : c.method() == ReturnMethod.NO_RETURN ? c.returnFrom() : intake.customerAddress(order).orElse(null);
+        if ((c.method() == ReturnMethod.DROP_OFF || c.method() == ReturnMethod.DRIVER_PICKUP)
+                && (from == null || !from.complete())) {
+            throw new ReturnRuleViolation("returns.address-required", "The order's delivery address is not known; "
+                    + "give the address the parcel ships from",
+                    Map.of("returnFrom", "Street, city and ZIP are required for a label or a pickup"));
         }
         List<RmaLine> lines = new ArrayList<>();
         List<RefundSelection> selections = new ArrayList<>();
@@ -160,7 +170,7 @@ class ReturnServiceImpl implements ReturnService {
         Rma rma = rmas.insert(Rma.requested(UUID.randomUUID(), number(), order.orderId(), order.orderNumber(),
                 shipment.shipmentId(), order.customerId(), shipment.sellerOrgId(), shipment.fulfilment(),
                 shipment.delivery(), c.method(), lines, order.currency(), estimate, due,
-                policy.refundAtFirstScan(shipment.fulfilment(), c.method(), estimate, seller), c.returnFrom(), now),
+                policy.refundAtFirstScan(shipment.fulfilment(), c.method(), estimate, seller), from, now),
                 key);
         String who = Access.describe(actor);
         rmas.recordTransition(rma.id(), null, RmaStatus.REQUESTED, who, null, now);
@@ -206,7 +216,7 @@ class ReturnServiceImpl implements ReturnService {
 
     @Override
     public Rma cancel(UUID id) {
-        return tx.execute(s -> {
+        Rma cancelled = tx.execute(s -> {
             Rma before = workflow.load(id);
             Actor a = access.customerOrStaff(before.customerId());
             if (!before.status().cancellable()) {
@@ -216,6 +226,10 @@ class ReturnServiceImpl implements ReturnService {
             return rmaEvents.save(before, before.cancel(Instant.now(clock)), TaxReturnsEvents.RMA_CANCELLED,
                     Access.describe(a), "Cancelled before drop-off");
         });
+        if (cancelled.method() == ReturnMethod.DRIVER_PICKUP) {
+            workflow.cancelPickup(cancelled.id(), "Return " + cancelled.number() + " cancelled");
+        }
+        return cancelled;
     }
 
     @Override
@@ -421,7 +435,7 @@ class ReturnServiceImpl implements ReturnService {
     }
 
     private PlacedOrder order(UUID orderId) {
-        return orders.find(orderId).orElseThrow(() -> new NotFoundException("returns.order-not-found",
+        return intake.order(orderId).orElseThrow(() -> new NotFoundException("returns.order-not-found",
                 "Order not found (or not placed yet)"));
     }
 

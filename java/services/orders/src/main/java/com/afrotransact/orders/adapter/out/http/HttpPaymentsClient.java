@@ -50,6 +50,7 @@ class HttpPaymentsClient implements PaymentsClient {
             m.put("shippingMinor", l.shippingMinor());
             m.put("taxMinor", l.taxMinor());
             m.put("taxJurisdiction", l.taxJurisdiction());
+            m.put("shippingTaxMinor", l.shippingTaxMinor());
             return m;
         }).toList());
         return intent(payments.call(c -> c.post().uri("/v1/payments")
@@ -126,6 +127,15 @@ class HttpPaymentsClient implements PaymentsClient {
     @Override
     public void delivered(String orderId, Instant deliveredAt) {
         payments.call(c -> c.post().uri("/v1/settlements/{orderId}/delivered", orderId)
+                .headers(h -> h.setBearerAuth(tokens.token()))
+                .body(Map.of("deliveredAt", deliveredAt.toString(), "kind", "PRODUCT"))
+                .retrieve().toBodilessEntity());
+    }
+
+    @Override
+    public void shipmentDelivered(String orderId, String shipmentId, Instant deliveredAt) {
+        payments.call(c -> c.post().uri("/v1/settlements/{orderId}/shipments/{shipmentId}/delivered", orderId,
+                        shipmentId)
                 .headers(h -> h.setBearerAuth(tokens.token()))
                 .body(Map.of("deliveredAt", deliveredAt.toString(), "kind", "PRODUCT"))
                 .retrieve().toBodilessEntity());

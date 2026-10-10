@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.afrotransact.taxreturns.domain.returns.DeliveryMethod;
 import com.afrotransact.taxreturns.domain.returns.FulfilmentType;
 import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
+import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
 import com.afrotransact.taxreturns.port.OrderSnapshotRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -29,14 +30,20 @@ class JdbcOrderSnapshotRepository implements OrderSnapshotRepository {
     public boolean insert(PlacedOrder o) {
         int rows = jdbc.sql("""
                 insert into order_snapshot (order_id, order_number, customer_id, currency, ship_to_country,
-                                            ship_to_state, ship_to_postal_code, ship_to_city, placed_at)
-                values (:id, :number, :customer, :currency, :country, :state, :postal, :city, :placedAt)
+                                            ship_to_state, ship_to_postal_code, ship_to_city, placed_at, ship_to_name,
+                                            ship_to_line1, ship_to_line2, ship_to_phone)
+                values (:id, :number, :customer, :currency, :country, :state, :postal, :city, :placedAt, :name,
+                        :line1, :line2, :phone)
                 on conflict do nothing
                 """)
                 .param("id", o.orderId()).param("number", o.orderNumber()).param("customer", o.customerId())
                 .param("currency", o.currency()).param("country", o.shipTo().country())
                 .param("state", o.shipTo().state()).param("postal", o.shipTo().postalCode())
                 .param("city", o.shipTo().city()).param("placedAt", Sql.ts(o.placedAt()))
+                .param("name", o.customerAddress() == null ? null : o.customerAddress().name())
+                .param("line1", o.customerAddress() == null ? null : o.customerAddress().line1())
+                .param("line2", o.customerAddress() == null ? null : o.customerAddress().line2())
+                .param("phone", o.customerAddress() == null ? null : o.customerAddress().phone())
                 .update();
         if (rows == 0) {
             return false;
@@ -60,13 +67,15 @@ class JdbcOrderSnapshotRepository implements OrderSnapshotRepository {
                 jdbc.sql("""
                         insert into order_line_snapshot (line_id, shipment_id, order_id, position, variant_atin, title,
                                                          quantity, unit_price_minor, tax_minor, product_type,
-                                                         perishable)
-                        values (:id, :shipment, :order, :pos, :atin, :title, :qty, :unit, :tax, :type, :perishable)
+                                                         perishable, discount_minor)
+                        values (:id, :shipment, :order, :pos, :atin, :title, :qty, :unit, :tax, :type, :perishable,
+                                :discount)
                         """)
                         .param("id", l.lineId()).param("shipment", s.shipmentId()).param("order", o.orderId())
                         .param("pos", lp++).param("atin", l.atin()).param("title", l.title())
                         .param("qty", l.quantity()).param("unit", l.unitPriceMinor()).param("tax", l.taxMinor())
                         .param("type", l.productType()).param("perishable", l.perishable())
+                        .param("discount", l.discountMinor())
                         .update();
             }
         }
@@ -102,7 +111,7 @@ class JdbcOrderSnapshotRepository implements OrderSnapshotRepository {
                             .add(new PlacedOrder.Line(rs.getString("line_id"), rs.getString("variant_atin"),
                                     rs.getString("title"), rs.getInt("quantity"), rs.getLong("unit_price_minor"),
                                     rs.getLong("tax_minor"), rs.getString("product_type"),
-                                    rs.getBoolean("perishable")));
+                                    rs.getBoolean("perishable"), rs.getLong("discount_minor")));
                 });
         List<PlacedOrder.Shipment> shipments = jdbc.sql(
                         "select * from shipment_snapshot where order_id = :id order by position")
@@ -120,6 +129,20 @@ class JdbcOrderSnapshotRepository implements OrderSnapshotRepository {
                         rs.getString("customer_id"), rs.getString("currency"),
                         new TaxAddress(rs.getString("ship_to_country"), rs.getString("ship_to_state"),
                                 rs.getString("ship_to_postal_code"), rs.getString("ship_to_city")),
-                        Sql.instant(rs, "placed_at"), shipments)).optional();
+                        Sql.instant(rs, "placed_at"), shipments, rs.getString("ship_to_line1") == null ? null
+                        : new ReturnAddress(rs.getString("ship_to_name"), rs.getString("ship_to_line1"),
+                        rs.getString("ship_to_line2"), rs.getString("ship_to_city"), rs.getString("ship_to_state"),
+                        rs.getString("ship_to_postal_code"), rs.getString("ship_to_country"),
+                        rs.getString("ship_to_phone")))).optional();
+    }
+
+    @Override
+    public void updateAddress(UUID orderId, ReturnAddress a) {
+        jdbc.sql("""
+                update order_snapshot set ship_to_name = :name, ship_to_line1 = :line1, ship_to_line2 = :line2,
+                       ship_to_phone = :phone
+                where order_id = :id and ship_to_line1 is null
+                """).param("name", a.name()).param("line1", a.line1()).param("line2", a.line2())
+                .param("phone", a.phone()).param("id", orderId).update();
     }
 }

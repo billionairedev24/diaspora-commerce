@@ -3,14 +3,19 @@ package com.afrotransact.orders.config;
 import java.util.Set;
 
 import com.afrotransact.orders.application.OrdersSettings;
+import com.afrotransact.orders.application.TaxSettings;
 import com.afrotransact.orders.domain.CourierProofPolicy;
 import com.afrotransact.orders.domain.DefaultCourierProofPolicy;
 import com.afrotransact.orders.domain.DefaultHandoverPolicy;
 import com.afrotransact.orders.domain.DefaultOrderNumberGenerator;
+import com.afrotransact.orders.domain.DefaultReturnWindowPolicy;
+import com.afrotransact.orders.domain.DefaultShipByPolicy;
 import com.afrotransact.orders.domain.DefaultShipmentTransitionPolicy;
 import com.afrotransact.orders.domain.DefaultShippingPolicy;
 import com.afrotransact.orders.domain.HandoverPolicy;
 import com.afrotransact.orders.domain.OrderNumberGenerator;
+import com.afrotransact.orders.domain.ReturnWindowPolicy;
+import com.afrotransact.orders.domain.ShipByPolicy;
 import com.afrotransact.orders.domain.ShipmentTransitionPolicy;
 import com.afrotransact.orders.domain.ShippingPolicy;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -58,6 +63,23 @@ class OrdersConfiguration {
         return new OrdersSettings(props.retailOrgId(), props.paymentTimeout(),
                 props.checkoutResponseTimeout(), Set.copyOf(props.perishableTypes()), props.commissionCategories(),
                 props.jobs().followUpBatch(), props.jobs().followUpMaxAttempts(), props.zone());
+    }
+
+    @Bean
+    TaxSettings taxSettings(OrdersProperties props) {
+        return new TaxSettings(props.tax().provider(), props.tax().fallbackToTable());
+    }
+
+    @Bean
+    ShipByPolicy shipByPolicy(OrdersProperties props) {
+        return new DefaultShipByPolicy(props.shipBy().afrotransactDays(), props.shipBy().sellerDays());
+    }
+
+    @Bean
+    ReturnWindowPolicy returnWindowPolicy(OrdersProperties props) {
+        OrdersProperties.Returns r = props.returns();
+        return new DefaultReturnWindowPolicy(r.windowDays(), r.windowDaysByProductType(),
+                Set.copyOf(r.nonReturnableProductTypes()));
     }
 
     @Bean

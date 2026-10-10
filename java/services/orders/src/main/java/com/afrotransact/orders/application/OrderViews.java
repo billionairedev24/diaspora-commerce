@@ -1,5 +1,7 @@
 package com.afrotransact.orders.application;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -11,6 +13,7 @@ import com.afrotransact.orders.domain.ActorKind;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
 import com.afrotransact.orders.domain.OrderTotals;
+import com.afrotransact.orders.domain.ReturnWindowPolicy;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.domain.ShipmentTransitionPolicy;
@@ -24,10 +27,15 @@ class OrderViews {
 
     private final ShipmentTransitionPolicy policy;
     private final HandoverCodeVault vault;
+    private final ReturnWindowPolicy returnWindows;
+    private final Clock clock;
 
-    OrderViews(ShipmentTransitionPolicy policy, HandoverCodeVault vault) {
+    OrderViews(ShipmentTransitionPolicy policy, HandoverCodeVault vault, ReturnWindowPolicy returnWindows,
+               Clock clock) {
         this.policy = policy;
         this.vault = vault;
+        this.returnWindows = returnWindows;
+        this.clock = clock;
     }
 
     OrderView of(Order o, Viewer viewer, List<StatusChange> history) {
@@ -60,6 +68,11 @@ class OrderViews {
         int units = s.lines().stream().mapToInt(OrderLine::quantity).sum();
         String label = "Shipment " + s.seq() + " of " + count + (s.sellerName() == null ? "" : " · " + s.sellerName());
         boolean cancellable = s.status() == ShipmentStatus.PLACED || s.status() == ShipmentStatus.CONFIRMED;
+        Instant windowEnds = returnWindows.windowEndsAt(s).orElse(null);
+        boolean returnable = windowEnds != null && Instant.now(clock).isBefore(windowEnds);
+        OrderView.ReturnLinks links = viewer.kind() == Viewer.Kind.SELLER || s.status() != ShipmentStatus.DELIVERED
+                ? null : new OrderView.ReturnLinks("/v1/returns/eligibility?orderId=" + s.orderId(),
+                "/v1/returns?orderId=" + s.orderId());
         return new OrderView.ShipmentView(s.id(), s.id(), s.seq(), label, s.sellerOrgId(), s.sellerName(),
                 s.fulfilmentType().name(), s.nodeId(), s.deliveryMethod().name(), s.serviceLevel(),
                 s.pickupLocationId(), s.preferences(), s.perishable(), s.handoverRequired(), code, s.status().wire(),
@@ -70,12 +83,13 @@ class OrderViews {
                         .map(ShipmentStatus::wire).toList(),
                 s.lines().stream().map(OrderViews::line).toList(),
                 history.stream().map(h -> new OrderView.TimelineEntry(h.from() == null ? null : h.from().wire(),
-                        h.to().wire(), h.actorKind().name(), h.source().wire(), h.reason(), h.occurredAt())).toList());
+                        h.to().wire(), h.actorKind().name(), h.source().wire(), h.reason(), h.occurredAt())).toList(),
+                returnable, windowEnds, returnWindows.problemReportOnly(s), links);
     }
 
     private static OrderView.LineView line(OrderLine l) {
         return new OrderView.LineView(l.id(), l.lineNo(), l.variantAtin(), l.productAtin(), l.title(), l.imageUrl(),
                 l.quantity(), l.unitPriceMinor(), l.itemsMinor(), l.taxMinor(), l.discountMinor(), l.category(),
-                l.perishable(), l.taxJurisdiction());
+                l.perishable(), l.taxJurisdiction(), l.productType());
     }
 }

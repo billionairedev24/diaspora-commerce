@@ -107,7 +107,7 @@ class ShipmentIntakeServiceImpl implements ShipmentIntakeService {
                         order.shipToState(), zip5(order.shipToPostalCode()), order.shipToCountry(),
                         GeoPoint.of(order.shipToLat(), order.shipToLon()), Boolean.TRUE.equals(s.perishable()),
                         s.handoverRequired(), units, DeliveryShipmentStatus.AWAITING_ROUTE, null, s.promisedBy(),
-                        now);
+                        now, s.shipBy());
                 if (shipments.insert(ds)) {
                     created++;
                 }

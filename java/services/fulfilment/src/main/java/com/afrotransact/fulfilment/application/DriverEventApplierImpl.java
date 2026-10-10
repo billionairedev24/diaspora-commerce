@@ -2,6 +2,8 @@ package com.afrotransact.fulfilment.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,6 +31,7 @@ import com.afrotransact.fulfilment.domain.ProblemDecision;
 import com.afrotransact.fulfilment.domain.ProofOfDelivery;
 import com.afrotransact.fulfilment.domain.ProofOfDeliveryPolicy;
 import com.afrotransact.fulfilment.domain.ReattemptPolicy;
+import com.afrotransact.fulfilment.domain.ReturnPickup;
 import com.afrotransact.fulfilment.domain.RoutePackage;
 import com.afrotransact.fulfilment.domain.RouteStop;
 import com.afrotransact.fulfilment.domain.SequencePolicy;
@@ -41,11 +44,13 @@ import com.afrotransact.fulfilment.port.DeliveryShipmentRepository;
 import com.afrotransact.fulfilment.port.DispatchFeed;
 import com.afrotransact.fulfilment.port.DriverEventLog;
 import com.afrotransact.fulfilment.port.InspectionRepository;
+import com.afrotransact.fulfilment.port.ReturnPickupRepository;
 import com.afrotransact.fulfilment.port.OrdersCommandQueue.Command;
 import com.afrotransact.fulfilment.port.RouteRepository;
 import com.afrotransact.fulfilment.port.SosRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.web.error.DomainException;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -71,6 +76,8 @@ class DriverEventApplierImpl implements DriverEventApplier {
     private final JsonMapper json;
     private final Clock clock;
     private final TransactionTemplate savepoint;
+    private final ReturnPickupRepository returnPickups;
+    private final ZoneId zone;
 
     /** The domain policies the handlers apply (grouped to keep the constructor readable). */
     record DriverRules(InspectionPolicy inspection, ProofOfDeliveryPolicy pod, ReattemptPolicy reattempt,
@@ -82,7 +89,10 @@ class DriverEventApplierImpl implements DriverEventApplier {
                            InspectionPolicy inspectionPolicy, ProofOfDeliveryPolicy podPolicy,
                            ReattemptPolicy reattemptPolicy, PickupPolicy pickupPolicy, OrdersRelayService orders,
                            DomainEventPublisher events, DispatchFeed feed, JsonMapper json, Clock clock,
-                           PlatformTransactionManager txm) {
+                           PlatformTransactionManager txm, ReturnPickupRepository returnPickups,
+                           @Value("${at.fulfilment.zone:America/Chicago}") String zone) {
+        this.returnPickups = returnPickups;
+        this.zone = ZoneId.of(zone);
         this.log = log;
         this.sequences = sequences;
         this.routes = routes;
@@ -218,7 +228,11 @@ class DriverEventApplierImpl implements DriverEventApplier {
         switch (type) {
             case INSPECTION_SUBMITTED -> inspect(route, driver, e, now);
             case LOADOUT_SCANNED -> route.scanLoadOut(scan(e).label(), scan(e).manual(), at);
-            case LOADOUT_COMPLETED -> forward(route.completeLoadOut(at), e, driver, bearer, "picked_up");
+            case LOADOUT_COMPLETED -> {
+                List<RoutePackage> loaded = route.completeLoadOut(at);
+                forward(loaded, e, driver, bearer, "picked_up");
+                handedOver(route, driver, loaded, at);
+            }
             case ROUTE_STARTED -> {
                 forward(route.start(at), e, driver, bearer, "out_for_delivery");
                 publishRoute(FulfilmentEvents.ROUTE_STARTED, route, now);
@@ -230,7 +244,16 @@ class DriverEventApplierImpl implements DriverEventApplier {
                 List<RoutePackage> collected = route.confirmPickup(stop(e), c.handedOverBy(), c.missingReason(),
                         rules.pickup(), at);
                 forward(collected, e, driver, bearer, "picked_up", "out_for_delivery");
+                handedOver(route, driver, collected, at);
                 reschedule(route, stop(e));
+            }
+            case RETURN_PICKUP_COLLECTED -> {
+                RouteStop s = route.collectReturn(stop(e), at);
+                returnPickupDone(s.id(), null, now);
+            }
+            case RETURN_PICKUP_FAILED -> {
+                RouteStop s = route.failReturn(stop(e), e.note(), at);
+                returnPickupDone(s.id(), s.note(), now);
             }
             case PICKUP_PROBLEM -> {
                 StopOutcome o = route.pickupProblem(stop(e), require(e.pickupProblem(), "pickupProblem"),
@@ -354,6 +377,28 @@ class DriverEventApplierImpl implements DriverEventApplier {
             }
         }
         orders.submit(cmds, bearer);
+    }
+
+    /** fulfilment.shipment.handed_over per shipment that left its origin, with its ship-by date. */
+    private void handedOver(DeliveryRoute route, DriverContext driver, List<RoutePackage> packages, Instant at) {
+        for (String shipmentId : packages.stream().map(RoutePackage::shipmentId).distinct().toList()) {
+            shipments.find(shipmentId).ifPresent(s -> events.publish(FulfilmentEvents.SHIPMENT_HANDED_OVER,
+                    FulfilmentEvents.AGGREGATE, shipmentId, new FulfilmentEventPayloads.HandedOver(s.shipmentId(),
+                            s.orderId(), s.orderNumber(), s.sellerOrgId(), s.fulfilmentType(), s.origin().name(),
+                            route.id(), driver.driverId(), s.shipBy(), at, s.shipBy() == null ? null
+                            : LocalDate.ofInstant(at, zone).isAfter(s.shipBy()))));
+        }
+    }
+
+    /** The RETURN_PICKUP stop was collected (why == null) or failed: closes the pickup and tells tax-returns. */
+    private void returnPickupDone(String stopId, String why, Instant now) {
+        returnPickups.findByStop(stopId).ifPresent(p -> {
+            ReturnPickup done = why == null ? p.collected(now) : p.failed(why, now);
+            returnPickups.update(done);
+            events.publish(why == null ? FulfilmentEvents.RETURN_PICKUP_COLLECTED
+                    : FulfilmentEvents.RETURN_PICKUP_FAILED, FulfilmentEvents.AGGREGATE, done.rmaId(),
+                    FulfilmentEventPayloads.ReturnPickupEvent.of(done, now));
+        });
     }
 
     private void publishRoute(String type, DeliveryRoute r, Instant now) {

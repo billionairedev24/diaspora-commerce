@@ -24,6 +24,14 @@ type BuyRequest struct {
 	Shipment       domain.Shipment    `json:"shipment"`
 	Carrier        domain.CarrierCode `json:"carrier"`
 	Service        domain.ServiceCode `json:"service"`
+	// Kind is outbound (default) or return; RateChoice records how a return label's service was chosen.
+	Kind       domain.LabelKind  `json:"-"`
+	RateChoice domain.RateChoice `json:"-"`
+	// BoxFree buys a label-free QR drop-off (carrier must implement port.BoxFreeReturner).
+	BoxFree bool `json:"-"`
+	// RequestHash overrides the idempotency fingerprint (return labels hash the return request, not the service
+	// rate shopping picked, so a retry replays even when rates moved).
+	RequestHash string `json:"-"`
 }
 
 // LabelView is a label record with a short-lived document URL when the store can sign one.
@@ -102,10 +110,26 @@ func (s *labelServiceImpl) Buy(ctx context.Context, req BuyRequest) (LabelView, 
 	if err != nil {
 		return LabelView{}, err
 	}
+	var boxFree port.BoxFreeReturner
+	if req.BoxFree {
+		r, ok := carrier.(port.BoxFreeReturner)
+		if !ok {
+			return LabelView{}, fmt.Errorf("%w: %s does not offer box-free QR drop-off", domain.ErrUnsupported, req.Carrier)
+		}
+		boxFree = r
+	}
+	hash := req.RequestHash
+	if hash == "" {
+		hash = requestHash(req)
+	}
+	kind := req.Kind
+	if kind == "" {
+		kind = domain.KindOutbound
+	}
 	rec := domain.LabelRecord{
-		ID: uuid.NewString(), IdempotencyKey: req.Caller + ":" + req.IdempotencyKey, RequestHash: requestHash(req),
+		ID: uuid.NewString(), IdempotencyKey: req.Caller + ":" + req.IdempotencyKey, RequestHash: hash,
 		Reference: req.Shipment.Reference, OriginNode: req.Shipment.OriginNode, Carrier: req.Carrier, Service: req.Service,
-		Status: domain.LabelPurchasing, CreatedAt: s.now().UTC(),
+		Status: domain.LabelPurchasing, CreatedAt: s.now().UTC(), Kind: kind, RateChoice: req.RateChoice, BoxFree: req.BoxFree,
 	}
 	stored, created, err := s.labels.Reserve(ctx, rec)
 	if err != nil {
@@ -123,12 +147,18 @@ func (s *labelServiceImpl) Buy(ctx context.Context, req BuyRequest) (LabelView, 
 	}
 	shipment := req.Shipment
 	shipment.Account = acct
-	label, err := carrier.BuyLabel(ctx, shipment, req.Service)
+	var label domain.Label
+	if boxFree != nil {
+		label, err = boxFree.BuyBoxFreeReturn(ctx, shipment, req.Service)
+	} else {
+		label, err = carrier.BuyLabel(ctx, shipment, req.Service)
+	}
 	if err != nil {
 		s.release(ctx, rec.ID)
 		return LabelView{}, fmt.Errorf("buy label: %w", err)
 	}
 	rec.TrackingNumber, rec.CarrierShipmentID = label.TrackingNumber, label.CarrierShipmentID
+	rec.QRPayload, rec.DropOffNetwork = label.QRPayload, label.DropOffNetwork
 	rec.CostMinor, rec.Currency, rec.Format = label.CostMinor, label.Currency, label.Format
 	rec.LabelKey = rec.ObjectKey()
 	if err := s.store(ctx, rec.LabelKey, label); err != nil {

@@ -32,7 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * One PostgreSQL container (local postgis image), one in-JVM WireMock standing in for identity's token endpoint,
- * catalog, payments, seller, offers and ai-gateway, and one Spring context shared by every integration test.
+ * catalog, orders, payments, seller, offers and ai-gateway, and one Spring context shared by every integration test.
  * Kafka, the outbox relay and the jobs are off: listeners and jobs are called directly.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
@@ -70,6 +70,7 @@ public abstract class TrustOpsIntegrationTest {
         registry.add("at.trustops.seller.base-url", UPSTREAM::baseUrl);
         registry.add("at.trustops.offers.base-url", UPSTREAM::baseUrl);
         registry.add("at.trustops.ai.base-url", UPSTREAM::baseUrl);
+        registry.add("at.trustops.orders.base-url", UPSTREAM::baseUrl);
     }
 
     protected JdbcClient jdbc;
@@ -105,12 +106,38 @@ public abstract class TrustOpsIntegrationTest {
                 .willReturn(WireMock.okJson("{\"id\":\"{{randomValue type='UUID'}}\",\"amountMinor\":"
                         + "{{jsonPath request.body '$.lines[0].itemsMinor'}},\"status\":\"SUCCEEDED\","
                         + "\"replayed\":false}")));
+        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/orders/[^/]+/refunds"))
+                .willReturn(WireMock.okJson("{\"id\":\"{{randomValue type='UUID'}}\",\"amountMinor\":"
+                        + "{{jsonPath request.body '$.amountMinor'}},\"status\":\"SUCCEEDED\",\"replayed\":false}")));
+        UPSTREAM.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/lookup/orders/.+"))
+                .willReturn(WireMock.notFound().withHeader("Content-Type", "application/problem+json")
+                        .withBody("{\"status\":404,\"code\":\"orders.not-found\"}")));
         UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/orgs/[^/]+/(suspend|reinstate)"))
                 .willReturn(WireMock.okJson("{\"orgId\":\"{{request.pathSegments.[2]}}\"}")));
         UPSTREAM.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/sellers/[^/]+/standing"))
                 .willReturn(WireMock.okJson("{\"rating\":4.6}")));
         UPSTREAM.stubFor(WireMock.put(WireMock.urlPathMatching("/v1/sellers/[^/]+/performance"))
                 .willReturn(WireMock.okJson("{}")));
+    }
+
+    /**
+     * orders-service's order lookup for one order: bought by {@code customerId}, one shipment per seller
+     * ({@code shp-1}, {@code shp-2} …) with two lines each ({@code <shipment>-l1}, {@code <shipment>-l2}).
+     */
+    protected static void stubOrder(String orderId, String orderNumber, String customerId, String... sellers) {
+        StringBuilder shipments = new StringBuilder();
+        for (int i = 0; i < sellers.length; i++) {
+            String s = "shp-" + (i + 1);
+            shipments.append(i == 0 ? "" : ",").append("""
+                    {"shipmentId":"%s","seq":%d,"sellerOrgId":"%s","status":"DELIVERED","lines":[
+                     {"lineId":"%s-l1","lineNo":1},{"lineId":"%s-l2","lineNo":2}]}""".formatted(s, i + 1,
+                    sellers[i], s, s));
+        }
+        UPSTREAM.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/lookup/orders/" + orderId))
+                .willReturn(WireMock.okJson("""
+                        {"orderId":"%s","orderNumber":"%s","customerId":"%s","status":"DELIVERED","currency":"USD",
+                         "paymentId":"7a1c3f6e-2b4d-4c8e-9f00-123456789abc","shipments":[%s]}
+                        """.formatted(orderId, orderNumber, customerId, shipments))));
     }
 
     /** Organisation id in identity's format. */

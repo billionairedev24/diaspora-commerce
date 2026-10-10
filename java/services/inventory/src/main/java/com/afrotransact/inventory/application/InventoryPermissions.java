@@ -9,6 +9,8 @@ public final class InventoryPermissions {
     public static final String ADJUST = "inventory:adjust";
     /** Goods receipts and inbound notices (retail service, FC receivers). */
     public static final String RECEIVE = "inventory:receive";
+    /** Post inspected customer returns (RETURN_RESTOCK / RETURN_DAMAGED); SERVICE principals (tax-returns). */
+    public static final String RETURNS = "inventory:returns";
     /** Reserve / confirm / commit / release; only SERVICE principals (orders service) hold it. */
     public static final String RESERVE = "inventory:reserve";
 

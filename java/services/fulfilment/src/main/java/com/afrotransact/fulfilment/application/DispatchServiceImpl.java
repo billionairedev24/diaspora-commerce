@@ -35,6 +35,7 @@ import com.afrotransact.fulfilment.port.GeoClient;
 import com.afrotransact.fulfilment.port.IdIssuer;
 import com.afrotransact.fulfilment.port.InspectionRepository;
 import com.afrotransact.fulfilment.port.OrdersCommandQueue;
+import com.afrotransact.fulfilment.port.ReturnPickupRepository;
 import com.afrotransact.fulfilment.port.RouteRepository;
 import com.afrotransact.fulfilment.port.SosRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
@@ -46,6 +47,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class DispatchServiceImpl implements DispatchService {
 
+    private final ReturnPickupRepository returnPickups;
     private final FulfilmentAccess access;
     private final RouteRepository routes;
     private final DeliveryShipmentRepository shipments;
@@ -67,7 +69,9 @@ class DispatchServiceImpl implements DispatchService {
                         CentreRepository centres, RouteAssembler assembler, RoutePlanner planner, GeoClient geo,
                         IdIssuer ids, SosRepository sos, InspectionRepository inspections, DriverEventLog log,
                         OrdersCommandQueue ordersQueue, DriverAccessService driverAccess,
-                        DomainEventPublisher events, DispatchFeed feed, Clock clock) {
+                        DomainEventPublisher events, DispatchFeed feed, Clock clock,
+                        ReturnPickupRepository returnPickups) {
+        this.returnPickups = returnPickups;
         this.access = access;
         this.routes = routes;
         this.shipments = shipments;
@@ -173,6 +177,7 @@ class DispatchServiceImpl implements DispatchService {
         List<String> freed = route.packagesForDrop(stopId).stream().map(RoutePackage::shipmentId).toList();
         route.removeStop(stopId, now);
         routes.save(route);
+        returnPickups.findByStop(stopId).ifPresent(p -> returnPickups.update(p.unrouted(now)));
         for (String shipmentId : freed) {
             shipments.updateStatus(shipmentId, DeliveryShipmentStatus.AWAITING_ROUTE, null);
         }

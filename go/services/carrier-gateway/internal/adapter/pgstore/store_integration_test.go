@@ -114,6 +114,25 @@ func TestPostgresStore(t *testing.T) {
 		if err != nil || sh.Active || sh.LabelID != rec.ID {
 			t.Fatalf("voided label must stop tracking: %+v %v", sh, err)
 		}
+		ret := domain.LabelRecord{ID: uuid.NewString(), IdempotencyKey: "svc:rma-1", RequestHash: "return:h", Reference: "RMA-1",
+			Carrier: domain.UPS, Service: "03", Status: domain.LabelPurchasing, CreatedAt: time.Now().UTC(), Kind: domain.KindReturn,
+			RateChoice: domain.RateCheapest, BoxFree: true}
+		if _, created, err := store.Reserve(ctx, ret); err != nil || !created {
+			t.Fatalf("reserve return %v %v", created, err)
+		}
+		ret.TrackingNumber, ret.Currency, ret.Format, ret.LabelKey = "QR-RMA-1", "USD", domain.FormatPNG, "labels/ups/q.png"
+		ret.QRPayload, ret.DropOffNetwork = "QR:RMA-1", "UPS Store"
+		if err := store.Complete(ctx, ret); err != nil {
+			t.Fatal(err)
+		}
+		r, err := store.Get(ctx, ret.ID)
+		if err != nil || r.Kind != domain.KindReturn || r.RateChoice != domain.RateCheapest || !r.BoxFree ||
+			r.QRPayload != "QR:RMA-1" || r.DropOffNetwork != "UPS Store" || r.Format != domain.FormatPNG {
+			t.Fatalf("return label round trip %+v %v", r, err)
+		}
+		if l, _ := store.Get(ctx, rec.ID); l.Kind != domain.KindOutbound {
+			t.Fatalf("labels default to outbound: %q", l.Kind)
+		}
 		failed := domain.LabelRecord{ID: uuid.NewString(), IdempotencyKey: "org_1:k2", RequestHash: "h", Carrier: domain.UPS, Service: "03",
 			Status: domain.LabelPurchasing, CreatedAt: time.Now()}
 		_, _, _ = store.Reserve(ctx, failed)

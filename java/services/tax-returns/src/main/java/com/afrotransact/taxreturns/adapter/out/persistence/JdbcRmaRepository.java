@@ -229,6 +229,35 @@ class JdbcRmaRepository implements RmaRepository {
         return jdbc.sql(sql).param("v", value).query(this::map).optional();
     }
 
+    @Override
+    public Optional<String> pickupId(UUID rmaId) {
+        return jdbc.sql("select pickup_id from rma_pickup where rma_id = :id and pickup_id is not null")
+                .param("id", rmaId).query(String.class).optional();
+    }
+
+    @Override
+    public void recordPickup(UUID rmaId, String pickupId, String status, String error, Instant at) {
+        jdbc.sql("""
+                insert into rma_pickup (rma_id, pickup_id, status, attempts, last_error, updated_at)
+                values (:id, :pickup, :status, case when :status = 'FAILED' then 1 else 0 end, :error, :at)
+                on conflict (rma_id) do update set pickup_id = coalesce(excluded.pickup_id, rma_pickup.pickup_id),
+                    status = excluded.status, last_error = excluded.last_error, updated_at = excluded.updated_at,
+                    attempts = rma_pickup.attempts + case when excluded.status = 'FAILED' then 1 else 0 end
+                """).param("id", rmaId).param("pickup", pickupId).param("status", status)
+                .param("error", error == null ? null : error.length() > 500 ? error.substring(0, 500) : error)
+                .param("at", Sql.ts(at)).update();
+    }
+
+    @Override
+    public List<Rma> pickupsToSchedule(int limit) {
+        return jdbc.sql("""
+                select r.* from rma r left join rma_pickup p on p.rma_id = r.id
+                where r.method = 'DRIVER_PICKUP' and r.status = 'LABEL_ISSUED'
+                  and (p.rma_id is null or (p.status = 'FAILED' and p.attempts < 20))
+                order by r.updated_at limit :limit
+                """).param("limit", limit).query(this::map).list();
+    }
+
     private Rma map(ResultSet rs, int rowNum) throws SQLException {
         UUID id = rs.getObject("id", UUID.class);
         String labelId = rs.getString("label_id");

@@ -371,7 +371,7 @@
 - Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","Done"
 "S116","Story","Marketplace-facilitator sales tax","Tax per line by delivery address (Stripe Tax or Avalara) attributed to each seller.","- Tax is computed at checkout and stored per line
 - Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","In Progress"
-"E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","In Progress"
+"E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","Done"
 "S117","Story","Listing moderation queue","AI-flagged listings with allow/remove decisions.","- Queue shows AI flags with reasons
 - Decisions are audited","E18","","High","5","trust java","trust","Done"
 "S118","Story","Disputes and A-to-z claims","Customers open claims; staff decide with refund or deny.","- Claims have SLAs and escalation
@@ -633,7 +633,7 @@
 - Contract test fails if a mapped event type is missing from events.yaml","E19","","High","5","notifications events","notifications","Done"
 "S218","Story","Returns endpoints and per-shipment inventory release","Orders adds return requests per shipment and releases or commits inventory per shipment rather than per order; payments delivered/settlement per shipment.","- Customer can request a return per shipment within policy
 - Cancelling one of several AfroTransact shipments releases only its stock
-- Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","In Progress"
+- Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","Done"
 "S219","Story","Cluster-wide shipment status stream","SSE shipment stream fans out across replicas via Kafka or Valkey pub/sub, and orders consumes carrier.pickup.ready.","- Staff on any replica see every transition within 2s
 - carrier.pickup.ready moves eligible shipments forward","E08","","Medium","3","orders","orders","To Do"
 "S220","Story","Payments support for long-dated bookings","Payments adds release of remaining authorisation after partial capture, off-session charges on saved cards for balances beyond the auth window, and debiting provider late-cancellation fees.","- Remaining authorisation can be released after a deposit capture
@@ -670,7 +670,7 @@
 - trust-ops moderation queue handles flagged live listings","E18","","High","8","trust-ops seller catalog","trust","Done"
 "S229","Story","Claims resolve payment and ownership automatically","Orders exposes a service lookup of an order with its payment id, line ids and customer id so trust-ops verifies ownership and refunds without staff supplying ids; fulfilment publishes events for seller health.","- trust-ops verifies the claimant owns the order
 - Refund lines are derived from the order automatically
-- Seller health uses fulfilment ship-by events for lateness","E18","","Medium","5","trust-ops orders fulfilment","trust","In Progress"
+- Seller health uses fulfilment ship-by events for lateness","E18","","Medium","5","trust-ops orders fulfilment","trust","Done"
 "S230","Story","Notifications for trust-ops events","Notifications subscribes to at.trustops.events and maps claim, moderation and enforcement events to templates for customers and seller owners.","- Claim opened/seller response due/decided notify the right parties
 - Moderation decisions notify the seller owners
 - Contract test covers the new rules","E19","","Medium","3","notifications trust-ops","notifications","Done"

@@ -112,9 +112,12 @@ func run() error {
 	}
 	tracking := app.NewTrackingService(carriers, store, app.PollPolicy{Carriers: pollCarriers, Interval: cfg.Polling.Interval,
 		MaxBackoff: cfg.Polling.MaxBackoff, Lease: cfg.Polling.Lease, Batch: cfg.Polling.Batch}, log, time.Now)
+	rates := app.NewRateService(carriers, resolver, quotecache.New(rdb, "carrier-gateway:"), cfg.Rates.Budget, cfg.Rates.QuoteTTL, log)
+	labels := app.NewLabelService(carriers, resolver, store, objects, log, time.Now)
 	services := httpapi.Services{
-		Rates:     app.NewRateService(carriers, resolver, quotecache.New(rdb, "carrier-gateway:"), cfg.Rates.Budget, cfg.Rates.QuoteTTL, log),
-		Labels:    app.NewLabelService(carriers, resolver, store, objects, log, time.Now),
+		Rates:     rates,
+		Labels:    labels,
+		Returns:   app.NewReturnLabelService(carriers, rates, labels),
 		Tracking:  tracking,
 		Pickups:   app.NewPickupService(carriers, resolver, store, store, time.Now),
 		Addresses: app.NewAddressService(carriers),

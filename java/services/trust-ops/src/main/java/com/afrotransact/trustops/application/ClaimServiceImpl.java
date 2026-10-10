@@ -24,6 +24,7 @@ import com.afrotransact.trustops.domain.TrustRuleViolation;
 import com.afrotransact.trustops.port.ClaimHistoryEntry;
 import com.afrotransact.trustops.port.ClaimQuery;
 import com.afrotransact.trustops.port.ClaimRepository;
+import com.afrotransact.trustops.port.OrdersClient;
 import com.afrotransact.trustops.port.Page;
 import com.afrotransact.trustops.port.PaymentsClient;
 import com.afrotransact.trustops.port.PaymentsClient.RefundLine;
@@ -43,9 +44,14 @@ class ClaimServiceImpl implements ClaimService {
     private final DomainEventPublisher events;
     private final AuditTrail audit;
     private final Clock clock;
+    private final OrdersClient orders;
+    private final ClaimSettings settings;
 
     ClaimServiceImpl(ClaimRepository claims, PaymentsClient payments, SlaPolicy sla, PermissionChecker permissions,
-                     ActorResolver actors, DomainEventPublisher events, AuditTrail audit, Clock clock) {
+                     ActorResolver actors, DomainEventPublisher events, AuditTrail audit, Clock clock,
+                     OrdersClient orders, ClaimSettings settings) {
+        this.orders = orders;
+        this.settings = settings;
         this.claims = claims;
         this.payments = payments;
         this.sla = sla;
@@ -69,10 +75,16 @@ class ClaimServiceImpl implements ClaimService {
             throw new ForbiddenActionException("trustops.customers-only", "Only customers (or staff on their behalf) "
                     + "open claims");
         }
+        ClaimDraft draft = new ClaimDraft(c.type(), c.orderId(), c.orderNumber(), c.shipmentId(), c.sellerOrgId(),
+                customer, c.amountMinor(), c.currency(), c.description(), c.evidenceAssetIds());
+        if (settings.verifyOwnership()) {
+            draft = verified(draft);
+        } else if (draft.sellerOrgId() == null || draft.sellerOrgId().isBlank()) {
+            throw new TrustRuleViolation("trustops.seller-required", "Name the seller of the order",
+                    Map.of("sellerOrgId", "Required"));
+        }
         Instant now = Instant.now(clock);
-        Claim opened = claims.insert(Claim.open(UUID.randomUUID(), claims.nextReference(), new ClaimDraft(c.type(),
-                c.orderId(), c.orderNumber(), c.shipmentId(), c.sellerOrgId(), customer, c.amountMinor(),
-                c.currency(), c.description(), c.evidenceAssetIds()), now, sla));
+        Claim opened = claims.insert(Claim.open(UUID.randomUUID(), claims.nextReference(), draft, now, sla));
         history(opened, actor, "OPENED", null, opened.description());
         publish(TrustOpsEvents.CLAIM_OPENED, opened);
         return ClaimView.of(opened, now);
@@ -187,7 +199,13 @@ class ClaimServiceImpl implements ClaimService {
         }
         Instant now = Instant.now(clock);
         Claim decided;
-        if (cmd.outcome() == ClaimOutcome.REFUND) {
+        if (cmd.outcome() == ClaimOutcome.REFUND && !cmd.explicitLines()) {
+            long amount = cmd.refundAmountMinor() == null ? c.amountMinor() : cmd.refundAmountMinor();
+            c.requireRefundAmount(amount);
+            RefundResult refund = refundFromOrder(c, amount, cmd.note());
+            decided = c.decideRefund(actor.subject(), refund.amountMinor() > 0 ? refund.amountMinor() : amount,
+                    refund.refundId(), cmd.note(), now);
+        } else if (cmd.outcome() == ClaimOutcome.REFUND) {
             List<RefundLine> lines = cmd.refundLines();
             if (cmd.paymentId() == null || lines.isEmpty()) {
                 throw new TrustRuleViolation("trustops.refund-lines-required", "A refund needs the payment id and "
@@ -215,6 +233,74 @@ class ClaimServiceImpl implements ClaimService {
         try {
             return payments.refund(paymentId, lines, reason.length() > 500 ? reason.substring(0, 500) : reason,
                     "trustops-claim-" + c.id());
+        } catch (UpstreamException e) {
+            if (e.rejected() || e.status() == 404 || e.status() == 400) {
+                throw new ConflictException("trustops.refund-refused", "Payments refused the refund: "
+                        + e.getMessage());
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * Checks the claim against orders-service: the order exists, the claimant bought it, the shipment is part of it
+     * and the seller sold it. Fills in the order number, the canonical order id and the seller when not given.
+     */
+    private ClaimDraft verified(ClaimDraft d) {
+        if (d.orderId() == null || d.orderId().isBlank()) {
+            throw new TrustRuleViolation("trustops.order-required", "Name the order",
+                    Map.of("orderId", "Required"));
+        }
+        OrdersClient.OrderFacts order = orders.order(d.orderId()).orElseThrow(() -> new TrustRuleViolation(
+                "trustops.order-not-found", "Order " + d.orderId() + " was not found",
+                Map.of("orderId", "Unknown order")));
+        if (d.customerId() == null || !d.customerId().equals(order.customerId())) {
+            throw new ForbiddenActionException("trustops.not-your-order", "Claims can only be opened on the "
+                    + "customer's own orders");
+        }
+        String seller = d.sellerOrgId() == null || d.sellerOrgId().isBlank() ? null : d.sellerOrgId().trim();
+        if (d.shipmentId() != null && !d.shipmentId().isBlank()) {
+            OrdersClient.ShipmentFacts shipment = order.shipment(d.shipmentId()).orElseThrow(() ->
+                    new TrustRuleViolation("trustops.shipment-not-in-order", "Shipment " + d.shipmentId()
+                            + " is not part of order " + order.orderNumber(), Map.of("shipmentId", "Unknown")));
+            if (seller != null && !seller.equals(shipment.sellerOrgId())) {
+                throw new TrustRuleViolation("trustops.seller-mismatch", "The shipment was sold by another seller",
+                        Map.of("sellerOrgId", "Does not match the shipment"));
+            }
+            seller = shipment.sellerOrgId();
+        } else if (seller == null) {
+            List<String> sellers = order.shipments().stream().map(OrdersClient.ShipmentFacts::sellerOrgId)
+                    .distinct().toList();
+            if (sellers.size() != 1) {
+                throw new TrustRuleViolation("trustops.seller-required", "The order has several sellers; name the "
+                        + "shipment or the seller", Map.of("shipmentId", "Required"));
+            }
+            seller = sellers.getFirst();
+        } else {
+            String named = seller;
+            if (order.shipments().stream().noneMatch(s -> s.sellerOrgId().equals(named))) {
+                throw new TrustRuleViolation("trustops.seller-mismatch", "That seller did not sell this order",
+                        Map.of("sellerOrgId", "Not a seller of the order"));
+            }
+        }
+        return new ClaimDraft(d.type(), order.orderId(), order.orderNumber(), d.shipmentId(), seller,
+                d.customerId(), d.amountMinor(), d.currency(), d.description(), d.evidenceAssetIds());
+    }
+
+    /** Refund by order: payments spreads the amount over the claim's lines (no payment or line ids from staff). */
+    private RefundResult refundFromOrder(Claim c, long amount, String note) {
+        OrdersClient.OrderFacts order = orders.order(c.orderId()).orElseThrow(() -> new ConflictException(
+                "trustops.refund-refused", "Order " + c.orderId() + " is unknown to orders-service; refund with the "
+                + "payment id and lines"));
+        List<String> lineIds = order.lineIds(c.sellerOrgId(), c.shipmentId());
+        if (lineIds.isEmpty()) {
+            throw new ConflictException("trustops.refund-refused", "No order lines match the claim's shipment / "
+                    + "seller; refund with the payment id and lines");
+        }
+        String reason = "A-to-z claim " + c.reference() + (note == null || note.isBlank() ? "" : ": " + note);
+        try {
+            return payments.refundByOrder(order.orderId(), lineIds, amount,
+                    reason.length() > 500 ? reason.substring(0, 500) : reason, "trustops-claim-" + c.id());
         } catch (UpstreamException e) {
             if (e.rejected() || e.status() == 404 || e.status() == 400) {
                 throw new ConflictException("trustops.refund-refused", "Payments refused the refund: "

@@ -5,15 +5,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.platform.events.InboxDeduplicator;
 import com.afrotransact.taxreturns.domain.returns.DeliveryMethod;
 import com.afrotransact.taxreturns.domain.returns.FulfilmentType;
 import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
+import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import com.afrotransact.taxreturns.domain.tax.TaxAddress;
+import com.afrotransact.taxreturns.port.OrderLookup;
 import com.afrotransact.taxreturns.port.OrderSnapshotRepository;
 import com.afrotransact.taxreturns.port.ProductFacts;
+import com.afrotransact.taxreturns.port.UpstreamException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -31,9 +35,11 @@ class OrderIntakeServiceImpl implements OrderIntakeService {
     private final TaxLedger ledger;
     private final InboxDeduplicator inbox;
     private final TransactionOperations tx;
+    private final OrderLookup lookup;
 
     OrderIntakeServiceImpl(OrderSnapshotRepository snapshots, ProductFacts productFacts, TaxLedger ledger,
-                           InboxDeduplicator inbox, TransactionOperations tx) {
+                           InboxDeduplicator inbox, TransactionOperations tx, OrderLookup lookup) {
+        this.lookup = lookup;
         this.snapshots = snapshots;
         this.productFacts = productFacts;
         this.ledger = ledger;
@@ -74,8 +80,48 @@ class OrderIntakeServiceImpl implements OrderIntakeService {
         return Boolean.TRUE.equals(handled);
     }
 
+    @Override
+    public Optional<PlacedOrder> order(UUID orderId) {
+        Optional<PlacedOrder> known = snapshots.find(orderId);
+        if (known.isPresent()) {
+            return known;
+        }
+        Optional<PlacedOrder> fetched = lookup.placedOrder(orderId);
+        if (fetched.isEmpty()) {
+            return Optional.empty();
+        }
+        PlacedOrder order = fetched.get();
+        tx.executeWithoutResult(status -> {
+            if (snapshots.insert(order)) {
+                int lines = ledger.recordSale(order);
+                LOG.info("Order {} backfilled from orders-service: {} shipments, {} tax lines", order.orderNumber(),
+                        order.shipments().size(), lines);
+            }
+        });
+        return snapshots.find(orderId);
+    }
+
+    @Override
+    public Optional<ReturnAddress> customerAddress(PlacedOrder order) {
+        Optional<ReturnAddress> known = order.returnFrom();
+        if (known.isPresent()) {
+            return known;
+        }
+        try {
+            Optional<ReturnAddress> fetched = lookup.placedOrder(order.orderId()).flatMap(PlacedOrder::returnFrom);
+            fetched.ifPresent(a -> snapshots.updateAddress(order.orderId(), a));
+            return fetched;
+        } catch (UpstreamException ex) {
+            LOG.warn("Order {}: ship-to address not available from orders ({} {})", order.orderNumber(),
+                    ex.status(), ex.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /** Catalog facts only for lines the event did not describe (older orders-service events). */
     private Map<String, ProductFacts.Facts> facts(OrderPlaced e) {
         List<String> atins = e.shipments().stream().flatMap(s -> s.lines().stream())
+                .filter(l -> l.productType() == null)
                 .map(OrderPlaced.Line::variantAtin).filter(a -> a != null && !a.isBlank()).distinct().toList();
         if (atins.isEmpty()) {
             return Map.of();
@@ -96,19 +142,23 @@ class OrderIntakeServiceImpl implements OrderIntakeService {
             long itemsAndTax = 0L;
             for (OrderPlaced.Line l : s.lines()) {
                 ProductFacts.Facts f = l.variantAtin() == null ? null : facts.get(l.variantAtin());
+                String type = l.productType() != null ? l.productType() : f == null ? null : f.productType();
+                boolean perishable = l.perishable() != null ? l.perishable() : f != null && f.perishable();
                 lines.add(new PlacedOrder.Line(l.lineId(), l.variantAtin(), l.title(), l.quantity(),
-                        l.unitPriceMinor(), l.taxMinor(), f == null ? null : f.productType(),
-                        f != null && f.perishable()));
-                itemsAndTax += l.unitPriceMinor() * l.quantity() + l.taxMinor();
+                        l.unitPriceMinor(), l.taxMinor(), type, perishable, l.discountMinor()));
+                itemsAndTax += l.unitPriceMinor() * l.quantity() - l.discountMinor() + l.taxMinor();
             }
+            long shipping = s.shippingMinor() != null ? s.shippingMinor() : Math.max(0L, s.totalMinor() - itemsAndTax);
             shipments.add(new PlacedOrder.Shipment(s.shipmentId(), s.sellerOrgId(), s.sellerName(),
-                    fulfilment(s.fulfilmentType()), delivery(s.deliveryMethod()), s.totalMinor(),
-                    Math.max(0L, s.totalMinor() - itemsAndTax), null, lines));
+                    fulfilment(s.fulfilmentType()), delivery(s.deliveryMethod()), s.totalMinor(), shipping, null,
+                    lines));
         }
+        ReturnAddress customer = e.shipToLine1() == null ? null : new ReturnAddress(e.shipToName(), e.shipToLine1(),
+                e.shipToLine2(), e.shipToCity(), e.shipToState(), e.shipToPostalCode(), e.shipToCountry(), null);
         return new PlacedOrder(e.orderId(), e.orderNumber(), e.customerId(),
                 e.currency() == null ? "USD" : e.currency().toUpperCase(Locale.ROOT),
                 new TaxAddress(e.shipToCountry(), e.shipToState(), e.shipToPostalCode(), e.shipToCity()),
-                e.placedAt(), shipments);
+                e.placedAt(), shipments, customer);
     }
 
     private static FulfilmentType fulfilment(String value) {

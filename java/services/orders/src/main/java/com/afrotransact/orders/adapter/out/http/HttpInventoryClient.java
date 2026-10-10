@@ -2,6 +2,7 @@ package com.afrotransact.orders.adapter.out.http;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -34,13 +35,13 @@ class HttpInventoryClient implements InventoryClient {
                     h.setBearerAuth(tokens.token());
                     h.set(IDEMPOTENCY_KEY, orderId);
                 })
-                .body(Map.of("orderId", orderId, "lines", items.stream()
-                        .map(i -> Map.of("sku", i.sku(), "qty", i.qty())).toList()))
+                .body(Map.of("orderId", orderId, "lines", items.stream().map(HttpInventoryClient::line).toList()))
                 .retrieve().body(JsonNode.class));
         List<Reserved> out = new ArrayList<>();
         if (reservation != null) {
             for (JsonNode l : reservation.path("lines")) {
-                out.add(new Reserved(l.path("sku").asString(), l.path("nodeId").asString(null), l.path("qty").asInt()));
+                out.add(new Reserved(l.path("sku").asString(), l.path("nodeId").asString(null), l.path("qty").asInt(),
+                        l.path("group").asString(null)));
             }
         }
         return out;
@@ -61,11 +62,37 @@ class HttpInventoryClient implements InventoryClient {
         post("/v1/reservations/{orderId}/release", orderId, Map.of("reason", reason == null ? "" : reason));
     }
 
+    @Override
+    public void commitGroups(String orderId, String shipmentId, List<String> groups) {
+        post("/v1/reservations/{orderId}/groups/commit", orderId, Map.of("groups", groups),
+                "commit-" + shipmentId);
+    }
+
+    @Override
+    public void releaseGroups(String orderId, String shipmentId, List<String> groups, String reason) {
+        post("/v1/reservations/{orderId}/groups/release", orderId, Map.of("groups", groups, "reason",
+                reason == null ? "" : reason), "release-" + shipmentId);
+    }
+
+    private static Map<String, Object> line(Item i) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("sku", i.sku());
+        m.put("qty", i.qty());
+        if (i.group() != null) {
+            m.put("group", i.group());
+        }
+        return m;
+    }
+
     private void post(String path, String orderId, Object body) {
+        post(path, orderId, body, orderId);
+    }
+
+    private void post(String path, String orderId, Object body, String idempotencyKey) {
         inventory.call(c -> {
             RestClient.RequestBodySpec spec = c.post().uri(path, orderId).headers(h -> {
                 h.setBearerAuth(tokens.token());
-                h.set(IDEMPOTENCY_KEY, orderId);
+                h.set(IDEMPOTENCY_KEY, idempotencyKey);
             });
             if (body != null) {
                 spec.body(body);

@@ -22,19 +22,27 @@ public record CommitResult(Reservation reservation, List<Money> cogs, List<LineC
     }
 
     /** COGS of one order line. */
-    public record LineCost(int lineNo, String sku, String nodeId, int qty, List<Money> cogs) {
+    public record LineCost(int lineNo, String sku, String nodeId, int qty, List<Money> cogs, String group,
+                           String stockOwnerOrgId) {
     }
 
+    /** COGS of every line the reservation shipped. */
     static CommitResult of(Reservation r, boolean replayed) {
+        return ofLines(r, r.committedLines(), replayed);
+    }
+
+    /** COGS of the given (shipped) lines, e.g. the lines of the groups committed by one call. */
+    static CommitResult ofLines(Reservation r, List<ReservationLine> shipped, boolean replayed) {
         List<LineCost> lines = new ArrayList<>();
         Map<String, Long> total = new TreeMap<>();
-        for (ReservationLine line : r.lines()) {
+        for (ReservationLine line : shipped) {
             Map<String, Long> perLine = new TreeMap<>();
             for (LotAllocation a : line.allocations()) {
                 perLine.merge(a.currency(), a.costMinor(), Long::sum);
                 total.merge(a.currency(), a.costMinor(), Long::sum);
             }
-            lines.add(new LineCost(line.lineNo(), line.sku(), line.nodeId(), line.qty(), money(perLine)));
+            lines.add(new LineCost(line.lineNo(), line.sku(), line.nodeId(), line.qty(), money(perLine), line.group(),
+                    line.stockOwnerOrgId()));
         }
         return new CommitResult(r, money(total), lines, replayed);
     }

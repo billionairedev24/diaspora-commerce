@@ -18,13 +18,24 @@ public record CheckoutPlan(String currency, List<Package> packages) {
     /**
      * One priced line (tax computed from the delivery address).
      *
-     * @param offerId       offers-service offer (coupon line reference); null for catalog-only lines
-     * @param discountMinor coupon discount allocated to the line
+     * @param offerId              offers-service offer (coupon line reference); null for catalog-only lines
+     * @param discountMinor        coupon discount allocated to the line
+     * @param productType          catalog product type
+     * @param localTaxJurisdiction local jurisdiction from the tax quote (null when none / table fallback)
+     * @param shippingTaxMinor     part of taxMinor on the shipment's shipping (first line of a shipment only)
      */
     public record Line(String lineId, int lineNo, String variantAtin, String productAtin, String title,
                        String imageUrl, int quantity, long unitPriceMinor, long taxMinor, String category,
                        boolean perishable, String taxJurisdiction, int promiseDays, String offerId,
-                       long discountMinor) {
+                       long discountMinor, String productType, String localTaxJurisdiction, long shippingTaxMinor) {
+
+        /** A line before product type and quote details are known (tests, older workflow histories). */
+        public Line(String lineId, int lineNo, String variantAtin, String productAtin, String title, String imageUrl,
+                    int quantity, long unitPriceMinor, long taxMinor, String category, boolean perishable,
+                    String taxJurisdiction, int promiseDays, String offerId, long discountMinor) {
+            this(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, taxMinor,
+                    category, perishable, taxJurisdiction, promiseDays, offerId, discountMinor, null, null, 0);
+        }
 
         /** Unit price × quantity. */
         public long itemsMinor() {
@@ -36,8 +47,17 @@ public record CheckoutPlan(String currency, List<Package> packages) {
             long items = itemsMinor();
             long d = Math.clamp(discount, 0, items);
             long tax = items == 0 ? taxMinor : Math.round((double) taxMinor * (items - d) / items);
+            long shipTax = Math.min(shippingTaxMinor, tax);
             return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, tax,
-                    category, perishable, taxJurisdiction, promiseDays, offerId, d);
+                    category, perishable, taxJurisdiction, promiseDays, offerId, d, productType, localTaxJurisdiction,
+                    shipTax);
+        }
+
+        /** The line with the tax of a quote (items + shipping on this line). */
+        public Line withTax(long tax, String jurisdiction, String localJurisdiction, long shippingTax) {
+            return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, tax,
+                    category, perishable, jurisdiction, promiseDays, offerId, discountMinor, productType,
+                    localJurisdiction, Math.clamp(shippingTax, 0, tax));
         }
     }
 }

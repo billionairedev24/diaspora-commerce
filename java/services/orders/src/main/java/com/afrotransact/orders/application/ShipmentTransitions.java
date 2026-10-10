@@ -147,6 +147,10 @@ class ShipmentTransitions {
                 .allMatch(s -> s.status() == ShipmentStatus.DELIVERED || s.status() == ShipmentStatus.RETURNED)) {
             followUps.enqueue(task("settle:" + order.id(), FollowUpRepository.Kind.SETTLE, order, null, now));
         }
+        if (to == ShipmentStatus.DELIVERED && order.shipments().size() > 1) {
+            followUps.enqueue(task("settle-shipment:" + after.id(), FollowUpRepository.Kind.SETTLE_SHIPMENT, order,
+                    after, now));
+        }
         if (to == ShipmentStatus.CANCELLED) {
             followUps.enqueue(task("cancel:" + after.id(), FollowUpRepository.Kind.CANCEL, order, after, now));
         }

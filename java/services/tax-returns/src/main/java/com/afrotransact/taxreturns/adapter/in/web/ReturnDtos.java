@@ -57,7 +57,9 @@ final class ReturnDtos {
     @Schema(name = "CreateReturn", description = "Items of one delivered shipment, the reason per item and the method")
     record CreateReturn(@NotNull UUID orderId, @NotNull UUID shipmentId, @NotNull ReturnMethod method,
                         @NotEmpty @Size(max = 100) List<@Valid CreateReturnLine> lines,
-                        @Schema(description = "Required for DROP_OFF: where the parcel ships from") @Valid
+                        @Schema(description = "Optional: where the parcel ships from. Defaults to the order's "
+                                + "delivery address (orders.order.placed / orders lookup), so apps send nothing; "
+                                + "staff may override it (e.g. the customer moved)") @Valid
                         AddressDto returnFrom) {
     }
 

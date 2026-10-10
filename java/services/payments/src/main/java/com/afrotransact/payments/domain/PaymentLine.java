@@ -45,4 +45,9 @@ public record PaymentLine(OrderLine line, UUID captureId, Money commission, Mone
     public Money refundedTotal() {
         return refundedItems.plus(refundedShipping).plus(refundedTax);
     }
+
+    /** What can still be refunded: items + shipping + tax not yet refunded (0 until captured). */
+    public Money refundable() {
+        return isCaptured() ? line.total().minus(refundedTotal()) : Money.zero(line.currency());
+    }
 }

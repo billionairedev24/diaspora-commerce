@@ -64,6 +64,9 @@ class ReturnsJobServiceImpl implements ReturnsJobService {
         for (Rma rma : rmas.approvedWithoutLabel(BATCH)) {
             labels += run("label", rma, () -> workflow.afterApproval(rma.id()));
         }
+        for (Rma rma : rmas.pickupsToSchedule(BATCH)) {
+            labels += run("pickup", rma, () -> workflow.schedulePickup(rma.id()));
+        }
         int refunded = 0;
         for (Rma rma : rmas.awaitingRefund(BATCH)) {
             refunded += run("refund", rma, () -> workflow.refund(rma.id()));

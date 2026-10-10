@@ -2,9 +2,12 @@ package com.afrotransact.orders.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderStatus;
+import com.afrotransact.orders.domain.ShipByPolicy;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.domain.TransitionActor;
@@ -27,14 +30,19 @@ class OrderPlacementServiceImpl implements OrderPlacementService {
     private final CheckoutRequestRepository requests;
     private final ShipmentTransitions transitions;
     private final DomainEventPublisher events;
+    private final ShipByPolicy shipBy;
+    private final OrdersSettings settings;
     private final Clock clock;
 
     OrderPlacementServiceImpl(OrderRepository orders, CheckoutRequestRepository requests,
-                              ShipmentTransitions transitions, DomainEventPublisher events, Clock clock) {
+                              ShipmentTransitions transitions, DomainEventPublisher events, ShipByPolicy shipBy,
+                              OrdersSettings settings, Clock clock) {
         this.orders = orders;
         this.requests = requests;
         this.transitions = transitions;
         this.events = events;
+        this.shipBy = shipBy;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -65,7 +73,9 @@ class OrderPlacementServiceImpl implements OrderPlacementService {
         Order placed = current.withHeader(OrderStatus.PLACED, null, now);
         orders.update(placed);
         events.publish(OrdersEvents.ORDER_PLACED, OrdersEvents.AGGREGATE, placed.id(),
-                OrdersEventPayloads.OrderPlaced.of(placed));
+                OrdersEventPayloads.OrderPlaced.of(placed, s -> placed.placedAt() == null ? null
+                        : shipBy.shipBy(LocalDate.ofInstant(placed.placedAt(), ZoneId.of(settings.zone())),
+                        s.fulfilmentType(), s.deliveryMethod())));
         requests.markOutcome(orderId, STATUS_PLACED, null, null);
         return placed;
     }

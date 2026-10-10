@@ -18,6 +18,8 @@ public enum DriverEventType {
     DELIVERY_COMPLETED("delivery.completed"),
     DELIVERY_PROBLEM("delivery.problem"),
     RETURN_SCANNED("return.scanned"),
+    RETURN_PICKUP_COLLECTED("return_pickup.collected"),
+    RETURN_PICKUP_FAILED("return_pickup.failed"),
     SHIFT_ENDED("shift.ended"),
     SOS_RAISED("sos.raised");
 

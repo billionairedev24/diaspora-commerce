@@ -110,8 +110,11 @@ at:
       express-days: 2
       delivery-days: 1
       pickup-days: 1
-    # Interim combined state + average local sales tax (basis points) until the tax service exists.
+    # Checkout tax: tax-returns' POST /v1/tax/quotes (orders-service token, scope tax:quote). When tax-returns is
+    # unavailable and fallback-to-table is on, the per-state table below taxes the items and a warning is logged.
     tax:
+      provider: ${ORDERS_TAX_PROVIDER:TAX_RETURNS}
+      fallback-to-table: ${ORDERS_TAX_FALLBACK_TO_TABLE:true}
       default-bps: 0
       rates:
         TX: 825
@@ -129,6 +132,19 @@ at:
         WA: 938
         MN: 749
         OH: 724
+    # Return windows for the order views' "Return or replace items" link; mirrors at.taxreturns.returns (tax-returns
+    # decides eligibility, including seller policies).
+    returns:
+      window-days: ${RETURN_WINDOW_DAYS:30}
+      window-days-by-product-type:
+        electronics: 15
+        books: 30
+      non-returnable-product-types: [perishable, fresh-produce, frozen-food, meat-seafood, prepared-meals, hot-food,
+                                     pantry, spices, grains, beverages]
+    # Handling time (business days after the order day) before a shipment must be handed over.
+    ship-by:
+      afrotransact-days: 1
+      seller-days: 2
     handover:
       # AES key material for sealing customer handover codes (HANDOVER_CODE_KEY in cloud).
       key: ${HANDOVER_CODE_KEY:local-only-handover-code-key-change-me}
@@ -137,7 +153,7 @@ at:
       token-path: /oauth2/token
       client-id: ${ORDERS_CLIENT_ID:orders-service}
       client-secret: ${ORDERS_CLIENT_SECRET:local-orders-service-secret}
-      scopes: payments:service inventory:reserve cart:service
+      scopes: payments:service inventory:reserve cart:service tax:quote
     upstreams:
       timeout: ${UPSTREAM_TIMEOUT:5s}
       promise-timeout: ${PROMISE_TIMEOUT:800ms}
@@ -149,6 +165,8 @@ at:
       content-url: ${CONTENT_URL:http://localhost:8112}
       catalog-url: ${CATALOG_URL:http://localhost:8101}
       offers-url: ${OFFERS_URL:http://localhost:8102}
+      tax-returns-url: ${TAX_RETURNS_URL:http://localhost:8111}
+      tax-timeout: ${TAX_QUOTE_TIMEOUT:2s}
     topics:
       payment-events: at.payment.events
       carrier-events: at.carrier-shipment.events

@@ -1375,6 +1375,7 @@ components:
           minLength: 0
         sellerOrgId:
           type: string
+          description: 'Optional: taken from the shipment / order (orders lookup)'
           maxLength: 80
           minLength: 0
         customerId:
@@ -1405,7 +1406,6 @@ components:
       - currency
       - description
       - orderId
-      - sellerOrgId
       - type
     ClaimResponse:
       type: object
@@ -1554,7 +1554,9 @@ components:
       - reason
     DecisionRequest:
       type: object
-      description: 'Decision: REFUND (paymentId + refundLines, sum ≤ claimed amount) or DENY (note required)'
+      description: 'Decision: REFUND or DENY (note required). A REFUND without paymentId / refundLines is derived from the
+        order: payments refunds refundAmountMinor (default the claimed amount) over the lines of the claim''s shipment; with
+        paymentId + refundLines those exact amounts (sum ≤ claimed amount)'
       properties:
         outcome:
           type: string
@@ -1574,6 +1576,10 @@ components:
             $ref: '#/components/schemas/RefundLineRequest'
           maxItems: 200
           minItems: 0
+        refundAmountMinor:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
       required:
       - outcome
     RefundLineRequest:

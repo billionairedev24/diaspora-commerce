@@ -4,6 +4,8 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,14 +18,17 @@ import com.afrotransact.taxreturns.domain.returns.Refund;
 import com.afrotransact.taxreturns.domain.returns.RefundState;
 import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 import com.afrotransact.taxreturns.domain.returns.ReturnLabel;
+import com.afrotransact.taxreturns.domain.returns.ReturnMethod;
 import com.afrotransact.taxreturns.domain.returns.ReturnPolicy;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.domain.returns.Rma;
 import com.afrotransact.taxreturns.domain.returns.RmaLine;
+import com.afrotransact.taxreturns.domain.returns.RmaStatus;
 import com.afrotransact.taxreturns.domain.returns.SellerReturnPolicy;
 import com.afrotransact.taxreturns.domain.returns.StockStatus;
 import com.afrotransact.taxreturns.port.CarrierLabels;
 import com.afrotransact.taxreturns.port.InventoryGateway;
+import com.afrotransact.taxreturns.port.ReturnPickupScheduler;
 import com.afrotransact.taxreturns.port.RmaRepository;
 import com.afrotransact.taxreturns.port.SellerPolicyRepository;
 import com.afrotransact.taxreturns.port.UpstreamException;
@@ -47,6 +52,7 @@ class ReturnWorkflow {
     private final SellerPolicyRepository sellers;
     private final CarrierLabels labels;
     private final InventoryGateway inventory;
+    private final ReturnPickupScheduler pickups;
     private final RefundOrchestrator refunds;
     private final RmaEvents rmaEvents;
     private final ReturnPolicy policy;
@@ -57,7 +63,8 @@ class ReturnWorkflow {
 
     ReturnWorkflow(RmaRepository rmas, SellerPolicyRepository sellers, CarrierLabels labels,
                    InventoryGateway inventory, RefundOrchestrator refunds, RmaEvents rmaEvents, ReturnPolicy policy,
-                   ReturnsSettings settings, TransactionOperations tx, Clock clock) {
+                   ReturnsSettings settings, TransactionOperations tx, Clock clock, ReturnPickupScheduler pickups) {
+        this.pickups = pickups;
         this.rmas = rmas;
         this.sellers = sellers;
         this.labels = labels;
@@ -112,14 +119,16 @@ class ReturnWorkflow {
                 return before;
             }
             Instant now = Instant.now(clock);
-            String qr = QR_PREFIX + before.number() + ":" + label.trackingNumber();
+            // A box-free return shows the carrier's code at the drop-off location; a printed label our own QR.
+            String qr = label.boxFree() ? label.qrPayload()
+                    : QR_PREFIX + before.number() + ":" + label.trackingNumber();
             return rmaEvents.save(before, before.labelIssued(label, qr, now.plus(Duration.ofDays(policy.dropOffDays())),
                     now), TaxReturnsEvents.RMA_LABEL_ISSUED, SYSTEM, null);
         });
     }
 
     private Rma arrangePickup(Rma rma) {
-        return tx.execute(s -> {
+        Rma arranged = tx.execute(s -> {
             Rma before = load(rma.id());
             if (!before.status().approved()) {
                 return before;
@@ -130,6 +139,53 @@ class ReturnWorkflow {
             return rmaEvents.save(before, before.pickupArranged(code, qr,
                     now.plus(Duration.ofDays(policy.dropOffDays())), now), TaxReturnsEvents.RMA_LABEL_ISSUED,
                     SYSTEM, null);
+        });
+        schedulePickup(arranged.id());
+        return load(arranged.id());
+    }
+
+    /**
+     * Asks fulfilment for a driver to collect a DRIVER_PICKUP return at the order's delivery address (idempotent per
+     * RMA). Failures are recorded and retried by the job.
+     */
+    void schedulePickup(UUID rmaId) {
+        Rma rma = load(rmaId);
+        if (rma.method() != ReturnMethod.DRIVER_PICKUP || rma.status() != RmaStatus.LABEL_ISSUED
+                || rmas.pickupId(rma.id()).isPresent()) {
+            return;
+        }
+        Instant now = Instant.now(clock);
+        if (rma.returnFrom() == null || !rma.returnFrom().complete()) {
+            rmas.recordPickup(rma.id(), null, "FAILED", "No pickup address", now);
+            return;
+        }
+        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        String depot = receivingNode(rma);
+        try {
+            String pickupId = pickups.schedule(new ReturnPickupScheduler.PickupRequest(rma.id(), rma.number(),
+                    rma.orderId(), rma.orderNumber(), rma.shipmentId(), rma.customerId(), rma.sellerOrgId(),
+                    rma.returnFrom(), depot,
+                    today.plusDays(settings.pickupReadyDays()),
+                    rma.dropOffBy() == null ? null : LocalDate.ofInstant(rma.dropOffBy(), ZoneOffset.UTC),
+                    rma.lines().stream().mapToInt(RmaLine::quantity).sum()));
+            rmas.recordPickup(rma.id(), pickupId, "SCHEDULED", null, now);
+        } catch (UpstreamException ex) {
+            LOG.warn("Return {}: driver pickup not scheduled ({} {}): {}; will retry", rma.number(), ex.status(),
+                    ex.code(), ex.getMessage());
+            rmas.recordPickup(rma.id(), null, "FAILED", ex.getMessage(), now);
+        }
+    }
+
+    /** The RMA was cancelled: cancel its driver pickup at fulfilment (best effort; logged when it fails). */
+    void cancelPickup(UUID rmaId, String reason) {
+        rmas.pickupId(rmaId).ifPresent(pickupId -> {
+            try {
+                pickups.cancel(pickupId, reason);
+                rmas.recordPickup(rmaId, pickupId, "CANCELLED", null, Instant.now(clock));
+            } catch (UpstreamException ex) {
+                LOG.warn("Return {}: pickup {} not cancelled at fulfilment ({}): {}", rmaId, pickupId, ex.status(),
+                        ex.getMessage());
+            }
         });
     }
 
@@ -182,7 +238,7 @@ class ReturnWorkflow {
                 inventory.acceptReturn(rma.orderId().toString(), l.atin(), l.quantity(), l.condition(),
                         "Return " + rma.number() + ": " + l.reason().name()
                                 + (l.inspectionNote() == null ? "" : " - " + l.inspectionNote()),
-                        "rma-" + rma.id() + "-" + l.lineId());
+                        receivingNode(rma), "rma-" + rma.id() + "-" + l.lineId());
                 results.put(l.lineId(), StockStatus.POSTED);
             } catch (UpstreamException ex) {
                 LOG.warn("Return {} line {}: inventory posting failed ({}): {}", rma.number(), l.lineId(),
@@ -204,6 +260,11 @@ class ReturnWorkflow {
             }
             return rmaEvents.save(before, before.withLines(lines, Instant.now(clock)), null, SYSTEM, null);
         });
+    }
+
+    /** AfroTransact-fulfilled returns are received at the return centre (when its inventory node is configured). */
+    private String receivingNode(Rma rma) {
+        return rma.fulfilment().afroTransactFulfilled() ? settings.returnCentreInventoryNode() : null;
     }
 
     Rma load(UUID id) {

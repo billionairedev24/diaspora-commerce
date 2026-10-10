@@ -106,9 +106,10 @@ class JdbcOrderRepository implements OrderRepository {
                 jdbc.sql("""
                         insert into order_line (id, shipment_id, order_id, line_no, variant_atin, product_atin, title,
                             image_url, quantity, unit_price_minor, tax_minor, discount_minor, category, perishable,
-                            tax_jurisdiction)
+                            tax_jurisdiction, product_type, local_tax_jurisdiction, shipping_tax_minor)
                         values (:id, :shipment, :order, :lineNo, :variant, :product, :title, :image, :qty, :unit, :tax,
-                            :discount, :category, :perishable, :jurisdiction)
+                            :discount, :category, :perishable, :jurisdiction, :productType, :localJurisdiction,
+                            :shippingTax)
                         """)
                         .param("id", Sql.uuid(l.id())).param("shipment", Sql.uuid(s.id()))
                         .param("order", Sql.uuid(o.id())).param("lineNo", l.lineNo())
@@ -117,6 +118,8 @@ class JdbcOrderRepository implements OrderRepository {
                         .param("unit", l.unitPriceMinor()).param("tax", l.taxMinor())
                         .param("discount", l.discountMinor()).param("category", l.category())
                         .param("perishable", l.perishable()).param("jurisdiction", l.taxJurisdiction())
+                        .param("productType", l.productType()).param("localJurisdiction", l.localTaxJurisdiction())
+                        .param("shippingTax", l.shippingTaxMinor())
                         .update();
             }
         }
@@ -322,7 +325,8 @@ class JdbcOrderRepository implements OrderRepository {
         Map<UUID, List<OrderLine>> linesByShipment = new LinkedHashMap<>();
         jdbc.sql("""
                 select l.id, l.shipment_id, l.line_no, l.variant_atin, l.product_atin, l.title, l.image_url, l.quantity,
-                    l.unit_price_minor, l.tax_minor, l.discount_minor, l.category, l.perishable, l.tax_jurisdiction
+                    l.unit_price_minor, l.tax_minor, l.discount_minor, l.category, l.perishable, l.tax_jurisdiction,
+                    l.product_type, l.local_tax_jurisdiction, l.shipping_tax_minor
                 from order_line l where l.order_id in (:ids) order by l.line_no
                 """)
                 .param("ids", ids)
@@ -370,7 +374,8 @@ class JdbcOrderRepository implements OrderRepository {
         return new OrderLine(Sql.str(rs, "id"), rs.getInt("line_no"), rs.getString("variant_atin"),
                 rs.getString("product_atin"), rs.getString("title"), rs.getString("image_url"), rs.getInt("quantity"),
                 rs.getLong("unit_price_minor"), rs.getLong("tax_minor"), rs.getLong("discount_minor"),
-                rs.getString("category"), rs.getBoolean("perishable"), rs.getString("tax_jurisdiction"));
+                rs.getString("category"), rs.getBoolean("perishable"), rs.getString("tax_jurisdiction"),
+                rs.getString("product_type"), rs.getString("local_tax_jurisdiction"), rs.getLong("shipping_tax_minor"));
     }
 
     private record ShipmentRow(UUID id, UUID orderId, int seq, String sellerOrgId, String sellerName,

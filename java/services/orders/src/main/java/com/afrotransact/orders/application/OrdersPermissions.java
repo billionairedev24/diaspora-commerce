@@ -5,6 +5,8 @@ public final class OrdersPermissions {
 
     /** View orders and shipments (sellers: only their organisation's shipments). */
     public static final String READ = "orders:read";
+    /** Service-to-service order lookup (tax-returns-service, trust-ops-service client scope). */
+    public static final String LOOKUP = "orders:lookup";
     /** Seller-fulfilled status steps (sellers) and admin oversight steps (support). */
     public static final String UPDATE_STATUS = "orders:update-status";
     /** AfroTransact-fulfilled shipments, cancellations and reroutes (operations, dispatch). */

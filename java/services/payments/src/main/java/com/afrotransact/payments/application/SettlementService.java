@@ -1,9 +1,11 @@
 package com.afrotransact.payments.application;
 
 import java.time.Instant;
+import java.util.List;
 
 import com.afrotransact.payments.domain.Settlement;
 import com.afrotransact.payments.domain.SettlementKind;
+import com.afrotransact.payments.domain.ShipmentSettlement;
 
 /**
  * Settlement hold and transfers: after delivery (products) or completion (services) each seller's net becomes
@@ -17,6 +19,19 @@ public interface SettlementService {
 
     Settlement get(String orderId);
 
-    /** Scheduled job: transfers the matured net of up to {@code maxOrders} orders. Returns transfers created. */
+    /**
+     * One shipment of the order was delivered: starts that shipment's hold, so the seller net captured for it is
+     * transferred after the hold even while other shipments are on their way. Idempotent per shipment.
+     */
+    ShipmentSettlement markShipmentDelivered(String orderId, String shipmentId, Instant deliveredAt,
+                                             SettlementKind kind);
+
+    /** Shipment holds of an order, oldest delivery first. */
+    List<ShipmentSettlement> shipments(String orderId);
+
+    /**
+     * Scheduled job: transfers the matured net of up to {@code maxOrders} shipment holds and then of up to
+     * {@code maxOrders} order holds. Returns transfers created.
+     */
     int releaseMatured(int maxOrders);
 }

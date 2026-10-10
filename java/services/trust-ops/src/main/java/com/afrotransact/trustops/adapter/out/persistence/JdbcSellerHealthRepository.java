@@ -11,6 +11,7 @@ import com.afrotransact.trustops.domain.SellerHealthReport;
 import com.afrotransact.trustops.domain.SellerHealthStatus;
 import com.afrotransact.trustops.port.SellerHealthRepository;
 import com.afrotransact.trustops.port.ShipmentFact;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -19,19 +20,23 @@ class JdbcSellerHealthRepository implements SellerHealthRepository {
 
     private final JdbcClient jdbc;
     private final JsonCodec json;
+    /** Business zone in which a handover's date is compared with the ship-by date. */
+    private final String zone;
 
-    JdbcSellerHealthRepository(JdbcClient jdbc, JsonCodec json) {
+    JdbcSellerHealthRepository(JdbcClient jdbc, JsonCodec json,
+                               @Value("${at.trustops.seller-health.zone:America/Chicago}") String zone) {
         this.jdbc = jdbc;
         this.json = json;
+        this.zone = zone;
     }
 
     @Override
     public void apply(ShipmentFact f, Instant now) {
         jdbc.sql("""
                 insert into seller_shipment (shipment_id, order_id, seller_org_id, placed_at, promised_by, delivered_at,
-                    cancelled_at, cancelled_by, last_status, updated_at)
+                    cancelled_at, cancelled_by, last_status, ship_by, handed_over_at, updated_at)
                 values (:shipment, :order, :seller, :placedAt, :promisedBy, :deliveredAt, :cancelledAt, :cancelledBy,
-                    :status, :now)
+                    :status, :shipBy, :handedOverAt, :now)
                 on conflict (shipment_id) do update set
                     order_id = coalesce(excluded.order_id, seller_shipment.order_id),
                     placed_at = coalesce(seller_shipment.placed_at, excluded.placed_at),
@@ -40,6 +45,8 @@ class JdbcSellerHealthRepository implements SellerHealthRepository {
                     cancelled_at = coalesce(seller_shipment.cancelled_at, excluded.cancelled_at),
                     cancelled_by = coalesce(seller_shipment.cancelled_by, excluded.cancelled_by),
                     last_status = coalesce(excluded.last_status, seller_shipment.last_status),
+                    ship_by = coalesce(excluded.ship_by, seller_shipment.ship_by),
+                    handed_over_at = coalesce(seller_shipment.handed_over_at, excluded.handed_over_at),
                     updated_at = excluded.updated_at
                 """)
                 .param("shipment", f.shipmentId())
@@ -51,24 +58,34 @@ class JdbcSellerHealthRepository implements SellerHealthRepository {
                 .param("cancelledAt", Sql.ts(f.cancelledAt()))
                 .param("cancelledBy", f.cancelledBy())
                 .param("status", f.status())
+                .param("shipBy", f.shipBy() == null ? null : Date.valueOf(f.shipBy()))
+                .param("handedOverAt", Sql.ts(f.handedOverAt()))
                 .param("now", Sql.ts(now))
                 .update();
     }
 
-    /** Seller cancellations: by the seller, or by the system for it (not the customer's own, not staff's). */
+    /**
+     * Late: handed over after the ship-by date (business zone) when the shipment has one; otherwise delivered after
+     * the promised date. A shipment counts towards the late-rate denominator once delivered or handed over against
+     * a ship-by date. Seller cancellations: by the seller, or by the system for it (not the customer's own, not
+     * staff's).
+     */
     @Override
     public SellerHealthMetrics metrics(String orgId, Instant from, Instant to) {
         SellerHealthMetrics shipments = jdbc.sql("""
                 select count(*) as shipments,
-                       count(*) filter (where delivered_at is not null) as delivered,
-                       count(*) filter (where delivered_at is not null and promised_by is not null
-                                        and (delivered_at at time zone 'UTC')::date > promised_by) as late,
+                       count(*) filter (where delivered_at is not null
+                                        or (ship_by is not null and handed_over_at is not null)) as delivered,
+                       count(*) filter (where (ship_by is not null and handed_over_at is not null
+                                            and (handed_over_at at time zone :zone)::date > ship_by)
+                                        or (ship_by is null and delivered_at is not null and promised_by is not null
+                                            and (delivered_at at time zone 'UTC')::date > promised_by)) as late,
                        count(*) filter (where cancelled_at is not null
                                         and cancelled_by in ('SELLER', 'SYSTEM')) as cancelled
                 from seller_shipment
                 where seller_org_id = :org and placed_at >= :from and placed_at < :to
                 """)
-                .param("org", orgId).param("from", Sql.ts(from)).param("to", Sql.ts(to))
+                .param("org", orgId).param("from", Sql.ts(from)).param("to", Sql.ts(to)).param("zone", zone)
                 .query((rs, row) -> new SellerHealthMetrics(orgId, from, to, rs.getInt("shipments"),
                         rs.getInt("delivered"), rs.getInt("late"), rs.getInt("cancelled"), 0))
                 .single();

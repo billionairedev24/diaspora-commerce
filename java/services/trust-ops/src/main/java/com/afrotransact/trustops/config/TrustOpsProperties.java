@@ -19,10 +19,13 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param audit        audit log ingestion and export
  * @param sellerHealth seller-health job
  * @param jobs         SLA sweep
+ * @param orders       orders-service (order lookup for claims)
+ * @param claims       claim ownership checks
  */
 @ConfigurationProperties(prefix = "at.trustops")
 public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstream payments, Upstream seller,
-                                 Upstream offers, Ai ai, Audit audit, SellerHealth sellerHealth, Jobs jobs) {
+                                 Upstream offers, Ai ai, Audit audit, SellerHealth sellerHealth, Jobs jobs,
+                                 Upstream orders, Claims claims) {
 
     public TrustOpsProperties {
         sla = sla == null ? new Sla(null, null, null, null, null, null, null, null) : sla;
@@ -35,6 +38,21 @@ public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstr
         audit = audit == null ? new Audit(null, null, null, null) : audit;
         sellerHealth = sellerHealth == null ? new SellerHealth(null, null, null, null, null) : sellerHealth;
         jobs = jobs == null ? new Jobs(null) : jobs;
+        orders = orders == null ? new Upstream("http://localhost:8104") : orders;
+        claims = claims == null ? new Claims(null) : claims;
+    }
+
+    /**
+     * Claims.
+     *
+     * @param verifyOwnership check the claimant, shipment and seller against orders-service's order lookup (default
+     *                        true; off only where orders-service is not reachable, e.g. isolated demos)
+     */
+    public record Claims(Boolean verifyOwnership) {
+
+        public Claims {
+            verifyOwnership = verifyOwnership == null ? Boolean.TRUE : verifyOwnership;
+        }
     }
 
     /**
@@ -75,8 +93,8 @@ public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstr
             tokenUri = tokenUri == null ? "http://localhost:8100/oauth2/token" : tokenUri;
             clientId = clientId == null ? "trust-ops-service" : clientId;
             clientSecret = clientSecret == null ? "" : clientSecret;
-            scopes = scopes == null ? "catalog:moderate payments:service sellers:enforce offers:write ai:triage"
-                    : scopes;
+            scopes = scopes == null
+                    ? "catalog:moderate payments:service sellers:enforce offers:write ai:triage orders:lookup" : scopes;
             timeout = timeout == null ? Duration.ofSeconds(10) : timeout;
         }
     }

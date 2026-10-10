@@ -8,9 +8,11 @@ import com.afrotransact.payments.application.PaymentsSettings;
 import com.afrotransact.payments.domain.DefaultPaymentSplitter;
 import com.afrotransact.payments.domain.DefaultPayoutPolicy;
 import com.afrotransact.payments.domain.DefaultReconciler;
+import com.afrotransact.payments.domain.DefaultRefundAllocator;
 import com.afrotransact.payments.domain.PaymentSplitter;
 import com.afrotransact.payments.domain.PayoutPolicy;
 import com.afrotransact.payments.domain.Reconciler;
+import com.afrotransact.payments.domain.RefundAllocator;
 import com.stripe.StripeClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -31,6 +33,11 @@ class PaymentsConfiguration {
         Set<String> roles = new HashSet<>(DefaultPayoutPolicy.DEFAULT_ROLES);
         roles.addAll(props.payout().roles());
         return new DefaultPayoutPolicy(props.payout().minimumMinor(), roles);
+    }
+
+    @Bean
+    RefundAllocator refundAllocator() {
+        return new DefaultRefundAllocator();
     }
 
     @Bean

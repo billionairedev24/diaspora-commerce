@@ -29,6 +29,12 @@ public interface PaymentsClient {
     /** {@code POST /v1/settlements/{orderId}/delivered}: starts the settlement hold. Idempotent. */
     void delivered(String orderId, Instant deliveredAt);
 
+    /**
+     * {@code POST /v1/settlements/{orderId}/shipments/{shipmentId}/delivered}: starts the hold of one shipment so its
+     * seller net is transferred without waiting for the order's other shipments. Idempotent.
+     */
+    void shipmentDelivered(String orderId, String shipmentId, Instant deliveredAt);
+
     /** {@code GET /v1/orders/{orderId}/split}. */
     Split split(String orderId);
 
@@ -37,9 +43,19 @@ public interface PaymentsClient {
                      Map<String, String> metadata, List<Line> lines) {
     }
 
-    /** One payment line: fulfilment FBA (AfroTransact-fulfilled) or SELF (seller-fulfilled). */
+    /**
+     * One payment line: fulfilment FBA (AfroTransact-fulfilled) or SELF (seller-fulfilled).
+     *
+     * @param shippingTaxMinor part of taxMinor charged on shipping (payments keeps it apart)
+     */
     record Line(String lineId, String sellerOrg, String category, String fulfilment, int quantity, long itemsMinor,
-                long shippingMinor, long taxMinor, String taxJurisdiction) {
+                long shippingMinor, long taxMinor, String taxJurisdiction, long shippingTaxMinor) {
+
+        public Line(String lineId, String sellerOrg, String category, String fulfilment, int quantity,
+                    long itemsMinor, long shippingMinor, long taxMinor, String taxJurisdiction) {
+            this(lineId, sellerOrg, category, fulfilment, quantity, itemsMinor, shippingMinor, taxMinor,
+                    taxJurisdiction, 0);
+        }
     }
 
     /** Payment as returned by payments (status AUTHORIZED once the shopper confirmed). */

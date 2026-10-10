@@ -8,6 +8,7 @@ import com.afrotransact.payments.adapter.in.web.PaymentsDtos.CaptureRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.CaptureResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.CreatePaymentRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.OffSessionChargeRequest;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.OrderRefundRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PaymentResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.RefundRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.RefundResponse;
@@ -17,6 +18,8 @@ import com.afrotransact.payments.application.CaptureResult;
 import com.afrotransact.payments.application.CreatePaymentCommand;
 import com.afrotransact.payments.application.OffSessionChargeService;
 import com.afrotransact.payments.application.OffSessionCommand;
+import com.afrotransact.payments.application.OrderRefundCommand;
+import com.afrotransact.payments.application.OrderRefundService;
 import com.afrotransact.payments.application.PaymentResult;
 import com.afrotransact.payments.application.PaymentService;
 import com.afrotransact.payments.application.RefundCommand;
@@ -48,10 +51,12 @@ class PaymentController {
 
     private final PaymentService payments;
     private final OffSessionChargeService offSession;
+    private final OrderRefundService orderRefunds;
 
-    PaymentController(PaymentService payments, OffSessionChargeService offSession) {
+    PaymentController(PaymentService payments, OffSessionChargeService offSession, OrderRefundService orderRefunds) {
         this.payments = payments;
         this.offSession = offSession;
+        this.orderRefunds = orderRefunds;
     }
 
     @Operation(summary = "Create the order's PaymentIntent (manual capture) and return its client secret",
@@ -169,6 +174,21 @@ class PaymentController {
                 .map(l -> new RefundCommand.Line(l.lineId(), money(l.itemsMinor(), currency),
                         money(l.shippingMinor(), currency), money(l.taxMinor(), currency))).toList(),
                 body.reason()), idempotencyKey);
+        return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
+                .body(RefundResponse.of(result.refund(), result.reversals(), result.replayed()));
+    }
+
+    @Operation(summary = "Refund by order and line ids (payments:service; e.g. trust-ops claims)",
+            description = "Finds the order's payment and spreads amountMinor (default: everything still refundable) "
+                    + "over the lines' remaining items, shipping and tax with the largest-remainder method, then "
+                    + "refunds like POST /v1/payments/{id}/refunds. Idempotent per Idempotency-Key.")
+    @PostMapping("/v1/orders/{orderId}/refunds")
+    ResponseEntity<RefundResponse> refundByOrder(
+            @PathVariable String orderId,
+            @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
+            @Valid @RequestBody OrderRefundRequest body) {
+        RefundResult result = orderRefunds.refundByOrder(new OrderRefundCommand(orderId, body.lineIds(),
+                body.amountMinor(), body.reason()), idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(RefundResponse.of(result.refund(), result.reversals(), result.replayed()));
     }

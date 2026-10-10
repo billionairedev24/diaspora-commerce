@@ -20,8 +20,9 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
 
     public TaxReturnsProperties {
         tax = tax == null ? new Tax(null, null) : tax;
-        returns = returns == null ? new Returns(0, null, null, 0, 0, null, 0, 0, 0, null, null) : returns;
-        upstreams = upstreams == null ? new Upstreams(null, null, null, null, null, null, null, null) : upstreams;
+        returns = returns == null ? new Returns(0, null, null, 0, 0, null, 0, 0, 0, null, null, null) : returns;
+        upstreams = upstreams == null ? new Upstreams(null, null, null, null, null, null, null, null, null, null)
+                : upstreams;
         consumers = consumers == null ? new Consumers(null, null, null) : consumers;
         jobs = jobs == null ? new Jobs(null, null, 0) : jobs;
     }
@@ -50,7 +51,8 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
     public record Returns(int defaultWindowDays, Map<String, Integer> windowDaysByProductType,
                           List<String> nonReturnableProductTypes, long lowValueThresholdMinor,
                           long firstScanRefundMaxMinor, Duration sellerApprovalSla, int dropOffDays,
-                          int maxRestockingFeeBps, int maxEvidence, Address returnCentre, Label label) {
+                          int maxRestockingFeeBps, int maxEvidence, Address returnCentre, Label label,
+                          Integer pickupReadyDays) {
 
         public Returns {
             defaultWindowDays = defaultWindowDays <= 0 ? 30 : defaultWindowDays;
@@ -61,24 +63,41 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
             dropOffDays = dropOffDays <= 0 ? 14 : dropOffDays;
             maxRestockingFeeBps = maxRestockingFeeBps <= 0 ? 2000 : maxRestockingFeeBps;
             maxEvidence = maxEvidence <= 0 ? 6 : maxEvidence;
-            returnCentre = returnCentre == null ? new Address(null, null, null, null, null, null, null, null, null)
+            returnCentre = returnCentre == null ? new Address(null, null, null, null, null, null, null, null, null, null)
                     : returnCentre;
-            label = label == null ? new Label(null, null, 0) : label;
+            label = label == null ? new Label(null, null, 0, null, null, null) : label;
+            pickupReadyDays = pickupReadyDays == null ? 1 : Math.max(0, pickupReadyDays);
         }
     }
 
-    /** AfroTransact return centre (destination of AfroTransact-fulfilled returns) and its carrier-gateway node. */
+    /**
+     * AfroTransact return centre (destination of AfroTransact-fulfilled returns): its carrier-gateway origin node and
+     * the inventory node (warehouse) that receives the parcels ({@code inventoryNode}, sent as receivingNodeId).
+     */
     public record Address(String node, String name, String line1, String line2, String city, String state,
-                          String postalCode, String country, String phone) {
+                          String postalCode, String country, String phone, String inventoryNode) {
     }
 
-    /** Carrier service used for return labels. */
-    public record Label(String carrier, String service, double weightLb) {
+    /**
+     * Return labels from carrier-gateway {@code POST /v1/return-labels}.
+     *
+     * @param carrier    carrier for rateChoice SERVICE
+     * @param service    service for rateChoice SERVICE
+     * @param rateChoice CHEAPEST (default), FASTEST or SERVICE (carrier + service above)
+     * @param carriers   carriers rate shopping may use (empty = all enabled)
+     * @param boxFree    OFF (printed label, default) or PREFERRED (label-free QR drop-off where a carrier offers it,
+     *                   else a printed label)
+     */
+    public record Label(String carrier, String service, double weightLb, String rateChoice, List<String> carriers,
+                        String boxFree) {
 
         public Label {
             carrier = carrier == null || carrier.isBlank() ? "ups" : carrier;
             service = service == null || service.isBlank() ? "03" : service;
             weightLb = weightLb <= 0 ? 2.0 : weightLb;
+            rateChoice = rateChoice == null || rateChoice.isBlank() ? "CHEAPEST" : rateChoice.trim();
+            carriers = carriers == null ? List.of() : List.copyOf(carriers);
+            boxFree = boxFree == null || boxFree.isBlank() ? "OFF" : boxFree.trim();
         }
     }
 
@@ -87,9 +106,12 @@ public record TaxReturnsProperties(Tax tax, Returns returns, Upstreams upstreams
      * @param clientId      client-credentials client ({@code tax-returns-service})
      * @param clientSecret  only from the environment; blank disables tokens (local profile)
      * @param timeout       connect + read timeout per call
+     * @param ordersUrl     orders-service (order lookup, {@code orders:lookup})
+     * @param fulfilmentUrl fulfilment-service (return pickups, {@code delivery:returns})
      */
     public record Upstreams(String tokenUri, String clientId, String clientSecret, Duration timeout,
-                            String paymentsUrl, String inventoryUrl, String carrierUrl, String catalogUrl) {
+                            String paymentsUrl, String inventoryUrl, String carrierUrl, String catalogUrl,
+                            String ordersUrl, String fulfilmentUrl) {
 
         public Upstreams {
             clientId = clientId == null || clientId.isBlank() ? "tax-returns-service" : clientId;

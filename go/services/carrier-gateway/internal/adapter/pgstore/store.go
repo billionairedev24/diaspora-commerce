@@ -75,14 +75,15 @@ func inTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx pgx.Tx) error) err
 
 const labelColumns = `l.id::text, l.idempotency_key, l.request_hash, l.reference, l.origin_node, l.carrier, l.service,
 	coalesce(l.tracking_number, ''), coalesce(l.carrier_shipment_id, ''), l.cost_minor, l.currency, l.label_format,
-	coalesce(l.label_key, ''), l.status, coalesce(t.state, ''), l.created_at, l.voided_at`
+	coalesce(l.label_key, ''), l.status, coalesce(t.state, ''), l.created_at, l.voided_at, l.kind, l.rate_choice,
+	l.box_free, l.qr_payload, l.drop_off_network`
 
 func scanLabel(row pgx.Row) (domain.LabelRecord, error) {
 	var r domain.LabelRecord
-	var carrier, service, format, status, state string
+	var carrier, service, format, status, state, kind, choice string
 	err := row.Scan(&r.ID, &r.IdempotencyKey, &r.RequestHash, &r.Reference, &r.OriginNode, &carrier, &service,
 		&r.TrackingNumber, &r.CarrierShipmentID, &r.CostMinor, &r.Currency, &format, &r.LabelKey, &status, &state,
-		&r.CreatedAt, &r.VoidedAt)
+		&r.CreatedAt, &r.VoidedAt, &kind, &choice, &r.BoxFree, &r.QRPayload, &r.DropOffNetwork)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.LabelRecord{}, domain.ErrNotFound
 	}
@@ -91,15 +92,17 @@ func scanLabel(row pgx.Row) (domain.LabelRecord, error) {
 	}
 	r.Carrier, r.Service, r.Format = domain.CarrierCode(carrier), domain.ServiceCode(service), domain.LabelFormat(format)
 	r.Status, r.TrackingState = domain.LabelStatus(status), domain.ShipmentState(state)
+	r.Kind, r.RateChoice = domain.LabelKind(kind), domain.RateChoice(choice)
 	return r, nil
 }
 
 func (s *storeImpl) Reserve(ctx context.Context, rec domain.LabelRecord) (domain.LabelRecord, bool, error) {
 	tag, err := s.pool.Exec(ctx, `insert into shipment_label
-		(id, idempotency_key, request_hash, reference, origin_node, carrier, service, status, created_at)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9) on conflict (idempotency_key) do nothing`,
+		(id, idempotency_key, request_hash, reference, origin_node, carrier, service, status, created_at, kind,
+		rate_choice, box_free)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) on conflict (idempotency_key) do nothing`,
 		rec.ID, rec.IdempotencyKey, rec.RequestHash, rec.Reference, rec.OriginNode, string(rec.Carrier), string(rec.Service),
-		string(domain.LabelPurchasing), rec.CreatedAt)
+		string(domain.LabelPurchasing), rec.CreatedAt, string(kindOrOutbound(rec.Kind)), string(rec.RateChoice), rec.BoxFree)
 	if err != nil {
 		return domain.LabelRecord{}, false, fmt.Errorf("reserve label: %w", err)
 	}
@@ -117,9 +120,11 @@ func (s *storeImpl) Reserve(ctx context.Context, rec domain.LabelRecord) (domain
 func (s *storeImpl) Complete(ctx context.Context, rec domain.LabelRecord) error {
 	return inTx(ctx, s.pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `update shipment_label set tracking_number = $2, carrier_shipment_id = $3, cost_minor = $4,
-			currency = $5, label_format = $6, label_key = $7, status = 'purchased', updated_at = now()
+			currency = $5, label_format = $6, label_key = $7, status = 'purchased', qr_payload = $8,
+			drop_off_network = $9, updated_at = now()
 			where id = $1 and status = 'purchasing'`,
-			rec.ID, rec.TrackingNumber, rec.CarrierShipmentID, rec.CostMinor, rec.Currency, string(rec.Format), rec.LabelKey)
+			rec.ID, rec.TrackingNumber, rec.CarrierShipmentID, rec.CostMinor, rec.Currency, string(rec.Format), rec.LabelKey,
+			rec.QRPayload, rec.DropOffNetwork)
 		if err != nil {
 			return fmt.Errorf("complete label: %w", err)
 		}
@@ -136,6 +141,13 @@ func (s *storeImpl) Complete(ctx context.Context, rec domain.LabelRecord) error 
 		}
 		return nil
 	})
+}
+
+func kindOrOutbound(k domain.LabelKind) domain.LabelKind {
+	if k == "" {
+		return domain.KindOutbound
+	}
+	return k
 }
 
 func (s *storeImpl) Release(ctx context.Context, id string) error {

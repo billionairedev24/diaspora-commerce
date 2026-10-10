@@ -38,7 +38,7 @@ final class Orders {
                 new OrderPlaced.Shipment(s2, "org_b", "Bamako Home", "SELLER_FULFILLED", "AFROTRANSACT_DELIVERY",
                         3_200 + 264, List.of(
                         new OrderPlaced.Line(pillow, "ATPILLOW01", "Bogolan mudcloth pillow cover", 1, 3_200,
-                                264)))));
+                                264)))), "Adaeze Nwosu", "12 Bayou Ln", null, null);
     }
 
     PaymentsGateway.ChargedPayment payment() {

@@ -18,6 +18,10 @@ public final class InventoryEvents {
     public static final String RESERVATION_HELD = "inventory.reservation.held";
     public static final String RESERVATION_COMMITTED = "inventory.reservation.committed";
     public static final String RESERVATION_RELEASED = "inventory.reservation.released";
+    /** Some groups (one shipment's lines) shipped; the reservation may still hold other groups. */
+    public static final String RESERVATION_GROUP_COMMITTED = "inventory.reservation.group_committed";
+    /** Some groups (one cancelled shipment's lines) were given back; other groups stay held. */
+    public static final String RESERVATION_GROUP_RELEASED = "inventory.reservation.group_released";
     public static final String RECONCILIATION_DRIFT = "inventory.reconciliation.drift_detected";
 
     private InventoryEvents() {

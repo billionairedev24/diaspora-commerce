@@ -110,6 +110,8 @@ at:
       max-evidence: 6
       return-centre:
         node: ${RETURN_CENTRE_NODE:}
+        # Inventory / fulfilment node receiving AfroTransact-fulfilled returns (inventory receivingNodeId).
+        inventory-node: ${RETURN_CENTRE_INVENTORY_NODE:}
         name: ${RETURN_CENTRE_NAME:AfroTransact Returns}
         line1: ${RETURN_CENTRE_LINE1:}
         line2: ${RETURN_CENTRE_LINE2:}
@@ -119,9 +121,15 @@ at:
         country: ${RETURN_CENTRE_COUNTRY:US}
         phone: ${RETURN_CENTRE_PHONE:}
       label:
+        # carrier-gateway POST /v1/return-labels: CHEAPEST | FASTEST rate-shop; SERVICE buys carrier + service.
+        rate-choice: ${RETURN_LABEL_RATE_CHOICE:CHEAPEST}
         carrier: ${RETURN_LABEL_CARRIER:ups}
         service: ${RETURN_LABEL_SERVICE:03}
         weight-lb: ${RETURN_LABEL_WEIGHT_LB:2.0}
+        # OFF = printed label; PREFERRED = label-free QR drop-off where a carrier integration offers it, else a label.
+        box-free: ${RETURN_LABEL_BOX_FREE:OFF}
+      # Driver pickups are scheduled with fulfilment-service from this many days after approval.
+      pickup-ready-days: ${RETURN_PICKUP_READY_DAYS:1}
     upstreams:
       token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
       client-id: ${TAX_RETURNS_CLIENT_ID:tax-returns-service}
@@ -132,6 +140,8 @@ at:
       inventory-url: ${INVENTORY_URL:http://localhost:8103}
       carrier-url: ${CARRIER_GATEWAY_URL:http://localhost:8209}
       catalog-url: ${CATALOG_URL:http://localhost:8101}
+      orders-url: ${ORDERS_URL:http://localhost:8104}
+      fulfilment-url: ${FULFILMENT_URL:http://localhost:8108}
     consumers:
       order-topic: at.order.events
       payment-topic: at.payment.events

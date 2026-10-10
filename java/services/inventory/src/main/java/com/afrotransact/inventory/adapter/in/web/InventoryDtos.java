@@ -148,11 +148,14 @@ final class InventoryDtos {
                        @PositiveOrZero long unitLandedCostMinor,
                        @NotBlank @Size(min = 3, max = 3) String currency,
                        @Schema(description = "Shelf life from manufacture in days (short-dated rule)")
-                       @Positive Integer shelfLifeDays) {
+                       @Positive Integer shelfLifeDays,
+                       @Schema(description = "Receive the good units straight into QUARANTINE with this reason "
+                               + "(e.g. QC hold at the dock); omit for sellable stock")
+                       @Size(max = 500) String holdReason) {
 
         ReceiveCommand.Line toDomain() {
             return new ReceiveCommand.Line(sku, lotNo, mfgDate, expDate, qtyGood, qtyDamaged, bin, unitLandedCostMinor,
-                    currency, shelfLifeDays);
+                    currency, shelfLifeDays, holdReason);
         }
     }
 
@@ -179,7 +182,7 @@ final class InventoryDtos {
 
         ReserveCommand toCommand(String idempotencyKey) {
             return new ReserveCommand(orderId, idempotencyKey,
-                    lines.stream().map(l -> new ReserveCommand.Line(l.sku(), l.nodeId(), l.qty())).toList());
+                    lines.stream().map(l -> new ReserveCommand.Line(l.sku(), l.nodeId(), l.qty(), l.group())).toList());
         }
     }
 
@@ -187,11 +190,20 @@ final class InventoryDtos {
     record ReserveLine(@NotBlank @Size(max = 64) String sku,
                        @Schema(description = "Node chosen by the promise service; omit to let inventory choose")
                        String nodeId,
-                       @Min(1) @Max(10_000) int qty) {
+                       @Min(1) @Max(10_000) int qty,
+                       @Schema(description = "Caller's grouping key (orders: the order line id); groups can be "
+                               + "committed or released on their own (one shipment at a time)")
+                       @Size(max = 80) String group) {
     }
 
     @Schema(name = "ReleaseRequest")
     record ReleaseRequest(@Size(max = 500) String reason) {
+    }
+
+    @Schema(name = "ReservationGroupsRequest", description = "The groups (orders: line ids of one shipment) to "
+            + "commit or release")
+    record GroupsRequest(@NotEmpty @Size(max = 100) List<@NotBlank @Size(max = 80) String> groups,
+                         @Size(max = 500) String reason) {
     }
 
     @Schema(name = "LotAllocation")
@@ -206,11 +218,14 @@ final class InventoryDtos {
 
     @Schema(name = "ReservationLine")
     record ReservationLineResponse(int lineNo, String sku, String nodeId, int qty,
-                                   List<AllocationResponse> allocations) {
+                                   List<AllocationResponse> allocations, String group,
+                                   @Schema(description = "HELD, COMMITTED or RELEASED") String status,
+                                   String stockOwnerOrgId) {
 
         static ReservationLineResponse of(ReservationLine l) {
             return new ReservationLineResponse(l.lineNo(), l.sku(), l.nodeId(), l.qty(),
-                    l.allocations().stream().map(AllocationResponse::of).toList());
+                    l.allocations().stream().map(AllocationResponse::of).toList(), l.group(), l.status().name(),
+                    l.stockOwnerOrgId());
         }
     }
 
@@ -238,7 +253,9 @@ final class InventoryDtos {
 
     @Schema(name = "ReturnRequest", description = "A returned item after inspection")
     record ReturnRequest(@NotBlank String orderId, @NotBlank String sku, UUID lotId, @Positive int qty,
-                         @NotNull ReturnCondition condition, @NotBlank @Size(max = 500) String reason) {
+                         @NotNull ReturnCondition condition, @NotBlank @Size(max = 500) String reason,
+                         @Schema(description = "Warehouse that received the parcel (e.g. the return centre); default "
+                                 + "= the node the unit shipped from") @Size(max = 20) String receivingNodeId) {
     }
 
     @Schema(name = "ReturnResult")

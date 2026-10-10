@@ -3,6 +3,7 @@ package com.afrotransact.orders.application;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.function.Function;
 
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
@@ -16,49 +17,70 @@ public final class OrdersEventPayloads {
     private OrdersEventPayloads() {
     }
 
-    /** orders.order.placed — notifications (order confirmation), indexer stats, tax-returns. */
+    /**
+     * orders.order.placed — notifications (order confirmation), indexer stats, tax-returns (returns, tax ledger),
+     * fulfilment (dispatch), trust-ops (seller health). The ship-to street lines and name let return labels be bought
+     * without asking the customer for an address.
+     */
     public record OrderPlaced(String orderId, String orderNumber, String customerId, String currency,
                               long itemsMinor, long shippingMinor, long taxMinor, long discountMinor,
                               long totalMinor, Instant placedAt, String shipToCity, String shipToState,
-                              String shipToPostalCode, String shipToCountry, List<ShipmentSummary> shipments) {
+                              String shipToPostalCode, String shipToCountry, List<ShipmentSummary> shipments,
+                              String shipToName, String shipToLine1, String shipToLine2, String paymentId) {
 
-        static OrderPlaced of(Order o) {
+        static OrderPlaced of(Order o, Function<Shipment, LocalDate> shipBy) {
+            ShipTo to = o.shipTo();
             return new OrderPlaced(o.id(), o.number(), o.customerId(), o.currency(), o.totals().itemsMinor(),
                     o.totals().shippingMinor(), o.totals().taxMinor(), o.totals().discountMinor(),
-                    o.totals().grandTotalMinor(), o.placedAt(), o.shipTo() == null ? null : o.shipTo().city(),
-                    o.shipTo() == null ? null : o.shipTo().state(), o.shipTo() == null ? null : o.shipTo().postalCode(),
-                    o.shipTo() == null ? null : o.shipTo().country(),
-                    o.shipments().stream().map(s -> ShipmentSummary.of(s, o.shipTo())).toList());
+                    o.totals().grandTotalMinor(), o.placedAt(), to == null ? null : to.city(),
+                    to == null ? null : to.state(), to == null ? null : to.postalCode(),
+                    to == null ? null : to.country(),
+                    o.shipments().stream().map(s -> ShipmentSummary.of(s, to, shipBy.apply(s))).toList(),
+                    to == null ? null : to.fullName(), to == null ? null : to.line1(), to == null ? null : to.line2(),
+                    o.paymentId());
         }
     }
 
     /**
      * One shipment of a placed order. {@code nodeId} is the fulfilment node of AfroTransact-fulfilled shipments;
      * the ship-to street line and position let fulfilment route AfroTransact Delivery stops (lat/lng null when
-     * the address has no known position).
+     * the address has no known position). {@code shippingMinor} is the shipment's shipping (charged on its first
+     * line); {@code shipBy} the date it must be handed over by (seller health lateness).
      */
     public record ShipmentSummary(String shipmentId, String sellerOrgId, String sellerName, String fulfilmentType,
                                   String deliveryMethod, String serviceLevel, LocalDate promisedBy,
                                   boolean handoverRequired, long totalMinor, List<LineSummary> lines, String nodeId,
                                   boolean perishable, String shipToLine1, String shipToLine2, Double lat,
-                                  Double lng) {
+                                  Double lng, long shippingMinor, LocalDate shipBy, LocalDate promisedFrom) {
 
-        static ShipmentSummary of(Shipment s, ShipTo to) {
+        static ShipmentSummary of(Shipment s, ShipTo to, LocalDate shipBy) {
             return new ShipmentSummary(s.id(), s.sellerOrgId(), s.sellerName(), s.fulfilmentType().name(),
                     s.deliveryMethod().name(), s.serviceLevel(), s.promisedBy(), s.handoverRequired(),
                     s.totalMinor(), s.lines().stream().map(LineSummary::of).toList(), s.nodeId(), s.perishable(),
                     to == null ? null : to.line1(), to == null ? null : to.line2(), to == null ? null : to.lat(),
-                    to == null ? null : to.lng());
+                    to == null ? null : to.lng(), s.shippingMinor(), shipBy, s.promisedFrom());
         }
     }
 
-    /** One line. */
+    /**
+     * One line.
+     *
+     * @param productType          catalog product type (tax category, return window, perishables)
+     * @param category             payments commission category
+     * @param discountMinor        coupon discount allocated to the line
+     * @param taxJurisdiction      state jurisdiction of the tax (US-TX)
+     * @param localTaxJurisdiction local jurisdiction from the tax quote (US-TX-770), null when none
+     * @param shippingTaxMinor     part of taxMinor charged on the shipment's shipping
+     */
     public record LineSummary(String lineId, String variantAtin, String title, int quantity, long unitPriceMinor,
-                              long taxMinor) {
+                              long taxMinor, String productAtin, String productType, String category,
+                              boolean perishable, long discountMinor, String taxJurisdiction,
+                              String localTaxJurisdiction, long shippingTaxMinor, int lineNo) {
 
         static LineSummary of(OrderLine l) {
             return new LineSummary(l.id(), l.variantAtin(), l.title(), l.quantity(), l.unitPriceMinor(),
-                    l.taxMinor());
+                    l.taxMinor(), l.productAtin(), l.productType(), l.category(), l.perishable(), l.discountMinor(),
+                    l.taxJurisdiction(), l.localTaxJurisdiction(), l.shippingTaxMinor(), l.lineNo());
         }
     }
 

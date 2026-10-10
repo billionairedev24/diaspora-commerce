@@ -39,6 +39,18 @@ class InventoryAccess {
         return actor;
     }
 
+    /**
+     * Returns after inspection: staff with {@code inventory:adjust}, or a SERVICE principal (tax-returns-service)
+     * with {@code inventory:returns}, which lets the returns service post stock without a staff-wide key.
+     */
+    Actor returner() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(InventoryPermissions.RETURNS)) {
+            return actor;
+        }
+        return permissions.require(InventoryPermissions.ADJUST);
+    }
+
     /** Readers of reservations: the orders service, or staff with {@code inventory:read}. */
     Actor reservationReader() {
         Actor actor = actors.current();

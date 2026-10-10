@@ -24,14 +24,16 @@ class ReturnController {
         this.returns = returns;
     }
 
-    @Operation(summary = "Restock a returned unit or move it to the lot's -DMG lot",
+    @Operation(summary = "Restock a returned unit or move it to the lot's -DMG lot (inventory:adjust, or a SERVICE "
+            + "with inventory:returns)",
             description = "RETURN_RESTOCK puts units back into their sellable lot; RETURN_DAMAGED holds them in "
-                    + "<lot>-DMG. Never more than the order shipped.")
+                    + "<lot>-DMG. Never more than the order shipped. With receivingNodeId the units go into the "
+                    + "same lot number at that node (e.g. the return centre).")
     @PostMapping("/v1/returns")
     ReturnResponse accept(
             @RequestHeader(ReservationController.IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
             @Valid @RequestBody ReturnRequest body) {
         return ReturnResponse.of(returns.accept(new ReturnCommand(body.orderId(), body.sku(), body.lotId(), body.qty(),
-                body.condition(), body.reason()), idempotencyKey));
+                body.condition(), body.reason(), body.receivingNodeId()), idempotencyKey));
     }
 }

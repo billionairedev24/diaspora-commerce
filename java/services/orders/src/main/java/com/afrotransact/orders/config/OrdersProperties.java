@@ -2,6 +2,7 @@ package com.afrotransact.orders.config;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -16,13 +17,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param perishableTypes         catalog product types treated as perishable
  * @param commissionCategories    catalog product type → payments commission category
  * @param shipping                fees and fallback delivery estimates
- * @param tax                     interim per-state rates (basis points)
+ * @param tax                     tax provider (tax-returns quote) and the interim per-state fallback rates
  * @param jobs                    follow-up job settings
+ * @param returns                 return windows shown on order views (tax-returns decides eligibility)
+ * @param shipBy                  handling time before a shipment must be handed over
  */
 @ConfigurationProperties(prefix = "at.orders")
 public record OrdersProperties(String retailOrgId, Duration paymentTimeout,
                                Duration checkoutResponseTimeout, String zone, List<String> perishableTypes,
-                               Map<String, String> commissionCategories, Shipping shipping, Tax tax, Jobs jobs) {
+                               Map<String, String> commissionCategories, Shipping shipping, Tax tax, Jobs jobs,
+                               Returns returns, ShipBy shipBy) {
 
     public OrdersProperties {
         retailOrgId = retailOrgId == null ? "org_afrotransact_retail" : retailOrgId;
@@ -32,8 +36,10 @@ public record OrdersProperties(String retailOrgId, Duration paymentTimeout,
         perishableTypes = perishableTypes == null ? List.of("perishable") : List.copyOf(perishableTypes);
         commissionCategories = commissionCategories == null ? Map.of() : Map.copyOf(commissionCategories);
         shipping = shipping == null ? new Shipping(null, null, null, null, null, null, null, null, null) : shipping;
-        tax = tax == null ? new Tax(null, null) : tax;
+        tax = tax == null ? new Tax(null, null, null, null) : tax;
         jobs = jobs == null ? new Jobs(null, null, null) : jobs;
+        returns = returns == null ? new Returns(null, null, null) : returns;
+        shipBy = shipBy == null ? new ShipBy(null, null) : shipBy;
     }
 
     /** Shipping fees (minor units) and fallback estimates (business days). */
@@ -54,12 +60,48 @@ public record OrdersProperties(String retailOrgId, Duration paymentTimeout,
         }
     }
 
-    /** Combined sales-tax rate per US state in basis points (825 = 8.25 %). */
-    public record Tax(Map<String, Integer> rates, Integer defaultBps) {
+    /**
+     * Checkout tax.
+     *
+     * @param rates           fallback: combined sales-tax rate per US state in basis points (825 = 8.25 %)
+     * @param defaultBps      fallback rate for states not listed
+     * @param provider        TAX_RETURNS (quote from tax-returns-service, default) or TABLE (rates only)
+     * @param fallbackToTable tax with the rates (and log a warning) when tax-returns is unavailable (default true)
+     */
+    public record Tax(Map<String, Integer> rates, Integer defaultBps, String provider, Boolean fallbackToTable) {
 
         public Tax {
             rates = rates == null ? Map.of() : Map.copyOf(rates);
             defaultBps = defaultBps == null ? 0 : defaultBps;
+            provider = provider == null || provider.isBlank() ? "TAX_RETURNS" : provider.trim().toUpperCase(Locale.ROOT);
+            fallbackToTable = fallbackToTable == null ? Boolean.TRUE : fallbackToTable;
+        }
+    }
+
+    /**
+     * Return windows for the order views' "Return or replace items" links.
+     *
+     * @param windowDays                default window after delivery
+     * @param windowDaysByProductType   catalog product type → window
+     * @param nonReturnableProductTypes product types that can only be reported as a problem
+     */
+    public record Returns(Integer windowDays, Map<String, Integer> windowDaysByProductType,
+                          List<String> nonReturnableProductTypes) {
+
+        public Returns {
+            windowDays = windowDays == null ? 30 : windowDays;
+            windowDaysByProductType = windowDaysByProductType == null ? Map.of() : Map.copyOf(windowDaysByProductType);
+            nonReturnableProductTypes = nonReturnableProductTypes == null ? List.of("perishable")
+                    : List.copyOf(nonReturnableProductTypes);
+        }
+    }
+
+    /** Handling time in business days after the order day before the shipment must be handed over. */
+    public record ShipBy(Integer afrotransactDays, Integer sellerDays) {
+
+        public ShipBy {
+            afrotransactDays = afrotransactDays == null ? 1 : afrotransactDays;
+            sellerDays = sellerDays == null ? 2 : sellerDays;
         }
     }
 

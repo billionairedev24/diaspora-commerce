@@ -12,6 +12,7 @@ import com.afrotransact.payments.domain.Settlement;
 import com.afrotransact.payments.domain.SettlementKind;
 import com.afrotransact.payments.domain.SettlementStatus;
 import com.afrotransact.payments.domain.SettlementTransfer;
+import com.afrotransact.payments.domain.ShipmentSettlement;
 import com.afrotransact.payments.port.SettlementRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -74,6 +75,59 @@ class JdbcSettlementRepository implements SettlementRepository {
                 update settlement set status = 'OPEN', next_check_at = release_at, updated_at = :now
                 where order_id = :o and status = 'SETTLED'
                 """).param("now", Sql.ts(now)).param("o", orderId).update();
+    }
+
+    @Override
+    public boolean insertShipment(ShipmentSettlement s) {
+        return jdbc.sql("""
+                insert into shipment_settlement (order_id, shipment_id, kind, delivered_at, release_at, status,
+                    next_check_at, updated_at)
+                values (:orderId, :shipmentId, :kind, :deliveredAt, :releaseAt, :status, :releaseAt, :updatedAt)
+                on conflict (order_id, shipment_id) do nothing
+                """)
+                .param("orderId", s.orderId()).param("shipmentId", s.shipmentId()).param("kind", s.kind().name())
+                .param("deliveredAt", Sql.ts(s.deliveredAt())).param("releaseAt", Sql.ts(s.releaseAt()))
+                .param("status", s.status().name()).param("updatedAt", Sql.ts(s.updatedAt()))
+                .update() == 1;
+    }
+
+    @Override
+    public Optional<ShipmentSettlement> findShipment(String orderId, String shipmentId) {
+        return jdbc.sql("select * from shipment_settlement where order_id = :o and shipment_id = :s")
+                .param("o", orderId).param("s", shipmentId)
+                .query(JdbcSettlementRepository::shipmentSettlement).optional();
+    }
+
+    @Override
+    public List<ShipmentSettlement> shipments(String orderId) {
+        return jdbc.sql("select * from shipment_settlement where order_id = :o order by delivered_at, shipment_id")
+                .param("o", orderId).query(JdbcSettlementRepository::shipmentSettlement).list();
+    }
+
+    @Override
+    public Optional<ShipmentSettlement> lockNextMaturedShipment(Instant now) {
+        return jdbc.sql("""
+                select * from shipment_settlement
+                where status = 'OPEN' and release_at <= :now and next_check_at <= :now
+                order by next_check_at, order_id, shipment_id
+                limit 1
+                for update skip locked
+                """)
+                .param("now", Sql.ts(now)).query(JdbcSettlementRepository::shipmentSettlement).optional();
+    }
+
+    @Override
+    public void markShipmentChecked(String orderId, String shipmentId, boolean settled, Instant nextCheckAt,
+                                    Instant now) {
+        jdbc.sql("""
+                update shipment_settlement set status = :status, next_check_at = coalesce(:next, next_check_at),
+                    updated_at = :now
+                where order_id = :o and shipment_id = :s
+                """)
+                .param("status", settled ? SettlementStatus.SETTLED.name() : SettlementStatus.OPEN.name())
+                .param("next", Sql.ts(nextCheckAt)).param("now", Sql.ts(now)).param("o", orderId)
+                .param("s", shipmentId)
+                .update();
     }
 
     @Override
@@ -145,6 +199,13 @@ class JdbcSettlementRepository implements SettlementRepository {
         return new Settlement(rs.getString("order_id"), SettlementKind.valueOf(rs.getString("kind")),
                 Sql.instant(rs, "delivered_at"), Sql.instant(rs, "release_at"),
                 SettlementStatus.valueOf(rs.getString("status")), Sql.instant(rs, "updated_at"));
+    }
+
+    private static ShipmentSettlement shipmentSettlement(ResultSet rs, int n) throws SQLException {
+        return new ShipmentSettlement(rs.getString("order_id"), rs.getString("shipment_id"),
+                SettlementKind.valueOf(rs.getString("kind")), Sql.instant(rs, "delivered_at"),
+                Sql.instant(rs, "release_at"), SettlementStatus.valueOf(rs.getString("status")),
+                Sql.instant(rs, "updated_at"));
     }
 
     private static SettlementTransfer transfer(ResultSet rs, int n) throws SQLException {

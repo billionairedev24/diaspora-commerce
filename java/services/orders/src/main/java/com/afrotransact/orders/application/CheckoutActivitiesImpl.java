@@ -52,6 +52,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final ProductFactsClient catalog;
     private final PromiseClient promises;
     private final TaxCalculator tax;
+    private final CheckoutTax checkoutTax;
     private final ShippingPolicy shipping;
     private final HandoverPolicy handover;
     private final HandoverCodeVault vault;
@@ -66,14 +67,16 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final Clock clock;
 
     CheckoutActivitiesImpl(MarketEligibility markets, ProductFactsClient catalog, PromiseClient promises,
-                           TaxCalculator tax, ShippingPolicy shipping, HandoverPolicy handover, HandoverCodeVault vault,
-                           InventoryClient inventory, PaymentsClient payments, CartClient cart,
-                           CouponsClient coupons, OrderCouponRepository orderCoupons, OrderRepository orderRepository,
+                           TaxCalculator tax, CheckoutTax checkoutTax, ShippingPolicy shipping,
+                           HandoverPolicy handover, HandoverCodeVault vault, InventoryClient inventory,
+                           PaymentsClient payments, CartClient cart, CouponsClient coupons,
+                           OrderCouponRepository orderCoupons, OrderRepository orderRepository,
                            OrderPlacementService placement, OrdersSettings settings, Clock clock) {
         this.markets = markets;
         this.catalog = catalog;
         this.promises = promises;
         this.tax = tax;
+        this.checkoutTax = checkoutTax;
         this.shipping = shipping;
         this.handover = handover;
         this.vault = vault;
@@ -164,7 +167,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                         i.productAtin(), i.title(), i.imageUrl(), i.quantity(), i.priceMinor(),
                         rate.taxOf(itemsMinor), f.map(ProductFactsClient.Facts::category).orElse(null),
                         f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
-                        i.offerId(), 0));
+                        i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0));
             }
             packages.add(new CheckoutPlan.Package(e.getKey(), first.sellerOrgId(), first.sellerName(),
                     fulfilmentType(first), method, level, method == DeliveryMethod.PICKUP ? pickup.trim() : null,
@@ -181,18 +184,26 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     }
 
     private OrderDraft draft(CheckoutInput in, CheckoutPlan plan) {
-        Map<String, Integer> tracked = new LinkedHashMap<>();
+        List<InventoryClient.Item> tracked = new ArrayList<>();
         for (CheckoutPlan.Package p : plan.packages()) {
             if (p.fulfilmentType().inventoryTracked()) {
-                p.lines().forEach(l -> tracked.merge(l.variantAtin(), l.quantity(), Integer::sum));
+                p.lines().forEach(l -> tracked.add(new InventoryClient.Item(l.variantAtin(), l.quantity(),
+                        l.lineId())));
             }
         }
         Map<String, String> nodeBySku = new LinkedHashMap<>();
+        Map<String, String> nodeByLine = new LinkedHashMap<>();
         boolean reserved = false;
         if (!tracked.isEmpty()) {
-            List<InventoryClient.Reserved> held = inventory.reserve(in.orderId(), tracked.entrySet().stream()
-                    .map(e -> new InventoryClient.Item(e.getKey(), e.getValue())).toList());
-            held.forEach(r -> nodeBySku.putIfAbsent(r.sku().toUpperCase(Locale.ROOT), r.nodeId()));
+            // One reservation line per order line, grouped by the line id: a shipment's lines can then be shipped
+            // or released on their own (inventory /groups/commit and /groups/release).
+            List<InventoryClient.Reserved> held = inventory.reserve(in.orderId(), tracked);
+            held.forEach(r -> {
+                nodeBySku.putIfAbsent(r.sku().toUpperCase(Locale.ROOT), r.nodeId());
+                if (r.group() != null) {
+                    nodeByLine.put(r.group(), r.nodeId());
+                }
+            });
             reserved = true;
         }
         LocalDate today = LocalDate.now(clock.withZone(ZoneId.of(settings.zone())));
@@ -201,8 +212,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         for (CheckoutPlan.Package p : plan.packages()) {
             Map<String, List<CheckoutPlan.Line>> byNode = new LinkedHashMap<>();
             for (CheckoutPlan.Line l : p.lines()) {
-                String node = p.fulfilmentType().inventoryTracked()
-                        ? nodeBySku.getOrDefault(l.variantAtin().toUpperCase(Locale.ROOT), "") : "";
+                String node = p.fulfilmentType().inventoryTracked() ? nodeByLine.getOrDefault(l.lineId(),
+                        nodeBySku.getOrDefault(l.variantAtin().toUpperCase(Locale.ROOT), "")) : "";
                 byNode.computeIfAbsent(node, k -> new ArrayList<>()).add(l);
             }
             for (Map.Entry<String, List<CheckoutPlan.Line>> group : byNode.entrySet()) {
@@ -229,8 +240,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                         BusinessDays.add(today, days + slack), lines));
             }
         }
-        return new OrderDraft(in.orderId(), in.orderNumber(), in.customerId(), in.workflowId(), plan.currency(),
-                in.shipTo(), reserved, shipments, Instant.now(clock), null);
+        return checkoutTax.tax(new OrderDraft(in.orderId(), in.orderNumber(), in.customerId(), in.workflowId(),
+                plan.currency(), in.shipTo(), reserved, shipments, Instant.now(clock), null));
     }
 
     // ------------------------------------------------------------------ coupons (offers-service)
@@ -270,7 +281,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 }
                 throw f;
             }
-            return applyCoupon(draft, in.couponCode(), r);
+            // Discounts change the taxable amounts (and shipping discounts the taxable shipping): quote again.
+            return checkoutTax.tax(applyCoupon(draft, in.couponCode(), r));
         });
     }
 

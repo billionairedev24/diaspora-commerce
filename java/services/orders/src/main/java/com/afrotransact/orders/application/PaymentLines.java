@@ -27,7 +27,7 @@ final class PaymentLines {
                 out.add(new PaymentsClient.Line(l.id(), s.sellerOrgId(), l.category(),
                         s.fulfilmentType().afrotransactFulfilled() ? "FBA" : "SELF", l.quantity(),
                         l.itemsMinor() - l.discountMinor(), i == 0 ? s.shippingMinor() : 0, l.taxMinor(),
-                        l.taxJurisdiction()));
+                        l.taxJurisdiction(), l.shippingTaxMinor()));
             }
         }
         return out;

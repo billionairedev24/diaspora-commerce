@@ -49,7 +49,8 @@ class HttpPaymentsGatewayTest {
         server.start();
         String base = "http://127.0.0.1:" + server.getAddress().getPort();
         TaxReturnsProperties props = new TaxReturnsProperties(null, null, new TaxReturnsProperties.Upstreams(
-                base + "/oauth2/token", null, "", Duration.ofSeconds(5), base, base, base, base), null, null);
+                base + "/oauth2/token", null, "", Duration.ofSeconds(5), base, base, base, base, base, base), null,
+                null);
         JsonMapper json = JsonMapper.builder().build();
         ClientCredentialsTokens tokens = new ClientCredentialsTokens(RestClient.builder(), props, Clock.systemUTC());
         payments = new HttpPaymentsGateway(RestClient.builder(), props, tokens, json);
@@ -68,7 +69,8 @@ class HttpPaymentsGatewayTest {
             respond(ex, 200, """
                     {"id":"%s","orderId":"%s","currency":"USD","lines":[
                       {"lineId":"l1","sellerOrg":"org_a","quantity":2,"itemsMinor":5000,"shippingMinor":799,
-                       "taxMinor":413,"captureId":"%s"},
+                       "taxMinor":413,"captureId":"%s","refundedItemsMinor":2500,"refundedShippingMinor":0,
+                       "refundedTaxMinor":207},
                       {"lineId":"l2","sellerOrg":"org_a","quantity":1,"itemsMinor":1000,"shippingMinor":0,
                        "taxMinor":83}]}
                     """.formatted(PAYMENT, ORDER, UUID.randomUUID()));
@@ -102,7 +104,7 @@ class HttpPaymentsGatewayTest {
         PaymentsGateway.ChargedPayment p = payments.paymentForOrder(ORDER).orElseThrow();
         assertThat(p.paymentId()).isEqualTo(PAYMENT);
         assertThat(p.lines()).containsExactly(
-                new PaymentsGateway.ChargedLine("l1", "org_a", 2, 5_000, 799, 413, true),
+                new PaymentsGateway.ChargedLine("l1", "org_a", 2, 5_000, 799, 413, true, 2_500, 0, 207),
                 new PaymentsGateway.ChargedLine("l2", "org_a", 1, 1_000, 0, 83, false));
         assertThat(payments.paymentForOrder(UUID.randomUUID())).isEmpty();
     }
@@ -120,12 +122,13 @@ class HttpPaymentsGatewayTest {
     @Test
     void mapsProblemsToUpstreamExceptions() {
         assertThatThrownBy(() -> inventory.acceptReturn(ORDER.toString(), "AT1", 1, ItemCondition.RESTOCK, "r",
-                "k")).isInstanceOfSatisfying(UpstreamException.class, ex -> {
+                "RET-FC", "k")).isInstanceOfSatisfying(UpstreamException.class, ex -> {
                     assertThat(ex.status()).isEqualTo(409);
                     assertThat(ex.code()).isEqualTo("inventory.return-exceeds-shipped");
                     assertThat(ex.retryable()).isFalse();
                 });
-        assertThat(requests.get("POST /v1/returns")).contains("\"condition\":\"RESTOCK\"", "\"qty\":1");
+        assertThat(requests.get("POST /v1/returns")).contains("\"condition\":\"RESTOCK\"", "\"qty\":1",
+                "\"receivingNodeId\":\"RET-FC\"");
         server.stop(0);
         assertThatThrownBy(() -> payments.paymentForOrder(ORDER)).isInstanceOfSatisfying(UpstreamException.class,
                 ex -> assertThat(ex.retryable()).isTrue());

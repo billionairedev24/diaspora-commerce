@@ -7,8 +7,9 @@ import java.util.Objects;
  * Counts over a rolling window of shipments placed with a seller (from orders events) and claims opened against it.
  *
  * @param shipments           shipments placed in the window
- * @param delivered           of which delivered
- * @param lateDeliveries      delivered after the promised date
+ * @param delivered           of which delivered, or handed over by the seller against a ship-by date
+ * @param lateDeliveries      handed over after the ship-by date (fulfilment / carrier pickup), or — for shipments
+ *                            without a ship-by date — delivered after the promised date
  * @param sellerCancellations cancelled by the seller (or by the system for the seller, for example unconfirmed)
  * @param claims              disputes / A-to-z claims opened against the seller in the window
  */

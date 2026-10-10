@@ -87,7 +87,7 @@ abstract class OrdersIntegrationTest {
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         for (String upstream : List.of("cart", "identity", "inventory", "payments", "promise", "content", "catalog",
-                "offers")) {
+                "offers", "tax-returns")) {
             registry.add("at.orders.upstreams." + upstream + "-url", WIREMOCK::baseUrl);
         }
         registry.add("at.orders.oauth.issuer-url", WIREMOCK::baseUrl);

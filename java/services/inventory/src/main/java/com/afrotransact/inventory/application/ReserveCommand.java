@@ -18,7 +18,13 @@ public record ReserveCommand(String orderId, String idempotencyKey, List<Line> l
      * One order line.
      *
      * @param nodeId fulfilment node chosen by the promise service; null lets inventory pick the node with stock
+     * @param group  caller's grouping key (orders: the order line id) for per-shipment commit / release; optional
      */
-    public record Line(String sku, String nodeId, int qty) {
+    public record Line(String sku, String nodeId, int qty, String group) {
+
+        /** A line without group (callers that commit and release the whole order). */
+        public Line(String sku, String nodeId, int qty) {
+            this(sku, nodeId, qty, null);
+        }
     }
 }

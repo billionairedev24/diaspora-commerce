@@ -28,6 +28,7 @@ public final class TrustOpsEvents {
     public static final String CONSUMER_AUDIT = "trust-ops:audit";
     public static final String CONSUMER_ORDERS = "trust-ops:seller-health";
     public static final String CONSUMER_HANDOFFS = "trust-ops:ai-handoffs";
+    public static final String CONSUMER_FULFILMENT = "trust-ops:fulfilment";
 
     private TrustOpsEvents() {
     }

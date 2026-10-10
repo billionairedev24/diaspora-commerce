@@ -93,7 +93,11 @@ class ShipmentRulesIT extends OrdersIntegrationTest {
                 .withRequestBody(WireMock.matchingJsonPath("$.amountMinor", WireMock.equalTo(String.valueOf(total))))
                 .withRequestBody(WireMock.matchingJsonPath("$.finalCapture", WireMock.equalTo("true"))));
         WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/reservations/" + order.id()
-                + "/commit")).withHeader("Idempotency-Key", WireMock.equalTo(order.id())));
+                + "/groups/commit")).withHeader("Idempotency-Key", WireMock.equalTo("commit-" + shipment))
+                .withRequestBody(WireMock.matchingJsonPath("$.groups[0]",
+                        WireMock.equalTo(order.shipments().getFirst().lines().getFirst().id()))));
+        WIREMOCK.verify(0, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/reservations/" + order.id()
+                + "/commit")));
         assertThat(jdbc.sql("select capture_id is not null from shipment where id = :id")
                 .param("id", UUID.fromString(shipment)).query(Boolean.class).single()).isTrue();
     }

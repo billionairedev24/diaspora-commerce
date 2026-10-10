@@ -9,6 +9,8 @@ public final class FulfilmentPermissions {
     public static final String DELIVERY = "delivery:operate";
     /** Plan routes and assign drivers (platform.dispatcher, fulfilment ops, operations manager). */
     public static final String DISPATCH = "delivery:dispatch";
+    /** Schedule and cancel customer return pickups (client scope of tax-returns-service). */
+    public static final String RETURNS = "delivery:returns";
 
     private FulfilmentPermissions() {
     }

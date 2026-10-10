@@ -52,7 +52,9 @@ class HttpPaymentsGateway implements PaymentsGateway {
         for (JsonNode l : n.path("lines")) {
             lines.add(new ChargedLine(l.path("lineId").asString(), l.path("sellerOrg").asString(null),
                     l.path("quantity").asInt(1), l.path("itemsMinor").asLong(), l.path("shippingMinor").asLong(),
-                    l.path("taxMinor").asLong(), !l.path("captureId").asString("").isEmpty()));
+                    l.path("taxMinor").asLong(), !l.path("captureId").asString("").isEmpty(),
+                    l.path("refundedItemsMinor").asLong(0), l.path("refundedShippingMinor").asLong(0),
+                    l.path("refundedTaxMinor").asLong(0)));
         }
         return Optional.of(new ChargedPayment(UUID.fromString(id), n.path("currency").asString("USD"), lines));
     }

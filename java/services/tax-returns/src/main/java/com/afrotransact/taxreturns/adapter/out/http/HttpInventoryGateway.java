@@ -25,13 +25,16 @@ class HttpInventoryGateway implements InventoryGateway {
 
     @Override
     public void acceptReturn(String orderId, String sku, int quantity, ItemCondition condition, String reason,
-                             String idempotencyKey) {
+                             String receivingNodeId, String idempotencyKey) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("orderId", orderId);
         body.put("sku", sku);
         body.put("qty", quantity);
         body.put("condition", condition.name());
         body.put("reason", reason.length() > 500 ? reason.substring(0, 500) : reason);
+        if (receivingNodeId != null && !receivingNodeId.isBlank()) {
+            body.put("receivingNodeId", receivingNodeId);
+        }
         inventory.call(c -> c.post().uri("/v1/returns").headers(h -> inventory.headers(h, idempotencyKey))
                 .body(body).retrieve().body(JsonNode.class));
     }

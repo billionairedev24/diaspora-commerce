@@ -15,13 +15,21 @@ public record PlacedOrder(String orderId, String orderNumber, String customerId,
         shipments = shipments == null ? List.of() : List.copyOf(shipments);
     }
 
-    /** One shipment of the order. */
+    /** One shipment of the order ({@code shipBy}: date it must leave its origin by). */
     public record PlacedShipment(String shipmentId, String sellerOrgId, String sellerName, String fulfilmentType,
                                  String deliveryMethod, LocalDate promisedBy, boolean handoverRequired,
-                                 Boolean perishable, String nodeId, List<PlacedLine> lines) {
+                                 Boolean perishable, String nodeId, List<PlacedLine> lines, LocalDate shipBy) {
 
         public PlacedShipment {
             lines = lines == null ? List.of() : List.copyOf(lines);
+        }
+
+        /** A shipment without ship-by date (orders placed before orders sent it). */
+        public PlacedShipment(String shipmentId, String sellerOrgId, String sellerName, String fulfilmentType,
+                              String deliveryMethod, LocalDate promisedBy, boolean handoverRequired, Boolean perishable,
+                              String nodeId, List<PlacedLine> lines) {
+            this(shipmentId, sellerOrgId, sellerName, fulfilmentType, deliveryMethod, promisedBy, handoverRequired,
+                    perishable, nodeId, lines, null);
         }
 
         public boolean afrotransactFulfilled() {

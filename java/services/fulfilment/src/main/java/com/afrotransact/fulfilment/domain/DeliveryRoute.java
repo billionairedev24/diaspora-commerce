@@ -214,6 +214,53 @@ public final class DeliveryRoute {
         resequence(true);
     }
 
+    /**
+     * Adds a customer return pickup stop at the end of the route (the parcel comes back to the depot with the
+     * route's failed packages).
+     */
+    public void addReturnPickupStop(RouteStop stop) {
+        requireKind(stop, StopKind.RETURN_PICKUP);
+        if (status != RouteStatus.PLANNED && status != RouteStatus.ASSIGNED && status != RouteStatus.IN_PROGRESS) {
+            throw new FulfilmentConflict("fulfilment.route-closed", "Route " + id + " is " + status);
+        }
+        stop.sequence(stops.isEmpty() ? 1 : stops.getLast().sequence() + 1);
+        stops.add(stop);
+    }
+
+    /** The driver collected the return parcel (the handover code was checked with tax-returns). */
+    public RouteStop collectReturn(String stopId, Instant at) {
+        RouteStop s = arrived(stopId);
+        requireKind(s, StopKind.RETURN_PICKUP);
+        s.status(StopStatus.DONE, at);
+        return s;
+    }
+
+    /** The return could not be collected (customer away, parcel not ready …); a note of 5+ characters is required. */
+    public RouteStop failReturn(String stopId, String why, Instant at) {
+        RouteStop s = arrived(stopId);
+        requireKind(s, StopKind.RETURN_PICKUP);
+        if (why == null || why.trim().length() < 5) {
+            throw new FulfilmentRuleViolation("fulfilment.note-required", "Say why the return was not collected");
+        }
+        s.note(why.trim(), at);
+        s.status(StopStatus.FAILED, at);
+        return s;
+    }
+
+    /** The return was cancelled: its stop is cancelled unless the driver is already at the door. */
+    public void cancelReturnStop(String stopId, String why, Instant at) {
+        RouteStop s = stop(stopId);
+        requireKind(s, StopKind.RETURN_PICKUP);
+        if (s.status() == StopStatus.ARRIVED) {
+            throw new FulfilmentConflict("fulfilment.return-pickup-in-progress",
+                    "The driver is at the customer's door; let them finish the stop");
+        }
+        if (s.status().unresolved()) {
+            s.note(why, at);
+            s.status(StopStatus.CANCELLED, at);
+        }
+    }
+
     public Optional<RouteStop> openPickupFor(String sellerOrgId) {
         return stops.stream().filter(s -> s.kind() == StopKind.PICKUP && s.status() == StopStatus.PENDING
                 && Objects.equals(s.sellerOrgId(), sellerOrgId)).findFirst();

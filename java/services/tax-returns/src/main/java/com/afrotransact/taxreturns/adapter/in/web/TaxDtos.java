@@ -60,11 +60,14 @@ final class TaxDtos {
     @Schema(name = "TaxQuoteLineResult")
     record QuoteLineResponse(String lineId, String sellerOrgId, String taxCategory, long taxableMinor,
                              @Schema(description = "Combined rate applied (fraction, 0.0825 = 8.25 %)") BigDecimal rate,
-                             long taxMinor, String jurisdiction, String localJurisdiction, String collectedBy) {
+                             long taxMinor, String jurisdiction, String localJurisdiction, String collectedBy,
+                             @Schema(description = "Part of taxMinor charged on the line's shipping")
+                             long shippingTaxMinor) {
 
         static QuoteLineResponse of(TaxLineResult r) {
             return new QuoteLineResponse(r.lineId(), r.sellerOrgId(), r.category().name(), r.taxableMinor(), r.rate(),
-                    r.taxMinor(), r.jurisdiction(), r.localJurisdiction(), r.collectedBy().name());
+                    r.taxMinor(), r.jurisdiction(), r.localJurisdiction(), r.collectedBy().name(),
+                    r.shippingTaxMinor());
         }
     }
 

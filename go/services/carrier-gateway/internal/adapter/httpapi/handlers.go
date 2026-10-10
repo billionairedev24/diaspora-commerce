@@ -19,6 +19,7 @@ import (
 type Services struct {
 	Rates     app.RateService
 	Labels    app.LabelService
+	Returns   app.ReturnLabelService
 	Tracking  app.TrackingService
 	Pickups   app.PickupService
 	Addresses app.AddressService
@@ -40,6 +41,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux, optionalAuth, requiredAuth f
 	req := func(perm string, fn http.HandlerFunc) http.Handler { return requiredAuth(auth.Require(perm, fn)) }
 	mux.Handle("POST /v1/rates", req(app.PermRate, h.rates))
 	mux.Handle("POST /v1/labels", req(app.PermLabel, h.buyLabel))
+	mux.Handle("POST /v1/return-labels", req(app.PermLabel, h.buyReturnLabel))
 	mux.Handle("GET /v1/labels/{id}", req(app.PermLabel, h.getLabel))
 	mux.Handle("GET /v1/labels/{id}/document", req(app.PermLabel, h.labelDocument))
 	mux.Handle("POST /v1/labels/{id}/void", req(app.PermVoid, h.voidLabel))
@@ -118,6 +120,35 @@ func (h *handlersImpl) buyLabel(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := h.svc.Labels.Buy(r.Context(), app.BuyRequest{IdempotencyKey: r.Header.Get("Idempotency-Key"), Caller: caller,
 		Shipment: s, Carrier: b.Carrier, Service: b.Service})
+	respond(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) buyReturnLabel(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		RateChoice      domain.RateChoice    `json:"rateChoice"`
+		Carrier         domain.CarrierCode   `json:"carrier"`
+		Service         domain.ServiceCode   `json:"service"`
+		Carriers        []domain.CarrierCode `json:"carriers"`
+		Mode            domain.ReturnMode    `json:"mode"`
+		FallbackToLabel bool                 `json:"fallbackToLabel"`
+		Shipment        ShipmentDTO          `json:"shipment"`
+	}
+	if !decode(w, r, &b) {
+		return
+	}
+	s, err := b.Shipment.toDomain()
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	a, _ := auth.FromContext(r.Context())
+	caller := a.OrgID
+	if caller == "" {
+		caller = a.Subject
+	}
+	v, err := h.svc.Returns.Buy(r.Context(), app.ReturnLabelRequest{IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		Caller: caller, Shipment: s, RateChoice: b.RateChoice, Carrier: b.Carrier, Service: b.Service, Carriers: b.Carriers,
+		Mode: b.Mode, FallbackToLabel: b.FallbackToLabel})
 	respond(w, r, http.StatusCreated, v, err)
 }
 
@@ -287,6 +318,16 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	var pe *problem.Error
 	if errors.As(err, &pe) {
 		problem.Write(w, r, pe)
+		return
+	}
+	var ue *app.UnsupportedError
+	if errors.As(err, &ue) {
+		fields := make(map[string]string, len(ue.Carriers))
+		for _, c := range ue.Carriers {
+			fields[string(c.Carrier)] = c.Reason
+		}
+		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "carrier-gateway.unsupported",
+			Detail: ue.Error(), Fields: fields})
 		return
 	}
 	detail := err.Error()

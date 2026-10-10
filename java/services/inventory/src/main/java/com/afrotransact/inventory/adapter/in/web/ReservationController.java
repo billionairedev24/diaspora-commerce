@@ -1,6 +1,9 @@
 package com.afrotransact.inventory.adapter.in.web;
 
+import java.util.LinkedHashSet;
+
 import com.afrotransact.inventory.adapter.in.web.InventoryDtos.CommitResponse;
+import com.afrotransact.inventory.adapter.in.web.InventoryDtos.GroupsRequest;
 import com.afrotransact.inventory.adapter.in.web.InventoryDtos.ReleaseRequest;
 import com.afrotransact.inventory.adapter.in.web.InventoryDtos.ReservationResponse;
 import com.afrotransact.inventory.adapter.in.web.InventoryDtos.ReserveRequest;
@@ -78,6 +81,28 @@ class ReservationController {
     CommitResponse commit(@PathVariable String orderId,
                           @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey) {
         return CommitResponse.of(reservations.commit(orderId));
+    }
+
+    @Operation(summary = "Ship only some groups (one shipment's lines)",
+            description = "Commits the held lines of the groups: SHIP movements and COGS for those lines only; other "
+                    + "groups stay held. Idempotent per group. 404 inventory.group-not-found for unknown groups "
+                    + "(reservations made without groups use /commit).")
+    @PostMapping("/{orderId}/groups/commit")
+    CommitResponse commitGroups(@PathVariable String orderId,
+                                @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
+                                @Valid @RequestBody GroupsRequest body) {
+        return CommitResponse.of(reservations.commitGroups(orderId, new LinkedHashSet<>(body.groups())));
+    }
+
+    @Operation(summary = "Release only some groups (one cancelled shipment)",
+            description = "Gives the held lines of the groups back to available stock; other groups stay held. "
+                    + "Idempotent; 409 inventory.group-committed when a line already shipped.")
+    @PostMapping("/{orderId}/groups/release")
+    ReservationResponse releaseGroups(@PathVariable String orderId,
+                                      @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
+                                      @Valid @RequestBody GroupsRequest body) {
+        return ReservationResponse.of(reservations.releaseGroups(orderId, new LinkedHashSet<>(body.groups()),
+                body.reason()), false);
     }
 
     @Operation(summary = "Release a held reservation (cancellation or payment failure)",

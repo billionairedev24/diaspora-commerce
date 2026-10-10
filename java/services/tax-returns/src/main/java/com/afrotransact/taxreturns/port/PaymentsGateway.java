@@ -22,9 +22,18 @@ public interface PaymentsGateway {
         }
     }
 
-    /** One charged line; {@code captured} is false until its shipment was captured. */
+    /**
+     * One charged line; {@code captured} is false until its shipment was captured. The refunded amounts are what
+     * payments-service already refunded on the line — by this service, cancellations and claims alike.
+     */
     record ChargedLine(String lineId, String sellerOrg, int quantity, long itemsMinor, long shippingMinor,
-                       long taxMinor, boolean captured) {
+                       long taxMinor, boolean captured, long refundedItemsMinor, long refundedShippingMinor,
+                       long refundedTaxMinor) {
+
+        public ChargedLine(String lineId, String sellerOrg, int quantity, long itemsMinor, long shippingMinor,
+                           long taxMinor, boolean captured) {
+            this(lineId, sellerOrg, quantity, itemsMinor, shippingMinor, taxMinor, captured, 0, 0, 0);
+        }
     }
 
     /** payments-service's answer. */

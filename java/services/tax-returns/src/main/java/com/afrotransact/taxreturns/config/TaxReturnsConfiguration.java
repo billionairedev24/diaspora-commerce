@@ -59,6 +59,6 @@ class TaxReturnsConfiguration {
         TaxReturnsProperties.Address a = props.returns().returnCentre();
         return new ReturnsSettings(new ReturnAddress(a.name(), a.line1(), a.line2(), a.city(), a.state(),
                 a.postalCode(), a.country(), a.phone()), a.node(), props.returns().label().weightLb(),
-                Duration.ofMinutes(1));
+                Duration.ofMinutes(1), props.returns().pickupReadyDays(), a.inventoryNode());
     }
 }

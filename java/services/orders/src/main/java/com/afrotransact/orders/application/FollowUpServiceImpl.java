@@ -98,6 +98,7 @@ class FollowUpServiceImpl implements FollowUpService {
             case CAPTURE -> capture(order, order.shipment(task.shipmentId()));
             case SETTLE -> settle(order);
             case CANCEL -> cancelled(order, order.shipment(task.shipmentId()));
+            case SETTLE_SHIPMENT -> settleShipment(order, order.shipment(task.shipmentId()));
             default -> throw new IllegalStateException("Unknown follow-up " + task.kind());
         }
     }
@@ -120,7 +121,21 @@ class FollowUpServiceImpl implements FollowUpService {
             });
         }
         if (s.fulfilmentType().inventoryTracked()) {
-            inventory.commit(order.id());
+            try {
+                inventory.commitGroups(order.id(), s.id(), PaymentLines.lineIds(s));
+            } catch (UpstreamFailure f) {
+                if (f.status() != 404) {
+                    throw f;
+                }
+                // reserved before per-line groups existed: ship the whole reservation on the first pickup
+                inventory.commit(order.id());
+            }
+        }
+    }
+
+    private void settleShipment(Order order, Shipment s) {
+        if (s.deliveredAt() != null) {
+            payments.shipmentDelivered(order.id(), s.id(), s.deliveredAt());
         }
     }
 
@@ -151,6 +166,9 @@ class FollowUpServiceImpl implements FollowUpService {
                         order.number(), f.code());
             }
         }
+        if (s.fulfilmentType().inventoryTracked() && releasedOnItsOwn(order, s, reason)) {
+            return;
+        }
         if (s.fulfilmentType().inventoryTracked()) {
             boolean trackedLeft = order.shipments().stream()
                     .anyMatch(o -> o.live() && o.fulfilmentType().inventoryTracked());
@@ -168,6 +186,22 @@ class FollowUpServiceImpl implements FollowUpService {
                 LOG.info("Shipment {} cancelled while other AfroTransact shipments of {} remain; its units stay held "
                         + "until the order ships (inventory has no partial release)", s.id(), order.number());
             }
+        }
+    }
+
+    /**
+     * Releases only the cancelled shipment's reservation lines (groups = its line ids). False when the reservation
+     * predates per-line groups (inventory answers 404) so the order-level rules apply.
+     */
+    private boolean releasedOnItsOwn(Order order, Shipment s, String reason) {
+        try {
+            inventory.releaseGroups(order.id(), s.id(), PaymentLines.lineIds(s), reason);
+            return true;
+        } catch (UpstreamFailure f) {
+            if (f.status() == 404) {
+                return false;
+            }
+            throw f;
         }
     }
 

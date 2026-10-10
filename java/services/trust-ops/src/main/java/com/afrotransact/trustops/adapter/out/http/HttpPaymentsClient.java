@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.JsonNode;
 
-/** payments-service {@code POST /v1/payments/{id}/refunds} (RefundRequest → RefundResponse). */
+/** payments-service refunds: {@code POST /v1/payments/{id}/refunds} and {@code POST /v1/orders/{id}/refunds}. */
 @Component
 class HttpPaymentsClient implements PaymentsClient {
 
@@ -34,8 +34,23 @@ class HttpPaymentsClient implements PaymentsClient {
         body.put("reason", reason);
         return downstream.call(SERVICE, client, c -> c.post().uri("/v1/payments/{id}/refunds", paymentId)
                 .headers(h -> downstream.headers(h, idempotencyKey)).contentType(MediaType.APPLICATION_JSON)
-                .body(body).retrieve().body(JsonNode.class),
-                n -> new RefundResult(n.path("id").asString(null), n.path("amountMinor").asLong(0),
-                        n.path("status").asString(null), n.path("replayed").asBoolean(false)));
+                .body(body).retrieve().body(JsonNode.class), HttpPaymentsClient::result);
+    }
+
+    @Override
+    public RefundResult refundByOrder(String orderId, List<String> lineIds, long amountMinor, String reason,
+                                      String idempotencyKey) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("lineIds", lineIds);
+        body.put("amountMinor", amountMinor);
+        body.put("reason", reason);
+        return downstream.call(SERVICE, client, c -> c.post().uri("/v1/orders/{id}/refunds", orderId)
+                .headers(h -> downstream.headers(h, idempotencyKey)).contentType(MediaType.APPLICATION_JSON)
+                .body(body).retrieve().body(JsonNode.class), HttpPaymentsClient::result);
+    }
+
+    private static RefundResult result(JsonNode n) {
+        return new RefundResult(n.path("id").asString(null), n.path("amountMinor").asLong(0),
+                n.path("status").asString(null), n.path("replayed").asBoolean(false));
     }
 }

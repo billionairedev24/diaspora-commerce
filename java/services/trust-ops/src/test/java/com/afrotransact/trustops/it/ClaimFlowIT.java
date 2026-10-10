@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -37,8 +38,10 @@ class ClaimFlowIT extends TrustOpsIntegrationTest {
     }
 
     private ClaimView openAs(String customer, String seller) {
+        String orderId = "ord-" + UUID.randomUUID();
+        stubOrder(orderId, "AT-2026-7KQ3MD", customer, seller);
         TestSupport.as(TestSupport.customer(customer));
-        ClaimView v = claims.open(new OpenClaimCommand(ClaimType.ITEM_NOT_RECEIVED, "ord-" + UUID.randomUUID(),
+        ClaimView v = claims.open(new OpenClaimCommand(ClaimType.ITEM_NOT_RECEIVED, orderId,
                 "AT-2026-7KQ3MD", "shp-1", seller, null, 4_999, "USD", "Tracking says delivered, nothing arrived",
                 List.of("asset_porch_photo")));
         TestSupport.reset();
@@ -222,8 +225,10 @@ class ClaimFlowIT extends TrustOpsIntegrationTest {
     @Test
     void httpOpenAndCustomerRules() {
         String seller = orgId();
+        String orderId = "ord-http-" + UUID.randomUUID();
+        stubOrder(orderId, "AT-2026-HTTP01", "cust-efe", seller);
         TestSupport.as(TestSupport.customer("cust-efe"));
-        Map<String, Object> body = Map.of("type", "DAMAGED_ITEM", "orderId", "ord-http-" + UUID.randomUUID(),
+        Map<String, Object> body = Map.of("type", "DAMAGED_ITEM", "orderId", orderId,
                 "sellerOrgId", seller, "amountMinor", 1_500, "currency", "USD", "description", "Jar arrived broken",
                 "evidenceAssetIds", List.of("asset_jar"));
         JsonNode created = ok(send("POST", "/v1/claims", body), 201);
@@ -239,5 +244,82 @@ class ClaimFlowIT extends TrustOpsIntegrationTest {
 
         TestSupport.as(TestSupport.sellerSupport(seller));
         problem(send("POST", "/v1/claims", body), 403, "trustops.customers-only");
+    }
+
+    @Test
+    void claimsAreCheckedAgainstTheOrderLookup() {
+        String seller = orgId();
+        String other = orgId();
+        String orderId = "ord-own-" + UUID.randomUUID();
+        stubOrder(orderId, "AT-2026-OWN001", "cust-kemi", seller, other);
+        Map<String, Object> base = Map.of("type", "ITEM_NOT_RECEIVED", "orderId", orderId, "amountMinor", 2_000,
+                "currency", "USD", "description", "Never arrived");
+
+        // Someone else's order, an unknown order, a shipment of another order, a seller that did not sell it.
+        TestSupport.as(TestSupport.customer("cust-intruder"));
+        problem(send("POST", "/v1/claims", with(base, "shipmentId", "shp-1")), 403, "trustops.not-your-order");
+        TestSupport.as(TestSupport.customer("cust-kemi"));
+        problem(send("POST", "/v1/claims", with(base, "orderId", "ord-missing-" + UUID.randomUUID())), 422,
+                "trustops.order-not-found");
+        problem(send("POST", "/v1/claims", with(base, "shipmentId", "shp-9")), 422, "trustops.shipment-not-in-order");
+        problem(send("POST", "/v1/claims", with(with(base, "shipmentId", "shp-1"), "sellerOrgId", other)), 422,
+                "trustops.seller-mismatch");
+        problem(send("POST", "/v1/claims", with(base, "sellerOrgId", orgId())), 422, "trustops.seller-mismatch");
+        // Two sellers on the order: name the shipment (or the seller).
+        problem(send("POST", "/v1/claims", base), 422, "trustops.seller-required");
+        UPSTREAM.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/(orders|payments)/.*")));
+
+        // The shipment names the seller; the order number comes from orders.
+        JsonNode created = ok(send("POST", "/v1/claims", with(base, "shipmentId", "shp-2")), 201);
+        assertThat(created.path("sellerOrgId").asString()).isEqualTo(other);
+        assertThat(created.path("orderNumber").asString()).isEqualTo("AT-2026-OWN001");
+        UPSTREAM.verify(WireMock.getRequestedFor(WireMock.urlPathEqualTo("/v1/lookup/orders/" + orderId))
+                .withHeader("Authorization", WireMock.equalTo("Bearer tok-trust-ops")));
+    }
+
+    @Test
+    void refundIsDerivedFromTheOrderWhenStaffNameNoLines() {
+        String seller = orgId();
+        ClaimView opened = openAs("cust-lami", seller);
+        UUID id = opened.claim().id();
+        TestSupport.as(TestSupport.trustSafety("sara"));
+        claims.escalate(id, "Clear carrier loss");
+
+        // Above the claim: refused before payments is called.
+        assertThatThrownBy(() -> claims.decide(id, new DecideClaimCommand(ClaimOutcome.REFUND, null, null, null,
+                6_000L))).hasMessageContaining("claim");
+        UPSTREAM.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/(orders|payments)/.*")));
+
+        JsonNode decided = ok(send("POST", "/v1/claims/" + id + "/decision", Map.of("outcome", "REFUND",
+                "note", "Partial: one jar arrived", "refundAmountMinor", 3_000)));
+        assertThat(decided.path("status").asString()).isEqualTo("RESOLVED_REFUND");
+        assertThat(decided.path("refundMinor").asLong()).isEqualTo(3_000);
+        UPSTREAM.verify(WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/orders/" + opened.claim().orderId()
+                        + "/refunds"))
+                .withHeader("Authorization", WireMock.equalTo("Bearer tok-trust-ops"))
+                .withHeader("Idempotency-Key", WireMock.equalTo("trustops-claim-" + id))
+                .withRequestBody(WireMock.equalToJson("""
+                        {"lineIds":["shp-1-l1","shp-1-l2"],"amountMinor":3000}""", true, true))
+                .withRequestBody(WireMock.matchingJsonPath("$.reason",
+                        WireMock.containing(opened.claim().reference()))));
+        UPSTREAM.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/payments/.*")));
+    }
+
+    @Test
+    void derivedRefundDefaultsToTheClaimedAmount() {
+        ClaimView opened = openAs("cust-musa", orgId());
+        TestSupport.as(TestSupport.trustSafety("sara"));
+        claims.escalate(opened.claim().id(), "Clear carrier loss");
+        ClaimView decided = claims.decide(opened.claim().id(), new DecideClaimCommand(ClaimOutcome.REFUND,
+                "Lost", null, null));
+        assertThat(decided.claim().refundMinor()).isEqualTo(4_999L);
+        UPSTREAM.verify(WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/orders/[^/]+/refunds"))
+                .withRequestBody(WireMock.matchingJsonPath("$.amountMinor", WireMock.equalTo("4999"))));
+    }
+
+    private static Map<String, Object> with(Map<String, Object> base, String key, Object value) {
+        Map<String, Object> m = new LinkedHashMap<>(base);
+        m.put(key, value);
+        return m;
     }
 }

@@ -140,7 +140,9 @@ class DefaultTaxRulesTest {
     void shippingTaxedOnlyWhereStateTaxesItAndOnlyForTaxableItems() {
         TaxLineInput withShipping = new TaxLineInput("l1", null, "org_a", TaxCategory.GENERAL, 1, 10_000, 0, 1_000);
         assertThat(one(new TaxAddress("US", "TX", "78701", null), withShipping).taxMinor()).isEqualTo(688);
+        assertThat(one(new TaxAddress("US", "TX", "78701", null), withShipping).shippingTaxMinor()).isEqualTo(63);
         assertThat(one(new TaxAddress("US", "CA", "94105", null), withShipping).taxMinor()).isEqualTo(725);
+        assertThat(one(new TaxAddress("US", "CA", "94105", null), withShipping).shippingTaxMinor()).isZero();
         TaxLineInput grocery = new TaxLineInput("l2", null, "org_a", TaxCategory.GROCERY, 1, 10_000, 0, 1_000);
         assertThat(one(new TaxAddress("US", "TX", "78701", null), grocery).taxMinor()).isZero();
     }

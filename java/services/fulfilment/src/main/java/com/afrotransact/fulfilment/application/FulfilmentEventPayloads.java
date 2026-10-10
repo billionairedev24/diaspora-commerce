@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.afrotransact.fulfilment.domain.ReturnPickup;
+
 /** Payloads of the events published on {@code at.fulfilment.events}. */
 public final class FulfilmentEventPayloads {
 
@@ -38,6 +40,29 @@ public final class FulfilmentEventPayloads {
 
     /** fulfilment.driver.access_revoked (key = driver id). */
     public record AccessRevoked(String driverId, String reason, Instant revokedAt) {
+    }
+
+    /** fulfilment.return_pickup.* (key = RMA id). */
+    public record ReturnPickupEvent(String returnPickupId, String rmaId, String rmaNumber, String orderId,
+                                    String shipmentId, String customerId, String sellerOrgId, String depotNodeId,
+                                    String status, String routeId, String stopId, LocalDate collectBy, String note,
+                                    Instant at) {
+
+        static ReturnPickupEvent of(ReturnPickup p, Instant at) {
+            return new ReturnPickupEvent(p.id(), p.rmaId(), p.rmaNumber(), p.orderId(), p.shipmentId(),
+                    p.customerId(), p.sellerOrgId(), p.depotNodeId(), p.status().name(), p.routeId(), p.stopId(),
+                    p.collectBy(), p.note(), at);
+        }
+    }
+
+    /**
+     * fulfilment.shipment.handed_over (key = shipment id): the shipment left its origin — collected at the seller
+     * (origin SELLER) or loaded out at the FC (origin FC). {@code late} = handed over after the ship-by date
+     * (business zone); trust-ops uses SELLER-origin events for seller-health lateness.
+     */
+    public record HandedOver(String shipmentId, String orderId, String orderNumber, String sellerOrgId,
+                             String fulfilmentType, String origin, String routeId, String driverId,
+                             LocalDate shipBy, Instant handedOverAt, Boolean late) {
     }
 
     /** fulfilment.orders.forward_failed (key = shipment id). */

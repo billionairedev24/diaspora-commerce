@@ -2,6 +2,7 @@ package com.afrotransact.trustops.config;
 
 import java.util.LinkedHashSet;
 
+import com.afrotransact.trustops.application.ClaimSettings;
 import com.afrotransact.trustops.application.TrustOpsSettings;
 import com.afrotransact.trustops.domain.AuditClassifier;
 import com.afrotransact.trustops.domain.AuditHashChain;
@@ -40,6 +41,11 @@ class TrustOpsConfiguration {
         TrustOpsProperties.SellerHealth h = props.sellerHealth();
         return new DefaultSellerHealthPolicy(h.lateShipmentThreshold(), h.cancellationThreshold(),
                 h.defectThreshold());
+    }
+
+    @Bean
+    ClaimSettings claimSettings(TrustOpsProperties props) {
+        return new ClaimSettings(props.claims().verifyOwnership());
     }
 
     @Bean

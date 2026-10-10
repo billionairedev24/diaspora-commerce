@@ -11,9 +11,17 @@ import java.util.Objects;
  * @param shipping        shipping charged for this line (FBA shipping is AfroTransact's revenue)
  * @param tax             sales tax collected on the line (remitted by AfroTransact, attributed to the seller)
  * @param taxJurisdiction jurisdiction code of the tax (e.g. US-TX-48201)
+ * @param shippingTax     the part of {@code tax} charged on shipping (states that tax delivery charges); 0 when
+ *                        none or unknown
  */
 public record OrderLine(String lineId, String sellerOrg, String category, Fulfilment fulfilment, int quantity,
-                        Money items, Money shipping, Money tax, String taxJurisdiction) {
+                        Money items, Money shipping, Money tax, String taxJurisdiction, Money shippingTax) {
+
+    /** A line whose tax is all on the items. */
+    public OrderLine(String lineId, String sellerOrg, String category, Fulfilment fulfilment, int quantity,
+                     Money items, Money shipping, Money tax, String taxJurisdiction) {
+        this(lineId, sellerOrg, category, fulfilment, quantity, items, shipping, tax, taxJurisdiction, null);
+    }
 
     public OrderLine {
         Objects.requireNonNull(lineId, "lineId");
@@ -32,6 +40,17 @@ public record OrderLine(String lineId, String sellerOrg, String category, Fulfil
         }
         items.requireSameCurrency(shipping);
         items.requireSameCurrency(tax);
+        shippingTax = shippingTax == null ? Money.zero(items.currency()) : shippingTax;
+        items.requireSameCurrency(shippingTax);
+        if (shippingTax.isNegative() || shippingTax.greaterThan(tax)) {
+            throw new PaymentsRuleViolation("payments.invalid-line", "Line " + lineId
+                    + " has a shipping tax outside 0 … tax");
+        }
+    }
+
+    /** Tax on the items: tax − shipping tax. */
+    public Money itemsTax() {
+        return tax.minus(shippingTax);
     }
 
     /** Items + shipping + tax: what the shopper pays for the line. */

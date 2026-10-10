@@ -45,6 +45,11 @@ public record OrderView(String id, String orderNumber, String status, String cus
      * @param cancellable      the customer may still cancel it (before packed)
      * @param nextActions      statuses the viewer may move it to now
      * @param timeline         status history, oldest first
+     * @param returnable       delivered and inside the return window of at least one returnable line (a hint for
+     *                         "Return or replace items"; tax-returns decides per line)
+     * @param returnWindowEndsAt end of the return window (null when not delivered or nothing is returnable)
+     * @param problemReportOnly delivered with only perishable / non-returnable lines ("Report a problem")
+     * @param returns          where the apps read eligibility and returns (tax-returns, through gateway-bff)
      */
     public record ShipmentView(String id, String shipmentId, int seq, String label, String sellerOrgId,
                                String sellerName, String fulfilmentType, String nodeId, String deliveryMethod,
@@ -53,13 +58,24 @@ public record OrderView(String id, String orderNumber, String status, String cus
                                String items, long itemsMinor, long shippingMinor, long taxMinor, long totalMinor,
                                String carrier, String trackingNumber, LocalDate promisedFrom, LocalDate promisedBy,
                                Instant deliveredAt, boolean captured, boolean cancellable, List<String> nextActions,
-                               List<LineView> lines, List<TimelineEntry> timeline) {
+                               List<LineView> lines, List<TimelineEntry> timeline, boolean returnable,
+                               Instant returnWindowEndsAt, boolean problemReportOnly, ReturnLinks returns) {
+    }
+
+    /**
+     * tax-returns endpoints for this order (tax-returns owns RMAs; orders only links them).
+     *
+     * @param eligibility {@code GET /v1/returns/eligibility?orderId=}
+     * @param list        {@code GET /v1/returns?orderId=}
+     */
+    public record ReturnLinks(String eligibility, String list) {
     }
 
     /** One line. */
     public record LineView(String id, int lineNo, String variantAtin, String productAtin, String title,
                            String imageUrl, int quantity, long unitPriceMinor, long itemsMinor, long taxMinor,
-                           long discountMinor, String category, boolean perishable, String taxJurisdiction) {
+                           long discountMinor, String category, boolean perishable, String taxJurisdiction,
+                           String productType) {
     }
 
     /** One status change. */

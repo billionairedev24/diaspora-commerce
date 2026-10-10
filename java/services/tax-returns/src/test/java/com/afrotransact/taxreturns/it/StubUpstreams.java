@@ -12,12 +12,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.taxreturns.domain.returns.ItemCondition;
+import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
 import com.afrotransact.taxreturns.domain.returns.RefundLineAmount;
 import com.afrotransact.taxreturns.domain.returns.ReturnLabel;
 import com.afrotransact.taxreturns.port.CarrierLabels;
 import com.afrotransact.taxreturns.port.InventoryGateway;
+import com.afrotransact.taxreturns.port.OrderLookup;
 import com.afrotransact.taxreturns.port.PaymentsGateway;
 import com.afrotransact.taxreturns.port.ProductFacts;
+import com.afrotransact.taxreturns.port.ReturnPickupScheduler;
 import com.afrotransact.taxreturns.port.UpstreamException;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -54,6 +57,18 @@ class StubUpstreams {
     @Primary
     FakeCarrier fakeCarrier() {
         return new FakeCarrier();
+    }
+
+    @Bean
+    @Primary
+    FakeOrders fakeOrders() {
+        return new FakeOrders();
+    }
+
+    @Bean
+    @Primary
+    FakePickups fakePickups() {
+        return new FakePickups();
     }
 
     @Bean
@@ -113,11 +128,13 @@ class StubUpstreams {
     static final class FakeInventory implements InventoryGateway {
 
         final List<String> postings = new CopyOnWriteArrayList<>();
+        final List<String> receivingNodes = new CopyOnWriteArrayList<>();
 
         @Override
         public void acceptReturn(String orderId, String sku, int quantity, ItemCondition condition, String reason,
-                                 String idempotencyKey) {
+                                 String receivingNodeId, String idempotencyKey) {
             postings.add(sku + ":" + quantity + ":" + condition + ":" + idempotencyKey);
+            receivingNodes.add(String.valueOf(receivingNodeId));
         }
     }
 
@@ -134,6 +151,40 @@ class StubUpstreams {
                 return new ReturnLabel(UUID.randomUUID().toString(), "ups", "1ZRET" + (100_000 + requests.size()),
                         "https://labels.example/" + request.reference() + ".pdf");
             });
+        }
+    }
+
+    /** orders-service lookup: orders this service never saw an event for. */
+    static final class FakeOrders implements OrderLookup {
+
+        final Map<UUID, PlacedOrder> orders = new ConcurrentHashMap<>();
+
+        @Override
+        public Optional<PlacedOrder> placedOrder(UUID orderId) {
+            return Optional.ofNullable(orders.get(orderId));
+        }
+    }
+
+    /** fulfilment-service return pickups; can fail the next schedule call. */
+    static final class FakePickups implements ReturnPickupScheduler {
+
+        final Map<UUID, PickupRequest> scheduled = new ConcurrentHashMap<>();
+        final List<String> cancelled = new CopyOnWriteArrayList<>();
+        volatile boolean failNext;
+
+        @Override
+        public String schedule(PickupRequest request) {
+            if (failNext) {
+                failNext = false;
+                throw new UpstreamException("fulfilment", 503, null, "fulfilment down", null);
+            }
+            scheduled.put(request.rmaId(), request);
+            return "rp-" + request.rmaId();
+        }
+
+        @Override
+        public void cancel(String pickupId, String reason) {
+            cancelled.add(pickupId);
         }
     }
 

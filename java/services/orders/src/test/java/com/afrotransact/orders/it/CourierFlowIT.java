@@ -87,7 +87,7 @@ class CourierFlowIT extends OrdersIntegrationTest {
         WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments/" + paymentId + "/capture"))
                 .withHeader("Idempotency-Key", WireMock.equalTo("capture-" + shipment)));
         WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/reservations/" + order.id()
-                + "/commit")));
+                + "/groups/commit")).withHeader("Idempotency-Key", WireMock.equalTo("commit-" + shipment)));
 
         ok(send("POST", "/v1/shipments/" + shipment + "/courier-events", event("drv-2", "out_for_delivery", null)));
         problem(send("POST", "/v1/shipments/" + shipment + "/courier-events", event("drv-3", "delivered",

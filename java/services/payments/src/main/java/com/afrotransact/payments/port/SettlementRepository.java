@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.Settlement;
+import com.afrotransact.payments.domain.ShipmentSettlement;
 import com.afrotransact.payments.domain.SettlementTransfer;
 
 /** Settlement holds, transfers to connected accounts and their reversals. */
@@ -25,6 +26,18 @@ public interface SettlementRepository {
 
     /** A capture after settlement re-opens it so the new payable is transferred too. */
     void reopen(String orderId, Instant now);
+
+    /** Inserts a shipment's hold; false when the shipment already has one. */
+    boolean insertShipment(ShipmentSettlement settlement);
+
+    Optional<ShipmentSettlement> findShipment(String orderId, String shipmentId);
+
+    List<ShipmentSettlement> shipments(String orderId);
+
+    /** Locks the next OPEN matured shipment settlement due for a check (FOR UPDATE SKIP LOCKED). */
+    Optional<ShipmentSettlement> lockNextMaturedShipment(Instant now);
+
+    void markShipmentChecked(String orderId, String shipmentId, boolean settled, Instant nextCheckAt, Instant now);
 
     void insertTransfer(SettlementTransfer transfer);
 

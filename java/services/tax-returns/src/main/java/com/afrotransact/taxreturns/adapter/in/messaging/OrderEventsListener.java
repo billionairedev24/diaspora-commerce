@@ -74,16 +74,29 @@ class OrderEventsListener {
                 for (JsonNode l : s.path("lines")) {
                     lines.add(new OrderPlaced.Line(Json.text(l, "lineId"), Json.text(l, "variantAtin"),
                             Json.text(l, "title"), l.path("quantity").asInt(1), l.path("unitPriceMinor").asLong(),
-                            l.path("taxMinor").asLong()));
+                            l.path("taxMinor").asLong(), Json.text(l, "productType"),
+                            l.path("perishable").isBoolean() ? l.path("perishable").asBoolean() : null,
+                            l.path("discountMinor").asLong(0), Json.text(l, "taxJurisdiction"),
+                            Json.text(l, "localTaxJurisdiction"), l.path("shippingTaxMinor").asLong(0)));
                 }
                 shipments.add(new OrderPlaced.Shipment(Json.uuid(s, "shipmentId"), Json.text(s, "sellerOrgId"),
                         Json.text(s, "sellerName"), Json.text(s, "fulfilmentType"), Json.text(s, "deliveryMethod"),
-                        s.path("totalMinor").asLong(), lines));
+                        s.path("totalMinor").asLong(), lines,
+                        s.path("shippingMinor").isNumber() ? s.path("shippingMinor").asLong() : null));
+            }
+            String line1 = Json.text(n, "shipToLine1");
+            if (line1 == null && n.path("shipments").size() > 0) {
+                line1 = Json.text(n.path("shipments").get(0), "shipToLine1");
+            }
+            String line2 = Json.text(n, "shipToLine2");
+            if (line2 == null && n.path("shipments").size() > 0) {
+                line2 = Json.text(n.path("shipments").get(0), "shipToLine2");
             }
             event = new OrderPlaced(Json.uuid(n, "orderId"), Json.text(n, "orderNumber"),
                     Json.text(n, "customerId"), Json.text(n, "currency"), Json.instant(n, "placedAt"),
                     Json.text(n, "shipToCity"), Json.text(n, "shipToState"), Json.text(n, "shipToPostalCode"),
-                    Json.text(n, "shipToCountry"), shipments);
+                    Json.text(n, "shipToCountry"), shipments, Json.text(n, "shipToName"), line1, line2,
+                    Json.text(n, "paymentId"));
         } catch (IllegalArgumentException ex) {
             LOG.warn("Skipping malformed orders.order.placed {}: {}", eventId, ex.getMessage());
             return;

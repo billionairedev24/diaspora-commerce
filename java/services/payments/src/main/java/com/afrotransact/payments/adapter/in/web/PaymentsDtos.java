@@ -30,6 +30,7 @@ import com.afrotransact.payments.domain.ReconciliationReport;
 import com.afrotransact.payments.domain.RecipientShare;
 import com.afrotransact.payments.domain.Refund;
 import com.afrotransact.payments.domain.Settlement;
+import com.afrotransact.payments.domain.ShipmentSettlement;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -38,6 +39,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
@@ -79,12 +81,15 @@ final class PaymentsDtos {
             @NotNull @PositiveOrZero Long itemsMinor,
             @PositiveOrZero Long shippingMinor,
             @PositiveOrZero Long taxMinor,
-            @Size(max = 40) String taxJurisdiction) {
+            @Size(max = 40) String taxJurisdiction,
+            @Schema(description = "Part of taxMinor charged on shipping (states that tax delivery); default 0")
+            @PositiveOrZero Long shippingTaxMinor) {
 
         OrderLine toLine(String currency) {
             return new OrderLine(lineId, sellerOrg, category, fulfilment, quantity, Money.of(itemsMinor, currency),
                     Money.of(shippingMinor == null ? 0 : shippingMinor, currency),
-                    Money.of(taxMinor == null ? 0 : taxMinor, currency), taxJurisdiction);
+                    Money.of(taxMinor == null ? 0 : taxMinor, currency), taxJurisdiction,
+                    Money.of(shippingTaxMinor == null ? 0 : shippingTaxMinor, currency));
         }
     }
 
@@ -111,15 +116,24 @@ final class PaymentsDtos {
         }
     }
 
+    @Schema(name = "PaymentLineResponse", description = "One line as charged, with what was refunded so far "
+            + "(by this service's refunds, cancellations and claims alike)")
     record LineResponse(String lineId, String sellerOrg, String category, String fulfilment, int quantity,
                         long itemsMinor, long shippingMinor, long taxMinor, String taxJurisdiction, UUID captureId,
-                        long commissionMinor, long fbaFeeMinor, long refundedMinor) {
+                        long commissionMinor, long fbaFeeMinor, long refundedMinor,
+                        @Schema(description = "Part of taxMinor charged on shipping") long shippingTaxMinor,
+                        @Schema(description = "taxMinor − shippingTaxMinor") long itemsTaxMinor,
+                        long refundedItemsMinor, long refundedShippingMinor, long refundedTaxMinor,
+                        @Schema(description = "Captured and not refunded yet (0 before capture)")
+                        long refundableMinor) {
 
         static LineResponse of(PaymentLine pl) {
             OrderLine l = pl.line();
             return new LineResponse(l.lineId(), l.sellerOrg(), l.category(), l.fulfilment().name(), l.quantity(),
                     l.items().minor(), l.shipping().minor(), l.tax().minor(), l.taxJurisdiction(), pl.captureId(),
-                    pl.commission().minor(), pl.fbaFee().minor(), pl.refundedTotal().minor());
+                    pl.commission().minor(), pl.fbaFee().minor(), pl.refundedTotal().minor(),
+                    l.shippingTax().minor(), l.itemsTax().minor(), pl.refundedItems().minor(),
+                    pl.refundedShipping().minor(), pl.refundedTax().minor(), pl.refundable().minor());
         }
     }
 
@@ -173,6 +187,15 @@ final class PaymentsDtos {
 
     record RefundLineRequest(@NotBlank String lineId, @PositiveOrZero Long itemsMinor,
                              @PositiveOrZero Long shippingMinor, @PositiveOrZero Long taxMinor) {
+    }
+
+    @Schema(name = "OrderRefundRequest", description = "Refund by order and line ids (service callers such as "
+            + "trust-ops): the amount is spread over the lines' remaining items, shipping and tax")
+    record OrderRefundRequest(
+            @NotEmpty @Size(max = 200) List<@NotBlank @Size(max = 80) String> lineIds,
+            @Schema(description = "Total to refund; omit to refund everything still refundable on the lines")
+            @Positive Long amountMinor,
+            @Size(max = 500) String reason) {
     }
 
     record RefundResponse(UUID id, UUID paymentId, String orderId, String stripeRefundId, long amountMinor,
@@ -327,6 +350,16 @@ final class PaymentsDtos {
         static SettlementResponse of(Settlement s) {
             return new SettlementResponse(s.orderId(), s.kind().name(), s.deliveredAt(), s.releaseAt(),
                     s.status().name());
+        }
+    }
+
+    @Schema(name = "ShipmentSettlement", description = "Settlement hold of one shipment")
+    record ShipmentSettlementResponse(String orderId, String shipmentId, String kind, Instant deliveredAt,
+                                      Instant releaseAt, String status) {
+
+        static ShipmentSettlementResponse of(ShipmentSettlement s) {
+            return new ShipmentSettlementResponse(s.orderId(), s.shipmentId(), s.kind().name(), s.deliveredAt(),
+                    s.releaseAt(), s.status().name());
         }
     }
 

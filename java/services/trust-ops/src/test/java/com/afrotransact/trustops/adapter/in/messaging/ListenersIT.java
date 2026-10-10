@@ -20,14 +20,16 @@ class ListenersIT extends TrustOpsIntegrationTest {
     private final AuditEventListener audit;
     private final OrderEventListener orders;
     private final AiHandoffEventListener handoffs;
+    private final FulfilmentEventListener fulfilment;
 
     @Autowired
     ListenersIT(CatalogProductEventListener products, AuditEventListener audit, OrderEventListener orders,
-                AiHandoffEventListener handoffs) {
+                AiHandoffEventListener handoffs, FulfilmentEventListener fulfilment) {
         this.products = products;
         this.audit = audit;
         this.orders = orders;
         this.handoffs = handoffs;
+        this.fulfilment = fulfilment;
     }
 
     private static ConsumerRecord<String, String> rec(String topic, String key, String type, UUID eventId,
@@ -140,6 +142,57 @@ class ListenersIT extends TrustOpsIntegrationTest {
         assertThat(jdbc.sql("select last_status || '|' || (delivered_at is not null) || '|' || promised_by::text "
                         + "from seller_shipment where shipment_id = :s").param("s", shipment.toString())
                 .query(String.class).single()).isEqualTo("delivered|true|" + promised);
+    }
+
+    @Test
+    void sellerHandoverFromFulfilmentRecordsShipByLateness() {
+        String org = orgId();
+        UUID shipment = UUID.randomUUID();
+        LocalDate shipBy = LocalDate.of(2026, 10, 6);
+        orders.onMessage(rec("at.order.events", "o-2", "orders.order.placed", UUID.randomUUID(), """
+                {"orderId":"o-2","orderNumber":"AT-2026-TEST02","customerId":"cust-1","currency":"USD",
+                 "placedAt":"2026-10-05T15:00:00Z","shipments":[{"shipmentId":"%s","sellerOrgId":"%s",
+                 "fulfilmentType":"SELLER_FULFILLED","deliveryMethod":"AT_DELIVERY","promisedBy":"2026-10-09",
+                 "shipBy":"%s","lines":[]}]}
+                """.formatted(shipment, org, shipBy)));
+        String handedOver = """
+                {"shipmentId":"%s","orderId":"o-2","orderNumber":"AT-2026-TEST02","sellerOrgId":"%s",
+                 "fulfilmentType":"SELLER_FULFILLED","origin":"%s","routeId":"r-1","driverId":"d-1",
+                 "shipBy":"%s","handedOverAt":"%s","late":true}
+                """;
+        // An FC loadout is not the seller's handover.
+        fulfilment.onMessage(rec("at.fulfilment.events", shipment.toString(), "fulfilment.shipment.handed_over",
+                UUID.randomUUID(), handedOver.formatted(shipment, org, "FC", shipBy, "2026-10-08T15:00:00Z")));
+        assertThat(jdbc.sql("select handed_over_at is null from seller_shipment where shipment_id = :s")
+                .param("s", shipment.toString()).query(Boolean.class).single()).isTrue();
+        // Other fulfilment events are ignored.
+        fulfilment.onMessage(rec("at.fulfilment.events", shipment.toString(), "fulfilment.task.created",
+                UUID.randomUUID(), "{}"));
+
+        UUID eventId = UUID.randomUUID();
+        fulfilment.onMessage(rec("at.fulfilment.events", shipment.toString(), "fulfilment.shipment.handed_over",
+                eventId, handedOver.formatted(shipment, org, "SELLER", shipBy, "2026-10-07T15:00:00Z")));
+        // Redelivery is deduplicated; a later handover time never overwrites the first.
+        fulfilment.onMessage(rec("at.fulfilment.events", shipment.toString(), "fulfilment.shipment.handed_over",
+                eventId, handedOver.formatted(shipment, org, "SELLER", shipBy, "2026-10-09T15:00:00Z")));
+        assertThat(jdbc.sql("select ship_by::text || '|' || extract(epoch from handed_over_at)::bigint || '|' || last_status "
+                        + "from seller_shipment "
+                        + "where shipment_id = :s").param("s", shipment.toString()).query(String.class).single())
+                .isEqualTo(shipBy + "|" + Instant.parse("2026-10-07T15:00:00Z").getEpochSecond() + "|placed");
+    }
+
+    @Test
+    void pickedUpStatusIsTheHandoverWhenFulfilmentDoesNotReportIt() {
+        String org = orgId();
+        UUID shipment = UUID.randomUUID();
+        orders.onMessage(rec("at.order.events", "o-3", "orders.shipment.status_changed", UUID.randomUUID(), """
+                {"orderId":"o-3","shipmentId":"%s","sellerOrgId":"%s","from":"ready","to":"picked_up",
+                 "actorType":"CARRIER","occurredAt":"2026-10-07T18:30:00Z"}
+                """.formatted(shipment, org)));
+        assertThat(jdbc.sql("select extract(epoch from handed_over_at)::bigint || '|' || last_status from seller_shipment "
+                        + "where shipment_id = :s")
+                .param("s", shipment.toString()).query(String.class).single())
+                .isEqualTo(Instant.parse("2026-10-07T18:30:00Z").getEpochSecond() + "|picked_up");
     }
 
     @Test

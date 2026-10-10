@@ -47,7 +47,7 @@ class OrdersEventListener {
     @JsonIgnoreProperties(ignoreUnknown = true)
     record ShipmentMessage(String shipmentId, String sellerOrgId, String sellerName, String fulfilmentType,
                            String deliveryMethod, LocalDate promisedBy, boolean handoverRequired, Boolean perishable,
-                           String nodeId, List<LineMessage> lines) {
+                           String nodeId, List<LineMessage> lines, LocalDate shipBy, Double lat, Double lng) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -99,9 +99,14 @@ class OrdersEventListener {
                         s.fulfilmentType(), s.deliveryMethod(), s.promisedBy(), s.handoverRequired(), s.perishable(),
                         s.nodeId(), s.lines() == null ? List.of() : s.lines().stream()
                         .map(l -> new PlacedOrder.PlacedLine(l.lineId(), l.variantAtin(), l.title(), l.quantity()))
-                        .toList()))
+                        .toList(), s.shipBy()))
                 .toList();
+        // orders sends the ship-to position per shipment (lat / lng); older producers sent it on the order.
+        ShipmentMessage positioned = m.shipments() == null ? null : m.shipments().stream()
+                .filter(s -> s.lat() != null && s.lng() != null).findFirst().orElse(null);
+        Double lat = m.shipToLat() != null ? m.shipToLat() : positioned == null ? null : positioned.lat();
+        Double lon = m.shipToLon() != null ? m.shipToLon() : positioned == null ? null : positioned.lng();
         return new PlacedOrder(m.orderId(), m.orderNumber(), m.customerId(), m.shipToCity(), m.shipToState(),
-                m.shipToPostalCode(), m.shipToCountry(), m.shipToLat(), m.shipToLon(), shipments);
+                m.shipToPostalCode(), m.shipToCountry(), lat, lon, shipments);
     }
 }

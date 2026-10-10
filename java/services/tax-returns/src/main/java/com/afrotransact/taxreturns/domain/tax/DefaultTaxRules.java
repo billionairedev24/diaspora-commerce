@@ -39,12 +39,14 @@ public final class DefaultTaxRules implements TaxRules {
             BigDecimal rate = rule.rateFor(line.category())
                     .add(local.map(l -> l.rateFor(line.category())).orElse(BigDecimal.ZERO));
             long taxable = line.taxableItemsMinor();
-            if (rule.shippingTaxable() && rate.signum() > 0) {
+            boolean shippingTaxed = rule.shippingTaxable() && rate.signum() > 0;
+            if (shippingTaxed) {
                 taxable = Math.addExact(taxable, line.shippingMinor());
             }
             long tax = rate.signum() == 0 ? 0L : taxOf(taxable, rate);
+            long shippingTax = shippingTaxed ? Math.min(tax, taxOf(line.shippingMinor(), rate)) : 0L;
             out.add(new TaxLineResult(line.lineId(), line.sellerOrgId(), line.category(), rate.signum() == 0 ? 0L
-                    : taxable, rate.stripTrailingZeros(), tax, jurisdiction, localJurisdiction, by));
+                    : taxable, rate.stripTrailingZeros(), tax, jurisdiction, localJurisdiction, by, shippingTax));
         }
         return new TaxQuote(currency, jurisdiction, by, out, PROVIDER);
     }

@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.taxreturns.domain.returns.PlacedOrder;
+import com.afrotransact.taxreturns.domain.returns.ReturnAddress;
 
 /** Snapshots of placed orders (from orders-service events). */
 public interface OrderSnapshotRepository {
@@ -18,4 +19,7 @@ public interface OrderSnapshotRepository {
     Optional<PlacedOrder> find(UUID orderId);
 
     Optional<PlacedOrder> findByNumber(String orderNumber);
+
+    /** Fills in the customer's street address of a snapshot that has none (from the orders lookup). */
+    void updateAddress(UUID orderId, ReturnAddress address);
 }

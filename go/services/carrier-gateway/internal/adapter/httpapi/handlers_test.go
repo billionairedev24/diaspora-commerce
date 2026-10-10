@@ -3,6 +3,7 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -76,11 +77,26 @@ func (f *fakeTracking) HandleWebhook(_ context.Context, c domain.CarrierCode, h 
 	return app.IngestResult{Accepted: 2}, nil
 }
 
+type fakeReturns struct{ got app.ReturnLabelRequest }
+
+func (f *fakeReturns) Buy(_ context.Context, r app.ReturnLabelRequest) (app.ReturnLabelView, error) {
+	f.got = r
+	if r.Mode == domain.ReturnBoxFreeQR && !r.FallbackToLabel {
+		return app.ReturnLabelView{}, fmt.Errorf("buy: %w", &app.UnsupportedError{Capability: "box-free QR drop-off",
+			Carriers: []app.UnsupportedCarrier{{Carrier: domain.USPS, Reason: "not available"}, {Carrier: domain.UPS, Reason: "not available"}}})
+	}
+	return app.ReturnLabelView{LabelView: app.LabelView{LabelRecord: domain.LabelRecord{ID: "r1", TrackingNumber: "9400",
+		Kind: domain.KindReturn}}, Mode: domain.ReturnPrintedLabel, RateChoice: r.RateChoice}, nil
+}
+
+var lastReturns *fakeReturns
+
 func server(t *testing.T) (*httptest.Server, *fakeRates, *fakeLabels, *fakeTracking) {
 	t.Helper()
 	rates, labels, tracking := &fakeRates{}, &fakeLabels{}, &fakeTracking{}
+	lastReturns = &fakeReturns{}
 	mux := http.NewServeMux()
-	httpapi.New(httpapi.Services{Rates: rates, Labels: labels, Tracking: tracking}).
+	httpapi.New(httpapi.Services{Rates: rates, Labels: labels, Tracking: tracking, Returns: lastReturns}).
 		Register(mux, auth.Middleware(verifier{}, true), auth.Middleware(verifier{}, false))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -162,6 +178,27 @@ func TestLabelEndpoints(t *testing.T) {
 	}
 	if res, _ := call(t, srv, "GET", "/v1/labels/l1/document", "ops", "", nil); res.StatusCode != http.StatusOK || res.Header.Get("Content-Type") != "application/x-zpl" {
 		t.Fatalf("document: %d %s", res.StatusCode, res.Header.Get("Content-Type"))
+	}
+}
+
+func TestReturnLabels(t *testing.T) {
+	srv, _, _, _ := server(t)
+	shipment := strings.TrimSuffix(strings.SplitN(rateBody, `"shipment":`, 2)[1], "}")
+	body := `{"rateChoice":"FASTEST","carriers":["usps","ups"],"shipment":` + shipment + `}`
+	res, out := call(t, srv, "POST", "/v1/return-labels", "ops", body, map[string]string{"Idempotency-Key": "rma-1"})
+	if res.StatusCode != http.StatusCreated || out["kind"] != "return" || lastReturns.got.RateChoice != domain.RateFastest ||
+		len(lastReturns.got.Carriers) != 2 || lastReturns.got.IdempotencyKey != "rma-1" || lastReturns.got.Caller != "org_ops" {
+		t.Fatalf("%d %v %+v", res.StatusCode, out, lastReturns.got)
+	}
+	qr := `{"mode":"BOX_FREE_QR","shipment":` + shipment + `}`
+	res, out = call(t, srv, "POST", "/v1/return-labels", "ops", qr, map[string]string{"Idempotency-Key": "rma-2"})
+	errs, _ := out["errors"].(map[string]any)
+	if res.StatusCode != http.StatusUnprocessableEntity || out["code"] != "carrier-gateway.unsupported" || errs["usps"] == nil ||
+		errs["ups"] == nil {
+		t.Fatalf("box-free unsupported: %d %v", res.StatusCode, out)
+	}
+	if res, _ := call(t, srv, "POST", "/v1/return-labels", "viewer", body, nil); res.StatusCode != http.StatusForbidden {
+		t.Fatalf("needs shipping:label: %d", res.StatusCode)
 	}
 }
 

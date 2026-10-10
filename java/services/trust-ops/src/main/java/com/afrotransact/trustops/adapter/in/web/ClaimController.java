@@ -118,6 +118,6 @@ class ClaimController {
         List<RefundLine> lines = b.refundLines() == null ? List.of() : b.refundLines().stream()
                 .map(l -> new RefundLine(l.lineId(), l.itemsMinor(), l.shippingMinor(), l.taxMinor())).toList();
         return ClaimResponse.of(claims.decide(id, new DecideClaimCommand(b.outcome(), b.note(), b.paymentId(),
-                lines)));
+                lines, b.refundAmountMinor())));
     }
 }

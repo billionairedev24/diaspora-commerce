@@ -67,6 +67,16 @@ class SellerHealthServiceImpl implements SellerHealthService {
     }
 
     @Override
+    @Transactional
+    public void recordHandovers(UUID eventId, List<ShipmentFact> facts) {
+        if (facts.isEmpty() || !inbox.firstDelivery(TrustOpsEvents.CONSUMER_FULFILMENT, eventId)) {
+            return;
+        }
+        Instant now = Instant.now(clock);
+        facts.forEach(f -> health.apply(f, now));
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public SellerHealthView health(String orgId) {
         permissions.require(TrustOpsPermissions.ORGS_READ);

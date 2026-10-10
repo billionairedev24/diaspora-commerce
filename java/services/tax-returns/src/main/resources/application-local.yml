@@ -10,6 +10,7 @@ at:
     returns:
       return-centre:
         node: ${RETURN_CENTRE_NODE:fc_houston}
+        inventory-node: ${RETURN_CENTRE_INVENTORY_NODE:HOU-FC}
         name: AfroTransact Returns (local)
         line1: 1 Return Way
         city: Houston

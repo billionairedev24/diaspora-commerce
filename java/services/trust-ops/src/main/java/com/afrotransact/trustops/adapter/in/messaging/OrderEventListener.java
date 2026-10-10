@@ -21,7 +21,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Projects orders events ({@code at.order.events}, key = order id) into per-shipment facts for seller health:
- * placed (with the promised date), delivered, cancelled (and by whom) and status changes.
+ * placed (with the promised and ship-by dates), delivered, cancelled (and by whom) and status changes (picked_up is
+ * the seller's handover when fulfilment does not report it).
  */
 @Component
 class OrderEventListener {
@@ -30,6 +31,8 @@ class OrderEventListener {
     static final String DELIVERED = "orders.shipment.delivered";
     static final String CANCELLED = "orders.shipment.cancelled";
     static final String STATUS_CHANGED = "orders.shipment.status_changed";
+    /** Shipment status meaning the carrier or driver collected it from the seller (the handover). */
+    static final String PICKED_UP = "picked_up";
 
     private static final Logger LOG = LoggerFactory.getLogger(OrderEventListener.class);
 
@@ -75,19 +78,19 @@ class OrderEventListener {
                 for (JsonNode s : n.path("shipments")) {
                     if (text(s, "shipmentId") != null && text(s, "sellerOrgId") != null) {
                         out.add(new ShipmentFact(text(s, "shipmentId"), orderId, text(s, "sellerOrgId"), placedAt,
-                                date(s, "promisedBy"), null, null, null, "placed"));
+                                date(s, "promisedBy"), null, null, null, "placed", date(s, "shipBy"), null));
                     }
                 }
             }
-            case DELIVERED -> add(out, n, orderId, null, instant(n, "deliveredAt"), null, null, "delivered");
+            case DELIVERED -> add(out, n, orderId, null, instant(n, "deliveredAt"), null, null, "delivered", null);
             case CANCELLED -> add(out, n, orderId, null, null, instant(n, "cancelledAt"), text(n, "actorType"),
-                    "cancelled");
+                    "cancelled", null);
             case STATUS_CHANGED -> {
                 String to = text(n, "to");
                 Instant at = instant(n, "occurredAt");
                 add(out, n, orderId, date(n, "promisedBy"), "delivered".equals(to) ? at : null,
                         "cancelled".equals(to) ? at : null, "cancelled".equals(to) ? text(n, "actorType") : null,
-                        to);
+                        to, PICKED_UP.equals(to) ? at : null);
             }
             default -> {
                 // not a shipment event
@@ -97,12 +100,13 @@ class OrderEventListener {
     }
 
     private static void add(List<ShipmentFact> out, JsonNode n, String orderId, LocalDate promisedBy,
-                            Instant deliveredAt, Instant cancelledAt, String cancelledBy, String status) {
+                            Instant deliveredAt, Instant cancelledAt, String cancelledBy, String status,
+                            Instant handedOverAt) {
         String shipment = text(n, "shipmentId");
         String seller = text(n, "sellerOrgId");
         if (shipment != null && seller != null) {
             out.add(new ShipmentFact(shipment, orderId, seller, null, promisedBy, deliveredAt, cancelledAt,
-                    cancelledBy, status));
+                    cancelledBy, status, null, handedOverAt));
         }
     }
 
