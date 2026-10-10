@@ -223,3 +223,33 @@ func TestSellerOrgUpdatedRenamesIndexedDocsAndFeedsTheDirectory(t *testing.T) {
 		t.Fatalf("renames %v", idx.renames)
 	}
 }
+
+func TestTakenDownListingsLeaveSearchAndReinstatedOnesReturn(t *testing.T) {
+	idx := &fakeIndex{}
+	p := app.NewProjector(idx, fakeCatalog{}, fakeSellers{}, "us", quiet)
+	now := time.Now()
+	takenDown := sellerProduct(t, domain.ProductTakenDown, false, now)
+	payload, err := json.Marshal(domain.ProductEvent{
+		ProductID: "p2", ATIN: "AT00000002", OwnerKind: "SELLER", OwnerOrgID: "org_kemi", Status: "TAKEN_DOWN",
+		Title:    "Ankara Wrap Dress",
+		Variants: []domain.VariantPayload{{ATIN: "AT0000000C", PriceMinor: 6499, Currency: "usd"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	takenDown.Payload = payload
+	for _, e := range []events.Envelope{takenDown, sellerProduct(t, domain.ProductReinstated, false, now.Add(time.Second))} {
+		if err := p.Handle(context.Background(), e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(idx.docs) != 2 {
+		t.Fatalf("want 2 upserts, got %d", len(idx.docs))
+	}
+	if idx.docs[0].Status == searchindex.StatusLive {
+		t.Fatal("taken-down listing must not be LIVE")
+	}
+	if idx.docs[1].Status != searchindex.StatusLive {
+		t.Fatalf("reinstated listing should be LIVE again, got %q", idx.docs[1].Status)
+	}
+}

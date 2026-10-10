@@ -40,7 +40,8 @@ func (p *projectorImpl) Handle(ctx context.Context, e events.Envelope) error {
 	version := domain.VersionOf(e.OccurredAt)
 	switch e.Type {
 	case domain.ProductCreated, domain.ProductApproved, domain.ProductRejected, domain.ProductPaused,
-		domain.ProductResumed, domain.ProductHidden, domain.ProductRestored:
+		domain.ProductResumed, domain.ProductHidden, domain.ProductRestored, domain.ProductTakenDown,
+		domain.ProductReinstated:
 		var pe domain.ProductEvent
 		if err := json.Unmarshal(e.Payload, &pe); err != nil {
 			p.log.WarnContext(ctx, "skipping malformed product event", "event_id", e.ID, "error", err)

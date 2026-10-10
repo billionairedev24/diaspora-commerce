@@ -6615,7 +6615,8 @@ operations:
       $ref: '#/channels/catalogProductEvents'
     summary: catalog.product.* upsert the product document (version = occurred-at). Events with sellerHidden = true (catalog.product.hidden,
       and any product event while the owner is hidden) index status SELLER_HIDDEN, which search never returns; catalog.product.restored
-      brings back the product's own status.
+      brings back the product's own status. catalog.product.taken_down indexes status TAKEN_DOWN (not returned) and catalog.product.reinstated
+      restores it.
   consumeIndexerSellerOrgEvents:
     action: receive
     channel:

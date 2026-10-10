@@ -12,6 +12,8 @@ const (
 	ProductResumed      = "catalog.product.resumed"
 	ProductHidden       = "catalog.product.hidden"
 	ProductRestored     = "catalog.product.restored"
+	ProductTakenDown    = "catalog.product.taken_down"
+	ProductReinstated   = "catalog.product.reinstated"
 	AvailabilityChanged = "inventory.availability.changed"
 	SellerOrgApproved   = "seller.org.approved"
 	SellerOrgUpdated    = "seller.org.updated"
