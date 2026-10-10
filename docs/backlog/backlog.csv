@@ -820,3 +820,7 @@
 "S268","Story","Remaining Java HIGH findings and Semgrep registry triage","Pin jackson-core/databind and json-smart to fixed versions across Java modules, triage Semgrep registry packs and make them blocking, and apply the S010 change requests (fixed build timestamp for reproducible Java jars, base images pinned by digest).","- Trivy fs reports no HIGH in Java Maven files
 - Semgrep registry rules are blocking after triage
 - Two clean Java image builds produce the same digest","E33","","High","3","security","quality","To Do"
+"S269","Story","Notification template gallery and staff template editor","A generated gallery of every template rendered with realistic sample data, and a staff console Notifications > Templates module: list, live preview per channel and locale with editable sample data, version history and diff, new versions with validation, and test-send.","- Every seeded template renders in the gallery with sample data
+- Staff preview any template per channel and locale
+- Staff create a new version with live preview and test-send
+- Edit rights limited to notifications:templates:write","E19","","High","5","notifications staff-console","notifications","In Progress"
