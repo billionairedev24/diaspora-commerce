@@ -11,7 +11,7 @@ Sellers and providers get onboarding, back offices and storefronts, and AfroTran
 | Staff console (platform back office) | `web/apps/staff-console` |
 | Customer app, driver app | `mobile/apps/customer`, `mobile/apps/driver` (Expo) |
 | Java services (Spring Boot 4.1, Java 25) | `java/services/*` |
-| Go services (Go 1.27.1) | `go/services/*` |
+| Go services (Go 1.27.2) | `go/services/*` |
 | API contracts | `contracts/` (OpenAPI 3.1 + AsyncAPI) |
 | Developer portal | `docs/portal` (Docusaurus, with Redoc + Scalar references) |
 | Infrastructure | `infra/` (docker compose, Helm, Argo CD, Terraform for AWS/GCP/Azure, Cloudflare, observability) |

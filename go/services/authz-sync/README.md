@@ -1,7 +1,7 @@
 # authz-sync
 
 Kafka → OpenFGA projection of who belongs to which organisation, and which staff hold which platform roles (S022,
-[ADR 0001](../../../docs/adr/0001-openfga-relationship-authorisation.md)). Go 1.27.1 · local port **8210**.
+[ADR 0001](../../../docs/adr/0001-openfga-relationship-authorisation.md)). Go 1.27.2 · local port **8210**.
 
 - Consumes `identity.role.granted|revoked` (topic `at.identity.events`) and `seller.org.approved|updated`
   (`at.seller-org.events`) as consumer group `authz-sync`. Offsets are committed only after the tuples are written.
@@ -51,6 +51,6 @@ Tuples are a projection. To rebuild a store (new environment, model incompatible
 
 ```bash
 cd go/services/authz-sync
-GOTOOLCHAIN=go1.27.1 go test ./...      # unit + OpenFGA Testcontainers integration (local image openfga/openfga:v1.10.0)
+GOTOOLCHAIN=go1.27.2 go test ./...      # unit + OpenFGA Testcontainers integration (local image openfga/openfga:v1.10.0)
 APP_ENV=local go run ./cmd/authz-sync    # needs docker compose's Kafka (:9092) and OpenFGA (:8091)
 ```

@@ -263,8 +263,8 @@ auth off (local super admin), webhook signatures not checked, test-send goes to 
 ```bash
 make up                                        # repo root: Postgres, Kafka, Mailpit …
 cd go/services/notifications
-GOTOOLCHAIN=go1.27.1 GOWORK=off go run ./cmd/notifications       # http://localhost:8208/docs
-GOTOOLCHAIN=go1.27.1 GOWORK=off go vet ./... && GOWORK=off go test ./...   # Docker needed for the Postgres test
+GOTOOLCHAIN=go1.27.2 GOWORK=off go run ./cmd/notifications       # http://localhost:8208/docs
+GOTOOLCHAIN=go1.27.2 GOWORK=off go vet ./... && GOWORK=off go test ./...   # Docker needed for the Postgres test
 GOWORK=off golangci-lint run --config ../../.golangci.yml ./...
 ```
 

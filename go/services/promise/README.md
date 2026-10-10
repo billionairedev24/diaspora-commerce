@@ -1,7 +1,7 @@
 # promise
 
 Delivery promises per destination ZIP — "Tomorrow, Oct 10", "Wed, Oct 15 – Fri, Oct 17", "Order within 3 h 12 min" —
-for search cards, the PDP, the cart and checkout. Go 1.27.1 · Valkey · local port **8204**.
+for search cards, the PDP, the cart and checkout. Go 1.27.2 · Valkey · local port **8204**.
 
 ## How a promise is computed
 
@@ -45,7 +45,7 @@ replace them with carrier zone/transit charts and Census ZCTA centroids without 
 
 ```bash
 cd go/services/promise
-export GOTOOLCHAIN=go1.27.1 GOWORK=off
+export GOTOOLCHAIN=go1.27.2 GOWORK=off
 go test ./...      # calendar/holidays, cutoffs, rollovers, handling, same-day, pickup, labels, batch API, Valkey Testcontainers
 APP_ENV=local go run ./cmd/promise   # needs Valkey from infra/local
 ```

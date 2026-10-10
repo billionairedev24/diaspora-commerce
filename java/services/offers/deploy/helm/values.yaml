@@ -8,7 +8,7 @@ cloud: none            # aws | gcp | azure | none (kind / local clusters)
 image:
   registry: ghcr.io/billionairedev24/diaspora-commerce
   repository: offers-service
-  tag: latest
+  tag: dev   # sentinel for local renders; the deploy pipeline writes the git sha into values-<env>.yaml
 replicas: 1
 autoscaling:
   enabled: false

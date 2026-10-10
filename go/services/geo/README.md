@@ -1,6 +1,6 @@
 # geo
 
-Addresses and places for every surface. Go 1.27.1 · PostgreSQL + PostGIS · local port **8205**.
+Addresses and places for every surface. Go 1.27.2 · PostgreSQL + PostGIS · local port **8205**.
 
 | Capability | How |
 |---|---|
@@ -23,6 +23,6 @@ Local uses the fixture list first so typing works offline. For production volume
 
 ```bash
 cd go/services/geo
-GOTOOLCHAIN=go1.27.1 go test ./...      # providers via httptest, fallback logic, PostGIS Testcontainers test
+GOTOOLCHAIN=go1.27.2 go test ./...      # providers via httptest, fallback logic, PostGIS Testcontainers test
 APP_ENV=local go run ./cmd/geo           # needs the geo database from infra/local
 ```

@@ -249,3 +249,14 @@ starting backlog.
 | — | gitleaks | 0 findings with `.gitleaks.toml` (11 before allowlisting: all test fixtures/local defaults) | — | — |
 
 Trivy totals for the repo (fs, vuln): 2 CRITICAL, 120 HIGH, 156 MEDIUM occurrences (per lockfile/module).
+
+### 5.1 Remediation status (S246: Go, Docker, Helm), 2026-10-10
+
+| Finding | Status | Change | Verified by |
+|---|---|---|---|
+| Go 1.27.1 stdlib (11 reachable GO-2026-66xx) | fixed | `toolchain go1.27.2` in every `go.mod` (the `go 1.27.1` directive is unchanged; a patch release needs no language bump); `golang:1.27.2` builder images; CI `GO_VERSION` 1.27.2 | `govulncheck` with `GOTOOLCHAIN=go1.27.2`: 0 findings in all 12 modules (before: 11 called each) |
+| golang.org/x/net v0.59.0 | fixed | v0.60.0 in every module | same |
+| moby/go-archive v0.2.0 (GO-2026-6253, fixed 0.3.0) | fixed | `github.com/moby/go-archive v0.3.3 // indirect` pinned in the 11 service modules (testcontainers-go v0.44.0, the newest, still requires v0.2.0) | `go test ./...` incl. Testcontainers green |
+| DS-0013 `RUN cd …` | fixed | `WORKDIR /src/services/<svc>` in every Go Dockerfile (`java/Dockerfile` had none) | grep; Trivy not re-run (not installed offline) |
+| KSV-0013 image tag `latest` | fixed | `at-service` library refuses `latest` and a missing tag/digest (`fail` with the service name); supports `image.digest`; service values use the sentinel `dev` until the deploy pipeline writes the git sha | 26 charts x dev/uat/prod x (platform-values + 4 clouds) rendered with helm + `kubeconform -strict` |
+| `go/go.work` still says `toolchain go1.27.1` | **open** | bump to `toolchain go1.27.2`: in workspace mode `GOTOOLCHAIN=auto` (local runs, `tools/security/govulncheck.sh`) otherwise selects 1.27.1 and still reports the stdlib vulns. CI is unaffected (`GOTOOLCHAIN: local` with Go 1.27.2) | — |

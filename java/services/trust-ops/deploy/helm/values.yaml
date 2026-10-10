@@ -8,7 +8,7 @@ cloud: none            # aws | gcp | azure | none (kind / local clusters)
 image:
   registry: ghcr.io/billionairedev24/diaspora-commerce
   repository: trust-ops-service
-  tag: latest
+  tag: dev   # sentinel for local renders; the deploy pipeline writes the git sha into values-<env>.yaml
 replicas: 1
 autoscaling:
   enabled: false
@@ -46,6 +46,7 @@ extraEnv:
   AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
   AUTH_TOKEN_URI: https://auth.dev.afrotransact.com/oauth2/token
   CATALOG_URL: http://catalog:8080
+  BOOKINGS_URL: http://bookings:8080
   PAYMENTS_URL: http://payments:8080
   SELLER_URL: http://seller:8080
   OFFERS_URL: http://offers:8080

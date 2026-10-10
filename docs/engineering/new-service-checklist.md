@@ -3,7 +3,7 @@
 Every service is built, tested, packaged and deployed **on its own**. Copy the reference implementations:
 
 - Java: `java/services/catalog` (Spring Boot 4.1, Java 25, hexagonal, JdbcClient + Flyway, outbox events)
-- Go: `go/services/search` (Go 1.27.1, hexagonal, shared `go/pkg` runtime)
+- Go: `go/services/search` (Go 1.27.2 toolchain, hexagonal, shared `go/pkg` runtime)
 
 ## Layout
 
@@ -31,7 +31,7 @@ deploy/helm/                            python3 tools/scaffold/new_chart.py <nam
 ### Go (`go/services/<name>`, module `github.com/billionairedev24/diaspora-commerce/go/services/<name>`)
 
 ```
-go.mod (go 1.27.1, toolchain go1.27.1, replace …/go/pkg => ../../pkg)
+go.mod (go 1.27.1, toolchain go1.27.2, replace …/go/pkg => ../../pkg)
 embed.go                      //go:embed config/*.yaml api/openapi.yaml
 cmd/<name>/main.go            explicit wiring only
 internal/domain               types and rules, no infrastructure imports
@@ -63,7 +63,7 @@ deploy/helm/                  python3 tools/scaffold/new_chart.py <name> go go/s
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64      # or any JDK 25
 cd java && ./mvnw -B -f services/<name>/pom.xml verify    # checkstyle + unit + ArchUnit + Testcontainers ITs
-cd go/services/<name> && GOTOOLCHAIN=go1.27.1 go vet ./... && go test ./... \
+cd go/services/<name> && GOTOOLCHAIN=go1.27.2 go vet ./... && go test ./... \
   && golangci-lint run --config ../../.golangci.yml ./...
 helm dependency build <svc>/deploy/helm && helm template x <svc>/deploy/helm -f <svc>/deploy/helm/values-prod.yaml | kubeconform -strict -ignore-missing-schemas
 ```

@@ -1,6 +1,6 @@
 # cart
 
-Shopping carts for the storefront and app (via the BFF). Go 1.27.1 · Valkey/Redis + PostgreSQL · local port **8203**.
+Shopping carts for the storefront and app (via the BFF). Go 1.27.2 · Valkey/Redis + PostgreSQL · local port **8203**.
 
 - **Packages per seller.** The cart view groups lines by seller and fulfilment (`AFROTRANSACT` first), with a
   subtotal per package — exactly how checkout splits shipments.
@@ -34,5 +34,5 @@ Contract: [`contracts/openapi/cart.yaml`](../../../contracts/openapi/cart.yaml).
 
 ```bash
 cd go/services/cart
-GOTOOLCHAIN=go1.27.1 go test ./...   # domain rules, conflict retry, catalog client, Valkey + Postgres Testcontainers
+GOTOOLCHAIN=go1.27.2 go test ./...   # domain rules, conflict retry, catalog client, Valkey + Postgres Testcontainers
 ```

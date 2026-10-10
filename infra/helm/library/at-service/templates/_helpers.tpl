@@ -4,7 +4,7 @@
 app.kubernetes.io/name: {{ include "at-service.name" . }}
 app.kubernetes.io/part-of: afrotransact
 app.kubernetes.io/component: {{ .Values.service.runtime }}
-app.kubernetes.io/version: {{ .Values.image.tag | quote }}
+app.kubernetes.io/version: {{ include "at-service.version" . | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 afrotransact.com/env: {{ .Values.env }}
 {{- end -}}
@@ -13,8 +13,40 @@ afrotransact.com/env: {{ .Values.env }}
 app.kubernetes.io/name: {{ include "at-service.name" . }}
 {{- end -}}
 
+{{/*
+Image reference. Every workload must pin its image: image.tag (CI writes the full git sha into values-<env>.yaml)
+and/or image.digest (sha256:…; rendered as repo[:tag]@digest). A missing tag and digest, or the mutable tag
+"latest", fails the render. Local and not-yet-deployed charts use the sentinel tag "dev".
+*/}}
+{{- define "at-service.imageTag" -}}
+{{- $tag := trim (toString (.Values.image.tag | default "")) -}}
+{{- $digest := trim (toString (.Values.image.digest | default "")) -}}
+{{- if eq (lower $tag) "latest" -}}
+{{- fail (printf "at-service: image.tag \"latest\" is not allowed for %s - set an immutable tag (git sha) or image.digest (local renders: the sentinel tag \"dev\")" (include "at-service.name" .)) -}}
+{{- end -}}
+{{- if and (not $tag) (not $digest) -}}
+{{- fail (printf "at-service: image.tag or image.digest is required for %s - set an explicit tag (git sha) or digest (local renders: the sentinel tag \"dev\")" (include "at-service.name" .)) -}}
+{{- end -}}
+{{- if and $digest (not (regexMatch "^sha256:[a-f0-9]{64}$" $digest)) -}}
+{{- fail (printf "at-service: image.digest %q for %s must be sha256:<64 hex>" $digest (include "at-service.name" .)) -}}
+{{- end -}}
+{{- $tag -}}
+{{- end -}}
+
 {{- define "at-service.image" -}}
-{{ .Values.image.registry }}/{{ .Values.image.repository | default (include "at-service.name" .) }}:{{ .Values.image.tag }}
+{{- $tag := include "at-service.imageTag" . -}}
+{{- $digest := trim (toString (.Values.image.digest | default "")) -}}
+{{ .Values.image.registry }}/{{ .Values.image.repository | default (include "at-service.name" .) }}{{ if $tag }}:{{ $tag }}{{ end }}{{ if $digest }}@{{ $digest }}{{ end }}
+{{- end -}}
+
+{{/* app.kubernetes.io/version: the tag, else "sha256-" + 12 hex chars of the digest (label values cannot hold ':'). */}}
+{{- define "at-service.version" -}}
+{{- $tag := include "at-service.imageTag" . -}}
+{{- if $tag -}}
+{{- $tag | trunc 63 | trimSuffix "-" | trimSuffix "." -}}
+{{- else -}}
+{{- printf "sha256-%s" (trimPrefix "sha256:" (toString .Values.image.digest) | trunc 12) -}}
+{{- end -}}
 {{- end -}}
 
 {{/* Health and metrics paths differ between Spring Boot and Go services. */}}

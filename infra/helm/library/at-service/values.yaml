@@ -1,1 +1,7 @@
 # Defaults merged under every service chart's values (documented here; the library itself renders nothing).
+#
+# image: the library never defaults the tag and refuses "latest" (Trivy KSV-0013). Set at least one of:
+#   image.tag     immutable tag; CI's GitOps bump writes the full git sha into values-<env>.yaml.
+#                 Service charts ship the sentinel "dev" until their first deploy (and for local renders).
+#   image.digest  sha256:<64 hex>; rendered as <registry>/<repository>[:<tag>]@<digest>.
+# A missing tag and digest, or tag "latest", fails `helm template` with a message naming the service.

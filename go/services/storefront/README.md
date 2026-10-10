@@ -1,6 +1,6 @@
 # storefront
 
-Seller storefronts and service-provider public pages. Go 1.27.1 · PostgreSQL · local port **8206**.
+Seller storefronts and service-provider public pages. Go 1.27.2 · PostgreSQL · local port **8206**.
 
 - **Theme vetting on the server.** `internal/domain/color.go` is a faithful port of the Theme Studio engine
   (`design/at-theme.js`): OKLCH conversion, 50–900 ramps, WCAG 2.2 contrast, `Fit` (move lightness until a target ratio)
@@ -24,5 +24,5 @@ Config: `DB_URL`, `PUBLIC_BASE_URL`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_API_TOKEN
 in `config/<env>.yaml`.
 
 ```bash
-cd go/services/storefront && GOTOOLCHAIN=go1.27.1 go test ./...   # colour maths vs WCAG values, rules, Postgres flow
+cd go/services/storefront && GOTOOLCHAIN=go1.27.2 go test ./...   # colour maths vs WCAG values, rules, Postgres flow
 ```

@@ -38,7 +38,7 @@ permissions:
 env:
   SERVICE: ${{ inputs.service }}
   SERVICE_DIR: go/services/${{ inputs.service }}
-  GO_VERSION: "1.27.1"
+  GO_VERSION: "1.27.2"
   GOTOOLCHAIN: local
 
 jobs:
@@ -75,7 +75,7 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.14.0
-          # Build the linter with the job's Go 1.27.1 so it understands the module's go directive.
+          # Build the linter with the job's Go 1.27.2 so it understands the module's go directive.
           install-mode: goinstall
           working-directory: ${{ env.SERVICE_DIR }}
           args: --config ../../.golangci.yml --timeout 5m

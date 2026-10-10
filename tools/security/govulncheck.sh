@@ -27,7 +27,7 @@ failed=()
 for mod in "${mods[@]}"; do
   name="${mod#"$ROOT"/}"
   [[ "$FORMAT" == "text" ]] && echo "==> $name" >&2
-  # Each module pins `toolchain go1.27.1`; GOTOOLCHAIN=auto lets `go` (used by govulncheck) switch to it.
+  # Each module pins `toolchain go1.27.2`; GOTOOLCHAIN=auto lets `go` (used by govulncheck) switch to it.
   ( cd "$mod" && GOTOOLCHAIN="${GOTOOLCHAIN:-auto}" "$GOVULNCHECK" -db "$DB" -format "$FORMAT" ./... )
   rc=$?
   # text mode: exit 3 = vulnerabilities found; other non-zero = error.

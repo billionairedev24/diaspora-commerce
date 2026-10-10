@@ -1,6 +1,6 @@
 # search
 
-Product search and typeahead over Elasticsearch 9. Go 1.27.1 · local port **8201**.
+Product search and typeahead over Elasticsearch 9. Go 1.27.2 · local port **8201**.
 
 ## Behaviour
 
@@ -103,7 +103,7 @@ synonyms set and creates `search-analytics-<market>` (the Elasticsearch API key 
 
 ```bash
 cd go/services/search
-GOTOOLCHAIN=go1.27.1 go test ./...        # unit + Elasticsearch Testcontainers integration test
+GOTOOLCHAIN=go1.27.2 go test ./...        # unit + Elasticsearch Testcontainers integration test
 golangci-lint run --config ../../.golangci.yml ./...
 APP_ENV=local go run ./cmd/search          # http://localhost:8201/docs
 docker build -f services/search/Dockerfile -t search ../..   # from go/: distroless image (~46 MB)

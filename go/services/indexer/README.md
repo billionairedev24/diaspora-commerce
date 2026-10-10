@@ -1,6 +1,6 @@
 # indexer
 
-Kafka → Elasticsearch projection of the product read model used by [search](../search). Go 1.27.1 · local port **8202**.
+Kafka → Elasticsearch projection of the product read model used by [search](../search). Go 1.27.2 · local port **8202**.
 
 - Consumes `catalog.product.created|approved|rejected|paused|resumed|hidden|restored` (topic `at.product.events`),
   `inventory.availability.changed` (`at.inventory.events`) and `seller.org.approved|updated` (`at.seller-org.events`)
@@ -41,6 +41,6 @@ Retail).
 
 ```bash
 cd go/services/indexer
-GOTOOLCHAIN=go1.27.1 go test ./...      # unit + Elasticsearch Testcontainers integration (version guards, stock sums)
+GOTOOLCHAIN=go1.27.2 go test ./...      # unit + Elasticsearch Testcontainers integration (version guards, stock sums)
 APP_ENV=local go run ./cmd/indexer
 ```
