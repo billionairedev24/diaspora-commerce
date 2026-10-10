@@ -3,6 +3,7 @@
 import { type ActivityEntry, type ExportJob, type ResourceKey } from '../../schemas/staff';
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
+import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
 
 export type Scalar = string | number | boolean | null;
 
@@ -36,6 +37,8 @@ export interface MockStaffDb {
   feeSchedules: MockFeeSchedule[];
   /** fulfilment's seller pickups (AfroTransact Delivery from the seller's store, S255). */
   dispatch: MockDispatch;
+  /** notifications' versioned templates and their sample data (S268). */
+  templates: { rows: MockTemplateRow[]; samples: Record<string, MockTemplateSample> };
   seq: number;
 }
 
@@ -398,6 +401,7 @@ function seed(now: Date): MockStaffDb {
     audit: [],
     feeSchedules,
     dispatch: seedDispatch(now),
+    templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     seq: 1
   };
 }

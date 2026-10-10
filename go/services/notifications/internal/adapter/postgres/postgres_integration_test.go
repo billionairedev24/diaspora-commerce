@@ -161,6 +161,9 @@ func TestPostgresIntegration(t *testing.T) {
 	pool := startPostgres(t)
 	ctx := context.Background()
 
+	// First, before other subtests add versions: what the template gallery shows.
+	t.Run("every seeded template renders with its sample data", func(t *testing.T) { seededTemplatesRender(t, pool) })
+
 	t.Run("seeded templates with locale fallback and versioning", func(t *testing.T) {
 		e := newEnv(t, pool)
 		tpl, err := e.templates.Find(ctx, "identity.verification", domain.LocaleFallbacks("fr-CA"), domain.ChannelSMS, 0)

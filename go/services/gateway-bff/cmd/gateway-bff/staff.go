@@ -25,7 +25,8 @@ type staffClients struct {
 }
 
 // staffServices wires the staff console (contracts/openapi/gateway-bff-staff.yaml): shell, tables and sheets,
-// dashboard, exports, the support console, the fee-schedule editor and the seller pickups of dispatch.
+// dashboard, exports, the support console, the fee-schedule editor, the seller pickups of dispatch and the
+// notification templates.
 func staffServices(cfg config.Config, client func(string, config.Upstream) httpclient.Client, sc staffClients, rdb redis.UniversalClient,
 	cache port.Cache, log *slog.Logger) (httpapi.StaffServices, error) {
 	up := cfg.Upstreams
@@ -58,7 +59,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	}
 	out.Shell, out.Records, out.Dashboard = app.NewStaffShellService(d), app.NewStaffRecordsService(d), app.NewStaffDashboardService(d)
 	out.Exports, out.Support, out.Fees = app.NewStaffExportsService(d), app.NewStaffSupportService(d), app.NewStaffFeesService(d)
-	out.Dispatch = app.NewStaffDispatchService(d)
+	out.Dispatch, out.Notifications = app.NewStaffDispatchService(d), app.NewStaffNotificationsService(d)
 	return out, nil
 }
 

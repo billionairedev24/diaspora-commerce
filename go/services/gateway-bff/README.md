@@ -142,6 +142,23 @@ shipments carry no pickup location id and routed pickups are not listed; orders'
 delivery-fee total (the BFF falls back to the snapshot); payments' payout balance has no delivery-fee total; catalog
 has no fulfilment field (listings stay `SELLER` until the offer is changed).
 
+## Notification templates in the staff console (S268)
+
+Contract: `contracts/openapi/gateway-bff-staff.yaml`, tag Notifications. The `notifications` module is derived from
+notifications' own permissions (identity's module matrix has no column for it): `notifications:templates:write` → EDIT,
+`notifications:read` → VIEW. The BFF checks them before calling notifications, which checks them again.
+
+| BFF operation | Upstream(s) | Permission |
+|---|---|---|
+| `GET /v1/staff/notifications/templates?q=` | notifications `GET /v1/templates` (latest per key, locale, channel), grouped by key | `notifications:read` |
+| `GET /v1/staff/notifications/templates/{key}` | notifications `GET /v1/templates?key=` (every version) + `GET /v1/templates/{key}/sample` (best effort: empty sample when it fails) | `notifications:read` |
+| `POST …/{key}/preview` | notifications `POST /v1/templates/{key}/preview` (stored version or `draft`); a template that does not render is a 422 on `subject` / `bodyText` / `bodyHtml` (`draft.`-prefixed) or `data`; SMS / WhatsApp answers carry the GSM-7 / UCS-2 segment count | `notifications:read` |
+| `POST …/{key}/versions` | placeholders checked against the key's sample data, draft rendered with it, SMS ≤ 3 segments, then notifications `POST /v1/templates` | `notifications:templates:write` |
+| `POST …/{key}/test-send` | notifications `POST /v1/templates/{key}/test-send` (the staff member's own email or phone; push refused) | `notifications:templates:write` |
+
+Gap: identity's seeds grant no platform role `notifications:templates:write` yet, so only VIEW is reachable until
+identity adds it (the staff console's mocks grant it to super admin, marketing and operations).
+
 ## Configuration
 
 `config/<APP_ENV>.yaml` (local, dev, uat, prod) with env overrides: `PORT`, `REDIS_URL`, `SESSION_SIGNING_KEY` (≥ 32

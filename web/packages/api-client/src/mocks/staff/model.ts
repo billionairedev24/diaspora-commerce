@@ -28,7 +28,11 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
   audit: { label: 'Audit log', description: 'Immutable, hash-chained record of every privileged action.' },
   markets: { label: 'Markets & locations', description: 'Turn AfroTransact on or off by country and by state.' },
   siteCfg: { label: 'Site content & legal', description: 'Contacts, social links and legal document versions, published without a deployment.' },
-  dev: { label: 'Developers', description: 'Identity providers: which social sign-in buttons appear.' }
+  dev: { label: 'Developers', description: 'Identity providers: which social sign-in buttons appear.' },
+  notifications: {
+    label: 'Notifications',
+    description: 'Email, SMS, push and WhatsApp templates: live preview with production-shaped sample data, version history and new versions.'
+  }
 };
 
 export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKey[] }[] = [
@@ -38,7 +42,7 @@ export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKe
   { key: 'finance', label: 'Finance', modules: ['payouts', 'fees'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
   { key: 'trust', label: 'Trust & compliance', modules: ['disputes', 'audit'] },
-  { key: 'settings', label: 'Settings', modules: ['markets', 'siteCfg', 'dev'] }
+  { key: 'settings', label: 'Settings', modules: ['markets', 'siteCfg', 'dev', 'notifications'] }
 ];
 
 export const RESOURCE_MODULE: Record<ResourceKey, StaffModuleKey> = {
@@ -59,8 +63,19 @@ export const REFUND_LIMITS: Record<string, number | null> = {
 
 export const roleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
 
+/**
+ * Grants identity's seeds do not carry yet (rbac-data.ts is generated from them): notifications:templates:write is
+ * checked by notifications and the BFF (S268) but no platform role holds it until identity seeds it. The mock gives it
+ * to the roles that edit customer messaging so the template editor can be tried.
+ */
+export const PENDING_PERMISSIONS: Record<string, string[]> = {
+  'platform.super_admin': ['notifications:read', 'notifications:templates:write'],
+  'platform.marketing': ['notifications:templates:write'],
+  'platform.operations_manager': ['notifications:templates:write']
+};
+
 export function permissionsOf(roles: string[]): string[] {
-  return [...new Set(roles.flatMap((r) => ROLE_PERMISSIONS[r] ?? []))].sort();
+  return [...new Set(roles.flatMap((r) => [...(ROLE_PERMISSIONS[r] ?? []), ...(PENDING_PERMISSIONS[r] ?? [])]))].sort();
 }
 
 function matrixLevel(roles: string[], module: MatrixModule): AccessLevel | null {
@@ -73,12 +88,16 @@ function matrixLevel(roles: string[], module: MatrixModule): AccessLevel | null 
   return best;
 }
 
-/** The staff member's level on a console module: the best level over their roles (support and exports are derived). */
+/** The staff member's level on a console module: the best level over their roles (support, exports and notifications are derived). */
 export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | null {
   if (module === 'exports') return matrixLevel(roles, 'dash');
   if (module === 'support') {
     const perms = permissionsOf(roles);
     return perms.includes('support:respond') ? 'EDIT' : perms.includes('users:read') ? 'VIEW' : null;
+  }
+  if (module === 'notifications') {
+    const perms = permissionsOf(roles);
+    return perms.includes('notifications:templates:write') ? 'EDIT' : perms.includes('notifications:read') ? 'VIEW' : null;
   }
   return matrixLevel(roles, module);
 }

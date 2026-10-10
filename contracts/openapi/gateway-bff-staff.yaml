@@ -62,6 +62,8 @@ tags:
     description: Fee-schedule editor (commission per category, seller overrides, card and FBA fees, AfroTransact Delivery pricing) over payments' immutable versions
   - name: Dispatch
     description: Seller pickups of AfroTransact Delivery from the seller's store (S255) — nearest-driver suggestions, overrides and their history
+  - name: Notifications
+    description: Notification templates (S268) — every key's versions per locale and channel, live previews with production-shaped sample data, new versions and test-sends to yourself
 security:
   - sessionCookie: []
 paths:
@@ -638,6 +640,119 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── notifications: templates (S268)
+  /v1/staff/notifications/templates:
+    get:
+      tags: [Notifications]
+      operationId: listNotificationTemplates
+      security: [{sessionCookie: []}]
+      summary: Every notification template key with its channels, locales and latest version
+      description: |
+        notifications `GET /v1/templates` (latest version of every key, locale and channel) grouped by key; `q` filters
+        by key, category or channel. Needs `notifications:read` (VIEW on the notifications module); `canEdit` says
+        whether the staff member holds `notifications:templates:write`.
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: 'Part of a key, a category or a channel'}
+      responses:
+        '200': {description: Templates, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationTemplateList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/notifications/templates/{key}:
+    get:
+      tags: [Notifications]
+      operationId: getNotificationTemplate
+      security: [{sessionCookie: []}]
+      summary: A template key's versions per locale and channel, with its sample data
+      description: |
+        notifications `GET /v1/templates?key=` (every version, newest first per locale and channel) and
+        `GET /v1/templates/{key}/sample`: the fields the key's event carries in production (a contract-shaped event run
+        through the real ingest), used to prefill the preview. When the sample cannot be read the editor starts from
+        empty data (`source: none`). Needs `notifications:read`.
+      parameters: [{$ref: '#/components/parameters/TemplateKey'}]
+      responses:
+        '200': {description: Template, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationTemplateDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/notifications/templates/{key}/preview:
+    post:
+      tags: [Notifications]
+      operationId: previewNotificationTemplate
+      security: [{sessionCookie: []}]
+      summary: Render a stored version or an unsaved draft with sample data
+      description: |
+        notifications `POST /v1/templates/{key}/preview` with the service's real renderer. `version` 0 renders the
+        latest stored version (locale fallback fr-CA → fr → en); `draft` renders unsaved content (the editor's live
+        preview). A template that does not compile, or reads a field the data lacks, is a 422 on the part that failed
+        (`subject`, `bodyText`, `bodyHtml`, prefixed `draft.` for drafts, else `data`). SMS and WhatsApp previews carry
+        the GSM-7 / UCS-2 segment count. Needs `notifications:read`.
+      parameters: [{$ref: '#/components/parameters/TemplateKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPreviewRequest'}}}
+      responses:
+        '200': {description: Rendered, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPreview'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/notifications/templates/{key}/versions:
+    post:
+      tags: [Notifications]
+      operationId: createNotificationTemplateVersion
+      security: [{sessionCookie: []}]
+      summary: Create the next version of a template for one locale and channel
+      description: |
+        notifications `POST /v1/templates` (`notifications:templates:write`). Before storing, the BFF checks that every
+        placeholder (`{{.field}}`, `{{if .field}}`, `{{$.field}}`) is a field of the key's sample data (keys without a
+        sample are only render-checked), renders the draft with the sample data, and refuses SMS longer than 3
+        segments. Emails need a subject and an HTML body; push notifications need a title; only emails have HTML.
+        The new version is what every later send of the key uses.
+      parameters: [{$ref: '#/components/parameters/TemplateKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NotificationVersionDraft'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationTemplateVersion'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/notifications/templates/{key}/test-send:
+    post:
+      tags: [Notifications]
+      operationId: testSendNotificationTemplate
+      security: [{sessionCookie: []}]
+      summary: Send a stored version or a draft to your own email or phone
+      description: |
+        notifications `POST /v1/templates/{key}/test-send` (`notifications:templates:write`). The destination is
+        always the signed-in staff member's own email (email) or phone (SMS, WhatsApp) from their access token, never
+        an address in the request; email subjects are prefixed `[TEST]`. Push cannot be test-sent (422 on `channel`);
+        no address on the account is a 422 without field errors.
+      parameters: [{$ref: '#/components/parameters/TemplateKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NotificationPreviewRequest'}}}
+      responses:
+        '200': {description: Sent, content: {application/json: {schema: {$ref: '#/components/schemas/NotificationTestSendResult'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     sessionCookie:
@@ -654,6 +769,7 @@ components:
     RecordId: {name: id, in: path, required: true, schema: {type: string, maxLength: 120}}
     ExportId: {name: exportId, in: path, required: true, schema: {type: string, maxLength: 64}}
     ShipmentId: {name: shipmentId, in: path, required: true, schema: {type: string, maxLength: 64}}
+    TemplateKey: {name: key, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,119}$'}, example: order.confirmed}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
     IdempotencyKeyRequired: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}, description: Same key = same refund; never refunds twice.}
   responses:
@@ -690,8 +806,8 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     StaffModuleKey:
       type: string
-      description: Sidebar modules; keys follow identity's platform module matrix (support and exports are derived).
-      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev]
+      description: Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived).
+      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]
@@ -1484,3 +1600,122 @@ components:
         pickupEnabled: {type: boolean}
         pickupHours: {type: array, items: {$ref: '#/components/schemas/PickupWindow'}}
         zoneName: {type: [string, 'null']}
+    # ── Notifications: templates (S268)
+    NotificationChannel: {type: string, enum: [email, sms, push, chat], description: chat is WhatsApp}
+    NotificationCategory: {type: string, enum: [security, transactional, reminder, marketing], description: 'Consent rules: security always sends, transactional unless the channel is off, reminder respects preferences and quiet hours, marketing needs opt-in'}
+    NotificationTemplateSummary:
+      type: object
+      required: [key, category, channels, locales, latestVersion, updatedBy, updatedAt]
+      properties:
+        key: {type: string, examples: [order.confirmed]}
+        category: {$ref: '#/components/schemas/NotificationCategory'}
+        channels: {type: array, items: {$ref: '#/components/schemas/NotificationChannel'}}
+        locales: {type: array, items: {type: string}}
+        latestVersion: {type: integer, description: Highest version over the key's locales and channels}
+        updatedBy: {type: [string, 'null'], description: Who created the most recent version (system for seeded templates)}
+        updatedAt: {type: [string, 'null'], format: date-time}
+    NotificationTemplateList:
+      type: object
+      required: [items, total, canEdit]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/NotificationTemplateSummary'}}
+        total: {type: integer}
+        canEdit: {type: boolean, description: 'notifications:templates:write (new versions and test-sends)'}
+    NotificationTemplateVersion:
+      type: object
+      required: [locale, channel, version, category, subject, bodyHtml, bodyText, createdBy, createdAt]
+      properties:
+        locale: {type: string}
+        channel: {$ref: '#/components/schemas/NotificationChannel'}
+        version: {type: integer}
+        category: {$ref: '#/components/schemas/NotificationCategory'}
+        subject: {type: string, description: 'Email subject, push title or WhatsApp template name'}
+        bodyHtml: {type: string, description: 'Email HTML (Go html/template); empty on other channels'}
+        bodyText: {type: string, description: 'Text part, SMS, push body or WhatsApp parameters (Go text/template)'}
+        createdBy: {type: [string, 'null']}
+        createdAt: {type: [string, 'null'], format: date-time}
+    NotificationTemplateVariant:
+      type: object
+      required: [locale, channel, latestVersion, versions]
+      properties:
+        locale: {type: string}
+        channel: {$ref: '#/components/schemas/NotificationChannel'}
+        latestVersion: {type: integer}
+        versions: {type: array, description: Newest first, items: {$ref: '#/components/schemas/NotificationTemplateVersion'}}
+    NotificationSample:
+      type: object
+      required: [source, area, eventTypes, data]
+      properties:
+        source:
+          type: string
+          enum: [event, request, sample, none]
+          description: "event: a producer event through notifications' real ingest; request: a producer's notification.requested; sample: fixed data for keys no event maps to; none: no sample"
+        area: {type: string, enum: [account, orders, seller, payouts, bookings, trust, retail, marketing, security, other]}
+        eventTypes: {type: array, items: {type: string}, description: Event types that send this template}
+        data: {type: object, additionalProperties: true}
+    NotificationTemplateDetail:
+      type: object
+      required: [key, category, variants, sample, canEdit, canTestSend]
+      properties:
+        key: {type: string}
+        category: {$ref: '#/components/schemas/NotificationCategory'}
+        variants: {type: array, items: {$ref: '#/components/schemas/NotificationTemplateVariant'}}
+        sample: {$ref: '#/components/schemas/NotificationSample'}
+        canEdit: {type: boolean}
+        canTestSend: {type: boolean}
+    NotificationDraft:
+      type: object
+      required: [bodyText]
+      properties:
+        category: {$ref: '#/components/schemas/NotificationCategory'}
+        subject: {type: string, maxLength: 300}
+        bodyHtml: {type: string, maxLength: 50000}
+        bodyText: {type: string, maxLength: 5000}
+    NotificationPreviewRequest:
+      type: object
+      required: [channel]
+      properties:
+        channel: {$ref: '#/components/schemas/NotificationChannel'}
+        locale: {type: string, default: en, pattern: '^[a-z]{2}(-[A-Z]{2})?$'}
+        version: {type: integer, minimum: 0, default: 0, description: 0 = latest}
+        data: {type: object, additionalProperties: true, description: Template fields (start from the sample data)}
+        draft: {$ref: '#/components/schemas/NotificationDraft'}
+    SmsSegments:
+      type: object
+      required: [encoding, characters, units, segments, perSegment]
+      properties:
+        encoding: {type: string, enum: [GSM-7, UCS-2], description: UCS-2 as soon as one character is outside the GSM 03.38 alphabet}
+        characters: {type: integer}
+        units: {type: integer, description: GSM-7 septets (extension characters count two) or UTF-16 code units}
+        segments: {type: integer}
+        perSegment: {type: integer, description: '160 / 70 for one segment, 153 / 67 per part when concatenated'}
+    NotificationPreview:
+      type: object
+      required: [subject, html, text, version, category, sms]
+      properties:
+        subject: {type: string}
+        html: {type: string, description: Email HTML; show it in a sandboxed iframe}
+        text: {type: string}
+        version: {type: integer, description: The rendered version (0 for a draft)}
+        category: {$ref: '#/components/schemas/NotificationCategory'}
+        sms:
+          oneOf:
+            - {$ref: '#/components/schemas/SmsSegments'}
+            - {type: 'null'}
+    NotificationVersionDraft:
+      type: object
+      required: [locale, channel, category, bodyText]
+      properties:
+        locale: {type: string, pattern: '^[a-z]{2}(-[A-Z]{2})?$'}
+        channel: {$ref: '#/components/schemas/NotificationChannel'}
+        category: {$ref: '#/components/schemas/NotificationCategory'}
+        subject: {type: string, maxLength: 300}
+        bodyHtml: {type: string, maxLength: 50000}
+        bodyText: {type: string, minLength: 1, maxLength: 5000}
+    NotificationTestSendResult:
+      type: object
+      required: [to, channel, provider]
+      properties:
+        to: {type: string, description: Your own email or phone}
+        channel: {$ref: '#/components/schemas/NotificationChannel'}
+        provider: {type: [string, 'null']}

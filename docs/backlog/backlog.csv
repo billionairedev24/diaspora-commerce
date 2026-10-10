@@ -380,7 +380,7 @@
 - Filter by actor, entity and date","E18","","High","3","trust java","trust","Done"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
 - Reinstatement restores them","E18","","Medium","5","trust","trust","Done"
-"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","In Progress"
+"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","Done"
 "S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
 - SMS adapters: Twilio, Vonage, AWS End User Messaging
 - Push: FCM and APNs; WhatsApp: Meta Cloud API
@@ -823,4 +823,4 @@
 "S269","Story","Notification template gallery and staff template editor","A generated gallery of every template rendered with realistic sample data, and a staff console Notifications > Templates module: list, live preview per channel and locale with editable sample data, version history and diff, new versions with validation, and test-send.","- Every seeded template renders in the gallery with sample data
 - Staff preview any template per channel and locale
 - Staff create a new version with live preview and test-send
-- Edit rights limited to notifications:templates:write","E19","","High","5","notifications staff-console","notifications","In Progress"
+- Edit rights limited to notifications:templates:write","E19","","High","5","notifications staff-console","notifications","Done"

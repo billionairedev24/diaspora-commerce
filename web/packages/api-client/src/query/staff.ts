@@ -1,6 +1,6 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
-import { type ResourceKey } from '../schemas/staff';
+import { type NotificationPreviewRequest, type ResourceKey } from '../schemas/staff';
 import { type ResourceQuery, type StaffApiClient } from '../staff-client';
 
 /* TanStack Query key factories for the staff console. Everything hangs off ['staff'] so signing out (or a role change)
@@ -24,7 +24,11 @@ export const staffKeys = {
   pickupList: (nodeId: string) => [...staffKeys.pickups(), 'list', nodeId] as const,
   pickup: (shipmentId: string) => [...staffKeys.pickups(), 'pickup', shipmentId] as const,
   pickupSuggestions: (shipmentId: string) => [...staffKeys.pickup(shipmentId), 'suggestions'] as const,
-  pickupAssignments: (shipmentId: string) => [...staffKeys.pickup(shipmentId), 'assignments'] as const
+  pickupAssignments: (shipmentId: string) => [...staffKeys.pickup(shipmentId), 'assignments'] as const,
+  templates: () => [...staffKeys.all, 'notifications', 'templates'] as const,
+  templateList: (q: string) => [...staffKeys.templates(), 'list', q] as const,
+  template: (key: string) => [...staffKeys.templates(), 'template', key] as const,
+  templatePreview: (key: string, body: NotificationPreviewRequest) => [...staffKeys.template(key), 'preview', body] as const
 };
 
 const MINUTE = 60_000;
@@ -64,5 +68,18 @@ export const staffQueries = {
   pickupSuggestions: (api: StaffApiClient, shipmentId: string) =>
     queryOptions({ queryKey: staffKeys.pickupSuggestions(shipmentId), queryFn: ({ signal }) => api.getPickupSuggestions(shipmentId, signal), staleTime: 10_000 }),
   pickupAssignments: (api: StaffApiClient, shipmentId: string) =>
-    queryOptions({ queryKey: staffKeys.pickupAssignments(shipmentId), queryFn: ({ signal }) => api.getPickupAssignments(shipmentId, signal), staleTime: 10_000 })
+    queryOptions({ queryKey: staffKeys.pickupAssignments(shipmentId), queryFn: ({ signal }) => api.getPickupAssignments(shipmentId, signal), staleTime: 10_000 }),
+  templates: (api: StaffApiClient, q = '') =>
+    queryOptions({ queryKey: staffKeys.templateList(q), queryFn: ({ signal }) => api.listNotificationTemplates(q, signal), placeholderData: keepPreviousData, staleTime: 30_000 }),
+  template: (api: StaffApiClient, key: string) =>
+    queryOptions({ queryKey: staffKeys.template(key), queryFn: ({ signal }) => api.getNotificationTemplate(key, signal), staleTime: 15_000 }),
+  /** Live preview: keyed by the whole request, so edits (debounced by the caller) render once each and stay cached. */
+  templatePreview: (api: StaffApiClient, key: string, body: NotificationPreviewRequest) =>
+    queryOptions({
+      queryKey: staffKeys.templatePreview(key, body),
+      queryFn: ({ signal }) => api.previewNotificationTemplate(key, body, signal),
+      placeholderData: keepPreviousData,
+      staleTime: 60_000,
+      retry: false
+    })
 };

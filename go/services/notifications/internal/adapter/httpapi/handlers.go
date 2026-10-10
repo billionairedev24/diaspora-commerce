@@ -34,7 +34,8 @@ type Deps struct {
 	Receipts     app.Receipts
 	Compliance   app.SmsCompliance
 	Unsubscriber app.Unsubscriber
-	StockAlerts  app.StockAlerts // nil disables /v1/stock-alerts
+	StockAlerts  app.StockAlerts     // nil disables /v1/stock-alerts
+	Samples      app.TemplateSamples // sample data per template key (nil: every key has an empty sample)
 	Twilio       webhooksig.Verifier
 	Resend       webhooksig.Verifier
 	SendGrid     webhooksig.Verifier
@@ -66,6 +67,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux, authn func(http.Handler) htt
 	secured("POST /v1/dead-letters/{id}/replay", PermManage, h.replay)
 	secured("GET /v1/templates", PermRead, h.listTemplates)
 	secured("POST /v1/templates", PermTemplatesWrite, h.createTemplate)
+	secured("GET /v1/templates/{key}/sample", PermRead, h.templateSample)
 	secured("POST /v1/templates/{key}/preview", PermRead, h.preview)
 	secured("POST /v1/templates/{key}/test-send", PermTemplatesWrite, h.testSend)
 	secured("POST /v1/consents/sms", PermSend, h.recordConsent)
@@ -186,6 +188,30 @@ func (h *handlersImpl) createTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, out)
+}
+
+// templateSample answers the sample data a key renders with in previews (the data its event carries in production).
+// A stored key without a sample (e.g. a new key created by staff) gets an empty sample; an unknown key is 404.
+func (h *handlersImpl) templateSample(w http.ResponseWriter, r *http.Request) {
+	key := r.PathValue("key")
+	var s app.TemplateSample
+	ok := false
+	if h.d.Samples != nil {
+		s, ok = h.d.Samples.Sample(key)
+	}
+	if !ok {
+		stored, err := h.d.Templates.List(r.Context(), key)
+		if err != nil {
+			h.writeErr(w, r, err)
+			return
+		}
+		if len(stored) == 0 {
+			h.writeErr(w, r, domain.ErrTemplateNotFound)
+			return
+		}
+		s = app.TemplateSample{Key: key, Area: app.TemplateArea(key), Source: app.SampleNone, EventTypes: []string{}, Data: map[string]any{}}
+	}
+	writeJSON(w, http.StatusOK, s)
 }
 
 func (h *handlersImpl) preview(w http.ResponseWriter, r *http.Request) {

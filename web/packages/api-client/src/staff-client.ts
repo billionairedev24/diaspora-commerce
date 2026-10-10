@@ -21,6 +21,18 @@ import {
   FeeScheduleViewSchema,
   type FeesOverview,
   FeesOverviewSchema,
+  type NotificationPreview,
+  type NotificationPreviewRequest,
+  NotificationPreviewSchema,
+  type NotificationTemplateDetail,
+  NotificationTemplateDetailSchema,
+  type NotificationTemplateList,
+  NotificationTemplateListSchema,
+  type NotificationTemplateVersion,
+  NotificationTemplateVersionSchema,
+  type NotificationTestSendResult,
+  NotificationTestSendResultSchema,
+  type NotificationVersionDraft,
   type PickupAssignmentList,
   PickupAssignmentListSchema,
   type PickupAssignRequest,
@@ -121,7 +133,19 @@ export function createStaffApiClient(options: ApiClientOptions) {
     getPickupAssignments: (shipmentId: string, signal?: AbortSignal): Promise<PickupAssignmentList> =>
       request(`/v1/staff/dispatch/pickups/${enc(shipmentId)}/assignments`, PickupAssignmentListSchema, { signal }),
     getShipFromLocation: (locationId: string, signal?: AbortSignal): Promise<ShipFromLocation> =>
-      request(`/v1/staff/ship-from-locations/${enc(locationId)}`, ShipFromLocationSchema, { signal })
+      request(`/v1/staff/ship-from-locations/${enc(locationId)}`, ShipFromLocationSchema, { signal }),
+
+    /* Notifications → Templates (S268) */
+    listNotificationTemplates: (q?: string, signal?: AbortSignal): Promise<NotificationTemplateList> =>
+      request('/v1/staff/notifications/templates', NotificationTemplateListSchema, { query: { q: q || undefined }, signal }),
+    getNotificationTemplate: (key: string, signal?: AbortSignal): Promise<NotificationTemplateDetail> =>
+      request(`/v1/staff/notifications/templates/${enc(key)}`, NotificationTemplateDetailSchema, { signal }),
+    previewNotificationTemplate: (key: string, body: NotificationPreviewRequest, signal?: AbortSignal): Promise<NotificationPreview> =>
+      request(`/v1/staff/notifications/templates/${enc(key)}/preview`, NotificationPreviewSchema, { method: 'POST', body, signal }),
+    createNotificationTemplateVersion: (key: string, body: NotificationVersionDraft): Promise<NotificationTemplateVersion> =>
+      request(`/v1/staff/notifications/templates/${enc(key)}/versions`, NotificationTemplateVersionSchema, { method: 'POST', body }),
+    testSendNotificationTemplate: (key: string, body: NotificationPreviewRequest): Promise<NotificationTestSendResult> =>
+      request(`/v1/staff/notifications/templates/${enc(key)}/test-send`, NotificationTestSendResultSchema, { method: 'POST', body })
   };
 }
 

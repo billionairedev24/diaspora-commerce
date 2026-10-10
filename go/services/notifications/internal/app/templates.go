@@ -11,7 +11,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/port"
 )
 
-// PreviewRequest selects a template version and the sample data to render it with.
+// PreviewRequest selects a template version (or unsaved draft content) and the sample data to render it with.
 type PreviewRequest struct {
 	Key     string         `json:"-"`
 	Locale  string         `json:"locale"`
@@ -19,6 +19,18 @@ type PreviewRequest struct {
 	Version int            `json:"version"`
 	Market  string         `json:"market"`
 	Data    map[string]any `json:"data"`
+	// Draft renders unsaved content instead of a stored version (the staff console's editor previews and
+	// test-sends a new version before it is created).
+	Draft *TemplateDraft `json:"draft,omitempty"`
+}
+
+// TemplateDraft is template content that is not stored yet.
+type TemplateDraft struct {
+	// Category defaults to the stored template's (else transactional); it decides consent rules on test-send.
+	Category domain.Category `json:"category,omitempty"`
+	Subject  string          `json:"subject,omitempty"`
+	BodyHTML string          `json:"bodyHtml,omitempty"`
+	BodyText string          `json:"bodyText"`
 }
 
 // TestSendResult reports where a test message went.
@@ -81,9 +93,17 @@ func (s *templatesImpl) render(ctx context.Context, req PreviewRequest) (domain.
 	if !req.Channel.Valid() {
 		return domain.Rendered{}, errors.Join(domain.ErrInvalidRequest, errors.New("unknown channel"))
 	}
-	t, err := s.store.Find(ctx, req.Key, domain.LocaleFallbacks(req.Locale), req.Channel, req.Version)
-	if err != nil {
-		return domain.Rendered{}, fmt.Errorf("find template: %w", err)
+	var t domain.Template
+	if req.Draft != nil {
+		var err error
+		if t, err = s.draft(ctx, req); err != nil {
+			return domain.Rendered{}, err
+		}
+	} else {
+		var err error
+		if t, err = s.store.Find(ctx, req.Key, domain.LocaleFallbacks(req.Locale), req.Channel, req.Version); err != nil {
+			return domain.Rendered{}, fmt.Errorf("find template: %w", err)
+		}
 	}
 	if req.Data == nil {
 		req.Data = map[string]any{}
@@ -93,6 +113,30 @@ func (s *templatesImpl) render(ctx context.Context, req PreviewRequest) (domain.
 		return domain.Rendered{}, errors.Join(domain.ErrInvalidRequest, err)
 	}
 	return r, nil
+}
+
+// draft builds the unsaved template of a draft preview; it must compile like a version about to be stored.
+func (s *templatesImpl) draft(ctx context.Context, req PreviewRequest) (domain.Template, error) {
+	locale := req.Locale
+	if locale == "" {
+		locale = "en"
+	}
+	t := domain.Template{Key: req.Key, Locale: locale, Channel: req.Channel, Category: req.Draft.Category,
+		Subject: req.Draft.Subject, BodyHTML: req.Draft.BodyHTML, BodyText: req.Draft.BodyText}
+	if !t.Category.Valid() {
+		t.Category = domain.CategoryTransactional
+		stored, err := s.store.Find(ctx, req.Key, domain.LocaleFallbacks(locale), req.Channel, 0)
+		switch {
+		case err == nil:
+			t.Category = stored.Category
+		case !errors.Is(err, domain.ErrTemplateNotFound):
+			return t, fmt.Errorf("find template: %w", err)
+		}
+	}
+	if err := s.renderer.Parse(t); err != nil {
+		return t, errors.Join(domain.ErrInvalidRequest, err)
+	}
+	return t, nil
 }
 
 func (s *templatesImpl) Preview(ctx context.Context, req PreviewRequest) (domain.Rendered, error) {

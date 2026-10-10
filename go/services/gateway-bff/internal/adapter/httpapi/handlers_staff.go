@@ -28,6 +28,8 @@ type StaffServices struct {
 	Fees      app.StaffFeesService
 	// Dispatch serves the seller pickups of AfroTransact Delivery (S255); routes are registered when it is set.
 	Dispatch app.StaffDispatchService
+	// Notifications serves Notifications → Templates (S268); routes are registered when it is set.
+	Notifications app.StaffNotificationsService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
 	Files port.LocalExportFiles
 }
@@ -68,6 +70,13 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		route("POST /v1/staff/dispatch/pickups/{shipmentId}/assign", h.staffAssignPickup)
 		route("GET /v1/staff/dispatch/pickups/{shipmentId}/assignments", h.staffPickupAssignments)
 		route("GET /v1/staff/ship-from-locations/{locationId}", h.staffShipFromLocation)
+	}
+	if s.Notifications != nil {
+		route("GET /v1/staff/notifications/templates", h.staffTemplates)
+		route("GET /v1/staff/notifications/templates/{key}", h.staffTemplate)
+		route("POST /v1/staff/notifications/templates/{key}/preview", h.staffTemplatePreview)
+		route("POST /v1/staff/notifications/templates/{key}/versions", h.staffTemplateVersion)
+		route("POST /v1/staff/notifications/templates/{key}/test-send", h.staffTemplateTestSend)
 	}
 }
 
@@ -408,5 +417,47 @@ func (h *handlersImpl) staffPickupAssignments(w http.ResponseWriter, r *http.Req
 
 func (h *handlersImpl) staffShipFromLocation(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Staff.Dispatch.ShipFromLocation(r.Context(), callerFrom(r.Context()), r.PathValue("locationId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- notifications: templates (S268)
+
+func (h *handlersImpl) staffTemplates(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Notifications.Templates(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("q"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffTemplate(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Notifications.Template(r.Context(), callerFrom(r.Context()), r.PathValue("key"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffTemplatePreview(w http.ResponseWriter, r *http.Request) {
+	var b domain.NotificationPreviewRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Notifications.Preview(r.Context(), callerFrom(r.Context()), r.PathValue("key"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffTemplateVersion(w http.ResponseWriter, r *http.Request) {
+	var b domain.NotificationVersionDraft
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Notifications.CreateVersion(r.Context(), callerFrom(r.Context()), r.PathValue("key"), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) staffTemplateTestSend(w http.ResponseWriter, r *http.Request) {
+	var b domain.NotificationPreviewRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Notifications.TestSend(r.Context(), callerFrom(r.Context()), r.PathValue("key"), b)
 	h.reply(w, r, http.StatusOK, v, err)
 }

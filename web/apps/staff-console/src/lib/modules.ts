@@ -2,6 +2,7 @@ import { type ResourceKey, type StaffModuleKey } from '@afrotransact/api-client'
 import { type Icon } from '@phosphor-icons/react';
 import {
   Bank,
+  BellRinging,
   Code,
   DownloadSimple,
   GlobeHemisphereWest,
@@ -24,14 +25,14 @@ import {
 export const MODULE_ICONS: Record<StaffModuleKey, Icon> = {
   dash: SquaresFour, exports: DownloadSimple, orders: Receipt, catalog: ShieldCheck, inventory: Stack, retail: Package, dispatch: Path,
   apps: IdentificationCard, support: Headset, rbac: UsersThree, payouts: Bank, fees: Percent, marketing: Megaphone, disputes: Scales,
-  audit: ListMagnifyingGlass, markets: GlobeHemisphereWest, siteCfg: Scales, dev: Code
+  audit: ListMagnifyingGlass, markets: GlobeHemisphereWest, siteCfg: Scales, dev: Code, notifications: BellRinging
 };
 
 /** URL path of each module. */
 export const MODULE_PATHS: Record<StaffModuleKey, string> = {
   dash: '/', exports: '/exports', orders: '/orders', catalog: '/moderation', inventory: '/inventory', retail: '/retail', dispatch: '/dispatch',
   apps: '/applications', support: '/support', rbac: '/users', payouts: '/payouts', fees: '/fees', marketing: '/marketing', disputes: '/disputes',
-  audit: '/audit', markets: '/markets', siteCfg: '/site-content', dev: '/developers'
+  audit: '/audit', markets: '/markets', siteCfg: '/site-content', dev: '/developers', notifications: '/notifications'
 };
 
 export const hrefOf = (key: StaffModuleKey): string => MODULE_PATHS[key];

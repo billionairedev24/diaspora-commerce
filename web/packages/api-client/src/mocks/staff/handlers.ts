@@ -5,6 +5,7 @@
 import { http, HttpResponse, type JsonBodyType } from 'msw';
 import { z } from 'zod';
 
+import { countSmsSegments, MAX_SMS_SEGMENTS, missingPlaceholders } from '../../notifications';
 import { bffProblemType } from '../../problem-types';
 import { type AccessLevel, type ChartSpec } from '../../schemas/seller';
 import {
@@ -13,6 +14,16 @@ import {
   type DriverSuggestions,
   type ExportJob,
   FieldValueSchema,
+  NotificationCategorySchema,
+  type NotificationChannel,
+  type NotificationPreview,
+  type NotificationSample,
+  type NotificationTemplateDetail,
+  type NotificationTemplateList,
+  type NotificationTemplateSummary,
+  type NotificationTemplateVariant,
+  type NotificationTemplateVersion,
+  type NotificationTestSendResult,
   type PickupAssignmentList,
   type PickupAssignResult,
   type PickupList,
@@ -30,7 +41,9 @@ import { validateStaffForm } from '../../validation/staff-form';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
+import { type MockTemplateRow } from './notification-templates';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
+import { MockRenderError, renderPart, type TemplatePart } from './template-render';
 
 export const MOCK_STAFF_ROLE_COOKIE = 'at_mock_staff_role';
 const DEFAULT_ROLES = ['platform.super_admin'];
@@ -358,6 +371,167 @@ const CancelBody = z.object({ customerId: z.string().min(1), orderNumber: z.stri
 
 function requireSupport(ctx: Ctx, min: AccessLevel) {
   if (!allows(ctx.roles, 'support', min)) throw forbidden('Your roles can’t use the support console.');
+}
+
+/* ── notifications: templates (S268) ── */
+
+const CHANNEL_ORDER: NotificationChannel[] = ['email', 'sms', 'push', 'chat'];
+const PART_FIELD: Record<TemplatePart, 'subject' | 'bodyText' | 'bodyHtml'> = { subject: 'subject', text: 'bodyText', html: 'bodyHtml' };
+const KEY_PATTERN = /^[a-z0-9][a-z0-9_.-]{0,119}$/;
+const LOCALE_PATTERN = /^[a-z]{2}(-[A-Z]{2})?$/;
+
+const DraftBody = z.object({
+  category: NotificationCategorySchema.optional(),
+  subject: z.string().max(300, 'Keep it under 300 characters').optional(),
+  bodyHtml: z.string().max(50_000, 'The HTML is too large (50,000 characters at most)').optional(),
+  bodyText: z.string().max(5_000, 'Keep it under 5,000 characters')
+});
+const PreviewBody = z.object({
+  channel: z.enum(['email', 'sms', 'push', 'chat'], { message: 'Choose email, sms, push or chat' }),
+  locale: z.string().regex(LOCALE_PATTERN, 'Use a locale such as en or fr-CA').default('en'),
+  version: z.number().int().min(0, 'Use 0 for the latest version').default(0),
+  data: z.record(z.string(), z.unknown()).default({}),
+  draft: DraftBody.optional()
+});
+const VersionBody = z.object({
+  locale: z.string().regex(LOCALE_PATTERN, 'Use a locale such as en or fr-CA').default('en'),
+  channel: z.enum(['email', 'sms', 'push', 'chat'], { message: 'Choose email, sms, push or chat' }),
+  category: NotificationCategorySchema,
+  subject: z.string().max(300, 'Keep it under 300 characters').default(''),
+  bodyHtml: z.string().max(50_000, 'The HTML is too large (50,000 characters at most)').default(''),
+  bodyText: z.string().max(5_000, 'Keep it under 5,000 characters')
+});
+
+function requireNotifications(ctx: Ctx, min: AccessLevel = 'VIEW') {
+  if (!allows(ctx.roles, 'notifications', min)) throw forbidden(`Your roles can’t ${min === 'VIEW' ? 'open' : 'change'} notifications.`);
+}
+
+function requireTemplateWrite(ctx: Ctx) {
+  requireNotifications(ctx, 'EDIT');
+  if (!ctx.permissions.includes('notifications:templates:write')) throw forbidden('This needs the notifications:templates:write permission.');
+}
+
+const canWriteTemplates = (ctx: Ctx) => ctx.permissions.includes('notifications:templates:write') && allows(ctx.roles, 'notifications', 'EDIT');
+const templateRows = (ctx: Ctx, key: string) => ctx.db.templates.rows.filter((r) => r.key === key);
+const sampleOf = (ctx: Ctx, key: string): NotificationSample =>
+  ctx.db.templates.samples[key] ?? { source: 'none', area: 'other', eventTypes: [], data: {} };
+
+function templateList(ctx: Ctx, q: string): NotificationTemplateList {
+  const term = q.trim().toLowerCase();
+  const latest = new Map<string, MockTemplateRow>();
+  ctx.db.templates.rows.forEach((r) => {
+    const id = `${r.key}|${r.locale}|${r.channel}`;
+    const cur = latest.get(id);
+    if (!cur || r.version > cur.version) latest.set(id, r);
+  });
+  const byKey = new Map<string, NotificationTemplateSummary>();
+  [...latest.values()]
+    .filter((r) => !term || `${r.key} ${r.category} ${r.channel}`.toLowerCase().includes(term))
+    .forEach((r) => {
+      const s = byKey.get(r.key) ?? { key: r.key, category: r.category, channels: [], locales: [], latestVersion: 0, updatedBy: null, updatedAt: null };
+      if (!s.channels.includes(r.channel)) s.channels.push(r.channel);
+      if (!s.locales.includes(r.locale)) s.locales.push(r.locale);
+      s.latestVersion = Math.max(s.latestVersion, r.version);
+      if (!s.updatedAt || r.createdAt > s.updatedAt) {
+        s.updatedAt = r.createdAt;
+        s.updatedBy = r.createdBy;
+      }
+      if (r.channel === 'email') s.category = r.category;
+      byKey.set(r.key, s);
+    });
+  const items = [...byKey.values()]
+    .map((s) => ({ ...s, channels: [...s.channels].sort((a, b) => CHANNEL_ORDER.indexOf(a) - CHANNEL_ORDER.indexOf(b)), locales: [...s.locales].sort() }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  return { items, total: items.length, canEdit: canWriteTemplates(ctx) };
+}
+
+function templateDetail(ctx: Ctx, key: string): NotificationTemplateDetail {
+  const rows = KEY_PATTERN.test(key) ? templateRows(ctx, key) : [];
+  if (!rows.length) throw notFound('No such notification template.');
+  const variants = new Map<string, NotificationTemplateVariant>();
+  rows.forEach((r) => {
+    const id = `${r.locale}|${r.channel}`;
+    const v = variants.get(id) ?? { locale: r.locale, channel: r.channel, latestVersion: 0, versions: [] };
+    v.versions.push({ locale: r.locale, channel: r.channel, version: r.version, category: r.category, subject: r.subject, bodyHtml: r.bodyHtml,
+      bodyText: r.bodyText, createdBy: r.createdBy, createdAt: r.createdAt });
+    v.latestVersion = Math.max(v.latestVersion, r.version);
+    variants.set(id, v);
+  });
+  const list = [...variants.values()]
+    .map((v) => ({ ...v, versions: [...v.versions].sort((a, b) => b.version - a.version) }))
+    .sort((a, b) => (a.locale === b.locale ? CHANNEL_ORDER.indexOf(a.channel) - CHANNEL_ORDER.indexOf(b.channel) : a.locale === 'en' ? -1 : b.locale === 'en' ? 1 : a.locale.localeCompare(b.locale)));
+  const email = list.find((v) => v.channel === 'email');
+  const write = canWriteTemplates(ctx);
+  return { key, category: (email ?? list[0])?.versions[0]?.category ?? 'transactional', variants: list, sample: sampleOf(ctx, key), canEdit: write, canTestSend: write };
+}
+
+function draftErrors(channel: NotificationChannel, subject: string, html: string, text: string): Record<string, string> {
+  const errs: Record<string, string> = {};
+  if (!text.trim()) errs.bodyText = 'Write the text';
+  if (channel === 'email' && !html.trim()) errs.bodyHtml = 'Emails need an HTML body';
+  if (channel !== 'email' && html.trim()) errs.bodyHtml = 'Only emails have an HTML body';
+  if (channel === 'email' && !subject.trim()) errs.subject = 'Emails need a subject';
+  if (channel === 'push' && !subject.trim()) errs.subject = 'Push notifications need a title';
+  return errs;
+}
+
+function renderRow(row: Pick<MockTemplateRow, 'subject' | 'bodyHtml' | 'bodyText'>, data: Record<string, unknown>, prefix: string) {
+  try {
+    return { subject: renderPart('subject', row.subject, data).trim(), text: renderPart('text', row.bodyText, data), html: renderPart('html', row.bodyHtml, data) };
+  } catch (e) {
+    if (!(e instanceof MockRenderError)) throw e;
+    const missing = /map has no entry for key "([^"]+)"/.exec(e.message);
+    throw invalid({ [prefix + PART_FIELD[e.part]]: missing ? `Not in the sample data: ${missing[1]}` : e.message.replace(/^template render failed: \w+: /, '') });
+  }
+}
+
+function previewTemplate(ctx: Ctx, key: string, b: z.infer<typeof PreviewBody>): NotificationPreview {
+  if (!KEY_PATTERN.test(key) || !templateRows(ctx, key).length) throw notFound('No such notification template.');
+  const fallbacks = [b.locale, b.locale.split('-')[0] ?? 'en', 'en'];
+  const stored = templateRows(ctx, key)
+    .filter((r) => r.channel === b.channel && fallbacks.includes(r.locale) && (b.version === 0 || r.version === b.version))
+    .sort((x, y) => fallbacks.indexOf(x.locale) - fallbacks.indexOf(y.locale) || y.version - x.version)[0];
+  let out: Omit<NotificationPreview, 'sms'>;
+  if (b.draft) {
+    const d = b.draft;
+    const errs = draftErrors(b.channel, d.subject ?? '', d.bodyHtml ?? '', d.bodyText);
+    if (Object.keys(errs).length) throw invalid(Object.fromEntries(Object.entries(errs).map(([k, v]) => [`draft.${k}`, v])));
+    const r = renderRow({ subject: d.subject ?? '', bodyHtml: d.bodyHtml ?? '', bodyText: d.bodyText }, b.data, 'draft.');
+    out = { ...r, version: 0, category: d.category ?? stored?.category ?? 'transactional' };
+  } else {
+    if (!stored) throw notFound('No version of this template for that channel and locale.');
+    out = { ...renderRow(stored, b.data, ''), version: stored.version, category: stored.category };
+  }
+  return { ...out, sms: b.channel === 'sms' || b.channel === 'chat' ? countSmsSegments(out.text) : null };
+}
+
+function createTemplateVersion(ctx: Ctx, key: string, b: z.infer<typeof VersionBody>): NotificationTemplateVersion {
+  if (!KEY_PATTERN.test(key)) throw notFound('No such notification template.');
+  const errs = draftErrors(b.channel, b.subject, b.bodyHtml, b.bodyText);
+  if (Object.keys(errs).length) throw invalid(errs);
+  requireTemplateWrite(ctx);
+  if (!templateRows(ctx, key).length) throw notFound('No such notification template.');
+  const sample = sampleOf(ctx, key);
+  if (sample.source !== 'none') {
+    const missing: Record<string, string> = {};
+    ([['subject', b.subject], ['bodyHtml', b.bodyHtml], ['bodyText', b.bodyText]] as const).forEach(([field, src]) => {
+      const m = missingPlaceholders(src, sample.data);
+      if (m.length) missing[field] = `Not in the sample data: ${m.join(', ')}`;
+    });
+    if (Object.keys(missing).length) throw invalid(missing);
+  }
+  const r = renderRow(b, sample.data, '');
+  if (b.channel === 'sms') {
+    const seg = countSmsSegments(r.text);
+    if (seg.segments > MAX_SMS_SEGMENTS) throw invalid({ bodyText: `This SMS is ${seg.segments} segments (${seg.encoding}) with the sample data; keep it to 3 or fewer` });
+  }
+  const version = Math.max(0, ...templateRows(ctx, key).filter((x) => x.locale === b.locale && x.channel === b.channel).map((x) => x.version)) + 1;
+  const row: MockTemplateRow = { key, locale: b.locale, channel: b.channel, version, category: b.category, subject: b.subject, bodyHtml: b.bodyHtml,
+    bodyText: b.bodyText, createdBy: ctx.db.user.id, createdAt: ctx.now.toISOString() };
+  ctx.db.templates.rows.push(row);
+  audit(ctx, 'notifications.template.version_created', key, `Created ${key} ${b.channel} ${b.locale} v${version}`);
+  const { key: _key, ...out } = row;
+  return out;
 }
 
 const W = '*/v1/staff';
@@ -779,6 +953,52 @@ export const staffHandlers = [
       const loc = ctx.db.dispatch.locations.find((l) => l.id === p.id);
       if (!loc) throw notFound('No such location.');
       return loc;
+    })
+  ),
+  /* ── notifications: templates (S268) ── */
+  http.get(
+    `${W}/notifications/templates`,
+    route((ctx): NotificationTemplateList => {
+      const q = query(ctx).get('q') ?? '';
+      if (q.length > 120) throw invalid({ q: 'Too long' });
+      requireNotifications(ctx);
+      return templateList(ctx, q);
+    })
+  ),
+  http.get(
+    `${W}/notifications/templates/:key`,
+    route((ctx, p): NotificationTemplateDetail => {
+      requireNotifications(ctx);
+      return templateDetail(ctx, p.key ?? '');
+    })
+  ),
+  http.post(
+    `${W}/notifications/templates/:key/preview`,
+    route(async (ctx, p): Promise<NotificationPreview> => {
+      const b = await json(ctx.request, PreviewBody);
+      requireNotifications(ctx);
+      return previewTemplate(ctx, p.key ?? '', b);
+    })
+  ),
+  http.post(
+    `${W}/notifications/templates/:key/versions`,
+    route(async (ctx, p): Promise<NotificationTemplateVersion> => {
+      const b = await json(ctx.request, VersionBody);
+      return createTemplateVersion(ctx, p.key ?? '', b);
+    }, 201)
+  ),
+  http.post(
+    `${W}/notifications/templates/:key/test-send`,
+    route(async (ctx, p): Promise<NotificationTestSendResult> => {
+      const b = await json(ctx.request, PreviewBody);
+      if (b.channel === 'push') throw invalid({ channel: 'Push notifications can’t be test-sent; use the preview' });
+      requireTemplateWrite(ctx);
+      previewTemplate(ctx, p.key ?? '', b);
+      if (b.channel !== 'email') {
+        throw new StaffProblem(422, 'VALIDATION_FAILED', 'No address to send to', 'Test messages go only to your own email or phone, and none is on your account.');
+      }
+      audit(ctx, 'notifications.template.test_sent', p.key ?? '', `Test-sent ${p.key ?? ''} (${b.channel}) to ${ctx.db.user.email}`);
+      return { to: ctx.db.user.email, channel: b.channel, provider: 'log' };
     })
   ),
   /* Anything else under /v1/staff is not part of the contract. */

@@ -10,7 +10,8 @@ import (
 )
 
 // Staff console (contracts/openapi/gateway-bff-staff.yaml): shell, RBAC, server-driven tables and sheets, exports and
-// the support console. Module keys follow identity's PLATFORM module matrix; "support" and "exports" are derived.
+// the support console. Module keys follow identity's PLATFORM module matrix; "support", "exports" and "notifications"
+// are derived.
 
 // Staff problem codes.
 const (
@@ -72,6 +73,7 @@ var StaffNav = []StaffNavGroupDef{
 		{"markets", "markets", "Markets & locations", "Turn AfroTransact on or off by country and by state."},
 		{"siteCfg", "siteCfg", "Site content & legal", "Contacts, social links and legal document versions, published without a deployment."},
 		{"dev", "dev", "Developers", "Identity providers: which social sign-in buttons appear."},
+		{"notifications", "", "Notifications", "Email, SMS, push and WhatsApp templates: live preview with production-shaped sample data, version history and new versions."},
 	}},
 }
 
@@ -98,6 +100,16 @@ func (a StaffAccess) Level(module string) string {
 		case a.Can("support:respond"):
 			return LevelEdit
 		case a.Can("users:read"):
+			return LevelView
+		default:
+			return LevelNone
+		}
+	case "notifications":
+		// Derived from the notifications service's own permissions (identity's matrix has no notifications column).
+		switch {
+		case a.Can(PermNotificationsTemplatesWrite):
+			return LevelEdit
+		case a.Can(PermNotificationsRead):
 			return LevelView
 		default:
 			return LevelNone

@@ -15,6 +15,11 @@ import {
   type FeesOverview,
   formatBps,
   isApiError,
+  type NotificationPreview,
+  type NotificationTemplateDetail,
+  type NotificationTemplateList,
+  type NotificationTemplateVersion,
+  type NotificationTestSendResult,
   parsePercent,
   type PickupAssignmentList,
   type PickupAssignResult,
@@ -63,6 +68,11 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
     expectTypeOf<PickupAssignResult>().toExtend<S['PickupAssignResult']>();
     expectTypeOf<PickupAssignmentList>().toExtend<S['PickupAssignmentList']>();
     expectTypeOf<ShipFromLocation>().toExtend<S['ShipFromLocation']>();
+    expectTypeOf<NotificationTemplateList>().toExtend<S['NotificationTemplateList']>();
+    expectTypeOf<NotificationTemplateDetail>().toExtend<S['NotificationTemplateDetail']>();
+    expectTypeOf<NotificationPreview>().toExtend<S['NotificationPreview']>();
+    expectTypeOf<NotificationTemplateVersion>().toExtend<S['NotificationTemplateVersion']>();
+    expectTypeOf<NotificationTestSendResult>().toExtend<S['NotificationTestSendResult']>();
   });
 
   it('generated file carries the do-not-edit banner', () => {
@@ -286,5 +296,61 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(history.items[0]).toMatchObject({ mode: 'DISPATCH_OVERRIDE', reason: 'Closer driver is at capacity' });
     expect((await dispatcher.listPickups()).items.some((p) => p.shipmentId === pickup.shipmentId)).toBe(false);
     expect((await dispatcher.getShipFromLocation('loc-mamatee-1')).pickupEnabled).toBe(true);
+  });
+
+  it('serves notification templates: list, detail with sample, previews, versions and test-send (S268)', async () => {
+    const support = client('platform.customer_support');
+    const ro = await support.listNotificationTemplates();
+    expect(ro.canEdit).toBe(false);
+    expect(ro.items.map((t) => t.key)).toContain('order.confirmed');
+    const oc = ro.items.find((t) => t.key === 'order.confirmed');
+    expect(oc).toMatchObject({ channels: ['email', 'sms', 'push'], locales: ['en'], latestVersion: 2, updatedBy: 'system' });
+    expect((await support.listNotificationTemplates('security')).items.map((t) => t.key)).toEqual(['identity.verification']);
+    await expect(client('platform.auditor').listNotificationTemplates()).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+
+    const detail = await support.getNotificationTemplate('order.confirmed');
+    expect(detail.variants.map((v) => `${v.channel}:${v.versions.map((x) => x.version).join(',')}`)).toEqual(['email:2,1', 'sms:2,1', 'push:2,1']);
+    expect(detail.sample).toMatchObject({ source: 'event', area: 'orders', eventTypes: ['orders.order.placed'] });
+    expect(detail.sample.data.total).toBe('$48.00');
+    await expect(support.getNotificationTemplate('no.such')).rejects.toSatisfy((e) => isApiError(e) && e.status === 404);
+
+    const email = await support.previewNotificationTemplate('order.confirmed', { channel: 'email', data: detail.sample.data });
+    expect(email).toMatchObject({ subject: 'Order AT-2026-7KQ3MD is confirmed', version: 2, sms: null });
+    expect(email.html).toContain('Thanks for your order, Ada!');
+    const v1 = await support.previewNotificationTemplate('order.confirmed', { channel: 'email', version: 1, data: detail.sample.data });
+    expect(v1.subject).toBe('Order AT-2026-7KQ3MD confirmed');
+    const booking = await support.getNotificationTemplate('booking.confirmed');
+    const sms = await support.previewNotificationTemplate('booking.confirmed', { channel: 'sms', data: booking.sample.data });
+    expect(sms.sms).toMatchObject({ encoding: 'UCS-2', segments: 2 });
+    await expect(support.previewNotificationTemplate('order.confirmed', { channel: 'email', data: {} })).rejects.toSatisfy(
+      (e) => isApiError(e) && e.status === 422 && e.fieldErrors.subject === 'Not in the sample data: orderNumber'
+    );
+    const draft = await support.previewNotificationTemplate('order.confirmed', { channel: 'sms', data: detail.sample.data, draft: { bodyText: 'Order {{.orderNumber}}: {{.total}}' } });
+    expect(draft).toMatchObject({ text: 'Order AT-2026-7KQ3MD: $48.00', version: 0, sms: { encoding: 'GSM-7', segments: 1 } });
+    const po = await support.getNotificationTemplate('retail.purchase_order.sent');
+    const poText = (await support.previewNotificationTemplate('retail.purchase_order.sent', { channel: 'email', data: po.sample.data })).text;
+    expect(poText).toContain('Incoterm: FOB');
+    expect(poText).not.toContain('Payment terms');
+
+    await expect(support.createNotificationTemplateVersion('order.confirmed', { locale: 'en', channel: 'sms', category: 'transactional', bodyText: 'Hi' })).rejects.toSatisfy(
+      (e) => isApiError(e) && e.status === 403
+    );
+    const editor = client('platform.marketing');
+    expect((await editor.listNotificationTemplates()).canEdit).toBe(true);
+    await expect(
+      editor.createNotificationTemplateVersion('order.confirmed', { locale: 'en', channel: 'sms', category: 'transactional', bodyText: 'Hi {{.nickname}}' })
+    ).rejects.toSatisfy((e) => isApiError(e) && e.status === 422 && e.fieldErrors.bodyText === 'Not in the sample data: nickname');
+    await expect(
+      editor.createNotificationTemplateVersion('order.confirmed', { locale: 'en', channel: 'sms', category: 'transactional', bodyText: 'Order confirmed. '.repeat(30) })
+    ).rejects.toSatisfy((e) => isApiError(e) && e.status === 422 && /4 segments/.test(e.fieldErrors.bodyText ?? ''));
+    const created = await editor.createNotificationTemplateVersion('order.confirmed', {
+      locale: 'en', channel: 'sms', category: 'transactional', bodyText: 'AfroTransact: order {{.orderNumber}} ({{.total}}) is confirmed. Reply STOP to opt out.'
+    });
+    expect(created).toMatchObject({ version: 3, channel: 'sms', createdBy: 'stf-1' });
+    expect((await editor.getNotificationTemplate('order.confirmed')).variants.find((v) => v.channel === 'sms')?.latestVersion).toBe(3);
+
+    expect(await editor.testSendNotificationTemplate('order.confirmed', { channel: 'email', data: detail.sample.data })).toMatchObject({ to: 'ifeoma@afrotransact.com', channel: 'email' });
+    await expect(editor.testSendNotificationTemplate('order.confirmed', { channel: 'push', data: {} })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422 && !!e.fieldErrors.channel);
+    await expect(support.testSendNotificationTemplate('order.confirmed', { channel: 'email', data: detail.sample.data })).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
   });
 });

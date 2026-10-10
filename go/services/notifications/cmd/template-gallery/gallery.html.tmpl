@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Notification templates</title>
+<style>{{.FontCSS}}</style>
+<style>{{.TokensCSS}}</style>
+<style>
+/* Dark theme: the same semantic roles over the ink ramp (tokens.css ships light only). */
+:root[data-theme="dark"] {
+  --at-color-canvas: var(--at-ink-900); --at-color-surface: var(--at-ink-800); --at-color-surface-muted: #24221F;
+  --at-color-text: var(--at-ink-50); --at-color-text-muted: var(--at-ink-300); --at-color-border: var(--at-ink-700);
+  --at-color-link: var(--at-green-300); --at-color-danger: #F97066; --at-color-danger-bg: #3A1714;
+  --g-bubble-sms: var(--at-ink-700); --g-bubble-chat: var(--at-green-900); --g-phone: var(--at-ink-1000);
+  --g-chip: var(--at-ink-700); --g-frame: var(--at-ink-0);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --at-color-canvas: var(--at-ink-900); --at-color-surface: var(--at-ink-800); --at-color-surface-muted: #24221F;
+    --at-color-text: var(--at-ink-50); --at-color-text-muted: var(--at-ink-300); --at-color-border: var(--at-ink-700);
+    --at-color-link: var(--at-green-300); --at-color-danger: #F97066; --at-color-danger-bg: #3A1714;
+    --g-bubble-sms: var(--at-ink-700); --g-bubble-chat: var(--at-green-900); --g-phone: var(--at-ink-1000);
+    --g-chip: var(--at-ink-700); --g-frame: var(--at-ink-0);
+  }
+}
+:root { --g-bubble-sms: var(--at-ink-100); --g-bubble-chat: var(--at-green-50); --g-phone: var(--at-ink-25); --g-chip: var(--at-ink-100); --g-frame: var(--at-ink-0); }
+html, body { margin: 0; background: var(--at-color-canvas); color: var(--at-color-text); font-family: var(--at-font-sans); font-size: 14px; line-height: 1.45; }
+*, *::before, *::after { box-sizing: border-box; }
+a { color: var(--at-color-link); }
+code, pre, .mono { font-family: var(--at-font-mono); font-size: 12px; }
+.layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); min-height: 100vh; }
+.side { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--at-color-border); padding: 20px 16px; background: var(--at-color-canvas); }
+.brand { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.brand .logo { width: 32px; height: 32px; border-radius: var(--at-radius-md); background: var(--at-ink-1000); color: var(--at-gold-500); display: grid; place-items: center; font-weight: 800; font-size: 13px; }
+.brand h1 { font-size: 16px; margin: 0; line-height: 1.2; }
+.brand p { margin: 0; color: var(--at-color-text-muted); font-size: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.field label, .legend { font-size: 12px; font-weight: 600; color: var(--at-color-text-muted); }
+input[type="search"], select { font: inherit; color: var(--at-color-text); background: var(--at-color-surface); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); padding: 8px 10px; min-height: 40px; width: 100%; }
+fieldset { border: 0; margin: 0 0 12px; padding: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.chip-toggle { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--at-color-border); border-radius: var(--at-radius-pill); padding: 4px 10px; font-size: 12px; cursor: pointer; user-select: none; }
+.chip-toggle input { margin: 0; accent-color: var(--at-green-700); }
+.index { margin-top: 8px; }
+.index summary { font-weight: 700; cursor: pointer; padding: 6px 0; }
+.index h2 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--at-color-text-muted); margin: 14px 0 4px; }
+.index ul { list-style: none; margin: 0; padding: 0; }
+.index li a { display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; border-radius: var(--at-radius-sm); color: var(--at-color-text); text-decoration: none; font-size: 13px; }
+.index li a:hover { background: var(--at-color-surface-muted); }
+.index li a .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.index .fail-dot { color: var(--at-color-danger); font-weight: 700; }
+.main { padding: 24px clamp(16px, 3vw, 40px) 64px; min-width: 0; }
+.topbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+.topbar h2 { margin: 0; font-size: 24px; letter-spacing: -0.015em; }
+.topbar p { margin: 4px 0 0; color: var(--at-color-text-muted); }
+.btn { font: inherit; font-size: 13px; font-weight: 600; color: var(--at-color-text); background: var(--at-color-surface); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); padding: 6px 12px; min-height: 32px; cursor: pointer; }
+.btn[aria-pressed="true"] { background: var(--at-ink-1000); color: var(--at-ink-0); border-color: var(--at-ink-1000); }
+:root[data-theme="dark"] .btn[aria-pressed="true"] { background: var(--at-gold-500); color: var(--at-ink-1000); border-color: var(--at-gold-500); }
+.failures { border: 1px solid var(--at-color-danger); background: var(--at-color-danger-bg); border-radius: var(--at-radius-lg); padding: 12px 16px; margin-bottom: 20px; }
+.failures h3 { margin: 0 0 6px; color: var(--at-color-danger); font-size: 15px; }
+.failures ul { margin: 0; padding-left: 18px; }
+.ok-banner { border: 1px solid var(--at-color-border); border-radius: var(--at-radius-lg); padding: 10px 16px; margin-bottom: 20px; color: var(--at-color-text-muted); }
+.area > h3 { font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: var(--at-color-text-muted); margin: 28px 0 10px; }
+.card { border: 1px solid var(--at-color-border); border-radius: var(--at-radius-lg); background: var(--at-color-surface); padding: 16px; margin-bottom: 16px; box-shadow: var(--at-shadow-sm); scroll-margin-top: 16px; }
+.card.failed { border-color: var(--at-color-danger); }
+.card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.card-head h4 { margin: 0; font-size: 17px; font-family: var(--at-font-mono); word-break: break-all; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: var(--at-radius-pill); background: var(--g-chip); color: var(--at-color-text); }
+.tag.cat-security { background: var(--at-ink-1000); color: var(--at-gold-500); }
+.tag.cat-marketing { background: var(--at-gold-50); color: var(--at-gold-800); }
+.tag.cat-reminder { background: var(--at-green-50); color: var(--at-green-700); }
+.tag.event { font-family: var(--at-font-mono); font-weight: 500; }
+.sections { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 14px; margin-top: 14px; }
+.section { border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); padding: 12px; min-width: 0; }
+.section.email { grid-column: 1 / -1; }
+.section-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.section-head strong { font-size: 13px; }
+.muted { color: var(--at-color-text-muted); font-size: 12px; }
+.subject { font-weight: 700; margin: 0 0 10px; word-break: break-word; }
+.subject span { font-weight: 500; color: var(--at-color-text-muted); }
+.frame-scroll { overflow-x: auto; border-radius: var(--at-radius-md); background: var(--at-color-surface-muted); padding: 12px; }
+.frame-wrap { width: 640px; max-width: none; margin: 0 auto; transition: width .2s; }
+.frame-wrap[data-width="mobile"] { width: 375px; max-width: 100%; }
+.frame-wrap iframe { display: block; width: 100%; height: 420px; border: 1px solid var(--at-color-border); border-radius: var(--at-radius-sm); background: var(--g-frame); }
+details > summary { cursor: pointer; font-weight: 600; font-size: 13px; padding: 6px 0; }
+pre { white-space: pre-wrap; word-break: break-word; background: var(--at-color-surface-muted); border-radius: var(--at-radius-sm); padding: 10px; margin: 6px 0 0; }
+.phone { background: var(--g-phone); border: 1px solid var(--at-color-border); border-radius: 22px; padding: 14px 12px 18px; max-width: 360px; }
+.phone-top { text-align: center; font-size: 11px; color: var(--at-color-text-muted); margin-bottom: 10px; }
+.phone-top strong { display: block; font-size: 13px; color: var(--at-color-text); }
+.bubble { position: relative; border-radius: 18px; padding: 9px 13px; max-width: 88%; white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+.bubble.sms { background: var(--g-bubble-sms); border-bottom-left-radius: 4px; }
+.bubble.chat { background: var(--g-bubble-chat); border-top-left-radius: 4px; }
+.chat-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; font-weight: 700; }
+.chat-head .wa { width: 24px; height: 24px; border-radius: 50%; background: var(--at-brand-whatsapp); }
+.counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.counts .tag.warn { background: var(--at-gold-50); color: var(--at-gold-800); }
+.push-card { display: flex; gap: 10px; align-items: flex-start; background: var(--at-color-surface); border: 1px solid var(--at-color-border); border-radius: 16px; padding: 12px; box-shadow: var(--at-shadow-md); max-width: 380px; }
+.push-card .icon { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 9px; background: var(--at-ink-1000); color: var(--at-gold-500); display: grid; place-items: center; font-weight: 800; font-size: 12px; }
+.push-card .app { font-size: 11px; color: var(--at-color-text-muted); }
+.push-card .title { font-weight: 700; margin: 1px 0; }
+.error { border: 1px solid var(--at-color-danger); background: var(--at-color-danger-bg); color: var(--at-color-text); border-radius: var(--at-radius-sm); padding: 10px; white-space: pre-wrap; word-break: break-word; font-size: 13px; }
+.error strong { color: var(--at-color-danger); }
+.card-foot { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 8px 16px; margin-top: 12px; }
+.empty { display: none; padding: 40px 0; text-align: center; color: var(--at-color-text-muted); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+[hidden] { display: none !important; }
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--at-color-border); }
+  .main { padding: 16px 16px 48px; }
+  .frame-scroll { padding: 8px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside class="side" aria-label="Templates index and filters">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">AT</div>
+      <div><h1>Notification templates</h1><p>{{.Keys}} keys · {{.Templates}} templates</p></div>
+    </div>
+    <div class="field">
+      <label for="q">Search</label>
+      <input id="q" type="search" placeholder="Key, subject, event…" autocomplete="off">
+    </div>
+    <fieldset>
+      <legend class="legend">Channels</legend>
+      <div class="chips">
+        {{range .Channels}}<label class="chip-toggle"><input type="checkbox" name="channel" value="{{.Key}}" checked>{{.Label}}</label>{{end}}
+      </div>
+    </fieldset>
+    <div class="field">
+      <label for="locale">Locale</label>
+      <select id="locale"><option value="">All locales</option>{{range .Locales}}<option value="{{.}}">{{.}}</option>{{end}}</select>
+    </div>
+    <details class="index" id="index" open>
+      <summary>Index</summary>
+      {{range .Areas}}<div class="index-area" data-area="{{.Key}}">
+        <h2>{{.Label}}</h2>
+        <ul>{{range .Cards}}<li data-card="{{.ID}}"><a href="#{{.ID}}"><span class="mono">{{.Key}}</span>{{if .Failed}}<span class="fail-dot" title="Fails to render">!</span>{{end}}</a></li>{{end}}</ul>
+      </div>{{end}}
+    </details>
+  </aside>
+  <main class="main" id="main">
+    <div class="topbar">
+      <div>
+        <h2>AfroTransact notification templates</h2>
+        <p>Latest version of every key, locale and channel, rendered by the notifications service's renderer with production-shaped sample data. Generated {{.Generated}}. <span id="shown"></span></p>
+      </div>
+      <button class="btn" id="theme" type="button" aria-label="Switch colour theme">Theme: auto</button>
+    </div>
+    {{if .Failures}}
+    <section class="failures" aria-labelledby="fail-h">
+      <h3 id="fail-h">{{.Failed}} template(s) failed to render</h3>
+      <ul>{{range .Failures}}<li><a href="#{{.CardID}}"><code>{{.Key}}</code> · {{.Locale}} · {{.ChannelLabel}} v{{.Version}}</a>: {{.Err}}</li>{{end}}</ul>
+    </section>
+    {{else}}
+    <p class="ok-banner">All {{.Templates}} templates render with their sample data.</p>
+    {{end}}
+    {{range .Areas}}
+    <section class="area" data-area="{{.Key}}" aria-label="{{.Label}}">
+      <h3>{{.Label}}</h3>
+      {{range .Cards}}
+      <article class="card{{if .Failed}} failed{{end}}" id="{{.ID}}" data-locale="{{.Locale}}" data-search="{{.Search}}">
+        <div class="card-head">
+          <h4>{{.Key}}</h4>
+          <span class="muted">{{.Locale}} · {{range $i, $c := .Channels}}{{if $i}}, {{end}}{{$c}}{{end}}</span>
+        </div>
+        <div class="meta">
+          {{range .Categories}}<span class="tag cat-{{.}}">{{.}}</span>{{end}}
+          {{range .Sections}}<span class="tag">{{.ChannelLabel}} v{{.Version}}</span>{{end}}
+        </div>
+        <div class="sections">
+          {{range .Sections}}
+          <section class="section {{.Channel}}" data-channel="{{.Channel}}" aria-label="{{.ChannelLabel}}">
+            <div class="section-head">
+              <strong>{{.ChannelLabel}} · v{{.Version}} · {{.Category}}</strong>
+              {{if eq .Channel "email"}}{{if not .Err}}<span role="group" aria-label="Preview width">
+                <button class="btn" type="button" data-width="desktop" aria-pressed="true">Desktop</button>
+                <button class="btn" type="button" data-width="mobile" aria-pressed="false">Mobile</button>
+              </span>{{end}}{{end}}
+              {{if .CreatedAt}}<span class="muted">{{if .CreatedBy}}{{.CreatedBy}} · {{end}}{{.CreatedAt}}</span>{{end}}
+            </div>
+            {{if .Err}}
+            <div class="error" role="alert"><strong>Does not render.</strong> {{.Err}}</div>
+            {{else if eq .Channel "email"}}
+            <p class="subject"><span>Subject:</span> {{.Subject}}</p>
+            <div class="frame-scroll" tabindex="0" aria-label="Email preview, {{.Key}}">
+              <div class="frame-wrap" data-width="desktop">
+                <iframe sandbox="allow-same-origin" loading="lazy" title="HTML email: {{.Subject}}" srcdoc="{{.HTML}}"></iframe>
+              </div>
+            </div>
+            <details><summary>Plain-text part</summary><pre>{{.Text}}</pre></details>
+            {{else if eq .Channel "sms"}}
+            <div class="phone">
+              <div class="phone-top"><strong>AfroTransact</strong>Text message · now</div>
+              <div class="bubble sms">{{.Text}}</div>
+            </div>
+            {{if .SMS}}<div class="counts">
+              <span class="tag">{{.Chars}} characters</span>
+              <span class="tag{{if eq .SMS.Encoding "UCS-2"}} warn{{end}}" title="{{if eq .SMS.Encoding "UCS-2"}}A character outside the GSM 03.38 alphabet switches the message to UCS-2 (70 per segment){{else}}GSM 03.38 alphabet (160 per segment){{end}}">{{.SMS.Encoding}} · {{.SMS.Units}} units</span>
+              <span class="tag{{if gt .SMS.Segments 1}} warn{{end}}">{{.SMS.Segments}} segment{{if ne .SMS.Segments 1}}s{{end}} · {{.SMS.PerSegment}}/segment</span>
+            </div>{{end}}
+            {{else if eq .Channel "push"}}
+            <div class="push-card">
+              <div class="icon" aria-hidden="true">AT</div>
+              <div><div class="app">AfroTransact · now</div><div class="title">{{.Subject}}</div><div>{{.Text}}</div></div>
+            </div>
+            {{else}}
+            <div class="phone">
+              <div class="chat-head"><span class="wa" aria-hidden="true"></span>AfroTransact <span class="muted">WhatsApp{{if .Subject}} · template {{.Subject}}{{end}}</span></div>
+              <div class="bubble chat">{{.Text}}</div>
+            </div>
+            {{with .SMS}}<div class="counts"><span class="tag">{{.Units}} {{.Encoding}} units</span></div>{{end}}
+            {{end}}
+          </section>
+          {{end}}
+        </div>
+        <div class="card-foot">
+          <div>
+            <div class="legend">Sent on</div>
+            <div class="meta">{{range .EventTypes}}<span class="tag event">{{.}}</span>{{else}}<span class="muted">No event rule: sent with <code>notification.requested</code> or <code>POST /v1/notifications</code>.</span>{{end}}</div>
+          </div>
+          <details><summary>Sample data ({{.Source}})</summary><pre>{{.SampleJSON}}</pre></details>
+        </div>
+      </article>
+      {{end}}
+    </section>
+    {{end}}
+    <p class="empty" id="empty">No template matches these filters.</p>
+  </main>
+</div>
+<script>
+(function () {
+  var root = document.documentElement;
+  var store = { get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } } };
+  var themeBtn = document.getElementById('theme');
+  var themes = ['auto', 'light', 'dark'];
+  function applyTheme(t) {
+    if (t === 'auto') { delete root.dataset.theme; } else { root.dataset.theme = t; }
+    themeBtn.textContent = 'Theme: ' + t;
+  }
+  var theme = store.get('at-gallery-theme') || 'auto';
+  applyTheme(theme);
+  themeBtn.addEventListener('click', function () {
+    theme = themes[(themes.indexOf(theme) + 1) % themes.length];
+    store.set('at-gallery-theme', theme);
+    applyTheme(theme);
+  });
+
+  function fit(frame) {
+    try {
+      var doc = frame.contentDocument;
+      if (!doc || !doc.documentElement) return;
+      var style = doc.getElementById('at-gallery-style');
+      if (!style) {
+        style = doc.createElement('style');
+        style.id = 'at-gallery-style';
+        style.textContent = 'html,body{scrollbar-width:none}::-webkit-scrollbar{display:none}';
+        (doc.head || doc.documentElement).appendChild(style);
+      }
+      var body = doc.body;
+      if (!body) return;
+      var bottom = body.getBoundingClientRect().bottom + parseFloat(doc.defaultView.getComputedStyle(body).marginBottom || '0');
+      frame.style.height = Math.max(160, Math.ceil(bottom) + 4) + 'px';
+    } catch (e) { /* cross-origin: keep the default height */ }
+  }
+  document.querySelectorAll('iframe').forEach(function (f) {
+    f.addEventListener('load', function () { fit(f); });
+    if (f.contentDocument && f.contentDocument.readyState === 'complete') fit(f);
+  });
+  // Phones start on the mobile width so the email fits the screen.
+  if (window.matchMedia('(max-width: 700px)').matches) {
+    document.querySelectorAll('.frame-wrap').forEach(function (w) { w.dataset.width = 'mobile'; });
+    document.querySelectorAll('button[data-width]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.width === 'mobile')); });
+  }
+  document.querySelectorAll('[data-width]').forEach(function (b) {
+    if (b.tagName !== 'BUTTON') return;
+    b.addEventListener('click', function () {
+      var section = b.closest('.section');
+      var wrap = section.querySelector('.frame-wrap');
+      wrap.dataset.width = b.dataset.width;
+      section.querySelectorAll('button[data-width]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+      setTimeout(function () { fit(wrap.querySelector('iframe')); }, 220);
+    });
+  });
+
+  var q = document.getElementById('q');
+  var locale = document.getElementById('locale');
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('input[name="channel"]'));
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.card'));
+  var shown = document.getElementById('shown');
+  function filter() {
+    var term = q.value.trim().toLowerCase();
+    var channels = boxes.filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+    var loc = locale.value;
+    var visible = 0;
+    cards.forEach(function (card) {
+      var any = false;
+      card.querySelectorAll('.section').forEach(function (s) {
+        var on = channels.indexOf(s.dataset.channel) >= 0;
+        s.hidden = !on;
+        if (on) any = true;
+      });
+      var show = any && (!loc || card.dataset.locale === loc) && (!term || card.dataset.search.indexOf(term) >= 0);
+      card.hidden = !show;
+      var li = document.querySelector('li[data-card="' + card.id + '"]');
+      if (li) li.hidden = !show;
+      if (show) visible++;
+    });
+    document.querySelectorAll('.area, .index-area').forEach(function (a) {
+      var sel = a.classList.contains('area') ? '.card' : 'li';
+      a.hidden = !Array.prototype.some.call(a.querySelectorAll(sel), function (el) { return !el.hidden; });
+    });
+    document.getElementById('empty').style.display = visible ? 'none' : 'block';
+    shown.textContent = 'Showing ' + visible + ' of ' + cards.length + ' keys.';
+  }
+  q.addEventListener('input', filter);
+  locale.addEventListener('change', filter);
+  boxes.forEach(function (b) { b.addEventListener('change', filter); });
+  if (window.matchMedia('(max-width: 860px)').matches) document.getElementById('index').removeAttribute('open');
+  document.querySelectorAll('.index a').forEach(function (a) {
+    a.addEventListener('click', function () {
+      if (window.matchMedia('(max-width: 860px)').matches) document.getElementById('index').removeAttribute('open');
+    });
+  });
+  filter();
+})();
+</script>
+</body>
+</html>

@@ -11,7 +11,7 @@ const nullableString = z.string().nullable();
 
 export const StaffModuleKeySchema = z.enum([
   'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'apps', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
-  'audit', 'markets', 'siteCfg', 'dev'
+  'audit', 'markets', 'siteCfg', 'dev', 'notifications'
 ]);
 export type StaffModuleKey = z.infer<typeof StaffModuleKeySchema>;
 
@@ -541,3 +541,100 @@ export const ShipFromLocationSchema = z.object({
   zoneName: nullableString
 });
 export type ShipFromLocation = z.infer<typeof ShipFromLocationSchema>;
+
+/* ── Notifications: templates (S268) ─────────────────────── */
+
+export const NotificationChannelSchema = z.enum(['email', 'sms', 'push', 'chat']);
+export type NotificationChannel = z.infer<typeof NotificationChannelSchema>;
+export const NotificationCategorySchema = z.enum(['security', 'transactional', 'reminder', 'marketing']);
+export type NotificationCategory = z.infer<typeof NotificationCategorySchema>;
+
+export const NotificationTemplateSummarySchema = z.object({
+  key: z.string(),
+  category: NotificationCategorySchema,
+  channels: z.array(NotificationChannelSchema),
+  locales: z.array(z.string()),
+  latestVersion: z.number().int(),
+  updatedBy: nullableString,
+  updatedAt: nullableString
+});
+export type NotificationTemplateSummary = z.infer<typeof NotificationTemplateSummarySchema>;
+export const NotificationTemplateListSchema = z.object({ items: z.array(NotificationTemplateSummarySchema), total: z.number().int(), canEdit: z.boolean() });
+export type NotificationTemplateList = z.infer<typeof NotificationTemplateListSchema>;
+
+export const NotificationTemplateVersionSchema = z.object({
+  locale: z.string(),
+  channel: NotificationChannelSchema,
+  version: z.number().int(),
+  category: NotificationCategorySchema,
+  subject: z.string(),
+  bodyHtml: z.string(),
+  bodyText: z.string(),
+  createdBy: nullableString,
+  createdAt: nullableString
+});
+export type NotificationTemplateVersion = z.infer<typeof NotificationTemplateVersionSchema>;
+export const NotificationTemplateVariantSchema = z.object({
+  locale: z.string(),
+  channel: NotificationChannelSchema,
+  latestVersion: z.number().int(),
+  versions: z.array(NotificationTemplateVersionSchema)
+});
+export type NotificationTemplateVariant = z.infer<typeof NotificationTemplateVariantSchema>;
+export const NotificationSampleSchema = z.object({
+  source: z.enum(['event', 'request', 'sample', 'none']),
+  area: z.enum(['account', 'orders', 'seller', 'payouts', 'bookings', 'trust', 'retail', 'marketing', 'security', 'other']),
+  eventTypes: z.array(z.string()),
+  data: z.record(z.string(), z.unknown())
+});
+export type NotificationSample = z.infer<typeof NotificationSampleSchema>;
+export const NotificationTemplateDetailSchema = z.object({
+  key: z.string(),
+  category: NotificationCategorySchema,
+  variants: z.array(NotificationTemplateVariantSchema),
+  sample: NotificationSampleSchema,
+  canEdit: z.boolean(),
+  canTestSend: z.boolean()
+});
+export type NotificationTemplateDetail = z.infer<typeof NotificationTemplateDetailSchema>;
+
+export interface NotificationDraft {
+  category?: NotificationCategory;
+  subject?: string;
+  bodyHtml?: string;
+  bodyText: string;
+}
+export interface NotificationPreviewRequest {
+  channel: NotificationChannel;
+  locale?: string;
+  version?: number;
+  data?: Record<string, unknown>;
+  draft?: NotificationDraft;
+}
+export const SmsSegmentsSchema = z.object({
+  encoding: z.enum(['GSM-7', 'UCS-2']),
+  characters: z.number().int(),
+  units: z.number().int(),
+  segments: z.number().int(),
+  perSegment: z.number().int()
+});
+export type SmsSegments = z.infer<typeof SmsSegmentsSchema>;
+export const NotificationPreviewSchema = z.object({
+  subject: z.string(),
+  html: z.string(),
+  text: z.string(),
+  version: z.number().int(),
+  category: NotificationCategorySchema,
+  sms: SmsSegmentsSchema.nullable()
+});
+export type NotificationPreview = z.infer<typeof NotificationPreviewSchema>;
+export interface NotificationVersionDraft {
+  locale: string;
+  channel: NotificationChannel;
+  category: NotificationCategory;
+  subject?: string;
+  bodyHtml?: string;
+  bodyText: string;
+}
+export const NotificationTestSendResultSchema = z.object({ to: z.string(), channel: NotificationChannelSchema, provider: nullableString });
+export type NotificationTestSendResult = z.infer<typeof NotificationTestSendResultSchema>;

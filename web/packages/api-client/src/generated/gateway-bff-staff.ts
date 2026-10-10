@@ -565,6 +565,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/notifications/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Every notification template key with its channels, locales and latest version
+         * @description notifications `GET /v1/templates` (latest version of every key, locale and channel) grouped by key; `q` filters
+         *     by key, category or channel. Needs `notifications:read` (VIEW on the notifications module); `canEdit` says
+         *     whether the staff member holds `notifications:templates:write`.
+         */
+        get: operations["listNotificationTemplates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/notifications/templates/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A template key's versions per locale and channel, with its sample data
+         * @description notifications `GET /v1/templates?key=` (every version, newest first per locale and channel) and
+         *     `GET /v1/templates/{key}/sample`: the fields the key's event carries in production (a contract-shaped event run
+         *     through the real ingest), used to prefill the preview. When the sample cannot be read the editor starts from
+         *     empty data (`source: none`). Needs `notifications:read`.
+         */
+        get: operations["getNotificationTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/notifications/templates/{key}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render a stored version or an unsaved draft with sample data
+         * @description notifications `POST /v1/templates/{key}/preview` with the service's real renderer. `version` 0 renders the
+         *     latest stored version (locale fallback fr-CA → fr → en); `draft` renders unsaved content (the editor's live
+         *     preview). A template that does not compile, or reads a field the data lacks, is a 422 on the part that failed
+         *     (`subject`, `bodyText`, `bodyHtml`, prefixed `draft.` for drafts, else `data`). SMS and WhatsApp previews carry
+         *     the GSM-7 / UCS-2 segment count. Needs `notifications:read`.
+         */
+        post: operations["previewNotificationTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/notifications/templates/{key}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create the next version of a template for one locale and channel
+         * @description notifications `POST /v1/templates` (`notifications:templates:write`). Before storing, the BFF checks that every
+         *     placeholder (`{{.field}}`, `{{if .field}}`, `{{$.field}}`) is a field of the key's sample data (keys without a
+         *     sample are only render-checked), renders the draft with the sample data, and refuses SMS longer than 3
+         *     segments. Emails need a subject and an HTML body; push notifications need a title; only emails have HTML.
+         *     The new version is what every later send of the key uses.
+         */
+        post: operations["createNotificationTemplateVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/notifications/templates/{key}/test-send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send a stored version or a draft to your own email or phone
+         * @description notifications `POST /v1/templates/{key}/test-send` (`notifications:templates:write`). The destination is
+         *     always the signed-in staff member's own email (email) or phone (SMS, WhatsApp) from their access token, never
+         *     an address in the request; email subjects are prefixed `[TEST]`. Push cannot be test-sent (422 on `channel`);
+         *     no address on the account is a 422 without field errors.
+         */
+        post: operations["testSendNotificationTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -590,10 +706,10 @@ export interface components {
         /** @enum {string} */
         AccessLevel: "VIEW" | "EDIT" | "APPROVE" | "FULL";
         /**
-         * @description Sidebar modules; keys follow identity's platform module matrix (support and exports are derived).
+         * @description Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived).
          * @enum {string}
          */
-        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev";
+        StaffModuleKey: "dash" | "exports" | "orders" | "catalog" | "inventory" | "retail" | "dispatch" | "apps" | "support" | "rbac" | "payouts" | "fees" | "marketing" | "disputes" | "audit" | "markets" | "siteCfg" | "dev" | "notifications";
         StaffUser: {
             id: string;
             firstName: string;
@@ -1365,6 +1481,137 @@ export interface components {
             pickupHours: components["schemas"]["PickupWindow"][];
             zoneName: string | null;
         };
+        /**
+         * @description chat is WhatsApp
+         * @enum {string}
+         */
+        NotificationChannel: "email" | "sms" | "push" | "chat";
+        /**
+         * @description Consent rules: security always sends, transactional unless the channel is off, reminder respects preferences and quiet hours, marketing needs opt-in
+         * @enum {string}
+         */
+        NotificationCategory: "security" | "transactional" | "reminder" | "marketing";
+        NotificationTemplateSummary: {
+            /** @example order.confirmed */
+            key: string;
+            category: components["schemas"]["NotificationCategory"];
+            channels: components["schemas"]["NotificationChannel"][];
+            locales: string[];
+            /** @description Highest version over the key's locales and channels */
+            latestVersion: number;
+            /** @description Who created the most recent version (system for seeded templates) */
+            updatedBy: string | null;
+            /** Format: date-time */
+            updatedAt: string | null;
+        };
+        NotificationTemplateList: {
+            items: components["schemas"]["NotificationTemplateSummary"][];
+            total: number;
+            /** @description notifications:templates:write (new versions and test-sends) */
+            canEdit: boolean;
+        };
+        NotificationTemplateVersion: {
+            locale: string;
+            channel: components["schemas"]["NotificationChannel"];
+            version: number;
+            category: components["schemas"]["NotificationCategory"];
+            /** @description Email subject, push title or WhatsApp template name */
+            subject: string;
+            /** @description Email HTML (Go html/template); empty on other channels */
+            bodyHtml: string;
+            /** @description Text part, SMS, push body or WhatsApp parameters (Go text/template) */
+            bodyText: string;
+            createdBy: string | null;
+            /** Format: date-time */
+            createdAt: string | null;
+        };
+        NotificationTemplateVariant: {
+            locale: string;
+            channel: components["schemas"]["NotificationChannel"];
+            latestVersion: number;
+            /** @description Newest first */
+            versions: components["schemas"]["NotificationTemplateVersion"][];
+        };
+        NotificationSample: {
+            /**
+             * @description event: a producer event through notifications' real ingest; request: a producer's notification.requested; sample: fixed data for keys no event maps to; none: no sample
+             * @enum {string}
+             */
+            source: "event" | "request" | "sample" | "none";
+            /** @enum {string} */
+            area: "account" | "orders" | "seller" | "payouts" | "bookings" | "trust" | "retail" | "marketing" | "security" | "other";
+            /** @description Event types that send this template */
+            eventTypes: string[];
+            data: {
+                [key: string]: unknown;
+            };
+        };
+        NotificationTemplateDetail: {
+            key: string;
+            category: components["schemas"]["NotificationCategory"];
+            variants: components["schemas"]["NotificationTemplateVariant"][];
+            sample: components["schemas"]["NotificationSample"];
+            canEdit: boolean;
+            canTestSend: boolean;
+        };
+        NotificationDraft: {
+            category?: components["schemas"]["NotificationCategory"];
+            subject?: string;
+            bodyHtml?: string;
+            bodyText: string;
+        };
+        NotificationPreviewRequest: {
+            channel: components["schemas"]["NotificationChannel"];
+            /** @default en */
+            locale: string;
+            /**
+             * @description 0 = latest
+             * @default 0
+             */
+            version: number;
+            /** @description Template fields (start from the sample data) */
+            data?: {
+                [key: string]: unknown;
+            };
+            draft?: components["schemas"]["NotificationDraft"];
+        };
+        SmsSegments: {
+            /**
+             * @description UCS-2 as soon as one character is outside the GSM 03.38 alphabet
+             * @enum {string}
+             */
+            encoding: "GSM-7" | "UCS-2";
+            characters: number;
+            /** @description GSM-7 septets (extension characters count two) or UTF-16 code units */
+            units: number;
+            segments: number;
+            /** @description 160 / 70 for one segment, 153 / 67 per part when concatenated */
+            perSegment: number;
+        };
+        NotificationPreview: {
+            subject: string;
+            /** @description Email HTML; show it in a sandboxed iframe */
+            html: string;
+            text: string;
+            /** @description The rendered version (0 for a draft) */
+            version: number;
+            category: components["schemas"]["NotificationCategory"];
+            sms: components["schemas"]["SmsSegments"] | null;
+        };
+        NotificationVersionDraft: {
+            locale: string;
+            channel: components["schemas"]["NotificationChannel"];
+            category: components["schemas"]["NotificationCategory"];
+            subject?: string;
+            bodyHtml?: string;
+            bodyText: string;
+        };
+        NotificationTestSendResult: {
+            /** @description Your own email or phone */
+            to: string;
+            channel: components["schemas"]["NotificationChannel"];
+            provider: string | null;
+        };
     };
     responses: {
         /** @description RFC 9457 problem */
@@ -1391,6 +1638,8 @@ export interface components {
         RecordId: string;
         ExportId: string;
         ShipmentId: string;
+        /** @example order.confirmed */
+        TemplateKey: string;
         /** @description Makes retries safe (same key = same result). */
         IdempotencyKey: string;
         /** @description Same key = same refund; never refunds twice. */
@@ -2248,6 +2497,164 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listNotificationTemplates: {
+        parameters: {
+            query?: {
+                /** @description Part of a key, a category or a channel */
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Templates */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTemplateList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getNotificationTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example order.confirmed */
+                key: components["parameters"]["TemplateKey"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Template */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTemplateDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    previewNotificationTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example order.confirmed */
+                key: components["parameters"]["TemplateKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Rendered */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreview"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createNotificationTemplateVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example order.confirmed */
+                key: components["parameters"]["TemplateKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationVersionDraft"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTemplateVersion"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    testSendNotificationTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example order.confirmed */
+                key: components["parameters"]["TemplateKey"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Sent */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationTestSendResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

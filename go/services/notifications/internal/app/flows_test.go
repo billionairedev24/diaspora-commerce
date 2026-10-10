@@ -181,3 +181,36 @@ func TestTemplateTestSendGoesOnlyToEditor(t *testing.T) {
 		t.Fatalf("preview of a specific version: %+v %v", prev, err)
 	}
 }
+
+func TestTemplatePreviewOfAnUnsavedDraft(t *testing.T) {
+	email := &captureEmail{}
+	router := app.NewRouter(app.Routes{Email: map[string][]port.EmailSender{"default": {email}}},
+		domain.NewBreakers(domain.BreakerSettings{}), time.Second, quietLog())
+	svc := app.NewTemplates(templates(), app.NewRenderer(), router, fakeContacts{email: "editor@afrotransact.com"}, "AT <no-reply@at.com>")
+	ctx := context.Background()
+	draft := &app.TemplateDraft{Subject: "Your order {{.n}} is in", BodyHTML: "<p>{{.n}} &amp; more</p>", BodyText: "Order {{.n}}"}
+	prev, err := svc.Preview(ctx, app.PreviewRequest{Key: "promo.weekly", Channel: domain.ChannelEmail, Data: map[string]any{"n": "AT-7"}, Draft: draft})
+	if err != nil || prev.Subject != "Your order AT-7 is in" || prev.HTML != "<p>AT-7 &amp; more</p>" || prev.Version != 0 ||
+		prev.Category != domain.CategoryMarketing {
+		t.Fatalf("draft preview keeps the stored category: %+v %v", prev, err)
+	}
+	// A new key without a stored version previews as transactional.
+	prev, err = svc.Preview(ctx, app.PreviewRequest{Key: "brand.new", Channel: domain.ChannelSMS, Data: map[string]any{}, Draft: &app.TemplateDraft{BodyText: "Hi"}})
+	if err != nil || prev.Text != "Hi" || prev.Category != domain.CategoryTransactional {
+		t.Fatalf("%+v %v", prev, err)
+	}
+	// Placeholders missing from the data and templates that do not compile are invalid requests.
+	if _, err := svc.Preview(ctx, app.PreviewRequest{Key: "promo.weekly", Channel: domain.ChannelEmail, Data: map[string]any{},
+		Draft: &app.TemplateDraft{Subject: "S", BodyText: "{{.missing}}"}}); !errors.Is(err, domain.ErrInvalidRequest) {
+		t.Fatalf("missing field: %v", err)
+	}
+	if _, err := svc.Preview(ctx, app.PreviewRequest{Key: "promo.weekly", Channel: domain.ChannelEmail, Data: map[string]any{},
+		Draft: &app.TemplateDraft{Subject: "S", BodyText: "{{.broken"}}); !errors.Is(err, domain.ErrInvalidRequest) {
+		t.Fatalf("parse error: %v", err)
+	}
+	// Test-send of a draft goes to the editor, prefixed [TEST].
+	res, err := svc.TestSend(ctx, app.PreviewRequest{Key: "promo.weekly", Channel: domain.ChannelEmail, Data: map[string]any{"n": "1"}, Draft: draft})
+	if err != nil || res.To != "editor@afrotransact.com" || len(email.got) != 1 || email.got[0].Subject != "[TEST] Your order 1 is in" {
+		t.Fatalf("%+v %v %+v", res, err, email.got)
+	}
+}

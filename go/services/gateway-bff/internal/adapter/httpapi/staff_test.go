@@ -55,7 +55,7 @@ var supportPerms = []string{"bookings:read", "catalog:moderate", "delivery:dispa
 
 var adminPerms = []string{"access:admin", "access:read", "applications:approve", "applications:review", "audit:read", "catalog:moderate", "content:legal.edit",
 	"content:markets.edit", "content:placements.approve", "content:placements.edit", "content:site.edit", "delivery:dispatch", "disputes:manage",
-	"inventory:adjust", "inventory:read", "notifications:manage", "orders:manage", "orders:read", "payments:configure", "payouts:approve", "payouts:read",
+	"inventory:adjust", "inventory:read", "notifications:manage", "notifications:read", "notifications:templates:write", "orders:manage", "orders:read", "payments:configure", "payouts:approve", "payouts:read",
 	"refunds:issue", "reports:read", "retail:po:approve", "retail:po:write", "returns:manage", "support:respond", "tax:configure", "users:read"}
 
 type fakePlatform struct {
@@ -118,6 +118,79 @@ func (f *fakePlatform) feeSchedules(w http.ResponseWriter, r *http.Request, p st
 			}
 		}
 		problemJ(w, 404, "payments.fee-schedule-not-found")
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func problemDetail(w http.ResponseWriter, status int, code, detail string) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{"type": "about:blank", "title": code, "status": status, "code": code, "detail": detail})
+}
+
+// templates fakes notifications' template routes: order.confirmed in email (v1, v2) and sms (v1), plus its sample.
+func (f *fakePlatform) templates(w http.ResponseWriter, r *http.Request, p string, body map[string]any) {
+	tpl := func(channel string, version int, subject, text, by, at string) map[string]any {
+		html := ""
+		if channel == "email" {
+			html = "<p>Thanks {{.firstName}}</p>"
+		}
+		return map[string]any{"key": "order.confirmed", "locale": "en", "channel": channel, "version": version, "category": "transactional",
+			"subject": subject, "bodyHtml": html, "bodyText": text, "createdBy": by, "createdAt": at}
+	}
+	all := []any{
+		tpl("email", 2, "Order {{.orderNumber}} is confirmed", "Thanks {{.firstName}}", "stf-1", "2026-10-09T10:00:00Z"),
+		tpl("email", 1, "Order {{.orderNumber}} confirmed", "Thanks", "system", "2026-09-01T10:00:00Z"),
+		tpl("sms", 1, "", "AfroTransact: order {{.orderNumber}} confirmed", "system", "2026-09-01T10:00:00Z"),
+	}
+	draft, _ := body["draft"].(map[string]any)
+	switch {
+	case p == "/v1/templates" && r.Method == http.MethodGet && r.URL.Query().Get("key") == "":
+		writeJ(w, 200, map[string]any{"items": []any{all[0], all[2],
+			map[string]any{"key": "identity.verification", "locale": "en", "channel": "sms", "version": 1, "category": "security", "bodyText": "Code {{.code}}",
+				"createdBy": "system", "createdAt": "2026-09-01T10:00:00Z"}}})
+	case p == "/v1/templates" && r.Method == http.MethodGet:
+		if r.URL.Query().Get("key") != "order.confirmed" {
+			writeJ(w, 200, map[string]any{"items": []any{}})
+			return
+		}
+		writeJ(w, 200, map[string]any{"items": all})
+	case p == "/v1/templates" && r.Method == http.MethodPost:
+		out := map[string]any{"version": 3, "createdBy": "stf-1", "createdAt": "2026-10-10T12:00:00Z"}
+		for k, v := range body {
+			out[k] = v
+		}
+		writeJ(w, 201, out)
+	case p == "/v1/templates/order.confirmed/sample":
+		writeJ(w, 200, map[string]any{"key": "order.confirmed", "area": "orders", "source": "event", "eventTypes": []string{"orders.order.placed"},
+			"data": map[string]any{"firstName": "Ada", "orderNumber": "AT-2026-7KQ3MD", "total": "$48.00"}})
+	case strings.HasSuffix(p, "/sample"):
+		problemJ(w, 404, "notifications.template-not-found")
+	case strings.HasSuffix(p, "/preview") || strings.HasSuffix(p, "/test-send"):
+		text := "AfroTransact: order AT-2026-7KQ3MD confirmed"
+		if draft != nil {
+			text, _ = draft["bodyText"].(string)
+		}
+		if strings.Contains(text, "{{.missing}}") {
+			problemDetail(w, 400, "notifications.invalid-request", `invalid request
+template render failed: text: template: text:1:2: executing "text" at <.missing>: map has no entry for key "missing"`)
+			return
+		}
+		if strings.HasSuffix(p, "/test-send") {
+			if body["channel"] == "sms" {
+				problemDetail(w, 422, "notifications.no-own-contact", "Test-send goes only to your own email or phone, and none is on your account")
+				return
+			}
+			writeJ(w, 200, map[string]any{"to": "ifeoma@afrotransact.com", "receipt": map[string]any{"provider": "smtp", "providerMessageId": "m-1"}})
+			return
+		}
+		version := 2
+		if draft != nil {
+			version = 0
+		}
+		writeJ(w, 200, map[string]any{"subject": "Order AT-2026-7KQ3MD is confirmed", "html": "<p>Thanks Ada</p>", "text": text, "version": version,
+			"category": "transactional"})
 	default:
 		http.NotFound(w, r)
 	}
@@ -423,6 +496,8 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"id": "ntf-1", "recipientId": "cus-1", "channel": "sms", "templateKey": "delivery.otp", "status": "failed"})
 	case strings.HasPrefix(p, "/v1/dead-letters/"):
 		writeJ(w, 200, map[string]any{"id": "ntf-1"})
+	case p == "/v1/templates" || strings.HasPrefix(p, "/v1/templates/"):
+		f.templates(w, r, p, body)
 	default:
 		http.NotFound(w, r) // a route the service does not serve (bookings' customer lookup) → 503 upstream unavailable
 	}
@@ -458,7 +533,7 @@ func staffBFF(t *testing.T, f *fakePlatform) (http.Handler, func(token, method, 
 		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }, RetailOrgID: "org-retail"}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
 		Exports: app.NewStaffExportsService(d), Support: app.NewStaffSupportService(d), Fees: app.NewStaffFeesService(d), Files: files,
-		Dispatch: app.NewStaffDispatchService(d)}
+		Dispatch: app.NewStaffDispatchService(d), Notifications: app.NewStaffNotificationsService(d)}
 	mux := http.NewServeMux()
 	httpapi.New(httpapi.Services{Sessions: staffSessions{}, Staff: staff}, nil, httpapi.SecurityOptions{AllowedOrigins: []string{"http://localhost:3002"}}, log).Register(mux)
 	do := func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
@@ -879,7 +954,81 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("location = %v", l)
 	}
 
-	for _, op := range []string{"getStaffSession", "getStaffDashboard", "listStaffResource", "createStaffRecord", "getStaffRecord", "updateStaffRecord", "runStaffAction",
+	// Notifications → Templates (S268): list, detail with sample, previews, new versions, test-send; edits need templates:write.
+	tl := do("admin", "GET", "/v1/staff/notifications/templates", nil, 200)
+	if items := tl["items"].([]any); len(items) != 2 || tl["canEdit"] != true || items[1].(map[string]any)["key"] != "order.confirmed" ||
+		items[1].(map[string]any)["latestVersion"] != float64(2) || items[1].(map[string]any)["updatedBy"] != "stf-1" ||
+		fmt.Sprint(items[1].(map[string]any)["channels"]) != "[email sms]" {
+		t.Fatalf("templates = %v", tl)
+	}
+	if q := do("support", "GET", "/v1/staff/notifications/templates?q=SECURITY", nil, 200); len(q["items"].([]any)) != 1 || q["canEdit"] != false {
+		t.Fatalf("search, read-only = %v", q)
+	}
+	do("auditor", "GET", "/v1/staff/notifications/templates", nil, 403)
+	td := do("admin", "GET", "/v1/staff/notifications/templates/order.confirmed", nil, 200)
+	vars := td["variants"].([]any)
+	if len(vars) != 2 || vars[0].(map[string]any)["channel"] != "email" || len(vars[0].(map[string]any)["versions"].([]any)) != 2 ||
+		vars[0].(map[string]any)["versions"].([]any)[0].(map[string]any)["version"] != float64(2) || td["sample"].(map[string]any)["source"] != "event" ||
+		td["canTestSend"] != true {
+		t.Fatalf("template = %v", td)
+	}
+	do("admin", "GET", "/v1/staff/notifications/templates/no.such", nil, 404)
+	pv := do("support", "POST", "/v1/staff/notifications/templates/order.confirmed/preview", map[string]any{"channel": "sms", "data": map[string]any{"orderNumber": "AT-1"}}, 200)
+	if pv["version"] != float64(2) || pv["sms"].(map[string]any)["segments"] != float64(1) || pv["sms"].(map[string]any)["encoding"] != "GSM-7" {
+		t.Fatalf("preview = %v", pv)
+	}
+	if pe := do("support", "POST", "/v1/staff/notifications/templates/order.confirmed/preview", map[string]any{"channel": "email",
+		"draft": map[string]any{"subject": "S", "bodyHtml": "<p>x</p>", "bodyText": "Hi {{.missing}}"}}, 422); pe["errors"].(map[string]any)["draft.bodyText"] != "Not in the sample data: missing" {
+		t.Fatalf("draft render error = %v", pe)
+	}
+	if pe := do("support", "POST", "/v1/staff/notifications/templates/order.confirmed/preview", map[string]any{"channel": "fax"}, 422); pe["errors"].(map[string]any)["channel"] == nil {
+		t.Fatalf("channel = %v", pe)
+	}
+	if pd := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/preview", map[string]any{"channel": "sms",
+		"draft": map[string]any{"bodyText": "Order · confirmed"}}, 200); pd["version"] != float64(0) || pd["sms"].(map[string]any)["encoding"] != "UCS-2" {
+		t.Fatalf("draft preview = %v", pd)
+	}
+	tplDraft := map[string]any{"locale": "en", "channel": "email", "category": "transactional", "subject": "Order {{.orderNumber}} is in",
+		"bodyHtml": "<p>{{.firstName}}, {{.total}}</p>", "bodyText": "{{.firstName}}: {{.total}}"}
+	do("support", "POST", "/v1/staff/notifications/templates/order.confirmed/versions", tplDraft, 403)
+	tplBad := map[string]any{"locale": "en", "channel": "email", "category": "transactional", "subject": "Hi {{.nickname}}", "bodyHtml": "<p>x</p>",
+		"bodyText": "{{range .lines}}{{.title}}{{end}} {{.couponCode}}"}
+	if e := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/versions", tplBad, 422)["errors"].(map[string]any); e["subject"] != "Not in the sample data: nickname" ||
+		e["bodyText"] != "Not in the sample data: couponCode, lines" {
+		t.Fatalf("placeholder check = %v", e)
+	}
+	if e := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/versions", map[string]any{"locale": "en", "channel": "sms",
+		"category": "transactional", "bodyText": strings.Repeat("Order confirmed. ", 30)}, 422)["errors"].(map[string]any); !strings.Contains(fmt.Sprint(e["bodyText"]), "4 segments") {
+		t.Fatalf("sms segments = %v", e)
+	}
+	if e := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/versions", map[string]any{"locale": "en", "channel": "email",
+		"category": "transactional", "bodyText": "x"}, 422)["errors"].(map[string]any); e["subject"] == nil || e["bodyHtml"] == nil {
+		t.Fatalf("email needs subject and html = %v", e)
+	}
+	tplCreated := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/versions", tplDraft, 201)
+	if tplCreated["version"] != float64(3) || tplCreated["channel"] != "email" || tplCreated["createdBy"] != "stf-1" {
+		t.Fatalf("created = %v", tplCreated)
+	}
+	if b := f.bodies["POST /v1/templates"]; b["key"] != "order.confirmed" || b["subject"] != "Order {{.orderNumber}} is in" {
+		t.Fatalf("create body = %v", b)
+	}
+	if b := f.bodies["POST /v1/templates/order.confirmed/preview"]; b["draft"] == nil || b["data"].(map[string]any)["firstName"] != "Ada" {
+		t.Fatalf("create renders the draft with the sample data first: %v", b)
+	}
+	ts := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/test-send", map[string]any{"channel": "email", "data": map[string]any{"firstName": "Ada"}}, 200)
+	if ts["to"] != "ifeoma@afrotransact.com" || ts["provider"] != "smtp" {
+		t.Fatalf("test-send = %v", ts)
+	}
+	do("support", "POST", "/v1/staff/notifications/templates/order.confirmed/test-send", map[string]any{"channel": "email"}, 403)
+	if e := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/test-send", map[string]any{"channel": "push"}, 422)["errors"].(map[string]any); e["channel"] == nil {
+		t.Fatalf("push test-send = %v", e)
+	}
+	if e := do("admin", "POST", "/v1/staff/notifications/templates/order.confirmed/test-send", map[string]any{"channel": "sms"}, 422); e["title"] != "No address to send to" {
+		t.Fatalf("no own phone = %v", e)
+	}
+
+	for _, op := range []string{"listNotificationTemplates", "getNotificationTemplate", "previewNotificationTemplate", "createNotificationTemplateVersion",
+		"testSendNotificationTemplate", "getStaffSession", "getStaffDashboard", "listStaffResource", "createStaffRecord", "getStaffRecord", "updateStaffRecord", "runStaffAction",
 		"addStaffNote", "listStaffExports", "createStaffExport", "getStaffExport", "downloadStaffExport", "getStaffExportFile", "searchSupportCustomers",
 		"getSupportCustomer", "supportRefund", "supportResendNotification", "supportCancelShipment", "getStaffFees", "searchFeeOrgs", "createFeeSchedule",
 		"cancelFeeSchedule", "quoteStaffDelivery", "listStaffPickups", "getPickupDriverSuggestions", "assignPickup", "listPickupAssignments",
@@ -898,6 +1047,12 @@ func TestStaffAccessLevels(t *testing.T) {
 	}
 	if a.Level("exports") != a.Level("dash") {
 		t.Fatal("exports follow the dashboard level")
+	}
+	for perms, want := range map[string]string{"": domain.LevelNone, "notifications:read": domain.LevelView,
+		"notifications:read notifications:templates:write": domain.LevelEdit} {
+		if got := (domain.StaffAccess{Permissions: strings.Fields(perms)}).Level("notifications"); got != want {
+			t.Errorf("notifications with %q = %s, want %s", perms, got, want)
+		}
 	}
 	if l := domain.RefundLimit([]string{"platform.customer_support", "platform.finance"}); l != nil {
 		t.Fatalf("finance has no refund limit, got %v", *l)
