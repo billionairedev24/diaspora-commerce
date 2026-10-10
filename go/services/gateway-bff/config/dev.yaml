@@ -1,0 +1,102 @@
+# gateway-bff · dev. Secrets (REDIS_URL outside local, OIDC_CLIENT_SECRET, SESSION_SIGNING_KEY) come from env vars only.
+# Upstream URLs can be overridden with <NAME>_URL (SEARCH_URL, CATALOG_URL, …).
+port: 8080
+docsEnabled: true
+redisUrl: ""
+market: us
+web:
+  origins:
+    - https://dev.afrotransact.com
+  publicOrigin: https://dev.afrotransact.com
+  bffPath: /api/bff
+session:
+  cookieName: at_session
+  cookieSecure: true
+  cookieDomain: ""
+  idleTtl: 720h
+oidc:
+  issuer: https://auth.dev.afrotransact.com
+  publicUrl: https://auth.dev.afrotransact.com
+  clientId: gateway-bff
+  redirectUri: https://dev.afrotransact.com/api/bff/v1/auth/oidc/callback
+  scopes: [openid, email, profile, phone, offline_access]
+  audience: ""
+  verifyBearer: true
+upstreams:
+  search:
+    url: http://search
+    timeout: 2s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  catalog:
+    url: http://catalog
+    timeout: 2s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  inventory:
+    url: http://inventory
+    timeout: 1500ms
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  cart:
+    url: http://cart
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  geo:
+    url: http://geo
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  identity:
+    url: http://identity
+    timeout: 5s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  content:
+    url: http://content
+    timeout: 1500ms
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  payments:
+    url: http://payments
+    timeout: 5s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  promise:
+    url: http://promise
+    timeout: 800ms
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  orders:
+    url: http://orders
+    timeout: 10s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  notifications:
+    url: http://notifications
+    timeout: 2s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+rateLimit:
+  authPerMinute: 20
+  lookupPerMinute: 120
+  trustForwardedFor: true
+  maxBodyBytes: 65536
+cache:
+  maxEntries: 5000
+  defaultTtl: 60s
+  catalogTtl: 60s
+  referenceTtl: 10m
+commerce:
+  defaultZip: "77042"
+  defaultCity: Houston
+  defaultState: TX
+  timeZone: America/Chicago
+  sellerShippingMinor: 599
+  freeShippingThresholdMinor: 4900
+  retailOrgId: org_afrotransact_retail
+  sellerNames: {}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampleRatio: 1.0

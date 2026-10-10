@@ -1,0 +1,448 @@
+package domain
+
+import "encoding/json"
+
+// Fulfilment and seller kinds.
+const (
+	FulfilledByAfroTransact = "AFROTRANSACT"
+	ShipsFromSeller         = "SELLER"
+	SellerKindPlatform      = "PLATFORM"
+	SellerKindSeller        = "SELLER"
+	Currency                = "USD"
+)
+
+// DeliveryPromise is the delivery estimate to the session's deliver-to ZIP.
+type DeliveryPromise struct {
+	Days         int     `json:"days"`
+	Label        string  `json:"label"`
+	Prefix       string  `json:"prefix"`
+	Free         bool    `json:"free"`
+	FeeMinor     int64   `json:"feeMinor"`
+	ExpressLabel *string `json:"expressLabel"`
+	Cutoff       *string `json:"cutoff"`
+}
+
+// Seller is who sells an offer.
+type Seller struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+	City string `json:"city"`
+}
+
+// Offer is one purchasable offer of a product.
+type Offer struct {
+	OfferID        string          `json:"offerId"`
+	Seller         Seller          `json:"seller"`
+	PriceMinor     int64           `json:"priceMinor"`
+	ListPriceMinor *int64          `json:"listPriceMinor"`
+	Currency       string          `json:"currency"`
+	Fulfilment     string          `json:"fulfilment"`
+	AvailableQty   int             `json:"availableQty"`
+	StockStatus    string          `json:"stockStatus"`
+	Delivery       DeliveryPromise `json:"delivery"`
+}
+
+// Sponsor labels a sponsored placement.
+type Sponsor struct {
+	Advertiser string `json:"advertiser"`
+}
+
+// ProductSummary is a product card (search hit, rail item, typeahead product).
+type ProductSummary struct {
+	ATIN               string          `json:"atin"`
+	Title              string          `json:"title"`
+	Brand              string          `json:"brand"`
+	Community          string          `json:"community"`
+	Department         string          `json:"department"`
+	Unit               string          `json:"unit"`
+	Rating             float64         `json:"rating"`
+	ReviewCount        int             `json:"reviewCount"`
+	ImageURL           *string         `json:"imageUrl"`
+	OfferID            string          `json:"offerId"`
+	PriceMinor         int64           `json:"priceMinor"`
+	ListPriceMinor     *int64          `json:"listPriceMinor"`
+	Currency           string          `json:"currency"`
+	SellerName         string          `json:"sellerName"`
+	SellerKind         string          `json:"sellerKind"`
+	SellerCity         string          `json:"sellerCity"`
+	Fulfilment         string          `json:"fulfilment"`
+	AvailableQty       int             `json:"availableQty"`
+	InStock            bool            `json:"inStock"`
+	LowStock           bool            `json:"lowStock"`
+	StockStatus        string          `json:"stockStatus"`
+	Delivery           DeliveryPromise `json:"delivery"`
+	OfferCount         int             `json:"offerCount"`
+	MinOfferPriceMinor int64           `json:"minOfferPriceMinor"`
+	Sponsor            *Sponsor        `json:"sponsor"`
+}
+
+// VariantOption is one selectable variant on the product page.
+type VariantOption struct {
+	ATIN       string `json:"atin"`
+	Label      string `json:"label"`
+	Selected   bool   `json:"selected"`
+	Available  bool   `json:"available"`
+	PriceMinor int64  `json:"priceMinor"`
+}
+
+// ProductImage is a gallery image.
+type ProductImage struct {
+	URL *string `json:"url"`
+	Alt string  `json:"alt"`
+}
+
+// ProductInfo is the product block of the product page.
+type ProductInfo struct {
+	ATIN        string          `json:"atin"`
+	Title       string          `json:"title"`
+	Brand       string          `json:"brand"`
+	Community   string          `json:"community"`
+	Department  string          `json:"department"`
+	Unit        string          `json:"unit"`
+	Origin      string          `json:"origin"`
+	Bullets     []string        `json:"bullets"`
+	Rating      float64         `json:"rating"`
+	ReviewCount int             `json:"reviewCount"`
+	Images      []ProductImage  `json:"images"`
+	Variants    []VariantOption `json:"variants"`
+}
+
+// ProductDetail is the product page.
+type ProductDetail struct {
+	Product        ProductInfo `json:"product"`
+	BuyBox         *Offer      `json:"buyBox"`
+	OtherOffers    []Offer     `json:"otherOffers"`
+	ShipsFrom      string      `json:"shipsFrom"`
+	SoldBy         string      `json:"soldBy"`
+	ReturnsPolicy  string      `json:"returnsPolicy"`
+	UnitPriceLabel string      `json:"unitPriceLabel"`
+}
+
+// FacetBucket is one filter value with its count.
+type FacetBucket struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+	Count int64  `json:"count"`
+}
+
+// Facets for the search filter rail.
+type Facets struct {
+	Department []FacetBucket `json:"department"`
+	Community  []FacetBucket `json:"community"`
+	Fulfilment []FacetBucket `json:"fulfilment"`
+	SellerKind []FacetBucket `json:"sellerKind"`
+	Rating     []FacetBucket `json:"rating"`
+	Price      []FacetBucket `json:"price"`
+	Delivery   []FacetBucket `json:"delivery"`
+}
+
+// SearchPage is one page of search results.
+type SearchPage struct {
+	Hits           []ProductSummary `json:"hits"`
+	Total          int64            `json:"total"`
+	Page           int              `json:"page"`
+	Size           int              `json:"size"`
+	PageCount      int              `json:"pageCount"`
+	Facets         Facets           `json:"facets"`
+	DeliverToLabel string           `json:"deliverToLabel"`
+	TookMs         int64            `json:"tookMs"`
+}
+
+// Phrase is a completed typeahead phrase.
+type Phrase struct {
+	Text       string  `json:"text"`
+	Department *string `json:"department"`
+}
+
+// Suggestions is the typeahead dropdown.
+type Suggestions struct {
+	Query    string           `json:"query"`
+	Phrases  []Phrase         `json:"phrases"`
+	Products []ProductSummary `json:"products"`
+}
+
+// CartLine is one cart row.
+type CartLine struct {
+	LineID         string  `json:"lineId"`
+	ATIN           string  `json:"atin"`
+	OfferID        string  `json:"offerId"`
+	Title          string  `json:"title"`
+	Unit           string  `json:"unit"`
+	Department     string  `json:"department"`
+	ImageURL       *string `json:"imageUrl"`
+	PriceMinor     int64   `json:"priceMinor"`
+	LineTotalMinor int64   `json:"lineTotalMinor"`
+	Quantity       int     `json:"quantity"`
+	MaxQuantity    int     `json:"maxQuantity"`
+	AvailableQty   int     `json:"availableQty"`
+	StockStatus    string  `json:"stockStatus"`
+	Selected       bool    `json:"selected"`
+}
+
+// DeliveryOption is one way to ship a package.
+type DeliveryOption struct {
+	Key      string `json:"key"`
+	Label    string `json:"label"`
+	ETA      string `json:"eta"`
+	FeeMinor int64  `json:"feeMinor"`
+	Free     bool   `json:"free"`
+}
+
+// ShippingNudge is "Add $X for free shipping".
+type ShippingNudge struct {
+	RemainingMinor int64 `json:"remainingMinor"`
+	ThresholdMinor int64 `json:"thresholdMinor"`
+}
+
+// CartPackage groups lines shipped together (one seller and fulfilment method).
+type CartPackage struct {
+	PackageID         string           `json:"packageId"`
+	Seller            Seller           `json:"seller"`
+	Fulfilment        string           `json:"fulfilment"`
+	Heading           string           `json:"heading"`
+	ShipsFrom         string           `json:"shipsFrom"`
+	Delivery          DeliveryPromise  `json:"delivery"`
+	DeliveryOptions   []DeliveryOption `json:"deliveryOptions"`
+	Lines             []CartLine       `json:"lines"`
+	ItemCount         int              `json:"itemCount"`
+	SubtotalMinor     int64            `json:"subtotalMinor"`
+	FreeShippingNudge *ShippingNudge   `json:"freeShippingNudge"`
+}
+
+// SavedItem is a "saved for later" row.
+type SavedItem struct {
+	SavedID    string  `json:"savedId"`
+	ATIN       string  `json:"atin"`
+	OfferID    string  `json:"offerId"`
+	Title      string  `json:"title"`
+	ImageURL   *string `json:"imageUrl"`
+	PriceMinor int64   `json:"priceMinor"`
+	Available  bool    `json:"available"`
+}
+
+// Cart is the cart page / mini cart.
+type Cart struct {
+	CartID        string        `json:"cartId"`
+	Currency      string        `json:"currency"`
+	Packages      []CartPackage `json:"packages"`
+	Saved         []SavedItem   `json:"saved"`
+	ItemCount     int           `json:"itemCount"`
+	SelectedCount int           `json:"selectedCount"`
+	SubtotalMinor int64         `json:"subtotalMinor"`
+	AllSelected   bool          `json:"allSelected"`
+	SellerCount   int           `json:"sellerCount"`
+}
+
+// DeliveryLocation is the session's deliver-to location.
+type DeliveryLocation struct {
+	ZIP         string `json:"zip"`
+	City        string `json:"city"`
+	State       string `json:"state"`
+	Label       string `json:"label"`
+	Serviceable bool   `json:"serviceable"`
+}
+
+// PostalAddress is a structured address from autocomplete.
+type PostalAddress struct {
+	Line1   string   `json:"line1"`
+	Line2   string   `json:"line2"`
+	City    string   `json:"city"`
+	State   string   `json:"state"`
+	ZIP     string   `json:"zip"`
+	Country string   `json:"country"`
+	Lat     *float64 `json:"lat"`
+	Lon     *float64 `json:"lon"`
+}
+
+// AddressSuggestion is one autocomplete row.
+type AddressSuggestion struct {
+	ID        string        `json:"id"`
+	Label     string        `json:"label"`
+	Secondary string        `json:"secondary"`
+	Address   PostalAddress `json:"address"`
+	Source    string        `json:"source"`
+}
+
+// AddressSuggestions is the autocomplete response.
+type AddressSuggestions struct {
+	Suggestions []AddressSuggestion `json:"suggestions"`
+	Attribution string              `json:"attribution"`
+}
+
+// MeUser is the signed-in user.
+type MeUser struct {
+	ID        string   `json:"id"`
+	FirstName string   `json:"firstName"`
+	LastName  string   `json:"lastName"`
+	Email     string   `json:"email"`
+	Initials  string   `json:"initials"`
+	Roles     []string `json:"roles"`
+}
+
+// MeCounts are the account menu badges.
+type MeCounts struct {
+	Orders         int `json:"orders"`
+	Returns        int `json:"returns"`
+	Addresses      int `json:"addresses"`
+	PaymentMethods int `json:"paymentMethods"`
+}
+
+// Me is who is signed in.
+type Me struct {
+	Authenticated bool      `json:"authenticated"`
+	User          *MeUser   `json:"user"`
+	Counts        *MeCounts `json:"counts"`
+}
+
+// AuthResult is the next step of an authentication flow (status: authenticated | mfa_required | verification_required).
+type AuthResult struct {
+	Status             string   `json:"status"`
+	RedirectTo         string   `json:"redirectTo,omitempty"`
+	ChallengeID        string   `json:"challengeId,omitempty"`
+	Methods            []string `json:"methods,omitempty"`
+	Destination        string   `json:"destination,omitempty"`
+	ResendAfterSeconds *int     `json:"resendAfterSeconds,omitempty"`
+}
+
+// Address is a saved delivery address.
+type Address struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Phone     string `json:"phone"`
+	Line1     string `json:"line1"`
+	Line2     string `json:"line2"`
+	City      string `json:"city"`
+	State     string `json:"state"`
+	ZIP       string `json:"zip"`
+	IsDefault bool   `json:"isDefault"`
+	Verified  bool   `json:"verified"`
+}
+
+// AddressInput creates or edits an address.
+type AddressInput struct {
+	Name             string `json:"name"`
+	Phone            string `json:"phone"`
+	Line1            string `json:"line1"`
+	Line2            string `json:"line2"`
+	City             string `json:"city"`
+	State            string `json:"state"`
+	ZIP              string `json:"zip"`
+	IsDefault        bool   `json:"isDefault"`
+	AcceptUnverified bool   `json:"acceptUnverified"`
+}
+
+// PaymentMethod is a saved Stripe payment method (display data only).
+type PaymentMethod struct {
+	ID        string  `json:"id"`
+	Type      string  `json:"type"`
+	Brand     *string `json:"brand"`
+	Last4     *string `json:"last4"`
+	Label     string  `json:"label"`
+	Expires   *string `json:"expires"`
+	IsDefault bool    `json:"isDefault"`
+}
+
+// SetupIntent is the Stripe Payment Element bootstrap.
+type SetupIntent struct {
+	ClientSecret   string `json:"clientSecret"`
+	PublishableKey string `json:"publishableKey"`
+}
+
+// Page is a cursor page of items.
+type Page[T any] struct {
+	Items      []T     `json:"items"`
+	NextCursor *string `json:"nextCursor"`
+}
+
+// OrderShipment is one shipment of an order.
+type OrderShipment struct {
+	ShipmentID string `json:"shipmentId"`
+	Label      string `json:"label"`
+	Status     string `json:"status"`
+	Items      string `json:"items"`
+}
+
+// OrderSummary is one order in Your orders.
+type OrderSummary struct {
+	OrderNumber string          `json:"orderNumber"`
+	PlacedAt    string          `json:"placedAt"`
+	TotalMinor  int64           `json:"totalMinor"`
+	Currency    string          `json:"currency"`
+	ShipTo      string          `json:"shipTo"`
+	Status      string          `json:"status"`
+	Shipments   []OrderShipment `json:"shipments"`
+}
+
+// ReturnSummary is one return (RMA).
+type ReturnSummary struct {
+	RMAID       string `json:"rmaId"`
+	OrderNumber string `json:"orderNumber"`
+	Title       string `json:"title"`
+	Status      string `json:"status"`
+	RefundMinor int64  `json:"refundMinor"`
+}
+
+// StartReturn starts a return.
+type StartReturn struct {
+	OrderNumber string `json:"orderNumber"`
+	ATIN        string `json:"atin"`
+	Reason      string `json:"reason"`
+}
+
+// PickupPoint is a pickup location offered for a package at checkout.
+type PickupPoint struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Address string `json:"address"`
+	Hours   string `json:"hours"`
+	Ready   string `json:"ready"`
+	SetBy   string `json:"setBy"`
+}
+
+// CheckoutPackage is a cart package with pickup points.
+type CheckoutPackage struct {
+	CartPackage
+	PickupPoints []PickupPoint `json:"pickupPoints"`
+}
+
+// CheckoutSummary is the checkout page.
+type CheckoutSummary struct {
+	Packages       []CheckoutPackage `json:"packages"`
+	Addresses      []Address         `json:"addresses"`
+	PaymentMethods []PaymentMethod   `json:"paymentMethods"`
+	SubtotalMinor  int64             `json:"subtotalMinor"`
+	ShippingMinor  int64             `json:"shippingMinor"`
+	TaxMinor       int64             `json:"taxMinor"`
+	TaxRateLabel   string            `json:"taxRateLabel"`
+	TotalMinor     int64             `json:"totalMinor"`
+	Currency       string            `json:"currency"`
+	SellerCount    int               `json:"sellerCount"`
+}
+
+// PlaceOrderRequest is the checkout submission (forwarded to orders as-is plus the selected lines).
+type PlaceOrderRequest struct {
+	AddressID          string            `json:"addressId"`
+	PaymentMethodID    string            `json:"paymentMethodId,omitempty"`
+	Wallet             string            `json:"wallet,omitempty"`
+	Gift               bool              `json:"gift,omitempty"`
+	DeliverySelections []json.RawMessage `json:"deliverySelections"`
+}
+
+// OrderConfirmationShipment is one shipment of a placed order.
+type OrderConfirmationShipment struct {
+	ShipmentID   string  `json:"shipmentId"`
+	Label        string  `json:"label"`
+	ETA          string  `json:"eta"`
+	DeliveryCode *string `json:"deliveryCode"`
+}
+
+// OrderConfirmation is the result of placing an order.
+type OrderConfirmation struct {
+	OrderNumber         string                      `json:"orderNumber"`
+	Status              string                      `json:"status"`
+	PaymentClientSecret *string                     `json:"paymentClientSecret"`
+	TotalMinor          int64                       `json:"totalMinor"`
+	Currency            string                      `json:"currency"`
+	Shipments           []OrderConfirmationShipment `json:"shipments"`
+}

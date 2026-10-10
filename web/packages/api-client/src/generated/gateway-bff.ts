@@ -1175,7 +1175,7 @@ export interface components {
             password: string;
             /** @constant */
             termsAccepted: true;
-            /** @description Separate */
+            /** @description Separate, optional SMS opt-in (AfroTransact Alerts) */
             smsConsent: boolean;
             returnTo?: string;
         };
@@ -1376,6 +1376,11 @@ export interface components {
             responsibilities: string[];
             requirements: string[];
         };
+        /**
+         * @description The résumé is uploaded beforehand through the media service; send its asset id as `resumeAssetId` (the content
+         *     service requires it and answers 422 `errors.resumeAssetId` otherwise). `resumeFileName` is the original file
+         *     name, kept for display.
+         */
         JobApplication: {
             name: string;
             /** Format: email */
@@ -1384,11 +1389,15 @@ export interface components {
             linkedin: string;
             /** @enum {string} */
             workAuthorization: "Yes" | "Yes, with sponsorship" | "No";
-            resumeFileName: string;
+            /** @description Media-service asset id of the uploaded résumé (PDF) */
+            resumeAssetId?: string;
+            resumeFileName?: string;
+            coverNote?: string;
             /** @constant */
             consent: true;
         };
         ApplicationReceipt: {
+            /** @description Application reference issued by the content service */
             reference: string;
             jobId: string;
         };

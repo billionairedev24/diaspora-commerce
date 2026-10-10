@@ -26,9 +26,12 @@ export const JobApplicationFormSchema = z.object({
     .refine((v) => v === '' || /^https:\/\/(www\.)?linkedin\.com\//.test(v), 'Use a linkedin.com URL'),
   workAuthorization: z.enum(WORK_AUTHORIZATION, { error: 'Choose one' }),
   resumeFileName: z.string().min(1, 'Attach your résumé').refine((v) => /\.pdf$/i.test(v), 'Upload a PDF'),
+  /** Media-service asset id of the uploaded résumé (required by the content service behind the BFF). */
+  resumeAssetId: z.string().min(1).optional(),
+  coverNote: z.string().max(2000).optional(),
   consent: z.literal(true, { error: 'Please accept the candidate privacy notice' })
 });
 export type JobApplicationForm = z.infer<typeof JobApplicationFormSchema>;
 
-export const ApplicationReceiptSchema = z.object({ reference: z.string().regex(/^APL-\d{6}$/), jobId: z.string() });
+export const ApplicationReceiptSchema = z.object({ reference: z.string().regex(/^CAR-\d{6}$/), jobId: z.string() });
 export type ApplicationReceipt = z.infer<typeof ApplicationReceiptSchema>;

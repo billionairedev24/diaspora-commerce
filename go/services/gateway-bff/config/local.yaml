@@ -1,0 +1,102 @@
+# gateway-bff · local. Secrets (REDIS_URL outside local, OIDC_CLIENT_SECRET, SESSION_SIGNING_KEY) come from env vars only.
+# Upstream URLs can be overridden with <NAME>_URL (SEARCH_URL, CATALOG_URL, …).
+port: 8200
+docsEnabled: true
+redisUrl: redis://localhost:6379/0
+market: us
+web:
+  origins:
+    - http://localhost:3000
+  publicOrigin: http://localhost:3000
+  bffPath: /api/bff
+session:
+  cookieName: at_session
+  cookieSecure: false
+  cookieDomain: ""
+  idleTtl: 720h
+oidc:
+  issuer: http://localhost:8100
+  publicUrl: http://localhost:8100
+  clientId: gateway-bff
+  redirectUri: http://localhost:8200/login/oauth2/code/afrotransact
+  scopes: [openid, email, profile, phone, offline_access]
+  audience: ""
+  verifyBearer: true
+upstreams:
+  search:
+    url: http://localhost:8201
+    timeout: 2s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  catalog:
+    url: http://localhost:8101
+    timeout: 2s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  inventory:
+    url: http://localhost:8103
+    timeout: 1500ms
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  cart:
+    url: http://localhost:8203
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  geo:
+    url: http://localhost:8205
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  identity:
+    url: http://localhost:8100
+    timeout: 5s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  content:
+    url: http://localhost:8112
+    timeout: 1500ms
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  payments:
+    url: http://localhost:8105
+    timeout: 5s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  promise:
+    url: http://localhost:8204
+    timeout: 800ms
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  orders:
+    url: http://localhost:8104
+    timeout: 10s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  notifications:
+    url: http://localhost:8208
+    timeout: 2s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+rateLimit:
+  authPerMinute: 60
+  lookupPerMinute: 120
+  trustForwardedFor: false
+  maxBodyBytes: 65536
+cache:
+  maxEntries: 5000
+  defaultTtl: 60s
+  catalogTtl: 60s
+  referenceTtl: 10m
+commerce:
+  defaultZip: "77042"
+  defaultCity: Houston
+  defaultState: TX
+  timeZone: America/Chicago
+  sellerShippingMinor: 599
+  freeShippingThresholdMinor: 4900
+  retailOrgId: org_afrotransact_retail
+  sellerNames: {}
+telemetry:
+  otlpEndpoint: localhost:4318
+  sampleRatio: 1.0

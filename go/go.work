@@ -6,6 +6,7 @@ use (
 	./pkg
 	./services/carrier-gateway
 	./services/cart
+	./services/gateway-bff
 	./services/geo
 	./services/indexer
 	./services/media

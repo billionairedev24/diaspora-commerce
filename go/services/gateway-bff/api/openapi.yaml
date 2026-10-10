@@ -1,0 +1,1684 @@
+openapi: 3.1.0
+info:
+  title: Gateway BFF API (storefront & customer app)
+  version: v1
+  summary: Screen-shaped API for the AfroTransact storefront (web) and customer mobile app.
+  description: |
+    The gateway BFF (Go, port 8200) composes catalog, offers, inventory, promise, search, cart, content,
+    identity, orders and payments into responses shaped for screens. Browsers never talk to the domain
+    services directly.
+
+    **Sessions and auth.** Web clients use the HttpOnly, Secure, SameSite=Lax cookie `at_session`, issued by the
+    BFF. Tokens from identity (Spring Authorization Server) are kept server-side and relayed to downstream
+    services (token relay); the browser never sees them. Sign-in with Google/Apple/Facebook and the hosted login
+    use the OAuth 2.1 authorization code flow with PKCE (S256), `state` and `nonce`, started at
+    `GET /v1/auth/oidc/{provider}/authorize` and `GET /v1/auth/login`, which redirect to identity's
+    `/oauth2/authorize`. Native apps send `Authorization: Bearer <access token>` instead of the cookie.
+    Guests get an anonymous session (cart, deliver-to ZIP); on sign-in the guest cart is merged into the
+    customer's cart.
+
+    **CSRF.** Unsafe methods (POST, PUT, PATCH, DELETE) require an `Origin` header matching an allowed
+    storefront origin; requests with a mismatched or missing Origin and a cookie session are rejected with 403.
+
+    **Errors** are RFC 9457 `application/problem+json` documents with a stable machine `code`. Validation
+    failures (422) list per-field messages in `errors` keyed by request property.
+
+    **Money** is always an integer amount in minor units (`*Minor`, cents for USD) plus an ISO 4217 `currency`.
+
+    **Stock rules.** Cart quantities are capped by available stock and by 99 per line. Requests that would
+    exceed stock fail with 409 `STOCK_LIMIT` (or `OUT_OF_STOCK` at zero) and report `available`, `inCart`,
+    `requested` and `maxQuantity`. Products with 1–5 units left are `LOW_STOCK` ("Only N left — order soon").
+
+    **Localization.** `Accept-Language` selects the response language for labels (delivery dates, facet labels).
+    The deliver-to ZIP is part of the session and drives delivery promises everywhere.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+servers:
+  - url: http://localhost:8200
+    description: local
+  - url: https://api.dev.afrotransact.com/bff
+    description: dev
+  - url: https://api.uat.afrotransact.com/bff
+    description: uat
+  - url: https://api.afrotransact.com/bff
+    description: prod
+tags:
+  - name: Site
+    description: Site configuration, home placements, newsletter
+  - name: Location
+    description: Deliver-to location and address autocomplete
+  - name: Search
+    description: Search and typeahead (proxy of the search service with delivery promises)
+  - name: Catalog
+    description: Product detail with buy box, offers and delivery promise
+  - name: Cart
+    description: Cart split into packages per seller, save for later
+  - name: Auth
+    description: Session, first-party sign-in/sign-up steps, passkeys and OIDC redirects
+  - name: Account
+    description: Addresses, payment methods, orders and returns
+  - name: Checkout
+    description: Checkout summary and order placement
+  - name: Careers
+    description: Open roles and applications
+security:
+  - {}
+  - sessionCookie: []
+  - bearer: []
+paths:
+  /v1/site-config:
+    get:
+      tags: [Site]
+      operationId: getSiteConfig
+      summary: Site configuration (social links, contacts, legal versions, identity providers, locales)
+      description: Published from Backoffice → Site content & legal; changes need no deployment. Cached with ETag.
+      responses:
+        '200':
+          description: Current configuration
+          headers:
+            ETag: {schema: {type: string}}
+            Cache-Control: {schema: {type: string}, example: 'public, max-age=60, stale-while-revalidate=600'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteConfig'}
+        '304': {description: Not modified}
+  /v1/home:
+    get:
+      tags: [Site]
+      operationId: getHome
+      summary: Home page placements for the session's deliver-to location
+      description: Announcement bar, hero carousel, tiles, sponsored banners and product rails. Nothing is hard-coded in clients.
+      responses:
+        '200':
+          description: Placements
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Home'}
+  /v1/newsletter/subscriptions:
+    post:
+      tags: [Site]
+      operationId: subscribeNewsletter
+      summary: Subscribe to the weekly newsletter (double opt-in)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NewsletterRequest'}
+      responses:
+        '202':
+          description: Confirmation email sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NewsletterResponse'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/delivery-location:
+    get:
+      tags: [Location]
+      operationId: getDeliveryLocation
+      summary: Current deliver-to location of the session
+      responses:
+        '200':
+          description: Location
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeliveryLocation'}
+    put:
+      tags: [Location]
+      operationId: setDeliveryLocation
+      summary: Change the deliver-to location by ZIP or device coordinates (updates every delivery promise)
+      description: Coordinates come from "Use my current location" and are reverse-geocoded to a ZIP by the geo service; they are not stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [zip]
+                  properties:
+                    zip: {type: string, pattern: '^\d{5}$'}
+                - type: object
+                  required: [lat, lon]
+                  properties:
+                    lat: {type: number, minimum: -90, maximum: 90}
+                    lon: {type: number, minimum: -180, maximum: 180}
+      responses:
+        '200':
+          description: Updated location
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DeliveryLocation'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/geo/address-suggestions:
+    get:
+      tags: [Location]
+      operationId: suggestAddresses
+      summary: Address autocomplete (geo service — Google Places or OpenStreetMap Nominatim)
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 120}}
+        - {name: country, in: query, schema: {type: string, default: US}}
+        - {name: sessionToken, in: query, schema: {type: string}, description: Places autocomplete session token for billing}
+      responses:
+        '200':
+          description: Up to 5 suggestions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AddressSuggestions'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/search:
+    get:
+      tags: [Search]
+      operationId: search
+      summary: Search products with filters, facet counts and delivery promises
+      description: |
+        Every typed word must match (prefix, synonym or typo tolerance). Facet counts for a dimension are computed
+        with every other active filter applied (disjunctive faceting). Sponsored placements that match the query
+        are labelled with `sponsor`.
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 200}}
+        - {name: department, in: query, schema: {type: string}}
+        - {name: community, in: query, schema: {type: string}}
+        - {name: fulfilment, in: query, schema: {$ref: '#/components/schemas/Fulfilment'}}
+        - {name: sellerKind, in: query, schema: {$ref: '#/components/schemas/SellerKind'}}
+        - {name: minRating, in: query, schema: {type: number, minimum: 0, maximum: 5}}
+        - {name: price, in: query, schema: {$ref: '#/components/schemas/PriceBucket'}}
+        - {name: maxDays, in: query, schema: {type: integer, minimum: 0}, description: Delivery within N business days to the deliver-to ZIP}
+        - {name: sort, in: query, schema: {$ref: '#/components/schemas/SearchSort'}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 60, default: 12}}
+      responses:
+        '200':
+          description: One page of results
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SearchPage'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+  /v1/search/suggestions:
+    get:
+      tags: [Search]
+      operationId: suggest
+      summary: Typeahead — completed phrases (first scoped to a department) and up to five products
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, maxLength: 100}}
+      responses:
+        '200':
+          description: Suggestions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Suggestions'}
+  /v1/products/{atin}:
+    get:
+      tags: [Catalog]
+      operationId: getProduct
+      summary: Product detail with buy box, other offers, availability and delivery promise
+      parameters:
+        - $ref: '#/components/parameters/Atin'
+      responses:
+        '200':
+          description: Product detail
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProductDetail'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/products/{atin}/stock-alerts:
+    post:
+      tags: [Catalog]
+      operationId: createStockAlert
+      summary: '"Email me when available" for an out-of-stock product'
+      description: Signed-in customers may omit the email; guests must provide one.
+      parameters:
+        - $ref: '#/components/parameters/Atin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StockAlertRequest'}
+      responses:
+        '201':
+          description: Subscribed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockAlert'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/cart:
+    get:
+      tags: [Cart]
+      operationId: getCart
+      summary: Current cart (guest or customer), one package per seller and fulfilment method
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+  /v1/cart/items:
+    post:
+      tags: [Cart]
+      operationId: addToCart
+      summary: Add an offer to the cart (merged into an existing line for the same offer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AddToCartRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/StockProblem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/cart/items/{lineId}:
+    parameters:
+      - $ref: '#/components/parameters/LineId'
+    patch:
+      tags: [Cart]
+      operationId: updateCartLine
+      summary: Change a line's quantity and/or whether it is selected for checkout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateCartLineRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/StockProblem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+    delete:
+      tags: [Cart]
+      operationId: removeCartLine
+      summary: Remove a line
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/cart/selection:
+    put:
+      tags: [Cart]
+      operationId: selectAllCartLines
+      summary: Select or deselect every line for checkout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [selected]
+              properties:
+                selected: {type: boolean}
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+  /v1/cart/items/{lineId}/save-for-later:
+    post:
+      tags: [Cart]
+      operationId: saveForLater
+      summary: Move a line to "Saved for later"
+      parameters:
+        - $ref: '#/components/parameters/LineId'
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/cart/saved/{savedId}/move-to-cart:
+    post:
+      tags: [Cart]
+      operationId: moveToCart
+      summary: Move a saved item back to the cart (quantity 1, subject to stock)
+      parameters:
+        - $ref: '#/components/parameters/SavedId'
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/StockProblem'}
+  /v1/cart/saved/{savedId}:
+    delete:
+      tags: [Cart]
+      operationId: removeSaved
+      summary: Delete a saved item
+      parameters:
+        - $ref: '#/components/parameters/SavedId'
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/me:
+    get:
+      tags: [Auth]
+      operationId: getMe
+      summary: Who is signed in (guest sessions return authenticated=false)
+      responses:
+        '200':
+          description: Session principal and account menu counts
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Me'}
+  /v1/auth/login:
+    get:
+      tags: [Auth]
+      operationId: startHostedLogin
+      summary: Redirect to identity's hosted login (authorization code + PKCE)
+      parameters:
+        - $ref: '#/components/parameters/ReturnTo'
+        - {name: prompt, in: query, schema: {type: string, enum: [login, create]}}
+      responses:
+        '302': {$ref: '#/components/responses/AuthorizeRedirect'}
+  /v1/auth/oidc/{provider}/authorize:
+    get:
+      tags: [Auth]
+      operationId: startSocialLogin
+      summary: Start sign-in with an external identity provider (only providers enabled in site config)
+      description: |
+        Generates `code_verifier`, `state` and `nonce`, stores them in the session and redirects to
+        `{identity}/oauth2/authorize?response_type=code&client_id=storefront-bff&scope=openid%20email%20profile&code_challenge=…&code_challenge_method=S256&state=…&nonce=…&idp_hint={provider}`.
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/IdentityProviderId'}
+        - $ref: '#/components/parameters/ReturnTo'
+      responses:
+        '302': {$ref: '#/components/responses/AuthorizeRedirect'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/auth/oidc/callback:
+    get:
+      tags: [Auth]
+      operationId: completeLogin
+      summary: Authorization-code callback — exchanges the code (with the PKCE verifier), creates the session, redirects to returnTo
+      security: [{}]
+      parameters:
+        - {name: code, in: query, required: true, schema: {type: string}}
+        - {name: state, in: query, required: true, schema: {type: string}}
+        - {name: error, in: query, schema: {type: string}}
+      responses:
+        '302':
+          description: Signed in; redirect to the original returnTo (or /signin?error=… on failure)
+          headers:
+            Location: {schema: {type: string}}
+            Set-Cookie: {schema: {type: string}, description: 'at_session=…; HttpOnly; Secure; SameSite=Lax; Path=/'}
+  /v1/auth/sign-in:
+    post:
+      tags: [Auth]
+      operationId: signIn
+      summary: Email + password sign-in (step 1); usually continues with two-step verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SignInRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/AuthResult'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/auth/mfa/verify:
+    post:
+      tags: [Auth]
+      operationId: verifyMfa
+      summary: Two-step verification code (authenticator app or SMS)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VerifyCodeRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/AuthResult'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/auth/sign-up:
+    post:
+      tags: [Auth]
+      operationId: signUp
+      summary: Create an account (same fields for customers, sellers and providers — role is decided server-side)
+      description: Sends a 6-digit code to the email address; the account is created when the code is verified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SignUpRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/AuthResult'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/auth/email-verification/verify:
+    post:
+      tags: [Auth]
+      operationId: verifyEmail
+      summary: Verify the sign-up email code; signs the new customer in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VerifyCodeRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/AuthResult'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/auth/email-verification/resend:
+    post:
+      tags: [Auth]
+      operationId: resendEmailCode
+      summary: Resend the sign-up code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId]
+              properties:
+                challengeId: {type: string}
+      responses:
+        '202':
+          description: Sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResendResponse'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/auth/passkey/options:
+    post:
+      tags: [Auth]
+      operationId: passkeyOptions
+      summary: WebAuthn assertion options for "Sign in with a passkey" (discoverable credentials)
+      requestBody:
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '200':
+          description: PublicKeyCredentialRequestOptions (base64url-encoded binary fields)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PasskeyOptions'}
+  /v1/auth/passkey/verify:
+    post:
+      tags: [Auth]
+      operationId: passkeyVerify
+      summary: Verify a WebAuthn assertion and sign in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PasskeyAssertion'}
+      responses:
+        '200': {$ref: '#/components/responses/AuthResult'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+  /v1/auth/sign-out:
+    post:
+      tags: [Auth]
+      operationId: signOut
+      summary: End the session (revokes refresh tokens at identity)
+      responses:
+        '204':
+          description: Signed out
+          headers:
+            Set-Cookie: {schema: {type: string}}
+  /v1/account/addresses:
+    get:
+      tags: [Account]
+      operationId: listAddresses
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Saved addresses
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AddressPage'}
+        '401': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Account]
+      operationId: createAddress
+      summary: Add an address (validated and standardised by the geo service)
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AddressInput'}
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Address'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/account/addresses/{addressId}:
+    parameters:
+      - {name: addressId, in: path, required: true, schema: {type: string}}
+    patch:
+      tags: [Account]
+      operationId: updateAddress
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AddressInput'}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Address'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+    delete:
+      tags: [Account]
+      operationId: deleteAddress
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '204': {description: Deleted}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/account/addresses/{addressId}/default:
+    post:
+      tags: [Account]
+      operationId: setDefaultAddress
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: addressId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Now the default
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Address'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/account/payment-methods:
+    get:
+      tags: [Account]
+      operationId: listPaymentMethods
+      summary: Saved Stripe payment methods (brand, last 4, expiry only)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Payment methods
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentMethodPage'}
+        '401': {$ref: '#/components/responses/Problem'}
+  /v1/account/payment-methods/setup-intents:
+    post:
+      tags: [Account]
+      operationId: createSetupIntent
+      summary: Stripe SetupIntent client secret for the Payment Element (card, US bank account, Cash App Pay)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '201':
+          description: SetupIntent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [clientSecret, publishableKey]
+                properties:
+                  clientSecret: {type: string}
+                  publishableKey: {type: string}
+        '401': {$ref: '#/components/responses/Problem'}
+  /v1/account/payment-methods/{paymentMethodId}:
+    delete:
+      tags: [Account]
+      operationId: deletePaymentMethod
+      summary: Detach a payment method from the Stripe customer
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: paymentMethodId, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Detached}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/account/orders:
+    get:
+      tags: [Account]
+      operationId: listOrders
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 50, default: 10}}
+      responses:
+        '200':
+          description: Orders, newest first
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderPage'}
+        '401': {$ref: '#/components/responses/Problem'}
+  /v1/account/orders/{orderNumber}/shipments/{shipmentId}/cancel:
+    post:
+      tags: [Account]
+      operationId: cancelShipment
+      summary: Cancel a shipment that has not shipped yet (releases the payment authorisation for it)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+        - {name: shipmentId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Updated order
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderSummary'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+  /v1/account/returns:
+    get:
+      tags: [Account]
+      operationId: listReturns
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Returns
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReturnPage'}
+        '401': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Account]
+      operationId: startReturn
+      summary: Start a return for a delivered, returnable item
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderNumber, atin, reason]
+              properties:
+                orderNumber: {type: string}
+                atin: {$ref: '#/components/schemas/Atin'}
+                reason: {type: string, enum: [DAMAGED, WRONG_ITEM, NOT_AS_DESCRIBED, NO_LONGER_NEEDED]}
+      responses:
+        '201':
+          description: Return started
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReturnSummary'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/checkout/summary:
+    get:
+      tags: [Checkout]
+      operationId: getCheckoutSummary
+      summary: Checkout view of the selected cart lines (addresses, payment methods, per-package delivery options, tax)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: addressId, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Summary
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CheckoutSummary'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/StockProblem'}
+  /v1/checkout/orders:
+    post:
+      tags: [Checkout]
+      operationId: placeOrder
+      summary: Place the order (orders saga — payment authorisation, stock reservation, shipment split)
+      description: |
+        Requires `Idempotency-Key`. Replaying the same key with the same body returns the original result (201);
+        the same key with a different body fails with 409 `IDEMPOTENCY_CONFLICT`. The payment is authorised now
+        and captured per shipment when it ships.
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, minLength: 16, maxLength: 64}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PlaceOrderRequest'}
+      responses:
+        '201':
+          description: Order placed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderConfirmation'}
+        '202':
+          description: Further action required (3-D Secure); confirm with Stripe.js and poll the order
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderConfirmation'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '402': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/StockProblem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/careers/jobs:
+    get:
+      tags: [Careers]
+      operationId: listJobs
+      responses:
+        '200':
+          description: Open roles
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobs]
+                properties:
+                  jobs: {type: array, items: {$ref: '#/components/schemas/Job'}}
+  /v1/careers/jobs/{jobId}/applications:
+    post:
+      tags: [Careers]
+      operationId: applyToJob
+      summary: Apply for a role (résumé uploaded beforehand through the media service)
+      parameters:
+        - {name: jobId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/JobApplication'}
+      responses:
+        '201':
+          description: Application received
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApplicationReceipt'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: at_session
+      description: Opaque BFF session id (HttpOnly, Secure, SameSite=Lax). Tokens stay server-side.
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token from identity (customer mobile app).
+  parameters:
+    Atin:
+      name: atin
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/Atin'}
+    LineId:
+      name: lineId
+      in: path
+      required: true
+      schema: {type: string}
+    SavedId:
+      name: savedId
+      in: path
+      required: true
+      schema: {type: string}
+    ReturnTo:
+      name: returnTo
+      in: query
+      schema: {type: string, pattern: '^/(?!/)', default: /}
+      description: Relative storefront path to return to after sign-in (absolute URLs are rejected).
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    ValidationProblem:
+      description: Validation failed; `errors` maps request properties to messages
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+          example:
+            type: https://errors.afrotransact.com/validation-failed
+            title: Validation failed
+            status: 422
+            code: VALIDATION_FAILED
+            detail: One or more fields are invalid.
+            errors: {email: Enter a valid email address}
+    StockProblem:
+      description: Requested quantity exceeds available stock (STOCK_LIMIT) or the item is out of stock (OUT_OF_STOCK)
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/StockProblem'}
+          example:
+            type: https://errors.afrotransact.com/stock-limit
+            title: Not enough stock
+            status: 409
+            code: STOCK_LIMIT
+            detail: Only 3 available — 3 already in your cart.
+            available: 3
+            inCart: 3
+            requested: 4
+            maxQuantity: 3
+    TooManyRequests:
+      description: Rate limited
+      headers:
+        Retry-After: {schema: {type: integer}}
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Cart:
+      description: The updated cart
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Cart'}
+    AuthResult:
+      description: Next step of the authentication flow
+      headers:
+        Set-Cookie: {schema: {type: string}, description: Rotated session cookie once authenticated}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AuthResult'}
+    AuthorizeRedirect:
+      description: Redirect to identity /oauth2/authorize (authorization code + PKCE S256, state, nonce)
+      headers:
+        Location: {schema: {type: string}}
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+        code:
+          type: string
+          description: |
+            Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, PRODUCT_NOT_FOUND, OFFER_NOT_FOUND,
+            LINE_NOT_FOUND, SAVED_NOT_FOUND, STOCK_LIMIT, OUT_OF_STOCK, INVALID_CREDENTIALS, INVALID_CODE, CHALLENGE_EXPIRED,
+            EMAIL_TAKEN, WEAK_PASSWORD, PROVIDER_DISABLED, ZIP_NOT_SERVICEABLE, PAYMENT_DECLINED, IDEMPOTENCY_CONFLICT,
+            STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE.
+        errors:
+          type: object
+          additionalProperties: {type: string}
+      additionalProperties: true
+    StockProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          required: [available, inCart, requested]
+          properties:
+            available: {type: integer, minimum: 0}
+            inCart: {type: integer, minimum: 0}
+            requested: {type: integer, minimum: 0}
+            maxQuantity: {type: integer, minimum: 0}
+    Atin:
+      type: string
+      pattern: '^AT[0-9A-Z]{8}$'
+      description: AfroTransact product identifier (one per product and per variant).
+    Fulfilment:
+      type: string
+      enum: [AFROTRANSACT, SELLER]
+      description: AFROTRANSACT = "Fulfilled by AfroTransact"; SELLER = "Ships from seller".
+    SellerKind:
+      type: string
+      enum: [PLATFORM, SELLER]
+      description: PLATFORM = sold by AfroTransact Retail (first party); SELLER = independent seller.
+    StockStatus:
+      type: string
+      enum: [IN_STOCK, LOW_STOCK, OUT_OF_STOCK]
+      description: LOW_STOCK when 1–5 units are available.
+    PriceBucket:
+      type: string
+      enum: [u10, 10-25, 25-50, o50]
+    SearchSort:
+      type: string
+      enum: [relevance, price_asc, price_desc, rating, fastest]
+      default: relevance
+    IdentityProviderId:
+      type: string
+      enum: [google, apple, facebook]
+    DeliveryPromise:
+      type: object
+      required: [days, label, prefix, free, feeMinor, expressLabel, cutoff]
+      properties:
+        days: {type: integer, minimum: 0, description: Business days to the deliver-to ZIP (0 = today)}
+        label: {type: string, examples: ['Tomorrow, Oct 11']}
+        prefix: {type: string, examples: [FREE delivery, Delivery]}
+        free: {type: boolean}
+        feeMinor: {type: integer}
+        expressLabel: {type: [string, 'null']}
+        cutoff: {type: [string, 'null'], examples: ['Order within 4 hrs 12 mins.']}
+    Seller:
+      type: object
+      required: [id, name, kind, city]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        kind: {$ref: '#/components/schemas/SellerKind'}
+        city: {type: string}
+    Offer:
+      type: object
+      required: [offerId, seller, priceMinor, listPriceMinor, currency, fulfilment, availableQty, stockStatus, delivery]
+      properties:
+        offerId: {type: string}
+        seller: {$ref: '#/components/schemas/Seller'}
+        priceMinor: {type: integer}
+        listPriceMinor: {type: [integer, 'null']}
+        currency: {type: string}
+        fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        availableQty: {type: integer, minimum: 0}
+        stockStatus: {$ref: '#/components/schemas/StockStatus'}
+        delivery: {$ref: '#/components/schemas/DeliveryPromise'}
+    ProductSummary:
+      type: object
+      description: Product card data (search hit, rail item, typeahead product). Superset of the search service Hit.
+      required: [atin, title, brand, community, department, unit, rating, reviewCount, imageUrl, offerId, priceMinor, listPriceMinor, currency, sellerName, sellerKind, sellerCity, fulfilment, availableQty, inStock, lowStock, stockStatus, delivery, offerCount, minOfferPriceMinor, sponsor]
+      properties:
+        atin: {$ref: '#/components/schemas/Atin'}
+        title: {type: string}
+        brand: {type: string}
+        community: {type: string}
+        department: {type: string}
+        unit: {type: string}
+        rating: {type: number, minimum: 0, maximum: 5}
+        reviewCount: {type: integer, minimum: 0}
+        imageUrl: {type: [string, 'null']}
+        offerId: {type: string, description: Buy-box offer}
+        priceMinor: {type: integer}
+        listPriceMinor: {type: [integer, 'null']}
+        currency: {type: string}
+        sellerName: {type: string}
+        sellerKind: {$ref: '#/components/schemas/SellerKind'}
+        sellerCity: {type: string}
+        fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        availableQty: {type: integer, minimum: 0}
+        inStock: {type: boolean}
+        lowStock: {type: boolean}
+        stockStatus: {$ref: '#/components/schemas/StockStatus'}
+        delivery: {$ref: '#/components/schemas/DeliveryPromise'}
+        offerCount: {type: integer, minimum: 1}
+        minOfferPriceMinor: {type: integer}
+        sponsor:
+          type: [object, 'null']
+          required: [advertiser]
+          properties:
+            advertiser: {type: string}
+    VariantOption:
+      type: object
+      required: [atin, label, selected, available, priceMinor]
+      properties:
+        atin: {$ref: '#/components/schemas/Atin'}
+        label: {type: string}
+        selected: {type: boolean}
+        available: {type: boolean}
+        priceMinor: {type: integer}
+    ProductDetail:
+      type: object
+      required: [product, buyBox, otherOffers, shipsFrom, soldBy, returnsPolicy, unitPriceLabel]
+      properties:
+        product:
+          type: object
+          required: [atin, title, brand, community, department, unit, origin, bullets, rating, reviewCount, images, variants]
+          properties:
+            atin: {$ref: '#/components/schemas/Atin'}
+            title: {type: string}
+            brand: {type: string}
+            community: {type: string}
+            department: {type: string}
+            unit: {type: string}
+            origin: {type: string}
+            bullets: {type: array, items: {type: string}}
+            rating: {type: number}
+            reviewCount: {type: integer}
+            images:
+              type: array
+              items:
+                type: object
+                required: [url, alt]
+                properties:
+                  url: {type: [string, 'null']}
+                  alt: {type: string}
+            variants: {type: array, items: {$ref: '#/components/schemas/VariantOption'}}
+        buyBox:
+          description: Winning offer, or null when the product is currently unavailable
+          oneOf:
+            - $ref: '#/components/schemas/Offer'
+            - type: 'null'
+        otherOffers: {type: array, items: {$ref: '#/components/schemas/Offer'}}
+        shipsFrom: {type: string}
+        soldBy: {type: string}
+        returnsPolicy: {type: string}
+        unitPriceLabel: {type: string}
+    StockAlertRequest:
+      type: object
+      properties:
+        email: {type: string, format: email}
+    StockAlert:
+      type: object
+      required: [atin, status]
+      properties:
+        atin: {$ref: '#/components/schemas/Atin'}
+        status: {type: string, enum: [subscribed]}
+    FacetBucket:
+      type: object
+      required: [value, label, count]
+      properties:
+        value: {type: string}
+        label: {type: string}
+        count: {type: integer, minimum: 0}
+    SearchPage:
+      type: object
+      required: [hits, total, page, size, pageCount, facets, deliverToLabel, tookMs]
+      properties:
+        hits: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+        pageCount: {type: integer}
+        facets:
+          type: object
+          required: [department, community, fulfilment, sellerKind, rating, price, delivery]
+          properties:
+            department: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
+            community: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
+            fulfilment: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
+            sellerKind: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
+            rating: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
+            price: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
+            delivery: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
+        deliverToLabel: {type: string}
+        tookMs: {type: integer}
+    Suggestions:
+      type: object
+      required: [query, phrases, products]
+      properties:
+        query: {type: string}
+        phrases:
+          type: array
+          description: Completed phrases; the first may be scoped to the top product's department.
+          items:
+            type: object
+            required: [text, department]
+            properties:
+              text: {type: string}
+              department: {type: [string, 'null']}
+        products: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/ProductSummary'}}
+    CartLine:
+      type: object
+      required: [lineId, atin, offerId, title, unit, department, imageUrl, priceMinor, lineTotalMinor, quantity, maxQuantity, availableQty, stockStatus, selected]
+      properties:
+        lineId: {type: string}
+        atin: {$ref: '#/components/schemas/Atin'}
+        offerId: {type: string}
+        title: {type: string}
+        unit: {type: string}
+        department: {type: string}
+        imageUrl: {type: [string, 'null']}
+        priceMinor: {type: integer}
+        lineTotalMinor: {type: integer}
+        quantity: {type: integer, minimum: 1}
+        maxQuantity: {type: integer, minimum: 0, description: 'min(available stock, 99)'}
+        availableQty: {type: integer, minimum: 0}
+        stockStatus: {$ref: '#/components/schemas/StockStatus'}
+        selected: {type: boolean}
+    DeliveryOption:
+      type: object
+      required: [key, label, eta, feeMinor, free]
+      properties:
+        key: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
+        label: {type: string}
+        eta: {type: string}
+        feeMinor: {type: integer}
+        free: {type: boolean}
+    CartPackage:
+      type: object
+      required: [packageId, seller, fulfilment, heading, shipsFrom, delivery, deliveryOptions, lines, itemCount, subtotalMinor, freeShippingNudge]
+      properties:
+        packageId: {type: string, description: '{sellerId}:{fulfilment}'}
+        seller: {$ref: '#/components/schemas/Seller'}
+        fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        heading: {type: string}
+        shipsFrom: {type: string}
+        delivery: {$ref: '#/components/schemas/DeliveryPromise'}
+        deliveryOptions: {type: array, items: {$ref: '#/components/schemas/DeliveryOption'}}
+        lines: {type: array, items: {$ref: '#/components/schemas/CartLine'}}
+        itemCount: {type: integer}
+        subtotalMinor: {type: integer}
+        freeShippingNudge:
+          type: [object, 'null']
+          required: [remainingMinor, thresholdMinor]
+          properties:
+            remainingMinor: {type: integer}
+            thresholdMinor: {type: integer}
+    SavedItem:
+      type: object
+      required: [savedId, atin, offerId, title, imageUrl, priceMinor, available]
+      properties:
+        savedId: {type: string}
+        atin: {$ref: '#/components/schemas/Atin'}
+        offerId: {type: string}
+        title: {type: string}
+        imageUrl: {type: [string, 'null']}
+        priceMinor: {type: integer}
+        available: {type: boolean}
+    Cart:
+      type: object
+      required: [cartId, currency, packages, saved, itemCount, selectedCount, subtotalMinor, allSelected, sellerCount]
+      properties:
+        cartId: {type: string}
+        currency: {type: string}
+        packages: {type: array, items: {$ref: '#/components/schemas/CartPackage'}}
+        saved: {type: array, items: {$ref: '#/components/schemas/SavedItem'}}
+        itemCount: {type: integer}
+        selectedCount: {type: integer}
+        subtotalMinor: {type: integer}
+        allSelected: {type: boolean}
+        sellerCount: {type: integer}
+    AddToCartRequest:
+      type: object
+      required: [offerId, quantity]
+      properties:
+        offerId: {type: string}
+        quantity: {type: integer, minimum: 1, maximum: 99}
+    UpdateCartLineRequest:
+      type: object
+      minProperties: 1
+      properties:
+        quantity: {type: integer, minimum: 1, maximum: 99}
+        selected: {type: boolean}
+    Tone:
+      type: string
+      enum: [ink, gold, green, sand]
+    Announcement:
+      type: object
+      required: [id, tone, icon, text, cta, href]
+      properties:
+        id: {type: string}
+        tone: {$ref: '#/components/schemas/Tone'}
+        icon: {type: string}
+        text: {type: string}
+        cta: {type: string}
+        href: {type: string}
+    HeroSlide:
+      type: object
+      required: [id, theme, kicker, title, sub, cta, href, label, imageUrl]
+      properties:
+        id: {type: string}
+        theme: {$ref: '#/components/schemas/Tone'}
+        kicker: {type: string}
+        title: {type: string}
+        sub: {type: string}
+        cta: {type: string}
+        href: {type: string}
+        label: {type: string, description: '"AfroTransact" or "Sponsored"'}
+        imageUrl: {type: [string, 'null']}
+    Tile:
+      type: object
+      required: [id, title, cta, href, cells]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        cta: {type: string}
+        href: {type: string}
+        cells:
+          type: array
+          maxItems: 4
+          items:
+            type: object
+            required: [label, href, imageUrl]
+            properties:
+              label: {type: string}
+              href: {type: string}
+              imageUrl: {type: [string, 'null']}
+    Banner:
+      type: object
+      required: [id, slot, advertiser, title, sub, cta, href, imageUrl]
+      properties:
+        id: {type: string}
+        slot: {type: string}
+        advertiser: {type: string}
+        title: {type: string}
+        sub: {type: string}
+        cta: {type: string}
+        href: {type: string}
+        imageUrl: {type: [string, 'null']}
+    Rail:
+      type: object
+      required: [id, title, href, items]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        href: {type: string}
+        items: {type: array, items: {$ref: '#/components/schemas/ProductSummary'}}
+    Home:
+      type: object
+      required: [announcements, hero, tiles, banners, rails, deliverTo]
+      properties:
+        announcements: {type: array, items: {$ref: '#/components/schemas/Announcement'}}
+        hero: {type: array, items: {$ref: '#/components/schemas/HeroSlide'}}
+        tiles: {type: array, items: {$ref: '#/components/schemas/Tile'}}
+        banners: {type: array, items: {$ref: '#/components/schemas/Banner'}}
+        rails: {type: array, items: {$ref: '#/components/schemas/Rail'}}
+        deliverTo: {$ref: '#/components/schemas/DeliveryLocation'}
+    DeliveryLocation:
+      type: object
+      required: [zip, city, state, label, serviceable]
+      properties:
+        zip: {type: string}
+        city: {type: string}
+        state: {type: string}
+        label: {type: string, examples: [Houston 77042]}
+        serviceable: {type: boolean}
+    PostalAddress:
+      type: object
+      required: [line1, line2, city, state, zip, country, lat, lon]
+      properties:
+        line1: {type: string}
+        line2: {type: string}
+        city: {type: string}
+        state: {type: string}
+        zip: {type: string}
+        country: {type: string}
+        lat: {type: [number, 'null']}
+        lon: {type: [number, 'null']}
+    AddressSuggestions:
+      type: object
+      required: [suggestions, attribution]
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: object
+            required: [id, label, secondary, address, source]
+            properties:
+              id: {type: string}
+              label: {type: string}
+              secondary: {type: string}
+              address: {$ref: '#/components/schemas/PostalAddress'}
+              source: {type: string, enum: [google, osm, fixture]}
+        attribution: {type: string, description: Required attribution text (e.g. © OpenStreetMap contributors)}
+    SiteConfig:
+      type: object
+      required: [revision, socials, contacts, legal, identityProviders, locales, market, appLinks, paymentMethods, smsProgramName]
+      properties:
+        revision: {type: integer}
+        socials:
+          type: array
+          description: Enabled social profiles only, in display order.
+          items:
+            type: object
+            required: [network, url, label]
+            properties:
+              network: {type: string, enum: [tiktok, instagram, facebook, x, youtube, linkedin, whatsapp]}
+              url: {type: string, format: uri}
+              label: {type: string}
+        contacts:
+          type: object
+          required: [phone, privacyEmail, accessibilityEmail, legalEmail, pressEmail, partnersEmail, address]
+          properties:
+            phone: {type: string}
+            privacyEmail: {type: string}
+            accessibilityEmail: {type: string}
+            legalEmail: {type: string}
+            pressEmail: {type: string}
+            partnersEmail: {type: string}
+            address: {type: string}
+        legal:
+          type: array
+          items:
+            type: object
+            required: [key, title, version, effective, href]
+            properties:
+              key: {type: string}
+              title: {type: string}
+              version: {type: string}
+              effective: {type: string, format: date}
+              href: {type: string}
+        identityProviders:
+          type: array
+          items:
+            type: object
+            required: [id, name, enabled]
+            properties:
+              id: {$ref: '#/components/schemas/IdentityProviderId'}
+              name: {type: string}
+              enabled: {type: boolean}
+        locales:
+          type: array
+          items:
+            type: object
+            required: [code, name, dir]
+            properties:
+              code: {type: string}
+              name: {type: string}
+              dir: {type: string, enum: [ltr, rtl]}
+        market:
+          type: object
+          required: [code, currency, country]
+          properties:
+            code: {type: string}
+            currency: {type: string}
+            country: {type: string}
+        appLinks:
+          type: object
+          required: [ios, android]
+          properties:
+            ios: {type: [string, 'null']}
+            android: {type: [string, 'null']}
+        paymentMethods: {type: array, items: {type: string}}
+        smsProgramName: {type: string}
+    NewsletterRequest:
+      type: object
+      required: [email]
+      properties:
+        email: {type: string, format: email}
+    NewsletterResponse:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [pending_confirmation, subscribed]}
+    Me:
+      type: object
+      required: [authenticated, user, counts]
+      properties:
+        authenticated: {type: boolean}
+        user:
+          type: [object, 'null']
+          required: [id, firstName, lastName, email, initials, roles]
+          properties:
+            id: {type: string}
+            firstName: {type: string}
+            lastName: {type: string}
+            email: {type: string}
+            initials: {type: string}
+            roles: {type: array, items: {type: string}}
+        counts:
+          type: [object, 'null']
+          description: Badges for the account menu.
+          required: [orders, returns, addresses, paymentMethods]
+          properties:
+            orders: {type: integer}
+            returns: {type: integer}
+            addresses: {type: integer}
+            paymentMethods: {type: integer}
+    SignInRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: {type: string, format: email}
+        password: {type: string, minLength: 1}
+        returnTo: {type: string}
+    SignUpRequest:
+      type: object
+      required: [firstName, lastName, email, phone, password, termsAccepted, smsConsent]
+      properties:
+        firstName: {type: string, maxLength: 49}
+        lastName: {type: string, maxLength: 49}
+        email: {type: string, format: email}
+        phone: {type: string, pattern: '^\+[1-9]\d{6,14}$', description: E.164 mobile number}
+        password: {type: string, minLength: 12, description: 'Upper and lower case, a number, not containing the name or email'}
+        termsAccepted: {type: boolean, const: true}
+        smsConsent: {type: boolean, description: 'Separate, optional SMS opt-in (AfroTransact Alerts)'}
+        returnTo: {type: string}
+    VerifyCodeRequest:
+      type: object
+      required: [challengeId, code]
+      properties:
+        challengeId: {type: string}
+        code: {type: string, pattern: '^\d{6}$'}
+        trustDevice: {type: boolean}
+    ResendResponse:
+      type: object
+      required: [resendAfterSeconds]
+      properties:
+        resendAfterSeconds: {type: integer}
+    AuthResult:
+      oneOf:
+        - type: object
+          required: [status, redirectTo]
+          properties:
+            status: {type: string, const: authenticated}
+            redirectTo: {type: string}
+        - type: object
+          required: [status, challengeId, methods, destination]
+          properties:
+            status: {type: string, const: mfa_required}
+            challengeId: {type: string}
+            methods: {type: array, items: {type: string, enum: [totp, sms, email, passkey]}}
+            destination: {type: string, description: Masked phone or email}
+        - type: object
+          required: [status, challengeId, destination, resendAfterSeconds]
+          properties:
+            status: {type: string, const: verification_required}
+            challengeId: {type: string}
+            destination: {type: string}
+            resendAfterSeconds: {type: integer}
+      discriminator:
+        propertyName: status
+    PasskeyOptions:
+      type: object
+      required: [challengeId, challenge, rpId, timeout, userVerification, allowCredentials]
+      properties:
+        challengeId: {type: string}
+        challenge: {type: string, description: base64url}
+        rpId: {type: string}
+        timeout: {type: integer}
+        userVerification: {type: string, enum: [required, preferred, discouraged]}
+        allowCredentials:
+          type: array
+          items:
+            type: object
+            required: [id, type]
+            properties:
+              id: {type: string}
+              type: {type: string, const: public-key}
+    PasskeyAssertion:
+      type: object
+      required: [challengeId, id, rawId, type, response]
+      properties:
+        challengeId: {type: string}
+        id: {type: string}
+        rawId: {type: string, description: base64url}
+        type: {type: string, const: public-key}
+        response:
+          type: object
+          required: [clientDataJSON, authenticatorData, signature, userHandle]
+          properties:
+            clientDataJSON: {type: string}
+            authenticatorData: {type: string}
+            signature: {type: string}
+            userHandle: {type: [string, 'null']}
+    AddressInput:
+      type: object
+      required: [name, phone, line1, city, state, zip]
+      properties:
+        name: {type: string}
+        phone: {type: string}
+        line1: {type: string}
+        line2: {type: string}
+        city: {type: string}
+        state: {type: string, pattern: '^[A-Z]{2}$'}
+        zip: {type: string, pattern: '^\d{5}(-\d{4})?$'}
+        isDefault: {type: boolean}
+        acceptUnverified: {type: boolean, description: Keep the address as entered when it can't be USPS-verified}
+    Address:
+      type: object
+      required: [id, name, phone, line1, line2, city, state, zip, isDefault, verified]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        phone: {type: string}
+        line1: {type: string}
+        line2: {type: string}
+        city: {type: string}
+        state: {type: string}
+        zip: {type: string}
+        isDefault: {type: boolean}
+        verified: {type: boolean}
+    AddressPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Address'}}
+        nextCursor: {type: [string, 'null']}
+    PaymentMethod:
+      type: object
+      required: [id, type, brand, last4, label, expires, isDefault]
+      properties:
+        id: {type: string}
+        type: {type: string, enum: [card, us_bank_account, cashapp]}
+        brand: {type: [string, 'null']}
+        last4: {type: [string, 'null']}
+        label: {type: string}
+        expires: {type: [string, 'null']}
+        isDefault: {type: boolean}
+    PaymentMethodPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PaymentMethod'}}
+        nextCursor: {type: [string, 'null']}
+    OrderSummary:
+      type: object
+      required: [orderNumber, placedAt, totalMinor, currency, shipTo, status, shipments]
+      properties:
+        orderNumber: {type: string}
+        placedAt: {type: string}
+        totalMinor: {type: integer}
+        currency: {type: string}
+        shipTo: {type: string}
+        status: {type: string}
+        shipments:
+          type: array
+          items:
+            type: object
+            required: [shipmentId, label, status, items]
+            properties:
+              shipmentId: {type: string}
+              label: {type: string}
+              status: {type: string}
+              items: {type: string}
+    OrderPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/OrderSummary'}}
+        nextCursor: {type: [string, 'null']}
+    ReturnSummary:
+      type: object
+      required: [rmaId, orderNumber, title, status, refundMinor]
+      properties:
+        rmaId: {type: string}
+        orderNumber: {type: string}
+        title: {type: string}
+        status: {type: string}
+        refundMinor: {type: integer}
+    ReturnPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ReturnSummary'}}
+        nextCursor: {type: [string, 'null']}
+    CheckoutSummary:
+      type: object
+      required: [packages, addresses, paymentMethods, subtotalMinor, shippingMinor, taxMinor, taxRateLabel, totalMinor, currency, sellerCount]
+      properties:
+        packages:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/CartPackage'
+              - type: object
+                properties:
+                  pickupPoints:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, address, hours, ready, setBy]
+                      properties:
+                        id: {type: string}
+                        name: {type: string}
+                        address: {type: string}
+                        hours: {type: string}
+                        ready: {type: string}
+                        setBy: {type: string, enum: [platform, seller]}
+        addresses: {type: array, items: {$ref: '#/components/schemas/Address'}}
+        paymentMethods: {type: array, items: {$ref: '#/components/schemas/PaymentMethod'}}
+        subtotalMinor: {type: integer}
+        shippingMinor: {type: integer}
+        taxMinor: {type: integer}
+        taxRateLabel: {type: string, examples: ['8.25% TX']}
+        totalMinor: {type: integer}
+        currency: {type: string}
+        sellerCount: {type: integer}
+    PlaceOrderRequest:
+      type: object
+      required: [addressId, deliverySelections]
+      properties:
+        addressId: {type: string}
+        paymentMethodId: {type: string, description: Saved Stripe payment method; omit when paying with a wallet}
+        wallet: {type: string, enum: [apple_pay, google_pay, link]}
+        gift: {type: boolean}
+        deliverySelections:
+          type: array
+          items:
+            type: object
+            required: [packageId, option]
+            properties:
+              packageId: {type: string}
+              option: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
+              pickupPointId: {type: string}
+              preferences:
+                type: object
+                properties:
+                  handover: {type: string, enum: [hand, door, desk]}
+                  safePlace: {type: string}
+                  instructions: {type: string, maxLength: 240}
+                  contact: {type: string, enum: [text, call, none]}
+    OrderConfirmation:
+      type: object
+      required: [orderNumber, status, totalMinor, currency, shipments]
+      properties:
+        orderNumber: {type: string}
+        status: {type: string, enum: [placed, requires_action]}
+        paymentClientSecret: {type: [string, 'null'], description: Present when status is requires_action (3-D Secure)}
+        totalMinor: {type: integer}
+        currency: {type: string}
+        shipments:
+          type: array
+          items:
+            type: object
+            required: [shipmentId, label, eta]
+            properties:
+              shipmentId: {type: string}
+              label: {type: string}
+              eta: {type: string}
+              deliveryCode: {type: [string, 'null'], description: One-time handover code for AfroTransact Delivery}
+    Job:
+      type: object
+      required: [id, title, team, location, type, pay, summary, responsibilities, requirements]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        team: {type: string}
+        location: {type: string}
+        type: {type: string}
+        pay: {type: string}
+        summary: {type: string}
+        responsibilities: {type: array, items: {type: string}}
+        requirements: {type: array, items: {type: string}}
+    JobApplication:
+      type: object
+      description: |
+        The résumé is uploaded beforehand through the media service; send its asset id as `resumeAssetId` (the content
+        service requires it and answers 422 `errors.resumeAssetId` otherwise). `resumeFileName` is the original file
+        name, kept for display.
+      required: [name, email, linkedin, workAuthorization, consent]
+      properties:
+        name: {type: string, minLength: 3}
+        email: {type: string, format: email}
+        linkedin: {type: string, description: Empty or an https://linkedin.com/ URL}
+        workAuthorization: {type: string, enum: ['Yes', 'Yes, with sponsorship', 'No']}
+        resumeAssetId: {type: string, description: Media-service asset id of the uploaded résumé (PDF)}
+        resumeFileName: {type: string, pattern: '\.pdf$'}
+        coverNote: {type: string, maxLength: 2000}
+        consent: {type: boolean, const: true}
+    ApplicationReceipt:
+      type: object
+      required: [reference, jobId]
+      properties:
+        reference: {type: string, pattern: '^CAR-\d{6}$', description: Application reference issued by the content service}
+        jobId: {type: string}

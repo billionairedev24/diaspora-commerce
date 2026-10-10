@@ -380,7 +380,7 @@
 - Filter by actor, entity and date","E18","","High","3","trust java","trust","To Do"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
 - Reinstatement restores them","E18","","Medium","5","trust","trust","To Do"
-"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","Done"
+"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","In Progress"
 "S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
 - SMS adapters: Twilio, Vonage, AWS End User Messaging
 - Push: FCM and APNs; WhatsApp: Meta Cloud API
@@ -601,3 +601,19 @@
 "S207","Story","Global MCP rate limits and durable audit","Move per-pod MCP rate-limit buckets to Valkey and give mcp.tool.invoked a durable path (outbox or local spool) so audit events survive broker outages.","- Rate limits are enforced across all replicas using Valkey token buckets
 - Audit events are spooled and replayed when Kafka is unavailable
 - Load test shows limits hold with 3 replicas","E21","","Medium","5","mcp ai","ai","To Do"
+"S208","Story","Gateway BFF (Go) with token relay and screen-shaped APIs","Go BFF serving contracts/openapi/gateway-bff.yaml: OIDC code+PKCE sessions in Valkey, token relay, guest cart merge, resilience per upstream.","- Every contract operation implemented and contract-tested
+- Sessions are encrypted in Valkey and refreshed before expiry
+- Unavailable upstreams return 503 bff.upstream-unavailable problems
+- Storefront renders home, search, product and cart against the real BFF","E23","","Highest","13","bff go","storefront-web","Done"
+"S209","Story","First-party sign-in API for storefront forms","Identity exposes a first-party password, MFA and passkey sign-in API for the BFF so the storefront can keep its own two-column sign-in forms instead of hosted login.","- BFF can sign in with password and returns MFA challenge when required
+- Passkey assertion flow works via BFF
+- Brute-force protection and lockout apply
+- BFF callback URI registered for gateway-bff client in dev, uat and prod","E02","","High","8","identity bff","identity","To Do"
+"S210","Story","Reverse geocoding for deliver-to by location","Geo adds GET /v1/reverse (lat/lng to ZIP and address) via Google Places or Nominatim so the deliver-to picker can use the device location.","- GET /v1/reverse returns ZIP, city, state and country
+- Provider fallback Google then Nominatim
+- BFF deliver-to by coordinates uses it","E22","","Medium","3","geo","geo","To Do"
+"S211","Story","Back-in-stock alerts","Notifications offers POST /v1/stock-alerts and sends an email/push when inventory publishes a restock for the variant.","- Shopper can subscribe to a variant alert once
+- Alert fires on restock event and is sent once
+- BFF stock-alert route works end to end","E19","","Medium","3","notifications","notifications","To Do"
+"S212","Story","Careers form uploads resume via media","The storefront careers form uploads the resume to the media service and sends resumeAssetId to the BFF.","- Resume uploads via signed media URL with type and size limits
+- Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","To Do"

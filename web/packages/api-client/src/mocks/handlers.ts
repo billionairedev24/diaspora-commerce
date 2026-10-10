@@ -301,7 +301,7 @@ export const handlers = [
   http.post('*/v1/careers/jobs/:jobId/applications', route(async (ctx, p) => {
     if (!JOBS.some((j) => j.id === p.jobId)) throw new MockProblem(404, 'JOB_NOT_FOUND', 'Role not found', 'This role is no longer open.');
     await body(ctx.request, JobApplicationFormSchema);
-    return json({ reference: 'APL-' + String(Math.floor(100000 + Math.random() * 899999)), jobId: p.jobId }, 201);
+    return json({ reference: 'CAR-' + String(Math.floor(100000 + Math.random() * 899999)), jobId: p.jobId }, 201);
   })),
 
   /* Account (next phase pages; authenticated) */

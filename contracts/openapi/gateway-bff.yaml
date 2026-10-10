@@ -1662,17 +1662,23 @@ components:
         requirements: {type: array, items: {type: string}}
     JobApplication:
       type: object
-      required: [name, email, linkedin, workAuthorization, resumeFileName, consent]
+      description: |
+        The résumé is uploaded beforehand through the media service; send its asset id as `resumeAssetId` (the content
+        service requires it and answers 422 `errors.resumeAssetId` otherwise). `resumeFileName` is the original file
+        name, kept for display.
+      required: [name, email, linkedin, workAuthorization, consent]
       properties:
         name: {type: string, minLength: 3}
         email: {type: string, format: email}
         linkedin: {type: string, description: Empty or an https://linkedin.com/ URL}
         workAuthorization: {type: string, enum: ['Yes', 'Yes, with sponsorship', 'No']}
+        resumeAssetId: {type: string, description: Media-service asset id of the uploaded résumé (PDF)}
         resumeFileName: {type: string, pattern: '\.pdf$'}
+        coverNote: {type: string, maxLength: 2000}
         consent: {type: boolean, const: true}
     ApplicationReceipt:
       type: object
       required: [reference, jobId]
       properties:
-        reference: {type: string, pattern: '^APL-\d{6}$'}
+        reference: {type: string, pattern: '^CAR-\d{6}$', description: Application reference issued by the content service}
         jobId: {type: string}
