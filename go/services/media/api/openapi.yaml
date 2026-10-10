@@ -14,9 +14,13 @@ servers:
   - {url: 'https://api.uat.afrotransact.com/media', description: uat}
   - {url: 'https://api.afrotransact.com/media', description: prod}
 security: [{bearer: []}]
+tags:
+  - {name: Uploads, description: Direct-to-storage upload URLs}
+  - {name: Assets, description: Finalised media assets and their metadata}
 paths:
   /v1/uploads:
     post:
+      tags: [Uploads]
       operationId: requestUpload
       summary: Get a direct upload URL
       requestBody:
@@ -44,6 +48,7 @@ paths:
         '422': {$ref: '#/components/responses/Problem'}
   /v1/assets/{id}/complete:
     post:
+      tags: [Uploads]
       operationId: completeUpload
       summary: Inspect the uploaded file and finalise the asset (idempotent)
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
@@ -52,6 +57,7 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
   /v1/assets/{id}:
     get:
+      tags: [Assets]
       operationId: getAsset
       summary: Asset metadata (private assets include a 5-minute signed URL)
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
@@ -61,6 +67,7 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
   /v1/assets:
     get:
+      tags: [Assets]
       operationId: listAssets
       summary: The caller's organisation's assets
       parameters: [{name: purpose, in: query, schema: {$ref: '#/components/schemas/Purpose'}}]
@@ -68,6 +75,7 @@ paths:
         '200':
           description: Assets
           content: {application/json: {schema: {type: object, properties: {assets: {type: array, items: {$ref: '#/components/schemas/Asset'}}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     bearer: {type: http, scheme: bearer, bearerFormat: JWT}

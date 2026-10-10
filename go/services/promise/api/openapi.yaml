@@ -22,9 +22,12 @@ servers:
   - {url: 'https://api.uat.afrotransact.com/promise', description: uat}
   - {url: 'https://api.afrotransact.com/promise', description: prod}
 security: [{}, {bearer: []}]
+tags:
+  - {name: Promises, description: Delivery promises per destination ZIP and their 24-hour snapshots}
 paths:
   /v1/promises:
     post:
+      tags: [Promises]
       operationId: promiseOffers
       summary: Promise many offers to one destination ZIP
       requestBody:
@@ -56,6 +59,7 @@ paths:
         '400': {$ref: '#/components/responses/Problem'}
   /v1/promises/{id}:
     get:
+      tags: [Promises]
       operationId: getPromise
       summary: Promise snapshot (kept 24 hours)
       parameters:
@@ -96,7 +100,7 @@ components:
       required: [type, id]
       properties:
         type: {type: string, enum: [FC, SELLER]}
-        id: {type: string, description: FC id (fc_houston_tx, fc_edison_nj, fc_atlanta_ga) or seller org id}
+        id: {type: string, description: 'FC id (fc_houston_tx, fc_edison_nj, fc_atlanta_ga) or seller org id'}
         shipFromZip: {type: string, description: Required for SELLER}
         handlingDays: {type: integer, minimum: 0, maximum: 30, description: SELLER business days to prepare the parcel}
         cutoff: {type: string, pattern: '^\d{2}:\d{2}$', description: SELLER order cutoff (default 12:00 local)}

@@ -25,12 +25,12 @@ servers:
   - {url: 'https://api.afrotransact.com/carrier-gateway', description: prod}
 security: [{bearer: []}]
 tags:
-  - {name: rates}
-  - {name: labels}
-  - {name: tracking}
-  - {name: pickups}
-  - {name: addresses}
-  - {name: webhooks}
+  - {name: rates, description: Parallel rate shopping across enabled carriers}
+  - {name: labels, description: 'Label purchase, documents and voids'}
+  - {name: tracking, description: Tracking state and scan history}
+  - {name: pickups, description: Carrier pickups and customer pickup locations}
+  - {name: addresses, description: Carrier-side address validation}
+  - {name: webhooks, description: Inbound carrier tracking pushes}
 paths:
   /v1/rates:
     post:
@@ -150,6 +150,8 @@ paths:
         '201':
           description: Tracking
           content: {application/json: {schema: {$ref: '#/components/schemas/Tracking'}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
   /v1/pickups:
     post:
       tags: [pickups]
@@ -199,6 +201,8 @@ paths:
         '200':
           description: Validation
           content: {application/json: {schema: {$ref: '#/components/schemas/AddressValidation'}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
   /v1/pickup-locations:
     get:
       tags: [pickups]
@@ -231,6 +235,7 @@ paths:
     get:
       tags: [pickups]
       operationId: getPickupLocation
+      summary: Read a pickup location (public)
       security: [{}, {bearer: []}]
       parameters: [{$ref: '#/components/parameters/Id'}]
       responses:
@@ -241,6 +246,7 @@ paths:
     put:
       tags: [pickups]
       operationId: updatePickupLocation
+      summary: Update a pickup location (sellers their own SELLER locations; staff with shipping:admin any)
       parameters: [{$ref: '#/components/parameters/Id'}]
       requestBody:
         required: true
@@ -249,6 +255,7 @@ paths:
         '200':
           description: Updated
           content: {application/json: {schema: {$ref: '#/components/schemas/PickupLocation'}}}
+        '400': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
   /v1/pickup-locations/{id}/ready:
     post:

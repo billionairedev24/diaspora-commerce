@@ -21,6 +21,7 @@ servers:
     description: prod
 tags:
   - name: Search
+    description: Product search and typeahead
 paths:
   /v1/search:
     get:
@@ -32,7 +33,7 @@ paths:
         - {name: q, in: query, schema: {type: string, maxLength: 200}, description: Free text}
         - {name: market, in: query, schema: {type: string, default: us}}
         - {name: department, in: query, schema: {type: string}}
-        - {name: community, in: query, schema: {type: string}, description: Comma-separated communities (Nigerian, Ghanaian…)}
+        - {name: community, in: query, schema: {type: string}, description: 'Comma-separated communities (Nigerian, Ghanaian…)'}
         - {name: fulfilment, in: query, schema: {type: string, enum: [AFROTRANSACT, SELLER]}}
         - {name: sellerKind, in: query, schema: {type: string, enum: [PLATFORM, SELLER]}}
         - {name: minRating, in: query, schema: {type: number, minimum: 0, maximum: 5}}

@@ -14,30 +14,43 @@ servers:
   - {url: 'https://api.dev.afrotransact.com/storefront', description: dev}
   - {url: 'https://api.uat.afrotransact.com/storefront', description: uat}
   - {url: 'https://api.afrotransact.com/storefront', description: prod}
+tags:
+  - {name: Themes, description: WCAG contrast vetting for theme colours}
+  - {name: Storefronts, description: Public storefront pages and the owner's draft / publish flow}
+  - {name: Moderation, description: Staff approval of storefront social and catalogue links}
 paths:
   /v1/themes/vet:
     post:
+      tags: [Themes]
       operationId: vetTheme
       summary: Contrast checks, OKLCH ramp and CSS tokens for a colour choice
+      security: []
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeInput'}}}}
       responses:
         '200': {description: Vetting, content: {application/json: {schema: {$ref: '#/components/schemas/Vetting'}}}}
         '422': {$ref: '#/components/responses/Problem'}
   /v1/storefronts/{slug}:
     get:
+      tags: [Storefronts]
       operationId: publicStorefront
       summary: Published page (approved links, published posts, enabled sections only)
+      security: []
       parameters: [{name: slug, in: path, required: true, schema: {type: string}}]
       responses:
         '200': {description: Storefront, content: {application/json: {schema: {$ref: '#/components/schemas/Storefront'}}}}
         '404': {$ref: '#/components/responses/Problem'}
   /v1/storefronts/me/draft:
     get:
+      tags: [Storefronts]
       operationId: getDraft
+      summary: The caller's storefront draft
       security: [{bearer: []}]
       responses:
         '200': {description: Draft, content: {application/json: {schema: {$ref: '#/components/schemas/Storefront'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
     put:
+      tags: [Storefronts]
       operationId: saveDraft
       summary: Save the draft (storefront:edit); edited social links go back to pending approval
       security: [{bearer: []}]
@@ -48,6 +61,7 @@ paths:
         '422': {$ref: '#/components/responses/Problem'}
   /v1/storefronts/me/publish:
     post:
+      tags: [Storefronts]
       operationId: publish
       summary: Publish the draft; blocked with the failing checks when contrast fails
       security: [{bearer: []}]
@@ -56,14 +70,19 @@ paths:
         '422': {$ref: '#/components/responses/Problem'}
   /v1/moderation/social-links:
     get:
+      tags: [Moderation]
       operationId: pendingSocialLinks
       summary: Storefronts with links awaiting approval (storefront:moderate)
       security: [{bearer: []}]
       responses:
         '200': {description: Queue}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
   /v1/moderation/social-links/{orgId}/{network}:
     post:
+      tags: [Moderation]
       operationId: decideSocialLink
+      summary: Approve or reject a storefront's social link (storefront:moderate)
       security: [{bearer: []}]
       parameters:
         - {name: orgId, in: path, required: true, schema: {type: string}}
@@ -71,6 +90,8 @@ paths:
       requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {approve: {type: boolean}}}}}}
       responses:
         '200': {description: Updated}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     bearer: {type: http, scheme: bearer, bearerFormat: JWT}

@@ -14,16 +14,24 @@ servers:
   - {url: 'https://api.uat.afrotransact.com/cart', description: uat}
   - {url: 'https://api.afrotransact.com/cart', description: prod}
 security: [{}, {bearer: []}]
+tags:
+  - {name: Cart, description: The shopper's cart and saved-for-later lines (guests and signed-in customers)}
+  - {name: Checkout, description: Service-to-service cart maintenance after an order is placed}
 paths:
   /v1/cart:
     get:
+      tags: [Cart]
       operationId: getCart
+      summary: View the cart (packages per seller, saved lines, totals)
       parameters: [{$ref: '#/components/parameters/Guest'}]
       responses:
         '200': {$ref: '#/components/responses/Cart'}
+        '400': {$ref: '#/components/responses/Problem'}
   /v1/cart/items:
     post:
+      tags: [Cart]
       operationId: addToCart
+      summary: Add a variant to the cart, capped by sellable stock
       parameters: [{$ref: '#/components/parameters/Guest'}]
       requestBody:
         required: true
@@ -40,6 +48,7 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
   /v1/cart/items/{atin}:
     put:
+      tags: [Cart]
       operationId: setQuantity
       summary: Set the exact quantity (stepper); 0 removes the line
       parameters: [{$ref: '#/components/parameters/Atin'}, {$ref: '#/components/parameters/Guest'}]
@@ -50,33 +59,45 @@ paths:
         '200': {$ref: '#/components/responses/Cart'}
         '409': {$ref: '#/components/responses/Problem'}
     delete:
+      tags: [Cart]
       operationId: removeLine
+      summary: Remove a line from the cart
       parameters: [{$ref: '#/components/parameters/Atin'}, {$ref: '#/components/parameters/Guest'}]
       responses:
         '200': {$ref: '#/components/responses/Cart'}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/cart/items/{atin}/save-for-later:
     post:
+      tags: [Cart]
       operationId: saveForLater
+      summary: Move a cart line to saved-for-later
       parameters: [{$ref: '#/components/parameters/Atin'}, {$ref: '#/components/parameters/Guest'}]
       responses:
         '200': {$ref: '#/components/responses/Cart'}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/cart/saved/{atin}/move-to-cart:
     post:
+      tags: [Cart]
       operationId: moveToCart
+      summary: Move a saved-for-later line back into the cart
       parameters: [{$ref: '#/components/parameters/Atin'}, {$ref: '#/components/parameters/Guest'}]
       responses:
         '200': {$ref: '#/components/responses/Cart'}
         '409': {$ref: '#/components/responses/Problem'}
   /v1/cart/merge:
     post:
+      tags: [Cart]
       operationId: mergeGuestCart
       summary: After sign-in, fold the guest cart (X-Guest-Cart) into the customer's cart
       security: [{bearer: []}]
       parameters: [{$ref: '#/components/parameters/Guest'}]
       responses:
         '200': {$ref: '#/components/responses/Cart'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
   /v1/carts/{customerId}/ordered:
     post:
+      tags: [Checkout]
       operationId: removeOrderedLines
       summary: Clear checked-out lines after an order is placed (cart:service)
       security: [{bearer: []}]
@@ -86,6 +107,8 @@ paths:
         content: {application/json: {schema: {type: object, properties: {variantAtins: {type: array, items: {type: string}}}}}}
       responses:
         '204': {description: Cleared}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     bearer: {type: http, scheme: bearer, bearerFormat: JWT}
