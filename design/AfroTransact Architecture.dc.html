@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="afrotransact-tokens.css">
+<script src="backoffice-data.js"></script>
+<script src="backoffice-config.js"></script>
+</helmet>
+<div style="min-height:100vh;background:var(--at-color-canvas);color:var(--at-color-text);font-family:var(--at-font-sans)">
+<div style="display:flex;flex-wrap:wrap;gap:var(--at-space-1) var(--at-space-5);align-items:center;padding:var(--at-space-1) var(--at-page-gutter);background:var(--at-gold-500);color:var(--at-ink-1000);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold)">
+  <span>Prototype · round 3</span><a href="AfroTransact Shop.dc.html" style="color:var(--at-ink-1000)">Shop</a><a href="AfroTransact Backoffice.dc.html" style="color:var(--at-ink-1000)">Backoffice</a><a href="AfroTransact Theme Studio.dc.html" style="color:var(--at-ink-1000)">Tokens &amp; seller themes</a><a href="AfroTransact Architecture.dc.html" style="color:var(--at-ink-1000)">Architecture</a>
+</div>
+<header style="background:var(--at-color-header-bg);color:var(--at-color-header-text);padding:var(--at-space-10) var(--at-page-gutter) var(--at-space-8)">
+  <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:var(--at-space-3)">
+    <div style="display:flex;align-items:center;gap:var(--at-space-3)"><img src="assets/logo-mark.svg" alt="" style="width:36px;height:36px"><span style="font-size:var(--at-text-2xl);font-weight:var(--at-weight-black)">afrotransact</span></div>
+    <h1 style="margin:0;font-size:var(--at-text-5xl);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-tight);line-height:1.05">Platform Architecture v2</h1>
+    <p style="margin:0;max-width:70ch;font-size:var(--at-text-lg);color:var(--at-color-header-muted)">A multi-market marketplace for products and services, with a first-party retail business, seller fulfilment, and Lola, an AI shopping agent. Spring Boot 4.1.4 on Java 25 for transactional domains; Go 1.27.1 for high-throughput edges; Elasticsearch for discovery; Spring Authorization Server for identity.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-2);margin-top:var(--at-space-2)">
+      <sc-for list="{{ toc }}" as="t" hint-placeholder-count="14"><a href="{{ t.href }}" style="padding:var(--at-space-1) var(--at-space-3);border:1px solid var(--at-ink-700);border-radius:var(--at-radius-pill);color:var(--at-color-header-text);font-size:var(--at-text-sm)">{{ t.n }}. {{ t.label }}</a></sc-for>
+    </div>
+  </div>
+</header>
+
+<main style="max-width:1200px;margin:0 auto;padding:var(--at-space-8) var(--at-page-gutter) var(--at-space-16);display:flex;flex-direction:column;gap:var(--at-space-12)">
+
+<section id="s1" style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">1. System context</h2>
+  <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+    <sc-for list="{{ layers }}" as="l" hint-placeholder-count="6">
+      <div style="display:grid;grid-template-columns:160px minmax(0,1fr);gap:var(--at-space-3);align-items:stretch">
+        <div style="display:flex;align-items:center;padding:var(--at-space-3);border-radius:var(--at-radius-sm);background:{{ l.bg }};color:{{ l.fg }};font-weight:var(--at-weight-bold);font-size:var(--at-text-sm)">{{ l.name }}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-2)">
+          <sc-for list="{{ l.items }}" as="i" hint-placeholder-count="5"><div style="flex:1 1 150px;padding:var(--at-space-3);border-radius:var(--at-radius-sm);background:var(--at-color-surface);border:1px solid var(--at-color-border);display:flex;flex-direction:column;gap:2px"><strong style="font-size:var(--at-text-md)">{{ i.n }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ i.d }}</span></div></sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section id="s2" style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">2. Services</h2>
+  <p style="margin:0;max-width:75ch;color:var(--at-color-text-muted)">One service per bounded context, each owning its schema. Cross-service reads go through APIs or event-fed read models — never another service’s tables.</p>
+  <div style="background:var(--at-color-surface);border-radius:var(--at-radius-md);box-shadow:var(--at-shadow-sm);overflow:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:var(--at-text-md)">
+      <thead><tr style="background:var(--at-color-surface-muted);text-align:left"><th style="padding:var(--at-space-3) var(--at-space-4)">Service</th><th style="padding:var(--at-space-3)">Runtime</th><th style="padding:var(--at-space-3)">Owns</th><th style="padding:var(--at-space-3)">Store</th></tr></thead>
+      <tbody><sc-for list="{{ services }}" as="s" hint-placeholder-count="20">
+        <tr style="border-top:1px solid var(--at-color-border)"><td style="padding:var(--at-space-2) var(--at-space-4);font-weight:var(--at-weight-semibold);white-space:nowrap">{{ s.n }}</td><td style="padding:var(--at-space-2) var(--at-space-3)"><span style="padding:1px var(--at-space-2);border-radius:var(--at-radius-xs);font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);background:{{ s.bg }};color:{{ s.fg }}">{{ s.rt }}</span></td><td style="padding:var(--at-space-2) var(--at-space-3)">{{ s.owns }}</td><td style="padding:var(--at-space-2) var(--at-space-3);color:var(--at-color-text-muted);font-size:var(--at-text-sm)">{{ s.store }}</td></tr>
+      </sc-for></tbody>
+    </table>
+  </div>
+</section>
+
+<sc-for list="{{ sections }}" as="sec" hint-placeholder-count="10">
+<section id="{{ sec.id }}" style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">{{ sec.title }}</h2>
+  <p style="margin:0;max-width:75ch;color:var(--at-color-text-muted);font-size:var(--at-text-base)">{{ sec.lead }}</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:var(--at-space-3)">
+    <sc-for list="{{ sec.items }}" as="i" hint-placeholder-count="6">
+      <div style="background:var(--at-color-surface);border-radius:var(--at-radius-md);padding:var(--at-space-4);box-shadow:var(--at-shadow-sm);display:flex;flex-direction:column;gap:var(--at-space-1)"><strong style="font-size:var(--at-text-base)">{{ i.t }}</strong><span style="font-size:var(--at-text-md);line-height:var(--at-leading-relaxed);color:var(--at-color-text-muted)">{{ i.d }}</span></div>
+    </sc-for>
+  </div>
+  <sc-if value="{{ sec.hasCode }}" hint-placeholder-val="{{ false }}">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:var(--at-space-3)">
+      <sc-for list="{{ sec.code }}" as="c" hint-placeholder-count="2">
+        <div style="display:flex;flex-direction:column;gap:var(--at-space-1)"><span style="font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);letter-spacing:var(--at-tracking-caps);text-transform:uppercase;color:var(--at-color-text-muted)">{{ c.label }}</span><pre style="margin:0;padding:var(--at-space-4);background:var(--at-ink-900);color:var(--at-ink-100);border-radius:var(--at-radius-md);font:var(--at-text-xs)/1.6 var(--at-font-mono);overflow:auto">{{ c.src }}</pre></div>
+      </sc-for>
+    </div>
+  </sc-if>
+</section>
+</sc-for>
+
+<section id="s16" style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">16. Backoffices — capabilities</h2>
+  <p style="margin:0;max-width:75ch;color:var(--at-color-text-muted)">Three backoffices on one design system and one permission model. Sellers and service providers get <strong>no backoffice access</strong> until onboarding is complete and a staff member approves: until then their token carries only <code style="font-family:var(--at-font-mono);font-size:var(--at-text-xs)">onboarding:*</code>, the BFF hides every module, and every backoffice API returns 403. <a href="AfroTransact Backoffice.dc.html">Open the working backoffice ↗</a></p>
+  <div style="border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);overflow:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:var(--at-text-sm)">
+      <thead><tr style="background:var(--at-color-surface-muted);text-align:left"><th style="padding:var(--at-space-3)">Backoffice</th><th style="padding:var(--at-space-3)">Who</th><th style="padding:var(--at-space-3)">Access precondition</th><th style="padding:var(--at-space-3)">Capabilities</th></tr></thead>
+      <tbody><sc-for list="{{ caps }}" as="c" hint-placeholder-count="3"><tr style="border-top:1px solid var(--at-color-border);vertical-align:top"><td style="padding:var(--at-space-3);font-weight:var(--at-weight-bold);white-space:nowrap">{{ c.name }}</td><td style="padding:var(--at-space-3)">{{ c.who }}</td><td style="padding:var(--at-space-3)">{{ c.pre }}</td><td style="padding:var(--at-space-3)"><ul style="margin:0;padding-left:var(--at-space-4);display:flex;flex-direction:column;gap:2px"><sc-for list="{{ c.items }}" as="i" hint-placeholder-count="8"><li><strong>{{ i.m }}</strong> — {{ i.d }}</li></sc-for></ul></td></tr></sc-for></tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s17" style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">17. RBAC — what each role can do</h2>
+  <p style="margin:0;max-width:75ch;color:var(--at-color-text-muted)">Full = all actions incl. configuration · Approve = decide and move money · Edit = create and update · View = read-only · — = no access (menu hidden, API 403). Roles map to Spring Authorization Server scopes; per-object checks (this seller’s orders, this practitioner’s calendar) run in OpenFGA. Privileged actions are step-up authenticated, reason-coded and audited; approvals over medium risk need two different people.</p>
+  <sc-for list="{{ rbacMatrices }}" as="mx" hint-placeholder-count="3">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+      <strong style="font-size:var(--at-text-lg)">{{ mx.title }}</strong>
+      <div style="border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);overflow:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:var(--at-text-sm)">
+          <thead><tr style="background:var(--at-color-surface-muted)"><th style="text-align:left;padding:var(--at-space-2) var(--at-space-3)">Capability</th><sc-for list="{{ mx.roles }}" as="r" hint-placeholder-count="8"><th style="padding:var(--at-space-2);font-size:var(--at-text-xs);white-space:nowrap">{{ r }}</th></sc-for></tr></thead>
+          <tbody><sc-for list="{{ mx.rows }}" as="row" hint-placeholder-count="10"><tr style="border-top:1px solid var(--at-color-border)"><td style="padding:var(--at-space-2) var(--at-space-3)"><strong>{{ row.label }}</strong><div style="font-size:var(--at-text-2xs);color:var(--at-color-text-muted)">{{ row.can }}</div></td><sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="8"><td style="padding:var(--at-space-2);text-align:center"><span style="display:inline-block;min-width:58px;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);background:{{ c.bg }};color:{{ c.fg }}">{{ c.label }}</span></td></sc-for></tr></sc-for></tbody>
+        </table>
+      </div>
+    </div>
+  </sc-for>
+</section>
+
+<section id="s21" style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">22. Cloud choice — AWS, Google Cloud or Azure — and what it costs</h2>
+  <p style="margin:0;max-width:75ch;color:var(--at-color-text-muted)">The cloud is <strong>not decided yet</strong>, so the platform is built cloud-neutral: everything runs on Kubernetes, infrastructure is Terraform with one module set per cloud behind the same interface, and CI/CD targets AWS, Google Cloud and Azure from the same pipeline. Pick one primary later (and optionally a second for DR); running two actively doubles fixed costs. Cloudflare sits in front of every option, so DNS, CDN, WAF and the web front-ends do not move when the backend cloud does. Ranges are launch-scale planning estimates (≈50k monthly shoppers, 600 sellers) to validate with each provider’s calculator and committed-use quotes.</p>
+  <div style="border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);overflow:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:var(--at-text-sm)">
+      <thead><tr style="background:var(--at-color-surface-muted);text-align:left"><th style="padding:var(--at-space-3)">Layer</th><th style="padding:var(--at-space-3)">AWS</th><th style="padding:var(--at-space-3)">Google Cloud</th><th style="padding:var(--at-space-3)">Azure</th><th style="padding:var(--at-space-3)">Est. / month</th><th style="padding:var(--at-space-3)">Cost levers</th></tr></thead>
+      <tbody><sc-for list="{{ costRows }}" as="c" hint-placeholder-count="10"><tr style="border-top:1px solid var(--at-color-border);vertical-align:top"><td style="padding:var(--at-space-2) var(--at-space-3);font-weight:var(--at-weight-semibold)">{{ c.layer }}</td><td style="padding:var(--at-space-2) var(--at-space-3)">{{ c.aws }}</td><td style="padding:var(--at-space-2) var(--at-space-3)">{{ c.gcp }}</td><td style="padding:var(--at-space-2) var(--at-space-3)">{{ c.az }}</td><td style="padding:var(--at-space-2) var(--at-space-3);white-space:nowrap;font-weight:var(--at-weight-semibold)">{{ c.est }}</td><td style="padding:var(--at-space-2) var(--at-space-3);color:var(--at-color-text-muted)">{{ c.lever }}</td></tr></sc-for>
+        <tr style="border-top:2px solid var(--at-color-text)"><td style="padding:var(--at-space-3);font-weight:var(--at-weight-bold)">Total (launch)</td><td style="padding:var(--at-space-3)" colSpan="3">Similar on all three at this scale; startup credits (AWS Activate, Google for Startups, Microsoft for Startups) and committed-use quotes usually decide year one.</td><td style="padding:var(--at-space-3);font-weight:var(--at-weight-bold);white-space:nowrap">$6k–11k</td><td style="padding:var(--at-space-3);color:var(--at-color-text-muted)">Target ≤ 3% of GMV for infrastructure; review monthly in the FinOps dashboard.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="s15" style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">23. Delivery plan</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:var(--at-space-3)">
+    <sc-for list="{{ phases }}" as="p" hint-placeholder-count="4">
+      <div style="background:var(--at-color-surface);border-radius:var(--at-radius-md);box-shadow:var(--at-shadow-sm);overflow:hidden"><div style="padding:var(--at-space-2) var(--at-space-4);background:{{ p.bg }};color:{{ p.fg }};font-weight:var(--at-weight-bold);font-size:var(--at-text-sm)">{{ p.when }}</div><ul style="margin:0;padding:var(--at-space-3) var(--at-space-4) var(--at-space-4) var(--at-space-8);display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-md)"><sc-for list="{{ p.items }}" as="i" hint-placeholder-count="4"><li>{{ i }}</li></sc-for></ul></div>
+    </sc-for>
+  </div>
+  <h3 style="margin:var(--at-space-4) 0 0;font-size:var(--at-text-xl)">Decisions needed</h3>
+  <ol style="margin:0;padding-left:var(--at-space-6);display:flex;flex-direction:column;gap:var(--at-space-2);max-width:80ch"><sc-for list="{{ decisions }}" as="d" hint-placeholder-count="6"><li>{{ d }}</li></sc-for></ol>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const SP = ['var(--at-green-50)', 'var(--at-green-800)'], GO = ['var(--at-gold-100)', 'var(--at-gold-900)'], OT = ['var(--at-ink-100)', 'var(--at-ink-700)'];
+const JAVA = `package com.afrotransact.checkout.application;
+
+import com.afrotransact.checkout.domain.CheckoutCommand;
+import com.afrotransact.checkout.domain.OrderId;
+
+public interface CheckoutService {
+    OrderId placeOrder(CheckoutCommand command, String idempotencyKey);
+}
+
+// ── CheckoutServiceImpl.java ─────────────────────────
+package com.afrotransact.checkout.application;
+
+import com.afrotransact.checkout.domain.CheckoutCommand;
+import com.afrotransact.checkout.domain.OrderId;
+import com.afrotransact.checkout.port.IdempotencyStore;
+import com.afrotransact.checkout.port.CheckoutWorkflowStarter;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+class CheckoutServiceImpl implements CheckoutService {
+
+    private final IdempotencyStore idempotency;
+    private final CheckoutWorkflowStarter workflows;
+
+    CheckoutServiceImpl(IdempotencyStore idempotency,
+                        CheckoutWorkflowStarter workflows) {
+        this.idempotency = idempotency;
+        this.workflows = workflows;
+    }
+
+    @Override
+    @Transactional
+    public OrderId placeOrder(CheckoutCommand command, String idempotencyKey) {
+        return idempotency.findResult(idempotencyKey, OrderId.class)
+            .orElseGet(() -> {
+                OrderId id = OrderId.next();
+                idempotency.reserve(idempotencyKey, command.fingerprint());
+                workflows.start(id, command);   // Temporal saga
+                idempotency.complete(idempotencyKey, id);
+                return id;
+            });
+    }
+}`;
+const GOSRC = `package search
+
+import (
+    "context"
+    "fmt"
+
+    "github.com/afrotransact/platform/go/search/domain"
+)
+
+// ProductSearcher is the port used by the HTTP and MCP adapters.
+type ProductSearcher interface {
+    Search(ctx context.Context, q domain.Query) (domain.Page, error)
+}
+
+// Index is implemented by the Elasticsearch adapter.
+type Index interface {
+    Hybrid(ctx context.Context, q domain.Query, vec []float32) (domain.Page, error)
+}
+
+// Embedder is implemented by the ai-gateway client.
+type Embedder interface {
+    Embed(ctx context.Context, text string) ([]float32, error)
+}
+
+type productSearcherImpl struct {
+    index    Index
+    embedder Embedder
+}
+
+var _ ProductSearcher = (*productSearcherImpl)(nil)
+
+func NewProductSearcher(index Index, embedder Embedder) ProductSearcher {
+    return &productSearcherImpl{index: index, embedder: embedder}
+}
+
+func (s *productSearcherImpl) Search(ctx context.Context, q domain.Query) (domain.Page, error) {
+    vec, err := s.embedder.Embed(ctx, q.Text)
+    if err != nil {
+        vec = nil // degrade to lexical-only
+    }
+    page, err := s.index.Hybrid(ctx, q, vec)
+    if err != nil {
+        return domain.Page{}, fmt.Errorf("search %q: %w", q.Text, err)
+    }
+    return page, nil
+}`;
+const TSQ = `// queries/orders.ts — key factory + options (TanStack Query v5)
+export const orderKeys = {
+  all: ["orders"] as const,
+  list: (f: OrderFilter) => [...orderKeys.all, "list", f] as const,
+  detail: (id: string) => [...orderKeys.all, "detail", id] as const,
+}
+
+export const ordersQuery = (f: OrderFilter) => queryOptions({
+  queryKey: orderKeys.list(f),
+  queryFn: ({ signal }) => api.orders.list(f, { signal }),
+  staleTime: 30_000,
+  placeholderData: keepPreviousData,
+})
+
+export function useCancelShipment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.shipments.cancel,
+    onMutate: async (id) => { /* optimistic + snapshot */ },
+    onError: (_e, _id, ctx) => qc.setQueryData(ctx.key, ctx.prev),
+    onSettled: () => qc.invalidateQueries({ queryKey: orderKeys.all }),
+  })
+}`;
+const TST = `// SellerOrdersTable.tsx — server-driven TanStack Table v8
+const table = useReactTable({
+  data: page.rows, columns, rowCount: page.total,
+  state: { sorting, columnFilters, globalFilter, pagination,
+           rowSelection, columnVisibility, columnPinning },
+  manualSorting: true, manualFiltering: true, manualPagination: true,
+  enableRowSelection: (row) => row.original.status !== "CANCELLED",
+  getRowId: (r) => r.id,
+  onSortingChange: setSorting, onPaginationChange: setPagination,
+  onColumnFiltersChange: setColumnFilters, onRowSelectionChange: setRowSelection,
+  getCoreRowModel: getCoreRowModel(),
+  getFacetedUniqueValues: getFacetedUniqueValues(),
+})
+// Filters/sort/page are serialised to the URL (nuqs) → queryKey.
+// Export: CSV/XLSX of filtered set via async job for >5k rows.
+// Virtualise rows with @tanstack/react-virtual above 200 rows.`;
+
+const GO_NOTIF = `package notify
+
+import (
+    "context"
+    "errors"
+    "fmt"
+    "time"
+
+    "github.com/afrotransact/platform/go/notify/domain"
+)
+
+// SmsSender is the provider-agnostic port. Implementations: twilioSmsSender,
+// awsEndUserMessagingSmsSender, vonageSmsSender. EmailSender, PushSender and
+// ChatSender follow the same shape (sesEmailSender, sendgridEmailSender, …).
+type SmsSender interface {
+    Name() string
+    Send(ctx context.Context, msg domain.SmsMessage) (domain.Receipt, error)
+}
+
+// Router picks providers per market and channel, with failover.
+type Router interface {
+    SendSms(ctx context.Context, msg domain.SmsMessage) (domain.Receipt, error)
+}
+
+type routerImpl struct {
+    providers []SmsSender      // ordered by priority, from config
+    breaker   domain.Breakers  // per-provider circuit breakers
+    consent   domain.ConsentChecker
+    timeout   time.Duration
+}
+
+var _ Router = (*routerImpl)(nil)
+
+func NewRouter(p []SmsSender, b domain.Breakers, c domain.ConsentChecker) Router {
+    return &routerImpl{providers: p, breaker: b, consent: c, timeout: 3 * time.Second}
+}
+
+func (r *routerImpl) SendSms(ctx context.Context, msg domain.SmsMessage) (domain.Receipt, error) {
+    if err := r.consent.Allow(ctx, msg); err != nil { // TCPA, STOP list, quiet hours
+        return domain.Receipt{}, fmt.Errorf("consent: %w", err)
+    }
+    var errs []error
+    for _, p := range r.providers {
+        if !r.breaker.Allow(p.Name()) {
+            continue
+        }
+        cctx, cancel := context.WithTimeout(ctx, r.timeout)
+        rec, err := p.Send(cctx, msg) // msg.IdempotencyKey sent to provider
+        cancel()
+        if err == nil {
+            r.breaker.Success(p.Name())
+            return rec, nil
+        }
+        r.breaker.Failure(p.Name())
+        errs = append(errs, fmt.Errorf("%s: %w", p.Name(), err))
+    }
+    return domain.Receipt{}, errors.Join(errs...) // caller re-queues with backoff
+}`;
+const JAVA_NOTIF = `package com.afrotransact.notification.port;
+
+import com.afrotransact.notification.domain.EmailMessage;
+import com.afrotransact.notification.domain.DeliveryReceipt;
+
+public interface EmailSender {
+    String providerName();
+    DeliveryReceipt send(EmailMessage message);
+}
+
+// ── adapter/ses/SesEmailSender.java ───────────────────
+package com.afrotransact.notification.adapter.ses;
+
+import com.afrotransact.notification.domain.DeliveryReceipt;
+import com.afrotransact.notification.domain.EmailMessage;
+import com.afrotransact.notification.port.EmailSender;
+import org.springframework.stereotype.Component;
+import software.amazon.awssdk.services.sesv2.SesV2Client;
+import software.amazon.awssdk.services.sesv2.model.SendEmailRequest;
+
+@Component
+class SesEmailSender implements EmailSender {
+
+    private final SesV2Client client;
+    private final SesRequestMapper mapper;
+
+    SesEmailSender(SesV2Client client, SesRequestMapper mapper) {
+        this.client = client;
+        this.mapper = mapper;
+    }
+
+    @Override
+    public String providerName() {
+        return "amazon-ses";
+    }
+
+    @Override
+    public DeliveryReceipt send(EmailMessage message) {
+        SendEmailRequest request = mapper.toRequest(message); // List-Unsubscribe, DKIM
+        return DeliveryReceipt.accepted(providerName(),
+            client.sendEmail(request).messageId());
+    }
+}
+// SendGridEmailSender and PostmarkEmailSender implement the same port.`;
+const CI_YAML = `# .github/workflows/service.yml (reusable, per service)
+on: { pull_request: {}, push: { branches: [main] } }
+jobs:
+  verify:
+    steps:
+      - lint            # Checkstyle/Spotless · golangci-lint · eslint
+      - arch-tests      # ArchUnit · go-arch-lint (no wildcard/inline imports)
+      - unit+contract   # JUnit/Testcontainers · go test · Pact
+      - openapi-diff    # breaking-change gate on contracts/
+      - security        # CodeQL · Trivy · gitleaks · OWASP dep-check
+      - build           # Jib / ko → multi-arch (arm64 first) image
+      - sbom+sign       # Syft SBOM · cosign keyless signature
+  deploy:
+    needs: verify
+    steps:
+      - bump image tag in gitops repo (env/staging)
+      - Argo CD syncs → Argo Rollouts canary 10% → 50% → 100%
+      - automated analysis: error rate, p99, saturation (Prometheus)
+      - auto-rollback on SLO breach · promote to prod needs approval`;
+
+class Component extends DCLogic {
+  componentDidMount() { const tick = () => { if (window.ATBO && window.ATBO.__configReady) this.forceUpdate(); else this._t = setTimeout(tick, 80); }; tick(); }
+  componentWillUnmount() { clearTimeout(this._t); }
+  renderVals() {
+    const sections = [
+      { id: 's3', title: '3. Identity — Spring Authorization Server', lead: 'One OAuth 2.1 / OpenID Connect authority for shoppers, seller teams, staff, partners and machine clients. Every service is a resource server; Go services validate JWTs against the same JWKS.', items: [
+        ['Grants', 'Authorization Code + PKCE for web and mobile; Client Credentials for service-to-service; Token Exchange (RFC 8693) when the BFF calls downstream on a user’s behalf; Device Code for in-store kiosks later.'],
+        ['Principals', 'customer · seller_member (scoped to seller_org_id with roles owner/admin/catalog/fulfilment/finance) · staff (trust, ops, finance, support) · partner_app · ai_agent (Lola, delegated + scoped).'],
+        ['Sign-in', 'Passkeys (WebAuthn) first, email/phone OTP, Google and Apple federation. Staff: SSO + mandatory phishing-resistant MFA; step-up for refunds, payouts and account actions.'],
+        ['Tokens', '5-min access JWT (aud per API, scopes like orders:read, listings:write); rotating refresh tokens with reuse detection; DPoP binding for mobile; opaque tokens + introspection for partners.'],
+        ['Authorization', 'Coarse scopes in the token; fine-grained checks in-service via OpenFGA (seller_org → store → listing relationships) so a catalog member cannot touch payouts.'],
+        ['Storage & ops', 'JDBC RegisteredClient/Authorization repositories on Postgres, keys in AWS KMS rotated every 90 days, consent screens for partner apps, full audit stream to Kafka.']] },
+      { id: 's4', title: '4. Search & discovery — Elasticsearch', lead: 'A per-market product index fed by change-data-capture, combining lexical, geo and vector relevance. Search is a read model: the catalog and offer services remain the source of truth.', items: [
+        ['Index design', 'products-{market}-v{n} behind aliases for zero-downtime reindex. One document per product with nested offers (seller, price, fulfilment, stock, ship-from geo_point) so the buy box is computable at query time.'],
+        ['Language', 'ICU tokenizer + folding, per-field multilingual analyzers, curated diaspora synonyms (garri ⇄ gari ⇄ cassava flakes, egusi ⇄ melon seed, jeera ⇄ cumin), transliteration and typo tolerance.'],
+        ['Ranking', 'function_score over BM25: buy-box price, delivery promise to the shopper’s ZIP, rating × review volume, conversion, seller health, Fulfilled-by-AfroTransact boost; sponsored slots blended separately.'],
+        ['Hybrid / semantic', 'dense_vector (embeddings via the AI gateway) with kNN + RRF fusion for “something for a Diwali dinner” style queries; this is also Lola’s retrieval layer.'],
+        ['Geo', 'geo_distance filters and decay for local sellers and services (“braider within 15 miles”); PostGIS remains authoritative for service areas.'],
+        ['Pipeline', 'Debezium → Kafka → Go indexer (bulk, idempotent by version) → Elasticsearch; autocomplete via search_as_you_type; facets from aggregations; p95 under 120 ms.']] },
+      { id: 's5', title: '5. Transactions, money and consistency', lead: 'Checkout is a durable saga, money is a double-entry ledger, and every write path is idempotent. Nothing that moves money is fire-and-forget.', items: [
+        ['Checkout saga (Temporal)', 'Validate cart → reserve inventory per node (TTL 15 min) → create PaymentIntent with manual capture → create Order + per-shipment SubOrders → confirm. Each step has a compensation: release reservation, cancel intent, void order.'],
+        ['Idempotency', 'Idempotency-Key on every POST that creates or moves value; stored with request fingerprint and response for 24 h; Stripe calls reuse the same key.'],
+        ['Outbox + inbox', 'Domain events written in the same transaction (outbox), relayed by Debezium; consumers dedupe by event id (inbox table) for effectively-once handling.'],
+        ['Concurrency', 'Optimistic locking (@Version) on aggregates; inventory decrements via conditional UPDATE … WHERE available ≥ qty; SERIALIZABLE isolation only inside the ledger.'],
+        ['Ledger', 'Immutable double-entry journal: shopper charge, platform commission, seller payable, FBA fees, tax payable, refunds, chargebacks. Daily reconciliation against Stripe balance transactions.'],
+        ['Capture & refunds', 'Capture per shipment on carrier acceptance; partial refunds per line; marketplace-facilitator sales tax computed at checkout and remitted by AfroTransact.']] },
+      { id: 's6', title: '6. First-party retail vs. marketplace', lead: 'AfroTransact sells its own products properly: AfroTransact Retail is a separate seller of record on the same rails, not a special case in the code. The platform is neutral between 1P and 3P.', items: [
+        ['AfroTransact Retail', 'Its own legal entity and seller account; buys from vendors with purchase orders, owns inventory, recognises gross revenue; the marketplace takes no commission from it, but it pays the same fulfilment costs internally.'],
+        ['AfroTransact Brand', 'Private-label line under Retail (jollof seasoning, basmati, black soap…), with supplier QA, lot tracking and recall procedures in retail-service.'],
+        ['Catalog & offers', 'One product (canonical ASIN-like ATIN, GTIN where available) with many offers. Sellers attach offers to existing products instead of duplicating listings.'],
+        ['Buy box', 'Winner chosen by landed price, delivery promise, seller health and stock; 1P competes under the same rules — audited to stay fair.'],
+        ['Fulfilled by AfroTransact', 'Sellers ship inventory into AfroTransact fulfilment centres (inbound shipments, receiving, storage and pick-pack fees). Badge shown when the offer ships from an AT node.'],
+        ['Seller-fulfilled', '“Ships from seller” offers with seller-declared handling time, label purchase through us, and late-shipment metrics that feed seller health.']] },
+      { id: 's7', title: '7. Sellers, payments and subscriptions — Stripe', lead: 'Every seller and service provider is fully set up for payouts and billing before going live.', items: [
+        ['Onboarding', 'Account (one login, role added server-side) → business details prefilled from the customer profile → Stripe Connect embedded onboarding (Account Session + account-onboarding component), where Stripe collects ID, SSN/ITIN or EIN and DOB and runs KYC plus the IRS name/TIN match → Connect payouts → plan → catalog, permits and licences → two-step staff review of uploaded business documents. AfroTransact never sends its own ID-verification links and stores only verification results (account.requirements, individual.verification.status, account.updated webhooks). For extra 1099 assurance, enable Stripe’s Tax ID additional verification on connected accounts.'],
+        ['Stripe Connect', 'Connected accounts with embedded onboarding and account-management components; separate charges and transfers so one checkout pays many sellers; payouts weekly, held until first-order delivery.'],
+        ['Stripe Billing', 'Seller plans (Starter / Growth / Pro) as subscriptions with trials, proration and dunning; usage-metered items for FBA storage, ads and AI credits; invoices on the Seller Center billing page.'],
+        ['Compliance', 'OFAC screening, IRS name/TIN match performed by Stripe Connect (results read from the Account object), 1099-K issuance via Stripe Connect tax reporting, category permits (FDA food facility, cottage food, cosmetology, FMC OTI), state-licence checks for regulated services.'],
+        ['Services', 'Bookings use deposits held by AfroTransact, released on completion; no-show and cancellation policies enforced in bookings-service.'],
+        ['Webhooks', 'Stripe events land in payments-service through a signed, idempotent inbox; never trusted client-side.']] },
+      { id: 's8', title: '8. Geolocation & addresses', lead: 'Delivery promises, tax and seller eligibility all depend on a correct, validated location.', items: [
+        ['Location detection', 'Browser/OS geolocation with consent, IP geolocation as a fallback, manual ZIP entry; stored as a coarse “deliver-to” until an address is chosen.'],
+        ['Autocomplete', 'Google Places Autocomplete (New) with session tokens for cost control, US-restricted, proxied via geo-service so keys never ship to clients.'],
+        ['Validation', 'USPS CASS/DPV via Smarty: standardises, flags a missing apartment/suite (multi-unit), vacant or undeliverable addresses, and residential vs commercial (RDI). Corrections are suggested, never silently applied.'],
+        ['Geo data', 'PostGIS for seller service areas, delivery zones and FC catchments; Elasticsearch geo_point for search.'],
+        ['Delivery promise', 'promise-service combines FC cutoffs, carrier SLAs and seller handling time to the ZIP to show “Tomorrow, Oct 10” — the same promise is stored on the order and measured.'],
+        ['Tax', 'Rooftop geocode to tax jurisdiction for marketplace-facilitator tax (Stripe Tax or Avalara).']] },
+      { id: 's9', title: '9. Lola — AI shopping agent via OpenRouter', lead: 'Lola is an agent, not a chatbot: she calls the same public APIs as the apps, under the shopper’s delegated token, and every action is visible and reversible.', items: [
+        ['Gateway', 'ai-gateway (Go) holds the OpenRouter keys; routes per task (fast model for intent, strong model for planning), falls back across providers, enforces per-user and per-feature budgets.'],
+        ['Tools (MCP)', 'search_products, compare_offers, add_to_cart, build_cart_from_recipe, check_delivery, track_order, start_return, find_service, book_service, translate_listing — exposed by mcp-server with OAuth scopes.'],
+        ['Grounding', 'Retrieval from Elasticsearch hybrid search and the shopper’s orders; Lola can only show products and prices returned by tools — never invented.'],
+        ['Guardrails', 'PII redaction before prompts, no medical or legal advice, confirmation before spending money (checkout and booking always need the user’s tap), prompt-injection filtering on seller content.'],
+        ['Voice & languages', 'Speech in/out, replies in the shopper’s language; listings auto-translated for search.'],
+        ['Seller & staff AI', 'Listing writer and translator, storefront generator from a prompt, seller support copilot, and trust-team triage (risk summaries, counterfeit and prohibited-item flags) — humans make the final call.']] },
+      { id: 's10', title: '10. Front-end — web, mobile and data tooling', lead: 'Next.js storefront (SSR for SEO), React Native app, and React consoles for sellers and staff, all on the same design tokens and TanStack data layer.', items: [
+        ['TanStack Query', 'Query-key factories per domain, queryOptions shared by server prefetch and client hooks, SSR hydration, infinite queries for results, prefetch on hover, optimistic mutations with rollback, invalidation by domain events over SSE.'],
+        ['TanStack Table', 'Server-driven tables (manual sorting/filtering/pagination) for orders, listings, inventory, payouts and staff queues; column visibility, pinning and resizing; row selection with bulk actions; URL-synced state; CSV/XLSX export (async job for large sets).'],
+        ['TanStack Virtual & Form', 'Virtualised long lists; TanStack Form + Zod schemas generated from OpenAPI so client and server validation match.'],
+        ['Design tokens', 'One token source (Style Dictionary) → CSS custom properties for web and a typed theme for React Native. Semantic layer only in components; lint rule bans raw hex and px colour values.'],
+        ['Seller themes', 'Seller colours are vetted with OKLCH ramps and WCAG 2.2 contrast in the studio and again in storefront-service; checkout, prices and header always stay platform-styled.'],
+        ['Quality', 'Playwright visual tests, axe accessibility checks in CI, Core Web Vitals budgets (LCP < 2.0 s on 4G).']], code: [{ label: 'TanStack Query', src: TSQ }, { label: 'TanStack Table', src: TST }] },
+      { id: 's11', title: '11. Code standards', lead: 'Enforced in CI, not by review comments.', items: [
+        ['Interface + implementation', 'Java: every use case and port is an interface with a package-private …Impl. Go: exported interface, unexported …Impl struct, constructor returns the interface, compile-time var _ assertion.'],
+        ['Imports', 'No wildcard imports (Checkstyle AvoidStarImport, Spotless order); no inline/fully-qualified class names in code bodies; Go: goimports + golangci-lint, no dot or blank imports outside main.'],
+        ['Hexagonal layers', 'domain → application → port → adapter; ArchUnit (Java) and go-arch-lint verify dependency direction; domain has no framework imports.'],
+        ['Construction', 'Constructor injection only; no field injection, no static singletons; Go wiring explicit in cmd/.'],
+        ['Errors & APIs', 'RFC 9457 problem+json; typed domain errors mapped at the edge; Go wraps with %w.'],
+        ['Tests', 'Unit at domain, Testcontainers at adapters (Postgres, Kafka, Elasticsearch), Pact between services, k6 load tests on search and checkout.']], code: [{ label: 'Spring Boot 4.1.4 · checkout-service', src: JAVA }, { label: 'Go 1.27.1 · search-service', src: GOSRC }] },
+      { id: 's12', title: '12. APIs, docs and MCP', lead: 'Contracts are written first and everything else is generated from them.', items: [
+        ['OpenAPI 3.1', 'contracts/ in the monorepo; Spring uses springdoc to verify implementations match; Go uses oapi-codegen strict servers; TypeScript clients and Zod schemas generated for web and mobile.'],
+        ['Scalar', 'Interactive reference at /docs on every service in dev and staging, with sandbox tokens from the auth server.'],
+        ['Redoc', 'Versioned static reference built on release and embedded in the developer portal.'],
+        ['Docusaurus', 'developers.afrotransact.com: seller API guides, webhooks, storefront theme schema, ADRs and changelog.'],
+        ['AsyncAPI', 'Event catalog (order.placed, shipment.shipped, payout.paid, seller.approved …) rendered in the portal; schemas in the registry.'],
+        ['MCP server', 'Shopper, seller and staff toolsets over the public APIs with OAuth 2.1 scopes, rate limits and audit — used by Lola and partner agents.']] },
+      { id: 's13', title: '13. Platform & operations', lead: 'Boring, observable, multi-region-ready infrastructure.', items: [
+        ['Runtime', 'Kubernetes on EKS, GKE or AKS (cloud decided later), Terraform, Helm, Argo CD; Cloudflare in front (DNS, CDN, WAF, bot management) with Envoy as the in-cluster gateway; Spring Boot on virtual threads; Go services as distroless images.'],
+        ['Data', 'Managed PostgreSQL 17 per service (Aurora, Cloud SQL or Azure Flexible Server), Redis/Valkey, Elasticsearch 9 on Elastic Cloud, Confluent Cloud Kafka with schema registry (same on any cloud), object storage with object lock / immutability for KYC evidence.'],
+        ['Workflows', 'Temporal Cloud for checkout, onboarding, fulfilment SLAs, booking reminders and payout holds.'],
+        ['Observability', 'OpenTelemetry traces/metrics/logs tagged with market, seller_org and order ids; SLOs on checkout success, search latency and payout timeliness.'],
+        ['Security', 'mTLS service mesh, OPA policies, secrets in AWS Secrets Manager, PCI scope kept at Stripe, quarterly pen tests, SOC 2 Type II roadmap.'],
+        ['Markets', 'market_id on every price, policy and document; currency, tax engine, payment methods and data residency configured per market so the UK and Canada are launches, not rewrites.']] },
+      { id: 's17b', title: '17b. Inventory, multi-seller settlement & fees', lead: 'AfroTransact sells from its own inventory and runs a marketplace on the same rails. Every checkout is one Stripe charge that settles to many recipients, each with its own commission, fees and tax attribution.', items: [
+        ['AfroTransact inventory', 'Platform (1P) products come only from AfroTransact Retail inventory in AfroTransact FCs: purchase orders → receiving → sellable stock by node. Stock is reserved at checkout and decremented on payment; zero stock makes an offer ineligible for cart and the buy box.'],
+        ['Availability rules', 'Add-to-cart, quantity steppers and Lola are all capped by sellable stock per offer; a cart line that loses stock is flagged and excluded from checkout; back-in-stock alerts on unavailable items.'],
+        ['Configurable commission', 'Commission % per category (and per seller override for negotiated deals) in the Fees & commissions backoffice, versioned with effective dates; Finance approval required. Services use the same model on deposits and balances.'],
+        ['One charge, many transfers', 'Stripe Connect separate charges and transfers with transfer_group = order id. After delivery (or appointment completion) each seller and provider receives a transfer of items + their shipping − commission − FBA fees − their pro-rata share of the Stripe fee.'],
+        ['Tax', 'AfroTransact collects and remits sales tax as marketplace facilitator; tax is computed per line by the delivery address and attributed to each seller in the ledger and on monthly statements; AfroTransact Retail is the seller of record for 1P.'],
+        ['Refunds & disputes', 'Partial refunds reverse the matching transfer portion and commission (fee policy configurable); chargebacks debit the responsible seller’s balance; every movement is a double-entry ledger journal reconciled daily with Stripe balance transactions.']] },
+      { id: 's17c', title: '17c. Inventory, order statuses & AfroTransact Delivery', lead: 'Platform products are sold only from AfroTransact-owned inventory; seller and FBA orders share one shipment state machine; carriers, our own drivers, sellers and staff each update only the steps they own.', items: [
+        ['Inventory model', 'inventory_position(sku, node, on_hand, reserved, inbound, damaged, version) + append-only inventory_ledger. available = on_hand − reserved is what the storefront shows; it is pushed to search and the PDP via events, never computed in the client.'],
+        ['Concurrency', 'Reservations run in one transaction: lock the (sku, node) rows with SELECT … FOR UPDATE in key order (no deadlocks), check available, insert reservation + ledger rows, bump @Version. All lines of an order succeed or none do. Idempotency key = order id, so retries never double-reserve. Load-tested with a flash-sale suite (N+25 concurrent checkouts for N units ⇒ exactly N succeed).'],
+        ['Lifecycle', 'Checkout RESERVE (TTL 15 min, auto-RELEASE on payment failure) → SHIP on carrier/driver pickup (on_hand −) → RETURN_RESTOCK or RETURN_DAMAGED after inspection. Cycle counts post ADJUST with a reason; adjustments can never go below what is reserved. Nightly job reconciles ledger sums to positions and alerts on drift.'],
+        ['Shipment state machine', 'placed → confirmed → packed → ready → picked_up → in_transit → out_for_delivery → delivered, with delivery_failed, returned and cancelled. Each transition lists allowed actors per fulfilment type and is enforced in order-service, not the UI.'],
+        ['Who can do what', 'Seller-fulfilled: only the seller confirms, packs and marks ready; carriers (webhooks) and AfroTransact Delivery move transit steps; platform admins may confirm delivery, record failure, process returns or cancel — never “packed”. Fulfilled by AfroTransact: admins and fulfilment ops own every step.'],
+        ['Carriers & webhooks', 'No aggregator: a carrier-gateway service (Go) integrates USPS (Web Tools v3 / Labels API), UPS (REST + OAuth), FedEx (REST + OAuth) and DHL Express (MyDHL API) directly behind one Carrier port — rate(), buy_label(), void(), track(), schedule_pickup(), validate_address(). Each adapter owns its auth, retries and error mapping; rate shopping fans out in parallel with a 1.5 s budget and caches quotes per cart. Tracking uses each carrier\'s push (UPS Track Alert, FedEx Track webhooks, DHL push) with USPS polled; events are HMAC/OAuth-verified where offered, deduped by event id, ordered by sequence and mapped to our shipment states. Labels (ZPL/PDF) stored in object storage; carrier accounts and negotiated rates per FC.'],
+        ['AfroTransact Delivery', 'Internal drivers pick up from sellers and our FCs and deliver to customers. The driver app is offline-first: scans, arrival, photo proof and customer OTP are queued with idempotency keys and posted as shipment events (actor: courier). Dispatch plans routes per zone and reassigns failed stops.']] },
+      { id: 's17d', title: '17d. Stripe Connect compliance sync', lead: 'Stripe is the source of truth for KYC/KYB requirements on every connected account; AfroTransact mirrors them, tells the seller, and collects the answers in our own UI so nobody needs a separate Stripe login.', items: [
+        ['Webhooks we consume', 'account.updated, capability.updated, person.created/updated, account.external_account.updated, payout.failed and account.application.deauthorized — signature-verified, deduplicated by event id, applied in order of the account’s requirements version.'],
+        ['What we store', 'requirements.currently_due / eventually_due / past_due / pending_verification / errors, current_deadline, disabled_reason, charges_enabled, payouts_enabled and capability statuses per connected account, with a full change history.'],
+        ['Notifications', 'On any new or changed requirement: email + SMS + in-app banner immediately, then reminders 7, 3 and 1 day before current_deadline (notification-service, consent and quiet hours respected). Staff can send a manual reminder from Stripe compliance.'],
+        ['Collecting answers', 'Account health renders a form per requirement (tax ID, verification documents, ownership declaration, representative DOB/title, ToS acceptance, new bank account). Sensitive values are tokenised with Stripe.js; documents go to Stripe Files (purpose account_requirement); then Accounts / Persons update calls. Status moves to pending_verification until Stripe confirms.'],
+        ['Automatic enforcement', 'past_due → payouts paused (funds keep accruing, released when cleared); charges disabled → listings and bookings hidden from the storefront; restored automatically on the next account.updated that clears the requirement.'],
+        ['Ownership', 'Trust & Safety approves holds and releases; Ops and Finance can remind and pause; sellers’ Owner/Admin and Finance roles can answer requirements — enforced by RBAC.']] },
+      { id: 's18', title: '18. Notifications — SMS, email, push, WhatsApp', lead: 'One notification-service with provider-agnostic ports and swappable adapters. Every message is templated, consent-checked, idempotent and logged with its delivery receipt.', items: [
+        ['Ports & adapters', 'SmsSender, EmailSender, PushSender, ChatSender interfaces; adapters for Twilio, AWS End User Messaging, Vonage (SMS); Amazon SES, SendGrid, Postmark (email); FCM and APNs (push); Meta Cloud API and Twilio (WhatsApp). Africa’s Talking or Termii plug in for future African markets.'],
+        ['Routing & failover', 'Per market and channel priority list in config; circuit breakers per provider; automatic failover on timeout or 5xx; cost-aware routing for marketing traffic.'],
+        ['Templates', 'Versioned templates (MJML for email, ICU MessageFormat for text) with locales; preview and test-send from the Platform backoffice; changes need Marketing or Ops Edit rights.'],
+        ['Compliance', 'TCPA consent records, registered 10DLC brand and campaigns, STOP/HELP handling, quiet hours by recipient time zone, CAN-SPAM and one-click unsubscribe (RFC 8058), SPF/DKIM/DMARC, suppression lists from bounces and complaints.'],
+        ['Delivery', 'Kafka-triggered (order.placed → order.confirmed), outbox-backed, idempotency key per message; provider webhooks update status; dead-letter queue with replay.'],
+        ['Preferences', 'Customers, sellers and providers manage channel preferences per category; OTP and security messages always send.']], code: [{ label: 'Go 1.27.1 · notification router', src: GO_NOTIF }, { label: 'Spring Boot 4.1.4 · email adapter', src: JAVA_NOTIF }] },
+      { id: 's19', title: '19. Ads, announcements & dynamic content', lead: 'Nothing promotional is hard-coded. content-service serves placements; ads-service runs paid campaigns; both are edited in the backoffice and cached at the edge.', items: [
+        ['Placement slots', 'Announcement bar, hero carousel, home display banners, category banners, sponsored products in search and on product pages, checkout cross-sell — each slot has a schema and size spec.'],
+        ['Targeting', 'Market, community, location (ZIP/DMA), device, new vs returning, schedule windows; never sensitive categories. Frequency caps per user.'],
+        ['Sponsored products', 'Seller campaigns with daily budgets and cost-per-click bids; a second-price auction blended with organic relevance so ads stay relevant; always labelled “Sponsored”.'],
+        ['Workflow', 'Draft → review (policy + brand safety) → scheduled → live → ended; Marketing Edit to change, approval required for paid third-party creatives.'],
+        ['Delivery', 'Placements compiled to JSON per market, pushed to the CDN with short TTL and purged on publish; the storefront renders them server-side for SEO and speed.'],
+        ['Measurement', 'Impressions, clicks, attributed sales (7-day click), ROAS in the Seller Center; ads billing through Stripe as metered usage.']] },
+      { id: 's20', title: '20. Deployments & CI/CD (multi-cloud ready)', lead: 'One pipeline, three possible clouds. CI builds signed, cloud-agnostic artefacts once; a deploy target (aws | gcp | azure) is just configuration, so we can choose — or move — the cloud later without rewriting delivery.', items: [
+        ['Cloud targets', 'GitHub Actions authenticates to each cloud with OIDC federation (no long-lived keys): AWS IAM role, GCP Workload Identity Federation, Azure federated credentials. Images push to a neutral registry (GHCR) and are mirrored to ECR, Artifact Registry or ACR for the chosen cloud.'],
+        ['Infrastructure', 'Terraform/OpenTofu with one module set per cloud behind identical inputs/outputs (cluster, postgres, cache, bucket, secrets, network); environments pick a provider in a single variable. Terratest runs the same smoke suite against each. Crossplane optional later for self-service.'],
+        ['Web deploys', 'Storefront, Seller Center and Staff console deploy to Cloudflare Workers (OpenNext adapter for Next.js) with preview URLs per PR; Vercel kept as a drop-in fallback using the same build output.'],
+        ['Environments', 'dev (per-PR preview namespaces, scale to zero), staging (prod-like, anonymised data), prod (multi-AZ), DR (second region, warm standby for data, cold for compute).'],
+        ['Pipeline', 'GitHub Actions with reusable workflows: lint, architecture tests, unit, contract, OpenAPI diff, security scans, multi-arch image, SBOM and cosign signature.'],
+        ['Release', 'Argo CD syncs the gitops repo; Argo Rollouts canary 10% → 50% → 100% with Prometheus analysis; automatic rollback on SLO breach; feature flags (OpenFeature + Unleash) separate deploy from release.'],
+        ['Database changes', 'Flyway (Java) and Atlas (Go) migrations, expand-and-contract only, run as pre-sync jobs; no manual production writes.'],
+        ['Plan & apply', 'Atlantis (or Terraform Cloud) runs plan on PR and apply on merge, per cloud workspace; policy-as-code (OPA/Conftest) blocks public buckets, missing encryption and untagged resources on all three.'],
+        ['Secrets & supply chain', 'External Secrets Operator → AWS Secrets Manager, GCP Secret Manager or Azure Key Vault; Kyverno only admits signed images from our registry.']], code: [{ label: 'CI/CD pipeline', src: CI_YAML }] },
+      { id: 's20b', title: '20b. Cloudflare edge & web hosting', lead: 'Cloudflare is the front door for every environment regardless of which cloud runs the backend, so moving clouds is a DNS/origin change, not a re-architecture.', items: [
+        ['Edge', 'Cloudflare DNS, CDN, WAF (OWASP managed rules + custom rules per route), Bot Management/Turnstile on sign-in, sign-up and checkout, rate limiting, DDoS protection, mTLS/Authenticated Origin Pulls to the cluster ingress.'],
+        ['Web apps', 'Next.js storefront and the React Seller Center / Staff console run on Cloudflare Workers via the OpenNext adapter (SSR at the edge, ISR via Workers KV/R2 cache). Static assets on Workers static assets. Vercel stays a supported fallback from the same build.'],
+        ['Origins', 'Workers call the BFF over Cloudflare Tunnel or a private origin on the chosen cloud (EKS, GKE or AKS); Load Balancing with health checks can fail over between regions or clouds.'],
+        ['Media', 'Product and seller images in R2 (zero egress) served through Cloudflare Images for resizing and AVIF/WebP; KYC documents never go to R2 — they stay in the private, object-locked bucket on the primary cloud.'],
+        ['Limits to watch', 'Worker CPU time per request and bundle size; keep heavy work (search, pricing, checkout) in backend services and let the edge do rendering, caching and auth checks only.']] },
+      { id: 's17c', title: '17c. AfroTransact inventory workflow (1P purchasing → lots → storefront)', lead: 'AfroTransact-owned products move through nine steps. Stock on the storefront is never typed in: it is always the sum of received, sellable lots minus reservations.', items: [
+        ['1 · Product master (catalog-service)', 'Category manager creates the product: name, category, supplier, HTS code and duty, shelf life, storage class, reorder point, retail price. System assigns SKU and GTIN (AfroTransact GS1 prefix 086001, check digit computed) and creates a Draft listing. Event catalog.product.created.'],
+        ['2 · Purchase order (purchasing-service)', 'Buyer selects supplier, destination FC and Incoterm, then lines (SKU, quantity, unit price in supplier currency). FX rate is captured at PO date. States: Draft → Pending approval → Approved → Sent to supplier → Confirmed → (shipment) → Received → Closed; Cancelled allowed until a shipment is booked. Approval over $10k requires Finance (Approve level). Sending emits PO PDF + EDI 850.'],
+        ['3 · Shipment & ASN (logistics-service)', 'Booking a shipment against a confirmed PO creates the shipment and its advance ship notice: one ASN line per PO line with lot number, manufacture date and expiry date supplied by the supplier’s packing list (editable until departure, then locked). Required documents per mode (commercial invoice, packing list, B/L or AWB, certificate of origin, ISF 10+2, FDA prior notice, CBP 7501).'],
+        ['4 · Transit milestones', 'PO confirmed → Cargo ready → Picked up → Export cleared → Departed → Arrived US port → US customs cleared → Delivered to FC → Received. Departure is blocked while documents are missing; customs clearance is blocked by any hold or uncleared document. At title transfer (per Incoterm) GL posts Dr 1310 In transit / Cr 2110 GR/IR.'],
+        ['5 · Goods receipt (wms-service)', 'Arrival at the FC opens a goods receipt (GRN) with one line per ASN line. The receiver scans each case’s GS1-128 label (AI 01 GTIN, 10 lot, 11 made, 17 expiry), counts good and damaged units, can split a line when one SKU arrives in several batches, scans the put-away bin and records the QA inspection (seals, English label with allergens and importer, legible lot/expiry, no pests or moisture).'],
+        ['6 · Receipt validation', 'Per line: lot 4–20 alphanumerics and unique per SKU; made date not in the future; expiry after made date and not passed; remaining life ≥ max(90 days, 50% of shelf life) or the batch is quarantined as short-dated; QA result required; bin format and storage class match. Per SKU: received vs ASN — shortages create a supplier/carrier claim, more than 2% over is blocked pending purchasing approval. Manual keying and lot mismatches against the ASN are flagged.'],
+        ['7 · Lots, landed cost & GL', 'Completing the GRN creates one lot per batch line: (SKU, lot, FC, bin, qty, made, expiry, received date, shipment, unit landed cost, status). Damaged units become a separate -DMG quarantine lot. Landed cost = FOB + freight, insurance, CBP fees, broker, drayage and receiving allocated by value share + duty per HTS rate, divided over units received. GL: Dr 1300 sellable + Dr 1320 quarantine / Cr 1310 In transit + Cr 2120 accrued freight & duty. Movements RECEIVE, PUT-AWAY, QUARANTINE written to the append-only ledger.'],
+        ['8 · Availability & storefront', 'inventory-service aggregates sellable lots by SKU × FC and publishes inventory.availability.changed (outbox → Kafka). Storefront, search index and Lola consume it; available-to-promise = sellable − reserved. Listing publish requires title, description, 3+ images, ingredients/allergens, nutrition/INCI and price; Live with zero stock shows “Coming soon” when inbound exists. Checkout reserves units (all-or-nothing, idempotent per order); pick allocates earliest-expiry lot first (FEFO); shipping posts COGS at the lot’s landed cost (FIFO by lot).'],
+        ['9 · Three-way match & payment', 'Finance matches PO price × received quantity to the supplier invoice (tolerance ±1%); variances route to the buyer. Closing the PO releases payment (multi-currency via wire / local rails) and posts FX gain or loss against the PO-date rate.'],
+        ['Data model', 'Product(sku, gtin, supplier_id, hts, duty_rate, shelf_life_months, storage_class, reorder_point, price) · PurchaseOrder(id, supplier_id, currency, fx_rate, fc_id, incoterm, status) · PurchaseOrderLine(po_id, sku, qty, unit_price) · Shipment(id, po_id, mode, carrier, container/awb, etd, eta, stage) · AsnLine(shipment_id, sku, qty, lot, mfg_date, exp_date, fob_unit) · ShipmentDocument(shipment_id, type, status, file_key) · GoodsReceipt(id, shipment_id, fc_id, dock, status) · ReceiptLine(grn_id, sku, expected, lot, mfg, exp, good, damaged, bin, qa_result, scanned) · Lot(id, sku, lot_no, fc_id, bin, qty, mfg, exp, unit_cost, status, reason) — unique (sku, lot_no, fc_id) · StockMovement(append-only) · Reservation(order_id, sku, fc_id, qty, status, ttl) · JournalEntry/Line · Listing(sku, status, content flags).'],
+        ['Events', 'catalog.product.created · purchasing.po.approved / sent / closed · logistics.shipment.booked / milestone / hold · wms.receipt.completed · inventory.lot.created / quarantined / released / expired / written_off · inventory.availability.changed · catalog.listing.published / paused · finance.journal.posted. All via transactional outbox; consumers idempotent on event id.'],
+        ['Jobs & alerts', 'Nightly: expire lots past expiry (blocked from sale, GL provision), flag lots ≤ 30/60 days for markdown, reorder suggestions when sellable + inbound < reorder point, cycle counts by ABC class, lot vs GL 1300/1320 reconciliation. Alerts to the inventory channel and Backoffice notifications.']] },
+      { id: 's20c', title: '20c. Testing, E2E & Storybook (required)', lead: 'No UI ships without a Storybook story and no user journey ships without an end-to-end test. Both are merge gates in CI, not nice-to-haves.', items: [
+        ['Test pyramid', 'Unit (JUnit 5 / Go test / Vitest) → contract (Pact between BFF and services, OpenAPI diff) → integration (Testcontainers: Postgres, Kafka, Redis, Elasticsearch) → E2E. Coverage gate 80% on domain modules; mutation testing (PIT) on pricing, tax, ledger and inventory.'],
+        ['E2E — web', 'Playwright (TypeScript) across Chromium, WebKit and Firefox plus mobile viewports. Required journeys: sign-up with passkey, search → PDP → cart → checkout with Stripe test cards (3DS, decline), multi-seller order split, returns/refund, seller onboarding with Stripe Connect test KYC, listing create → moderation, inventory receive → reserve → ship, staff RBAC denials.'],
+        ['E2E — mobile', 'Detox (React Native) on iOS simulator and Android emulator in CI; Maestro flows for smoke tests on real devices via a device farm (BrowserStack / Firebase Test Lab) before each store release. Same required journeys as web plus push notification deep links and offline driver app sync.'],
+        ['E2E environments & data', 'Runs against per-PR preview environments with seeded fixtures (factory scripts, not prod copies); Stripe, carriers (USPS/UPS/FedEx/DHL sandboxes), Resend and Twilio in test mode; WireMock for anything without a sandbox. Tests are parallel, isolated per tenant, retried once, and flaky tests are quarantined with an owner and SLA.'],
+        ['Storybook', 'Storybook 9 for the shared UI package and every app (storefront, Seller Center, Staff console, React Native via @storybook/react-native). Every component and screen state has stories: default, loading, empty, error, RTL/long text, dark-on-gold, mobile. Design tokens and seller themes are switchable from the toolbar.'],
+        ['Storybook as tests', 'Interaction tests (play functions) run in CI with the Vitest addon; accessibility checks (axe) fail the build on serious violations; visual regression with Chromatic (or Playwright screenshots) on every PR with required review of diffs. Published Storybook is the living design-system reference for designers and partners.'],
+        ['Merge gates', 'A PR cannot merge unless: unit + contract + integration green, affected E2E journeys green on the preview, new/changed components have stories, a11y and visual checks approved. Nightly full E2E across all browsers and both mobile platforms; results posted to Slack and Grafana.'],
+        ['Performance & security tests', 'k6 load tests for checkout and search (flash-sale profile) before major releases; Lighthouse CI budgets (LCP < 2.5 s, CLS < 0.1) on key storefront pages; OWASP ZAP baseline scan on previews; dependency and container scanning in the pipeline.']] },
+      { id: 's21b', title: '21. Monitoring, on-call & support', lead: 'Know about problems before customers do, and give support the same view of an order the customer has.', items: [
+        ['Telemetry', 'OpenTelemetry SDKs in every service → OTel Collector → Grafana Cloud (Mimir, Loki, Tempo) or Prometheus/Loki/Tempo self-hosted; traces carry market, seller_org and order ids.'],
+        ['SLOs', 'Checkout success ≥ 99.9%, search p95 < 150 ms, payment webhook lag < 60 s, payout on time ≥ 99.5%, notification delivery < 30 s; error budgets gate releases.'],
+        ['Alerting', 'Multi-window burn-rate alerts to PagerDuty or Opsgenie; Sentry for front-end and mobile errors; synthetic checks for sign-in, search, checkout from 3 regions; public status page.'],
+        ['On-call', 'Follow-the-sun rotation per domain, runbooks linked from every alert, blameless post-incident reviews within 5 days.'],
+        ['Customer support', 'Support console in the Platform backoffice (order, payment and delivery timeline, refunds within role limits) integrated with Zendesk or Freshdesk; WhatsApp and chat channels.'],
+        ['Lola for support', 'Lola answers “where is my order”, starts returns and drafts agent replies; hands off to a human with full context; tier 1 SLA 1 h, tier 2 4 h, payments and trust escalations 24 h.']] },
+      { id: 's22', title: '22a. Cost optimisation', lead: 'Design for low fixed cost now and linear cost later. FinOps is a weekly habit, not a quarterly surprise.', items: [
+        ['Compute', 'Arm instances (AWS Graviton, GCP Axion/Tau T2A, Azure Cobalt) for Go and Java; Karpenter, GKE Autopilot or AKS node autoprovisioning bin-packing; spot/preemptible pools for stateless and batch; VPA for right-sizing.'],
+        ['Commitments', 'Savings Plans / committed-use discounts for the steady baseline only (≈60%), on-demand and spot above it.'],
+        ['Data', 'Right-size Postgres and use read replicas only where measured; Elasticsearch hot-warm-frozen tiers with ILM; Redis sized to cart working set.'],
+        ['Storage & network', 'S3/GCS lifecycle to infrequent-access and archive; CDN for images with AVIF/WebP; VPC endpoints to avoid NAT charges; same-zone traffic where possible.'],
+        ['Observability', 'Tail-based trace sampling (keep errors and slow requests), log levels per environment, 14-day hot retention then archive.'],
+        ['AI & messaging', 'OpenRouter model routing (small models for intent, large only for planning), caching of embeddings and frequent answers, per-feature budgets; SMS only where email or push won’t do.']] },
+      { id: 's14', title: '14. Repository layout', lead: 'One monorepo, two server toolchains, shared contracts.', items: [
+        ['contracts/', 'openapi/, asyncapi/, proto/ — source of truth for every interface.'],
+        ['java/', 'Spring Boot services, each with domain / application / port / adapter packages; platform-bom for versions.'],
+        ['go/', 'gateway-bff, search, indexer, cart, promise, geo, media, storefront, ai-gateway, mcp-server; pkg/ for shared libraries.'],
+        ['web/ & mobile/', 'Next.js storefront, seller-center, staff-console; React Native app; packages/tokens and packages/ui (each with .stories.tsx); e2e/ (Playwright) and mobile/e2e/ (Detox, Maestro).'],
+        ['docs/', 'Docusaurus portal, ADRs, runbooks.'],
+        ['infra/', 'terraform/modules/{aws,gcp,azure}/ with a shared interface, terraform/envs/, Helm charts, Argo CD apps per environment, cloudflare/ (DNS, WAF rules, Workers routes as code).']] }
+    ].map((x) => ({ ...x, items: x.items.map(([t, d]) => ({ t, d })), hasCode: !!x.code, code: x.code || [] }));
+
+    const svc = (n, rt, owns, store) => { const c = rt.startsWith('Spring') ? SP : rt.startsWith('Go') ? GO : OT; return { n, rt, owns, store, bg: c[0], fg: c[1] }; };
+    return {
+      toc: [['s1', 'Context'], ['s2', 'Services'], ['s3', 'Identity'], ['s4', 'Search'], ['s5', 'Transactions'], ['s6', '1P vs marketplace'], ['s7', 'Sellers & Stripe'], ['s8', 'Geo & address'], ['s9', 'Lola AI'], ['s10', 'Front-end'], ['s11', 'Code standards'], ['s12', 'APIs & docs'], ['s13', 'Platform'], ['s14', 'Repo'], ['s16', 'Backoffices'], ['s17', 'RBAC'], ['s17b', 'Settlement & fees'], ['s17c', 'Inventory & delivery'], ['s17d', 'Stripe compliance'], ['s18', 'Notifications'], ['s19', 'Ads & content'], ['s20', 'CI/CD'], ['s21b', 'Monitoring & support'], ['s22', 'Cost'], ['s21', 'AWS vs GCP'], ['s15', 'Plan']].map(([id, label], i) => ({ href: '#' + id, label, n: i + 1 })),
+      layers: [
+        ['Clients', 'var(--at-ink-1000)', 'var(--at-gold-500)', [['Storefront web', 'Next.js 16 · SSR'], ['Mobile app', 'React Native'], ['Seller Center', 'React · TanStack'], ['Staff console', 'React · TanStack'], ['Partners & agents', 'API · MCP']]],
+        ['Edge', 'var(--at-ink-800)', 'var(--at-ink-0)', [['Cloudflare', 'DNS · CDN · WAF · bot mgmt'], ['Envoy gateway', 'routing · rate limits'], ['BFF (Go)', 'web / mobile aggregation'], ['Spring Authorization Server', 'OAuth 2.1 · OIDC']]],
+        ['Commerce (Spring)', 'var(--at-green-600)', 'var(--at-ink-0)', [['catalog · offers', ''], ['checkout · orders', 'Temporal saga'], ['payments · ledger', 'Stripe Connect'], ['seller · billing', 'Stripe Billing'], ['retail (1P) · fulfilment', 'WMS · inbound'], ['bookings · trust-ops · tax · returns', '']]],
+        ['Edge services (Go)', 'var(--at-gold-500)', 'var(--at-ink-1000)', [['search · indexer', 'Elasticsearch'], ['cart · promise', 'Redis'], ['geo', 'Places · Smarty · PostGIS'], ['storefront', 'themes · CDN'], ['ai-gateway · mcp-server', 'OpenRouter'], ['media', 'S3 · scanning']]],
+        ['Data & events', 'var(--at-ink-200)', 'var(--at-ink-900)', [['PostgreSQL 17', 'per service'], ['Kafka', 'outbox · CDC'], ['Elasticsearch 9', 'search read model'], ['Redis 7', 'cart · sessions'], ['S3', 'media · evidence']]],
+        ['External', 'var(--at-ink-100)', 'var(--at-ink-800)', [['Stripe', 'Connect · Billing · Identity · Tax'], ['Carriers (direct)', 'USPS · UPS · FedEx · DHL'], ['Google Places · Smarty', 'address'], ['OpenRouter', 'LLMs'], ['Twilio · SES', 'messaging']]]
+      ].map(([name, bg, fg, items]) => ({ name, bg, fg, items: items.map(([n, d]) => ({ n, d })) })),
+      services: [
+        svc('identity (Spring Authorization Server)', 'Spring 4.1.4', 'Users, seller orgs, staff, clients, consent, MFA, passkeys', 'Postgres'),
+        svc('gateway-bff', 'Go 1.27.1', 'Screen-shaped APIs for web and mobile, token exchange', 'Redis cache'),
+        svc('catalog', 'Spring 4.1.4', 'Products (ATIN), attributes, categories, media refs', 'Postgres'),
+        svc('offers & pricing', 'Spring 4.1.4', 'Seller offers, price rules, deals, buy-box inputs', 'Postgres'),
+        svc('search + indexer', 'Go 1.27.1', 'Query, facets, autocomplete, hybrid retrieval', 'Elasticsearch'),
+        svc('inventory', 'Spring 4.1.4', 'Stock by node (FC / seller), reservations', 'Postgres'),
+        svc('cart', 'Go 1.27.1', 'Carts, price snapshots, merge on login', 'Redis + Postgres'),
+        svc('promise', 'Go 1.27.1', 'Delivery dates per ZIP, cutoffs, carrier SLAs', 'Redis'),
+        svc('checkout & orders', 'Spring 4.1.4', 'Saga, orders, sub-orders per shipment, cancellations', 'Postgres + Temporal'),
+        svc('payments & ledger', 'Spring 4.1.4', 'PaymentIntents, captures, refunds, transfers, journal', 'Postgres (serializable)'),
+        svc('seller & billing', 'Spring 4.1.4', 'Onboarding, KYB, Connect accounts, subscriptions', 'Postgres + Temporal'),
+        svc('retail (1P)', 'Spring 4.1.4', 'Vendors, purchase orders, private label, lots', 'Postgres'),
+        svc('fulfilment', 'Spring 4.1.4', 'FC inbound, pick/pack, labels, tracking', 'Postgres'),
+        svc('bookings', 'Spring 4.1.4', 'Service catalogue, availability, deposits', 'Postgres'),
+        svc('trust-ops', 'Spring 4.1.4', 'Reviews of sellers/listings, disputes, audit', 'Postgres'),
+        svc('tax & returns', 'Spring 4.1.4', 'Facilitator tax, RMAs, refunds orchestration', 'Postgres'),
+        svc('geo', 'Go 1.27.1', 'Autocomplete proxy, validation, geocoding', 'PostGIS'),
+        svc('storefront', 'Go 1.27.1', 'Seller layouts + vetted themes, rendering cache', 'Postgres + CDN'),
+        svc('ai-gateway', 'Go 1.27.1', 'OpenRouter routing, budgets, redaction, evals', 'Postgres'),
+        svc('mcp-server', 'Go 1.27.1', 'Agent tools over public APIs', '—'),
+        svc('notifications', 'Go 1.27.1', 'Email, SMS, push, WhatsApp', 'Postgres')
+      ],
+      sections,
+      caps: [
+        { name: 'Platform backoffice', who: 'AfroTransact staff (10 roles)', pre: 'SSO + passkey/TOTP, device posture, IP allow-list for finance', items: [['Applications', 'KYC/KYB review, request info, approve/reject, four-eyes'], ['Sellers & providers', 'Health, suspend, reinstate'], ['Listing moderation', 'AI-flagged listings, allow/remove'], ['Orders & disputes', 'Cancel, refund, A-to-z claims'], ['Payouts & ledger', 'Hold/release, reconcile'], ['Retail (1P)', 'Purchase orders, AfroTransact Brand'], ['Fulfilment', 'FC inbound and receiving'], ['Ads & announcements', 'Placements and campaigns'], ['Notifications', 'Providers, routing, templates'], ['Users & roles · Audit', 'RBAC administration, immutable audit']].map(([m, d]) => ({ m, d })) },
+        { name: 'Seller Center', who: 'Seller org members (7 roles)', pre: 'Org status APPROVED by staff; Stripe Connect payouts enabled; active subscription', items: [['Orders', 'Labels, shipping, cancellations'], ['Listings', 'Offers on catalogue products, AI writer'], ['Inventory & FBA', 'Stock, inbound shipments'], ['Advertising', 'Sponsored product/brand/display'], ['Storefront', 'Layout and contrast-vetted theme'], ['Payouts', 'Statements, 1099-K'], ['Plan & billing', 'Stripe Billing plan and invoices'], ['Team & roles', 'Invite members, least privilege']].map(([m, d]) => ({ m, d })) },
+        { name: 'Provider Hub', who: 'Service-provider org members (4 roles)', pre: 'Org status APPROVED; licence and insurance verified where required; Connect enabled', items: [['Bookings', 'Confirm, complete, no-show, deposits'], ['Services & pricing', 'Duration, price, deposit'], ['Availability', 'Weekly hours, time off'], ['Payouts & billing', 'Payouts, plan, invoices'], ['Team', 'Practitioners and roles'], ['Reviews', 'Public replies']].map(([m, d]) => ({ m, d })) }
+      ],
+      rbacMatrices: window.ATBO ? ['platform', 'seller', 'provider'].map((pk) => { const BO = window.ATBO; const RP = BO.PORTALS[pk]; return { title: RP.title, roles: RP.roles.map((r) => r[1]), rows: RP.modules.map((k, i) => ({ label: BO.MOD[k].label, can: BO.CAN[k] || '', cells: RP.roles.map(([rk]) => { const d = BO.LV[(RP.matrix[rk] || '')[i] || '-']; return { label: d[0], bg: d[1], fg: d[2] }; }) })) }; }) : [],
+      costRows: [
+        ['Kubernetes compute', 'EKS + Karpenter, Graviton, spot', 'GKE Autopilot, Tau/Axion, spot pods', 'AKS + node autoprovisioning, Cobalt Arm, spot', '$1.5k–3k', 'Arm, spot, bin-packing, scale previews to zero'],
+        ['PostgreSQL', 'Aurora PostgreSQL / RDS', 'Cloud SQL / AlloyDB', 'Azure Database for PostgreSQL Flexible', '$1k–2k', 'Right-size, replicas only where measured, reserved'],
+        ['Search', 'Elastic Cloud on AWS', 'Elastic Cloud on GCP', 'Elastic Cloud on Azure', '$0.6k–1.5k', 'Same vendor on every cloud; hot-warm-frozen ILM'],
+        ['Events', 'Confluent Cloud or MSK', 'Confluent Cloud', 'Confluent Cloud or Event Hubs (Kafka API)', '$0.3k–0.8k', 'Confluent keeps Kafka identical across clouds'],
+        ['Cache', 'ElastiCache (Valkey)', 'Memorystore (Valkey)', 'Azure Cache for Redis', '$0.15k–0.4k', 'Size to working set'],
+        ['Workflows', 'Temporal Cloud', 'Temporal Cloud', 'Temporal Cloud', '$0.2k–0.5k', 'Action-efficient workflow design'],
+        ['Object storage', 'S3', 'GCS', 'Blob Storage', '$0.1k–0.3k', 'S3-compatible API in code; lifecycle tiers'],
+        ['Edge (all clouds)', 'Cloudflare', 'Cloudflare', 'Cloudflare', '$0.2k–0.5k', 'DNS, CDN, WAF, bot management, Images; R2 for public media (no egress fees)'],
+        ['Web front-ends', 'Cloudflare Workers / Pages', 'Cloudflare Workers / Pages', 'Cloudflare Workers / Pages', '$0.05k–0.3k', 'Vercel as fallback; see 20b'],
+        ['Container registry & secrets', 'ECR · Secrets Manager', 'Artifact Registry · Secret Manager', 'ACR · Key Vault', '$0.05k–0.2k', 'External Secrets Operator abstracts all three'],
+        ['Observability', 'Grafana Cloud', 'Grafana Cloud', 'Grafana Cloud', '$0.4k–1k', 'OpenTelemetry everywhere; tail sampling'],
+        ['Messaging', 'Resend + SendGrid · Twilio', 'Resend + SendGrid · Twilio', 'Resend + SendGrid · Twilio', '$0.3k–1k', 'Resend primary for transactional email (React Email templates), SendGrid/SES as failover; SMS for OTP and urgent only'],
+        ['AI', 'OpenRouter', 'OpenRouter', 'OpenRouter', '$0.5k–1.5k', 'Model routing, caching, per-feature budgets']
+      ].map(([layer, aws, gcp, az, est, lever]) => ({ layer, aws, gcp, az, est, lever })),
+      phases: [
+        ['Phase 0 · 6 weeks', 'var(--at-ink-1000)', 'var(--at-gold-500)', ['Contracts, monorepo, CI gates', 'Auth server + tokens package', 'Catalog, offers, search MVP', 'Seller onboarding + Connect']],
+        ['Phase 1 · launch USA', 'var(--at-green-600)', 'var(--at-ink-0)', ['Checkout saga, ledger, tax', 'Seller-fulfilled + labels', 'Storefront themes', 'Lola v1 (search, cart, track)']],
+        ['Phase 2', 'var(--at-gold-500)', 'var(--at-ink-1000)', ['AfroTransact Retail + Brand', 'Fulfilled by AfroTransact (1 FC)', 'Services & bookings', 'Billing plans, metered fees']],
+        ['Phase 3', 'var(--at-ink-200)', 'var(--at-ink-900)', ['Second FC, faster promise', 'Partner API + MCP', 'UK or Canada market', 'Ads & sponsored listings']]
+      ].map(([when, bg, fg, items]) => ({ when, bg, fg, items })),
+      decisions: ['Stripe Connect account type (Express vs Custom with embedded components) and who bears negative balances.', 'First fulfilment centre location and 3PL vs owned operation.', 'AfroTransact Retail legal structure and how 1P is kept neutral in the buy box.', 'Seller plan pricing and commission by category.', 'Food policy: cottage-food sellers allowed at launch or FDA-registered only.', 'Migration of current sellers, listings and order history from v1.']
+    };
+  }
+}
+</script>
+</body>
+</html>

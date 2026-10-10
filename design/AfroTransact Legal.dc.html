@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="afrotransact-tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<script src="at-site.js"></script>
+<style>body{margin:0}a{color:var(--at-color-link)}a:hover{color:var(--at-green-700)}:focus-visible{outline:3px solid var(--at-gold-500);outline-offset:2px}@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}@media print{[data-noprint]{display:none!important}}</style>
+</helmet>
+<div lang="{{ lang }}" dir="{{ dir }}" style="min-height:100vh;display:flex;flex-direction:column;background:var(--at-color-canvas);color:var(--at-color-text);font-family:var(--at-font-sans)">
+  <a href="#main" onClick="{{ skip }}" data-noprint="1" style="position:absolute;inset-inline-start:var(--at-space-3);top:-80px;z-index:10;padding:var(--at-space-3) var(--at-space-4);border-radius:var(--at-radius-sm);background:var(--at-gold-500);color:var(--at-ink-1000);font-weight:var(--at-weight-bold)" style-focus="top:var(--at-space-3)">{{ t.skip }}</a>
+
+  <header data-noprint="1" style="background:var(--at-ink-1000);color:var(--at-color-header-text)">
+    <div style="max-width:var(--at-page-max);margin:0 auto;padding:var(--at-space-3) var(--at-page-gutter);display:flex;flex-wrap:wrap;align-items:center;gap:var(--at-space-3) var(--at-space-5)">
+      <a href="AfroTransact Shop.dc.html" style="display:flex;align-items:center;gap:var(--at-space-2);color:var(--at-color-header-text);text-decoration:none"><img src="assets/logo-mark.svg" alt="" style="width:32px;height:32px"><span style="font-weight:var(--at-weight-black);font-size:var(--at-text-xl);letter-spacing:var(--at-tracking-tight)">afrotransact</span></a>
+      <span aria-hidden="true" style="width:1px;height:24px;background:var(--at-ink-600)"></span>
+      <span style="font-size:var(--at-text-md);font-weight:var(--at-weight-semibold)">{{ t.center }}</span>
+      <span style="flex:1"></span>
+      <label style="display:flex;align-items:center;gap:var(--at-space-2);font-size:var(--at-text-sm)"><i class="ph ph-globe" aria-hidden="true"></i>{{ t.language }}<select value="{{ lang }}" onChange="{{ onLang }}" style="height:36px;border:1px solid var(--at-ink-600);border-radius:var(--at-radius-sm);background:var(--at-ink-900);color:var(--at-color-header-text);padding:0 var(--at-space-2);font-size:var(--at-text-sm)"><sc-for list="{{ langs }}" as="l" hint-placeholder-count="4"><option value="{{ l.v }}" lang="{{ l.v }}">{{ l.label }}</option></sc-for></select></label>
+      <a href="AfroTransact Shop.dc.html" style="display:flex;align-items:center;gap:var(--at-space-1);min-height:44px;color:var(--at-color-header-text);font-size:var(--at-text-sm)"><i class="ph ph-arrow-left" aria-hidden="true"></i>{{ t.back }}</a>
+    </div>
+  </header>
+
+  <sc-if value="{{ draft }}" hint-placeholder-val="{{ true }}"><p role="note" style="margin:0;padding:var(--at-space-2) var(--at-page-gutter);background:var(--at-gold-100);color:var(--at-ink-1000);font-size:var(--at-text-sm);text-align:center">{{ t.draft }}</p></sc-if>
+
+  <div style="flex:1;width:100%;max-width:var(--at-page-max);margin:0 auto;padding:var(--at-space-8) var(--at-page-gutter);box-sizing:border-box;display:flex;flex-wrap:wrap;gap:var(--at-space-8);align-items:flex-start">
+    <nav aria-label="{{ t.docs }}" data-noprint="1" style="flex:0 1 260px;position:sticky;top:var(--at-space-4);display:flex;flex-direction:column;gap:var(--at-space-2)">
+      <h2 style="margin:0;font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);letter-spacing:var(--at-tracking-caps);text-transform:uppercase;color:var(--at-color-text-muted)">{{ t.docs }}</h2>
+      <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ docs }}" as="d" hint-placeholder-count="8"><li><a href="{{ d.href }}" aria-current="{{ d.current }}" style="display:flex;align-items:center;min-height:44px;padding-inline:var(--at-space-3);border-radius:var(--at-radius-sm);background:{{ d.bg }};color:var(--at-color-text);font-weight:{{ d.weight }};text-decoration:none;border-inline-start:4px solid {{ d.bar }}" style-hover="background:var(--at-color-surface-hover)">{{ d.title }}</a></li></sc-for>
+      </ul>
+    </nav>
+
+    <main id="main" tabIndex="-1" style="flex:1 1 560px;min-width:0;display:flex;flex-direction:column;gap:var(--at-space-6);outline:none">
+      <sc-if value="{{ hasTrans }}" hint-placeholder-val="{{ false }}"><p role="note" style="margin:0;padding:var(--at-space-3) var(--at-space-4);border-radius:var(--at-radius-sm);background:var(--at-color-info-bg);color:var(--at-color-text);font-size:var(--at-text-sm);line-height:var(--at-leading-relaxed)">{{ t.translation }}</p></sc-if>
+      <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+        <h1 ref="{{ h1Ref }}" tabIndex="-1" style="margin:0;font-size:var(--at-text-4xl);line-height:1.1;letter-spacing:var(--at-tracking-tight);outline:none">{{ title }}</h1>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:var(--at-space-2) var(--at-space-5);font-size:var(--at-text-sm);color:var(--at-color-text-muted)">
+          <span>{{ t.version }} {{ meta.v }}</span>
+          <span>{{ t.effective }} <time dateTime="{{ meta.eff }}">{{ meta.effLabel }}</time></span>
+          <sc-if value="{{ meta.hasHist }}" hint-placeholder-val="{{ false }}"><details data-noprint="1" style="font-size:var(--at-text-sm)"><summary style="cursor:pointer;color:var(--at-color-link);min-height:24px">{{ t.prev }}</summary><ul style="margin:var(--at-space-2) 0 0;padding-inline-start:var(--at-space-5)"><sc-for list="{{ meta.hist }}" as="h" hint-placeholder-count="1"><li>{{ t.version }} {{ h.v }} · <time dateTime="{{ h.eff }}">{{ h.label }}</time></li></sc-for></ul></details></sc-if>
+          <button type="button" onClick="{{ print }}" data-noprint="1" style="display:flex;align-items:center;gap:var(--at-space-1);min-height:36px;padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);color:var(--at-color-text);font-size:var(--at-text-sm);cursor:pointer"><i class="ph ph-printer" aria-hidden="true"></i>{{ t.print }}</button>
+        </div>
+      </div>
+
+      <nav aria-label="{{ t.onPage }}" data-noprint="1" style="display:flex;flex-direction:column;gap:var(--at-space-2);padding:var(--at-space-4) var(--at-space-5);border-radius:var(--at-radius-md);background:var(--at-color-surface)">
+        <h2 style="margin:0;font-size:var(--at-text-sm);font-weight:var(--at-weight-bold)">{{ t.onPage }}</h2>
+        <ol style="margin:0;padding-inline-start:var(--at-space-5);columns:2 220px;column-gap:var(--at-space-6);font-size:var(--at-text-sm);line-height:1.9"><sc-for list="{{ toc }}" as="c" hint-placeholder-count="6"><li><a href="{{ c.href }}" onClick="{{ c.go }}">{{ c.h }}</a></li></sc-for></ol>
+      </nav>
+
+      <article lang="en" dir="ltr" style="display:flex;flex-direction:column;gap:var(--at-space-6);max-width:72ch">
+        <sc-for list="{{ sections }}" as="sec" hint-placeholder-count="6"><section aria-labelledby="{{ sec.id }}" style="display:flex;flex-direction:column;gap:var(--at-space-2)"><h2 id="{{ sec.id }}" tabIndex="-1" style="margin:0;font-size:var(--at-text-2xl);line-height:1.2;outline:none">{{ sec.n }}. {{ sec.h }}</h2><p style="margin:0;font-size:var(--at-text-md);line-height:var(--at-leading-relaxed);text-wrap:pretty">{{ sec.p }}</p></section></sc-for>
+      </article>
+
+      <sc-if value="{{ isCookies }}" hint-placeholder-val="{{ false }}">
+      <section aria-labelledby="prefs-h" style="display:flex;flex-direction:column;gap:var(--at-space-4);padding:var(--at-space-6);border-radius:var(--at-radius-md);background:var(--at-color-surface)">
+        <h2 id="prefs-h" style="margin:0;font-size:var(--at-text-2xl)">{{ t.cookiePrefs }}</h2>
+        <sc-if value="{{ gpc }}" hint-placeholder-val="{{ false }}"><p role="note" style="margin:0;padding:var(--at-space-3) var(--at-space-4);border-radius:var(--at-radius-sm);background:var(--at-color-success-bg);font-size:var(--at-text-sm)">{{ t.gpc }}</p></sc-if>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column">
+          <sc-for list="{{ cats }}" as="c" hint-placeholder-count="4"><li style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--at-space-1) var(--at-space-4);align-items:center;padding:var(--at-space-4) 0;border-top:1px solid var(--at-color-border)">
+            <span id="{{ c.lid }}" style="font-size:var(--at-text-md);font-weight:var(--at-weight-bold)">{{ c.label }}</span>
+            <sc-if value="{{ c.locked }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);color:var(--at-color-success)">{{ t.alwaysOn }}</span></sc-if>
+            <sc-if value="{{ c.free }}" hint-placeholder-val="{{ true }}"><button type="button" role="switch" aria-checked="{{ c.checked }}" aria-labelledby="{{ c.lid }}" aria-describedby="{{ c.did }}" disabled="{{ c.disabled }}" onClick="{{ c.toggle }}" style="position:relative;width:52px;height:30px;border:2px solid {{ c.ring }};border-radius:var(--at-radius-pill);background:{{ c.track }};cursor:pointer;padding:0;opacity:{{ c.op }}"><span aria-hidden="true" style="position:absolute;top:3px;inset-inline-start:{{ c.knob }};width:20px;height:20px;border-radius:50%;background:var(--at-ink-0);box-shadow:var(--at-shadow-sm)"></span></button></sc-if>
+            <span id="{{ c.did }}" style="grid-column:1/-1;font-size:var(--at-text-sm);color:var(--at-color-text-muted);line-height:var(--at-leading-relaxed)">{{ c.desc }}</span>
+          </li></sc-for>
+        </ul>
+        <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-2)">
+          <button type="button" onClick="{{ savePrefs }}" style="min-height:var(--at-size-control);padding:0 var(--at-space-6);border:2px solid var(--at-ink-1000);border-radius:var(--at-radius-pill);background:var(--at-ink-1000);color:var(--at-ink-0);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer">{{ t.save }}</button>
+          <button type="button" onClick="{{ acceptAll }}" style="min-height:var(--at-size-control);padding:0 var(--at-space-6);border:2px solid var(--at-ink-1000);border-radius:var(--at-radius-pill);background:var(--at-color-surface);color:var(--at-ink-1000);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer">{{ t.acceptAll }}</button>
+          <button type="button" onClick="{{ rejectAll }}" style="min-height:var(--at-size-control);padding:0 var(--at-space-6);border:2px solid var(--at-ink-1000);border-radius:var(--at-radius-pill);background:var(--at-color-surface);color:var(--at-ink-1000);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer">{{ t.rejectAll }}</button>
+        </div>
+        <div style="overflow-x:auto" tabIndex="0" role="region" aria-labelledby="ctab-cap">
+          <div id="ctab-cap" style="font-size:var(--at-text-lg);font-weight:var(--at-weight-bold);padding-bottom:var(--at-space-2)">{{ t.table }}</div>
+          <div role="table" aria-labelledby="ctab-cap" lang="en" dir="ltr" style="min-width:660px;font-size:var(--at-text-sm)">
+            <div role="rowgroup"><div role="row" style="display:grid;grid-template-columns:150px 110px minmax(180px,1fr) 100px 120px"><span role="columnheader" style="padding:var(--at-space-2);border-bottom:2px solid var(--at-ink-1000);font-weight:var(--at-weight-bold)">{{ t.colName }}</span><span role="columnheader" style="padding:var(--at-space-2);border-bottom:2px solid var(--at-ink-1000);font-weight:var(--at-weight-bold)">{{ t.colProvider }}</span><span role="columnheader" style="padding:var(--at-space-2);border-bottom:2px solid var(--at-ink-1000);font-weight:var(--at-weight-bold)">{{ t.colPurpose }}</span><span role="columnheader" style="padding:var(--at-space-2);border-bottom:2px solid var(--at-ink-1000);font-weight:var(--at-weight-bold)">{{ t.colDuration }}</span><span role="columnheader" style="padding:var(--at-space-2);border-bottom:2px solid var(--at-ink-1000);font-weight:var(--at-weight-bold)">{{ t.colCategory }}</span></div></div>
+            <div role="rowgroup"><sc-for list="{{ cookieRows }}" as="r" hint-placeholder-count="6"><div role="row" style="display:grid;grid-template-columns:150px 110px minmax(180px,1fr) 100px 120px"><span role="rowheader" style="padding:var(--at-space-2);border-bottom:1px solid var(--at-color-border);font-family:var(--at-font-mono);font-weight:var(--at-weight-semibold)">{{ r.name }}</span><span role="cell" style="padding:var(--at-space-2);border-bottom:1px solid var(--at-color-border)">{{ r.provider }}</span><span role="cell" style="padding:var(--at-space-2);border-bottom:1px solid var(--at-color-border)">{{ r.purpose }}</span><span role="cell" style="padding:var(--at-space-2);border-bottom:1px solid var(--at-color-border)">{{ r.duration }}</span><span role="cell" style="padding:var(--at-space-2);border-bottom:1px solid var(--at-color-border)">{{ r.cat }}</span></div></sc-for></div>
+          </div>
+        </div>
+      </section>
+      </sc-if>
+
+      <sc-if value="{{ isChoices }}" hint-placeholder-val="{{ false }}">
+      <section aria-labelledby="dns-h" style="display:flex;flex-direction:column;gap:var(--at-space-3);padding:var(--at-space-6);border-radius:var(--at-radius-md);background:var(--at-color-surface)">
+        <div style="display:flex;align-items:center;gap:var(--at-space-4)"><h2 id="dns-h" style="flex:1;margin:0;font-size:var(--at-text-xl)">{{ t.dns }}</h2><button type="button" role="switch" aria-checked="{{ dns.checked }}" aria-labelledby="dns-h" aria-describedby="dns-d" onClick="{{ dns.toggle }}" style="position:relative;flex:none;width:52px;height:30px;border:2px solid {{ dns.ring }};border-radius:var(--at-radius-pill);background:{{ dns.track }};cursor:pointer;padding:0"><span aria-hidden="true" style="position:absolute;top:3px;inset-inline-start:{{ dns.knob }};width:20px;height:20px;border-radius:50%;background:var(--at-ink-0);box-shadow:var(--at-shadow-sm)"></span></button></div>
+        <p id="dns-d" style="margin:0;font-size:var(--at-text-sm);color:var(--at-color-text-muted)">{{ dns.status }}</p>
+      </section>
+      <form onSubmit="{{ submitReq }}" noValidate="{{ true }}" aria-labelledby="req-h" style="display:flex;flex-direction:column;gap:var(--at-space-4);padding:var(--at-space-6);border-radius:var(--at-radius-md);background:var(--at-color-surface)">
+        <h2 id="req-h" style="margin:0;font-size:var(--at-text-2xl)">{{ t.reqTitle }}</h2>
+        <p style="margin:0;font-size:var(--at-text-sm);line-height:var(--at-leading-relaxed);color:var(--at-color-text-muted)">{{ t.reqIntro }}</p>
+        <sc-if value="{{ req.hasErrs }}" hint-placeholder-val="{{ false }}"><div ref="{{ errRef }}" tabIndex="-1" role="alert" aria-labelledby="err-h" style="display:flex;flex-direction:column;gap:var(--at-space-2);padding:var(--at-space-4);border:2px solid var(--at-color-danger);border-radius:var(--at-radius-sm);background:var(--at-color-danger-bg)"><h3 id="err-h" style="margin:0;font-size:var(--at-text-md)">{{ req.errTitle }}</h3><ul style="margin:0;padding-inline-start:var(--at-space-5)"><sc-for list="{{ req.errList }}" as="e" hint-placeholder-count="1"><li><a href="{{ e.href }}" onClick="{{ e.go }}" style="color:var(--at-color-danger)">{{ e.msg }}</a></li></sc-for></ul></div></sc-if>
+        <sc-if value="{{ req.sent }}" hint-placeholder-val="{{ false }}"><p role="status" style="margin:0;padding:var(--at-space-3) var(--at-space-4);border-radius:var(--at-radius-sm);background:var(--at-color-success-bg);font-size:var(--at-text-sm)">{{ req.sentMsg }}</p></sc-if>
+        <fieldset id="f-type" tabIndex="-1" aria-invalid="{{ req.typeInvalid }}" aria-describedby="f-type-e" style="margin:0;padding:0;border:0;display:flex;flex-direction:column;gap:var(--at-space-1)">
+          <legend style="padding:0;margin-bottom:var(--at-space-2);font-size:var(--at-text-md);font-weight:var(--at-weight-bold)">{{ t.reqType }}</legend>
+          <sc-for list="{{ req.types }}" as="o" hint-placeholder-count="4"><label style="display:flex;align-items:center;gap:var(--at-space-3);min-height:44px;font-size:var(--at-text-md);cursor:pointer"><input type="radio" name="reqtype" value="{{ o.v }}" checked="{{ o.on }}" onChange="{{ o.pick }}" style="width:20px;height:20px;accent-color:var(--at-ink-1000)">{{ o.label }}</label></sc-for>
+          <span id="f-type-e" style="font-size:var(--at-text-sm);color:var(--at-color-danger)">{{ req.errs.type }}</span>
+        </fieldset>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:var(--at-space-4)">
+          <div style="display:flex;flex-direction:column;gap:var(--at-space-1)"><label for="f-email" style="font-size:var(--at-text-md);font-weight:var(--at-weight-bold)">{{ t.email }}</label><input id="f-email" type="email" autoComplete="email" value="{{ req.email }}" onChange="{{ req.onEmail }}" aria-invalid="{{ req.emailInvalid }}" aria-describedby="f-email-e" style="min-height:var(--at-size-control);padding:0 var(--at-space-3);border:2px solid {{ req.emailBorder }};border-radius:var(--at-radius-sm);font-size:var(--at-text-md);font-family:inherit;background:var(--at-color-surface);color:inherit"><span id="f-email-e" style="font-size:var(--at-text-sm);color:var(--at-color-danger)">{{ req.errs.email }}</span></div>
+          <div style="display:flex;flex-direction:column;gap:var(--at-space-1)"><label for="f-state" style="font-size:var(--at-text-md);font-weight:var(--at-weight-bold)">{{ t.state }}</label><select id="f-state" autoComplete="address-level1" value="{{ req.state }}" onChange="{{ req.onState }}" aria-invalid="{{ req.stateInvalid }}" aria-describedby="f-state-e" style="min-height:var(--at-size-control);padding:0 var(--at-space-3);border:2px solid {{ req.stateBorder }};border-radius:var(--at-radius-sm);font-size:var(--at-text-md);font-family:inherit;background:var(--at-color-surface);color:inherit"><option value="">{{ t.choose }}</option><sc-for list="{{ states }}" as="st" hint-placeholder-count="5"><option value="{{ st.v }}">{{ st.label }}</option></sc-for></select><span id="f-state-e" style="font-size:var(--at-text-sm);color:var(--at-color-danger)">{{ req.errs.state }}</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:var(--at-space-1)"><label for="f-details" style="font-size:var(--at-text-md);font-weight:var(--at-weight-bold)">{{ t.details }}</label><textarea id="f-details" rows="3" value="{{ req.details }}" onChange="{{ req.onDetails }}" style="padding:var(--at-space-2) var(--at-space-3);border:2px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);font-size:var(--at-text-md);font-family:inherit;resize:vertical;background:var(--at-color-surface);color:inherit"></textarea></div>
+        <button type="submit" style="align-self:flex-start;min-height:var(--at-size-control);padding:0 var(--at-space-6);border:0;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer" style-hover="background:var(--at-gold-600)">{{ t.submit }}</button>
+      </form>
+      </sc-if>
+
+      <div role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">{{ live }}</div>
+    </main>
+  </div>
+
+  <footer style="background:var(--at-ink-1000);color:var(--at-color-header-text)">
+    <div style="max-width:var(--at-page-max);margin:0 auto;padding:var(--at-space-8) var(--at-page-gutter);display:flex;flex-wrap:wrap;gap:var(--at-space-6) var(--at-space-10);align-items:flex-start">
+      <div style="display:flex;flex-direction:column;gap:var(--at-space-2);font-size:var(--at-text-sm)">
+        <h2 style="margin:0;font-size:var(--at-text-md)">{{ t.contact }}</h2>
+        <a href="{{ c.tel }}" style="display:flex;align-items:center;gap:var(--at-space-2);color:var(--at-color-header-text);font-weight:var(--at-weight-bold)"><i class="ph ph-phone" aria-hidden="true"></i>{{ c.phone }}</a>
+        <a href="{{ c.privacyHref }}" style="color:var(--at-color-header-text)">{{ c.privacy }}</a>
+        <a href="{{ c.a11yHref }}" style="color:var(--at-color-header-text)">{{ c.accessibility }}</a>
+        <span style="color:var(--at-color-header-muted)">{{ c.address }}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+        <h2 style="margin:0;font-size:var(--at-text-md)">{{ t.followUs }}</h2>
+        <ul style="list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:var(--at-space-2)"><sc-for list="{{ socials }}" as="so" hint-placeholder-count="6"><li><a href="{{ so.href }}" target="_blank" rel="noopener noreferrer" aria-label="{{ so.label }}" title="{{ so.label }}" style="width:44px;height:44px;border-radius:50%;background:{{ so.color }};box-shadow:0 0 0 1px {{ so.ring }};display:flex;align-items:center;justify-content:center;text-decoration:none;flex:none" style-hover="transform:translateY(-2px)"><span aria-hidden="true" style="width:20px;height:20px;background:#ffffff;-webkit-mask:{{ so.glyph }} center/contain no-repeat;mask:{{ so.glyph }} center/contain no-repeat"></span></a></li></sc-for></ul>
+      </div>
+      <span style="flex:1"></span>
+      <span style="align-self:flex-end;font-size:var(--at-text-xs);color:var(--at-color-header-muted)">© 2026 AfroTransact, Inc. {{ t.rights }}</span>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const STATES = 'AL Alabama,AK Alaska,AZ Arizona,AR Arkansas,CA California,CO Colorado,CT Connecticut,DE Delaware,DC District of Columbia,FL Florida,GA Georgia,HI Hawaii,ID Idaho,IL Illinois,IN Indiana,IA Iowa,KS Kansas,KY Kentucky,LA Louisiana,ME Maine,MD Maryland,MA Massachusetts,MI Michigan,MN Minnesota,MS Mississippi,MO Missouri,MT Montana,NE Nebraska,NV Nevada,NH New Hampshire,NJ New Jersey,NM New Mexico,NY New York,NC North Carolina,ND North Dakota,OH Ohio,OK Oklahoma,OR Oregon,PA Pennsylvania,RI Rhode Island,SC South Carolina,SD South Dakota,TN Tennessee,TX Texas,UT Utah,VT Vermont,VA Virginia,WA Washington,WV West Virginia,WI Wisconsin,WY Wyoming'.split(',').map((x) => ({ v: x.slice(0, 2), label: x.slice(3) }));
+const CATS = ['necessary', 'functional', 'analytics', 'advertising'];
+
+class Component extends DCLogic {
+  state = { ready: false, doc: 'terms', prefs: null, req: { type: '', email: '', state: '', details: '' }, errs: {}, sent: null, live: '' };
+  h1Ref = React.createRef();
+  errRef = React.createRef();
+
+  componentDidMount() {
+    const boot = () => { if (!window.ATSite) { this._t = setTimeout(boot, 60); return; } this._un = window.ATSite.subscribe(() => this.forceUpdate()); this.readHash(false); this.setState({ ready: true }); };
+    boot();
+    this._hc = () => this.readHash(true);
+    window.addEventListener('hashchange', this._hc);
+  }
+  componentWillUnmount() { clearTimeout(this._t); if (this._un) this._un(); window.removeEventListener('hashchange', this._hc); }
+  componentDidUpdate(pp, ps) {
+    const A = window.ATSite; if (!A) return;
+    const l = A.locale(); document.documentElement.lang = l; document.documentElement.dir = A.dir(l);
+    document.title = A.t('d.' + this.state.doc, l) + ' · AfroTransact';
+    if (this._lastDoc !== this.state.doc && this._focusOnDoc) { window.scrollTo(0, 0); if (this.h1Ref.current) this.h1Ref.current.focus(); this._focusOnDoc = false; }
+    this._lastDoc = this.state.doc;
+  }
+  readHash(focus) {
+    const A = window.ATSite; const k = (window.location.hash || '').slice(1).split(':')[0];
+    const doc = A && A.DOC_KEYS.includes(k) ? k : 'terms';
+    if (doc !== this.state.doc) { this._focusOnDoc = focus; this.setState({ doc, errs: {}, sent: null }); }
+  }
+  jump(id) { return (e) => { e.preventDefault(); const el = document.getElementById(id); if (!el) return; const y = el.getBoundingClientRect().top + window.scrollY - 16; window.scrollTo({ top: y, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); el.focus({ preventScroll: true }); }; }
+
+  renderVals() {
+    const A = window.ATSite; const s = this.state;
+    if (!A) return { t: {}, docs: [], toc: [], sections: [], langs: [], socials: [], cats: [], cookieRows: [], states: [], meta: { hist: [] }, req: { types: [], errs: {}, errList: [] }, dns: {}, c: {}, h1Ref: this.h1Ref, errRef: this.errRef };
+    const l = A.locale(); const tr = (k, v) => A.t(k, l, v);
+    const keys = ['skip', 'center', 'back', 'language', 'docs', 'onPage', 'version', 'effective', 'prev', 'print', 'translation', 'draft', 'followUs', 'contact', 'rights', 'cookiePrefs', 'gpc', 'alwaysOn', 'save', 'acceptAll', 'rejectAll', 'table', 'colName', 'colProvider', 'colPurpose', 'colDuration', 'colCategory', 'reqTitle', 'reqIntro', 'reqType', 'email', 'state', 'details', 'submit', 'choose', 'dns'];
+    const t = {}; keys.forEach((k) => { t[k] = tr(k); });
+    const cfg = A.get(); const meta = cfg.legal[s.doc] || { v: '1.0', eff: '2026-01-01', hist: [] };
+    const sections = (A.DOCS[s.doc] || []).map(([h, p], i) => ({ id: s.doc + '-s' + (i + 1), n: i + 1, h, p: A.fill(p) }));
+    const gpc = A.gpc(); const saved = A.consent();
+    const prefs = s.prefs || { functional: !!(saved && saved.functional), analytics: !!(saved && saved.analytics), advertising: !!(saved && saved.advertising) && !gpc };
+    const setP = (k) => () => this.setState({ prefs: { ...prefs, [k]: !prefs[k] } });
+    const commit = (p, msg) => { A.setConsent(p); this.setState({ prefs: { ...p, advertising: !!p.advertising && !gpc }, live: msg || tr('saved') }); };
+    const sw = (on, dis) => ({ checked: on ? 'true' : 'false', track: on ? 'var(--at-green-700)' : 'var(--at-ink-300)', ring: on ? 'var(--at-green-700)' : 'var(--at-ink-600)', knob: on ? '25px' : '3px', disabled: !!dis, op: dis ? 0.5 : 1 });
+    const r = s.req; const e = s.errs;
+    const setR = (k) => (ev) => { const v = ev.target.value; this.setState((st) => ({ req: { ...st.req, [k]: v }, errs: { ...st.errs, [k]: '' }, sent: null })); };
+    const errList = [['type', 'f-type'], ['email', 'f-email'], ['state', 'f-state']].filter(([k]) => e[k]).map(([k, id]) => ({ msg: e[k], href: '#' + id, go: this.jump(id) }));
+    const dnsOn = !!(saved && saved.dns) || gpc;
+    return {
+      lang: l, dir: A.dir(l), t, draft: cfg.draftBanner, hasTrans: l !== 'en', live: s.live, h1Ref: this.h1Ref, errRef: this.errRef,
+      skip: (ev) => { ev.preventDefault(); const m = document.getElementById('main'); if (m) m.focus(); },
+      langs: A.LOCALES.map(([v, label]) => ({ v, label })), onLang: (ev) => { A.setLocale(ev.target.value); this.setState({ live: '' }); },
+      docs: A.DOC_KEYS.map((k) => { const cur = k === s.doc; return { title: tr('d.' + k), href: '#' + k, current: cur ? 'page' : undefined, bg: cur ? 'var(--at-color-surface)' : 'transparent', weight: cur ? 'var(--at-weight-bold)' : 'var(--at-weight-regular)', bar: cur ? 'var(--at-gold-500)' : 'transparent' }; }),
+      title: tr('d.' + s.doc),
+      meta: { v: meta.v, eff: meta.eff, effLabel: A.fmtDate(meta.eff, l), hasHist: meta.hist.length > 0, hist: meta.hist.map(([v, eff]) => ({ v, eff, label: A.fmtDate(eff, l) })) },
+      print: () => window.print(),
+      toc: sections.map((x) => ({ h: x.h, href: '#' + s.doc + ':' + x.id, go: this.jump(x.id) })), sections,
+      isCookies: s.doc === 'cookies', isChoices: s.doc === 'choices', gpc,
+      cats: CATS.map((k) => { const locked = k === 'necessary'; const dis = k === 'advertising' && gpc; return { lid: 'cat-' + k, did: 'catd-' + k, label: tr('c.' + k), desc: tr('cd.' + k), locked, free: !locked, toggle: dis ? () => {} : setP(k), ...sw(locked ? true : !!prefs[k], dis) }; }),
+      savePrefs: () => commit(prefs), acceptAll: () => commit({ functional: true, analytics: true, advertising: true }), rejectAll: () => commit({ functional: false, analytics: false, advertising: false }),
+      cookieRows: A.COOKIES.map(([name, provider, purpose, duration, cat]) => ({ name, provider, purpose, duration, cat: tr('c.' + cat) })),
+      dns: { ...sw(dnsOn, false), status: dnsOn ? tr('dnsOn') : tr('dnsOff'), toggle: () => { const cur = A.consent() || {}; const next = !dnsOn; if (!next && gpc) return this.setState({ live: tr('gpc') }); try { localStorage.setItem('at.consent.v1', JSON.stringify({ ...cur, necessary: true, dns: next, advertising: next ? false : !!cur.advertising, at: new Date().toISOString() })); } catch (x) { /* ignore */ } this.setState({ live: next ? tr('dnsOn') : tr('dnsOff') }); this.forceUpdate(); } },
+      states: STATES,
+      req: { ...r, errs: { type: e.type || '', email: e.email || '', state: e.state || '' }, hasErrs: errList.length > 0, errList, errTitle: tr('errSummary', { n: errList.length }),
+        typeInvalid: e.type ? 'true' : 'false', emailInvalid: e.email ? 'true' : 'false', stateInvalid: e.state ? 'true' : 'false',
+        emailBorder: e.email ? 'var(--at-color-danger)' : 'var(--at-color-border-strong)', stateBorder: e.state ? 'var(--at-color-danger)' : 'var(--at-color-border-strong)',
+        types: ['access', 'delete', 'correct', 'optout'].map((v) => ({ v, label: tr('r.' + v), on: r.type === v, pick: () => this.setState((st) => ({ req: { ...st.req, type: v }, errs: { ...st.errs, type: '' }, sent: null })) })),
+        onEmail: setR('email'), onState: setR('state'), onDetails: setR('details'), sent: !!s.sent, sentMsg: s.sent ? tr('submitted', { ref: s.sent, email: r.email }) : '' },
+      submitReq: (ev) => {
+        ev.preventDefault(); const ne = {};
+        if (!r.type) ne.type = tr('errType'); if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(r.email.trim())) ne.email = tr('errEmail'); if (!r.state) ne.state = tr('errState');
+        if (Object.keys(ne).length) { this.setState({ errs: ne, sent: null }, () => { if (this.errRef.current) this.errRef.current.focus(); }); return; }
+        const ref = 'PR-' + Date.now().toString(36).toUpperCase().slice(-6); this.setState({ errs: {}, sent: ref, live: tr('submitted', { ref, email: r.email }) });
+      },
+      socials: A.socials(),
+      c: { ...cfg.contacts, tel: 'tel:' + cfg.contacts.phone.replace(/[^\d+]/g, ''), privacyHref: 'mailto:' + cfg.contacts.privacy, a11yHref: 'mailto:' + cfg.contacts.accessibility }
+    };
+  }
+}
+</script>
+</body>
+</html>

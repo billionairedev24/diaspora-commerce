@@ -1,0 +1,34 @@
+# Java
+target/
+*.class
+.mvn/wrapper/maven-wrapper.jar
+# Go
+/go/**/bin/
+*.test
+coverage.out
+# Node
+node_modules/
+.next/
+.open-next/
+.turbo/
+dist/
+build/
+storybook-static/
+.expo/
+.wrangler/
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+# Env & secrets
+.env
+.env.*
+!.env.example
+*.pem
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+.DS_Store

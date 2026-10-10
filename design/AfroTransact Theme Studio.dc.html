@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="afrotransact-tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<script src="at-theme.js"></script>
+</helmet>
+<div style="min-height:100vh;background:var(--at-color-canvas);color:var(--at-color-text);font-family:var(--at-font-sans)">
+
+<div style="display:flex;flex-wrap:wrap;gap:var(--at-space-1) var(--at-space-5);align-items:center;padding:var(--at-space-1) var(--at-page-gutter);background:var(--at-gold-500);color:var(--at-ink-1000);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold)">
+  <span>Prototype · round 3</span><a href="AfroTransact Shop.dc.html" style="color:var(--at-ink-1000)">Shop</a><a href="AfroTransact Theme Studio.dc.html" style="color:var(--at-ink-1000)">Tokens &amp; seller themes</a><a href="AfroTransact Architecture.dc.html" style="color:var(--at-ink-1000)">Architecture</a>
+</div>
+<header style="background:var(--at-color-header-bg);color:var(--at-color-header-text);padding:var(--at-space-3) var(--at-page-gutter);display:flex;align-items:center;gap:var(--at-space-3)">
+  <img src="assets/logo-mark.svg" alt="" style="width:32px;height:32px">
+  <span style="font-size:var(--at-text-2xl);font-weight:var(--at-weight-black)">afrotransact</span>
+  <span style="font-size:var(--at-text-md);color:var(--at-color-header-muted);margin-left:var(--at-space-2)">Design tokens &amp; Seller Theme Studio</span>
+</header>
+
+<main style="max-width:var(--at-page-max);margin:0 auto;padding:var(--at-space-8) var(--at-page-gutter) var(--at-space-16);display:flex;flex-direction:column;gap:var(--at-space-10)">
+
+<section style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <div><h1 style="margin:0;font-size:var(--at-text-4xl);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-tight)">Brand palette</h1>
+  <p style="margin:var(--at-space-2) 0 0;max-width:72ch;color:var(--at-color-text-muted);font-size:var(--at-text-lg)">Three tiers: <strong>primitives</strong> (raw ramps), <strong>semantic tokens</strong> (what components use), and <strong>store tokens</strong> (what a seller can override, after vetting). Components never reference a hex or a primitive directly. Values below are read live from <code style="font-family:var(--at-font-mono);font-size:var(--at-text-sm)">afrotransact-tokens.css</code>.</p></div>
+  <div style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+    <sc-for list="{{ ramps }}" as="r" hint-placeholder-count="4">
+      <div style="background:var(--at-color-surface);border-radius:var(--at-radius-md);padding:var(--at-space-4);box-shadow:var(--at-shadow-sm)">
+        <div style="display:flex;align-items:baseline;gap:var(--at-space-3);margin-bottom:var(--at-space-3)"><strong style="font-size:var(--at-text-lg)">{{ r.name }}</strong><span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">{{ r.note }}</span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(86px,1fr));gap:var(--at-space-2)">
+          <sc-for list="{{ r.steps }}" as="s" hint-placeholder-count="10">
+            <div style="display:flex;flex-direction:column;gap:var(--at-space-1)">
+              <div style="height:64px;border-radius:var(--at-radius-sm);background:{{ s.css }};border:1px solid var(--at-color-border);display:flex;align-items:flex-end;justify-content:space-between;padding:var(--at-space-1) var(--at-space-2);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);color:{{ s.on }}"><span>Aa</span><span>{{ s.best }}</span></div>
+              <span style="font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold)">{{ s.step }}{{ s.star }}</span>
+              <span style="font-size:var(--at-text-2xs);font-family:var(--at-font-mono);color:var(--at-color-text-muted)">{{ s.hex }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">Semantic tokens</h2>
+  <div style="background:var(--at-color-surface);border-radius:var(--at-radius-md);box-shadow:var(--at-shadow-sm);overflow:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:var(--at-text-md)">
+      <thead><tr style="background:var(--at-color-surface-muted);text-align:left"><th style="padding:var(--at-space-3) var(--at-space-4)">Token</th><th style="padding:var(--at-space-3)">Resolves to</th><th style="padding:var(--at-space-3)">Sample</th><th style="padding:var(--at-space-3)">Contrast</th><th style="padding:var(--at-space-3)">Use for</th></tr></thead>
+      <tbody>
+        <sc-for list="{{ semantic }}" as="t" hint-placeholder-count="14">
+          <tr style="border-top:1px solid var(--at-color-border)">
+            <td style="padding:var(--at-space-2) var(--at-space-4);font-family:var(--at-font-mono);font-size:var(--at-text-sm)">{{ t.name }}</td>
+            <td style="padding:var(--at-space-2) var(--at-space-3);font-family:var(--at-font-mono);font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ t.ref }} · {{ t.hex }}</td>
+            <td style="padding:var(--at-space-2) var(--at-space-3)"><span style="display:inline-flex;align-items:center;justify-content:center;min-width:72px;height:28px;border-radius:var(--at-radius-xs);background:{{ t.bg }};color:{{ t.fg }};border:1px solid var(--at-color-border);font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm)">Aa</span></td>
+            <td style="padding:var(--at-space-2) var(--at-space-3);font-weight:var(--at-weight-semibold);color:{{ t.passColor }}">{{ t.ratio }}</td>
+            <td style="padding:var(--at-space-2) var(--at-space-3);color:var(--at-color-text-muted)">{{ t.use }}</td>
+          </tr>
+        </sc-for>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <div><h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">Seller Theme Studio</h2>
+  <p style="margin:var(--at-space-2) 0 0;max-width:72ch;color:var(--at-color-text-muted);font-size:var(--at-text-base)">Sellers pick any brand colours. We generate an OKLCH ramp, choose black or white labels automatically, derive an accessible text tone, and block publishing anything under WCAG 2.2 AA. The same vetting runs again in storefront-service on save, so the API can’t be bypassed.</p></div>
+  <div style="display:grid;grid-template-columns:minmax(300px,380px) minmax(0,1fr);gap:var(--at-space-6);align-items:start">
+    <div style="background:var(--at-color-surface);border-radius:var(--at-radius-md);box-shadow:var(--at-shadow-sm);padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-4)">
+      <strong style="font-size:var(--at-text-sm)">Presets</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-2)">
+        <sc-for list="{{ presets }}" as="p" hint-placeholder-count="6"><button type="button" onClick="{{ p.pick }}" style="display:flex;align-items:center;gap:var(--at-space-2);height:var(--at-size-control-sm);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-size:var(--at-text-xs)" style-hover="background:var(--at-color-surface-muted)"><span style="width:14px;height:14px;border-radius:var(--at-radius-pill);background:{{ p.primary }}"></span><span style="width:14px;height:14px;border-radius:var(--at-radius-pill);background:{{ p.accent }};margin-left:-10px"></span>{{ p.name }}</button></sc-for>
+      </div>
+      <sc-for list="{{ pickers }}" as="c" hint-placeholder-count="3">
+        <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-bold)">{{ c.label }}
+          <span style="display:flex;gap:var(--at-space-2)"><input type="color" value="{{ c.value }}" onChange="{{ c.on }}" aria-label="{{ c.label }}" style="width:48px;height:var(--at-size-control);padding:2px;border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-color-surface)"><input value="{{ c.value }}" onChange="{{ c.onText }}" maxLength="7" style="flex:1;height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-family:var(--at-font-mono);font-weight:var(--at-weight-regular)"></span>
+        </label>
+      </sc-for>
+      <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+        <strong style="font-size:var(--at-text-sm)">Contrast checks · WCAG 2.2</strong>
+        <sc-for list="{{ checks }}" as="c" hint-placeholder-count="6">
+          <div style="display:grid;grid-template-columns:20px 1fr auto;gap:var(--at-space-2);align-items:start;font-size:var(--at-text-sm)">
+            <i class="{{ c.icon }}" style="color:{{ c.color }};font-size:var(--at-text-lg)"></i>
+            <span>{{ c.label }}<span style="display:block;font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ c.note }}</span></span>
+            <strong style="color:{{ c.color }}">{{ c.ratio }}:1</strong>
+          </div>
+        </sc-for>
+      </div>
+      <sc-if value="{{ canFix }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ autoFix }}" style="height:var(--at-size-control-sm);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-size:var(--at-text-sm);display:flex;align-items:center;justify-content:center;gap:var(--at-space-2)"><i class="ph ph-magic-wand"></i>Auto-fix to nearest accessible shade</button></sc-if>
+      <button type="button" onClick="{{ publish }}" disabled="{{ cantPublish }}" style="height:var(--at-size-control);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-weight:var(--at-weight-semibold);cursor:pointer;opacity:{{ publishOpacity }}">{{ publishLabel }}</button>
+      <span style="font-size:var(--at-text-xs);color:{{ statusColor }}">{{ status }}</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+      <div style="background:var(--at-color-surface);border-radius:var(--at-radius-md);box-shadow:var(--at-shadow-sm);padding:var(--at-space-4)">
+        <strong style="font-size:var(--at-text-sm)">Generated primary ramp</strong>
+        <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:var(--at-space-1);margin-top:var(--at-space-2)">
+          <sc-for list="{{ storeRamp }}" as="s" hint-placeholder-count="10"><div style="display:flex;flex-direction:column;gap:2px"><div style="height:40px;border-radius:var(--at-radius-xs);background:{{ s.hex }}"></div><span style="font-size:var(--at-text-2xs);color:var(--at-color-text-muted)">{{ s.step }}</span></div></sc-for>
+        </div>
+      </div>
+      <div ref="{{ previewRef }}" style="background:var(--store-surface);color:var(--store-text);border-radius:var(--at-radius-md);box-shadow:var(--at-shadow-md);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:var(--at-space-3);padding:var(--at-space-2) var(--at-space-5);background:var(--at-color-header-bg);color:var(--at-color-header-text);font-size:var(--at-text-xs)"><img src="assets/logo-mark.svg" alt="" style="width:18px;height:18px">afrotransact.com/s/mama-tees-pantry<span style="margin-left:auto">Storefront preview</span></div>
+        <div style="background:var(--store-primary);color:var(--store-on-primary);padding:var(--at-space-8) var(--at-space-6);display:flex;flex-direction:column;gap:var(--at-space-2)">
+          <span style="font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);letter-spacing:var(--at-tracking-caps);text-transform:uppercase">Houston, TX · Verified seller</span>
+          <span style="font-size:var(--at-text-4xl);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-tight);line-height:1.05">{{ storeName }}</span>
+          <span style="font-size:var(--at-text-lg)">Market-day staples, packed in Houston.</span>
+        </div>
+        <div style="display:flex;gap:var(--at-space-5);padding:var(--at-space-3) var(--at-space-6);background:var(--store-tint);font-size:var(--at-text-md);font-weight:var(--at-weight-semibold)"><span style="color:var(--store-ink)">Shop all</span><span>Rice &amp; grains</span><span>Pepper &amp; sauces</span><span>Party trays</span></div>
+        <div style="padding:var(--at-space-6);display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:var(--at-space-5)">
+          <sc-for list="{{ storeItems }}" as="p" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+              <div style="aspect-ratio:1/1;background:repeating-linear-gradient(135deg,var(--at-ink-100) 0 6px,var(--at-ink-50) 6px 12px);border-radius:var(--at-radius-sm)"></div>
+              <span style="font-weight:var(--at-weight-semibold);font-size:var(--at-text-md)">{{ p.name }}</span>
+              <span style="font-size:var(--at-text-xl);font-weight:var(--at-weight-bold)">{{ p.price }}</span>
+              <button type="button" style="height:var(--at-size-control-sm);border:0;border-radius:var(--at-radius-pill);background:var(--store-accent);color:var(--store-on-accent);font-weight:var(--at-weight-semibold);cursor:pointer">Add to cart</button>
+              <span style="font-size:var(--at-text-sm);color:var(--store-ink);text-decoration:underline">View details</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="padding:0 var(--at-space-6) var(--at-space-5);font-size:var(--at-text-xs);color:var(--at-color-text-muted)">Checkout, prices, ratings and the AfroTransact header always stay platform-styled so shoppers recognise them across every store.</div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const RAMP_DEFS = [
+  { key: 'gold', name: 'AfroTransact Gold', note: 'Primary actions, brand moments. Never as text on white — use 800 for text.', steps: [50, 100, 200, 300, 400, 500, 600, 700, 800, 900], base: 500 },
+  { key: 'green', name: 'AfroTransact Green', note: 'Secondary actions, links, success, "Fulfilled by" badges.', steps: [50, 100, 200, 300, 400, 500, 600, 700, 800, 900], base: 600 },
+  { key: 'ink', name: 'Ink (warm neutral)', note: 'Text, surfaces, header (1000 = brand black).', steps: [0, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000], base: 1000 },
+  { key: 'red', name: 'Signal red', note: 'Deals, errors, low stock only.', steps: [50, 100, 500, 600, 700], base: 600 }
+];
+const SEMANTIC = [
+  ['--at-color-action-primary', '--at-color-action-primary-text', 'Add to cart, Search, Place order'],
+  ['--at-color-action-secondary', '--at-color-action-secondary-text', 'Buy now, confirm actions'],
+  ['--at-color-header-bg', '--at-color-header-text', 'Global header'],
+  ['--at-color-subheader-bg', '--at-color-subheader-text', 'Department bar'],
+  ['--at-color-surface', '--at-color-text', 'Body text on cards'],
+  ['--at-color-surface', '--at-color-text-muted', 'Secondary text'],
+  ['--at-color-surface', '--at-color-text-subtle', 'Meta only (≥ 4.5)'],
+  ['--at-color-surface', '--at-color-link', 'Links'],
+  ['--at-color-surface', '--at-color-deal', 'Deal %, order total'],
+  ['--at-color-surface', '--at-color-rating-text', 'Star rating text'],
+  ['--at-color-badge-fulfilled-bg', '--at-color-badge-fulfilled-text', '“Fulfilled by AfroTransact”'],
+  ['--at-color-badge-brand-bg', '--at-color-badge-brand-text', '“AfroTransact Brand”'],
+  ['--at-color-success-bg', '--at-color-success', 'Verified, delivered'],
+  ['--at-color-warning-bg', '--at-color-warning', 'Needs attention'],
+  ['--at-color-danger-bg', '--at-color-danger', 'Errors']
+];
+const PRESETS = [
+  { name: 'AfroTransact default', primary: '#FFD400', accent: '#067457' },
+  { name: 'Kente gold', primary: '#E8A317', accent: '#1F3A93' },
+  { name: 'Ankara teal', primary: '#0F7C80', accent: '#E85D2A' },
+  { name: 'Bissap red', primary: '#9B1B30', accent: '#2E2C28' },
+  { name: 'Ube purple', primary: '#6B3FA0', accent: '#F2C14E' },
+  { name: 'Too-light lemon', primary: '#FFF59D', accent: '#B2F2BB' }
+];
+const ITEMS = [{ name: 'Ofada rice, 5 lb', price: '$18.50' }, { name: 'Ata dindin, 16 oz', price: '$12.00' }, { name: 'Party jollof tray', price: '$120.00' }];
+
+class Component extends DCLogic {
+  state = { primary: '#FFD400', accent: '#067457', surface: '#FFFFFF', published: false, ready: !!window.ATTheme, tokens: {} };
+  previewRef = React.createRef();
+
+  componentDidMount() {
+    const read = () => {
+      const cs = getComputedStyle(document.documentElement);
+      const get = (v) => cs.getPropertyValue(v).trim();
+      const tokens = {};
+      RAMP_DEFS.forEach((r) => r.steps.forEach((s) => { tokens[`--at-${r.key}-${s}`] = get(`--at-${r.key}-${s}`); }));
+      SEMANTIC.forEach(([a, b]) => { tokens[a] = this.resolve(get(a), get); tokens[b] = this.resolve(get(b), get); });
+      if (window.ATTheme && tokens['--at-gold-500']) this.setState({ ready: true, tokens }, () => this.applyPreview());
+      else setTimeout(read, 150);
+    };
+    read();
+  }
+  componentDidUpdate() { this.applyPreview(); }
+  resolve(v, get) { const m = v.match(/var\((--[\w-]+)\)/); return m ? this.resolve(get(m[1]), get) : v; }
+  vetNow() { return window.ATTheme ? window.ATTheme.vet({ primary: this.state.primary, accent: this.state.accent, surface: this.state.surface }) : null; }
+  applyPreview() { const v = this.vetNow(); if (v && this.previewRef.current) window.ATTheme.apply(this.previewRef.current, v.tokens); }
+
+  renderVals() {
+    const s = this.state, T = window.ATTheme, tk = s.tokens;
+    const valid = (h) => /^#[0-9a-fA-F]{6}$/.test(h);
+    const set = (k) => (e) => this.setState({ [k]: e.target.value.toUpperCase(), published: false });
+    const setText = (k) => (e) => { let v = e.target.value.trim(); if (!v.startsWith('#')) v = '#' + v; if (valid(v)) this.setState({ [k]: v.toUpperCase(), published: false }); };
+
+    const ramps = RAMP_DEFS.map((r) => ({ name: r.name, note: r.note, steps: r.steps.map((step) => {
+      const hex = (tk[`--at-${r.key}-${step}`] || '').toUpperCase(); const ok = T && valid(hex);
+      const w = ok ? T.contrast(hex, '#FFFFFF') : 0, b = ok ? T.contrast(hex, '#000000') : 0;
+      return { step, hex, css: `var(--at-${r.key}-${step})`, star: step === r.base ? ' ★' : '', on: w >= b ? 'var(--at-ink-0)' : 'var(--at-ink-1000)', best: ok ? Math.max(w, b).toFixed(1) : '' };
+    }) }));
+    const semantic = SEMANTIC.map(([bg, fg, use]) => { const hb = tk[bg], hf = tk[fg]; const r = T && valid(hb || '') && valid(hf || '') ? T.contrast(hb, hf) : 0;
+      return { name: fg, ref: bg.replace('--at-color-', 'on '), hex: (hf || '').toUpperCase(), bg: `var(${bg})`, fg: `var(${fg})`, ratio: r ? r.toFixed(2) + ':1' : '…', passColor: r >= 4.5 ? 'var(--at-color-success)' : 'var(--at-color-danger)', use }; });
+
+    const v = this.vetNow();
+    const checks = v ? v.checks.map((c) => ({ label: c.label, ratio: c.ratio.toFixed(2), icon: c.pass ? 'ph-fill ph-check-circle' : (['body', 'onPrimary', 'onAccent'].includes(c.id) ? 'ph-fill ph-x-circle' : 'ph-fill ph-warning-circle'), color: c.pass ? 'var(--at-color-success)' : (['body', 'onPrimary', 'onAccent'].includes(c.id) ? 'var(--at-color-danger)' : 'var(--at-color-warning)'),
+      note: c.pass ? `Needs ${c.need}:1 — passes` : c.fix ? `Needs ${c.need}:1 — we’ll use ${c.fix} automatically for this role` : `Needs ${c.need}:1 — blocks publishing` })) : [];
+    const ui = v && v.checks.find((c) => c.id === 'primaryUi');
+    const canFix = !!(ui && !ui.pass);
+    return {
+      ramps, semantic,
+      presets: PRESETS.map((p) => ({ ...p, pick: () => this.setState({ primary: p.primary, accent: p.accent, published: false }) })),
+      pickers: [['primary', 'Brand primary (hero, banners)'], ['accent', 'Accent (store buttons)'], ['surface', 'Store surface']].map(([k, label]) => ({ label, value: s[k], on: set(k), onText: setText(k) })),
+      checks, canFix, autoFix: () => { if (ui) this.setState({ primary: ui.fix }); },
+      storeRamp: v ? v.ramp : [], previewRef: this.previewRef, storeName: "Mama Tee's Pantry", storeItems: ITEMS,
+      cantPublish: !v || !v.ok, publishOpacity: v && v.ok ? 1 : 0.45, publishLabel: s.published ? 'Theme published ✓' : 'Publish theme',
+      publish: () => this.setState({ published: true }),
+      status: !v ? 'Loading theme engine…' : v.ok ? (canFix ? 'Publishable. The primary is too light for borders on white; we’ll draw edges with the 600 step.' : 'All required checks pass.') : 'Fix the failing checks to publish — labels must reach 4.5:1.',
+      statusColor: v && v.ok ? 'var(--at-color-success)' : 'var(--at-color-danger)'
+    };
+  }
+}
+</script>
+</body>
+</html>

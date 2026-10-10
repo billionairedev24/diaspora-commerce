@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="afrotransact-tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<script src="at-access.js"></script>
+<script src="at-barcode.js"></script>
+<style>@keyframes atspin{to{transform:rotate(360deg)}}@keyframes atscan{0%,100%{top:12%}50%{top:82%}}</style>
+</helmet>
+<div style="min-height:100vh;background:var(--at-color-canvas);font-family:var(--at-font-sans);color:var(--at-color-text);display:flex;flex-wrap:wrap;gap:var(--at-space-10);justify-content:center;align-items:flex-start;padding:var(--at-space-8) var(--at-space-4)">
+
+<div style="width:390px;height:812px;border:10px solid var(--at-ink-1000);border-radius:48px;overflow:hidden;background:var(--at-color-surface);display:flex;flex-direction:column;box-shadow:var(--at-shadow-lg);position:relative">
+  <div style="display:flex;justify-content:space-between;padding:12px 26px 6px;font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);background:var(--at-color-header-bg);color:var(--at-color-header-text)"><span>9:41</span><span><i class="ph-fill ph-cell-signal-full"></i> <i class="{{ netIcon }}"></i> <i class="ph-fill ph-battery-full"></i></span></div>
+  <div style="display:flex;align-items:center;gap:var(--at-space-2);padding:var(--at-space-2) var(--at-space-3) var(--at-space-3);background:var(--at-color-header-bg);color:var(--at-color-header-text)">
+    <sc-if value="{{ canBack }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ back }}" aria-label="Back" style="width:44px;height:44px;border:0;background:none;color:inherit;cursor:pointer"><i class="ph ph-caret-left" style="font-size:var(--at-text-2xl)"></i></button></sc-if>
+    <img src="assets/logo-mark.svg" alt="" style="width:26px;height:26px">
+    <div style="flex:1;display:flex;flex-direction:column;line-height:1.15;min-width:0"><strong style="font-size:var(--at-text-lg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ title }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-header-muted)">AfroTransact Delivery{{ subTitle }}</span></div>
+    <sc-if value="{{ authed }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ openSos }}" aria-label="Emergency or incident" style="height:28px;padding:0 var(--at-space-2);border:0;border-radius:var(--at-radius-pill);background:var(--at-red-600);color:var(--at-ink-0);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);cursor:pointer">SOS</button><button type="button" onClick="{{ goSync }}" style="display:flex;align-items:center;gap:4px;height:28px;padding:0 var(--at-space-2);border:0;border-radius:var(--at-radius-pill);background:{{ syncBg }};color:var(--at-ink-1000);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);cursor:pointer"><i class="{{ syncIcon }}"></i>{{ syncLabel }}</button></sc-if>
+  </div>
+
+  <div style="flex:1;overflow-y:auto;overflow-x:hidden;padding:var(--at-space-4);display:flex;flex-direction:column;gap:var(--at-space-3)">
+
+    <!-- LOGIN -->
+    <sc-if value="{{ vLogin }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3);padding-top:var(--at-space-6)">
+      <img src="assets/logo-mark.svg" alt="" style="width:56px;height:56px">
+      <h1 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-black)">Sign in to drive</h1>
+      <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">Use your AfroTransact staff account. You need the “Use the driver app” permission.</span>
+      <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Work email<input value="{{ email }}" onChange="{{ onEmail }}" type="email" autoComplete="username" placeholder="you@afrotransact.com" style="height:var(--at-size-control-lg);border:1px solid {{ emailBorder }};border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-base)"></label>
+      <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Password<input value="{{ pw }}" onChange="{{ onPw }}" onKeyDown="{{ onPwKey }}" type="password" autoComplete="current-password" style="height:var(--at-size-control-lg);border:1px solid {{ pwBorder }};border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-base)"></label>
+      <span style="font-size:var(--at-text-sm);color:var(--at-color-danger);min-height:18px">{{ loginErr }}</span>
+      <button type="button" onClick="{{ doLogin }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer">{{ loginLabel }}</button>
+      <button type="button" onClick="{{ passkey }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold)"><i class="ph ph-fingerprint"></i> Sign in with passkey</button>
+      <div style="padding:var(--at-space-3);border-radius:var(--at-radius-sm);background:var(--at-color-surface-muted);font-size:var(--at-text-xs);line-height:var(--at-leading-normal)"><strong>Demo accounts</strong><br>Driver: tunde@afrotransact.com / drive2026<br>Ops admin with driver access: daniel@afrotransact.com / ops2026<br>No driver access: kofi@afrotransact.com / fc2026</div>
+    </div>
+    </sc-if>
+
+    <!-- MFA -->
+    <sc-if value="{{ vMfa }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3);padding-top:var(--at-space-6)">
+      <i class="ph ph-device-mobile-camera" style="font-size:44px"></i>
+      <h1 style="margin:0;font-size:var(--at-text-2xl);font-weight:var(--at-weight-bold)">Enter your 6-digit code</h1>
+      <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">From your authenticator app for {{ pendingEmail }}. Demo code: 246810</span>
+      <input value="{{ mfa }}" onChange="{{ onMfa }}" inputMode="numeric" maxLength="6" placeholder="••••••" aria-label="Verification code" style="height:56px;border:1px solid {{ mfaBorder }};border-radius:var(--at-radius-sm);text-align:center;font-size:var(--at-text-3xl);letter-spacing:.4em">
+      <span style="font-size:var(--at-text-sm);color:var(--at-color-danger);min-height:18px">{{ mfaErr }}</span>
+      <button type="button" onClick="{{ doMfa }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer">Verify</button>
+    </div>
+    </sc-if>
+
+    <!-- DENIED -->
+    <sc-if value="{{ vDenied }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3);padding-top:var(--at-space-6)">
+      <i class="ph-fill ph-lock-key" style="font-size:44px;color:var(--at-color-danger)"></i>
+      <h1 style="margin:0;font-size:var(--at-text-2xl);font-weight:var(--at-weight-bold)">No driver access</h1>
+      <span style="font-size:var(--at-text-md);line-height:var(--at-leading-relaxed)">{{ deniedMsg }}</span>
+      <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">A developer or super admin can grant <strong>delivery:operate</strong> in Backoffice → Access control, either by giving you the Driver role or as a direct permission.</span>
+      <button type="button" onClick="{{ logout }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold)">Back to sign in</button>
+    </div>
+    </sc-if>
+
+    <!-- HOME -->
+    <sc-if value="{{ vHome }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+      <div style="padding:var(--at-space-4);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);display:flex;flex-direction:column;gap:var(--at-space-1)">
+        <strong style="font-size:var(--at-text-lg)">Hi {{ firstName }}</strong>
+        <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">{{ route.zone }} · {{ route.window }} · {{ stopCount }} stops · {{ pkgCount }} packages</span>
+        <span style="font-size:var(--at-text-sm)">Vehicle {{ route.vehicle }} · from {{ route.depot }}</span>
+      </div>
+      <div style="display:flex;flex-direction:column;border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);overflow:hidden">
+        <sc-for list="{{ phases }}" as="p" hint-placeholder-count="5"><button type="button" onClick="{{ p.go }}" disabled="{{ p.locked }}" style="display:flex;align-items:center;gap:var(--at-space-3);min-height:56px;padding:var(--at-space-2) var(--at-space-4);border:0;border-top:1px solid var(--at-color-border);background:{{ p.bg }};text-align:left;cursor:{{ p.cursor }};color:inherit"><span style="width:30px;height:30px;border-radius:var(--at-radius-pill);display:grid;place-items:center;background:{{ p.dotBg }};color:{{ p.dotFg }};flex:none"><i class="{{ p.icon }}"></i></span><span style="flex:1;display:flex;flex-direction:column"><strong style="font-size:var(--at-text-md)">{{ p.label }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ p.note }}</span></span><i class="ph ph-caret-right" style="color:var(--at-color-text-subtle)"></i></button></sc-for>
+      </div>
+      <button type="button" onClick="{{ primary.go }}" disabled="{{ primary.disabled }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer;opacity:{{ primary.opacity }}">{{ primary.label }}</button>
+    </div>
+    </sc-if>
+
+    <!-- INSPECTION -->
+    <sc-if value="{{ vInspect }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+      <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">Pre-trip inspection (DVIR). Critical items must pass before you can start.</span>
+      <sc-for list="{{ checks }}" as="c" hint-placeholder-count="10">
+        <div style="display:flex;align-items:center;gap:var(--at-space-2);padding:var(--at-space-2) var(--at-space-3);border:1px solid {{ c.ring }};border-radius:var(--at-radius-sm)">
+          <span style="flex:1;font-size:var(--at-text-sm)"><strong>{{ c.label }}</strong><sc-if value="{{ c.critical }}" hint-placeholder-val="{{ false }}"> <span style="font-size:var(--at-text-2xs);color:var(--at-color-danger);font-weight:var(--at-weight-bold)">CRITICAL</span></sc-if></span>
+          <button type="button" onClick="{{ c.pass }}" aria-label="Pass" style="width:44px;height:36px;border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:{{ c.passBg }};color:{{ c.passFg }};cursor:pointer"><i class="ph-fill ph-check"></i></button>
+          <button type="button" onClick="{{ c.fail }}" aria-label="Fail" style="width:44px;height:36px;border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:{{ c.failBg }};color:{{ c.failFg }};cursor:pointer"><i class="ph-fill ph-x"></i></button>
+        </div>
+      </sc-for>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--at-space-2)">
+        <sc-for list="{{ readings }}" as="r" hint-placeholder-count="3"><label style="display:flex;flex-direction:column;gap:2px;font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold)">{{ r.label }}<input value="{{ r.value }}" onChange="{{ r.on }}" inputMode="decimal" placeholder="{{ r.ph }}" style="height:var(--at-size-touch);border:1px solid {{ r.border }};border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-md)"><span style="font-weight:var(--at-weight-regular);color:{{ r.helpColor }};min-height:14px">{{ r.help }}</span></label></sc-for>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:var(--at-space-2)">
+        <sc-for list="{{ photos }}" as="p" hint-placeholder-count="4"><button type="button" onClick="{{ p.take }}" style="aspect-ratio:1/1;border:1px dashed {{ p.border }};border-radius:var(--at-radius-sm);background:{{ p.bg }};cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:var(--at-text-2xs)"><i class="{{ p.icon }}" style="font-size:var(--at-text-xl);color:{{ p.color }}"></i>{{ p.label }}</button></sc-for>
+      </div>
+      
+      <sc-if value="{{ hasDefects }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Describe the defect(s)<textarea value="{{ defectNote }}" onChange="{{ onDefect }}" rows="3" style="border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:var(--at-space-2);font-family:inherit;font-size:var(--at-text-md)"></textarea></label></sc-if>
+      <label style="display:flex;gap:var(--at-space-2);align-items:flex-start;font-size:var(--at-text-sm);cursor:pointer"><input type="checkbox" checked="{{ certify }}" onChange="{{ toggleCertify }}" style="width:22px;height:22px;margin-top:2px;accent-color:var(--at-color-action-secondary)">I certify this vehicle was inspected and the information above is accurate.</label>
+      <span style="font-size:var(--at-text-sm);color:var(--at-color-danger);min-height:18px">{{ inspectErr }}</span>
+      <button type="button" onClick="{{ submitInspect }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer">{{ inspectLabel }}</button>
+    </div>
+    </sc-if>
+
+    <!-- SCANNER (load-out, pickup, drop-off, return) -->
+    <sc-if value="{{ vScan }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+      <div style="position:relative;height:150px;border-radius:var(--at-radius-md);background:var(--at-ink-900);overflow:hidden;display:flex;align-items:center;justify-content:center">
+        <div style="position:absolute;inset:18% 12%;border:2px solid var(--at-gold-500);border-radius:var(--at-radius-sm)"></div>
+        <div style="position:absolute;left:14%;right:14%;height:2px;background:var(--at-red-500);animation:atscan 1.6s ease-in-out infinite"></div>
+        <span style="position:relative;color:var(--at-ink-0);font-size:var(--at-text-xs)">{{ scanHint }}</span>
+      </div>
+      <div style="display:flex;gap:var(--at-space-2)"><input value="{{ code }}" onChange="{{ onCode }}" onKeyDown="{{ onCodeKey }}" placeholder="Or type the label number" aria-label="Barcode" style="flex:1;height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-family:var(--at-font-mono);font-size:var(--at-text-md);text-transform:uppercase"><button type="button" onClick="{{ submitCode }}" style="height:var(--at-size-touch);padding:0 var(--at-space-4);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold)">Enter</button></div>
+      <button type="button" onClick="{{ camScan }}" disabled="{{ scanDone }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer;opacity:{{ camOpacity }}"><i class="ph ph-barcode"></i> Scan next label</button>
+      <span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);color:{{ scanMsgColor }};min-height:18px">{{ scanMsg }}</span>
+      <div style="display:flex;justify-content:space-between;font-size:var(--at-text-sm)"><strong>{{ scanTitle }}</strong><span>{{ scannedCount }} / {{ expectedCount }}</span></div>
+      <sc-for list="{{ scanList }}" as="p" hint-placeholder-count="4">
+        <div style="padding:var(--at-space-2) var(--at-space-3);border:1px solid {{ p.ring }};border-radius:var(--at-radius-sm);background:{{ p.bg }};display:flex;flex-direction:column;gap:var(--at-space-1)">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:var(--at-text-sm)"><strong style="font-family:var(--at-font-mono)">{{ p.code }}</strong><span style="font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);color:{{ p.stateColor }}">{{ p.state }}</span></div>
+          <div style="display:flex;height:34px;align-items:stretch;background:var(--at-ink-0);padding:2px 0"><sc-for list="{{ p.bars }}" as="b" hint-placeholder-count="40"><span style="width:{{ b.w }};background:{{ b.bg }}"></span></sc-for></div>
+          <span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ p.label }} · {{ p.order }} · {{ p.flags }}</span>
+        </div>
+      </sc-for>
+      <button type="button" onClick="{{ finishScan }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-secondary);color:var(--at-color-action-secondary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer;opacity:{{ finishOpacity }}">{{ finishLabel }}</button>
+    </div>
+    </sc-if>
+
+    <!-- ROUTE -->
+    <sc-if value="{{ vRoute }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+      <div style="display:flex;justify-content:space-between;font-size:var(--at-text-sm)"><strong>{{ doneCount }} of {{ stopCount }} stops done</strong><span style="color:var(--at-color-text-muted)">{{ onBoard }} on board</span></div>
+      <div style="height:8px;border-radius:var(--at-radius-pill);background:var(--at-color-surface-muted);overflow:hidden"><div style="height:100%;width:{{ progress }};background:var(--at-color-action-secondary)"></div></div>
+      <sc-for list="{{ stops }}" as="s" hint-placeholder-count="5">
+        <button type="button" onClick="{{ s.open }}" style="display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:var(--at-space-3);align-items:center;text-align:left;padding:var(--at-space-3);min-height:var(--at-size-touch);border:1px solid {{ s.ring }};border-radius:var(--at-radius-md);background:var(--at-color-surface);cursor:pointer;color:inherit">
+          <span style="width:36px;height:36px;border-radius:var(--at-radius-pill);background:{{ s.dotBg }};color:{{ s.dotFg }};display:grid;place-items:center"><i class="{{ s.icon }}" style="font-size:var(--at-text-lg)"></i></span>
+          <span style="display:flex;flex-direction:column;min-width:0"><strong style="font-size:var(--at-text-md)">{{ s.n }}. {{ s.kindLabel }} · {{ s.name }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ s.address }}</span><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ s.window }} · {{ s.pkgs }} pkg{{ s.flags }}</span></span>
+          <span style="font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);color:{{ s.statusColor }}">{{ s.statusLabel }}</span>
+        </button>
+      </sc-for>
+    </div>
+    </sc-if>
+
+    <!-- STOP -->
+    <sc-if value="{{ vStop }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+      <div style="height:130px;border-radius:var(--at-radius-md);background:repeating-linear-gradient(135deg,var(--at-ink-100) 0 8px,var(--at-ink-50) 8px 16px);display:flex;align-items:flex-end;justify-content:space-between;padding:var(--at-space-3);font-size:var(--at-text-xs);color:var(--at-ink-600)"><span>Map · {{ stop.eta }}</span><a href="{{ stop.mapUrl }}" target="_blank" style="font-weight:var(--at-weight-bold)">Navigate ↗</a></div>
+      <div><span style="font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);letter-spacing:var(--at-tracking-caps);text-transform:uppercase;color:var(--at-color-text-muted)">Stop {{ stop.n }} · {{ stop.kindLabel }}</span><div style="font-size:var(--at-text-xl);font-weight:var(--at-weight-bold)">{{ stop.name }}</div><div style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">{{ stop.address }}</div><div style="font-size:var(--at-text-sm)">{{ stop.window }} · {{ stop.note }}</div></div>
+      <sc-if value="{{ stop.hasPrefs }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-3);border-radius:var(--at-radius-md);border:1px solid var(--at-gold-300);background:var(--at-gold-50);display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm)"><strong style="display:flex;gap:var(--at-space-2);align-items:center"><i class="ph ph-note"></i>Customer instructions</strong><span><strong>{{ stop.prefLabel }}</strong></span><sc-if value="{{ stop.hasNote }}" hint-placeholder-val="{{ false }}"><span>“{{ stop.prefNote }}”</span></sc-if><span style="color:var(--at-color-text-muted)">{{ stop.contactLabel }}</span><sc-if value="{{ stop.codeRequired }}" hint-placeholder-val="{{ false }}"><span style="color:var(--at-color-danger);font-weight:var(--at-weight-semibold)"><i class="ph ph-key"></i> Delivery code required at handover{{ stop.perishNote }}</span></sc-if></div></sc-if>
+      <div style="display:flex;gap:var(--at-space-2)"><button type="button" onClick="{{ callContact }}" style="flex:1;height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold)"><i class="ph ph-phone"></i> Call</button><button type="button" onClick="{{ textContact }}" style="flex:1;height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold)"><i class="ph ph-chat-text"></i> Text</button></div>
+      <div style="display:flex;flex-direction:column;border:1px solid var(--at-color-border);border-radius:var(--at-radius-md)"><sc-for list="{{ stop.pkgList }}" as="p" hint-placeholder-count="2"><div style="display:flex;align-items:center;gap:var(--at-space-2);padding:var(--at-space-2) var(--at-space-3);border-top:1px solid var(--at-color-border);font-size:var(--at-text-sm)"><i class="{{ p.icon }}" style="color:{{ p.color }};font-size:var(--at-text-lg)"></i><span style="flex:1"><strong style="font-family:var(--at-font-mono)">{{ p.code }}</strong> · {{ p.label }}</span></div></sc-for></div>
+      <sc-if value="{{ stop.isPending }}" hint-placeholder-val="{{ true }}"><div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+        <sc-if value="{{ arriveBlocked }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-3);border-radius:var(--at-radius-md);background:var(--at-color-warning-bg);font-size:var(--at-text-sm);display:flex;flex-direction:column;gap:var(--at-space-2)"><strong>Before you can arrive</strong><sc-for list="{{ readiness }}" as="r" hint-placeholder-count="3"><span><i class="{{ r.icon }}" style="color:{{ r.color }}"></i> {{ r.label }}</span></sc-for><button type="button" onClick="{{ fixReadiness }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm)">{{ fixLabel }}</button></div></sc-if>
+        <button type="button" onClick="{{ arrive }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer;opacity:{{ arriveOpacity }}">I’ve arrived</button>
+        <span style="font-size:var(--at-text-sm);color:var(--at-color-danger);min-height:18px">{{ stopErr }}</span></div></sc-if>
+      <sc-if value="{{ stop.isArrived }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+          <button type="button" onClick="{{ openStopScan }}" style="height:var(--at-size-control-lg);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer"><i class="ph ph-barcode"></i> Scan packages ({{ stop.scanned }}/{{ stop.total }})</button>
+          <sc-if value="{{ stop.isPickup }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Handed over by (seller staff name)<input value="{{ handover }}" onChange="{{ onHandover }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-md)"></label></sc-if>
+          <sc-if value="{{ stop.isDrop }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:var(--at-space-2)"><strong style="font-size:var(--at-text-sm)">How was it delivered?</strong>
+              <sc-for list="{{ dmOpts }}" as="o" hint-placeholder-count="4"><label style="display:flex;gap:var(--at-space-3);align-items:flex-start;padding:var(--at-space-2) var(--at-space-3);min-height:var(--at-size-touch);border:1px solid {{ o.ring }};border-radius:var(--at-radius-sm);background:{{ o.bg }};cursor:pointer;opacity:{{ o.opacity }}"><input type="radio" name="dm" checked="{{ o.on }}" onChange="{{ o.pick }}" disabled="{{ o.disabled }}" style="width:20px;height:20px;margin-top:2px;accent-color:var(--at-color-action-secondary)"><span style="font-size:var(--at-text-sm)"><strong>{{ o.label }}</strong><br><span style="color:var(--at-color-text-muted);font-size:var(--at-text-xs)">{{ o.hint }}</span></span></label></sc-for>
+            </div>
+            <sc-if value="{{ dmCustomer }}" hint-placeholder-val="{{ true }}"><label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Customer’s 4-digit code<input value="{{ otp }}" onChange="{{ onOtp }}" inputMode="numeric" maxLength="4" placeholder="••••" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-md);background:var(--at-color-surface);height:var(--at-size-control-lg);text-align:center;font-size:var(--at-text-2xl);letter-spacing:.4em"></label><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">Demo code: {{ stop.otp }} · sent by SMS when the route started</span></sc-if>
+            <sc-if value="{{ dmProxy }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--at-space-2)"><label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Received by<input value="{{ recipient }}" onChange="{{ onRecipient }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-md);background:var(--at-color-surface)"></label><label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Relationship<select value="{{ relation }}" onChange="{{ onRelation }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-md);background:var(--at-color-surface)"><option value="">Choose…</option><option value="Family member">Family member</option><option value="Neighbour">Neighbour</option><option value="Roommate">Roommate</option><option value="Front desk / concierge">Front desk / concierge</option><option value="Colleague">Colleague</option></select></label></div></sc-if>
+            <sc-if value="{{ dmSafe }}" hint-placeholder-val="{{ false }}"><label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Safe place<select value="{{ safePlace }}" onChange="{{ onSafe }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-md);background:var(--at-color-surface)"><option value="">Choose…</option><option value="Front door">Front door</option><option value="Back porch">Back porch</option><option value="Garage">Garage</option><option value="Mailroom">Mailroom</option></select></label><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">Allowed because the customer opted in and nothing here is perishable or ID-restricted.</span></sc-if>
+            <sc-if value="{{ needSig }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:var(--at-space-1)"><div style="display:flex;justify-content:space-between;font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)"><span>Signature</span><button type="button" onClick="{{ clearSig }}" style="border:0;background:none;color:var(--at-color-link);cursor:pointer;font-size:var(--at-text-xs)">Clear</button></div><canvas ref="{{ sigRef }}" width="330" height="120" onPointerDown="{{ sigDown }}" onPointerMove="{{ sigMove }}" onPointerUp="{{ sigUp }}" onPointerLeave="{{ sigUp }}" style="width:100%;height:120px;border:1px dashed {{ sigBorder }};border-radius:var(--at-radius-sm);background:var(--at-ink-0);touch-action:none"></canvas></div></sc-if>
+            <sc-if value="{{ hasPodImg }}" hint-placeholder-val="{{ false }}"><div style="position:relative;border-radius:var(--at-radius-md);overflow:hidden;border:2px solid var(--at-color-success)"><div role="img" aria-label="Proof of delivery photo" style="width:100%;height:180px;background:{{ podBg }}"></div><span style="position:absolute;left:8px;bottom:8px;padding:2px 8px;border-radius:var(--at-radius-pill);background:var(--at-color-header-bg);color:var(--at-color-header-text);font-size:var(--at-text-2xs)">{{ podStamp }}</span></div></sc-if>
+            <button type="button" onClick="{{ takePod }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm);border-style:dashed;border-color:{{ podBorder }}"><i class="{{ podIcon }}"></i> {{ podLabel }}</button>
+            
+            <span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ geoLine }}</span>
+          </sc-if>
+          <span style="font-size:var(--at-text-sm);color:var(--at-color-danger);min-height:18px">{{ stopErr }}</span>
+          <button type="button" onClick="{{ complete }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-secondary);color:var(--at-color-action-secondary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer">{{ completeLabel }}</button>
+          <button type="button" onClick="{{ openEx }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm);color:var(--at-color-danger);border-color:var(--at-red-100)"><i class="ph ph-warning"></i> Report a problem</button>
+          <sc-if value="{{ exOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:var(--at-space-3);padding:var(--at-space-3);border:1px solid var(--at-red-100);border-radius:var(--at-radius-md);background:var(--at-color-danger-bg)">
+            <strong>What went wrong?</strong>
+            <sc-for list="{{ exTypes }}" as="t" hint-placeholder-count="6"><label style="display:flex;gap:var(--at-space-2);align-items:flex-start;padding:var(--at-space-2);border:1px solid {{ t.ring }};border-radius:var(--at-radius-sm);background:var(--at-color-surface);cursor:pointer"><input type="radio" name="ex" checked="{{ t.on }}" onChange="{{ t.pick }}" style="width:18px;height:18px;margin-top:2px;accent-color:var(--at-red-600)"><span style="font-size:var(--at-text-sm)"><strong>{{ t.label }}</strong><br><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ t.hint }}</span></span></label></sc-for>
+            <sc-if value="{{ exNoShow }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:var(--at-space-2)"><div style="display:flex;gap:var(--at-space-2)"><button type="button" onClick="{{ exCall }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm);flex:1">{{ callLabel }}</button><button type="button" onClick="{{ exText }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm);flex:1">{{ textLabel }}</button></div><button type="button" onClick="{{ startWait }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm)"><i class="ph ph-timer"></i> {{ waitLabel }}</button><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">Policy: call and text, then wait 5 minutes before choosing a fallback. The customer gets a live “driver is waiting” message.</span></div></sc-if>
+            <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Notes<textarea value="{{ exNote }}" onChange="{{ onExNote }}" rows="2" placeholder="{{ exNotePh }}" style="border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:var(--at-space-2);font-family:inherit;font-size:var(--at-text-md)"></textarea></label>
+            <sc-if value="{{ hasExImg }}" hint-placeholder-val="{{ false }}"><div role="img" aria-label="Problem photo" style="width:100%;height:140px;border-radius:var(--at-radius-sm);background:{{ exBg }}"></div></sc-if>
+            <button type="button" onClick="{{ exTakePhoto }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm);border-style:dashed"><i class="{{ exPhotoIcon }}"></i> {{ exPhotoLabel }}</button>
+            <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">What happens next<select value="{{ exRes }}" onChange="{{ onExRes }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-md);background:var(--at-color-surface)"><sc-for list="{{ exResOpts }}" as="o" hint-placeholder-count="4"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></label>
+            <span style="font-size:var(--at-text-sm);color:var(--at-color-danger);min-height:18px">{{ exErr }}</span>
+            <div style="display:flex;gap:var(--at-space-2)"><button type="button" onClick="{{ submitEx }}" style="flex:1;height:var(--at-size-touch);border:0;border-radius:var(--at-radius-pill);background:var(--at-red-600);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer">Submit</button><button type="button" onClick="{{ closeEx }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm)">Cancel</button></div>
+          </div>
+          </sc-if>
+        </div>
+      </sc-if>
+      <sc-if value="{{ stop.isClosed }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-3);border-radius:var(--at-radius-md);background:{{ stop.closedBg }};font-size:var(--at-text-sm)"><strong>{{ stop.statusLabel }}</strong> · {{ stop.closedNote }}</div></sc-if>
+    </div>
+    </sc-if>
+
+    <!-- END -->
+    <sc-if value="{{ vEnd }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+      <div style="padding:var(--at-space-4);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);font-size:var(--at-text-sm);display:flex;flex-direction:column;gap:var(--at-space-1)"><strong style="font-size:var(--at-text-lg)">Shift summary</strong><span>{{ deliveredCount }} delivered · {{ failedCount }} failed · {{ returnCount }} to return</span><span style="color:var(--at-color-text-muted)">Failed and undelivered packages must be scanned back in at {{ route.depot }}.</span></div>
+      <sc-if value="{{ needReturnScan }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ openReturnScan }}" style="height:var(--at-size-control-lg);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer"><i class="ph ph-barcode"></i> Scan returns ({{ returnScanned }}/{{ returnCount }})</button></sc-if>
+      <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">End odometer (mi)<input value="{{ odoEnd }}" onChange="{{ onOdoEnd }}" inputMode="numeric" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-md)"></label>
+      <span style="font-size:var(--at-text-sm);color:var(--at-color-danger);min-height:18px">{{ endErr }}</span>
+      <button type="button" onClick="{{ endShift }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-secondary);color:var(--at-color-action-secondary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer">End shift</button>
+    </div>
+    </sc-if>
+
+    <!-- SYNC / PROFILE -->
+    <sc-if value="{{ vSync }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+      <div style="padding:var(--at-space-4);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);display:flex;flex-direction:column;gap:var(--at-space-1)"><strong style="font-size:var(--at-text-lg)">{{ userName }}</strong><span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">{{ userEmail }} · {{ userSite }}</span><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">Permissions: {{ userPerms }}</span></div>
+      <label style="display:flex;align-items:center;justify-content:space-between;padding:var(--at-space-3) var(--at-space-4);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);font-size:var(--at-text-md);cursor:pointer">Online (simulate signal)<input type="checkbox" checked="{{ online }}" onChange="{{ toggleOnline }}" style="width:22px;height:22px;accent-color:var(--at-color-action-secondary)"></label>
+      <div style="border:1px solid var(--at-color-border);border-radius:var(--at-radius-md)"><div style="padding:var(--at-space-3) var(--at-space-4);display:flex;justify-content:space-between"><strong>Outbox</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ lastSync }}</span></div>
+        <sc-for list="{{ outbox }}" as="e" hint-placeholder-count="3"><div style="display:flex;gap:var(--at-space-2);padding:var(--at-space-2) var(--at-space-4);border-top:1px solid var(--at-color-border);font-size:var(--at-text-xs)"><i class="{{ e.icon }}" style="color:{{ e.color }}"></i><span style="flex:1;overflow-wrap:break-word"><strong>{{ e.status }}</strong> · {{ e.stop }}<br><span style="font-family:var(--at-font-mono);color:var(--at-color-text-muted)">{{ e.id }}</span></span><span>{{ e.state }}</span></div></sc-for>
+      </div>
+      <button type="button" onClick="{{ logout }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold)">Sign out</button>
+    </div>
+    </sc-if>
+  </div>
+
+  <sc-if value="{{ authed }}" hint-placeholder-val="{{ false }}">
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);padding:var(--at-space-2) var(--at-space-2) var(--at-space-6);border-top:1px solid var(--at-color-border)">
+    <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="4"><button type="button" onClick="{{ t.go }}" style="display:flex;flex-direction:column;align-items:center;gap:2px;min-height:var(--at-size-touch);border:0;background:none;cursor:pointer;font-size:var(--at-text-xs);color:{{ t.color }};font-weight:{{ t.weight }}"><i class="{{ t.icon }}" style="font-size:var(--at-text-2xl)"></i>{{ t.label }}</button></sc-for>
+  </div>
+  </sc-if>
+  <sc-if value="{{ camOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="position:absolute;inset:0;z-index:6;background:var(--at-ink-1000);color:var(--at-ink-0);display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;gap:var(--at-space-2);padding:var(--at-space-6) var(--at-space-4) var(--at-space-2)"><button type="button" onClick="{{ camClose }}" aria-label="Close camera" style="width:44px;height:44px;border:0;border-radius:var(--at-radius-pill);background:var(--at-ink-800);color:var(--at-ink-0);cursor:pointer"><i class="ph ph-x" style="font-size:var(--at-text-xl)"></i></button><strong style="flex:1;font-size:var(--at-text-md)">{{ camTitle }}</strong><span style="font-size:var(--at-text-2xs);color:var(--at-ink-300)">LIVE</span></div>
+    <div style="position:relative;flex:1;margin:0 var(--at-space-3);border-radius:var(--at-radius-md);overflow:hidden;background:var(--at-ink-900)">
+      <video ref="{{ videoRef }}" autoPlay="{{ true }}" playsInline="{{ true }}" muted="{{ true }}" style="width:100%;height:100%;object-fit:cover;display:block"></video>
+      <div style="position:absolute;inset:18% 10%;border:2px solid var(--at-gold-500);border-radius:var(--at-radius-sm);pointer-events:none"></div>
+      <span style="position:absolute;left:10px;bottom:10px;padding:2px 8px;border-radius:var(--at-radius-pill);background:rgb(0 0 0 / .6);font-size:var(--at-text-2xs)">{{ camStamp }}</span>
+      <sc-if value="{{ camHasMsg }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--at-space-3);padding:var(--at-space-6);text-align:center;background:var(--at-ink-900)"><i class="{{ camMsgIcon }}" style="font-size:40px"></i><span style="font-size:var(--at-text-sm);line-height:var(--at-leading-normal)">{{ camMsg }}</span><sc-if value="{{ camFailed }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ camDemo }}" style="height:var(--at-size-touch);padding:0 var(--at-space-4);border:1px solid var(--at-ink-600);border-radius:var(--at-radius-pill);background:var(--at-ink-800);color:var(--at-ink-0);cursor:pointer;font-weight:var(--at-weight-semibold)">Continue with a demo photo (preview only)</button></sc-if></div></sc-if>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-around;padding:var(--at-space-5) var(--at-space-4) var(--at-space-8)">
+      <span style="width:44px;font-size:var(--at-text-2xs);color:var(--at-ink-300);text-align:center">No gallery uploads</span>
+      <button type="button" onClick="{{ camShoot }}" disabled="{{ camNotReady }}" aria-label="Take photo" style="width:74px;height:74px;border-radius:var(--at-radius-pill);border:4px solid var(--at-ink-0);background:var(--at-gold-500);cursor:pointer;opacity:{{ camShootOpacity }}"></button>
+      <button type="button" onClick="{{ camFlip }}" aria-label="Switch camera" style="width:44px;height:44px;border:0;border-radius:var(--at-radius-pill);background:var(--at-ink-800);color:var(--at-ink-0);cursor:pointer"><i class="ph ph-camera-rotate" style="font-size:var(--at-text-xl)"></i></button>
+    </div>
+  </div>
+  </sc-if>
+  <sc-if value="{{ sosOpen }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;inset:0;background:var(--at-color-overlay);display:flex;align-items:flex-end;z-index:5"><div style="width:100%;background:var(--at-color-surface);border-radius:var(--at-radius-lg) var(--at-radius-lg) 0 0;padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-2)"><strong style="font-size:var(--at-text-lg)">Report an incident</strong><span style="font-size:var(--at-text-sm);color:var(--at-color-danger)">In an emergency call 911 first.</span><sc-for list="{{ sosOpts }}" as="o" hint-placeholder-count="4"><button type="button" onClick="{{ o.go }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm);text-align:left;padding:0 var(--at-space-4)"><i class="{{ o.icon }}"></i> {{ o.label }}</button></sc-for><button type="button" onClick="{{ closeSos }}" style="height:var(--at-size-touch);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer;font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm)">Cancel</button></div></div></sc-if>
+  <sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}"><div style="position:absolute;left:var(--at-space-4);right:var(--at-space-4);bottom:96px;padding:var(--at-space-3) var(--at-space-4);border-radius:var(--at-radius-md);background:var(--at-color-header-bg);color:var(--at-color-header-text);font-size:var(--at-text-sm);box-shadow:var(--at-shadow-md)">{{ toast }}</div></sc-if>
+</div>
+
+<div style="max-width:400px;display:flex;flex-direction:column;gap:var(--at-space-3);padding-top:var(--at-space-6)">
+  <span style="font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);letter-spacing:var(--at-tracking-caps);text-transform:uppercase;color:var(--at-color-text-muted)">AfroTransact Delivery · driver app</span>
+  <h1 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-black);line-height:1.1">Sign in, inspect, load, deliver — every step scanned and synced.</h1>
+  <ol style="margin:0;padding-left:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-2);color:var(--at-color-text-muted);line-height:var(--at-leading-normal);font-size:var(--at-text-sm)">
+    <li><strong>Sign in + MFA.</strong> Access is checked against the permission <code>delivery:operate</code> (Driver role, or granted directly to e.g. an ops admin). Revoking it in Backoffice → Access control signs the driver out live.</li>
+    <li><strong>Pre-trip inspection.</strong> 10-point DVIR, odometer, fuel, cold-box temperature (required for perishables, 33–40°F) and 4 photos. A failed critical item blocks the route and alerts dispatch.</li>
+    <li><strong>Load-out scan.</strong> Every shipment label from the FC manifest is scanned (Code 128). Unknown or duplicate labels are rejected.</li>
+    <li><strong>Stops.</strong> Seller pickups: scan each label + handover name. Drop-offs: scan, photo and the customer’s one-time code.</li>
+    <li><strong>End of shift.</strong> Failed packages are scanned back into the FC; odometer must increase.</li>
+  </ol>
+  <p style="margin:0;color:var(--at-color-text-muted);font-size:var(--at-text-sm)">Each action is an event with an idempotency key in an on-device outbox. Offline, events queue; online, they sync in order to order-service (actor: AfroTransact Delivery). Watch them in <a href="AfroTransact Backoffice.dc.html">Backoffice → Delivery dispatch</a>.</p>
+  <button type="button" onClick="{{ resetRoute }}" style="align-self:flex-start;height:var(--at-size-control-sm);padding:0 var(--at-space-4);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-color-surface);cursor:pointer">Reset demo route</button>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const KEY = 'at.delivery.v1';
+const ROUTE = { id: 'RT-HOU-PM', zone: 'Houston SW', window: '1:00–5:00 pm', vehicle: 'Ford Transit · TX-7P10', depot: 'Houston FC', odo: 48210 };
+const PKGS = [
+  ['ATS7K2Q9H4M1', 'AfroTransact Brand · jollof seasoning ×2', '112-4401731', 'fc', '', 's3'], ['ATS3NP8D2LQ6', 'Aged basmati 10 lb', '112-4401802', 'fc', 'heavy', 's4'], ['ATS9WX4T1BC8', 'African black soap ×3', '112-4401855', 'fc', '', 's5'],
+  ['ATS5RM2J7VZ3', "Ofada rice ×2 (Mama Tee's)", '112-4401731', 's1', '', 's3'], ['ATS8HD6K3PF2', 'Party jollof tray', '112-4401907', 's1', 'perishable · keep upright', 's5']
+].map(([code, label, order, from, flags, to]) => ({ code, label, order, from, flags, to }));
+const STOPS = [
+  { id: 's1', kind: 'pickup', name: "Mama Tee's Pantry", address: '7100 Bellaire Blvd, Unit 14, Houston, TX 77074', window: '1:35–1:50 pm', note: 'Counter pickup · ask for Titi', otp: '', eta: '12 min' },
+  { id: 's3', kind: 'dropoff', name: 'Adaeze N.', address: '9800 Westheimer Rd, Houston, TX 77042', window: '2:10–2:40 pm', note: 'Front desk if away', otp: '4821', eta: '18 min', prefs: { pref: 'hand', place: '', note: 'Ring 2B · front desk can sign if I’m away', contact: 'text', perishable: false } },
+  { id: 's4', kind: 'dropoff', name: 'Kunle B.', address: '2400 Fountain View Dr, Apt 318, Houston, TX 77057', window: '2:45–3:15 pm', note: 'Gate code after arrival', otp: '1934', eta: '9 min', prefs: { pref: 'door', place: 'Front door', note: 'Gate code 4471 · Apt 318 is upstairs on the left', contact: 'text', perishable: false } },
+  { id: 's5', kind: 'dropoff', name: 'Grace W.', address: '6200 Hillcroft Ave, Houston, TX 77081', window: '3:20–3:50 pm', note: 'Perishable — hand to customer', otp: '5507', eta: '14 min', prefs: { pref: 'hand', place: '', note: 'Call when outside — no doorbell', contact: 'call', perishable: true } }
+];
+const CHECKS = [['tyres', 'Tyres & wheels', true], ['brakes', 'Brakes', true], ['lights', 'Lights & signals', true], ['mirrors', 'Mirrors & windshield', false], ['wipers', 'Horn & wipers', false], ['leaks', 'No fluid leaks', false], ['cargo', 'Cargo area clean & secure', false], ['cold', 'Cold box powered', false], ['safety', 'Extinguisher & first-aid kit', false], ['mount', 'Phone mount & charger', false]];
+const fresh = () => ({ shift: 'off', inspect: { res: {}, odo: '', fuel: '', temp: '', photos: {}, defect: '', certify: false, done: false }, loaded: [], stops: STOPS.map((s) => ({ ...s, status: 'pending', scanned: [], closedNote: '' })), returned: [], odoEnd: '', events: [], outbox: [] });
+const load = () => { try { const r = JSON.parse(localStorage.getItem(KEY) || 'null'); return r && r.stops && r.inspect ? { ...r, stops: r.stops.map((x) => { const b = STOPS.find((y) => y.id === x.id) || {}; return { ...x, prefs: x.prefs || b.prefs }; }) } : fresh(); } catch (e) { return fresh(); } };
+const keyOf = () => 'evt_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+class Component extends DCLogic {
+  state = { ...load(), view: 'login', auth: null, email: '', pw: '', loginErr: '', busy: false, pendingUser: null, mfa: '', mfaErr: '', deniedMsg: '', stopId: null, scanCtx: null, code: '', scanMsg: '', scanOk: true, otp: '', pod: false, failReason: '', handover: '', stopErr: '', inspectErr: '', endErr: '', online: true, lastSync: 'never', toast: '', dm: 'customer', recipient: '', relation: '', safePlace: '', sig: false, exOpen: false, exType: '', exNote: '', exPhoto: false, exRes: '', exErr: '', called: false, texted: false, waitLeft: null, sosOpen: false };
+  sigRef = React.createRef();
+  camRef = React.createRef();
+  videoRef = React.createRef();
+  snap(target) { this._camTarget = target; this.setState({ camOpen: true, camTarget: target, camState: 'starting', camFacing: this.state.camFacing || 'environment' }, () => this.startCam()); }
+  async startCam() {
+    this.stopCam();
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw Object.assign(new Error('nocam'), { name: 'NotFoundError' });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: this.state.camFacing || 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      if (!this.state.camOpen) { stream.getTracks().forEach((t) => t.stop()); return; }
+      this._stream = stream; const v = this.videoRef.current; if (v) { v.srcObject = stream; await v.play().catch(() => {}); }
+      this.setState({ camState: 'live' });
+    } catch (e) { this.setState({ camState: e && e.name === 'NotAllowedError' ? 'denied' : 'unavailable' }); }
+  }
+  stopCam() { if (this._stream) { this._stream.getTracks().forEach((t) => t.stop()); this._stream = null; } }
+  shoot() {
+    const v = this.videoRef.current; if (!v || !v.videoWidth) return;
+    const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; const x = c.getContext('2d'); x.drawImage(v, 0, 0, c.width, c.height);
+    const stamp = new Date().toLocaleString() + ' · 29.7376, -95.5134 · ' + ROUTE.id; const h = Math.round(c.height * 0.07);
+    x.fillStyle = 'rgba(0,0,0,0.55)'; x.fillRect(0, c.height - h, c.width, h); x.fillStyle = '#FFFFFF'; x.font = Math.round(h * 0.45) + 'px sans-serif'; x.fillText(stamp, Math.round(h * 0.4), c.height - Math.round(h * 0.35));
+    const url = c.toDataURL('image/jpeg', 0.82); this.stopCam(); this.setState({ camOpen: false }); this.applyPhoto(this.state.camTarget, url);
+    this.emit('Photo captured', this.state.camTarget === 'pod' ? 'Proof of delivery' : this.state.camTarget === 'ex' ? 'Exception evidence' : 'Vehicle inspection', 'live camera · ' + Math.round(url.length / 1024) + ' KB · SHA-256 queued');
+  }
+  demoPhoto(label) { const c = document.createElement('canvas'); c.width = 640; c.height = 360; const x = c.getContext('2d'); const g = x.createLinearGradient(0, 0, 640, 360); g.addColorStop(0, '#C8C3B8'); g.addColorStop(1, '#7C776D'); x.fillStyle = g; x.fillRect(0, 0, 640, 360); x.fillStyle = '#2D2B27'; x.fillRect(220, 140, 200, 150); x.fillStyle = '#FFD400'; x.fillRect(245, 165, 150, 40); x.fillStyle = '#FFFFFF'; x.font = 'bold 26px sans-serif'; x.fillText(label, 24, 44); x.font = '18px sans-serif'; x.fillText(new Date().toLocaleString() + ' · 29.7376, -95.5134', 24, 336); return c.toDataURL('image/jpeg', 0.8); }
+  applyPhoto(target, url) {
+    if (target === 'pod') this.setState({ pod: true, podUrl: url, podAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), stopErr: '' });
+    else if (target === 'ex') this.setState({ exPhoto: true, exUrl: url, exErr: '' });
+    else if (target && target.indexOf('insp:') === 0) { const k = target.slice(5); this.patch((st) => ({ inspect: { ...st.inspect, photos: { ...st.inspect.photos, [k]: url } } })); }
+  }
+  sigPos(e) { const c = this.sigRef.current; const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * (c.width / r.width), (e.clientY - r.top) * (c.height / r.height)]; }
+  componentDidMount() {
+    const watch = () => { if (!window.ATAccess) { this._w = setTimeout(watch, 60); return; } this._unsub = window.ATAccess.subscribe(() => { const a = this.state.auth; if (a && !window.ATAccess.can(a.user.id, 'delivery:operate')) { this.setState({ auth: null, view: 'denied', deniedMsg: 'Your driver access was just removed by an administrator. Unsynced events were kept on this device.' }); } }); };
+    watch();
+    const pull = () => { try { const p = JSON.parse(localStorage.getItem('at.delivery.prefs.v1') || 'null'); if (!p) return; this.setState((st) => ({ stops: st.stops.map((x) => (x.id === 's3' ? { ...x, otp: p.code || x.otp, prefs: { pref: p.pref, place: p.place, note: p.note, contact: p.contact, perishable: p.perishable }, note: 'Order ' + p.order } : x)) })); } catch (e) { /* ignore */ } };
+    pull(); this._pp = (e) => { if (e.key === 'at.delivery.prefs.v1') pull(); }; window.addEventListener('storage', this._pp);
+  }
+  componentWillUnmount() { this.stopCam(); clearInterval(this._wait); clearTimeout(this._w); if (this._unsub) this._unsub(); }
+  persist(next) { try { localStorage.setItem(KEY, JSON.stringify({ shift: next.shift, inspect: next.inspect, loaded: next.loaded, stops: next.stops, returned: next.returned, odoEnd: next.odoEnd, events: next.events, outbox: next.outbox })); } catch (e) { /* storage blocked */ } }
+  emit(status, stop, order) {
+    const ev = { id: keyOf(), status, stop, order, at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), by: this.state.auth ? this.state.auth.user.name : 'driver' };
+    this.setState((s) => { const n = { ...s, outbox: [ev, ...s.outbox] }; this.persist(n); return n; }, () => this.flush());
+  }
+  flush() {
+    if (!this.state.online || !this.state.outbox.length) return;
+    clearTimeout(this._f); this._f = setTimeout(() => this.setState((s) => { const sent = [...s.outbox].reverse(); const seen = new Set(s.events.map((e) => e.id)); const n = { ...s, events: [...sent.filter((e) => !seen.has(e.id)).reverse(), ...s.events].slice(0, 60), outbox: [], lastSync: 'Synced ' + sent.length + ' event(s) at ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }; this.persist(n); return n; }), 500);
+  }
+  patch(fn) { this.setState((s) => { const n = { ...s, ...fn(s) }; this.persist(n); return n; }); }
+  flash(t) { clearTimeout(this._t); this.setState({ toast: t }); this._t = setTimeout(() => this.setState({ toast: '' }), 2400); }
+  expected(ctx) {
+    const s = this.state; if (!ctx) return [];
+    if (ctx.type === 'loadout') return PKGS.filter((p) => p.from === 'fc');
+    if (ctx.type === 'pickup') return PKGS.filter((p) => p.from === ctx.stopId);
+    if (ctx.type === 'drop') return PKGS.filter((p) => p.to === ctx.stopId);
+    if (ctx.type === 'return') { const failed = s.stops.filter((x) => x.status === 'failed').map((x) => x.id); return PKGS.filter((p) => failed.includes(p.to)); }
+    return [];
+  }
+  scannedFor(ctx) { const s = this.state; if (!ctx) return []; if (ctx.type === 'loadout') return s.loaded; if (ctx.type === 'return') return s.returned; const st = s.stops.find((x) => x.id === ctx.stopId); return st ? st.scanned : []; }
+  doScan(raw) {
+    const ctx = this.state.scanCtx; const code = String(raw || '').trim().toUpperCase(); const exp = this.expected(ctx); const have = this.scannedFor(ctx);
+    if (!code) return; if (!/^ATS[0-9A-Z]{9}$/.test(code)) return this.setState({ scanMsg: 'Not an AfroTransact shipment label (ATS + 9 characters).', scanOk: false, code: '' });
+    if (!exp.some((p) => p.code === code)) return this.setState({ scanMsg: code + ' isn’t expected here. Set it aside and tell dispatch.', scanOk: false, code: '' });
+    if (have.includes(code)) return this.setState({ scanMsg: code + ' was already scanned.', scanOk: false, code: '' });
+    this.patch((s) => (ctx.type === 'loadout' ? { loaded: [...s.loaded, code] } : ctx.type === 'return' ? { returned: [...s.returned, code] } : { stops: s.stops.map((x) => (x.id === ctx.stopId ? { ...x, scanned: [...x.scanned, code] } : x)) }));
+    this.setState({ scanMsg: '✓ ' + code + ' scanned', scanOk: true, code: '' });
+  }
+  podCheck(stop, pk) {
+    const s = this.state; const perish = pk.some((p) => /perishable/.test(p.flags));
+    if (s.dm === 'safe' && perish) return 'Perishable items must be handed to a person.';
+    if (s.dm === 'customer' && s.otp !== stop.otp) return 'That code doesn’t match. Ask for the 4-digit code from their SMS.';
+    if (s.dm === 'proxy' && (s.recipient.trim().length < 2 || !s.relation)) return 'Enter who received it and their relationship.';
+    if (s.dm === 'safe' && !s.safePlace) return 'Choose where you left it.';
+    if ((s.dm === 'proxy') && !s.sig) return 'Ask the recipient to sign.';
+    if (!s.pod) return 'Take a proof-of-delivery photo.';
+    return '';
+  }
+  podNote() { const s = this.state; return { customer: 'Handed to customer · code verified', proxy: 'Received by ' + s.recipient + ' (' + s.relation + ') · signed', safe: 'Left at ' + s.safePlace + ' · photo', desk: '' }[s.dm] + ' · photo ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · 29.7376° N, 95.5134° W'; }
+  exVals(stop) {
+    const s = this.state; if (!stop) return { exTypes: [], exResOpts: [], dmOpts: [] };
+    const drop = stop.kind === 'dropoff'; const pk = drop ? PKGS.filter((p) => p.to === stop.id) : PKGS.filter((p) => p.from === stop.id); const perish = pk.some((p) => /perishable/.test(p.flags));
+    const TYPES = drop ? [['noshow', 'Customer not available', 'Call, text, wait 5 minutes'], ['access', 'Can’t access the building / wrong address', 'Gate code, buzzer, address not found'], ['damaged', 'Package damaged', 'Photo required; customer may refuse'], ['refused', 'Customer refused', 'Record the reason'], ['missing', 'Package missing from van', 'Not found on board'], ['unsafe', 'Unsafe to deliver', 'Dog, hazard, threatening situation']] : [['notready', 'Order not ready', 'Seller still packing'], ['closed', 'Seller closed', 'No one at the shop'], ['count', 'Package count mismatch', 'Fewer or more packages than the manifest'], ['damagedPickup', 'Damaged at pickup', 'Refuse or accept with photo']];
+    const RES = drop ? { noshow: [['retry', 'Reattempt later on this route'], ['pickup', 'Take to AfroTransact pickup point (customer notified)'], ['return', 'Return to FC']], access: [['retry', 'Reattempt after contacting customer'], ['return', 'Return to FC']], damaged: [['return', 'Customer refused · return to FC'], ['partial', 'Customer accepted · log damage claim']], refused: [['return', 'Return to FC']], missing: [['return', 'Report missing · dispatch investigates']], unsafe: [['return', 'Return to FC'], ['pickup', 'Take to pickup point']] }
+      : { notready: [['wait', 'Wait up to 10 minutes'], ['skip', 'Skip · seller reschedules']], closed: [['skip', 'Skip · seller reschedules']], count: [['partial', 'Take what’s ready · rest rescheduled'], ['skip', 'Refuse all']], damagedPickup: [['skip', 'Refuse · seller repacks'], ['partial', 'Accept with damage photo']] };
+    const res = RES[s.exType] || []; const needPhoto = ['damaged', 'access', 'unsafe', 'damagedPickup', 'count'].includes(s.exType);
+    const fmt = (n) => Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0');
+    return {
+      dmOpts: [['customer', 'Handed to customer', 'Ask for their 4-digit code'], ['proxy', 'Handed to someone else', 'Name, relationship and signature'], ['safe', 'Left in a safe place', perish ? 'Not allowed — perishable items' : stop.prefs && stop.prefs.pref === 'door' ? 'Customer allowed: ' + (stop.prefs.place || 'door') + ' · photo required' : 'Customer didn’t allow safe drop']].map(([v, label, hint]) => { const dis = v === 'safe' && (perish || !(stop.prefs && stop.prefs.pref === 'door')); return { label, hint, on: s.dm === v, disabled: dis, opacity: dis ? 0.5 : 1, ring: s.dm === v ? 'var(--at-gold-500)' : 'var(--at-color-border)', bg: s.dm === v ? 'var(--at-gold-50)' : 'var(--at-color-surface)', pick: () => this.setState({ dm: v, stopErr: '' }) }; }),
+      dmCustomer: s.dm === 'customer', dmProxy: s.dm === 'proxy', dmSafe: s.dm === 'safe', needSig: s.dm === 'proxy', sigBorder: s.sig ? 'var(--at-color-success)' : 'var(--at-color-border-strong)',
+      recipient: s.recipient, onRecipient: (e) => this.setState({ recipient: e.target.value, stopErr: '' }), relation: s.relation, onRelation: (e) => this.setState({ relation: e.target.value, stopErr: '' }), safePlace: s.safePlace, onSafe: (e) => this.setState({ safePlace: e.target.value, stopErr: '' }),
+      sigRef: this.sigRef, sigDown: (e) => { const c = this.sigRef.current; if (!c) return; this._draw = true; const ctx = c.getContext('2d'); const [x, y] = this.sigPos(e); ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--at-ink-1000') || 'black'; ctx.beginPath(); ctx.moveTo(x, y); },
+      sigMove: (e) => { if (!this._draw) return; const ctx = this.sigRef.current.getContext('2d'); const [x, y] = this.sigPos(e); ctx.lineTo(x, y); ctx.stroke(); if (!this.state.sig) this.setState({ sig: true, stopErr: '' }); }, sigUp: () => { this._draw = false; },
+      clearSig: () => { const c = this.sigRef.current; if (c) c.getContext('2d').clearRect(0, 0, c.width, c.height); this.setState({ sig: false }); },
+      geoLine: s.pod ? 'Photo stamped ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · GPS 29.7376, −95.5134 · 18 m from address' : 'Photos are GPS- and time-stamped and must be within 150 m of the address.',
+      openEx: () => this.setState({ exOpen: !s.exOpen, exErr: '' }), closeEx: () => this.setState({ exOpen: false }), exOpen: s.exOpen,
+      exTypes: TYPES.map(([v, label, hint]) => ({ label, hint, on: s.exType === v, ring: s.exType === v ? 'var(--at-red-600)' : 'var(--at-color-border)', pick: () => this.setState({ exType: v, exRes: (RES[v] || [[]])[0][0] || '', exErr: '' }) })),
+      exNoShow: s.exType === 'noshow', callLabel: s.called ? '✓ Called' : 'Call customer', textLabel: s.texted ? '✓ Texted' : 'Text customer',
+      exCall: () => { this.setState({ called: true }); this.emit('Called customer', stop.name, 'masked number · no answer'); }, exText: () => { this.setState({ texted: true }); this.emit('Texted customer', stop.name, 'Your driver is outside'); },
+      waitLabel: s.waitLeft == null ? 'Start 5-minute wait' : s.waitLeft > 0 ? 'Waiting… ' + fmt(s.waitLeft) + ' (tap to skip — demo)' : '✓ Waited 5 minutes',
+      startWait: () => { if (s.waitLeft == null) { this.setState({ waitLeft: 300 }); clearInterval(this._wait); this._wait = setInterval(() => this.setState((st) => { if (st.waitLeft <= 1) { clearInterval(this._wait); return { waitLeft: 0 }; } return { waitLeft: st.waitLeft - 1 }; }), 1000); } else if (s.waitLeft > 0) { clearInterval(this._wait); this.setState({ waitLeft: 0 }); } },
+      exNote: s.exNote, onExNote: (e) => this.setState({ exNote: e.target.value, exErr: '' }), exNotePh: s.exType === 'access' ? 'e.g. Gate code 4471 didn’t work; buzzer unanswered' : 'What happened?',
+      exTakePhoto: () => this.setState({ exPhoto: true }), exPhotoIcon: s.exPhoto ? 'ph-fill ph-check-circle' : 'ph ph-camera', exPhotoLabel: s.exPhoto ? 'Photo captured ✓' : needPhoto ? 'Take photo (required)' : 'Take photo (optional)',
+      exRes: s.exRes, onExRes: (e) => this.setState({ exRes: e.target.value }), exResOpts: res.map(([v, l]) => ({ v, l })), exErr: s.exErr,
+      submitEx: () => {
+        if (!s.exType) return this.setState({ exErr: 'Choose what went wrong.' });
+        if (s.exType === 'noshow' && (!s.called || !s.texted || s.waitLeft !== 0)) return this.setState({ exErr: 'Call, text and complete the 5-minute wait first.' });
+        if (s.exType !== 'noshow' && s.exNote.trim().length < 5) return this.setState({ exErr: 'Add a short note for the customer and dispatch.' });
+        if (needPhoto && !s.exPhoto) return this.setState({ exErr: 'A photo is required for this problem.' });
+        const typeLabel = TYPES.find((t) => t[0] === s.exType)[1]; const resLabel = (res.find((r) => r[0] === s.exRes) || ['', ''])[1];
+        const status = s.exRes === 'retry' || s.exRes === 'wait' ? (s.exRes === 'wait' ? 'arrived' : 'retry') : s.exRes === 'partial' ? 'done' : 'failed';
+        this.patch((st) => ({ stops: st.stops.map((x) => (x.id === stop.id ? { ...x, status, closedNote: typeLabel + ' · ' + resLabel + (s.exNote ? ' · “' + s.exNote.trim() + '”' : '') } : x)), view: status === 'arrived' ? 'stop' : 'route', stopId: status === 'arrived' ? stop.id : null, exOpen: false }));
+        this.emit(status === 'failed' ? 'Delivery failed' : 'Exception', stop.name, typeLabel + ' → ' + resLabel); this.flash(typeLabel + ' logged · customer and dispatch notified');
+        if (s.exRes === 'wait') { this.setState({ exType: '', exNote: '', exPhoto: false }); }
+      },
+      sosOpen: s.sosOpen, openSos: () => this.setState({ sosOpen: true }), closeSos: () => this.setState({ sosOpen: false }),
+      sosOpts: [['Vehicle breakdown', 'ph ph-wrench'], ['Accident', 'ph ph-car-profile'], ['I feel unsafe', 'ph ph-shield-warning'], ['Medical issue', 'ph ph-first-aid']].map(([label, icon]) => ({ label, icon, go: () => { this.setState({ sosOpen: false }); this.emit('Incident: ' + label, ROUTE.vehicle, 'GPS 29.7376, −95.5134'); this.flash('Dispatch notified — they’ll call you now. Remaining stops can be reassigned.'); } }))
+    };
+  }
+  renderVals() {
+    const s0 = this.state; const ins0 = s0.inspect; const loaded0 = PKGS.filter((p) => p.from === 'fc').every((p) => s0.loaded.includes(p.code));
+    const readiness = [['Vehicle inspection passed', ins0.done], ['Load-out scan complete', loaded0], ['Route started', s0.shift === 'on']].map(([label, ok]) => ({ label, icon: ok ? 'ph-fill ph-check-circle' : 'ph ph-circle', color: ok ? 'var(--at-color-success)' : 'var(--at-color-warning)' }));
+    const extraRV = { readiness, arriveBlocked: s0.shift !== 'on', arriveOpacity: s0.shift === 'on' ? 1 : 0.55,
+      fixLabel: !ins0.done ? 'Go to vehicle inspection' : !loaded0 ? 'Scan load-out now' : 'Start route now',
+      fixReadiness: () => { if (!ins0.done) return this.setState({ view: 'inspect' }); if (!loaded0) return this.setState({ view: 'scan', scanCtx: { type: 'loadout' } }); this.patch(() => ({ shift: 'on' })); this.emit('Route started', ROUTE.id, 'Delivery codes sent to 3 customers'); this.flash('Route started — tap “I’ve arrived” when you get there'); },
+      camRef: this.camRef, onPhoto: (e) => { const file = e.target.files && e.target.files[0]; if (!file) return; this.applyPhoto(this._camTarget, URL.createObjectURL(file)); },
+      hasPodImg: !!s0.podUrl, podLabelLive: s0.podUrl ? 'Retake photo' : 'Take live photo', podBg: s0.podUrl ? 'center/cover no-repeat url("' + s0.podUrl + '")' : 'transparent', podStamp: (s0.podAt || '') + ' · GPS 29.7376, −95.5134 · 18 m from address',
+      demoPod: () => this.applyPhoto('pod', this.demoPhoto('Proof of delivery')), hasExImg: !!s0.exUrl, exBg: s0.exUrl ? 'center/cover no-repeat url("' + s0.exUrl + '")' : 'transparent', demoEx: () => this.applyPhoto('ex', this.demoPhoto('Delivery problem')),
+      demoInspect: () => ['Front', 'Back', 'Left', 'Right'].forEach((k) => this.applyPhoto('insp:' + k, this.demoPhoto('Vehicle ' + k))) };
+    const cs = s0.camState; const camTitles = { pod: 'Proof of delivery', ex: 'Photo of the problem' };
+    const camVals = { camOpen: !!s0.camOpen, camTitle: camTitles[s0.camTarget] || 'Vehicle ' + String(s0.camTarget || '').replace('insp:', '').toLowerCase() + ' photo', camStamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' · GPS 29.7376, −95.5134',
+      camHasMsg: cs !== 'live', camFailed: cs === 'denied' || cs === 'unavailable', camMsgIcon: cs === 'starting' ? 'ph ph-camera' : 'ph ph-camera-slash',
+      camMsg: cs === 'starting' ? 'Starting camera… allow camera access when your phone asks.' : cs === 'denied' ? 'Camera access was blocked. Turn it on in Settings → AfroTransact Delivery → Camera. Proof photos must be taken live — gallery uploads aren’t accepted.' : 'No camera is available in this preview window. On the phone app this opens the rear camera.',
+      camNotReady: cs !== 'live', camShootOpacity: cs === 'live' ? 1 : 0.4, camShoot: () => this.shoot(), camClose: () => { this.stopCam(); this.setState({ camOpen: false }); },
+      camFlip: () => this.setState({ camFacing: s0.camFacing === 'user' ? 'environment' : 'user', camState: 'starting' }, () => this.startCam()),
+      camDemo: () => { const t = s0.camTarget; this.stopCam(); this.setState({ camOpen: false }); if (t === 'insp:all') ['Front', 'Back', 'Left', 'Right'].forEach((k) => this.applyPhoto('insp:' + k, this.demoPhoto('Vehicle ' + k))); else this.applyPhoto(t, this.demoPhoto(camTitles[t] || 'Vehicle photo')); } };
+    return { ...this.renderVals2(), ...extraRV, ...camVals, takePod: () => this.snap('pod'), exTakePhoto: () => this.snap('ex'),
+      photos: ['Front', 'Back', 'Left', 'Right'].map((p) => { const v = ins0.photos[p]; return { label: v ? '' : p, icon: v ? 'ph-fill ph-check-circle' : 'ph ph-camera', color: v ? 'var(--at-ink-0)' : 'var(--at-color-text-muted)', border: v ? 'var(--at-color-success)' : 'var(--at-color-border-strong)', bg: typeof v === 'string' ? 'center/cover no-repeat url(' + v + ')' : v ? 'var(--at-color-success-bg)' : 'var(--at-color-surface)', take: () => this.snap('insp:' + p) }; }) };
+  }
+  renderVals2() {
+    const s = this.state; const B = window.ATBarcode; const a = s.auth; const view = a ? s.view : (['mfa', 'denied'].includes(s.view) ? s.view : 'login');
+    const stop = s.stops.find((x) => x.id === s.stopId); const done = s.stops.filter((x) => ['done', 'failed'].includes(x.status)).length;
+    const ins = s.inspect; const failedCrit = CHECKS.some(([k, , c]) => c && ins.res[k] === 'fail'); const anyFail = CHECKS.some(([k]) => ins.res[k] === 'fail'); const perishable = PKGS.some((p) => /perishable/.test(p.flags));
+    const LBL = { pending: 'Next', arrived: 'On site', done: 'Done', failed: 'Failed', retry: 'Retry later' }; const COL = { pending: 'var(--at-color-text-muted)', arrived: 'var(--at-color-info)', done: 'var(--at-color-success)', failed: 'var(--at-color-danger)', retry: 'var(--at-color-warning)' };
+    const onBoard = PKGS.filter((p) => (s.loaded.includes(p.code) || s.stops.some((x) => x.kind === 'pickup' && x.scanned.includes(p.code) && x.status === 'done')) && !s.stops.some((x) => x.kind === 'dropoff' && x.status === 'done' && x.id === p.to)).length;
+    const ctx = s.scanCtx; const exp = this.expected(ctx); const have = this.scannedFor(ctx);
+    const setIns = (patch) => this.patch((st) => ({ inspect: { ...st.inspect, ...patch } }));
+    const phase = s.shift; const loadedAll = PKGS.filter((p) => p.from === 'fc').every((p) => s.loaded.includes(p.code));
+    const go = (v, extra) => () => this.setState({ view: v, stopErr: '', scanMsg: '', ...(extra || {}) });
+    const titles = { home: 'Today', inspect: 'Vehicle inspection', scan: ctx ? { loadout: 'Load-out scan', pickup: 'Pickup scan', drop: 'Delivery scan', return: 'Return scan' }[ctx.type] : 'Scan', route: 'Route', stop: stop ? 'Stop ' + (s.stops.indexOf(stop) + 1) : 'Stop', end: 'End shift', sync: 'Profile & sync', login: 'Driver sign in', mfa: 'Verify', denied: 'Access' };
+    const delivered = s.stops.filter((x) => x.kind === 'dropoff' && x.status === 'done').length; const failed = s.stops.filter((x) => x.status === 'failed');
+    const returnExp = this.expected({ type: 'return' });
+    return {
+      title: titles[view] || 'Driver', subTitle: a ? ' · ' + ROUTE.id : '', authed: !!a,
+      canBack: ['inspect', 'scan', 'stop', 'end', 'sync'].includes(view) && !!a,
+      back: () => this.setState({ view: view === 'scan' && ctx && ['pickup', 'drop'].includes(ctx.type) ? 'stop' : view === 'scan' && ctx && ctx.type === 'return' ? 'end' : view === 'stop' ? 'route' : 'home', scanMsg: '' }),
+      netIcon: s.online ? 'ph-fill ph-wifi-high' : 'ph ph-wifi-slash', syncBg: !s.online ? 'var(--at-ink-300)' : s.outbox.length ? 'var(--at-gold-300)' : 'var(--at-gold-500)', syncIcon: !s.online ? 'ph ph-cloud-slash' : s.outbox.length ? 'ph ph-circle-notch' : 'ph-fill ph-cloud-check', syncLabel: !s.online ? 'Offline · ' + s.outbox.length : s.outbox.length ? 'Syncing ' + s.outbox.length : 'Synced', goSync: go('sync'),
+      vLogin: view === 'login', vMfa: view === 'mfa', vDenied: view === 'denied', vHome: view === 'home', vInspect: view === 'inspect', vScan: view === 'scan', vRoute: view === 'route', vStop: view === 'stop' && !!stop, vEnd: view === 'end', vSync: view === 'sync',
+      email: s.email, pw: s.pw, onEmail: (e) => this.setState({ email: e.target.value, loginErr: '' }), onPw: (e) => this.setState({ pw: e.target.value, loginErr: '' }), loginErr: s.loginErr, emailBorder: s.loginErr ? 'var(--at-color-danger)' : 'var(--at-color-border-strong)', pwBorder: s.loginErr ? 'var(--at-color-danger)' : 'var(--at-color-border-strong)', loginLabel: s.busy ? 'Signing in…' : 'Sign in',
+      doLogin: () => { if (!window.ATAccess) return; if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(s.email)) return this.setState({ loginErr: 'Enter your work email.' }); if (!s.pw) return this.setState({ loginErr: 'Enter your password.' }); this.setState({ busy: true }); setTimeout(() => { const r = window.ATAccess.login(s.email, s.pw); if (!r.ok) return this.setState({ busy: false, loginErr: r.error }); this.setState({ busy: false, pendingUser: r, view: 'mfa', mfa: '', mfaErr: '' }); }, 500); },
+      onPwKey: (e) => { if (e.key === 'Enter') this.renderVals().doLogin(); }, passkey: () => this.flash('Passkeys use the device’s Face ID / fingerprint in the production app. Use email for this demo.'),
+      pendingEmail: s.pendingUser ? s.pendingUser.user.email : '', mfa: s.mfa, onMfa: (e) => this.setState({ mfa: e.target.value.replace(/\D/g, '').slice(0, 6), mfaErr: '' }), mfaErr: s.mfaErr, mfaBorder: s.mfaErr ? 'var(--at-color-danger)' : 'var(--at-color-border-strong)',
+      doMfa: () => { if (s.mfa !== '246810') return this.setState({ mfaErr: 'That code is incorrect or expired.' }); const r = s.pendingUser; if (!r.perms.includes('delivery:operate')) return this.setState({ view: 'denied', deniedMsg: r.user.name + ' is signed in, but doesn’t have the “Use the driver app” permission.', pendingUser: null }); this.setState({ auth: r, view: 'home', pendingUser: null, pw: '' }); this.emit('Signed in', r.user.name, ROUTE.id); },
+      deniedMsg: s.deniedMsg, logout: () => this.setState({ auth: null, view: 'login', email: '', pw: '', pendingUser: null }),
+      firstName: a ? a.user.name.split(' ')[0] : '', userName: a ? a.user.name : '', userEmail: a ? a.user.email : '', userSite: a ? a.user.site : '', userPerms: a ? a.perms.join(', ') : '',
+      route: ROUTE, stopCount: s.stops.length, pkgCount: PKGS.length,
+      phases: [['inspect', 'Vehicle inspection', ins.done ? 'Passed · odometer ' + ins.odo : 'Required before load-out', 'ph ph-clipboard-text', ins.done, false],
+        ['loadout', 'Load-out at ' + ROUTE.depot, loadedAll ? 'All ' + s.loaded.length + ' FC packages scanned' : s.loaded.length + ' of 3 scanned', 'ph ph-package', loadedAll, !ins.done],
+        ['route', 'Route', done + ' of ' + s.stops.length + ' stops', 'ph ph-path', done === s.stops.length, phase !== 'on'],
+        ['end', 'End shift', phase === 'ended' ? 'Completed' : 'Return scan + odometer', 'ph ph-flag-checkered', phase === 'ended', phase !== 'on']]
+        .map(([k, label, note, icon, ok, locked]) => ({ label, note, icon: ok ? 'ph-fill ph-check' : icon, locked, cursor: locked ? 'not-allowed' : 'pointer', bg: locked ? 'var(--at-color-surface-sunken)' : 'var(--at-color-surface)', dotBg: ok ? 'var(--at-green-600)' : 'var(--at-color-surface-muted)', dotFg: ok ? 'var(--at-ink-0)' : 'var(--at-color-text)', go: k === 'loadout' ? go('scan', { scanCtx: { type: 'loadout' } }) : go(k) })),
+      primary: !ins.done ? { label: 'Start inspection', go: go('inspect'), disabled: false, opacity: 1 } : !loadedAll ? { label: 'Scan load-out', go: go('scan', { scanCtx: { type: 'loadout' } }), disabled: false, opacity: 1 } : phase === 'on' ? { label: done === s.stops.length ? 'End shift' : 'Continue route', go: go(done === s.stops.length ? 'end' : 'route'), disabled: false, opacity: 1 } : phase === 'ended' ? { label: 'Shift complete', go: () => {}, disabled: true, opacity: 0.45 } : { label: 'Start route', go: () => { this.patch(() => ({ shift: 'on', view: 'route' })); this.emit('Route started', ROUTE.id, 'Delivery codes sent to 3 customers'); }, disabled: false, opacity: 1 },
+      checks: CHECKS.map(([k, label, critical]) => { const v = ins.res[k]; return { label, critical, ring: v === 'fail' ? 'var(--at-color-danger)' : v === 'pass' ? 'var(--at-green-200)' : 'var(--at-color-border)', passBg: v === 'pass' ? 'var(--at-green-600)' : 'var(--at-color-surface)', passFg: v === 'pass' ? 'var(--at-ink-0)' : 'var(--at-color-text-muted)', failBg: v === 'fail' ? 'var(--at-red-600)' : 'var(--at-color-surface)', failFg: v === 'fail' ? 'var(--at-ink-0)' : 'var(--at-color-text-muted)', pass: () => setIns({ res: { ...ins.res, [k]: 'pass' } }), fail: () => setIns({ res: { ...ins.res, [k]: 'fail' } }) }; }),
+      readings: [['odo', 'Odometer (mi)', String(ROUTE.odo + 12), (v) => (Number(v) >= ROUTE.odo ? '' : 'Must be ≥ ' + ROUTE.odo)], ['fuel', 'Fuel / charge %', '75', (v) => (Number(v) >= 0 && Number(v) <= 100 && v !== '' ? (Number(v) < 25 ? 'Low — refuel before perishables' : '') : '0–100')], ['temp', 'Cold box °F', '37', (v) => (!perishable ? '' : Number(v) >= 33 && Number(v) <= 40 ? '' : 'Perishables on board: 33–40°F')]]
+        .map(([k, label, ph, chk]) => { const v = ins[k]; const err = v === '' ? '' : chk(v); return { label, ph, value: v, on: (e) => setIns({ [k]: e.target.value.replace(/[^\d.]/g, '') }), help: err, helpColor: /Low/.test(err) ? 'var(--at-color-warning)' : 'var(--at-color-danger)', border: err && !/Low/.test(err) ? 'var(--at-color-danger)' : 'var(--at-color-border-strong)' }; }),
+      photos: ['Front', 'Back', 'Left', 'Right'].map((p) => ({ label: p, icon: ins.photos[p] ? 'ph-fill ph-check-circle' : 'ph ph-camera', color: ins.photos[p] ? 'var(--at-color-success)' : 'var(--at-color-text-muted)', border: ins.photos[p] ? 'var(--at-color-success)' : 'var(--at-color-border-strong)', bg: ins.photos[p] ? 'var(--at-color-success-bg)' : 'var(--at-color-surface)', take: () => setIns({ photos: { ...ins.photos, [p]: true } }) })),
+      hasDefects: anyFail, defectNote: ins.defect, onDefect: (e) => setIns({ defect: e.target.value }), certify: ins.certify, toggleCertify: () => setIns({ certify: !ins.certify }), inspectErr: s.inspectErr, inspectLabel: failedCrit ? 'Report defect to dispatch' : 'Submit inspection',
+      submitInspect: () => {
+        const missing = CHECKS.filter(([k]) => !ins.res[k]); if (missing.length) return this.setState({ inspectErr: 'Mark every item pass or fail (' + missing.length + ' left).' });
+        if (Number(ins.odo) < ROUTE.odo || ins.odo === '') return this.setState({ inspectErr: 'Enter a valid odometer reading.' }); if (ins.fuel === '' || Number(ins.fuel) > 100) return this.setState({ inspectErr: 'Enter fuel or charge %.' });
+        if (perishable && !(Number(ins.temp) >= 33 && Number(ins.temp) <= 40)) return this.setState({ inspectErr: 'Cold box must read 33–40°F for perishables.' });
+        if (Object.keys(ins.photos).length < 4) return this.setState({ inspectErr: 'Take all 4 vehicle photos.' }); if (anyFail && !ins.defect.trim()) return this.setState({ inspectErr: 'Describe the defect.' }); if (!ins.certify) return this.setState({ inspectErr: 'Certify the inspection.' });
+        if (failedCrit) { this.emit('Vehicle defect reported', ROUTE.vehicle, ins.defect); this.setState({ inspectErr: '' }); return this.flash('Defect sent to dispatch — a replacement vehicle will be assigned. You can’t start this route.'); }
+        setIns({ done: true }); this.setState({ inspectErr: '', view: 'home' }); this.emit('Inspection passed', ROUTE.vehicle, 'Odo ' + ins.odo + ' · fuel ' + ins.fuel + '%' + (perishable ? ' · cold box ' + ins.temp + '°F' : '')); this.flash('Inspection passed');
+      },
+      scanHint: exp.length - have.length > 0 ? 'Point at the shipment label barcode' : 'All labels scanned', code: s.code, onCode: (e) => this.setState({ code: e.target.value.toUpperCase() }), onCodeKey: (e) => { if (e.key === 'Enter') this.doScan(s.code); }, submitCode: () => this.doScan(s.code),
+      camScan: () => { const next = exp.find((p) => !have.includes(p.code)); if (next) this.doScan(next.code); }, scanDone: exp.every((p) => have.includes(p.code)), camOpacity: exp.every((p) => have.includes(p.code)) ? 0.45 : 1,
+      scanMsg: s.scanMsg, scanMsgColor: s.scanOk ? 'var(--at-color-success)' : 'var(--at-color-danger)', scanTitle: ctx ? { loadout: 'FC manifest', pickup: 'Seller packages', drop: 'For this customer', return: 'Return to FC' }[ctx.type] : '', scannedCount: have.length, expectedCount: exp.length,
+      scanList: exp.map((p) => { const ok = have.includes(p.code); return { ...p, flags: p.flags || 'standard', state: ok ? 'SCANNED' : 'WAITING', stateColor: ok ? 'var(--at-color-success)' : 'var(--at-color-text-muted)', ring: ok ? 'var(--at-green-200)' : 'var(--at-color-border)', bg: ok ? 'var(--at-color-success-bg)' : 'var(--at-color-surface)', bars: B ? B.toCss(B.code128(p.code), 1) : [] }; }),
+      finishOpacity: exp.every((p) => have.includes(p.code)) ? 1 : 0.45, finishLabel: ctx && ctx.type === 'loadout' ? 'Confirm load-out' : 'Done scanning',
+      finishScan: () => { if (!exp.every((p) => have.includes(p.code))) return this.setState({ scanMsg: (exp.length - have.length) + ' label(s) still to scan.', scanOk: false }); if (ctx.type === 'loadout') { this.emit('Loaded at FC', ROUTE.depot, exp.map((p) => p.order).filter((v, i, x) => x.indexOf(v) === i).join(', ')); this.setState({ view: 'home', scanMsg: '' }); this.flash('Load-out complete — start your route'); } else this.setState({ view: ctx.type === 'return' ? 'end' : 'stop', scanMsg: '' }); },
+      doneCount: done, progress: Math.round((done / s.stops.length) * 100) + '%', onBoard,
+      stops: s.stops.map((x, i) => ({ n: i + 1, name: x.name, address: x.address, window: x.window, pkgs: x.kind === 'pickup' ? PKGS.filter((p) => p.from === x.id).length : PKGS.filter((p) => p.to === x.id).length, flags: PKGS.some((p) => (p.to === x.id || p.from === x.id) && /perishable/.test(p.flags)) ? ' · perishable' : '', kindLabel: x.kind === 'pickup' ? 'Pick up' : 'Deliver', icon: x.kind === 'pickup' ? 'ph ph-storefront' : 'ph ph-house-line',
+        dotBg: x.status === 'done' ? 'var(--at-green-600)' : x.status === 'failed' ? 'var(--at-red-600)' : x.kind === 'pickup' ? 'var(--at-gold-500)' : 'var(--at-ink-1000)', dotFg: x.kind === 'pickup' && !['done', 'failed'].includes(x.status) ? 'var(--at-ink-1000)' : 'var(--at-ink-0)', statusLabel: LBL[x.status], statusColor: COL[x.status], ring: x.status === 'arrived' ? 'var(--at-gold-500)' : 'var(--at-color-border)', open: go('stop', { stopId: x.id, dm: x.prefs && x.prefs.pref === 'door' ? 'safe' : x.prefs && x.prefs.pref === 'desk' ? 'proxy' : 'customer', otp: '', podUrl: '', exUrl: '', pod: false, failReason: '', handover: '', dm: 'customer', recipient: '', relation: '', safePlace: '', sig: false, exOpen: false, exType: '', exNote: '', exPhoto: false, exRes: '', exErr: '', called: false, texted: false, waitLeft: null }) })),
+      stop: stop ? (() => { const pk = stop.kind === 'pickup' ? PKGS.filter((p) => p.from === stop.id) : PKGS.filter((p) => p.to === stop.id); return { ...stop, n: s.stops.indexOf(stop) + 1, kindLabel: stop.kind === 'pickup' ? 'Pick up' : 'Deliver', isPickup: stop.kind === 'pickup', isDrop: stop.kind === 'dropoff', isPending: stop.status === 'pending' || stop.status === 'retry', isArrived: stop.status === 'arrived', isClosed: ['done', 'failed'].includes(stop.status), statusLabel: LBL[stop.status], closedBg: stop.status === 'done' ? 'var(--at-color-success-bg)' : 'var(--at-color-danger-bg)', mapUrl: 'https://maps.google.com/?q=' + encodeURIComponent(stop.address), scanned: stop.scanned.length, total: pk.length,
+        otpRule: pk.some((p) => /perishable/.test(p.flags)) ? 'hand-to-customer required for perishables' : 'sent by SMS when the route started', hasPrefs: !!stop.prefs, prefLabel: stop.prefs ? { hand: 'Hand to customer', door: 'Leave at ' + (stop.prefs.place || 'door') + ' if not in', desk: 'Front desk or neighbour is OK' }[stop.prefs.pref] : '', hasNote: !!(stop.prefs && stop.prefs.note), prefNote: stop.prefs ? stop.prefs.note : '', contactLabel: stop.prefs ? { text: 'Text on arrival', call: 'Call on arrival', none: 'Don’t contact — follow instructions' }[stop.prefs.contact] : '', codeRequired: !!(stop.prefs && (stop.prefs.pref === 'hand' || stop.prefs.perishable)), perishNote: stop.prefs && stop.prefs.perishable ? ' · perishable, no safe drop' : '', pkgList: pk.map((p) => ({ code: p.code, label: p.label, icon: stop.scanned.includes(p.code) ? 'ph-fill ph-check-circle' : 'ph ph-barcode', color: stop.scanned.includes(p.code) ? 'var(--at-color-success)' : 'var(--at-color-text-muted)' })) }; })() : { pkgList: [] },
+      arrive: () => { if (s.shift !== 'on') return this.setState({ stopErr: 'Start the route first.' }); const pk = s.stops.filter((x) => x.kind === 'pickup'); if (stop.kind === 'dropoff' && pk.some((x) => x.status !== 'done') && PKGS.some((p) => p.to === stop.id && p.from !== 'fc')) return this.setState({ stopErr: 'Pick up from the seller first — a package for this stop is still at their shop.' }); this.patch((st) => ({ stops: st.stops.map((x) => (x.id === stop.id ? { ...x, status: 'arrived' } : x)), stopErr: '' })); this.emit('Arrived', stop.name, ''); },
+      openStopScan: go('scan', { scanCtx: { type: stop && stop.kind === 'pickup' ? 'pickup' : 'drop', stopId: s.stopId } }),
+      handover: s.handover, onHandover: (e) => this.setState({ handover: e.target.value }), callContact: () => this.flash('Calling via masked number — call recorded for safety'), textContact: () => this.flash('Sent: “Your AfroTransact driver is 5 minutes away.”'),
+      podLabel: s.pod ? 'Photo captured ✓' : 'Take proof-of-delivery photo', podIcon: s.pod ? 'ph-fill ph-check-circle' : 'ph ph-camera', podBorder: s.pod ? 'var(--at-color-success)' : 'var(--at-color-border-strong)', takePod: () => this.setState({ pod: true, stopErr: '' }),
+      otp: s.otp, onOtp: (e) => this.setState({ otp: e.target.value.replace(/\D/g, '').slice(0, 4), stopErr: '' }), stopErr: s.stopErr, completeLabel: stop && stop.kind === 'pickup' ? 'Confirm pickup' : 'Mark delivered',
+      complete: () => {
+        const pk = stop.kind === 'pickup' ? PKGS.filter((p) => p.from === stop.id) : PKGS.filter((p) => p.to === stop.id);
+        if (!pk.every((p) => stop.scanned.includes(p.code))) return this.setState({ stopErr: 'Scan every package first (' + stop.scanned.length + '/' + pk.length + ').' });
+        if (stop.kind === 'pickup' && s.handover.trim().length < 2) return this.setState({ stopErr: 'Enter who handed the packages over.' });
+        if (stop.kind === 'dropoff') { const e = this.podCheck(stop, pk); if (e) return this.setState({ stopErr: e }); }
+        this.patch((st) => ({ stops: st.stops.map((x) => (x.id === stop.id ? { ...x, status: 'done', closedNote: stop.kind === 'pickup' ? pk.length + ' packages · handed over by ' + s.handover : this.podNote() } : x)), view: 'route', stopId: null }));
+        this.emit(stop.kind === 'pickup' ? 'Picked up' : 'Delivered', stop.name, pk.map((p) => p.order).filter((v, i, x) => x.indexOf(v) === i).join(', ')); this.flash(stop.kind === 'pickup' ? 'Pickup confirmed — shipments now “Picked up”' : 'Delivered — customer and seller notified');
+      },
+      ...this.exVals(stop),
+      failReason: s.failReason, onFail: (e) => { const r = e.target.value; if (!r) return; if (!s.pod) return this.setState({ stopErr: 'Take a photo of the location before marking a failed delivery.' }); this.patch((st) => ({ stops: st.stops.map((x) => (x.id === stop.id ? { ...x, status: 'failed', closedNote: r + ' · return package to FC' } : x)), view: 'route', stopId: null })); this.emit('Delivery failed', stop.name, r); },
+      deliveredCount: delivered, failedCount: failed.length, returnCount: returnExp.length, returnScanned: s.returned.length, needReturnScan: returnExp.length > 0, openReturnScan: go('scan', { scanCtx: { type: 'return' } }),
+      odoEnd: s.odoEnd, onOdoEnd: (e) => this.patch(() => ({ odoEnd: e.target.value.replace(/\D/g, '') })), endErr: s.endErr,
+      endShift: () => { if (done < s.stops.length) return this.setState({ endErr: (s.stops.length - done) + ' stop(s) not finished.' }); if (!returnExp.every((p) => s.returned.includes(p.code))) return this.setState({ endErr: 'Scan returned packages back into the FC.' }); if (!(Number(s.odoEnd) > Number(ins.odo))) return this.setState({ endErr: 'End odometer must be more than ' + ins.odo + '.' }); this.patch(() => ({ shift: 'ended', view: 'home', endErr: '' })); this.emit('Shift ended', ROUTE.id, delivered + ' delivered · ' + failed.length + ' returned · ' + (Number(s.odoEnd) - Number(ins.odo)) + ' mi'); this.flash('Shift ended. Thank you!'); },
+      online: s.online, toggleOnline: () => this.setState({ online: !s.online }, () => this.flush()), lastSync: s.lastSync,
+      outbox: [...s.outbox.map((e) => ({ ...e, state: 'queued', icon: 'ph ph-clock', color: 'var(--at-color-warning)' })), ...s.events.slice(0, 8).map((e) => ({ ...e, state: 'synced', icon: 'ph-fill ph-cloud-check', color: 'var(--at-color-success)' }))],
+      tabs: [['Today', 'ph ph-house', 'home'], ['Route', 'ph ph-path', 'route'], ['Scan', 'ph ph-barcode', 'scan'], ['Profile', 'ph ph-user-circle', 'sync']].map(([label, icon, v]) => ({ label, icon, color: view === v ? 'var(--at-color-text)' : 'var(--at-color-text-muted)', weight: view === v ? 'var(--at-weight-bold)' : 'var(--at-weight-medium)',
+        go: () => { if (v === 'route' && s.shift !== 'on') return this.flash('Pass inspection and load-out first'); if (v === 'scan') { const c = !s.inspect.done ? null : !loadedAll ? { type: 'loadout' } : stop && stop.status === 'arrived' ? { type: stop.kind === 'pickup' ? 'pickup' : 'drop', stopId: stop.id } : null; if (!c) return this.flash('Nothing to scan right now'); return this.setState({ view: 'scan', scanCtx: c }); } this.setState({ view: v, stopId: v === 'route' ? null : s.stopId }); } })),
+      resetRoute: () => { const f = fresh(); try { localStorage.setItem(KEY, JSON.stringify(f)); } catch (e) { /* storage blocked */ } this.setState({ ...f, view: s.auth ? 'home' : 'login', stopId: null, scanCtx: null }); },
+      toastOn: !!s.toast, toast: s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>
