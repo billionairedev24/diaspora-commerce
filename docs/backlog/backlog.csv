@@ -148,7 +148,7 @@
 "S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation
 - Ranking boosts in-stock and Fulfilled-by-AfroTransact items
 - A relevance test set runs in CI","E04","","Medium","5","search","search","To Do"
-"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","Done"
+"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","In Progress"
 "S040","Story","Offers service: create offer on existing product","Sellers attach price, stock and condition to an existing ATIN instead of duplicating the page.","- Offer created from catalog.product.created for the creating seller
 - Other sellers can add an offer by ATIN or GTIN
 - Offer price, handling time and fulfilment type are stored","E05","","Highest","5","offers java","offers","Done"
@@ -371,15 +371,15 @@
 - Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","To Do"
 "S116","Story","Marketplace-facilitator sales tax","Tax per line by delivery address (Stripe Tax or Avalara) attributed to each seller.","- Tax is computed at checkout and stored per line
 - Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","To Do"
-"E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","To Do"
+"E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","In Progress"
 "S117","Story","Listing moderation queue","AI-flagged listings with allow/remove decisions.","- Queue shows AI flags with reasons
-- Decisions are audited","E18","","High","5","trust java","trust","To Do"
+- Decisions are audited","E18","","High","5","trust java","trust","In Progress"
 "S118","Story","Disputes and A-to-z claims","Customers open claims; staff decide with refund or deny.","- Claims have SLAs and escalation
-- Decision notifies both parties","E18","","Medium","5","trust java","trust","To Do"
+- Decision notifies both parties","E18","","Medium","5","trust java","trust","In Progress"
 "S119","Story","Immutable audit log","Every privileged action recorded and streamed to Kafka.","- Audit records cannot be edited or deleted
-- Filter by actor, entity and date","E18","","High","3","trust java","trust","To Do"
+- Filter by actor, entity and date","E18","","High","3","trust java","trust","In Progress"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
-- Reinstatement restores them","E18","","Medium","5","trust","trust","To Do"
+- Reinstatement restores them","E18","","Medium","5","trust","trust","In Progress"
 "E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","In Progress"
 "S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
 - SMS adapters: Twilio, Vonage, AWS End User Messaging
@@ -648,6 +648,6 @@
 - Checkout validates, redeems and releases coupons idempotently","E05","","Highest","5","bff offers cart orders","offers","To Do"
 "S223","Story","Seller performance feed for the buy box","A seller-health job computes late shipment, cancellation and defect rates from orders and fulfilment events and updates offers' seller performance.","- Metrics computed daily per seller from order events
 - Offers seller performance updated via API
-- Buy box weights reviewed with product owner","E05","","Medium","5","offers orders","offers","To Do"
+- Buy box weights reviewed with product owner","E05","","Medium","5","offers orders","offers","In Progress"
 "S224","Story","GTIN lookup readable by service tokens","Catalog makes /v1/identifiers/gtin/{code} callable by service clients (offers) without requiring the seller to hold catalog:write.","- Service token with catalog:read can look up GTINs
 - Offers GTIN lookup works for sellers without catalog:write","E03","","Medium","1","catalog offers","catalog","To Do"
