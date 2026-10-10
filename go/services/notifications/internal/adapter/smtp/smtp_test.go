@@ -2,9 +2,15 @@ package smtp_test
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net"
+	"net/mail"
 	"strconv"
 	"strings"
 	"testing"
@@ -12,6 +18,7 @@ import (
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/smtp"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/port"
 )
 
 // fakeSMTP accepts one session, answering RCPT with rcptReply, and returns the DATA it received.
@@ -111,4 +118,64 @@ func TestSmtpReplyClassification(t *testing.T) {
 func atoi(s string) int {
 	n, _ := strconv.Atoi(s[:3])
 	return n
+}
+
+func TestBuildMIMEWithAttachments(t *testing.T) {
+	pdf := bytes.Repeat([]byte("%PDF-1.7 purchase order "), 20)
+	raw, err := smtp.BuildMIME(domain.EmailMessage{From: "AT <no-reply@at.com>", To: "efua@accrapack.example", Subject: "PO",
+		Text: "see attached", HTML: "<p>see attached</p>", Attachments: []domain.Attachment{
+			{FileName: "PO-1P-323.pdf", ContentType: "application/pdf", Content: pdf},
+			{FileName: `../evil"name.bin`, ContentType: "not a type", Content: []byte{1, 2, 3}}}},
+		"<id@at>", time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c, ok := smtp.New(smtp.Config{}).(port.AttachmentCapable); !ok || !c.SupportsAttachments() {
+		t.Fatal("smtp attaches files")
+	}
+	msg, err := mail.ReadMessage(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mt, params, err := mime.ParseMediaType(msg.Header.Get("Content-Type"))
+	if err != nil || mt != "multipart/mixed" {
+		t.Fatalf("%s %v", mt, err)
+	}
+	mr := multipart.NewReader(msg.Body, params["boundary"])
+	var parts []*multipart.Part
+	var bodies [][]byte
+	for {
+		p, err := mr.NextRawPart()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(p)
+		parts, bodies = append(parts, p), append(bodies, b)
+	}
+	if len(parts) != 3 || !strings.HasPrefix(parts[0].Header.Get("Content-Type"), "multipart/alternative") {
+		t.Fatalf("parts: %d %v", len(parts), parts[0].Header)
+	}
+	if parts[1].FileName() != "PO-1P-323.pdf" || parts[1].Header.Get("Content-Type") != `application/pdf; name=PO-1P-323.pdf` {
+		t.Errorf("pdf part: %v", parts[1].Header)
+	}
+	got, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(string(bodies[1]), "\r\n", ""))
+	if err != nil || !bytes.Equal(got, pdf) {
+		t.Errorf("pdf content: %v", err)
+	}
+	for _, l := range strings.Split(string(bodies[1]), "\r\n") {
+		if len(l) > 76 {
+			t.Fatalf("base64 line longer than 76: %d", len(l))
+		}
+	}
+	if parts[2].FileName() != "evilname.bin" || !strings.HasPrefix(parts[2].Header.Get("Content-Type"), "application/octet-stream") {
+		t.Errorf("unsafe name / bad type part: %v", parts[2].Header)
+	}
+	// Without attachments the message stays multipart/alternative.
+	plain, _ := smtp.BuildMIME(domain.EmailMessage{From: "a@b.c", To: "x@y.z", Subject: "s", Text: "t"}, "<id@at>", time.Now())
+	if strings.Contains(string(plain), "multipart/mixed") {
+		t.Error("no attachments: no multipart/mixed")
+	}
 }

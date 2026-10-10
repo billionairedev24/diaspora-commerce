@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"net/textproto"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
@@ -40,7 +42,10 @@ type Config struct {
 
 type senderImpl struct{ cfg Config }
 
-var _ port.EmailSender = (*senderImpl)(nil)
+var (
+	_ port.EmailSender       = (*senderImpl)(nil)
+	_ port.AttachmentCapable = (*senderImpl)(nil)
+)
 
 // New returns the SMTP email sender.
 func New(cfg Config) port.EmailSender {
@@ -51,6 +56,9 @@ func New(cfg Config) port.EmailSender {
 }
 
 func (s *senderImpl) Name() string { return Name }
+
+// SupportsAttachments is true: attachments become base64 parts of a multipart/mixed message.
+func (s *senderImpl) SupportsAttachments() bool { return true }
 
 func (s *senderImpl) Send(ctx context.Context, msg domain.EmailMessage) (domain.Receipt, error) {
 	from, err := mail.ParseAddress(msg.From)
@@ -141,7 +149,8 @@ func randomID() string {
 	return hex.EncodeToString(b)
 }
 
-// BuildMIME renders a multipart/alternative message with custom headers (List-Unsubscribe …).
+// BuildMIME renders a multipart/alternative message with custom headers (List-Unsubscribe …). With attachments
+// the alternative part is wrapped in multipart/mixed and each file follows as a base64 part.
 func BuildMIME(msg domain.EmailMessage, messageID string, now time.Time) ([]byte, error) {
 	var b bytes.Buffer
 	boundary := "at-" + randomID()
@@ -162,6 +171,12 @@ func BuildMIME(msg domain.EmailMessage, messageID string, now time.Time) ([]byte
 	sort.Strings(keys)
 	for _, k := range keys {
 		hdr(textproto.CanonicalMIMEHeaderKey(k), msg.Headers[k])
+	}
+	mixed := ""
+	if len(msg.Attachments) > 0 {
+		mixed = "at-mixed-" + randomID()
+		hdr("Content-Type", `multipart/mixed; boundary="`+mixed+`"`)
+		fmt.Fprintf(&b, "\r\n--%s\r\n", mixed)
 	}
 	hdr("Content-Type", `multipart/alternative; boundary="`+boundary+`"`)
 	b.WriteString("\r\n")
@@ -188,5 +203,32 @@ func BuildMIME(msg domain.EmailMessage, messageID string, now time.Time) ([]byte
 		}
 	}
 	fmt.Fprintf(&b, "--%s--\r\n", boundary)
+	if mixed == "" {
+		return b.Bytes(), nil
+	}
+	for _, a := range msg.Attachments {
+		writeAttachment(&b, mixed, a)
+	}
+	fmt.Fprintf(&b, "--%s--\r\n", mixed)
 	return b.Bytes(), nil
+}
+
+// writeAttachment writes one base64 attachment part (76-character lines, RFC 2045).
+func writeAttachment(b *bytes.Buffer, boundary string, a domain.Attachment) {
+	ctype, _, err := mime.ParseMediaType(a.ContentType)
+	if err != nil || !strings.Contains(ctype, "/") {
+		ctype = "application/octet-stream"
+	}
+	name := domain.SafeFileName(a.FileName)
+	fmt.Fprintf(b, "--%s\r\nContent-Type: %s\r\nContent-Transfer-Encoding: base64\r\nContent-Disposition: %s\r\n\r\n",
+		boundary, mime.FormatMediaType(ctype, map[string]string{"name": name}),
+		mime.FormatMediaType("attachment", map[string]string{"filename": name}))
+	enc := base64.StdEncoding.EncodeToString(a.Content)
+	for len(enc) > 76 {
+		b.WriteString(enc[:76] + "\r\n")
+		enc = enc[76:]
+	}
+	if enc != "" {
+		b.WriteString(enc + "\r\n")
+	}
 }

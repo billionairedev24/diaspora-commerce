@@ -15,6 +15,18 @@ type EmailSender interface {
 	Send(ctx context.Context, msg domain.EmailMessage) (domain.Receipt, error)
 }
 
+// AttachmentCapable is implemented by email senders that can attach files (Resend, SendGrid, SES, SMTP). Senders
+// without it never receive attachments: the router strips them and the email's link is the fallback.
+type AttachmentCapable interface {
+	SupportsAttachments() bool
+}
+
+// AttachmentFetcher downloads an email attachment from its (signed) URL. It enforces the host allow-list and the
+// size limit and returns domain.ErrAttachmentRejected for files that are not allowed.
+type AttachmentFetcher interface {
+	Fetch(ctx context.Context, ref domain.AttachmentRef) (domain.Attachment, error)
+}
+
 // SmsSender delivers text messages (Twilio, Vonage, AWS End User Messaging, log).
 type SmsSender interface {
 	Name() string

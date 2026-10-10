@@ -3,6 +3,7 @@ package resend
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -31,7 +32,10 @@ type senderImpl struct {
 	client *http.Client
 }
 
-var _ port.EmailSender = (*senderImpl)(nil)
+var (
+	_ port.EmailSender       = (*senderImpl)(nil)
+	_ port.AttachmentCapable = (*senderImpl)(nil)
+)
 
 // New returns the Resend email sender.
 func New(cfg Config, client *http.Client) port.EmailSender {
@@ -44,26 +48,40 @@ func New(cfg Config, client *http.Client) port.EmailSender {
 
 func (s *senderImpl) Name() string { return Name }
 
+// SupportsAttachments is true: Resend takes base64 attachments (40 MB per email).
+func (s *senderImpl) SupportsAttachments() bool { return true }
+
 type tag struct {
 	Name  string `json:"name"`
 	Value string `json:"value"`
 }
 
+type attachment struct {
+	Filename    string `json:"filename"`
+	Content     string `json:"content"` // base64
+	ContentType string `json:"content_type,omitempty"`
+}
+
 type request struct {
-	From    string            `json:"from"`
-	To      []string          `json:"to"`
-	Subject string            `json:"subject"`
-	HTML    string            `json:"html,omitempty"`
-	Text    string            `json:"text,omitempty"`
-	ReplyTo string            `json:"reply_to,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Tags    []tag             `json:"tags,omitempty"`
+	From        string            `json:"from"`
+	To          []string          `json:"to"`
+	Subject     string            `json:"subject"`
+	HTML        string            `json:"html,omitempty"`
+	Text        string            `json:"text,omitempty"`
+	ReplyTo     string            `json:"reply_to,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Tags        []tag             `json:"tags,omitempty"`
+	Attachments []attachment      `json:"attachments,omitempty"`
 }
 
 func (s *senderImpl) Send(ctx context.Context, msg domain.EmailMessage) (domain.Receipt, error) {
 	body := request{From: msg.From, To: []string{msg.To}, Subject: msg.Subject, HTML: msg.HTML, Text: msg.Text,
 		ReplyTo: msg.ReplyTo, Headers: msg.Headers,
 		Tags: []tag{{Name: "category", Value: string(msg.Category)}, {Name: "notification_id", Value: msg.NotificationID}}}
+	for _, a := range msg.Attachments {
+		body.Attachments = append(body.Attachments, attachment{Filename: a.FileName,
+			Content: base64.StdEncoding.EncodeToString(a.Content), ContentType: a.ContentType})
+	}
 	req, err := providerhttp.NewJSONRequest(ctx, s.cfg.BaseURL+"/emails", body)
 	if err != nil {
 		return domain.Receipt{}, domain.Permanent(Name, 0, "request").Wrap(err)

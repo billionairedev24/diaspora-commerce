@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
 )
@@ -25,6 +26,7 @@ const (
 	TopicInventory          = "inventory"
 	TopicPayments           = "payments"
 	TopicTrustOps           = "trustOps"
+	TopicRetail             = "retail"
 )
 
 // DefaultTopics are the AsyncAPI channel addresses (contracts/asyncapi/events.yaml) for each logical topic.
@@ -39,6 +41,7 @@ var DefaultTopics = map[string]string{
 	TopicInventory:          "at.inventory.events",
 	TopicPayments:           "at.payment.events",
 	TopicTrustOps:           "at.trustops.events",
+	TopicRetail:             "at.retail.events",
 }
 
 // ResolveTopics overlays configured addresses on DefaultTopics. Unknown names and empty addresses are errors, so a
@@ -119,6 +122,26 @@ var ContactChangedTypes = []string{"identity.user.phone-verified", "identity.not
 // trustops.claim.* events (with the seller org id as recipient.id, which identity cannot resolve as a user), so
 // those requests are ignored instead of notifying the customer twice.
 var SupersededGenericTemplates = map[string]bool{"claim.opened": true, "claim.decided": true, "claim.withdrawn": true}
+
+// RequestedTemplate is a template that a producer asks for with notification.requested instead of a typed event
+// rule (the producer chooses template, channels and recipient).
+type RequestedTemplate struct {
+	Topic    string           // logical topic the producer publishes the request on
+	Channels []domain.Channel // channels the producer requests (a seeded template is checked for each)
+	// PayloadOnly: the recipient is an external address from the payload (a supplier contact) and is never
+	// looked up in identity, even when the payload carries an id.
+	PayloadOnly bool
+	// Enrich normalises and formats the producer's raw template fields on a copy of data.
+	Enrich func(d map[string]any, l Links)
+}
+
+// RequestedTemplates are the notification.requested template keys producers are known to send. Other keys are
+// still rendered as-is when a template exists.
+var RequestedTemplates = map[string]RequestedTemplate{
+	// Retail (S225/S243): the PO email to the supplier's purchasing contact, with a signed link to the PO PDF
+	// (data.documentUrl) and the PDF as a media attachment reference (data.attachments).
+	"retail.purchase_order.sent": {Topic: TopicRetail, Channels: chEmail, PayloadOnly: true, Enrich: enrichPurchaseOrder},
+}
 
 var (
 	chEmail          = []domain.Channel{domain.ChannelEmail}
@@ -550,4 +573,18 @@ func enrichModeration(d map[string]any, l Links) {
 	d["reasonText"] = humanCode(str(d, "reasonCode"))
 	setDefault(d, "reasonText", "our listing policies")
 	d["actionUrl"] = join(l.SellerCenter, "/listings")
+}
+
+// enrichPurchaseOrder fills retail's supplier PO email: JSON nulls in optional fields become "" (the template skips
+// empty rows), the total falls back to totalMinor + currency, and the link expiry gets a readable date.
+func enrichPurchaseOrder(d map[string]any, _ Links) {
+	nullable(d, "contactName", "supplierName", "orderDate", "deliverBy", "incoterm", "paymentTerms", "total",
+		"documentExpiresAt")
+	setDefault(d, "contactName", "there")
+	setDefault(d, "supplierName", "your company")
+	setDefault(d, "total", moneyField(d, "totalMinor"))
+	d["documentExpiresOn"] = ""
+	if t, err := time.Parse(time.RFC3339, str(d, "documentExpiresAt")); err == nil {
+		d["documentExpiresOn"] = t.UTC().Format("Jan 2, 2006")
+	}
 }

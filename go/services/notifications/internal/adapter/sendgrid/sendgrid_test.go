@@ -10,6 +10,7 @@ import (
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/sendgrid"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/port"
 )
 
 func TestSendRequestShape(t *testing.T) {
@@ -65,5 +66,29 @@ func TestErrors(t *testing.T) {
 		if !errors.As(err, &pe) || pe.Retryable != retry {
 			t.Errorf("%d: %v", status, err)
 		}
+	}
+}
+
+func TestSendsAttachments(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Attachments []map[string]string `json:"attachments"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if len(body.Attachments) != 1 || body.Attachments[0]["filename"] != "PO-1P-323.pdf" || body.Attachments[0]["content"] != "JVBERi0=" ||
+			body.Attachments[0]["type"] != "application/pdf" || body.Attachments[0]["disposition"] != "attachment" {
+			t.Errorf("attachments: %+v", body.Attachments)
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer srv.Close()
+	s := sendgrid.New(sendgrid.Config{APIKey: "SG.key", BaseURL: srv.URL}, srv.Client())
+	if c, ok := s.(port.AttachmentCapable); !ok || !c.SupportsAttachments() {
+		t.Fatal("sendgrid attaches files")
+	}
+	_, err := s.Send(context.Background(), domain.EmailMessage{From: "a@b.c", To: "s@supplier.example", Subject: "PO", Text: "t",
+		Attachments: []domain.Attachment{{FileName: "PO-1P-323.pdf", ContentType: "application/pdf", Content: []byte("%PDF-")}}})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

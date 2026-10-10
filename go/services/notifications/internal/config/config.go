@@ -20,7 +20,8 @@ type Config struct {
 		Enabled bool     `yaml:"enabled" env:"KAFKA_ENABLED"`
 		Brokers []string `yaml:"brokers" env:"KAFKA_BROKERS"`
 		// Topics maps logical topic names (identity, orders, sellerApplications, sellerCompliance, payouts,
-		// bookings, content, inventory, payments, trustOps) to addresses; missing names default to the AsyncAPI channel addresses.
+		// bookings, content, inventory, payments, trustOps, retail) to addresses; missing names default to the
+		// AsyncAPI channel addresses.
 		Topics map[string]string `yaml:"topics"`
 	} `yaml:"kafka"`
 	// Identity resolves recipients by user id / org id for events that carry no contact details.
@@ -41,6 +42,17 @@ type Config struct {
 		SellerCenter string `yaml:"sellerCenter" env:"LINKS_SELLER_CENTER"`
 		ProviderHub  string `yaml:"providerHub" env:"LINKS_PROVIDER_HUB"`
 	} `yaml:"links"`
+	// Attachments are email attachments fetched from signed media links at send time (S243). Only hosts in the
+	// allow-list (the media base URL's host plus allowedHosts, e.g. the object-storage host that signs the links)
+	// are fetched; files over maxBytes, or over maxTotalBytes per email, stay links. Disabled = links only.
+	Attachments struct {
+		Enabled       bool          `yaml:"enabled" env:"ATTACHMENTS_ENABLED"`
+		MediaBaseURL  string        `yaml:"mediaBaseUrl" env:"MEDIA_BASE_URL"`
+		AllowedHosts  []string      `yaml:"allowedHosts" env:"ATTACHMENTS_ALLOWED_HOSTS"`
+		MaxBytes      int64         `yaml:"maxBytes" env:"ATTACHMENTS_MAX_BYTES"`
+		MaxTotalBytes int64         `yaml:"maxTotalBytes" env:"ATTACHMENTS_MAX_TOTAL_BYTES"`
+		Timeout       time.Duration `yaml:"timeout" env:"ATTACHMENTS_TIMEOUT"`
+	} `yaml:"attachments"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
 		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URI"`

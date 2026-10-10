@@ -27,6 +27,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/identity"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/jwtcontact"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/mediafetch"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/postgres"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/webhooksig"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/app"
@@ -113,9 +114,14 @@ func run() error {
 	if cfg.Dispatcher.BackoffMax > 0 {
 		retry.Max = cfg.Dispatcher.BackoffMax
 	}
+	fetcher, err := attachmentFetcher(cfg, log)
+	if err != nil {
+		return fmt.Errorf("attachments: %w", err)
+	}
 	dispatcher := app.NewDispatcher(app.DispatcherConfig{Batch: cfg.Dispatcher.Batch, Lease: cfg.Dispatcher.Lease,
 		PollInterval: cfg.Dispatcher.PollInterval, Concurrency: cfg.Dispatcher.Concurrency, Retry: retry,
-		EmailFrom: cfg.Email.From, EmailReplyTo: cfg.Email.ReplyTo}, store, checker, router, log)
+		EmailFrom: cfg.Email.From, EmailReplyTo: cfg.Email.ReplyTo, Attachments: fetcher,
+		MaxAttachmentBytes: cfg.Attachments.MaxTotalBytes}, store, checker, router, log)
 	contacts := jwtcontact.New(localOnly(local, cfg.TestSend.LocalEmail), localOnly(local, cfg.TestSend.LocalPhone))
 	templates := app.NewTemplates(templateStore, renderer, router, contacts, cfg.Email.From)
 	prefs := app.NewPreferences(consentStore, unsub)
@@ -209,6 +215,26 @@ func recipientResolver(cfg config.Config, local bool, log *slog.Logger) contactc
 		&http.Client{Timeout: timeout})
 	return contactcache.New(inner, contactcache.Options{TTL: cfg.Identity.CacheTTL, NotFoundTTL: cfg.Identity.NotFoundTTL,
 		MaxEntries: cfg.Identity.CacheMax})
+}
+
+// attachmentFetcher builds the email attachment fetcher (signed media links, allow-listed hosts, size limit). When
+// attachments are disabled, emails carry only the link their template renders.
+func attachmentFetcher(cfg config.Config, log *slog.Logger) (port.AttachmentFetcher, error) {
+	a := cfg.Attachments
+	if !a.Enabled {
+		log.Info("email attachments disabled: documents are sent as links")
+		return nil, nil
+	}
+	timeout := a.Timeout
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	f, err := mediafetch.New(mediafetch.Config{MediaBaseURL: a.MediaBaseURL, AllowedHosts: a.AllowedHosts,
+		MaxBytes: a.MaxBytes}, &http.Client{Timeout: timeout})
+	if err != nil {
+		return nil, fmt.Errorf("fetcher: %w", err)
+	}
+	return f, nil
 }
 
 func localOnly(local bool, v string) string {

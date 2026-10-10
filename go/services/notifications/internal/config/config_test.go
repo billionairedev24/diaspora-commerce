@@ -1,11 +1,13 @@
 package config_test
 
 import (
+	"net/http"
 	"testing"
 	"time"
 
 	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/mediafetch"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
@@ -40,8 +42,17 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 				t.Fatalf("links: %+v", c.Links)
 			}
 			topics, err := app.ResolveTopics(c.Kafka.Topics)
-			if err != nil || len(topics) != len(app.DefaultTopics) {
+			if err != nil || len(topics) != len(app.DefaultTopics) || c.Kafka.Topics[app.TopicRetail] != "at.retail.events" {
 				t.Fatalf("kafka.topics: %v %v", topics, err)
+			}
+			a := c.Attachments
+			if !a.Enabled || a.MediaBaseURL == "" || len(a.AllowedHosts) == 0 || a.MaxBytes <= 0 || a.MaxTotalBytes < a.MaxBytes ||
+				a.Timeout <= 0 {
+				t.Fatalf("attachments: %+v", a)
+			}
+			if _, err := mediafetch.New(mediafetch.Config{MediaBaseURL: a.MediaBaseURL, AllowedHosts: a.AllowedHosts,
+				MaxBytes: a.MaxBytes}, http.DefaultClient); err != nil {
+				t.Fatalf("attachments: %v", err)
 			}
 			switch env {
 			case pkgconfig.EnvLocal:

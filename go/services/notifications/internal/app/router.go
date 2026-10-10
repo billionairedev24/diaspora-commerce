@@ -72,7 +72,15 @@ func convert[S sender[M], M any](in []S) []sender[M] {
 func (r *routerImpl) Send(ctx context.Context, out domain.Outbound) (domain.Receipt, error) {
 	switch out.Channel {
 	case domain.ChannelEmail:
-		return failover(ctx, r, convert[port.EmailSender, domain.EmailMessage](pick(r.routes.Email, out.Market)), out.Email)
+		ps := pick(r.routes.Email, out.Market)
+		if len(out.Email.Attachments) == 0 {
+			return failover(ctx, r, convert[port.EmailSender, domain.EmailMessage](ps), out.Email)
+		}
+		guarded := make([]sender[domain.EmailMessage], 0, len(ps))
+		for _, p := range ps {
+			guarded = append(guarded, attachmentGuard{EmailSender: p})
+		}
+		return failover(ctx, r, guarded, out.Email)
 	case domain.ChannelSMS:
 		return failover(ctx, r, convert[port.SmsSender, domain.SmsMessage](pick(r.routes.SMS, out.Market)), out.SMS)
 	case domain.ChannelPush:
@@ -159,4 +167,25 @@ func failover[M any](ctx context.Context, r *routerImpl, providers []sender[M], 
 		errs = append(errs, err)
 	}
 	return domain.Receipt{}, errors.Join(errs...)
+}
+
+// CanAttach reports whether an email provider can attach files (port.AttachmentCapable).
+func CanAttach(s port.EmailSender) bool {
+	c, ok := s.(port.AttachmentCapable)
+	return ok && c.SupportsAttachments()
+}
+
+// attachmentGuard hands attachments only to providers that can attach files. Others get the message without them;
+// the email's body still links to the document, so the recipient can download it.
+type attachmentGuard struct{ port.EmailSender }
+
+func (g attachmentGuard) Send(ctx context.Context, msg domain.EmailMessage) (domain.Receipt, error) {
+	if !CanAttach(g.EmailSender) {
+		msg.Attachments = nil
+	}
+	rec, err := g.EmailSender.Send(ctx, msg)
+	if err != nil {
+		return rec, fmt.Errorf("%w", err)
+	}
+	return rec, nil
 }

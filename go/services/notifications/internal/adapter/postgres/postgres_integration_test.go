@@ -525,4 +525,5 @@ func TestPostgresIntegration(t *testing.T) {
 
 	t.Run("every mapped producer event renders with the seeded templates", func(t *testing.T) { producerEvents(t, pool) })
 	t.Run("stock alerts: subscribe once, claim once per restock", func(t *testing.T) { stockAlerts(t, pool) })
+	t.Run("retail purchase-order request: supplier email with the PDF attached", func(t *testing.T) { retailPurchaseOrder(t, pool) })
 }

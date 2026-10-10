@@ -53,7 +53,7 @@ var columnList = []struct {
 	{"recipient_id", true}, {"address", false}, {"time_zone", true}, {"subject", true}, {"body_html", true},
 	{"body_text", true}, {"headers", false}, {"status", false}, {"status_detail", true}, {"attempts", false},
 	{"next_attempt_at", false}, {"last_error", true}, {"provider", true}, {"provider_message_id", true},
-	{"created_at", false}, {"updated_at", false}, {"sent_at", false},
+	{"created_at", false}, {"updated_at", false}, {"sent_at", false}, {"attachments", false},
 }
 
 // cols renders the select list, qualified with alias when given (UPDATE … RETURNING).
@@ -77,12 +77,12 @@ var columns = cols("")
 func scan(row pgx.Row) (domain.Notification, error) {
 	var n domain.Notification
 	var id uuid.UUID
-	var headers []byte
+	var headers, attachments []byte
 	var ch, cat, st string
 	err := row.Scan(&id, &n.IdempotencyKey, &n.EventID, &n.TemplateKey, &n.TemplateVersion, &n.Locale, &ch, &cat,
 		&n.Market, &n.RecipientID, &n.Address, &n.TimeZone, &n.Subject, &n.BodyHTML, &n.BodyText, &headers, &st,
 		&n.StatusDetail, &n.Attempts, &n.NextAttemptAt, &n.LastError, &n.Provider, &n.ProviderMessageID,
-		&n.CreatedAt, &n.UpdatedAt, &n.SentAt)
+		&n.CreatedAt, &n.UpdatedAt, &n.SentAt, &attachments)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return n, domain.ErrNotFound
 	}
@@ -93,6 +93,11 @@ func scan(row pgx.Row) (domain.Notification, error) {
 	if len(headers) > 0 {
 		if err := json.Unmarshal(headers, &n.Headers); err != nil {
 			return n, fmt.Errorf("decode headers: %w", err)
+		}
+	}
+	if len(attachments) > 0 {
+		if err := json.Unmarshal(attachments, &n.Attachments); err != nil {
+			return n, fmt.Errorf("decode attachments: %w", err)
 		}
 	}
 	return n, nil
@@ -123,21 +128,26 @@ func nullable(s string) *string {
 
 func insert(ctx context.Context, tx pgx.Tx, ns []domain.Notification) error {
 	for _, n := range ns {
-		var headers []byte
+		var headers, attachments []byte
+		var err error
 		if len(n.Headers) > 0 {
-			var err error
 			if headers, err = json.Marshal(n.Headers); err != nil {
 				return fmt.Errorf("encode headers: %w", err)
 			}
 		}
-		_, err := tx.Exec(ctx, `INSERT INTO notification (id, idempotency_key, event_id, template_key, template_version,
+		if len(n.Attachments) > 0 {
+			if attachments, err = json.Marshal(n.Attachments); err != nil {
+				return fmt.Errorf("encode attachments: %w", err)
+			}
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO notification (id, idempotency_key, event_id, template_key, template_version,
 			locale, channel, category, market, recipient_id, address, time_zone, subject, body_html, body_text, headers,
-			status, attempts, next_attempt_at, created_at, updated_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,0,$18,$19,$19)
+			status, attempts, next_attempt_at, created_at, updated_at, attachments)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,0,$18,$19,$19,$20)
 			ON CONFLICT (idempotency_key) DO NOTHING`,
 			n.ID, n.IdempotencyKey, nullable(n.EventID), n.TemplateKey, n.TemplateVersion, n.Locale, string(n.Channel),
 			string(n.Category), n.Market, nullable(n.RecipientID), n.Address, nullable(n.TimeZone), n.Subject,
-			n.BodyHTML, n.BodyText, headers, string(domain.StatusQueued), n.NextAttemptAt, n.CreatedAt)
+			n.BodyHTML, n.BodyText, headers, string(domain.StatusQueued), n.NextAttemptAt, n.CreatedAt, attachments)
 		if err != nil {
 			return fmt.Errorf("insert notification: %w", err)
 		}

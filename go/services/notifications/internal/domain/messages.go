@@ -10,6 +10,9 @@ type EmailMessage struct {
 	HTML           string
 	Text           string
 	Headers        map[string]string // e.g. List-Unsubscribe, List-Unsubscribe-Post
+	// Attachments are fetched files. Providers that cannot attach files never receive them (the router strips them
+	// and the body's link is the fallback).
+	Attachments    []Attachment
 	Category       Category
 	IdempotencyKey string
 }

@@ -21,6 +21,7 @@ kafka:
     inventory: at.inventory.events
     payments: at.payment.events
     trustOps: at.trustops.events
+    retail: at.retail.events
 # Recipient lookup by user / org id (client-credentials client notifications-service, scope users:read; the secret
 # comes from NOTIFICATIONS_CLIENT_SECRET).
 identity:
@@ -32,6 +33,15 @@ identity:
   cacheTtl: 5m
   notFoundTtl: 30s
   cacheMaxEntries: 10000
+# Email attachments (S243): signed media links are fetched at send time from these hosts only (the media base URL's
+# host is always allowed); larger files stay links. MinIO serves the signed links locally.
+attachments:
+  enabled: true
+  mediaBaseUrl: http://localhost:8207
+  allowedHosts: [localhost:9000]
+  maxBytes: 10485760
+  maxTotalBytes: 20971520
+  timeout: 10s
 links:
   storefront: http://localhost:3000
   sellerCenter: http://localhost:3001

@@ -23,6 +23,13 @@ type asyncAPI struct {
 			Ref string `yaml:"$ref"`
 		} `yaml:"messages"`
 	} `yaml:"channels"`
+	Operations map[string]struct {
+		Action  string `yaml:"action"`
+		Channel struct {
+			Ref string `yaml:"$ref"`
+		} `yaml:"channel"`
+		Summary string `yaml:"summary"`
+	} `yaml:"operations"`
 	Components struct {
 		Messages map[string]struct {
 			Name string `yaml:"name"`
@@ -30,8 +37,7 @@ type asyncAPI struct {
 	} `yaml:"components"`
 }
 
-// eventsByAddress maps each channel address to the event types (message names) published on it.
-func eventsByAddress(t *testing.T) map[string][]string {
+func readEvents(t *testing.T) asyncAPI {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "contracts", "asyncapi", "events.yaml"))
 	if err != nil {
@@ -41,6 +47,13 @@ func eventsByAddress(t *testing.T) map[string][]string {
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		t.Fatalf("parse events.yaml: %v", err)
 	}
+	return doc
+}
+
+// eventsByAddress maps each channel address to the event types (message names) published on it.
+func eventsByAddress(t *testing.T) map[string][]string {
+	t.Helper()
+	doc := readEvents(t)
 	out := map[string][]string{}
 	for id, ch := range doc.Channels {
 		for mid, m := range ch.Messages {
@@ -121,6 +134,46 @@ func TestRulesMatchAsyncAPIContract(t *testing.T) {
 	}
 }
 
+// TestRequestedTemplatesMatchProducers checks every notification.requested template key a producer is known to send
+// (S243: retail's supplier PO email): the producer publishes notification.requested on that topic, and the
+// producer's send operation names the template key in events.yaml.
+func TestRequestedTemplatesMatchProducers(t *testing.T) {
+	byAddr := eventsByAddress(t)
+	doc := readEvents(t)
+	if _, ok := app.RequestedTemplates["retail.purchase_order.sent"]; !ok {
+		t.Fatal("retail.purchase_order.sent (S243) is not a requested template")
+	}
+	if app.DefaultTopics[app.TopicRetail] != "at.retail.events" {
+		t.Fatalf("retail topic: %q", app.DefaultTopics[app.TopicRetail])
+	}
+	for key, rt := range app.RequestedTemplates {
+		addr, ok := app.DefaultTopics[rt.Topic]
+		if !ok {
+			t.Errorf("%s: unknown topic %q", key, rt.Topic)
+			continue
+		}
+		if !slices.Contains(byAddr[addr], app.GenericEventType) {
+			t.Errorf("%s: %s is not published on %s", key, app.GenericEventType, addr)
+		}
+		named := false
+		for _, op := range doc.Operations {
+			ch := doc.Channels[strings.TrimPrefix(op.Channel.Ref, "#/channels/")]
+			if op.Action == "send" && ch.Address == addr && strings.Contains(op.Summary, key) {
+				named = true
+			}
+		}
+		if !named {
+			t.Errorf("%s: no send operation on %s names the template key", key, addr)
+		}
+		if len(rt.Channels) == 0 {
+			t.Errorf("%s: no channels", key)
+		}
+	}
+	if !app.RequestedTemplates["retail.purchase_order.sent"].PayloadOnly {
+		t.Error("supplier contacts must never be looked up in identity")
+	}
+}
+
 // TestEveryRuleHasSeededTemplates checks each rule's template exists (en) for every channel it sends on.
 func TestEveryRuleHasSeededTemplates(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join("..", "adapter", "postgres", "migrations", "*.sql"))
@@ -153,6 +206,9 @@ func TestEveryRuleHasSeededTemplates(t *testing.T) {
 	check("stock alerts", app.StockAlertTemplate, []domain.Channel{domain.ChannelEmail, domain.ChannelPush})
 	check("identity.verification sms override", "identity.verification", []domain.Channel{domain.ChannelSMS})
 	check("compliance in_app → push", "seller.compliance.reminder", []domain.Channel{domain.ChannelPush})
+	for key, rt := range app.RequestedTemplates {
+		check("notification.requested", key, rt.Channels)
+	}
 	for key := range app.SupersededGenericTemplates {
 		check("superseded notification.requested", key, []domain.Channel{domain.ChannelEmail})
 	}

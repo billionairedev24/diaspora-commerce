@@ -10,6 +10,7 @@ import (
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/resend"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/port"
 )
 
 func TestSendRequestShape(t *testing.T) {
@@ -71,6 +72,34 @@ func TestTransportErrorIsRetryable(t *testing.T) {
 	srv.Close()
 	_, err := resend.New(resend.Config{BaseURL: url}, http.DefaultClient).Send(context.Background(), domain.EmailMessage{})
 	if !domain.IsRetryable(err) {
+		t.Fatal(err)
+	}
+}
+
+func TestSendsAttachments(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Attachments []struct {
+				Filename    string `json:"filename"`
+				Content     string `json:"content"`
+				ContentType string `json:"content_type"`
+			} `json:"attachments"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if len(body.Attachments) != 1 || body.Attachments[0].Filename != "PO-1P-323.pdf" ||
+			body.Attachments[0].Content != "JVBERi0=" || body.Attachments[0].ContentType != "application/pdf" {
+			t.Errorf("attachments: %+v", body.Attachments)
+		}
+		_, _ = w.Write([]byte(`{"id":"re-1"}`))
+	}))
+	defer srv.Close()
+	s := resend.New(resend.Config{APIKey: "re_test", BaseURL: srv.URL}, srv.Client())
+	if c, ok := s.(port.AttachmentCapable); !ok || !c.SupportsAttachments() {
+		t.Fatal("resend attaches files")
+	}
+	_, err := s.Send(context.Background(), domain.EmailMessage{From: "a@b.c", To: "s@supplier.example", Subject: "PO",
+		Attachments: []domain.Attachment{{FileName: "PO-1P-323.pdf", ContentType: "application/pdf", Content: []byte("%PDF-")}}})
+	if err != nil {
 		t.Fatal(err)
 	}
 }

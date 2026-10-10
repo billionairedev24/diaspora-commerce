@@ -30,7 +30,10 @@ type senderImpl struct {
 	configurationSet string
 }
 
-var _ port.EmailSender = (*senderImpl)(nil)
+var (
+	_ port.EmailSender       = (*senderImpl)(nil)
+	_ port.AttachmentCapable = (*senderImpl)(nil)
+)
 
 // New returns the SES email sender. configurationSet (optional) routes events to SNS/EventBridge.
 func New(api API, configurationSet string) port.EmailSender {
@@ -38,6 +41,9 @@ func New(api API, configurationSet string) port.EmailSender {
 }
 
 func (s *senderImpl) Name() string { return Name }
+
+// SupportsAttachments is true: SES v2 simple messages carry attachments (the SDK base64-encodes them).
+func (s *senderImpl) SupportsAttachments() bool { return true }
 
 func (s *senderImpl) Send(ctx context.Context, msg domain.EmailMessage) (domain.Receipt, error) {
 	body := &types.Body{}
@@ -50,6 +56,16 @@ func (s *senderImpl) Send(ctx context.Context, msg domain.EmailMessage) (domain.
 	simple := &types.Message{Subject: &types.Content{Data: aws.String(msg.Subject), Charset: aws.String("UTF-8")}, Body: body}
 	for k, v := range msg.Headers {
 		simple.Headers = append(simple.Headers, types.MessageHeader{Name: aws.String(k), Value: aws.String(v)})
+	}
+	for _, a := range msg.Attachments {
+		ct := a.ContentType
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		simple.Attachments = append(simple.Attachments, types.Attachment{FileName: aws.String(a.FileName),
+			RawContent: a.Content, ContentType: aws.String(ct),
+			ContentDisposition:      types.AttachmentContentDispositionAttachment,
+			ContentTransferEncoding: types.AttachmentContentTransferEncodingBase64})
 	}
 	in := &sesv2.SendEmailInput{
 		FromEmailAddress: aws.String(msg.From),

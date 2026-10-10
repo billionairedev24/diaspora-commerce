@@ -14,6 +14,7 @@ import (
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/ses"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/port"
 )
 
 func client(srv *httptest.Server) *sesv2.Client {
@@ -82,5 +83,37 @@ func TestErrorMapping(t *testing.T) {
 		if !errors.As(err, &pe) || pe.Retryable != tc.retryable || pe.Code != tc.code {
 			t.Errorf("%s: %v", tc.code, err)
 		}
+	}
+}
+
+func TestSendsAttachments(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var b struct {
+			Content struct {
+				Simple struct {
+					Attachments []struct {
+						FileName, ContentType, ContentDisposition, ContentTransferEncoding string
+						RawContent                                                         []byte
+					}
+				}
+			}
+		}
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		a := b.Content.Simple.Attachments
+		if len(a) != 1 || a[0].FileName != "PO-1P-323.pdf" || a[0].ContentType != "application/pdf" ||
+			a[0].ContentDisposition != "ATTACHMENT" || string(a[0].RawContent) != "%PDF-" {
+			t.Errorf("attachments: %+v", a)
+		}
+		_, _ = w.Write([]byte(`{"MessageId":"ses-1"}`))
+	}))
+	defer srv.Close()
+	s := ses.New(client(srv), "")
+	if c, ok := s.(port.AttachmentCapable); !ok || !c.SupportsAttachments() {
+		t.Fatal("ses attaches files")
+	}
+	_, err := s.Send(context.Background(), domain.EmailMessage{From: "a@b.c", To: "s@supplier.example", Subject: "PO", Text: "t",
+		Attachments: []domain.Attachment{{FileName: "PO-1P-323.pdf", ContentType: "application/pdf", Content: []byte("%PDF-")}}})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

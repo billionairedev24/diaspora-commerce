@@ -3,6 +3,7 @@ package sendgrid
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -32,7 +33,10 @@ type senderImpl struct {
 	client *http.Client
 }
 
-var _ port.EmailSender = (*senderImpl)(nil)
+var (
+	_ port.EmailSender       = (*senderImpl)(nil)
+	_ port.AttachmentCapable = (*senderImpl)(nil)
+)
 
 // New returns the SendGrid email sender.
 func New(cfg Config, client *http.Client) port.EmailSender {
@@ -44,6 +48,9 @@ func New(cfg Config, client *http.Client) port.EmailSender {
 }
 
 func (s *senderImpl) Name() string { return Name }
+
+// SupportsAttachments is true: SendGrid takes base64 attachments (30 MB per message).
+func (s *senderImpl) SupportsAttachments() bool { return true }
 
 type address struct {
 	Email string `json:"email"`
@@ -60,7 +67,15 @@ type content struct {
 	Value string `json:"value"`
 }
 
+type attachment struct {
+	Content     string `json:"content"` // base64
+	Type        string `json:"type,omitempty"`
+	Filename    string `json:"filename"`
+	Disposition string `json:"disposition"`
+}
+
 type request struct {
+	Attachments      []attachment      `json:"attachments,omitempty"`
 	Personalizations []personalization `json:"personalizations"`
 	From             address           `json:"from"`
 	ReplyTo          *address          `json:"reply_to,omitempty"`
@@ -95,6 +110,10 @@ func (s *senderImpl) Send(ctx context.Context, msg domain.EmailMessage) (domain.
 	}
 	if msg.HTML != "" {
 		body.Content = append(body.Content, content{Type: "text/html", Value: msg.HTML})
+	}
+	for _, a := range msg.Attachments {
+		body.Attachments = append(body.Attachments, attachment{Content: base64.StdEncoding.EncodeToString(a.Content),
+			Type: a.ContentType, Filename: a.FileName, Disposition: "attachment"})
 	}
 	req, err := providerhttp.NewJSONRequest(ctx, s.cfg.BaseURL+"/v3/mail/send", body)
 	if err != nil {

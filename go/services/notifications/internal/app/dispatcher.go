@@ -22,7 +22,14 @@ type DispatcherConfig struct {
 	Retry        domain.RetryPolicy
 	EmailFrom    string
 	EmailReplyTo string
+	// Attachments fetches email attachments (signed media links) at send time; nil sends the link only.
+	Attachments port.AttachmentFetcher
+	// MaxAttachmentBytes caps the total size attached to one email (default 20 MiB); files beyond it stay links.
+	MaxAttachmentBytes int64
 }
+
+// DefaultMaxAttachmentBytes is the default total attachment size per email (providers accept 20–40 MB messages).
+const DefaultMaxAttachmentBytes = 20 << 20
 
 // Dispatcher drains the notification table: claim (SKIP LOCKED) → consent check → route with failover →
 // mark sent, reschedule (quiet hours), retry with backoff, or dead-letter.
@@ -57,6 +64,9 @@ func NewDispatcher(cfg DispatcherConfig, store port.NotificationStore, consent p
 	}
 	if cfg.Concurrency <= 0 {
 		cfg.Concurrency = 8
+	}
+	if cfg.MaxAttachmentBytes <= 0 {
+		cfg.MaxAttachmentBytes = DefaultMaxAttachmentBytes
 	}
 	if cfg.Retry.MaxAttempts <= 0 {
 		cfg.Retry = domain.DefaultRetryPolicy
@@ -126,7 +136,7 @@ func (d *dispatcherImpl) process(ctx context.Context, n domain.Notification) err
 		return d.wrap(d.store.Reschedule(ctx, n.ID, dec.Until, dec.Reason))
 	case domain.VerdictAllow:
 	}
-	out, err := d.outbound(n)
+	out, err := d.outbound(ctx, n)
 	if err != nil {
 		return d.wrap(d.store.MarkFinal(ctx, n.ID, domain.StatusFailed, n.Attempts+1, err.Error(), true))
 	}
@@ -160,13 +170,13 @@ func (d *dispatcherImpl) wrap(err error) error {
 	return nil
 }
 
-func (d *dispatcherImpl) outbound(n domain.Notification) (domain.Outbound, error) {
+func (d *dispatcherImpl) outbound(ctx context.Context, n domain.Notification) (domain.Outbound, error) {
 	out := domain.Outbound{Channel: n.Channel, Market: n.Market}
 	switch n.Channel {
 	case domain.ChannelEmail:
 		out.Email = domain.EmailMessage{NotificationID: n.ID, From: d.cfg.EmailFrom, ReplyTo: d.cfg.EmailReplyTo,
 			To: n.Address, Subject: n.Subject, HTML: n.BodyHTML, Text: n.BodyText, Headers: n.Headers,
-			Category: n.Category, IdempotencyKey: n.IdempotencyKey}
+			Attachments: d.attachments(ctx, n), Category: n.Category, IdempotencyKey: n.IdempotencyKey}
 	case domain.ChannelSMS:
 		out.SMS = domain.SmsMessage{NotificationID: n.ID, To: n.Address, Body: n.BodyText, Category: n.Category,
 			IdempotencyKey: n.IdempotencyKey}
@@ -194,6 +204,33 @@ func (d *dispatcherImpl) outbound(n domain.Notification) (domain.Outbound, error
 		return out, fmt.Errorf("unknown channel %q", n.Channel)
 	}
 	return out, nil
+}
+
+// attachments fetches a notification's attachment references. A file that cannot be fetched (expired link, host
+// not allow-listed, too large, media down) or that would exceed the per-email total is left out: the email still
+// links to it, so sending is never blocked by an attachment.
+func (d *dispatcherImpl) attachments(ctx context.Context, n domain.Notification) []domain.Attachment {
+	if len(n.Attachments) == 0 || d.cfg.Attachments == nil {
+		return nil
+	}
+	var out []domain.Attachment
+	var total int64
+	for _, ref := range n.Attachments {
+		a, err := d.cfg.Attachments.Fetch(ctx, ref)
+		if err != nil {
+			d.log.WarnContext(ctx, "attachment not fetched; the email links to it instead", "id", n.ID,
+				"fileName", ref.FileName, "assetId", ref.AssetID, "error", err)
+			continue
+		}
+		if total+int64(len(a.Content)) > d.cfg.MaxAttachmentBytes {
+			d.log.WarnContext(ctx, "attachments over the per-email limit; the email links to it instead", "id", n.ID,
+				"fileName", ref.FileName, "limitBytes", d.cfg.MaxAttachmentBytes)
+			continue
+		}
+		total += int64(len(a.Content))
+		out = append(out, a)
+	}
+	return out
 }
 
 func truncate(s string, n int) string {

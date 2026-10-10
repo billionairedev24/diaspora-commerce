@@ -426,6 +426,14 @@ channels:
     messages:
       notificationsInventoryAvailabilityChanged:
         $ref: '#/components/messages/inventoryAvailabilityChanged'
+  notificationsRetailEvents:
+    address: at.retail.events
+    description: retail (S225/S243) → supplier purchase-order emails requested with notification.requested (templateKey retail.purchase_order.sent;
+      recipient = the supplier contact's address, never resolved through identity). Typed retail.* events (retail.po.sent,
+      retail.po.dispatched, retail.po.dispatch-failed …) are not mapped.
+    messages:
+      notificationsRequestedRetail:
+        $ref: '#/components/messages/notificationsRequested'
   offersEvents:
     address: at.offers.events
     description: Offers, buy box and coupon events from offers-service via its transactional outbox. Offer and buy box events
@@ -4464,6 +4472,34 @@ components:
           description: IANA zone for quiet hours
         locale:
           type: string
+        name:
+          type: string
+          description: Display name (informational; e.g. the supplier contact)
+    NotificationsAttachmentRef:
+      type: object
+      description: A file to attach to the email, by signed media link. Fetched at send time only from allow-listed hosts
+        (the media base URL's host and configured storage hosts) and up to the size limit; when it cannot be fetched or the
+        provider cannot attach files, the email still links to it.
+      required:
+      - url
+      properties:
+        assetId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+          examples:
+          - PO-1P-323.pdf
+        contentType:
+          type: string
+          examples:
+          - application/pdf
+        url:
+          type: string
+          format: uri
+        expiresAt:
+          type: string
+          format: date-time
     NotificationsRequestedPayload:
       type: object
       required:
@@ -4491,6 +4527,13 @@ components:
         data:
           type: object
           additionalProperties: true
+          description: Template fields; data.attachments (at most 10) are email attachment references.
+          properties:
+            attachments:
+              type: array
+              maxItems: 10
+              items:
+                $ref: '#/components/schemas/NotificationsAttachmentRef'
     OffersOfferEvent:
       type: object
       required:
@@ -7918,6 +7961,16 @@ operations:
     summary: inventory.availability.changed with available > 0 claims every active stock alert for the SKU (= variant ATIN)
       and sends stock.back_in_stock (email, push) once; redeliveries re-claim the same alerts and the inbox stops a second
       send.
+  consumeNotificationsRetailEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationsRetailEvents'
+    summary: 'notification.requested with templateKey retail.purchase_order.sent → the supplier PO email (email, to recipient.email
+      only; transactional). Fields: contactName, poNumber, supplierName, orderDate, deliverBy, incoterm, paymentTerms, total
+      (else totalMinor + currency), documentUrl, documentExpiresAt; nulls render as empty and the optional rows are dropped.
+      data.attachments (the PO PDF as a media asset reference) is fetched from an allow-listed host within the size limit
+      and attached by Resend, SendGrid, SES and SMTP; otherwise the email links to documentUrl. Other retail events are ignored:
+      retail.po.dispatch-failed carries no buyer to notify, and retail.po.sent would duplicate the request.'
   publishOffersEvents:
     action: send
     channel:

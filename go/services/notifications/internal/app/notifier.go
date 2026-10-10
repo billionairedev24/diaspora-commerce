@@ -118,6 +118,10 @@ func (n *notifierImpl) build(ctx context.Context, req domain.Request) ([]domain.
 		base = uuid.NewString()
 	}
 	now := n.now().UTC()
+	refs := domain.CleanAttachmentRefs(req.Attachments)
+	if len(refs) == 0 {
+		refs = domain.AttachmentRefsFrom(req.Data)
+	}
 	var rows []domain.Notification
 	var skipped []error
 	for _, ch := range req.Channels {
@@ -159,6 +163,9 @@ func (n *notifierImpl) build(ctx context.Context, req domain.Request) ([]domain.
 				NextAttemptAt:   now,
 				CreatedAt:       now,
 				UpdatedAt:       now,
+			}
+			if ch == domain.ChannelEmail {
+				row.Attachments = refs
 			}
 			if ch == domain.ChannelEmail && tpl.Category == domain.CategoryMarketing && n.unsub != nil {
 				row.Headers = n.unsub.Headers(domain.Key(req.Recipient.ID, addr), addr, tpl.Category, now)

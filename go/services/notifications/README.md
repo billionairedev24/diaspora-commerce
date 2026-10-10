@@ -3,7 +3,8 @@
 Go service (port **8208** locally, Postgres database `notifications`) that sends templated, consent-checked
 email, SMS, push and WhatsApp messages with per-market provider failover, and records delivery receipts.
 Architecture: section 18 of `design/AfroTransact Architecture.dc.html`. Backlog: E19 (S121–S125), S211 (back-in-stock alerts), S217 (rules aligned with real producer events), S230 (trust-ops claims, moderation and
-suspensions), plus organisation invitations (S231) and phone verification (S234).
+suspensions), plus organisation invitations (S231), phone verification (S234) and retail's supplier
+purchase-order emails with real attachments (S243).
 
 ## How a message flows
 
@@ -15,6 +16,7 @@ POST /v1/notifications (Idempotency-Key) ───────────┴►
                                                                          SELECT … FOR UPDATE SKIP LOCKED │
 Dispatcher ◄─────────────────────────────────────────────────────────────────────────────────────────────┘
   ├─ ConsentChecker: suppression, TCPA SMS consent, preferences, quiet hours ─► suppressed / rescheduled
+  ├─ email attachments: signed media links fetched (allow-listed hosts, size limit); failures stay links
   ├─ Router: providers for (channel, market) in order, circuit breaker each, 3 s per attempt,
   │          fail over on timeout / 5xx / retryable; stop on permanent errors
   └─ sent ─► provider webhooks ─► delivered / bounced / complained / failed (never backwards)
@@ -26,9 +28,10 @@ Dispatcher ◄──────────────────────
 | Path | What |
 |---|---|
 | `internal/domain` | channels, categories, statuses, `Decide` consent rules, quiet hours, SMS keywords, circuit breakers, retry policy, `ProviderError` (retryable vs permanent) |
-| `internal/port` | `EmailSender`, `SmsSender`, `PushSender`, `ChatSender`, `ConsentChecker`, `ConsentStore`, `TemplateStore`, `NotificationStore`, `ContactResolver`, `RecipientResolver`, `ContactInvalidator`, `StockAlertStore` |
+| `internal/port` | `EmailSender` (+ optional `AttachmentCapable`), `AttachmentFetcher`, `SmsSender`, `PushSender`, `ChatSender`, `ConsentChecker`, `ConsentStore`, `TemplateStore`, `NotificationStore`, `ContactResolver`, `RecipientResolver`, `ContactInvalidator`, `StockAlertStore` |
 | `internal/app` | `Router`, `Notifier`, `Dispatcher`, `Ingest` (+ `rules.go`: topics and event rules), `StockAlerts`, `Receipts`, `SmsCompliance`, `Templates`, `Preferences`, `NotificationLog`, `Unsubscriber`, `Renderer` |
-| `internal/adapter/{resend,sendgrid,ses,smtp}` | email adapters (Resend uses `Idempotency-Key`) |
+| `internal/adapter/{resend,sendgrid,ses,smtp}` | email adapters (Resend uses `Idempotency-Key`); all four attach files |
+| `internal/adapter/mediafetch` | `AttachmentFetcher`: downloads signed media links from allow-listed hosts, size-limited, redirects re-checked |
 | `internal/adapter/{twilio,vonage,awssms}` | SMS adapters (AWS = End User Messaging `SendTextMessage`) |
 | `internal/adapter/{fcm,apns}` | push: FCM HTTP v1 (OAuth2 service account), APNs HTTP/2 with ES256 provider token |
 | `internal/adapter/whatsapp` | WhatsApp Cloud API (text, or approved template + parameters) |
@@ -107,6 +110,7 @@ fragment `contracts/asyncapi/fragments/notifications.yaml`):
 | `inventory` | `at.inventory.events` |
 | `payments` | `at.payment.events` |
 | `trustOps` | `at.trustops.events` |
+| `retail` | `at.retail.events` |
 
 Rules (`internal/app/rules.go`) map an event type to one or more templates (a rule's `When` picks variants, e.g. by
 `purpose`, `reason` or `status`). Recipients come from the payload's `recipient` block (or top-level `email`/`phone`),
@@ -151,6 +155,7 @@ time zone and market, and channels the user switched off in their account are dr
 | `content.newsletter.confirmation_requested` | payload `email` | `newsletter.confirm` | email |
 | `inventory.availability.changed` | stock alerts | `stock.back_in_stock` | email, push |
 | `notification.requested` (any topic) | payload `recipient` (+ identity) | `templateKey` | `channels` |
+| … from retail with `templateKey=retail.purchase_order.sent` | payload `recipient.email` (the supplier contact; never looked up) | `retail.purchase_order.sent` (PDF attached, link fallback) | email |
 
 trust-ops also publishes `notification.requested` for `claim.opened`, `claim.decided` and `claim.withdrawn` (with the
 seller org id as `recipient.id`, which identity cannot resolve as a user). Those keys (`SupersededGenericTemplates`)
@@ -158,10 +163,43 @@ are ignored on the generic path because the typed `trustops.claim.*` rules above
 trust-ops publishes no separate "response due" reminder or lapse event, so the seller's deadline goes out once, when
 the claim opens.
 
+### Supplier purchase-order emails (S243)
+
+retail-service (S225) sends a sent PO to the supplier's purchasing contact as `notification.requested` on
+`at.retail.events`: `templateKey` `retail.purchase_order.sent`, channel `email`, `recipient: {email, name}` (an external
+address: `RequestedTemplates` marks the key `PayloadOnly`, so identity is never called, even if an id is present) and
+`data` with `contactName`, `poNumber`, `supplierName`, `orderDate`, `deliverBy`, `incoterm`, `paymentTerms`, `total`,
+`documentUrl` (signed media link to the PO PDF), `documentExpiresAt` and `attachments: [{assetId, fileName,
+contentType, url, expiresAt}]`. The ingest turns JSON nulls into "" (the template drops empty rows), defaults
+`contactName` ("there"), `supplierName` and `total` (from `totalMinor` + `currency`) and derives `documentExpiresOn`
+("Oct 24, 2026"). That is the only template key retail requests (its dispatch `email-template` setting defaults to it).
+Retail's typed events are not mapped: `retail.po.sent` would duplicate the request and `retail.po.dispatch-failed`
+names no buyer to notify (its `recipient` is the supplier's address or EDI id).
+
+### Attachments
+
+Email requests may reference files by signed link: `attachments` on `POST /v1/notifications`, or `data.attachments` (as
+retail sends them). At most 10 references are kept per email row (column `attachments`, migration `0007`; file names
+are stripped of paths and quotes). The dispatcher fetches them when the email is sent (`AttachmentFetcher`,
+`internal/adapter/mediafetch`):
+
+* only `http(s)` URLs without user info whose host is allow-listed: the host of `attachments.mediaBaseUrl` plus
+  `attachments.allowedHosts` (`host` matches any port, `host:port` that port, `*.example.com` any subdomain);
+  redirects are re-checked against the same list; no credentials are sent (the link is signed);
+* at most `attachments.maxBytes` per file (10 MiB; declared `Content-Length` or streamed) and
+  `attachments.maxTotalBytes` per email (20 MiB);
+* Resend, SendGrid, SES and SMTP attach the files (`SupportsAttachments`); the router strips them for providers that
+  cannot (the log provider), so a failover still delivers the email;
+* a file that is rejected, expired (403) or unreachable is left out with a warning, never failing the send: the
+  template always renders the link (`documentUrl`), which is the fallback. With `attachments.enabled: false` emails
+  carry links only.
+
 `TestRulesMatchAsyncAPIContract` parses `contracts/asyncapi/events.yaml` and fails when a mapped event type or topic
 is missing (or published on another topic), when a contact-change type is not on the identity topic, or when the S230
-trust-ops rules (customer and seller owners for claims) are missing; `TestEveryRuleHasSeededTemplates` checks every rule has a seeded template
-per channel; the Postgres integration test renders a contract-shaped fixture of every mapped event.
+trust-ops rules (customer and seller owners for claims) are missing; `TestRequestedTemplatesMatchProducers` checks
+each `RequestedTemplates` key (retail's PO email) against its producer: `notification.requested` is published on that
+topic and the producer's send operation names the key; `TestEveryRuleHasSeededTemplates` checks every rule and
+requested template has a seeded template per channel; the Postgres integration test renders a contract-shaped fixture of every mapped event.
 
 Each event id is recorded in the `inbox` table in the same transaction as its notifications, so redeliveries
 are ignored. A recipient that cannot be reached (no address, unknown user) is skipped; other recipients of the same
@@ -194,14 +232,17 @@ carry no first name, formatted total or handover code: the ingest derives `first
 `itemsText`, `deadline` and links (`orderUrl`, `portalUrl`, `actionUrl`, `productUrl`) from `links.*` config. `programName` / `portalUrl` come from the organisation kind (`domain.OrgKind`, S215): `PROVIDER` → Provider Hub; `SELLER` and `BOTH` (sells products and services) → Seller Center — for seller applications (`kind`) and organisation invitations (`orgKind`). `0005`
 adds the S230 trust-ops templates (claims, moderation, suspension), `org.invitation`, `identity.verification.phone`,
 the suspension / reinstatement variants of the seller enforcement templates, `booking.balance_unpaid` and
-`payment.authentication_required`; for those the ingest derives `claimType`, `amount`, `dueDate`, `outcomeText`,
+`payment.authentication_required`, `0006` the claim reminder / lapse templates, and `0008` the supplier
+`retail.purchase_order.sent` email (S243); for `0005` the ingest derives `claimType`, `amount`, `dueDate`, `outcomeText`,
 `sellerOutcomeText`, `reasonText`, `balance`, `reference`, `claimsUrl` and `actionUrl`, and turns JSON nulls in
 optional fields (`note`, `inviterName`, `orderNumber`) into empty strings or defaults.
 
 ## Configuration
 
-`config/{local,dev,uat,prod}.yaml` with env overrides (`APP_ENV` selects the file). `kafka.topics`, `identity.*` (base URL, token URL, client id, timeout, cache TTLs) and `links.*`
-(storefront, seller center, provider hub) are per environment. Routing is an ordered
+`config/{local,dev,uat,prod}.yaml` with env overrides (`APP_ENV` selects the file). `kafka.topics`, `identity.*` (base URL, token URL, client id, timeout, cache TTLs), `links.*`
+(storefront, seller center, provider hub) and `attachments.*` (enabled, `mediaBaseUrl`, `allowedHosts`, `maxBytes`,
+`maxTotalBytes`, `timeout`; local allows MinIO `localhost:9000`, other environments media's public host and private
+bucket host) are per environment. Routing is an ordered
 provider list per market (`default` is the fallback), e.g. `routing.email.us: [resend, sendgrid, ses]`,
 `routing.sms.us: [twilio, aws, vonage]`. A provider whose credentials are missing is skipped with a warning.
 
@@ -210,7 +251,8 @@ Secrets (env only): `DB_URL`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `TWILIO_ACCO
 `RESEND_WEBHOOK_SECRET`, `SENDGRID_WEBHOOK_PUBLIC_KEY`, `UNSUBSCRIBE_SIGNING_KEY`, `SMTP_PASSWORD`,
 `NOTIFICATIONS_CLIENT_SECRET` (identity client; local defaults to identity's local secret; when missing elsewhere
 identity lookups are disabled with an error log rather than stopping OTP delivery). AWS (SES, End User
-Messaging) uses the default credential chain / workload identity. Other env overrides: `PUBLIC_BASE_URL`,
+Messaging) uses the default credential chain / workload identity. Other env overrides: `PUBLIC_BASE_URL`, `MEDIA_BASE_URL`, `ATTACHMENTS_ENABLED`, `ATTACHMENTS_ALLOWED_HOSTS`
+(comma-separated), `ATTACHMENTS_MAX_BYTES`, `ATTACHMENTS_MAX_TOTAL_BYTES`, `ATTACHMENTS_TIMEOUT`,
 `KAFKA_ENABLED`, `KAFKA_BROKERS`, `IDENTITY_ENABLED`, `IDENTITY_URL`, `AUTH_TOKEN_URI`, `LINKS_*`, `DISPATCHER_*`, `BREAKER_*`, `QUIET_HOURS_START/END`, `SEND_TIMEOUT`.
 
 Local: email → SMTP to Mailpit (`localhost:1025`, UI http://localhost:8025), SMS/push/WhatsApp → log provider,
@@ -231,7 +273,9 @@ The Postgres integration test (testcontainers) uses `postgis/postgis:17-3.5` (ov
 and versioning, idempotent submit, inbox de-duplication, `SKIP LOCKED` claiming across workers, retry with
 backoff → dead letter → replay, TCPA consent with STOP/START, quiet hours, OTP bypass, receipts that never move
 status backwards, suppression, one-click unsubscribe, every mapped producer event rendered with the seeded templates,
-and stock alerts (subscribe once, claim once per restock, end-to-end send).
+stock alerts (subscribe once, claim once per restock, end-to-end send) and retail's PO request (rendered to the
+supplier without identity, attachment reference stored, PDF attached by the dispatcher). Attachment tests use fakes
+(in-memory fetcher, fake HTTP transport for `mediafetch`) and never touch the network.
 
 Container: `docker build -f services/notifications/Dockerfile go`. Helm: `deploy/helm` on the `at-service` library
 chart.

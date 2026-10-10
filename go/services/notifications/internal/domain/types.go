@@ -134,14 +134,16 @@ func Key(recipientID, address string) string {
 
 // Request asks for a templated notification on one or more channels.
 type Request struct {
-	TemplateKey    string         `json:"templateKey"`
-	Locale         string         `json:"locale,omitempty"`
-	Market         string         `json:"market,omitempty"`
-	Channels       []Channel      `json:"channels"`
-	Recipient      Recipient      `json:"recipient"`
-	Data           map[string]any `json:"data,omitempty"`
-	IdempotencyKey string         `json:"-"`
-	EventID        string         `json:"-"`
+	TemplateKey string         `json:"templateKey"`
+	Locale      string         `json:"locale,omitempty"`
+	Market      string         `json:"market,omitempty"`
+	Channels    []Channel      `json:"channels"`
+	Recipient   Recipient      `json:"recipient"`
+	Data        map[string]any `json:"data,omitempty"`
+	// Attachments are files to attach to the email (signed media links). When empty, data.attachments is used.
+	Attachments    []AttachmentRef `json:"attachments,omitempty"`
+	IdempotencyKey string          `json:"-"`
+	EventID        string          `json:"-"`
 }
 
 // ErrInvalidRequest is returned for malformed requests.
@@ -177,32 +179,34 @@ func (r Request) Validate() (Request, error) {
 
 // Notification is one message on one channel to one address (a row of the outbox-style notification table).
 type Notification struct {
-	ID                string            `json:"id"`
-	IdempotencyKey    string            `json:"idempotencyKey"`
-	EventID           string            `json:"eventId,omitempty"`
-	TemplateKey       string            `json:"templateKey"`
-	TemplateVersion   int               `json:"templateVersion"`
-	Locale            string            `json:"locale"`
-	Channel           Channel           `json:"channel"`
-	Category          Category          `json:"category"`
-	Market            string            `json:"market"`
-	RecipientID       string            `json:"recipientId,omitempty"`
-	Address           string            `json:"address"`
-	TimeZone          string            `json:"timeZone,omitempty"`
-	Subject           string            `json:"subject,omitempty"`
-	BodyHTML          string            `json:"-"`
-	BodyText          string            `json:"bodyText,omitempty"`
-	Headers           map[string]string `json:"headers,omitempty"`
-	Status            Status            `json:"status"`
-	StatusDetail      string            `json:"statusDetail,omitempty"`
-	Attempts          int               `json:"attempts"`
-	NextAttemptAt     time.Time         `json:"nextAttemptAt"`
-	LastError         string            `json:"lastError,omitempty"`
-	Provider          string            `json:"provider,omitempty"`
-	ProviderMessageID string            `json:"providerMessageId,omitempty"`
-	CreatedAt         time.Time         `json:"createdAt"`
-	UpdatedAt         time.Time         `json:"updatedAt"`
-	SentAt            *time.Time        `json:"sentAt,omitempty"`
+	ID              string            `json:"id"`
+	IdempotencyKey  string            `json:"idempotencyKey"`
+	EventID         string            `json:"eventId,omitempty"`
+	TemplateKey     string            `json:"templateKey"`
+	TemplateVersion int               `json:"templateVersion"`
+	Locale          string            `json:"locale"`
+	Channel         Channel           `json:"channel"`
+	Category        Category          `json:"category"`
+	Market          string            `json:"market"`
+	RecipientID     string            `json:"recipientId,omitempty"`
+	Address         string            `json:"address"`
+	TimeZone        string            `json:"timeZone,omitempty"`
+	Subject         string            `json:"subject,omitempty"`
+	BodyHTML        string            `json:"-"`
+	BodyText        string            `json:"bodyText,omitempty"`
+	Headers         map[string]string `json:"headers,omitempty"`
+	// Attachments (email only) are fetched by the dispatcher when the message is sent.
+	Attachments       []AttachmentRef `json:"attachments,omitempty"`
+	Status            Status          `json:"status"`
+	StatusDetail      string          `json:"statusDetail,omitempty"`
+	Attempts          int             `json:"attempts"`
+	NextAttemptAt     time.Time       `json:"nextAttemptAt"`
+	LastError         string          `json:"lastError,omitempty"`
+	Provider          string          `json:"provider,omitempty"`
+	ProviderMessageID string          `json:"providerMessageId,omitempty"`
+	CreatedAt         time.Time       `json:"createdAt"`
+	UpdatedAt         time.Time       `json:"updatedAt"`
+	SentAt            *time.Time      `json:"sentAt,omitempty"`
 }
 
 // DeadLetter is a notification that exhausted its retries or failed permanently.

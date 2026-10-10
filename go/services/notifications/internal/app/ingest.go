@@ -177,12 +177,23 @@ func (h *ingestImpl) generic(ctx context.Context, p eventPayload) (domain.Reques
 	for _, c := range p.Channels {
 		channels = append(channels, domain.Channel(c))
 	}
-	t, err := fill(ctx, h.cfg.Resolver, p.Recipient, channels)
-	if err != nil {
-		return domain.Request{}, err
+	known, isKnown := RequestedTemplates[p.TemplateKey]
+	t := target{recipient: p.Recipient}
+	if !known.PayloadOnly {
+		var err error
+		if t, err = fill(ctx, h.cfg.Resolver, p.Recipient, channels); err != nil {
+			return domain.Request{}, err
+		}
+	}
+	data := maps.Clone(p.Data)
+	if data == nil {
+		data = map[string]any{}
+	}
+	if isKnown && known.Enrich != nil {
+		known.Enrich(data, h.cfg.Links)
 	}
 	return domain.Request{TemplateKey: p.TemplateKey, Channels: channels, Recipient: t.recipient, Market: p.Market,
-		Locale: p.Locale, Data: p.Data}, nil
+		Locale: p.Locale, Data: data}, nil
 }
 
 // channelsFor applies the payload's channel overrides to the rule's channels.
