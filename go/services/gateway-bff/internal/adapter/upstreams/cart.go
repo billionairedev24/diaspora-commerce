@@ -24,6 +24,13 @@ func (k *cartImpl) do(ctx context.Context, o port.CartOwner, method, path string
 	if o.GuestID != "" {
 		h.Set(GuestCartHeader, o.GuestID)
 	}
+	if o.Country != "" && o.Region != "" {
+		h.Set("X-Delivery-Country", o.Country)
+		h.Set("X-Delivery-Region", o.Region)
+		if o.City != "" {
+			h.Set("X-Delivery-City", o.City)
+		}
+	}
 	var out port.UpstreamCart
 	res, err := call(ctx, k.c, httpclient.Request{Method: method, Path: path, Header: h, Bearer: o.BearerToken, JSON: body}, &out)
 	if err != nil {

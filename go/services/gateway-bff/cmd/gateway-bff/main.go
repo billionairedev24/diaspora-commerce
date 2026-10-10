@@ -135,7 +135,7 @@ func run() error {
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: cfg.Commerce.DefaultZip,
 		DefaultCity: cfg.Commerce.DefaultCity, DefaultState: cfg.Commerce.DefaultState, Log: log})
 	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store,
-		Sessions: sessions, Estimator: estimator, Log: log})
+		Sessions: sessions, Estimator: estimator, Log: log, Location: location, Market: cfg.Market})
 	services := httpapi.Services{
 		Sessions: sessions,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{

@@ -50,6 +50,9 @@ type CartDeps struct {
 	Estimator domain.Estimator
 	Clock     Clock
 	Log       *slog.Logger
+	// Location and Market supply the delivery place sent with cart calls (optional).
+	Location LocationService
+	Market   string
 }
 
 type cartServiceImpl struct{ d CartDeps }
@@ -66,6 +69,24 @@ func NewCartService(d CartDeps) CartService {
 
 func owner(c *domain.Caller) port.CartOwner {
 	return port.CartOwner{BearerToken: c.BearerToken, GuestID: c.GuestCartID()}
+}
+
+// owner adds the shopper's delivery place, so cart-service can group pre-order lines by window.
+func (s *cartServiceImpl) owner(ctx context.Context, c *domain.Caller) port.CartOwner {
+	o := owner(c)
+	if s.d.Location == nil {
+		return o
+	}
+	loc := s.d.Location.Current(ctx, c)
+	if loc.State == "" {
+		return o
+	}
+	p, errs := domain.NormalizePlace(s.d.Market, loc.State, loc.City)
+	if len(errs) > 0 {
+		return o
+	}
+	o.Country, o.Region, o.City = p.Country, p.Region, p.City
+	return o
 }
 
 func selectionOwner(c *domain.Caller) string {
@@ -160,7 +181,7 @@ func isStock(err error) (*port.UpstreamProblem, bool) {
 }
 
 func (s *cartServiceImpl) fetch(ctx context.Context, c *domain.Caller) (port.UpstreamCart, bool, error) {
-	o := owner(c)
+	o := s.owner(ctx, c)
 	if o.BearerToken == "" && o.GuestID == "" {
 		return port.UpstreamCart{}, false, nil
 	}
@@ -264,7 +285,7 @@ func (s *cartServiceImpl) Add(ctx context.Context, c *domain.Caller, offerID str
 	if err != nil {
 		return domain.Cart{}, err
 	}
-	up, err := s.d.Cart.Add(ctx, owner(c), atin, chosen, qty)
+	up, err := s.d.Cart.Add(ctx, s.owner(ctx, c), atin, chosen, qty)
 	if err != nil {
 		if p, ok := isStock(err); ok {
 			inCart := s.inCart(ctx, c, atin)
@@ -297,7 +318,7 @@ func (s *cartServiceImpl) UpdateLine(ctx context.Context, c *domain.Caller, line
 		return domain.Cart{}, lineNotFound()
 	}
 	if qty != nil && *qty != line.Quantity {
-		next, err := s.d.Cart.SetQuantity(ctx, owner(c), lineID, *qty)
+		next, err := s.d.Cart.SetQuantity(ctx, s.owner(ctx, c), lineID, *qty)
 		if err != nil {
 			if p, ok := isStock(err); ok {
 				return domain.Cart{}, s.stockProblem(ctx, lineID, line.Title, p.Detail, line.Quantity, *qty).WithCause(err)
@@ -322,7 +343,7 @@ func (s *cartServiceImpl) RemoveLine(ctx context.Context, c *domain.Caller, line
 	if _, found := up.Line(lineID); !ok || !found {
 		return domain.Cart{}, lineNotFound()
 	}
-	next, err := s.d.Cart.Remove(ctx, owner(c), lineID)
+	next, err := s.d.Cart.Remove(ctx, s.owner(ctx, c), lineID)
 	if err != nil {
 		return domain.Cart{}, cartErr(err, domain.CodeLineNotFound)
 	}
@@ -350,7 +371,7 @@ func (s *cartServiceImpl) SaveForLater(ctx context.Context, c *domain.Caller, li
 	if owner(c) == (port.CartOwner{}) {
 		return domain.Cart{}, lineNotFound()
 	}
-	up, err := s.d.Cart.SaveForLater(ctx, owner(c), lineID)
+	up, err := s.d.Cart.SaveForLater(ctx, s.owner(ctx, c), lineID)
 	if err != nil {
 		return domain.Cart{}, cartErr(err, domain.CodeLineNotFound)
 	}
@@ -361,7 +382,7 @@ func (s *cartServiceImpl) MoveToCart(ctx context.Context, c *domain.Caller, save
 	if owner(c) == (port.CartOwner{}) {
 		return domain.Cart{}, cartErr(&port.UpstreamProblem{Status: 404, Code: port.CartLineNotFound}, domain.CodeSavedNotFound)
 	}
-	up, err := s.d.Cart.MoveToCart(ctx, owner(c), savedID)
+	up, err := s.d.Cart.MoveToCart(ctx, s.owner(ctx, c), savedID)
 	if err != nil {
 		if p, ok := isStock(err); ok {
 			return domain.Cart{}, s.stockProblem(ctx, savedID, "", p.Detail, 0, 1).WithCause(err)
@@ -373,7 +394,7 @@ func (s *cartServiceImpl) MoveToCart(ctx context.Context, c *domain.Caller, save
 	}
 	// The contract moves the item back with quantity 1 (the cart service keeps the saved quantity).
 	if l, ok := up.Line(savedID); ok && l.Quantity > 1 {
-		if next, err := s.d.Cart.SetQuantity(ctx, owner(c), savedID, 1); err == nil {
+		if next, err := s.d.Cart.SetQuantity(ctx, s.owner(ctx, c), savedID, 1); err == nil {
 			up = next
 		}
 	}
@@ -392,7 +413,7 @@ func (s *cartServiceImpl) RemoveSaved(ctx context.Context, c *domain.Caller, sav
 	if _, found := up.SavedLine(savedID); !ok || !found {
 		return domain.Cart{}, notFound
 	}
-	next, err := s.d.Cart.Remove(ctx, owner(c), savedID)
+	next, err := s.d.Cart.Remove(ctx, s.owner(ctx, c), savedID)
 	if err != nil {
 		return domain.Cart{}, cartErr(err, domain.CodeSavedNotFound)
 	}
@@ -565,7 +586,7 @@ func (s *cartServiceImpl) SetPreorderFulfilment(ctx context.Context, c *domain.C
 	if owner(c) == (port.CartOwner{}) {
 		return domain.Cart{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "Your cart has no pre-order items.")
 	}
-	up, err := s.d.Cart.SetPreorderFulfilment(ctx, owner(c), windowID, f)
+	up, err := s.d.Cart.SetPreorderFulfilment(ctx, s.owner(ctx, c), windowID, f)
 	if err != nil {
 		return domain.Cart{}, cartErr(err, "")
 	}

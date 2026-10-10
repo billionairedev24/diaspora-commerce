@@ -145,6 +145,10 @@ type InventoryClient interface {
 type CartOwner struct {
 	BearerToken string
 	GuestID     string
+	// Country, Region and City are the shopper's delivery place (pre-order packaging); empty when unknown.
+	Country string
+	Region  string
+	City    string
 }
 
 // UpstreamCartLine is a cart-service line. OfferID is the offers-service offer of the line (empty for lines added
