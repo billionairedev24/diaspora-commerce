@@ -512,7 +512,7 @@
 - openapi-diff gate blocks breaking changes without a version bump
 - Java implementations verified against contracts","E27","","Highest","5","docs contracts","docs","To Do"
 "S170","Story","Swagger UI, Scalar and Redoc on every service","Interactive references in local/dev/uat; off in prod.","- /swagger-ui.html (Java), /docs (Scalar) and /redoc on every service
-- Disabled in prod configuration","E27","","Highest","2","docs","docs","To Do"
+- Disabled in prod configuration","E27","","Highest","2","docs","docs","Done"
 "S171","Story","Docusaurus developer portal","developers.afrotransact.com with guides, webhooks, theme schema, ADRs and changelog.","- Portal builds statically and deploys to Cloudflare Pages
 - API reference pages render every contract with Redoc and Scalar","E27","","High","5","docs web","docs","Done"
 "S172","Story","AsyncAPI event catalog","contracts/asyncapi/events.yaml documents every topic and payload.","- Every published event type is documented
@@ -534,29 +534,29 @@
 "S179","Story","Local development stack (docker compose)","Postgres+PostGIS (one DB per service), Kafka, Elasticsearch, Kibana, Redis, Temporal, MinIO, Mailpit, OpenFGA.","- make up starts the full stack
 - Every service database and user is created automatically","E29","","Highest","3","infra local","infra","Done"
 "S180","Story","Terraform modules per cloud with a shared interface","Cluster, Postgres, cache, bucket, secrets and network modules for aws, gcp and azure with identical inputs/outputs.","- envs/<env> choose the provider with a single variable
-- OPA/Conftest blocks public buckets, missing encryption and untagged resources","E29","","High","13","infra terraform","infra","To Do"
+- OPA/Conftest blocks public buckets, missing encryption and untagged resources","E29","","High","13","infra terraform","infra","In Progress"
 "S181","Story","Cloudflare edge as code","DNS, WAF rules, rate limits, Turnstile and Workers routes in Terraform.","- WAF managed rules on all hostnames
-- Authenticated Origin Pulls to the cluster ingress","E29","","High","5","infra cloudflare","infra","To Do"
+- Authenticated Origin Pulls to the cluster ingress","E29","","High","5","infra cloudflare","infra","In Progress"
 "S182","Story","Cost optimisation baseline","Arm nodes, spot pools, scale-to-zero previews, ILM tiers and tail sampling.","- Preview namespaces scale to zero when idle
 - Elasticsearch ILM hot-warm-frozen policies defined","E29","","Medium","5","infra finops","infra","To Do"
 "S183","Story","Secrets via External Secrets Operator","AWS Secrets Manager, GCP Secret Manager or Azure Key Vault behind ESO.","- No secret values in git
-- Same ExternalSecret manifests work on all three clouds","E29","","High","3","infra security","infra","To Do"
+- Same ExternalSecret manifests work on all three clouds","E29","","High","3","infra security","infra","In Progress"
 "E30","Epic","CI/CD, environments & Kubernetes deployment","Each service built, tested, signed and deployed independently to local/dev/uat/prod on the chosen cloud.","","","CI/CD, environments & Kubernetes deployment","High","","cicd","cicd","In Progress"
 "S184","Story","Helm library chart and per-service charts","Shared at-service library chart; every service has its own chart and values per environment.","- helm template works for every service and environment
 - Charts include Deployment, Service, HPA, PDB, ServiceMonitor, NetworkPolicy and ExternalSecret","E30","","Highest","5","cicd k8s","cicd","Done"
 "S185","Story","Per-service GitHub Actions workflows","Path-filtered workflows calling reusable Java/Go pipelines.","- A change to one service builds and tests only that service
-- Pipeline: lint, arch tests, unit, integration, OpenAPI diff, security scans, image, SBOM, cosign","E30","","Highest","5","cicd github-actions","cicd","To Do"
+- Pipeline: lint, arch tests, unit, integration, OpenAPI diff, security scans, image, SBOM, cosign","E30","","Highest","5","cicd github-actions","cicd","In Progress"
 "S186","Story","Deploy workflow with cloud target (aws | gcp | azure)","OIDC federation to the chosen cloud; images mirrored to its registry.","- No long-lived cloud keys in GitHub
-- Target cloud is a single input/variable","E30","","High","5","cicd github-actions","cicd","To Do"
+- Target cloud is a single input/variable","E30","","High","5","cicd github-actions","cicd","In Progress"
 "S187","Story","Argo CD apps per service and environment","ApplicationSet generates one app per service per environment; Argo Rollouts canary in uat/prod.","- Canary 10% → 50% → 100% with Prometheus analysis
 - Automatic rollback on SLO breach; prod promotion needs approval","E30","","High","8","cicd k8s","cicd","Done"
 "S188","Story","Environment configuration: local, dev, uat, prod","Profile/config per environment for every service and app.","- Spring profiles application-<env>.yml and Go config/<env>.yaml
 - Docs pages on in local/dev/uat, off in prod
 - Trace sampling 100% dev, 50% uat, 10% prod","E30","","Highest","3","cicd config","cicd","In Progress"
 "S189","Story","Web deploys to Cloudflare Workers with PR previews","OpenNext builds for storefront, Seller Center and staff console; Vercel fallback.","- Each PR gets a preview URL
-- Same build output deploys to Vercel if needed","E30","","High","5","cicd web cloudflare","cicd","To Do"
+- Same build output deploys to Vercel if needed","E30","","High","5","cicd web cloudflare","cicd","In Progress"
 "S190","Story","Mobile builds with EAS","Expo EAS builds and store submissions per environment.","- Dev, preview and production channels
-- OTA updates for JS-only changes","E30","","Medium","3","cicd mobile","cicd","To Do"
+- OTA updates for JS-only changes","E30","","Medium","3","cicd mobile","cicd","In Progress"
 "E31","Epic","Legal, privacy, i18n & accessibility","Policy pages, cookie consent, SMS terms, translations and WCAG 2.2 AA.","","","Legal, privacy, i18n & accessibility","High","","legal","legal","In Progress"
 "S191","Story","Legal center pages","Conditions of Use, Privacy, Cookie Notice, Privacy Choices, Returns, Seller & Provider Terms, Prohibited Items, Accessibility, SMS & Notification Terms.","- Each page shows version, effective date and previous versions
 - Draft-for-counsel banner until legal approves","E31","","High","5","legal web","legal","In Progress"
@@ -662,7 +662,7 @@
 - Receipt date rules use the warehouse time zone","E10","","Medium","8","retail catalog inventory payments","retail","To Do"
 "S227","Story","Fix contract lint findings","Make every contract pass tools/contracts/lint_contracts.sh: tags, summaries and explicit security on all operations; fix YAML flow-mapping commas that truncate descriptions; align notifications topic names with producers.","- lint_contracts.sh passes for every contract
 - CI runs the lint on contract changes
-- No consumer subscribes to a topic without a producer","E27","","High","3","contracts docs","docs","To Do"
+- No consumer subscribes to a topic without a producer","E27","","High","3","contracts docs","docs","Done"
 "S228","Story","Seller suspension hides listings; live listing takedown","Seller service gets suspend/reinstate endpoints (separate from payout compliance holds) that publish seller.listings.hidden/restored; catalog publishes a flagged-listing event and supports staff takedown of live listings; seller account-health lookup is callable by service tokens.","- Suspend and reinstate endpoints on seller, callable by trust-ops-service
 - Reinstating does not release unrelated compliance payout holds
 - Suspension hides catalog, offers, bookings and search listings via events
@@ -688,10 +688,10 @@
 "S233","Story","Orders accepts relayed courier events and richer shipment data","Orders accepts courier events relayed by fulfilment-service (scope delivery:relay, driverId as actor); orders.order.placed carries per-shipment nodeId, perishable flag and ship-to street and position; dispatch can read delivery briefs; inventory offers pick confirmation.","- Queued proofs of delivery are accepted from fulfilment-service while the driver is offline
 - order placed events include nodeId, perishable, street and lat/lng per shipment
 - Dispatch role can read delivery briefs
-- 150 m proof-of-delivery check applies to all stops","E12","","High","5","orders fulfilment identity","delivery","To Do"
+- 150 m proof-of-delivery check applies to all stops","E12","","High","5","orders fulfilment identity","delivery","In Progress"
 "S234","Story","Phone number verification","Identity verifies phone numbers by SMS code independently of MFA so notifications can text verified numbers.","- User can verify a phone with a 6-digit SMS code
 - phoneVerified is true after verification
-- Changing the phone resets verification","E02","","Medium","2","identity notifications","identity","To Do"
+- Changing the phone resets verification","E02","","Medium","2","identity notifications","identity","In Progress"
 "S235","Story","Returns and tax integration across services","Orders calls the tax quote at checkout and links returns; order placed events carry product type, perishable, discount, jurisdiction, shipping amount and street; payments exposes refunded amounts per line; inventory returns accept a service scope and receiving warehouse; carrier-gateway supports box-free QR drop-off and return rate choice; fulfilment schedules return pickups; storefront and mobile return screens.","- Checkout tax comes from tax-returns quote
 - Return eligibility uses order event data without customer-entered address
 - Payments reports refunded amount per line
