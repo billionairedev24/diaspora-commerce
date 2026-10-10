@@ -754,3 +754,7 @@
 "S250","Story","Media long-lived links and BFF-forwarded tokens","Media serves a media-hosted redirect link for long-lived document URLs (cloud signers cap at 7 days, IRSA sessions expire sooner) and accepts user tokens forwarded by the BFF where appropriate; BFF uploads résumés with purpose career-resume.","- PO email links work for 14 days on every cloud
 - Staff exports via the BFF can be stored in media
 - Careers résumé uploads use career-resume","E01","","Medium","3","media bff","foundation","To Do"
+"S251","Story","Environment-aware domains and URLs","Remove hard-coded production hosts: per-env settings for public URLs, auth issuer, CORS, cookies, WebAuthn, media and upstreams; local defaults to localhost; one problem-type URI base; CI guard against prod hosts in non-prod config.","- Local, dev and uat run without any prod host in their config
+- Emails and redirects link to the environment's own hosts
+- CI fails when a prod host appears in non-prod config or source
+- docs/engineering/environments.md lists hosts per environment","E30","","Highest","8","config environments","cicd","In Progress"
