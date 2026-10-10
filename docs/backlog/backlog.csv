@@ -363,14 +363,14 @@
 "S113","Story","Provider public page design","Layouts, accent, cover, gallery (plan-limited), featured work and social links pending approval.","- Gallery size limited by plan (6/12/24)
 - Social links validated per network and shown only after approval
 - Featured posts can link to a bookable service","E16","","Medium","5","storefront bookings","storefront","Done"
-"E17","Epic","Returns, refunds & tax","RMAs, refunds orchestration and marketplace-facilitator sales tax.","","","Returns, refunds & tax","High","","returns","returns","To Do"
+"E17","Epic","Returns, refunds & tax","RMAs, refunds orchestration and marketplace-facilitator sales tax.","","","Returns, refunds & tax","High","","returns","returns","In Progress"
 "S114","Story","Start a return on delivered items","Pick items, reason and method; get return number, drop-off instructions and refund amount.","- Food items show 'report a problem' instead of return
 - Return can be cancelled before drop-off
-- Mobile app shows a QR code for drop-off","E17","","High","5","returns java","returns","To Do"
+- Mobile app shows a QR code for drop-off","E17","","High","5","returns java","returns","In Progress"
 "S115","Story","Refund orchestration","Inspection outcome triggers refund and inventory restock or damaged.","- Refund reverses the seller transfer portion and commission
-- Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","To Do"
+- Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","In Progress"
 "S116","Story","Marketplace-facilitator sales tax","Tax per line by delivery address (Stripe Tax or Avalara) attributed to each seller.","- Tax is computed at checkout and stored per line
-- Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","To Do"
+- Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","In Progress"
 "E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","In Progress"
 "S117","Story","Listing moderation queue","AI-flagged listings with allow/remove decisions.","- Queue shows AI flags with reasons
 - Decisions are audited","E18","","High","5","trust java","trust","In Progress"
