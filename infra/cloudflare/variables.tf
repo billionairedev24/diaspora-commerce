@@ -87,3 +87,9 @@ variable "advanced_certificate_environments" {
   type        = list(string)
   default     = ["dev", "uat"]
 }
+
+variable "pages_projects_owner" {
+  description = "This run creates the account-wide Cloudflare Pages projects (afrotransact-docs, afrotransact-storybook). Exactly one environment sets it (dev, the first one applied); every run attaches its own developers.<base> domain to the docs project."
+  type        = bool
+  default     = false
+}

@@ -11,3 +11,6 @@ tunnel_service = "http://envoy-gateway.ingress.svc.cluster.local:80"
 # origin_target = "k8s-ingress-1234.elb.us-east-1.amazonaws.com" # or the GKE/AKS LB IP
 
 workers_routes_enabled = true
+
+# Account-wide Cloudflare Pages projects (docs portal, Storybook) are created by this run (dev is applied first).
+pages_projects_owner = true

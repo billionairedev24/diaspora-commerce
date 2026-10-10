@@ -1,6 +1,6 @@
 # Module contract: one interface, three clouds
 
-`modules/aws`, `modules/gcp` and `modules/azure` each contain the same nine modules. For every module the
+`modules/aws`, `modules/gcp` and `modules/azure` each contain the same ten modules. For every module the
 **inputs are byte-identical** (`variables.tf` and `context.tf` are copied from `_interface/<module>/` and
 `context.tf.tmpl`) and the **output names are identical** (values are cloud specific).
 `scripts/sync-interface.sh --check` enforces both in CI (`terraform.yml`), so an environment can switch
@@ -13,6 +13,7 @@ modules/
   aws|gcp|azure/<module>/  main.tf + outputs.tf per cloud (variables.tf/context.tf are copies)
   shared/elastic           Elasticsearch 9 on Elastic Cloud (elastic/ec) - same on every cloud
   shared/confluent         Kafka on Confluent Cloud (confluentinc/confluent) - same on every cloud
+  shared/temporal          Temporal Cloud namespace per environment (temporalio/temporalcloud)
 ```
 
 ## Common input: `context`
@@ -43,6 +44,7 @@ Azure tags. Every module adds `service` (`platform` or the service name) and `mo
 | `registry` | `repositories`, `immutable_tags`, `keep_last`, `reader_principals` | `registry_url`, `repository_urls`, `registry` (handle) |
 | `identity` | `cluster` (= `cluster.workload_identity`), `services` (map: `namespace`, `service_account`, `buckets`, `secrets`), `buckets`, `secret_store` | `identities` (svc → annotation value), `helm_values` (svc → `{cloud, workloadIdentity}`) |
 | `github-oidc` | `github_repository`, `subjects`, `access` (`deploy`\|`plan`\|`apply`), `create_provider`, `provider_ref`, `registry` | `login` (inputs for the login action), `principal`, `provider_ref` |
+| `budget` | `monthly_limit`, `currency`, `actual_thresholds`, `forecast_thresholds`, `notification_emails`, `shared_account`, `billing_account` (gcp) | `budget_id`, `budget_name`, `alert_target` |
 
 A cloud may ignore an input that has no meaning there (documented in the module header), e.g. `storage_gb`
 on Aurora (auto-grows) or `secret_store` on AWS postgres (RDS manages the admin secret itself).
@@ -60,6 +62,7 @@ on Aurora (auto-grows) or `secret_store` on AWS postgres (RDS manages the admin 
 | registry | ECR per service (immutable, scan on push, KMS, lifecycle) | Artifact Registry `afrotransact` (immutable tags, cleanup policies) | ACR (Premium in prod), AcrPull for kubelet, purge task |
 | identity | IRSA role per service | GSA per service + Workload Identity binding | user-assigned identity + federated credential per service |
 | github-oidc | IAM OIDC provider + role (StringLike on `sub`) | WIF pool/provider (repo condition) + SA impersonation per exact `sub` | user-assigned identity + federated credential per `sub` (no app registration) |
+| budget | AWS Budgets monthly COST budget (ACTUAL + FORECASTED), SNS topic with its own CMK; tag filter `env` when the account is shared | Cloud Billing budget on the project (label filter when shared), Monitoring email channels | consumption budget on the environment's resource group (Owners + emails) |
 
 Encryption at rest is on for every data store on every cloud; deletion protection follows
 `context.deletion_protection` (Aurora/Cloud SQL/Memorystore/EKS/GKE flags, Azure `CanNotDelete` locks).

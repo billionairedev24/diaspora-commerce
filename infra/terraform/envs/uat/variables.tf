@@ -96,6 +96,43 @@ variable "enable_confluent" {
   default     = true
 }
 
+variable "enable_temporal" {
+  description = "Provision the environment's Temporal Cloud namespace (needs TEMPORAL_CLOUD_API_KEY)."
+  type        = bool
+  default     = true
+}
+
+variable "temporal_region" {
+  description = "Temporal Cloud region; empty = <cloud>-<region> (aws-us-east-1, gcp-us-east4). Required when cloud = azure."
+  type        = string
+  default     = ""
+}
+
+variable "temporal_accepted_client_ca" {
+  description = "Base64 PEM of the CA signing the Temporal worker client certificates (mTLS, not secret). Empty = API key auth."
+  type        = string
+  default     = ""
+}
+
+# ------------------------------------------------------------------ cost (S182)
+variable "budget_notification_emails" {
+  description = "Recipients of the environment's monthly budget alerts (sizing.tf monthly_budget). Empty = AWS: SNS topic only, GCP: billing admins, Azure: subscription Owners."
+  type        = list(string)
+  default     = []
+}
+
+variable "budget_shared_account" {
+  description = "Several environments share this AWS account / GCP project: filter the budget by the env tag/label (AWS: activate the `env` cost allocation tag in Billing first)."
+  type        = bool
+  default     = false
+}
+
+variable "gcp_billing_account" {
+  description = "Billing account id the GCP project is linked to (cloud = gcp; required for the budget)."
+  type        = string
+  default     = ""
+}
+
 # ------------------------------------------------------------------ cloud account identifiers
 variable "gcp_project_id" {
   description = "GCP project (cloud = gcp)."

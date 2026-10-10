@@ -6,11 +6,14 @@ Every Java and Go service is built, tested, signed and deployed **independently*
 ```
 PR / push touching go/services/search/**          (path filter: only go-search.yml runs)
   go-search.yml ──► _go-service.yml
-                     ├ verify    golangci-lint, go vet, go test -race (unit + Testcontainers ITs), coverage
+                     ├ verify    golangci-lint, go vet, go test -race (unit + Testcontainers ITs), coverage gate
                      ├ contract  api/openapi.yaml == contracts/openapi/search.yaml, oasdiff breaking vs base
-                     ├ security  gitleaks, Trivy fs (HIGH/CRITICAL), govulncheck, [CodeQL]
+                     ├ security  gitleaks, Trivy fs (HIGH/CRITICAL), govulncheck, Semgrep, [CodeQL]
                      ├ helm      lint + template dev/uat/prod x none/aws/gcp/azure | kubeconform
-                     └ image     buildx linux/amd64+arm64 -> ghcr.io/<repo>/search:<sha>
+                     └ image     buildx linux/amd64+arm64, reproducible (SOURCE_DATE_EPOCH = commit time,
+                                 rewrite-timestamp) -> ghcr.io/<repo>/search:<sha>
+                                 image policy: non-root USER, EXPOSE 8080, APP_ENV=prod / SPRING_PROFILES_ACTIVE=prod,
+                                 size budget (Go 60 MB, Java 450 MB; linux/amd64 uncompressed) - also on PRs
                                  Trivy image (CRITICAL fails) -> Syft SPDX SBOM -> cosign sign + attest (keyless)
   main only ──► _deploy.yml (environment dev)
                      ├ cosign verify (identity = this repo's _go-service.yml@refs/heads/main)
@@ -24,25 +27,27 @@ promote.yml (manual) ──► _deploy.yml (environment uat | prod; prod waits f
 
 Java services are identical with `_java-service.yml` (Temurin 25, Maven cache, platform libs installed
 first, `./mvnw -B -f services/<svc>/pom.xml verify` = Checkstyle/Spotless + unit + ArchUnit +
-Testcontainers ITs + JaCoCo; image from `java/Dockerfile` with `SERVICE=<svc>`).
+Testcontainers ITs + JaCoCo + `tools/quality/coverage_report.sh` gate; Semgrep in the security job; image from
+`java/Dockerfile` with `SERVICE=<svc>`).
 
 ## Workflows
 
 | Workflow | Trigger | What |
 |---|---|---|
 | `java-<svc>.yml`, `go-<svc>.yml` (25, generated) | changes under that service (+ shared libs/chart/workflow) | pipeline above; deploy to dev on main |
-| `web-<app>.yml` (3, generated) | `web/apps/<app>/**`, `web/packages/**` | lint, typecheck, test, Next build, OpenNext build; PR -> Workers preview URL comment; main -> dev; dispatch -> uat/prod; optional Vercel fallback |
+| `web-<app>.yml` (3, generated) | `web/apps/<app>/**`, `web/packages/**` | lint, typecheck, test, Next build, OpenNext build; security (gitleaks, Semgrep, osv-scanner on `pnpm-lock.yaml`, gates the deploy); PR -> Workers preview URL comment; main -> dev; dispatch -> uat/prod; optional Vercel fallback |
 | `promote.yml` (generated) | manual | promote a signed image (default: the tag running in the previous env) to uat or prod |
 | `_java-service.yml`, `_go-service.yml`, `_web-app.yml`, `_deploy.yml` | `workflow_call` | reusable pipelines |
 | `contracts.yml` | `contracts/**` | Redocly + Spectral lint, oasdiff breaking changes for every spec, AsyncAPI validate |
 | `terraform.yml` | `infra/terraform/**`, `infra/cloudflare/**`, `infra/policy/**` | fmt, interface drift, validate (all modules, all env x cloud), tflint, conftest tests; plan per env on its cloud with conftest on the plan JSON + PR comment; apply dev on main, uat/prod on dispatch |
-| `security.yml` | main, weekly, manual | CodeQL (java-kotlin, go, js/ts, actions), Trivy repo SARIF (CRITICAL fails), gitleaks full history, ZAP baseline vs dev |
+| `security.yml` | main, weekly, manual (+ PRs touching scanner config) | CodeQL (java-kotlin, go, js/ts, actions); Trivy repo SARIF (CRITICAL vulns/secrets fail) and Trivy IaC on `infra/` (CRITICAL/HIGH fail); Semgrep self-test + repo scan (ERROR fails); govulncheck every Go module; osv-scanner every lockfile (SARIF, CVSS >= 9 fails); gitleaks full history; OWASP Dependency-Check (weekly, `NVD_API_KEY`); ZAP baseline vs dev |
+| `carrier-sandboxes.yml` | manual | carrier sandbox smoke (`tools/smoke/carriers.sh`): ephemeral carrier-gateway on the runner with the `carrier-sandbox` environment secrets, or the deployed dev service (docs/runbooks/carrier-sandboxes.md) |
 | `backlog.yml` | `docs/backlog/**` | CSV parses, header, unique ids, valid status/type/priority, parents are epics |
 | `docs.yml` | `docs/**`, `contracts/**` | build `docs/portal` and deploy to Cloudflare Pages (skips until it exists) |
 | `storybook.yml` (hand-written) | `web/packages/{ui,tokens,i18n}/**`, `web/apps/*/src/**/*.stories.tsx`, Seller Center components/styles used by app stories, root `package.json`/lockfile/workspace | `storybook build`; Vitest addon (`test:storybook`: render + `play` + axe serious/critical, v8 coverage gated and uploaded) and Playwright visual diffs vs committed baselines in the pinned Playwright image; Cloudflare Pages `afrotransact-storybook` (PR preview comment, production on main); `update-visual-baselines` label regenerates baselines |
 | `mobile.yml` | tags `mobile-v*`, main (`mobile/**`), manual | EAS build (production, auto-submit) on tags; EAS Update OTA to `preview` on main; dev/preview/production profiles |
 | `workflows.yml` | `.github/**`, `tools/ci/**`, PORTS.md | generated workflows up to date + actionlint |
-| env-urls step (to add, see below) | `java/**`, `go/**`, `web/**`, `mobile/**`, `infra/**`, `tools/ci/check_env_urls.py` | `tools/ci/check_env_urls.py` on the whole repository: no hard-coded environment hosts |
+| `env-urls.yml` | `java/**`, `go/**`, `web/**`, `mobile/**`, `infra/**`, `tools/ci/check_env_*.py` | `tools/ci/check_env_urls.py` (no hard-coded environment hosts) and `tools/ci/check_env_config.py` (profiles, docs pages, trace sampling and sizing per environment) |
 
 Generated workflows: `python3 tools/ci/gen_workflows.py` reads the service table in
 `infra/local/PORTS.md`; add a service there and re-run. Workflows for services that do not exist yet are
@@ -57,22 +62,14 @@ or other-environment host in dev/uat config, a dev/uat host in prod config, a ho
 `https://developers.afrotransact.com/problems/`. Hosts, settings and rules are in [environments.md](environments.md).
 Exit status 0 = clean, 1 = violations, 2 = usage error; `--format github` prints `::error file=…,line=…` annotations.
 
-The whole repository passes (web, mobile and gateway-bff included), so the step runs without excludes. CI step to add
-(by the workflow owners; `.github/` is not edited from here). It needs nothing beyond the runner's Python, so it fits
-next to the small repo-wide checks (`contracts.yml`, `workflows.yml`) or in a new `env-urls.yml` triggered on
-`java/**`, `go/**`, `web/**`, `mobile/**`, `infra/**` and `tools/ci/check_env_urls.py`:
+The whole repository passes (web, mobile and gateway-bff included), so `env-urls.yml` runs it without excludes, next
+to `tools/ci/check_env_config.py` (S188/S182): every Java service has `application-{local,dev,uat,prod}.yml` and every
+Go service `config/{local,dev,uat,prod}.yaml`; API reference pages are on in local/dev/uat and off in prod; trace
+sampling resolves to 100% dev, 50% uat, 10% prod (profile defaults and Helm `telemetry.sampling`); `values-<env>.yaml`
+follows the sizing rules (dev 1 replica without HPA on the spot pool, uat on the spot pool, prod at least 2 replicas
+and no spot toleration, requests and memory limit everywhere, never `image.tag: latest`). Locally: `make env-check`.
 
-```yaml
-  env-urls:
-    name: environment URL guard
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - name: No hard-coded environment hosts
-        run: python3 tools/ci/check_env_urls.py --format github
-```
-
-Do not add `--exclude` flags to it: a path that needs a host belongs in its environment's config file, or, for an
+Do not add `--exclude` flags to the URL guard: a path that needs a host belongs in its environment's config file, or, for an
 identifier that only looks like a host, in the documented `EXCEPTIONS` list of the script.
 
 ### Web and mobile deploys: per-environment values (change requests for the workflow owners)
@@ -91,6 +88,20 @@ identifier that only looks like a host, in the documented `EXCEPTIONS` list of t
    `eval "$(jq -r --arg p "$PROFILE" '.build[$p].env | to_entries[] | "export \(.key)=\(.value|@sh)"' eas.json)"`
    in each app directory), or mirror the values into EAS environment variables and pass
    `--environment <development|preview|production>`.
+
+## Container images (S010)
+
+| | Go services | Java services |
+|---|---|---|
+| Dockerfile | `go/services/<svc>/Dockerfile` (context `go/`) | `java/Dockerfile` (`SERVICE=<svc>`, context `java/`) |
+| Runtime base | `gcr.io/distroless/static-debian12:nonroot` (static, CGO off, `-trimpath -ldflags "-s -w"`) | `eclipse-temurin:25-jre`, layered jar (`dependencies`, `spring-boot-loader`, `snapshot-dependencies`, `application`) |
+| User | `nonroot` (65532) | `1000:1000` |
+| Defaults | `APP_ENV=prod`, `PORT=8080`, `EXPOSE 8080` | `SPRING_PROFILES_ACTIVE=prod`, `--server.port=8080`, `EXPOSE 8080` |
+| Size budget (CI, linux/amd64 uncompressed) | 60 MB (measured 2026-10-10: binaries 21-40 MB + 6 MB base; cart image 10.7 MB compressed) | 450 MB guard rail (JRE ~280 MB + fat jar up to ~80 MB) |
+| Platforms | linux/amd64 + linux/arm64 (Arm node pools) | same |
+
+`.github/actions/publish-image` enforces user, port, environment defaults and the size budget on every build (pull
+requests included) before anything is pushed; see change request 5 for the remaining reproducibility items.
 
 ## Security of the pipeline
 
@@ -128,10 +139,14 @@ identifier that only looks like a host, in the documented `EXCEPTIONS` list of t
 | `AZURE_DEPLOY_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` | azure: `github_oidc.deploy.*` |
 
 **Repository variables**: `TF_TARGETS` (below), `GITOPS_BRANCH` (default `main`), `VERCEL_FALLBACK`
-(`true` to always deploy web to Vercel too), `DEV_BASE_DOMAIN` (ZAP target), `DOCS_PAGES_PROJECT`.
+(`true` to always deploy web to Vercel too), `DEV_BASE_DOMAIN` (ZAP and carrier smoke target), `DOCS_PAGES_PROJECT`.
+The whole first-time setup in order (state, OIDC, variables, every secret, apply, Argo CD, Temporal, Pages, smoke):
+[docs/runbooks/first-environment.md](../runbooks/first-environment.md).
 
 **Secrets**: `CLOUDFLARE_API_TOKEN` (Workers, Pages: docs + Storybook), `CLOUDFLARE_ACCOUNT_ID`, `EC_API_KEY`, `CONFLUENT_CLOUD_API_KEY`,
-`CONFLUENT_CLOUD_API_SECRET`, `EXPO_TOKEN`, optional `VERCEL_TOKEN`/`VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`,
+`CONFLUENT_CLOUD_API_SECRET`, `TEMPORAL_CLOUD_API_KEY` (Terraform: Temporal Cloud namespaces), `EXPO_TOKEN`,
+optional `NVD_API_KEY` (weekly OWASP Dependency-Check), `SMOKE_CLIENT_ID`/`SMOKE_CLIENT_SECRET` on `dev` and the carrier
+sandbox keys on the `carrier-sandbox` environment (`carrier-sandboxes.yml`), optional `VERCEL_TOKEN`/`VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`,
 optional `GITOPS_APP_ID`/`GITOPS_APP_PRIVATE_KEY` (a GitHub App allowed to push the GitOps bump through
 branch protection; otherwise `GITHUB_TOKEN` is used and `main` must allow it, or set `GITOPS_BRANCH` to a
 dedicated `gitops` branch that Argo CD tracks).
@@ -194,10 +209,10 @@ Details, local commands and the font-rendering caveat: [testing.md §7](testing.
 One-time setup:
 - Secrets: the same repository secrets as `docs.yml`, `CLOUDFLARE_API_TOKEN` (needs **Account → Cloudflare Pages →
   Edit**) and `CLOUDFLARE_ACCOUNT_ID`. No variables are needed.
-- Create the Pages project once, with production branch `main`:
-  `npx wrangler pages project create afrotransact-storybook --production-branch=main`. `infra/cloudflare`
-  manages no Pages projects (the docs project is not there either); move both there if Pages should be under
-  Terraform.
+- The Pages projects `afrotransact-storybook` and `afrotransact-docs` (production branch `main`) are created by
+  `infra/cloudflare/pages.tf` in the run with `pages_projects_owner = true` (dev); every environment's run adds its
+  `developers.<base>` custom domain to the docs project. Without Terraform:
+  `npx wrangler pages project create afrotransact-storybook --production-branch=main`.
 - Create the PR label `update-visual-baselines`. If `main` is protected, the label path pushes only to PR
   branches, never to main.
 
@@ -214,7 +229,8 @@ must define those three profiles with matching channels.
    key is hard-coded as `afrotransact/<env>/<svc>`. GCP Secret Manager ids and Azure Key Vault names cannot
    contain `/`, so Terraform names them `afrotransact-<env>-<svc>`. Proposed: a `secrets.keySeparator`
    value (default `/`; `-` in platform-values for gcp/azure) used in
-   `printf "afrotransact%s%s%s%s" sep .Values.env sep name`.
+   `printf "afrotransact%s%s%s%s" sep .Values.env sep name`. Done: `secrets.keySeparator` is in the library and
+   the platform-values examples.
 2. **GKE arm64 taint**: GKE taints Arm nodes `kubernetes.io/arch=arm64:NoSchedule`; platform-values for
    `cloud: gcp` should set `nodeSelector: {kubernetes.io/arch: arm64}` (GKE then adds the toleration).
    AKS spot nodes additionally carry `kubernetes.azure.com/scalesetpriority=spot:NoSchedule`; the dev
@@ -222,9 +238,19 @@ must define those three profiles with matching channels.
 3. **infra/k8s**: `platform-secrets` ClusterSecretStore from `tofu output cluster_secret_store`; the
    `external-secrets` service account in namespace `external-secrets` annotated with
    `tofu output platform_values["external-secrets"]`; Envoy gateway must require Cloudflare's origin-pull
-   client certificate (Authenticated Origin Pulls) when `origin_mode = ingress`, or run `cloudflared`
-   with the tunnel token when `origin_mode = tunnel`; Kyverno `verifyImages` with the keyless identity
-   `https://github.com/billionairedev24/diaspora-commerce/.github/workflows/_(java|go)-service.yml@refs/heads/main`.
+   client certificate (Authenticated Origin Pulls) when `origin_mode = ingress`. Done (S249): `cloudflared` with the
+   tunnel token, the EnvoyProxy `edge` (Service `envoy-gateway` in `ingress`, deploy type GatewayNamespace) and the
+   per-environment HTTPRoutes for `api.` / `auth.` / `mcp.` / `grafana.` (`infra/k8s/platform/edge`); Kyverno with
+   the `verifyImages` policy for the keyless identity
+   `https://github.com/billionairedev24/diaspora-commerce/.github/workflows/_(java|go)-service.yml@refs/heads/main`
+   (`infra/k8s/platform/policies`; Kyverno needs registry read access on the cloud, see the first-environment runbook).
 4. **Argo CD**: Applications should track `GITOPS_BRANCH` and read `values-<env>.yaml` (where `_deploy.yml`
    writes `image.tag`) plus a platform-values file with `cloud`, `image.registry` (= the environment's
    `REGISTRY_URL`; the chart appends `/<service>`) and `workloadIdentity`.
+5. **Reproducible images (S010)**: CI builds with `SOURCE_DATE_EPOCH` = commit time and BuildKit
+   `rewrite-timestamp`; two `--no-cache` builds of `go/services/cart` gave the same OCI manifest digest. Remaining:
+   (a) `java/platform-parent/pom.xml`: set `<project.build.outputTimestamp>` (e.g. `2026-01-01T00:00:00Z`, or
+   `${git.commit.time}`) so jar entries and `build-info.properties` are reproducible; (b) pin the base images by
+   digest in `java/Dockerfile` and `go/services/*/Dockerfile` (`golang:1.27.2@sha256:…`,
+   `gcr.io/distroless/static-debian12:nonroot@sha256:…`, `eclipse-temurin:25-jre@sha256:…`; Dependabot's docker
+   ecosystem keeps the digests current), otherwise a rebuild after a base-image refresh changes the digest.

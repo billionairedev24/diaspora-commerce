@@ -1,6 +1,17 @@
 # Runbooks
 
-One page per alert. Every alert's `runbook_url` annotation points here (rules in `infra/observability/rules/`).
+One page per alert (below), plus operational procedures. Every alert's `runbook_url` annotation points here (rules in
+`infra/observability/rules/`).
+
+## Procedures
+
+| Procedure | When |
+|---|---|
+| [First environment](first-environment.md) | bootstrapping dev / uat / prod on AWS, Google Cloud or Azure (state, OIDC, secrets, apply, Argo CD, Temporal, Pages, smoke) |
+| [Cost](cost.md) | a budget alert fired; the monthly cost review |
+| [Carrier sandboxes](carrier-sandboxes.md) | proving USPS / UPS / FedEx / DHL against their sandboxes; carrier credentials |
+
+## Alerts
 
 | Alert | Severity |
 |---|---|

@@ -43,6 +43,7 @@ spec:
     - https://charts.jetstack.io
     - https://helm.elastic.co
     - registry-1.docker.io/envoyproxy
+    - ghcr.io/kyverno/charts
   destinations:
     - server: "*"
       namespace: "*"

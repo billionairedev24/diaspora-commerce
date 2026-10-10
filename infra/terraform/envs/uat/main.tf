@@ -9,12 +9,13 @@
 terraform {
   required_version = ">= 1.9" # provider for_each (OpenTofu)
   required_providers {
-    aws       = { source = "hashicorp/aws", version = "~> 6.0" }
-    google    = { source = "hashicorp/google", version = ">= 7.0, < 9.0" }
-    azurerm   = { source = "hashicorp/azurerm", version = ">= 4.0, < 6.0" }
-    random    = { source = "hashicorp/random", version = "~> 3.6" }
-    ec        = { source = "elastic/ec", version = "~> 0.12" }
-    confluent = { source = "confluentinc/confluent", version = "~> 2.0" }
+    aws           = { source = "hashicorp/aws", version = "~> 6.0" }
+    google        = { source = "hashicorp/google", version = ">= 7.0, < 9.0" }
+    azurerm       = { source = "hashicorp/azurerm", version = ">= 4.0, < 6.0" }
+    random        = { source = "hashicorp/random", version = "~> 3.6" }
+    ec            = { source = "elastic/ec", version = "~> 0.12" }
+    confluent     = { source = "confluentinc/confluent", version = "~> 2.0" }
+    temporalcloud = { source = "temporalio/temporalcloud", version = ">= 1.0, < 2.0" }
   }
   # Partial backend config: see backend.<cloud>.hcl.example and README "Bootstrap state".
   # tofu init -backend-config=backend.hcl
@@ -36,6 +37,7 @@ locals {
     azure     = local.is_azure ? toset(["azure"]) : toset([])
     ec        = var.enable_elastic ? toset(["ec"]) : toset([])
     confluent = var.enable_confluent ? toset(["confluent"]) : toset([])
+    temporal  = var.enable_temporal ? toset(["temporal"]) : toset([])
   }
 
   context = {
@@ -202,6 +204,16 @@ module "aws_registry" {
   reader_principals = []
 }
 
+module "aws_budget" {
+  source              = "../../modules/aws/budget"
+  for_each            = local.on.aws
+  providers           = { aws = aws.this[each.key] }
+  context             = local.context
+  monthly_limit       = local.sizing.monthly_budget
+  notification_emails = var.budget_notification_emails
+  shared_account      = var.budget_shared_account
+}
+
 module "aws_identity" {
   source       = "../../modules/aws/identity"
   for_each     = local.on.aws
@@ -322,6 +334,17 @@ module "gcp_registry" {
   context           = local.context
   repositories      = local.service_names
   reader_principals = [module.gcp_cluster["gcp"].node_identity]
+}
+
+module "gcp_budget" {
+  source              = "../../modules/gcp/budget"
+  for_each            = local.on.gcp
+  providers           = { google = google.this[each.key] }
+  context             = local.context
+  monthly_limit       = local.sizing.monthly_budget
+  notification_emails = var.budget_notification_emails
+  shared_account      = var.budget_shared_account
+  billing_account     = var.gcp_billing_account
 }
 
 module "gcp_identity" {
@@ -454,6 +477,16 @@ module "azure_registry" {
   reader_principals = [module.azure_cluster["azure"].node_identity]
 }
 
+module "azure_budget" {
+  source              = "../../modules/azure/budget"
+  for_each            = local.on.azure
+  providers           = { azurerm = azurerm.this[each.key] }
+  context             = merge(local.context, { scope = azurerm_resource_group.this["azure"].name })
+  monthly_limit       = local.sizing.monthly_budget
+  notification_emails = var.budget_notification_emails
+  shared_account      = var.budget_shared_account
+}
+
 module "azure_identity" {
   source       = "../../modules/azure/identity"
   for_each     = local.on.azure
@@ -515,6 +548,18 @@ module "confluent" {
   services  = local.service_names
 }
 
+# Temporal Cloud namespace afrotransact-<env> (orders-service checkout saga; docs/runbooks/first-environment.md).
+module "temporal" {
+  source             = "../../modules/shared/temporal"
+  for_each           = local.on.temporal
+  providers          = { temporalcloud = temporalcloud.this[each.key] }
+  context            = local.context
+  cloud              = var.cloud
+  temporal_region    = var.temporal_region
+  profile            = local.sizing.saas_profile
+  accepted_client_ca = var.temporal_accepted_client_ca
+}
+
 # =========================================================================================== selected cloud
 # Collapse the three module sets into one object with the shared output names.
 locals {
@@ -529,6 +574,7 @@ locals {
     secrets   = one(concat(values(module.aws_secrets), values(module.gcp_secrets), values(module.azure_secrets)))
     registry  = one(concat(values(module.aws_registry), values(module.gcp_registry), values(module.azure_registry)))
     identity  = one(concat(values(module.aws_identity), values(module.gcp_identity), values(module.azure_identity)))
+    budget    = one(concat(values(module.aws_budget), values(module.gcp_budget), values(module.azure_budget)))
     gh_deploy = one(concat(values(module.aws_github_deploy), values(module.gcp_github_deploy), values(module.azure_github_deploy)))
     gh_plan   = one(concat(values(module.aws_github_plan), values(module.gcp_github_plan), values(module.azure_github_plan)))
     gh_apply  = one(concat(values(module.aws_github_apply), values(module.gcp_github_apply), values(module.azure_github_apply)))
@@ -548,6 +594,10 @@ locals {
         SCHEMA_REGISTRY_URL = module.confluent["confluent"].schema_registry_url
       } : {},
       var.enable_elastic && contains(["search", "indexer"], k) ? { ES_URLS = module.elastic["ec"].elasticsearch_url } : {},
+      var.enable_temporal && k == "orders" ? {
+        TEMPORAL_TARGET    = module.temporal["temporal"].target
+        TEMPORAL_NAMESPACE = module.temporal["temporal"].namespace
+      } : {},
     )
   }
 }

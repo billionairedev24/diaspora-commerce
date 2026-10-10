@@ -158,7 +158,7 @@ Thresholds (`tools/quality/coverage-thresholds.conf`; `COVERAGE_MIN_{JAVA,GO,DOM
 Modules below a default have a **ratchet** override in the conf file (e.g. `search.go = 45`): it may only go up.
 Domain coverage below 80% is a review blocker even when the ratchet passes.
 
-CI wiring (owned by the CI workflows; commands to use):
+CI wiring (in place: the `verify` jobs of `_java-service.yml` and `_go-service.yml`, `storybook.yml`):
 
 ```bash
 # _java-service.yml, after `./mvnw -B -f services/$SVC/pom.xml verify`

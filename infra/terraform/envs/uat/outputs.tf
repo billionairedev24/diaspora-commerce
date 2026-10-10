@@ -14,6 +14,15 @@ output "cluster" {
   }
 }
 
+output "budget" {
+  description = "Monthly cloud budget of this environment (S182; docs/runbooks/cost.md)."
+  value = {
+    name         = local.p.budget.budget_name
+    limit        = local.sizing.monthly_budget
+    alert_target = local.p.budget.alert_target
+  }
+}
+
 output "registry_url" {
   description = "Set as the GitHub environment variable REGISTRY_URL (deploy mirror target)."
   value       = local.p.registry.registry_url
@@ -85,4 +94,9 @@ output "kafka" {
     bootstrap_servers   = module.confluent[0].bootstrap_servers
     schema_registry_url = module.confluent[0].schema_registry_url
   } : null
+}
+
+output "temporal" {
+  description = "Temporal Cloud namespace and endpoint (seeded into the orders-service secret as TEMPORAL_NAMESPACE / TEMPORAL_TARGET)."
+  value       = var.enable_temporal ? { namespace = module.temporal["temporal"].namespace, target = module.temporal["temporal"].target, auth = module.temporal["temporal"].auth } : null
 }

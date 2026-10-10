@@ -1,0 +1,21 @@
+# Kyverno (oci://ghcr.io/kyverno/charts/kyverno 3.9.1) — admission policies; enforces the signed-image policy in
+# ../policies (S249). Kyverno verifies cosign keyless signatures against Rekor and reads the images from the
+# environment's registry (ECR / Artifact Registry / ACR): give the kyverno-admission-controller service account the
+# registry-read workload identity in clouds/<cloud>/kyverno.yaml (same pattern as external-secrets).
+admissionController:
+  replicas: 2
+  container:
+    resources:
+      requests: {cpu: 100m, memory: 256Mi}
+      limits: {memory: 512Mi}
+backgroundController:
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+cleanupController:
+  enabled: true
+reportsController:
+  enabled: true
+features:
+  policyExceptions:
+    enabled: true
+    namespace: kyverno
