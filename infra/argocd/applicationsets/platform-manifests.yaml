@@ -25,6 +25,7 @@ spec:
                 - {component: edge, wave: "-1", manifestPath: infra/k8s/platform/edge}
                 - {component: observability-content, wave: "0", manifestPath: infra/k8s/platform/observability}
                 - {component: elasticsearch, wave: "1", manifestPath: infra/k8s/platform/elasticsearch/overlays/ENV}
+                - {component: openfga, wave: "1", manifestPath: infra/k8s/platform/openfga/overlays/ENV}
   template:
     metadata:
       name: '{{ .component }}-{{ .argocd.env }}'

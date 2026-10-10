@@ -1,0 +1,18 @@
+env: uat
+# A small Kafka consumer: fixed replicas (partitions bound the parallelism), no CPU autoscaling.
+replicas: 2
+autoscaling:
+  enabled: false
+  min: 2
+  max: 2
+  cpu: 70
+rollout:
+  enabled: true
+resources:
+  requests: {cpu: 100m, memory: 64Mi}
+  limits: {memory: 256Mi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.5"
+tolerations:
+  - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}

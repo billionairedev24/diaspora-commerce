@@ -34,6 +34,7 @@ monitoring:
 #   - DB_PASSWORD
 #   - KAFKA_BOOTSTRAP
 #   - OFFERS_CLIENT_SECRET
+#   - FGA_API_TOKEN            (one of OpenFGA's pre-shared keys, afrotransact/openfga preshared-keys; S022)
 secrets:
   enabled: true
   store: platform-secrets

@@ -79,6 +79,18 @@ at:
   security:
     public-paths:
       - /v1/public/**
+    # S022 fine-grained authorisation (OpenFGA). Off unless FGA_ENABLED=true; see docs/engineering/authorisation.md.
+    # enforce=false is shadow mode: relationship denials are logged, not enforced.
+    fga:
+      enabled: ${FGA_ENABLED:false}
+      enforce: ${FGA_ENFORCE:true}
+      api-url: ${FGA_API_URL:http://localhost:8091}
+      store-id: ${FGA_STORE_ID:}
+      store-name: ${FGA_STORE_NAME:afrotransact}
+      model-id: ${FGA_MODEL_ID:}
+      api-token: ${FGA_API_TOKEN:}
+      timeout: ${FGA_TIMEOUT:500ms}
+      cache-ttl: ${FGA_CACHE_TTL:5s}
   events:
     relay-enabled: true
   offers:

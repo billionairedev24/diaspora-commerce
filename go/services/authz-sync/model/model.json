@@ -1,0 +1,1912 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "user"
+    },
+    {
+      "type": "client"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "auditor": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "can_view_all": {},
+          "catalog_manager": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "finance": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "marketing": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "operations": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "service": {
+            "directly_related_user_types": [
+              {
+                "type": "client"
+              }
+            ]
+          },
+          "staff_viewer": {},
+          "super_admin": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "support": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "trust_safety": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "auditor": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "super_admin"
+                }
+              }
+            ]
+          }
+        },
+        "can_view_all": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "staff_viewer"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "service"
+                }
+              }
+            ]
+          }
+        },
+        "catalog_manager": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "super_admin"
+                }
+              }
+            ]
+          }
+        },
+        "finance": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "super_admin"
+                }
+              }
+            ]
+          }
+        },
+        "marketing": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "super_admin"
+                }
+              }
+            ]
+          }
+        },
+        "operations": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "super_admin"
+                }
+              }
+            ]
+          }
+        },
+        "service": {
+          "this": {}
+        },
+        "staff_viewer": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "support"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "catalog_manager"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "finance"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "trust_safety"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "operations"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "marketing"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "auditor"
+                }
+              }
+            ]
+          }
+        },
+        "super_admin": {
+          "this": {}
+        },
+        "support": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "super_admin"
+                }
+              }
+            ]
+          }
+        },
+        "trust_safety": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "super_admin"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "type": "platform"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "auditor": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "catalog_manager": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "finance": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "marketing": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "operations": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "platform": {
+            "directly_related_user_types": [
+              {
+                "type": "platform"
+              }
+            ]
+          },
+          "service": {},
+          "staff_viewer": {},
+          "support": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "trust_safety": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "auditor": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "auditor"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "catalog_manager": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "catalog_manager"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "finance": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "finance"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "marketing": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "marketing"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "operations": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "operations"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "platform": {
+          "this": {}
+        },
+        "service": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "service"
+            },
+            "tupleset": {
+              "relation": "platform"
+            }
+          }
+        },
+        "staff_viewer": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "support"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "catalog_manager"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "finance"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "trust_safety"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "operations"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "marketing"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "auditor"
+                }
+              }
+            ]
+          }
+        },
+        "support": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "support"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "trust_safety": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "trust_safety"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "type": "market"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "admin": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "ads": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "can_fulfil": {},
+          "can_manage_ads": {},
+          "can_manage_products": {},
+          "can_manage_services": {},
+          "can_request_payouts": {},
+          "can_view": {},
+          "can_view_payouts": {},
+          "can_view_products": {},
+          "catalog": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "delegated_editor": {
+            "directly_related_user_types": [
+              {
+                "type": "client"
+              }
+            ]
+          },
+          "delegated_viewer": {
+            "directly_related_user_types": [
+              {
+                "type": "client"
+              }
+            ]
+          },
+          "finance": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "fulfilment": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "manager": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "market": {
+            "directly_related_user_types": [
+              {
+                "type": "market"
+              }
+            ]
+          },
+          "member": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "offers_services": {
+            "directly_related_user_types": [
+              {
+                "type": "user",
+                "wildcard": {}
+              },
+              {
+                "type": "client",
+                "wildcard": {}
+              }
+            ]
+          },
+          "owner": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "platform": {
+            "directly_related_user_types": [
+              {
+                "type": "platform"
+              }
+            ]
+          },
+          "platform_service": {},
+          "practitioner": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "product_editor": {},
+          "sells_products": {
+            "directly_related_user_types": [
+              {
+                "type": "user",
+                "wildcard": {}
+              },
+              {
+                "type": "client",
+                "wildcard": {}
+              }
+            ]
+          },
+          "service_manager": {},
+          "staff_catalog": {},
+          "staff_finance": {},
+          "staff_marketing": {},
+          "staff_operations": {},
+          "staff_support": {},
+          "staff_viewer": {},
+          "support": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "admin": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              }
+            ]
+          }
+        },
+        "ads": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              }
+            ]
+          }
+        },
+        "can_fulfil": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "fulfilment"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "support"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "staff_operations"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "platform_service"
+                }
+              }
+            ]
+          }
+        },
+        "can_manage_ads": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "ads"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "staff_marketing"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "delegated_editor"
+                }
+              }
+            ]
+          }
+        },
+        "can_manage_products": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "product_editor"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "staff_catalog"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "platform_service"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "delegated_editor"
+                }
+              }
+            ]
+          }
+        },
+        "can_manage_services": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "service_manager"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "staff_support"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "platform_service"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "delegated_editor"
+                }
+              }
+            ]
+          }
+        },
+        "can_request_payouts": {
+          "computedUserset": {
+            "relation": "finance"
+          }
+        },
+        "can_view": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "member"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "staff_viewer"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "platform_service"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "delegated_viewer"
+                }
+              }
+            ]
+          }
+        },
+        "can_view_payouts": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "finance"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "manager"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "staff_finance"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "platform_service"
+                }
+              }
+            ]
+          }
+        },
+        "can_view_products": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "member"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "staff_viewer"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "platform_service"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "delegated_viewer"
+                }
+              }
+            ]
+          }
+        },
+        "catalog": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              }
+            ]
+          }
+        },
+        "delegated_editor": {
+          "this": {}
+        },
+        "delegated_viewer": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "delegated_editor"
+                }
+              }
+            ]
+          }
+        },
+        "finance": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              }
+            ]
+          }
+        },
+        "fulfilment": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              }
+            ]
+          }
+        },
+        "manager": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              }
+            ]
+          }
+        },
+        "market": {
+          "this": {}
+        },
+        "member": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "owner"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "manager"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "catalog"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "fulfilment"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "finance"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "ads"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "support"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "practitioner"
+                }
+              }
+            ]
+          }
+        },
+        "offers_services": {
+          "this": {}
+        },
+        "owner": {
+          "this": {}
+        },
+        "platform": {
+          "this": {}
+        },
+        "platform_service": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "service"
+            },
+            "tupleset": {
+              "relation": "platform"
+            }
+          }
+        },
+        "practitioner": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "manager"
+                }
+              }
+            ]
+          }
+        },
+        "product_editor": {
+          "intersection": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "catalog"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "sells_products"
+                }
+              }
+            ]
+          }
+        },
+        "sells_products": {
+          "this": {}
+        },
+        "service_manager": {
+          "intersection": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "manager"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "offers_services"
+                }
+              }
+            ]
+          }
+        },
+        "staff_catalog": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "catalog_manager"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "catalog_manager"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "staff_finance": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "finance"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "finance"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "staff_marketing": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "marketing"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "marketing"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "staff_operations": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "operations"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "operations"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "staff_support": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "support"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "support"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "staff_viewer": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "staff_viewer"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "staff_viewer"
+                  },
+                  "tupleset": {
+                    "relation": "platform"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "support": {
+          "union": {
+            "child": [
+              {
+                "this": {}
+              },
+              {
+                "computedUserset": {
+                  "relation": "admin"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "type": "organization"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "can_design": {},
+          "can_edit": {},
+          "can_manage_listings": {},
+          "can_view": {},
+          "org": {
+            "directly_related_user_types": [
+              {
+                "type": "organization"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "can_design": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "can_edit"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "ads"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "catalog"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_edit": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "admin"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "manager"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "staff_marketing"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_manage_listings": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "can_manage_products"
+            },
+            "tupleset": {
+              "relation": "org"
+            }
+          }
+        },
+        "can_view": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "can_view"
+            },
+            "tupleset": {
+              "relation": "org"
+            }
+          }
+        },
+        "org": {
+          "this": {}
+        }
+      },
+      "type": "storefront"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "can_edit": {},
+          "can_view": {},
+          "org": {
+            "directly_related_user_types": [
+              {
+                "type": "organization"
+              }
+            ]
+          },
+          "store": {
+            "directly_related_user_types": [
+              {
+                "type": "storefront"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "can_edit": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "can_manage_products"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "can_manage_listings"
+                  },
+                  "tupleset": {
+                    "relation": "store"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_view": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "can_view_products"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "can_view"
+                  },
+                  "tupleset": {
+                    "relation": "store"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "org": {
+          "this": {}
+        },
+        "store": {
+          "this": {}
+        }
+      },
+      "type": "product"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "can_edit": {},
+          "can_view": {},
+          "org": {
+            "directly_related_user_types": [
+              {
+                "type": "organization"
+              }
+            ]
+          },
+          "product": {
+            "directly_related_user_types": [
+              {
+                "type": "product"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "can_edit": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "can_manage_products"
+            },
+            "tupleset": {
+              "relation": "org"
+            }
+          }
+        },
+        "can_view": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "can_view_products"
+            },
+            "tupleset": {
+              "relation": "org"
+            }
+          }
+        },
+        "org": {
+          "this": {}
+        },
+        "product": {
+          "this": {}
+        }
+      },
+      "type": "offer"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "buyer": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "can_manage": {},
+          "can_view": {},
+          "market": {
+            "directly_related_user_types": [
+              {
+                "type": "market"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "buyer": {
+          "this": {}
+        },
+        "can_manage": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "support"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "operations"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "service"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_view": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "buyer"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "support"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "operations"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "finance"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "service"
+                  },
+                  "tupleset": {
+                    "relation": "market"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "market": {
+          "this": {}
+        }
+      },
+      "type": "order"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "can_update_status": {},
+          "can_view": {},
+          "order": {
+            "directly_related_user_types": [
+              {
+                "type": "order"
+              }
+            ]
+          },
+          "org": {
+            "directly_related_user_types": [
+              {
+                "type": "organization"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "can_update_status": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "can_fulfil"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "can_manage"
+                  },
+                  "tupleset": {
+                    "relation": "order"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_view": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "member"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "can_view"
+                  },
+                  "tupleset": {
+                    "relation": "order"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "order": {
+          "this": {}
+        },
+        "org": {
+          "this": {}
+        }
+      },
+      "type": "shipment"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "can_manage": {},
+          "can_view": {},
+          "customer": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          },
+          "org": {
+            "directly_related_user_types": [
+              {
+                "type": "organization"
+              }
+            ]
+          },
+          "practitioner": {
+            "directly_related_user_types": [
+              {
+                "type": "user"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "can_manage": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "practitioner"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "can_manage_services"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "can_view": {
+          "union": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "customer"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "practitioner"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "service_manager"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "finance"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "staff_support"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "platform_service"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "delegated_viewer"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "customer": {
+          "this": {}
+        },
+        "org": {
+          "this": {}
+        },
+        "practitioner": {
+          "this": {}
+        }
+      },
+      "type": "booking"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "can_manage": {},
+          "can_view": {},
+          "org": {
+            "directly_related_user_types": [
+              {
+                "type": "organization"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "can_manage": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "can_manage_ads"
+            },
+            "tupleset": {
+              "relation": "org"
+            }
+          }
+        },
+        "can_view": {
+          "union": {
+            "child": [
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "can_manage_ads"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "finance"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "computedUserset": {
+                    "relation": "staff_viewer"
+                  },
+                  "tupleset": {
+                    "relation": "org"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "org": {
+          "this": {}
+        }
+      },
+      "type": "ads_campaign"
+    },
+    {
+      "metadata": {
+        "relations": {
+          "can_request": {},
+          "can_view": {},
+          "org": {
+            "directly_related_user_types": [
+              {
+                "type": "organization"
+              }
+            ]
+          }
+        }
+      },
+      "relations": {
+        "can_request": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "can_request_payouts"
+            },
+            "tupleset": {
+              "relation": "org"
+            }
+          }
+        },
+        "can_view": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "can_view_payouts"
+            },
+            "tupleset": {
+              "relation": "org"
+            }
+          }
+        },
+        "org": {
+          "this": {}
+        }
+      },
+      "type": "payout"
+    }
+  ]
+}

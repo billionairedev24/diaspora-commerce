@@ -1,0 +1,100 @@
+# OpenFGA server: HTTP API on 8080 (services and authz-sync), gRPC 8081, metrics 2112. Stateless; state lives in
+# Postgres. Pre-shared key authn; the playground is off. Overlays set replicas, resources and trace sampling.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: openfga
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openfga
+  annotations: {argocd.argoproj.io/sync-wave: "1"}
+  labels: {app.kubernetes.io/name: openfga}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels: {app.kubernetes.io/name: openfga}
+  strategy:
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: openfga}
+    spec:
+      serviceAccountName: openfga
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: {type: RuntimeDefault}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {app.kubernetes.io/name: openfga}
+      containers:
+        - name: openfga
+          image: openfga/openfga:v1.10.0
+          args: ["run"]
+          ports:
+            - {name: http, containerPort: 8080}
+            - {name: grpc, containerPort: 8081}
+            - {name: metrics, containerPort: 2112}
+          env:
+            - {name: OPENFGA_DATASTORE_ENGINE, value: postgres}
+            - name: OPENFGA_DATASTORE_URI
+              valueFrom:
+                secretKeyRef: {name: openfga, key: OPENFGA_DATASTORE_URI}
+            - {name: OPENFGA_DATASTORE_MAX_OPEN_CONNS, value: "30"}
+            - {name: OPENFGA_AUTHN_METHOD, value: preshared}
+            - name: OPENFGA_AUTHN_PRESHARED_KEYS
+              valueFrom:
+                secretKeyRef: {name: openfga, key: OPENFGA_AUTHN_PRESHARED_KEYS}
+            - {name: OPENFGA_PLAYGROUND_ENABLED, value: "false"}
+            - {name: OPENFGA_LOG_FORMAT, value: json}
+            - {name: OPENFGA_METRICS_ENABLED, value: "true"}
+            - {name: OPENFGA_DATASTORE_METRICS_ENABLED, value: "true"}
+            - {name: OPENFGA_TRACE_ENABLED, value: "true"}
+            - {name: OPENFGA_TRACE_OTLP_ENDPOINT, value: otel-collector.observability:4317}
+            - {name: OPENFGA_TRACE_OTLP_TLS_ENABLED, value: "false"}
+            - {name: OPENFGA_TRACE_SAMPLE_RATIO, value: "0.1"}
+            # Server-side check cache (services also cache for a few seconds); keep both short.
+            - {name: OPENFGA_CHECK_QUERY_CACHE_ENABLED, value: "true"}
+            - {name: OPENFGA_CHECK_QUERY_CACHE_TTL, value: 10s}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 250m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openfga
+  labels: {app.kubernetes.io/name: openfga}
+spec:
+  selector: {app.kubernetes.io/name: openfga}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+    - {name: grpc, port: 8081, targetPort: grpc}
+    - {name: metrics, port: 2112, targetPort: metrics}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: openfga
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: openfga}

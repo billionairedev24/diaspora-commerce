@@ -130,6 +130,7 @@ Consumers de-duplicate on `event-id` with the platform inbox. See
 | `OFFERS_CLIENT_ID`, `OFFERS_CLIENT_SECRET` | client credentials for catalog GTIN lookups (`offers-service`, scope `catalog:read`; `at.offers.oauth.*`) |
 | `RETAIL_ORG_ID` | organisation id of AfroTransact Retail (seller kind `PLATFORM`) |
 | `CONSUMERS_ENABLED` | turn the Kafka listeners off |
+| `FGA_ENABLED`, `FGA_ENFORCE`, `FGA_API_URL`, `FGA_API_TOKEN`, `FGA_STORE_NAME` / `FGA_STORE_ID`, `FGA_MODEL_ID`, `FGA_TIMEOUT`, `FGA_CACHE_TTL` | OpenFGA relationship checks (`at.security.fga.*`, S022; see below) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACE_SAMPLING` | tracing |
 
 Buy box weights, transit estimates, default handling time and the low-stock threshold are under `at.offers.*` in
@@ -140,6 +141,18 @@ Profiles:
 - `local`: security off, debug logs.
 - `dev`, `uat`: API reference pages on.
 - `prod`: API reference pages off.
+
+### Relationship checks (S022 pilot)
+
+Offer use cases check the RBAC permission **and** an OpenFGA relation through `ResourceAccessChecker`
+([guide](../../../docs/engineering/authorisation.md)): `can_view` / `can_edit` on `offer:<id>` (the owning
+organisation is read from the offers database and sent as a contextual tuple), `can_manage_products` /
+`can_view_products` on `organization:<id>` for create, seller stock and listing, and `can_view_all` on the platform for
+listing every organisation's offers. A member of another organisation is refused (`auth.relationship-denied`, 403)
+even with `offers:write` and a forged `org` claim; staff are limited to the markets they hold a grant in. With
+`FGA_ENABLED=false` the checks fall back to the previous RBAC + `org` claim behaviour. Enforced in `dev`, shadow mode
+(`FGA_ENFORCE=false`, denials logged as `FGA shadow:`) in `uat`, off in `prod`. Coupons, buy box and seller standing
+still use RBAC only.
 
 ## Run and test
 
@@ -156,6 +169,8 @@ Test coverage:
 - **ITs (PostgreSQL via `PostgresTestContainer`):**
   - offers and buy box flow, including the audit trail and the HTTP docs pages;
   - coupons: idempotent redeem and release, limits, clip;
-  - Kafka listeners, invoked directly with outbox-shaped records.
+  - Kafka listeners, invoked directly with outbox-shaped records;
+  - relationship checks against a real OpenFGA (`OfferRelationshipsIT`, local image `openfga/openfga:v1.10.0`, model
+    `contracts/openfga/model.json`): forged `org` claim refused, market-scoped staff grants, revocation.
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

@@ -1,0 +1,20 @@
+# syntax=docker/dockerfile:1.7
+# Build context: go/   (docker build -f services/authz-sync/Dockerfile go)
+FROM golang:1.27.1 AS build
+WORKDIR /src
+ENV CGO_ENABLED=0 GOWORK=off GOFLAGS=-trimpath
+COPY pkg/go.mod pkg/go.sum ./pkg/
+COPY services/authz-sync/go.mod services/authz-sync/go.sum ./services/authz-sync/
+RUN --mount=type=cache,target=/go/pkg/mod cd services/authz-sync && go mod download
+COPY pkg ./pkg
+COPY services/authz-sync ./services/authz-sync
+ARG VERSION=dev
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    cd services/authz-sync && go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/authz-sync ./cmd/authz-sync
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/authz-sync /usr/local/bin/authz-sync
+USER nonroot:nonroot
+ENV APP_ENV=prod PORT=8080
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/authz-sync"]

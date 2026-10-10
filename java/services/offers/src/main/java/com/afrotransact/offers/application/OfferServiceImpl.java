@@ -25,6 +25,8 @@ import com.afrotransact.offers.port.OfferRepository.OfferQuery;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
+import com.afrotransact.platform.security.relationship.FgaObject;
+import com.afrotransact.platform.security.relationship.ResourceAccessChecker;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
@@ -40,18 +42,20 @@ class OfferServiceImpl implements OfferService {
     private final BuyBoxService buyBox;
     private final BuyBoxEvaluator evaluator;
     private final PermissionChecker permissions;
+    private final ResourceAccessChecker access;
     private final DomainEventPublisher events;
     private final OffersSettings settings;
     private final Clock clock;
 
     OfferServiceImpl(OfferRepository offers, CatalogClient catalog, BuyBoxService buyBox, BuyBoxEvaluator evaluator,
-                     PermissionChecker permissions, DomainEventPublisher events, OffersSettings settings,
-                     Clock clock) {
+                     PermissionChecker permissions, ResourceAccessChecker access, DomainEventPublisher events,
+                     OffersSettings settings, Clock clock) {
         this.offers = offers;
         this.catalog = catalog;
         this.buyBox = buyBox;
         this.evaluator = evaluator;
         this.permissions = permissions;
+        this.access = access;
         this.events = events;
         this.settings = settings;
         this.clock = clock;
@@ -62,7 +66,7 @@ class OfferServiceImpl implements OfferService {
     public OfferView create(CreateOfferCommand cmd) {
         Actor actor = permissions.require(OffersPermissions.WRITE);
         String org = sellerOrg(actor, cmd.sellerOrgId());
-        permissions.requireForOrg(OffersPermissions.WRITE, org);
+        access.requireForOrg(OffersPermissions.WRITE, OffersRelations.ORG_MANAGE_PRODUCTS, org);
         validateCreate(cmd);
 
         CatalogVariant variant = resolve(cmd);
@@ -146,7 +150,7 @@ class OfferServiceImpl implements OfferService {
     public StockUpdate setSellerStock(String sellerSku, int quantity, String reason, String sellerOrgId) {
         Actor actor = permissions.require(OffersPermissions.WRITE);
         String org = sellerOrg(actor, sellerOrgId);
-        permissions.requireForOrg(OffersPermissions.WRITE, org);
+        access.requireForOrg(OffersPermissions.WRITE, OffersRelations.ORG_MANAGE_PRODUCTS, org);
         if (quantity < 0 || quantity > MAX_SELLER_QUANTITY) {
             throw new OfferRuleViolation("The quantity is not valid",
                     Map.of("quantity", "Between 0 and " + MAX_SELLER_QUANTITY));
@@ -181,7 +185,8 @@ class OfferServiceImpl implements OfferService {
     @Transactional(readOnly = true)
     public OfferView get(UUID id) {
         Offer offer = offers.findById(id).orElseThrow(() -> notFound(id));
-        permissions.requireForOrg(OffersPermissions.READ, offer.sellerOrgId());
+        access.requireOwned(OffersPermissions.READ, OffersRelations.CAN_VIEW, OffersRelations.offer(offer.id()),
+                offer.sellerOrgId());
         return evaluator.view(offer);
     }
 
@@ -191,6 +196,11 @@ class OfferServiceImpl implements OfferService {
         Actor actor = permissions.require(OffersPermissions.READ);
         String org = Actors.isStaff(actor) ? sellerOrgId : actor.orgId().orElseThrow(() ->
                 new OfferRuleViolation("Your account is not linked to a seller organisation"));
+        if (org != null && !org.isBlank()) {
+            access.requireForOrg(OffersPermissions.READ, OffersRelations.ORG_VIEW_PRODUCTS, org);
+        } else {
+            access.require(OffersPermissions.READ, OffersRelations.PLATFORM_VIEW_ALL, FgaObject.PLATFORM);
+        }
         OfferPage result = offers.search(new OfferQuery(org, atin == null ? null : atin.toUpperCase(Locale.ROOT),
                 status, Math.max(page, 0), Math.clamp(size, 1, 100)));
         return new PageView<>(evaluator.views(result.items()), result.total(), result.page(), result.size());
@@ -198,7 +208,8 @@ class OfferServiceImpl implements OfferService {
 
     private OfferView change(UUID id, UnaryOperator<Offer> change, String eventType) {
         Offer current = offers.findById(id).orElseThrow(() -> notFound(id));
-        permissions.requireForOrg(OffersPermissions.WRITE, current.sellerOrgId());
+        access.requireOwned(OffersPermissions.WRITE, OffersRelations.CAN_EDIT, OffersRelations.offer(current.id()),
+                current.sellerOrgId());
         Offer updated = offers.update(change.apply(current));
         publish(eventType, updated);
         buyBox.recompute(List.of(updated.atin()), eventType);

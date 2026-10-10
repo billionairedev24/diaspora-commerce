@@ -1,0 +1,10 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: openfga
+  labels: {release: kube-prometheus-stack}
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: openfga}
+  endpoints:
+    - {port: metrics, interval: 30s}

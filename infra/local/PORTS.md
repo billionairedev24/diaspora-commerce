@@ -27,6 +27,7 @@
 | media | Go | 8207 | upload signing (UploadThing / S3-compatible), image metadata | Postgres `media` |
 | notifications | Go | 8208 | email (Resend, SendGrid, SES), SMS (Twilio, Vonage), push, WhatsApp | Postgres `notifications` |
 | carrier-gateway | Go | 8209 | USPS, UPS, FedEx, DHL rates/labels/tracking | Postgres `carriers` |
+| authz-sync | Go | 8210 | identity/seller events → OpenFGA relationship tuples | OpenFGA |
 
 | Front-end | Port |
 |---|---|

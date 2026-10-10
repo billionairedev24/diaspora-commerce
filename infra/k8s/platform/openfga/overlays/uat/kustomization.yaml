@@ -1,0 +1,10 @@
+# uat: production-like, two replicas, half the traces.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [../../base]
+patches:
+  - target: {kind: Deployment, name: openfga}
+    patch: |-
+      - {op: replace, path: /spec/replicas, value: 2}
+      - {op: test, path: /spec/template/spec/containers/0/env/12/name, value: OPENFGA_TRACE_SAMPLE_RATIO}
+      - {op: replace, path: /spec/template/spec/containers/0/env/12/value, value: "0.5"}

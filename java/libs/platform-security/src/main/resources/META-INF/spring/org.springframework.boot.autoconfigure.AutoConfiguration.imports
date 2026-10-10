@@ -1,1 +1,3 @@
 com.afrotransact.platform.security.PlatformSecurityAutoConfiguration
+com.afrotransact.platform.security.relationship.openfga.OpenFgaAutoConfiguration
+com.afrotransact.platform.security.relationship.RelationshipAutoConfiguration

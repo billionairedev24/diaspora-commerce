@@ -1,0 +1,31 @@
+# AsyncAPI 3.0 fragment for authz-sync (Go, S022). Merged into contracts/asyncapi/events.yaml by
+# tools/contracts/merge_asyncapi.py. authz-sync publishes nothing except poison events on its dead-letter topic.
+channels:
+  authzSyncDeadLetters:
+    address: at.authz-sync.dlq.events
+    description: >-
+      Events authz-sync could not apply because they are malformed or OpenFGA rejected their tuples (same key, headers
+      and payload as the original event). Store outages are retried, never dead-lettered.
+operations:
+  publishAuthzSyncDeadLetters:
+    action: send
+    channel: {$ref: '#/channels/authzSyncDeadLetters'}
+    summary: Poison events parked so one bad event never blocks a partition.
+  consumeAuthzSyncIdentityEvents:
+    action: receive
+    channel: {$ref: '#/channels/identityEvents'}
+    summary: >-
+      authz-sync (consumer group authz-sync) mirrors roles into OpenFGA. identity.role.granted / revoked with orgId
+      writes / deletes user:<userId> <relation> organization:<orgId> (seller.owner and provider.owner → owner,
+      seller.admin → admin, provider.manager → manager, seller.catalog → catalog, seller.fulfilment → fulfilment,
+      seller.finance and provider.finance → finance, seller.ads → ads, seller.support → support,
+      provider.practitioner → practitioner). Without orgId, platform staff roles become relations on
+      platform:afrotransact (or on market:<code> when the payload carries a market), and platform.retail_buyer becomes
+      catalog on AfroTransact Retail's organisation. Other roles and event types are ignored.
+  consumeAuthzSyncSellerOrgEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerOrgEvents'}
+    summary: >-
+      seller.org.approved / updated: organization:<orgId> gets platform:afrotransact, its market (country as content's
+      market code; other market tuples are removed) and the capability flags of its kind — sells_products for SELLER,
+      offers_services for PROVIDER, both for BOTH (user:* and client:* wildcards); flags of other kinds are removed.

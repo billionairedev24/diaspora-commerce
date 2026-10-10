@@ -1,0 +1,44 @@
+# Base values for authz-sync. Environment files override; Argo CD adds platform-values.yaml (cloud, identity, store).
+service:
+  name: authz-sync
+  runtime: go
+  port: 8080
+env: dev
+cloud: none            # aws | gcp | azure | none (kind / local clusters)
+image:
+  registry: ghcr.io/billionairedev24/diaspora-commerce
+  repository: authz-sync
+  tag: latest
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 3
+  cpu: 70
+rollout:
+  enabled: false
+  pause: 2m
+  maxErrorRate: "0.01"
+resources:
+  requests: {cpu: 100m, memory: 64Mi}
+  limits: {memory: 256Mi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+monitoring:
+  serviceMonitor: true
+  prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
+# Secret keys expected at afrotransact/<env>/authz-sync in the cloud secret store:
+#   - KAFKA_BOOTSTRAP
+#   - OPENFGA_API_TOKEN
+secrets:
+  enabled: true
+  store: platform-secrets
+  keySeparator: "/"     # "-" on GCP Secret Manager and Azure Key Vault (set in platform-values.yaml)
+workloadIdentity:
+  aws: {roleArn: ""}
+  gcp: {serviceAccount: ""}
+  azure: {clientId: ""}
+extraEnv: {}
+nodeSelector: {}
+tolerations: []

@@ -1,0 +1,170 @@
+model
+  schema 1.1
+
+# AfroTransact fine-grained authorisation model (S022, ADR 0001-openfga-relationship-authorisation).
+#
+# RBAC (JWT `perms`) still answers "may this kind of actor do this kind of thing?". This model answers
+# "may THIS actor do it to THIS resource?", so an `org` claim alone never grants access to another
+# organisation's data.
+#
+# Object ids
+#   user:<identity user uuid>            (JWT `sub` of user tokens)
+#   client:<oauth client id>             (JWT `sub` of client-credentials tokens: services, partner apps, AI agents)
+#   platform:afrotransact                (single instance)
+#   market:<ISO 3166-1 alpha-2>          (content's market codes, e.g. market:US, market:GB)
+#   organization:<seller org id>         (org_…, seller-service id = JWT `org` claim)
+#   <resource>:<owning service's id>     (offer:<uuid>, booking:<uuid>, payout:<id>, …)
+#
+# Who writes which tuples
+#   authz-sync (go/services/authz-sync) — org membership (identity.role.granted|revoked with orgId), platform
+#     staff roles, organisation market / kind / platform links (seller.org.approved|updated).
+#   owning services — resource → org links, either as contextual tuples on every check (preferred: the
+#     service's database stays the source of truth) or persisted with RelationshipWriter.
+#   operators — market-scoped staff grants and delegated clients (fga CLI or RelationshipWriter).
+
+type user
+
+# OAuth2 clients. First-party service clients get `platform#service`; partner apps / AI agents only act for an
+# organisation that delegated to them.
+type client
+
+type platform
+  relations
+    define super_admin: [user]
+    # First-party service clients (client_credentials) trusted for every organisation.
+    define service: [client]
+    # Platform-wide staff grants (identity platform.* roles). Market-scoped grants live on `market`.
+    define support: [user] or super_admin
+    define catalog_manager: [user] or super_admin
+    define finance: [user] or super_admin
+    define trust_safety: [user] or super_admin
+    define operations: [user] or super_admin
+    define marketing: [user] or super_admin
+    define auditor: [user] or super_admin
+    define staff_viewer: support or catalog_manager or finance or trust_safety or operations or marketing or auditor
+    # Cross-organisation reads ("list every org's offers"): platform-wide staff and first-party services only.
+    define can_view_all: staff_viewer or service
+
+# A market (country). Staff granted a role on a market act only on organisations, orders and bookings there.
+type market
+  relations
+    define platform: [platform]
+    define support: [user] or support from platform
+    define catalog_manager: [user] or catalog_manager from platform
+    define finance: [user] or finance from platform
+    define trust_safety: [user] or trust_safety from platform
+    define operations: [user] or operations from platform
+    define marketing: [user] or marketing from platform
+    define auditor: [user] or auditor from platform
+    define staff_viewer: support or catalog_manager or finance or trust_safety or operations or marketing or auditor
+    define service: service from platform
+
+# A seller and/or provider organisation (seller-service). Roles mirror identity's organisation roles.
+type organization
+  relations
+    define platform: [platform]
+    define market: [market]
+    # What the organisation sells (seller.org kind SELLER / PROVIDER / BOTH); wildcard tuples act as flags.
+    define sells_products: [user:*, client:*]
+    define offers_services: [user:*, client:*]
+
+    # Organisation roles (identity role keys → relation, see docs/engineering/authorisation.md).
+    define owner: [user]                                   # seller.owner, provider.owner
+    define admin: [user] or owner                          # seller.admin
+    define manager: [user] or owner                        # provider.manager
+    define catalog: [user] or admin                        # seller.catalog
+    define fulfilment: [user] or admin                     # seller.fulfilment
+    define finance: [user] or owner                        # seller.finance, provider.finance
+    define ads: [user] or admin                            # seller.ads
+    define support: [user] or admin                        # seller.support
+    define practitioner: [user] or manager                 # provider.practitioner
+    define member: [user] or owner or admin or manager or catalog or fulfilment or finance or ads or support or practitioner
+
+    # Delegation: partner apps / AI agents acting for this organisation (granted by an owner).
+    define delegated_editor: [client]
+    define delegated_viewer: [client] or delegated_editor
+
+    # Platform reach into this organisation: first-party services and staff, platform-wide or by market.
+    define platform_service: service from platform
+    define staff_viewer: staff_viewer from market or staff_viewer from platform
+    define staff_support: support from market or support from platform
+    define staff_catalog: catalog_manager from market or catalog_manager from platform
+    define staff_finance: finance from market or finance from platform
+    define staff_operations: operations from market or operations from platform
+    define staff_marketing: marketing from market or marketing from platform
+
+    # Capability gates used by resources (and directly for org-level actions such as "create an offer").
+    define product_editor: catalog and sells_products
+    define service_manager: manager and offers_services
+    define can_view: member or staff_viewer or platform_service or delegated_viewer
+    define can_manage_products: product_editor or staff_catalog or platform_service or delegated_editor
+    define can_view_products: member or staff_viewer or platform_service or delegated_viewer
+    define can_manage_services: service_manager or staff_support or platform_service or delegated_editor
+    define can_view_payouts: finance or admin or manager or staff_finance or platform_service
+    define can_request_payouts: finance
+    define can_manage_ads: ads or staff_marketing or delegated_editor
+    define can_fulfil: fulfilment or support or staff_operations or platform_service
+
+# A seller / provider storefront ("store"). seller_org → store → listing.
+type storefront
+  relations
+    define org: [organization]
+    define can_view: can_view from org
+    define can_edit: admin from org or manager from org or staff_marketing from org
+    define can_design: can_edit or ads from org or catalog from org
+    define can_manage_listings: can_manage_products from org
+
+# A catalog product page / listing owned by an organisation, optionally placed in a store.
+type product
+  relations
+    define org: [organization]
+    define store: [storefront]
+    define can_view: can_view_products from org or can_view from store
+    define can_edit: can_manage_products from org or can_manage_listings from store
+
+# A seller's offer on a product (offers-service).
+type offer
+  relations
+    define org: [organization]
+    define product: [product]
+    define can_view: can_view_products from org
+    define can_edit: can_manage_products from org
+
+# A customer order (orders-service). Sellers never see the whole order, only their shipments.
+type order
+  relations
+    define market: [market]
+    define buyer: [user]
+    define can_view: buyer or support from market or operations from market or finance from market or service from market
+    define can_manage: support from market or operations from market or service from market
+
+# The seller-side part of an order (one per seller org): fulfil, label, update status.
+type shipment
+  relations
+    define order: [order]
+    define org: [organization]
+    define can_view: member from org or can_view from order
+    define can_update_status: can_fulfil from org or can_manage from order
+
+# A service booking (bookings-service). Practitioners see only the bookings assigned to them.
+type booking
+  relations
+    define org: [organization]
+    define customer: [user]
+    define practitioner: [user]
+    define can_view: customer or practitioner or service_manager from org or finance from org or staff_support from org or platform_service from org or delegated_viewer from org
+    define can_manage: practitioner or can_manage_services from org
+
+# A sponsored-products / ads campaign (content-service).
+type ads_campaign
+  relations
+    define org: [organization]
+    define can_view: can_manage_ads from org or finance from org or staff_viewer from org
+    define can_manage: can_manage_ads from org
+
+# A payout to an organisation (payments-service). Catalog, ads and support members never see payouts.
+type payout
+  relations
+    define org: [organization]
+    define can_view: can_view_payouts from org
+    define can_request: can_request_payouts from org

@@ -1,5 +1,12 @@
 # UAT / staging: production-like, anonymised data, API reference pages on for testers.
 at:
+  security:
+    # S022 OpenFGA relationship checks. Shadow mode first: denials are logged (FGA shadow) and compared before FGA_ENFORCE=true.
+    fga:
+      enabled: ${FGA_ENABLED:true}
+      enforce: ${FGA_ENFORCE:false}
+      # In-cluster OpenFGA (infra/k8s/platform/openfga); FGA_API_TOKEN comes from the service's secret.
+      api-url: ${FGA_API_URL:http://openfga.openfga.svc:8080}
   offers:
     catalog:
       # In-cluster service name of catalog-service (Helm chart `catalog`, port 8080).

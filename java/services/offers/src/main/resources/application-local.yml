@@ -2,6 +2,11 @@
 at:
   security:
     enabled: false
+    # Security is off locally (every call is the local super admin), so relationship checks stay off too. To try
+    # them: FGA_ENABLED=true with docker compose's OpenFGA on :8091 and authz-sync running (it creates the store).
+    fga:
+      enabled: ${FGA_ENABLED:false}
+      api-url: ${FGA_API_URL:http://localhost:8091}
 logging:
   level:
     com.afrotransact: DEBUG

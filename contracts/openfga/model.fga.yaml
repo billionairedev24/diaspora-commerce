@@ -1,0 +1,241 @@
+# OpenFGA model tests. Run: fga model test --tests contracts/openfga/model.fga.yaml
+# (install: go install github.com/openfga/cli/cmd/fga@v0.7.4). Fixture ids mirror the Java pilot IT.
+name: afrotransact-authorisation
+model_file: ./model.fga
+
+tuples:
+  # Platform, markets
+  - {user: platform:afrotransact, relation: platform, object: market:US}
+  - {user: platform:afrotransact, relation: platform, object: market:GB}
+  - {user: client:orders-service, relation: service, object: platform:afrotransact}
+  - {user: user:root, relation: super_admin, object: platform:afrotransact}
+  - {user: user:global-support, relation: support, object: platform:afrotransact}
+  # Market-scoped staff grants
+  - {user: user:us-support, relation: support, object: market:US}
+  - {user: user:us-catalog, relation: catalog_manager, object: market:US}
+  - {user: user:gb-finance, relation: finance, object: market:GB}
+
+  # Org A: Lagos Textile Hub, US seller
+  - {user: platform:afrotransact, relation: platform, object: organization:org_a}
+  - {user: market:US, relation: market, object: organization:org_a}
+  - {user: "user:*", relation: sells_products, object: organization:org_a}
+  - {user: "client:*", relation: sells_products, object: organization:org_a}
+  - {user: user:anne, relation: owner, object: organization:org_a}
+  - {user: user:cat, relation: catalog, object: organization:org_a}
+  - {user: user:fin, relation: finance, object: organization:org_a}
+  - {user: user:ful, relation: fulfilment, object: organization:org_a}
+  - {user: user:adsy, relation: ads, object: organization:org_a}
+  - {user: client:partner-app, relation: delegated_editor, object: organization:org_a}
+
+  # Org B: Mama Tee's Pantry, GB seller AND provider (kind BOTH)
+  - {user: platform:afrotransact, relation: platform, object: organization:org_b}
+  - {user: market:GB, relation: market, object: organization:org_b}
+  - {user: "user:*", relation: sells_products, object: organization:org_b}
+  - {user: "client:*", relation: sells_products, object: organization:org_b}
+  - {user: "user:*", relation: offers_services, object: organization:org_b}
+  - {user: "client:*", relation: offers_services, object: organization:org_b}
+  - {user: user:bob, relation: owner, object: organization:org_b}
+  - {user: user:mgr, relation: manager, object: organization:org_b}
+  - {user: user:prac, relation: practitioner, object: organization:org_b}
+
+  # Org C: provider only (no product selling)
+  - {user: platform:afrotransact, relation: platform, object: organization:org_c}
+  - {user: market:US, relation: market, object: organization:org_c}
+  - {user: "user:*", relation: offers_services, object: organization:org_c}
+  - {user: user:carl, relation: owner, object: organization:org_c}
+
+  # Resources: seller_org → store → listing, offers, orders, bookings, campaigns, payouts
+  - {user: organization:org_a, relation: org, object: storefront:store_a}
+  - {user: storefront:store_a, relation: store, object: product:listing_in_store}
+  - {user: organization:org_a, relation: org, object: product:listing_a}
+  - {user: organization:org_a, relation: org, object: offer:offer_a}
+  - {user: organization:org_b, relation: org, object: offer:offer_b}
+  - {user: market:US, relation: market, object: order:order_us}
+  - {user: user:shopper, relation: buyer, object: order:order_us}
+  - {user: order:order_us, relation: order, object: shipment:ship_a}
+  - {user: organization:org_a, relation: org, object: shipment:ship_a}
+  - {user: organization:org_b, relation: org, object: booking:booking_b}
+  - {user: user:prac, relation: practitioner, object: booking:booking_b}
+  - {user: user:shopper, relation: customer, object: booking:booking_b}
+  - {user: organization:org_b, relation: org, object: booking:booking_b2}
+  - {user: organization:org_a, relation: org, object: ads_campaign:camp_a}
+  - {user: organization:org_a, relation: org, object: payout:payout_a}
+  - {user: organization:org_b, relation: org, object: payout:payout_b}
+
+tests:
+  - name: org membership and roles
+    check:
+      - user: user:anne
+        object: organization:org_a
+        assertions: {owner: true, admin: true, catalog: true, finance: true, member: true, can_view: true}
+      - user: user:cat
+        object: organization:org_a
+        assertions: {member: true, catalog: true, admin: false, finance: false, product_editor: true}
+      - user: user:anne
+        object: organization:org_b
+        assertions: {member: false, can_view: false, can_manage_products: false}
+
+  - name: listing ownership across the store chain (seller_org → store → listing)
+    check:
+      - user: user:cat
+        object: product:listing_in_store
+        assertions: {can_view: true, can_edit: true}
+      - user: user:cat
+        object: product:listing_a
+        assertions: {can_view: true, can_edit: true}
+      - user: user:bob
+        object: product:listing_in_store
+        assertions: {can_view: false, can_edit: false}
+      - user: user:adsy
+        object: storefront:store_a
+        assertions: {can_view: true, can_design: true, can_edit: false, can_manage_listings: false}
+
+  - name: offers are editable only by their own organisation
+    check:
+      - user: user:cat
+        object: offer:offer_a
+        assertions: {can_view: true, can_edit: true}
+      - user: user:ful
+        object: offer:offer_a
+        assertions: {can_view: true, can_edit: false}
+      - user: user:anne
+        object: offer:offer_b
+        assertions: {can_view: false, can_edit: false}
+      - user: user:bob
+        object: offer:offer_b
+        assertions: {can_view: true, can_edit: true}
+
+  - name: provider-only organisations cannot manage products
+    check:
+      - user: user:carl
+        object: organization:org_c
+        assertions: {owner: true, can_manage_products: false, can_manage_services: true}
+
+  - name: a catalog member cannot access payouts
+    check:
+      - user: user:cat
+        object: payout:payout_a
+        assertions: {can_view: false, can_request: false}
+      - user: user:adsy
+        object: payout:payout_a
+        assertions: {can_view: false}
+      - user: user:fin
+        object: payout:payout_a
+        assertions: {can_view: true, can_request: true}
+      - user: user:anne
+        object: payout:payout_a
+        assertions: {can_view: true, can_request: true}
+      - user: user:fin
+        object: payout:payout_b
+        assertions: {can_view: false}
+
+  - name: staff grants scoped by market
+    check:
+      - user: user:us-support
+        object: order:order_us
+        assertions: {can_view: true, can_manage: true}
+      - user: user:us-support
+        object: shipment:ship_a
+        assertions: {can_view: true, can_update_status: true}
+      - user: user:us-catalog
+        object: offer:offer_a
+        assertions: {can_view: true, can_edit: true}
+      - user: user:us-catalog
+        object: offer:offer_b
+        assertions: {can_view: false, can_edit: false}
+      - user: user:gb-finance
+        object: payout:payout_b
+        assertions: {can_view: true, can_request: false}
+      - user: user:gb-finance
+        object: payout:payout_a
+        assertions: {can_view: false}
+      - user: user:global-support
+        object: booking:booking_b
+        assertions: {can_view: true, can_manage: true}
+      - user: user:root
+        object: offer:offer_b
+        assertions: {can_view: true, can_edit: true}
+
+  - name: seller side of orders
+    check:
+      - user: user:ful
+        object: shipment:ship_a
+        assertions: {can_view: true, can_update_status: true}
+      - user: user:cat
+        object: shipment:ship_a
+        assertions: {can_view: true, can_update_status: false}
+      - user: user:ful
+        object: order:order_us
+        assertions: {can_view: false}
+      - user: user:shopper
+        object: order:order_us
+        assertions: {can_view: true, can_manage: false}
+
+  - name: bookings and practitioners
+    check:
+      - user: user:prac
+        object: booking:booking_b
+        assertions: {can_view: true, can_manage: true}
+      - user: user:prac
+        object: booking:booking_b2
+        assertions: {can_view: false, can_manage: false}
+      - user: user:mgr
+        object: booking:booking_b2
+        assertions: {can_view: true, can_manage: true}
+      - user: user:shopper
+        object: booking:booking_b
+        assertions: {can_view: true, can_manage: false}
+      - user: user:us-support
+        object: booking:booking_b
+        assertions: {can_view: false}
+
+  - name: ads campaigns
+    check:
+      - user: user:adsy
+        object: ads_campaign:camp_a
+        assertions: {can_view: true, can_manage: true}
+      - user: user:ful
+        object: ads_campaign:camp_a
+        assertions: {can_view: false, can_manage: false}
+
+  - name: delegation for service clients
+    check:
+      - user: client:partner-app
+        object: offer:offer_a
+        assertions: {can_view: true, can_edit: true}
+      - user: client:partner-app
+        object: offer:offer_b
+        assertions: {can_view: false, can_edit: false}
+      - user: client:partner-app
+        object: payout:payout_a
+        assertions: {can_view: false}
+      - user: client:orders-service
+        object: shipment:ship_a
+        assertions: {can_view: true, can_update_status: true}
+      - user: client:orders-service
+        object: payout:payout_b
+        assertions: {can_view: true, can_request: false}
+
+  - name: cross-organisation reads need a platform-wide grant
+    check:
+      - user: user:global-support
+        object: platform:afrotransact
+        assertions: {can_view_all: true}
+      - user: user:us-support
+        object: platform:afrotransact
+        assertions: {can_view_all: false}
+      - user: client:orders-service
+        object: platform:afrotransact
+        assertions: {can_view_all: true}
+
+  - name: list what a member can edit
+    list_objects:
+      - user: user:cat
+        type: offer
+        assertions:
+          can_edit: [offer:offer_a]
+          can_view: [offer:offer_a]
+      - user: user:us-catalog
+        type: offer
+        assertions:
+          can_edit: [offer:offer_a]

@@ -1,0 +1,22 @@
+# Only AfroTransact service namespaces (afrotransact-<env>, labelled by Argo CD) reach the API; observability scrapes
+# metrics. Nothing is exposed through the edge gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: openfga
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: openfga}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels: {app.kubernetes.io/part-of: afrotransact}
+      ports:
+        - {port: 8080}
+        - {port: 8081}
+    - from:
+        - namespaceSelector:
+            matchLabels: {kubernetes.io/metadata.name: observability}
+      ports:
+        - {port: 2112}
