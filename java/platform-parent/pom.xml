@@ -34,6 +34,8 @@
         <!-- Security: Jackson 3.1.5 (Boot 4.1.1 BOM) has 5 CVEs; lz4-java 1.10.1 (via kafka-clients) has CVE-2026-106451. -->
         <jackson-bom.version>3.1.7</jackson-bom.version>
         <lz4-java.version>1.11.4</lz4-java.version>
+        <!-- Security: Tomcat 11.0.24 (Boot 4.1.1 BOM) has CRITICAL CVE-2026-65182/65905/68525. -->
+        <tomcat.version>11.0.25</tomcat.version>
 
         <checkstyle-plugin.version>3.6.0</checkstyle-plugin.version>
         <checkstyle.version>14.3.0</checkstyle.version>
