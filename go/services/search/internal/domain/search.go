@@ -105,10 +105,12 @@ type Hit struct {
 	InStock      bool    `json:"inStock"`
 	LowStock     bool    `json:"lowStock"`
 	AvailableQty int     `json:"availableQty"`
-	DeliveryDays int     `json:"deliveryDays"`
-	ImageURL     string  `json:"imageUrl,omitempty"`
-	OfferCount   int     `json:"offerCount"`
-	Score        float64 `json:"score"`
+	// Availability is IN_STOCK, LOW_STOCK ("Only N left", N = AvailableQty) or OUT_OF_STOCK ("Currently unavailable").
+	Availability Availability `json:"availability"`
+	DeliveryDays int          `json:"deliveryDays"`
+	ImageURL     string       `json:"imageUrl,omitempty"`
+	OfferCount   int          `json:"offerCount"`
+	Score        float64      `json:"score"`
 	// Sponsored is set on ads only (always labelled "Sponsored" with the reason it was shown).
 	Sponsored *Sponsored `json:"sponsored,omitempty"`
 
@@ -135,7 +137,11 @@ type Page struct {
 	Size     int                      `json:"size"`
 	Facets   map[string][]FacetBucket `json:"facets"`
 	Semantic bool                     `json:"semantic"`
-	TookMs   int64                    `json:"tookMs"`
+	// Retrieval is HYBRID (BM25 + kNN fused by reciprocal rank) or LEXICAL; SemanticSkipped says why semantic
+	// retrieval was not used (SHORT_QUERY, SORTED, NOT_CONFIGURED, DEEP_PAGE, EMBEDDER_UNAVAILABLE, EMBEDDER_TIMEOUT).
+	Retrieval       Retrieval `json:"retrieval"`
+	SemanticSkipped string    `json:"semanticSkipped,omitempty"`
+	TookMs          int64     `json:"tookMs"`
 	// SearchID identifies this search for click reporting (POST /v1/search/clicks).
 	SearchID string `json:"searchId,omitempty"`
 }

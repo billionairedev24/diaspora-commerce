@@ -17,6 +17,9 @@ operations:
       catalog.product.* upsert the product document (version = occurred-at). Events with sellerHidden = true
       (catalog.product.hidden, and any product event while the owner is hidden) index status SELLER_HIDDEN, which
       search never returns; catalog.product.restored brings back the product's own status. catalog.product.taken_down indexes status TAKEN_DOWN (not returned) and catalog.product.reinstated restores it.
+      Each document also carries an embedding of its text (title, brand, category path) from ai-gateway's
+      POST /v1/embeddings (purpose search-document, client indexer-service, scope ai:use) for hybrid search (S036);
+      an embedding failure never blocks the event, and a backfill embeds LIVE documents without one.
   consumeIndexerSellerOrgEvents:
     action: receive
     channel: {$ref: '#/channels/sellerOrgEvents'}

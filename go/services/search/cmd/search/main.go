@@ -131,7 +131,18 @@ func run() error {
 
 	var emb port.Embedder
 	if cfg.AIGatewayURL != "" {
-		emb = embedder.NewGatewayEmbedder(cfg.AIGatewayURL, httpClient)
+		c := cfg.Ads.Content // the search-service client
+		if c.TokenURL != "" && c.ClientSecret == "" {
+			log.Warn("SEARCH_CLIENT_SECRET not set: embedding calls are unauthenticated and will fall back to lexical")
+		}
+		emb = embedder.New(embedder.Config{BaseURL: cfg.AIGatewayURL, TokenURL: c.TokenURL, ClientID: c.ClientID,
+			ClientSecret: c.ClientSecret, Scopes: cfg.Semantic.Scopes}, httpClient)
+	} else {
+		log.Info("AI_GATEWAY_URL not set: search is lexical only")
+	}
+	opts = append(opts, app.WithEmbedTimeout(cfg.Semantic.Timeout))
+	if cfg.Semantic.MinWords > 0 {
+		opts = append(opts, app.WithMinSemanticWords(cfg.Semantic.MinWords))
 	}
 	deps := httpapi.Deps{
 		Searcher:  app.NewProductSearcher(index, emb, log, opts...),

@@ -24,7 +24,14 @@ type Config struct {
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`
 	} `yaml:"auth"`
 	AIGatewayURL string `yaml:"aiGatewayUrl" env:"AI_GATEWAY_URL"`
-	Kafka        struct {
+	// Semantic is hybrid retrieval (S036): queries of MinWords+ words are embedded by ai-gateway within Timeout
+	// (150 ms), with search's own client-credentials token (the content client's id and secret, Scopes ai:use).
+	Semantic struct {
+		Timeout  time.Duration `yaml:"timeout" env:"SEMANTIC_TIMEOUT"`
+		MinWords int           `yaml:"minWords" env:"SEMANTIC_MIN_WORDS"`
+		Scopes   []string      `yaml:"scopes" env:"SEMANTIC_SCOPES"`
+	} `yaml:"semantic"`
+	Kafka struct {
 		// Brokers for search.* and ads.* events; empty disables publishing (events are counted as dropped).
 		Brokers []string `yaml:"brokers" env:"KAFKA_BOOTSTRAP"`
 		Buffer  int      `yaml:"buffer" env:"EVENT_BUFFER"`

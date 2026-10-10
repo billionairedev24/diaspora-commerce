@@ -98,6 +98,11 @@ func TestSharedPlatformURLsDriveLinks(t *testing.T) {
 	if !slices.Contains(c.Attachments.AllowedHosts, "media.uat.afrotransact.com") {
 		t.Fatalf("media CDN host must be allowed: %v", c.Attachments.AllowedHosts)
 	}
+	// S250: media-hosted long-lived links (PO PDFs) are fetched from the API host, but only under /media/v1/l/.
+	if !slices.Contains(c.Attachments.AllowedHosts, "api.uat.afrotransact.com/media/v1/l/") ||
+		slices.Contains(c.Attachments.AllowedHosts, "api.uat.afrotransact.com") {
+		t.Fatalf("media link prefix (not the whole API host) must be allowed: %v", c.Attachments.AllowedHosts)
+	}
 
 	env["PUBLIC_BASE_URL"] = "https://hooks.example.test/notifications"
 	env["PROVIDER_HUB_URL"] = "https://providers.example.test"

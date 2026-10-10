@@ -22,10 +22,18 @@ Product search and typeahead over Elasticsearch 9. Go 1.27.2 · local port **820
   price range (minor units), delivery days, in stock, distance from a point.
 - Facets for every filter, sorts (relevance, price, rating, newest), relevance boosted by rating, stock and
   Fulfilled-by-AfroTransact.
-- Natural-language queries (3+ words) blend kNN over the `embedding` field using the AI gateway's embeddings;
-  if the gateway is slow (>150 ms) or down, results fall back to lexical search.
+- **Hybrid retrieval (S036)**: queries of 3+ words (`SEMANTIC_MIN_WORDS`) on the relevance order, within the first
+  120 results, ask ai-gateway `POST /v1/embeddings` (purpose `search-query`, client `search-service`, scope `ai:use`)
+  for an embedding with a 150 ms budget (`SEMANTIC_TIMEOUT`). One `_msearch` runs BM25 (with facets) and a kNN query
+  over the `embedding` dense_vector (same filters, `LIVE` only, wrapped in the same commercial boosts); the two lists
+  are merged by **reciprocal rank fusion** (k = 60) in the service, so no Elasticsearch licence feature is needed.
+  If the embedder fails, times out or returns a vector of the wrong size, or the kNN side fails, the page is lexical.
+  The response reports `semantic`, `retrieval` (`HYBRID` / `LEXICAL`) and `semanticSkipped` (`SHORT_QUERY`,
+  `SORTED`, `DEEP_PAGE`, `NOT_CONFIGURED`, `EMBEDDER_UNAVAILABLE`, `EMBEDDER_TIMEOUT`).
 - Typeahead returns completed phrases (the first scoped to its department) and up to five products, cacheable 30 s.
-- `lowStock` is set when 1–5 units are left (the storefront shows "Only N left").
+- **Stock signals (S038)**: every hit (results, typeahead products, ads) carries `availableQty`, `lowStock` (1–5 units:
+  "Only N left") and `availability` (`IN_STOCK`, `LOW_STOCK`, `OUT_OF_STOCK`: "Currently unavailable"); the indexer
+  keeps `available_qty` / `in_stock` from inventory events.
 
 ## Relevance harness (S039)
 
@@ -33,6 +41,22 @@ Product search and typeahead over Elasticsearch 9. Go 1.27.2 · local port **820
 [`relevance/products.yaml`](relevance/products.yaml). `TestRelevanceJudgements` indexes them into Elasticsearch 9.3
 (Testcontainers, the production settings and query) and fails when mean NDCG@10 or precision@5 drops below the
 thresholds in the file (it runs in CI with `go test ./...`). Measured: before tuning 0.855 / 0.807, after 0.942 / 0.913.
+
+**Keyword vs hybrid (S036).** The harness also runs every query hybrid (BM25 + kNN, reciprocal rank fusion) with
+**fake deterministic embeddings** ([`relevance/concepts.yaml`](relevance/concepts.yaml): hashed words plus a small
+hand-written concept lexicon; tests never call a model) and 8 judged natural-language queries (`semanticQueries`).
+It fails when hybrid regresses the core queries, misses `semanticThresholds` or does not beat keyword-only on the
+natural-language ones. Measured on Elasticsearch 9.3.0 (NDCG@10 / P@5):
+
+| Queries | Keyword only | Hybrid |
+|---|---|---|
+| 25 core (hybrid only for 3+ words, as in production) | 0.942 / 0.913 | 0.949 / 0.913 |
+| 8 natural-language ("crunchy snacks for a road trip", "something to make eba with" …) | 0.000 / 0.000 | 0.858 / 0.765 |
+| all 33 | 0.714 / 0.691 | 0.927 / 0.877 |
+
+Keyword-only scores 0 on the natural-language queries because every typed word must match. The fake model validates
+the plumbing (fusion, filters, boosts, fallback), not a real model's quality: re-measure with ai-gateway's model
+before tuning `semanticThresholds`.
 
 ```bash
 go test ./internal/adapter/elastic -run TestRelevanceJudgements -v   # prints the per-query table
@@ -90,7 +114,9 @@ Auth is optional (public reads); when a bearer token is present it is verified a
 
 `config/<APP_ENV>.yaml` (local, dev, uat, prod) with env overrides: `PORT`, `ES_URLS`, `ES_USERNAME`,
 `ES_PASSWORD`, `ES_API_KEY`, `AUTH_ENABLED`, `AUTH_ISSUER_URL`, `AI_GATEWAY_URL`,
-`OTEL_EXPORTER_OTLP_ENDPOINT_HOST`, `TRACE_SAMPLING`, `DOCS_ENABLED`, `MARKETS`, `KAFKA_BOOTSTRAP` (search and ads
+`SEMANTIC_TIMEOUT` (150ms), `SEMANTIC_MIN_WORDS` (3), `SEMANTIC_SCOPES` (`ai:use`; the embedder uses the
+`SEARCH_CLIENT_ID` / `SEARCH_CLIENT_SECRET` client), `OTEL_EXPORTER_OTLP_ENDPOINT_HOST`, `TRACE_SAMPLING`,
+`DOCS_ENABLED`, `MARKETS`, `KAFKA_BOOTSTRAP` (search and ads
 events; empty = dropped and counted in `search_events_total`), `SYNONYMS_FILE`, `SYNONYMS_OVERWRITE`,
 `SYNONYMS_MIGRATE_INDEX`, `ANALYTICS_ENABLED`, `ANALYTICS_FLUSH_INTERVAL`, `ANALYTICS_RETENTION_DAYS`,
 `CLICK_DEDUPE_WINDOW`, `ADS_ENABLED`, `ADS_MIN_QUALITY`, `ADS_RESERVE_MINOR`, `ADS_TOKEN_KEY` (secret), `ADS_TOKEN_TTL`,

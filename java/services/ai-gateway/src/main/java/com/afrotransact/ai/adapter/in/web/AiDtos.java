@@ -85,6 +85,27 @@ final class AiDtos {
                           @Schema(example = "3") Integer count) {
     }
 
+    @Schema(description = "Image moderation input (media-service sends a JPEG preview of at most 768 px)")
+    record ModerateImageRequest(
+            @Schema(description = "Base64-encoded image (at most 2 MB decoded)")
+            @NotBlank @Size(max = 2_900_000) String image,
+            @Schema(example = "image/jpeg") @NotBlank String contentType,
+            @Schema(description = "product-image or storefront", example = "product-image") String purpose) {
+    }
+
+    @Schema(description = "A moderation finding")
+    record ModerationLabelView(@Schema(example = "WATERMARK") String code,
+                               @Schema(example = "Another shop's logo in the corner") String description) {
+    }
+
+    @Schema(description = "Image moderation verdict; advisory, media decides how to apply it")
+    record ModerateImageResponse(
+            @Schema(description = "ALLOW (publish), REVIEW (hold for a person) or BLOCK (prohibited)",
+                    allowableValues = {"ALLOW", "REVIEW", "BLOCK"}) String decision,
+            List<ModerationLabelView> labels,
+            @Schema(example = "google/gemini-2.5-flash") String model) {
+    }
+
     @Schema(description = "Trust-team triage input; field values as the reviewer sees them (masked where required)")
     record TriageRequest(@NotBlank @Schema(example = "APPLICATION") String subjectType,
                          @NotBlank String subjectId,

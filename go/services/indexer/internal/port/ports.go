@@ -18,7 +18,18 @@ type ProductIndex interface {
 	ApplyAvailability(ctx context.Context, market, variantATIN, node string, qty int, version int64) (bool, error)
 	// RenameSeller sets seller_name on every document of the seller and returns how many changed.
 	RenameSeller(ctx context.Context, market, sellerID, name string) (int, error)
+	// MissingEmbeddings returns up to limit LIVE documents without an embedding, ordered by ATIN after the given one.
+	MissingEmbeddings(ctx context.Context, market, afterATIN string, limit int) ([]domain.EmbeddingCandidate, error)
+	// SetEmbedding stores a document's embedding unless the document changed since it was read (version differs);
+	// it reports whether it was stored.
+	SetEmbedding(ctx context.Context, market, atin string, vec []float32, version int64) (bool, error)
 	Ping(ctx context.Context) error
+}
+
+// Embedder turns a product's text into its search embedding (ai-gateway POST /v1/embeddings, purpose
+// search-document, with the indexer-service client's token).
+type Embedder interface {
+	Embed(ctx context.Context, text string) ([]float32, error)
 }
 
 // UpsertOptions tunes one product upsert.

@@ -1,8 +1,10 @@
 package relevance_test
 
 import (
+	"context"
 	"errors"
 	"math"
+	"slices"
 	"testing"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/relevance"
@@ -64,5 +66,30 @@ func TestRepositorySuiteLoads(t *testing.T) {
 	}
 	if suite.Thresholds.NDCG10 <= 0 || suite.Thresholds.Precision5 <= 0 {
 		t.Fatal("thresholds must be set")
+	}
+}
+
+func TestFakeEmbedderIsDeterministicAndEncodesConcepts(t *testing.T) {
+	f, err := relevance.LoadFakeEmbedder("../../relevance/concepts.yaml", 1536)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	cos := func(a, b string) float64 {
+		va, _ := f.Embed(ctx, a)
+		vb, _ := f.Embed(ctx, b)
+		var dot float64
+		for i := range va {
+			dot += float64(va[i]) * float64(vb[i])
+		}
+		return dot
+	}
+	a1, _ := f.Embed(ctx, "Gari Ijebu, Fine")
+	a2, _ := f.Embed(ctx, "Gari Ijebu, Fine")
+	if len(a1) != 1536 || !slices.Equal(a1, a2) {
+		t.Fatal("embeddings must be deterministic and 1536-dimensional")
+	}
+	if near, far := cos("something to make eba with", "Gari Ijebu, Fine"), cos("something to make eba with", "Kente Stole"); near <= far {
+		t.Fatalf("eba should be closer to gari (%.3f) than to kente (%.3f)", near, far)
 	}
 }

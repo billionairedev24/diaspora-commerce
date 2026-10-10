@@ -19,7 +19,16 @@ Kafka → Elasticsearch projection of the product read model used by [search](..
 - Product events become one document per product page (`searchindex.ProductDocument`): department and path resolved
   from catalog-service's category tree (cached), seller display name, fulfilment (`AFROTRANSACT` for AfroTransact Retail,
   `SELLER` otherwise), lowest variant price, variant ATINs and status. Only `LIVE` documents are searchable.
-- Availability events update one `variant×node` quantity and recompute `available_qty` / `in_stock` for the product.
+- Availability events update one `variant×node` quantity and recompute `available_qty` / `in_stock` for the product
+  (search turns them into the low-stock / out-of-stock signals of S038).
+- **Embeddings (S036):** each product document carries an `embedding` (1536-dim `dense_vector`) of its text
+  (`searchindex.EmbeddingText`: title, brand, category path) from ai-gateway `POST /v1/embeddings` (purpose
+  `search-document`), called with the `indexer-service` client's token requested with scope `ai:use` (the client
+  needs that scope in identity). Vectors are cached by text, so the status events of one product embed once. An AI
+  failure never fails the event: the document is written without a new vector (an earlier one is kept) and the
+  **backfill** (`EmbeddingBackfill`, at start and every `EMBEDDINGS_BACKFILL_INTERVAL`, 15 min) embeds every LIVE
+  document that has none, with a version guard so a newer product event always wins. `indexer_embeddings_total{outcome}`
+  counts calls.
 - **Ordering and idempotency:** every write is a Painless script guarded by a version (event `occurred-at` in
   microseconds, or the inventory position version). Redelivered or out-of-order events are no-ops, so the read
   model converges regardless of delivery order.
@@ -34,13 +43,15 @@ Kafka → Elasticsearch projection of the product read model used by [search](..
 `OTEL_EXPORTER_OTLP_ENDPOINT_HOST`, `TRACE_SAMPLING`, `SYNONYMS_SET`, `SELLER_DIRECTORY_ENABLED`, `SELLER_URL`,
 `AUTH_TOKEN_URL`, `INDEXER_CLIENT_ID` (`indexer-service`), `INDEXER_CLIENT_SECRET` (secret), `INDEXER_CLIENT_SCOPES`
 (`sellers:directory`), `SELLER_DIRECTORY_PAGE_SIZE`, `SELLER_DIRECTORY_WARM_TIMEOUT`,
-`SELLER_DIRECTORY_REFRESH_INTERVAL`. `sellerNames` in config seeds names the directory does not know (AfroTransact
+`SELLER_DIRECTORY_REFRESH_INTERVAL`, `EMBEDDINGS_ENABLED`, `AI_GATEWAY_URL`, `EMBEDDINGS_TIMEOUT`,
+`EMBEDDINGS_SCOPES` (`ai:use`), `EMBEDDINGS_CACHE_SIZE`, `EMBEDDINGS_BACKFILL_INTERVAL`, `EMBEDDINGS_BACKFILL_BATCH`. `sellerNames` in config seeds names the directory does not know (AfroTransact
 Retail).
 
 ## Run and test
 
 ```bash
 cd go/services/indexer
-GOTOOLCHAIN=go1.27.2 go test ./...      # unit + Elasticsearch Testcontainers integration (version guards, stock sums)
+GOTOOLCHAIN=go1.27.2 go test ./...      # unit (fake embedder) + Elasticsearch Testcontainers integration (version
+                                        # guards, stock sums, embeddings kept across upserts, backfill guard)
 APP_ENV=local go run ./cmd/indexer
 ```

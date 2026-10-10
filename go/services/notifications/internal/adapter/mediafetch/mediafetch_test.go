@@ -153,3 +153,33 @@ func TestNeedsAnAllowList(t *testing.T) {
 		t.Fatal("relative media base URL must fail")
 	}
 }
+
+// S250: purchase-order PDFs come as media-hosted long-lived links on the shared API host; only that path prefix is
+// allowed there, and the redirect to object storage is re-checked.
+func TestFetchMediaHostedLinkByPathPrefix(t *testing.T) {
+	pdf := []byte("%PDF-1.7 po")
+	ft := &fakeTransport{responses: map[string]reply{
+		"https://api.example.test/media/v1/l/tok123":       redirect("https://bucket.s3.example.com/po/1.pdf?X-Sig=1"),
+		"https://bucket.s3.example.com/po/1.pdf?X-Sig=1":   body(200, "application/pdf", pdf, true),
+		"https://api.example.test/bff/v1/staff/exports/1":  body(200, "text/csv", []byte("secret"), true),
+		"https://api.example.test/media/v1/l/../../bff/x":  body(200, "text/csv", []byte("secret"), true),
+		"https://api.example.test/media/v1/assets/1":       body(200, "application/json", []byte("{}"), true),
+		"https://api.example.test/media/v1/l/redirect-out": redirect("https://attacker.example/x"),
+	}}
+	f, err := mediafetch.New(mediafetch.Config{AllowedHosts: []string{"*.s3.example.com", "api.example.test/media/v1/l/"},
+		MaxBytes: 64}, &http.Client{Transport: ft})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	a, err := f.Fetch(ctx, domain.AttachmentRef{FileName: "PO-1.pdf", URL: "https://api.example.test/media/v1/l/tok123"})
+	if err != nil || !bytes.Equal(a.Content, pdf) {
+		t.Fatalf("media link: %+v %v", a, err)
+	}
+	for _, u := range []string{"https://api.example.test/bff/v1/staff/exports/1", "https://api.example.test/media/v1/l/../../bff/x",
+		"https://api.example.test/media/v1/assets/1", "https://api.example.test/media/v1/l/redirect-out"} {
+		if _, err := f.Fetch(ctx, domain.AttachmentRef{FileName: "x", URL: u}); !errors.Is(err, domain.ErrAttachmentRejected) {
+			t.Errorf("%s must be rejected, got %v", u, err)
+		}
+	}
+}

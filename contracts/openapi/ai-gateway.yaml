@@ -2,9 +2,9 @@ openapi: 3.1.0
 info:
   title: AI Gateway API
   description: 'Lola, the AfroTransact shopping agent (streaming chat with visible tool calls, grounded product cards and
-    action proposals that always need the shopper''s tap), plus AI utilities: embeddings for search, listing writer, translation,
-    storefront taglines and trust-team triage. Models are served through OpenRouter with per-task routing, fallbacks and per-user
-    / per-feature budgets.'
+    action proposals that always need the shopper''s tap), plus AI utilities: embeddings for search, image moderation for
+    media uploads, listing writer, translation, storefront taglines and trust-team triage. Models are served through OpenRouter
+    with per-task routing, fallbacks and per-user / per-feature budgets.'
   contact:
     name: AfroTransact Platform
     url: https://developers.afrotransact.com
@@ -24,7 +24,7 @@ tags:
 - name: Lola
   description: 'AI shopping agent: streaming chat with visible tool calls and action proposals'
 - name: AI utilities
-  description: Embeddings for search and drafting aids for sellers and staff
+  description: Embeddings for search, image moderation for media and drafting aids for sellers and staff
 - name: AI usage
   description: AI credits per organisation for metered billing (S206)
 paths:
@@ -48,6 +48,29 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ListingDraft'
+  /v1/ai/moderate-image:
+    post:
+      tags:
+      - AI utilities
+      summary: Moderate an uploaded image before it is published (ai:use)
+      description: 'The AI moderation hook of media-service (client media-service): a vision model checks a product or storefront
+        image for prohibited content (BLOCK) and marketplace rules such as watermarks, contact details or text overlays (REVIEW).
+        Labels imply a minimum decision and an unreadable answer is REVIEW, never ALLOW. Advisory: media holds or publishes
+        the image and staff review held ones.'
+      operationId: moderateImage
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModerateImageRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ModerateImageResponse'
   /v1/ai/tagline:
     post:
       tags:
@@ -516,6 +539,54 @@ components:
             type: string
         model:
           type: string
+    ModerateImageRequest:
+      type: object
+      description: Image moderation input (media-service sends a JPEG preview of at most 768 px)
+      properties:
+        image:
+          type: string
+          description: Base64-encoded image (at most 2 MB decoded)
+          maxLength: 2900000
+          minLength: 0
+        contentType:
+          type: string
+          example: image/jpeg
+          minLength: 1
+        purpose:
+          type: string
+          description: product-image or storefront
+          example: product-image
+      required:
+      - contentType
+      - image
+    ModerateImageResponse:
+      type: object
+      description: Image moderation verdict; advisory, media decides how to apply it
+      properties:
+        decision:
+          type: string
+          description: ALLOW (publish), REVIEW (hold for a person) or BLOCK (prohibited)
+          enum:
+          - ALLOW
+          - REVIEW
+          - BLOCK
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModerationLabelView'
+        model:
+          type: string
+          example: google/gemini-2.5-flash
+    ModerationLabelView:
+      type: object
+      description: A moderation finding
+      properties:
+        code:
+          type: string
+          example: WATERMARK
+        description:
+          type: string
+          example: Another shop's logo in the corner
     ListingWriterRequest:
       type: object
       description: Listing writer input; the result is a draft and is never published automatically

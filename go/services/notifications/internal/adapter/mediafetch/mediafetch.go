@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
@@ -26,8 +27,9 @@ const maxRedirects = 3
 type Config struct {
 	// MediaBaseURL is media-service's base URL; its host is always allowed.
 	MediaBaseURL string
-	// AllowedHosts are further hosts signed links may point at (object storage, CDN): "host", "host:port", or
-	// "*.example.com" for any subdomain of example.com.
+	// AllowedHosts are further hosts signed links may point at (object storage, CDN): "host", "host:port",
+	// "*.example.com" for any subdomain of example.com, or "host/path/prefix/" for only URLs under that path on the
+	// host (media-hosted links on the shared API host, which redirect to object storage).
 	AllowedHosts []string
 	// MaxBytes is the size limit per file (DefaultMaxBytes when 0).
 	MaxBytes int64
@@ -75,7 +77,7 @@ func New(cfg Config, client *http.Client) (port.AttachmentFetcher, error) {
 }
 
 // check rejects URLs that may not be fetched: other schemes than http/https, user info, hosts not allow-listed
-// ("host" entries match any port, "host:port" entries only that port).
+// ("host" entries match any port, "host:port" entries only that port, "host/prefix" entries only that path prefix).
 func (f *fetcherImpl) check(u *url.URL) error {
 	if u.Scheme != "https" && u.Scheme != "http" {
 		return fmt.Errorf("%w: scheme %q", domain.ErrAttachmentRejected, u.Scheme)
@@ -85,6 +87,13 @@ func (f *fetcherImpl) check(u *url.URL) error {
 	}
 	host, hostPort := strings.ToLower(u.Hostname()), strings.ToLower(u.Host)
 	for _, a := range f.allowed {
+		if h, prefix, ok := strings.Cut(a, "/"); ok {
+			p := path.Clean("/" + u.EscapedPath())
+			if (hostPort == h || host == h) && strings.HasPrefix(p+"/", "/"+prefix) && !strings.Contains(u.EscapedPath(), "..") {
+				return nil
+			}
+			continue
+		}
 		switch {
 		case strings.HasPrefix(a, "*."):
 			if strings.HasSuffix(host, a[1:]) && len(host) > len(a)-1 {

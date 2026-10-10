@@ -5,6 +5,7 @@ package config
 import (
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
@@ -60,10 +61,14 @@ type Config struct {
 		MediaBaseURL string   `yaml:"mediaBaseUrl" env:"MEDIA_BASE_URL"`
 		AllowedHosts []string `yaml:"allowedHosts" env:"ATTACHMENTS_ALLOWED_HOSTS"`
 		// MediaPublicURL is the shared public media CDN (MEDIA_PUBLIC_URL); its host is added to AllowedHosts.
-		MediaPublicURL string        `yaml:"mediaPublicUrl" env:"MEDIA_PUBLIC_URL"`
-		MaxBytes       int64         `yaml:"maxBytes" env:"ATTACHMENTS_MAX_BYTES"`
-		MaxTotalBytes  int64         `yaml:"maxTotalBytes" env:"ATTACHMENTS_MAX_TOTAL_BYTES"`
-		Timeout        time.Duration `yaml:"timeout" env:"ATTACHMENTS_TIMEOUT"`
+		MediaPublicURL string `yaml:"mediaPublicUrl" env:"MEDIA_PUBLIC_URL"`
+		// MediaLinkBaseURL is media's public URL (default <API_BASE_URL>/media): long-lived document links
+		// (<base>/v1/l/<token>, S250) are fetched from it and redirect to object storage. Only that path prefix is
+		// added to the allow-list, not the whole API host.
+		MediaLinkBaseURL string        `yaml:"mediaLinkBaseUrl" env:"MEDIA_LINK_BASE_URL"`
+		MaxBytes         int64         `yaml:"maxBytes" env:"ATTACHMENTS_MAX_BYTES"`
+		MaxTotalBytes    int64         `yaml:"maxTotalBytes" env:"ATTACHMENTS_MAX_TOTAL_BYTES"`
+		Timeout          time.Duration `yaml:"timeout" env:"ATTACHMENTS_TIMEOUT"`
 	} `yaml:"attachments"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
@@ -190,5 +195,13 @@ func (c *Config) Resolve() {
 	if u, err := url.Parse(c.Attachments.MediaPublicURL); err == nil && u.Host != "" &&
 		!slices.Contains(c.Attachments.AllowedHosts, u.Host) {
 		c.Attachments.AllowedHosts = append(slices.Clone(c.Attachments.AllowedHosts), u.Host)
+	}
+	c.Attachments.MediaLinkBaseURL = pkgconfig.FirstNonEmpty(c.Attachments.MediaLinkBaseURL,
+		pkgconfig.JoinURL(c.APIBaseURL, "/media"))
+	if u, err := url.Parse(c.Attachments.MediaLinkBaseURL); err == nil && u.Host != "" {
+		entry := u.Host + strings.TrimRight(u.Path, "/") + "/v1/l/"
+		if !slices.Contains(c.Attachments.AllowedHosts, entry) {
+			c.Attachments.AllowedHosts = append(slices.Clone(c.Attachments.AllowedHosts), entry)
+		}
 	}
 }

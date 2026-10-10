@@ -44,6 +44,9 @@ type Thresholds struct {
 type Suite struct {
 	Thresholds Thresholds `yaml:"thresholds"`
 	Queries    []Query    `yaml:"queries"`
+	// SemanticThresholds and SemanticQueries are the natural-language queries hybrid retrieval must serve (S036).
+	SemanticThresholds Thresholds `yaml:"semanticThresholds"`
+	SemanticQueries    []Query    `yaml:"semanticQueries"`
 }
 
 // LoadProducts reads the fixtures file.
@@ -69,7 +72,7 @@ func LoadSuite(path string) (Suite, error) {
 	if len(s.Queries) == 0 {
 		return Suite{}, fmt.Errorf("%s: no queries", path)
 	}
-	for _, q := range s.Queries {
+	for _, q := range append(append([]Query{}, s.Queries...), s.SemanticQueries...) {
 		if q.Q == "" || len(q.Judgements) == 0 {
 			return Suite{}, fmt.Errorf("%s: query %q needs text and judgements", path, q.Q)
 		}

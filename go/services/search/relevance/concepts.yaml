@@ -1,0 +1,16 @@
+# Concept lexicon of the FAKE embedding model used by the relevance harness (S036): a deterministic stand-in for
+# ai-gateway's embeddings so tests never call a model. A text's vector is a hashed bag of words (weight 1) plus, for
+# every concept a word belongs to, that concept's dimension (weight 3), normalised to unit length (1536 dims, cosine).
+# It encodes a little "world knowledge" the lexical ranking cannot have (eba is made from gari, kente is a graduation
+# gift), which is what semantic retrieval adds. Numbers measured with it validate the hybrid plumbing — fusion, filters,
+# commercial boosts, fallbacks — not the quality of a real embedding model.
+stopwords: [a, an, the, for, to, of, with, into, from, my, me, i, what, goes, something, make, very, need, some, on]
+concepts:
+  snack: [snack, snacks, crunchy, crisp, crisps, chip, chips, chin, kpekere, ipekere, munch, road, trip, nibble]
+  jollof: [jollof, party, seasoning, spice, spices, tomato, parboiled, smoky]
+  skincare: [moisturiser, moisturizer, dry, skin, shea, ori, butter, lotion, whipped, unrefined]
+  wedding: [outfit, wedding, owambe, nigerian, dress, ankara, wax, gele, aso, oke, headwrap, fabric, attire]
+  pepper: [hot, pepper, spicy, sauce, shito, suya, yaji, grill, grilled, meat, rub, chili]
+  swallow: [eba, gari, garri, cassava, swallow, fufu, flakes, soak, ijebu]
+  hibiscus: [hibiscus, zobo, bissap, sobolo, drink, flower, flowers, tea]
+  ceremony: [graduation, gift, kente, ghana, stole, woven, ceremony]

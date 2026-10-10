@@ -105,3 +105,13 @@ type SellerDirectoryPage struct {
 	Size  int         `json:"size"`
 	Total int64       `json:"total"`
 }
+
+// EmbeddingCandidate is an indexed product without an embedding (indexed while the AI gateway was unavailable, or
+// before semantic retrieval existed).
+type EmbeddingCandidate struct {
+	ATIN         string
+	Title        string
+	Brand        string
+	CategoryPath string
+	Version      int64
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v9"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/searchindex"
+	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/port"
 )
 
@@ -190,6 +191,90 @@ func (i *indexImpl) RenameSeller(ctx context.Context, market, sellerID, name str
 		return out.Updated, fmt.Errorf("version conflict renaming seller %s; will retry", sellerID)
 	}
 	return out.Updated, nil
+}
+
+// MissingEmbeddings pages through LIVE documents without an embedding, by ATIN.
+func (i *indexImpl) MissingEmbeddings(ctx context.Context, market, afterATIN string, limit int) ([]domain.EmbeddingCandidate, error) {
+	body := map[string]any{
+		"size": limit,
+		"query": map[string]any{"bool": map[string]any{
+			"filter":   []any{map[string]any{"term": map[string]any{"status": searchindex.StatusLive}}},
+			"must_not": []any{map[string]any{"exists": map[string]any{"field": "embedding"}}},
+		}},
+		"sort":    []any{map[string]any{"atin": "asc"}},
+		"_source": []string{"atin", "title", "brand", "category_path", "version"},
+	}
+	if afterATIN != "" {
+		body["search_after"] = []any{afterATIN}
+	}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("encode: %w", err)
+	}
+	res, err := i.es.Search(i.es.Search.WithContext(ctx), i.es.Search.WithIndex(searchindex.Alias(market)),
+		i.es.Search.WithBody(bytes.NewReader(buf)))
+	if err != nil {
+		return nil, fmt.Errorf("search: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.IsError() {
+		msg, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return nil, fmt.Errorf("search: %s: %s", res.Status(), msg)
+	}
+	var out struct {
+		Hits struct {
+			Hits []struct {
+				Source struct {
+					ATIN         string `json:"atin"`
+					Title        string `json:"title"`
+					Brand        string `json:"brand"`
+					CategoryPath string `json:"category_path"`
+					Version      int64  `json:"version"`
+				} `json:"_source"`
+			} `json:"hits"`
+		} `json:"hits"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
+	}
+	cands := make([]domain.EmbeddingCandidate, 0, len(out.Hits.Hits))
+	for _, h := range out.Hits.Hits {
+		s := h.Source
+		cands = append(cands, domain.EmbeddingCandidate{ATIN: s.ATIN, Title: s.Title, Brand: s.Brand,
+			CategoryPath: s.CategoryPath, Version: s.Version})
+	}
+	return cands, nil
+}
+
+const setEmbeddingScript = `
+if (ctx._source.version == null || ((Number) ctx._source.version).longValue() != params.version) { ctx.op = 'noop'; return; }
+ctx._source.embedding = params.vec;`
+
+// SetEmbedding stores a backfilled embedding unless the product changed since it was read.
+func (i *indexImpl) SetEmbedding(ctx context.Context, market, atin string, vec []float32, version int64) (bool, error) {
+	buf, err := json.Marshal(map[string]any{"script": map[string]any{
+		"lang": "painless", "source": setEmbeddingScript, "params": map[string]any{"vec": vec, "version": version},
+	}})
+	if err != nil {
+		return false, fmt.Errorf("encode: %w", err)
+	}
+	res, err := i.es.Update(searchindex.Alias(market), atin, bytes.NewReader(buf), i.es.Update.WithContext(ctx),
+		i.es.Update.WithRetryOnConflict(3), i.es.Update.WithRefresh(i.refreshParam()))
+	if err != nil {
+		return false, fmt.Errorf("update %s: %w", atin, err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.IsError() {
+		msg, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return false, fmt.Errorf("update %s: %s: %s", atin, res.Status(), msg)
+	}
+	var out struct {
+		Result string `json:"result"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return false, fmt.Errorf("decode: %w", err)
+	}
+	return out.Result == "updated", nil
 }
 
 func (i *indexImpl) Ping(ctx context.Context) error {

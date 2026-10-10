@@ -10,7 +10,8 @@ public enum AiFeature {
     TRANSLATE,
     TAGLINE,
     TRIAGE,
-    HANDOFF_SUMMARY;
+    HANDOFF_SUMMARY,
+    IMAGE_MODERATION;
 
     /** Configuration and ledger key, for example {@code listing-writer}. */
     public String key() {

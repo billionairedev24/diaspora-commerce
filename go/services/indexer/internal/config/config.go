@@ -45,6 +45,18 @@ type Config struct {
 		WarmTimeout     time.Duration `yaml:"warmTimeout" env:"SELLER_DIRECTORY_WARM_TIMEOUT"`
 		RefreshInterval time.Duration `yaml:"refreshInterval" env:"SELLER_DIRECTORY_REFRESH_INTERVAL"`
 	} `yaml:"sellerDirectory"`
+	// Embeddings stores a semantic embedding with every product (S036): ai-gateway POST /v1/embeddings (purpose
+	// search-document) with the indexer-service client of SellerDirectory (same id and secret, Scopes ai:use). A
+	// backfill embeds LIVE documents that have none, at start and every BackfillInterval.
+	Embeddings struct {
+		Enabled          bool          `yaml:"enabled" env:"EMBEDDINGS_ENABLED"`
+		BaseURL          string        `yaml:"baseUrl" env:"AI_GATEWAY_URL"`
+		Timeout          time.Duration `yaml:"timeout" env:"EMBEDDINGS_TIMEOUT"`
+		Scopes           []string      `yaml:"scopes" env:"EMBEDDINGS_SCOPES"`
+		CacheSize        int           `yaml:"cacheSize" env:"EMBEDDINGS_CACHE_SIZE"`
+		BackfillInterval time.Duration `yaml:"backfillInterval" env:"EMBEDDINGS_BACKFILL_INTERVAL"`
+		BackfillBatch    int           `yaml:"backfillBatch" env:"EMBEDDINGS_BACKFILL_BATCH"`
+	} `yaml:"embeddings"`
 	Retry struct {
 		Attempts  int `yaml:"attempts" env:"RETRY_ATTEMPTS"`
 		BackoffMs int `yaml:"backoffMs" env:"RETRY_BACKOFF_MS"`

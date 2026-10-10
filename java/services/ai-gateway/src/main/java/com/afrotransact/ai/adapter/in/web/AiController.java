@@ -1,14 +1,21 @@
 package com.afrotransact.ai.adapter.in.web;
 
+import java.util.Base64;
+
 import com.afrotransact.ai.adapter.in.web.AiDtos.EmbeddingRequest;
 import com.afrotransact.ai.adapter.in.web.AiDtos.EmbeddingResponse;
 import com.afrotransact.ai.adapter.in.web.AiDtos.ListingWriterRequest;
+import com.afrotransact.ai.adapter.in.web.AiDtos.ModerateImageRequest;
+import com.afrotransact.ai.adapter.in.web.AiDtos.ModerateImageResponse;
+import com.afrotransact.ai.adapter.in.web.AiDtos.ModerationLabelView;
 import com.afrotransact.ai.adapter.in.web.AiDtos.TaglineRequest;
 import com.afrotransact.ai.adapter.in.web.AiDtos.TranslateRequest;
 import com.afrotransact.ai.adapter.in.web.AiDtos.TriageRequest;
 import com.afrotransact.ai.application.ContentAssistService;
 import com.afrotransact.ai.application.EmbeddingService;
+import com.afrotransact.ai.application.ImageModerationService;
 import com.afrotransact.ai.application.TriageService;
+import com.afrotransact.ai.domain.AiRuleViolation;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,20 +24,23 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "AI utilities", description = "Embeddings for search and drafting aids for sellers and staff")
+@Tag(name = "AI utilities", description = "Embeddings for search, image moderation for media and drafting aids for "
+        + "sellers and staff")
 @RestController
 class AiController {
 
     private final EmbeddingService embeddings;
     private final ContentAssistService content;
     private final TriageService triage;
+    private final ImageModerationService images;
     private final CallerResolver callers;
 
     AiController(EmbeddingService embeddings, ContentAssistService content, TriageService triage,
-                 CallerResolver callers) {
+                 ImageModerationService images, CallerResolver callers) {
         this.embeddings = embeddings;
         this.content = content;
         this.triage = triage;
+        this.images = images;
         this.callers = callers;
     }
 
@@ -64,6 +74,25 @@ class AiController {
     ContentAssistService.Taglines tagline(@Valid @RequestBody TaglineRequest body, HttpServletRequest request) {
         return content.taglines(callers.current(request), new ContentAssistService.TaglineRequest(body.storeName(),
                 body.description(), body.categories(), body.tone(), body.count() == null ? 3 : body.count()));
+    }
+
+    @Operation(summary = "Moderate an uploaded image before it is published (ai:use)", description = """
+            The AI moderation hook of media-service (client media-service): a vision model checks a product or \
+            storefront image for prohibited content (BLOCK) and marketplace rules such as watermarks, contact \
+            details or text overlays (REVIEW). Labels imply a minimum decision and an unreadable answer is REVIEW, \
+            never ALLOW. Advisory: media holds or publishes the image and staff review held ones.""")
+    @PostMapping("/v1/ai/moderate-image")
+    ModerateImageResponse moderateImage(@Valid @RequestBody ModerateImageRequest body, HttpServletRequest request) {
+        byte[] image;
+        try {
+            image = Base64.getMimeDecoder().decode(body.image());
+        } catch (IllegalArgumentException e) {
+            throw new AiRuleViolation("ai.unsupported-image", "image must be base64-encoded");
+        }
+        ImageModerationService.Result r = images.moderate(callers.current(request),
+                new ImageModerationService.Request(image, body.contentType(), body.purpose()));
+        return new ModerateImageResponse(r.decision().name(),
+                r.labels().stream().map(l -> new ModerationLabelView(l.code(), l.description())).toList(), r.model());
     }
 
     @Operation(summary = "Trust-team triage summary with cited fields (ai:triage)",

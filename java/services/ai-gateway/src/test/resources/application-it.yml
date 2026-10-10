@@ -17,6 +17,7 @@ at:
       translation: {models: [test/primary, test/secondary], timeout: 5s, max-retries: 1, backoff: 10ms}
       triage: {models: [test/strong], timeout: 5s, max-retries: 0, backoff: 10ms}
       embedding: {models: [test/embed], timeout: 5s, max-retries: 0, backoff: 10ms}
+      image-moderation: {models: [test/vision], timeout: 5s, max-retries: 0, backoff: 10ms}
     prices:
       - {model: test/strong, input: 3, output: 15}
       - {model: test/backup, input: 1, output: 5}
@@ -25,6 +26,7 @@ at:
       - {model: test/secondary, input: 1, output: 2}
       - {model: test/embed, input: 0.02, output: 0}
       - {model: test/fast, input: 0.1, output: 0.4}
+      - {model: test/vision, input: 0.3, output: 2.5}
     budgets:
       lola: {user-daily-tokens: 1000000, user-daily-cost-usd: 10, feature-daily-cost-usd: 0, degrade-on-exceed: false}
       embeddings: {user-daily-tokens: 1000, feature-daily-cost-usd: 0, degrade-on-exceed: false}

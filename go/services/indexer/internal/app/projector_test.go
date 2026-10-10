@@ -25,6 +25,9 @@ type fakeIndex struct {
 	avail   []string
 	renames []string
 	fail    int
+	missing []domain.EmbeddingCandidate
+	changed map[string]bool
+	vectors map[string][]float32
 }
 
 func (f *fakeIndex) UpsertProduct(_ context.Context, _ string, d searchindex.ProductDocument, _ int64,
@@ -50,6 +53,29 @@ func (f *fakeIndex) ApplyAvailability(_ context.Context, _, sku, node string, qt
 }
 
 func (f *fakeIndex) Ping(context.Context) error { return nil }
+
+// MissingEmbeddings pages through the fake's missing list like the Elasticsearch query (by ATIN, after the cursor).
+func (f *fakeIndex) MissingEmbeddings(_ context.Context, _, after string, limit int) ([]domain.EmbeddingCandidate, error) {
+	out := []domain.EmbeddingCandidate{}
+	for _, c := range f.missing {
+		if c.ATIN > after && len(out) < limit {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeIndex) SetEmbedding(_ context.Context, _, atin string, vec []float32, version int64) (bool, error) {
+	if f.changed[atin] {
+		return false, nil // the version guard saw a newer document
+	}
+	if f.vectors == nil {
+		f.vectors = map[string][]float32{}
+	}
+	f.vectors[atin] = vec
+	_ = version
+	return true, nil
+}
 
 type fakeCatalog struct{}
 

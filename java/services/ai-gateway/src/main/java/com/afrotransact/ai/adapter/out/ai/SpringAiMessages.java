@@ -14,6 +14,8 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.content.Media;
+import org.springframework.util.MimeTypeUtils;
 
 /** Maps provider-neutral messages to Spring AI messages and back. */
 final class SpringAiMessages {
@@ -26,7 +28,13 @@ final class SpringAiMessages {
         for (ChatMessage m : messages) {
             out.add(switch (m.role()) {
                 case SYSTEM -> new SystemMessage(m.content());
-                case USER -> new UserMessage(m.content());
+                case USER -> m.images().isEmpty() ? new UserMessage(m.content()) : UserMessage.builder()
+                        .text(m.content())
+                        .media(m.images().stream()
+                                .map(i -> Media.builder().mimeType(MimeTypeUtils.parseMimeType(i.mimeType()))
+                                        .data(i.data()).build())
+                                .toList())
+                        .build();
                 case ASSISTANT -> AssistantMessage.builder()
                         .content(m.content())
                         .toolCalls(m.toolCalls().stream()

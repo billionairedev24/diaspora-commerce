@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/searchindex"
@@ -20,20 +21,41 @@ type Projector interface {
 }
 
 type projectorImpl struct {
-	index   port.ProductIndex
-	catalog port.CatalogReader
-	sellers port.SellerDirectory
-	market  string
-	log     *slog.Logger
+	index        port.ProductIndex
+	catalog      port.CatalogReader
+	sellers      port.SellerDirectory
+	market       string
+	log          *slog.Logger
+	embedder     port.Embedder
+	embedTimeout time.Duration
 }
 
 var _ Projector = (*projectorImpl)(nil)
 
+// ProjectorOption configures optional collaborators.
+type ProjectorOption func(*projectorImpl)
+
+// WithEmbedder stores a semantic embedding with each product document (S036). A failed or slow embedding never
+// blocks indexing: the document is written without a new vector (the previous one, if any, is kept) and the
+// backfill fills it in later.
+func WithEmbedder(e port.Embedder, timeout time.Duration) ProjectorOption {
+	return func(p *projectorImpl) {
+		p.embedder, p.embedTimeout = e, timeout
+		if p.embedTimeout <= 0 {
+			p.embedTimeout = 5 * time.Second
+		}
+	}
+}
+
 // NewProjector returns a Projector writing to the given market's index.
 func NewProjector(index port.ProductIndex, catalog port.CatalogReader, sellers port.SellerDirectory,
-	market string, log *slog.Logger,
+	market string, log *slog.Logger, opts ...ProjectorOption,
 ) Projector {
-	return &projectorImpl{index: index, catalog: catalog, sellers: sellers, market: market, log: log}
+	p := &projectorImpl{index: index, catalog: catalog, sellers: sellers, market: market, log: log}
+	for _, o := range opts {
+		o(p)
+	}
+	return p
 }
 
 func (p *projectorImpl) Handle(ctx context.Context, e events.Envelope) error {
@@ -117,11 +139,27 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 			}
 		}
 	}
+	doc.Embedding = p.embed(ctx, searchindex.EmbeddingText(doc.Title, doc.Brand, doc.CategoryPath, doc.Description))
 	if err := p.index.UpsertProduct(ctx, p.market, doc, version,
 		port.UpsertOptions{PreserveSellerName: !known}); err != nil {
 		return fmt.Errorf("upsert %s: %w", pe.ATIN, err)
 	}
 	return nil
+}
+
+// embed returns the document's embedding, or nil when embeddings are off or the AI gateway failed (logged).
+func (p *projectorImpl) embed(ctx context.Context, text string) []float32 {
+	if p.embedder == nil || text == "" {
+		return nil
+	}
+	ectx, cancel := context.WithTimeout(ctx, p.embedTimeout)
+	defer cancel()
+	vec, err := p.embedder.Embed(ectx, text)
+	if err != nil {
+		p.log.WarnContext(ctx, "embedding failed; indexed without a new vector (backfill retries)", "error", err)
+		return nil
+	}
+	return vec
 }
 
 // sellerName applies seller.org.approved / updated: remember the name and rename the seller's indexed documents.

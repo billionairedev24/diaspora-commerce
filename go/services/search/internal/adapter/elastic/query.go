@@ -107,7 +107,7 @@ func (r Ranking) scored(q domain.Query, filters []any) object {
 }
 
 // buildSearch translates a normalized domain query into an Elasticsearch request body.
-func (r Ranking) buildSearch(q domain.Query, vec []float32) object {
+func (r Ranking) buildSearch(q domain.Query) object {
 	filters := buildFilters(q)
 	body := object{
 		"query":            r.scored(q, filters),
@@ -121,13 +121,34 @@ func (r Ranking) buildSearch(q domain.Query, vec []float32) object {
 	if s := sortClause(q.Sort); s != nil {
 		body["sort"] = s
 	}
-	if vec != nil {
-		body["knn"] = object{
-			"field": "embedding", "query_vector": vec, "k": q.Size * 2, "num_candidates": 100,
-			"filter": filters, "boost": 0.5,
-		}
-	}
 	return body
+}
+
+// buildLexicalWindow is the BM25 side of a hybrid search: the first window results (with facets and total), which
+// reciprocal rank fusion merges with the semantic side.
+func (r Ranking) buildLexicalWindow(q domain.Query, window int) object {
+	body := r.buildSearch(q)
+	body["from"], body["size"] = 0, window
+	return body
+}
+
+// buildSemantic is the kNN side of a hybrid search: approximate nearest neighbours of the query embedding among the
+// filtered (live, matching filters) products, multiplied by the same commercial boosts as the lexical side so an
+// out-of-stock twin does not outrank the in-stock product.
+func (r Ranking) buildSemantic(q domain.Query, vec []float32, window int) object {
+	return object{
+		"query": object{"function_score": object{
+			"query": object{"knn": object{
+				"field": "embedding", "query_vector": vec, "k": window, "num_candidates": max(100, 2*window),
+				"filter": buildFilters(q),
+			}},
+			"functions":  r.functions(),
+			"score_mode": "multiply",
+			"boost_mode": "multiply",
+		}},
+		"size":    window,
+		"_source": sourceFields,
+	}
 }
 
 // buildAdCandidates scores advertised products with the organic query, restricted to products that may be advertised

@@ -7,8 +7,16 @@ info:
     Every typed word must match; partial words, diaspora synonyms (gari/garri, zobo/bissap/hibiscus,
     kpekere/plantain chips …, a curated synonym set that staff edit without reindexing) and typos (one edit for
     3–5 letters, two for 6+) are tolerated. Relevance is boosted for in-stock items, Fulfilled by AfroTransact,
-    rating × review volume and fast delivery. Natural-language queries of three or more words are blended with
-    semantic (kNN) retrieval when the AI gateway is available.
+    rating × review volume and fast delivery.
+
+    **Hybrid retrieval (S036).** Queries of three or more words (relevance order, first 120 results) request an
+    embedding from the AI gateway with a 150 ms budget and run BM25 and kNN over the products' embeddings (same
+    filters and commercial boosts), merged by reciprocal rank fusion. If the embedder fails or times out the page is
+    lexical. `retrieval` (`HYBRID` / `LEXICAL`) and `semantic` report what was used; `semanticSkipped` says why not.
+
+    **Stock signals (S038).** Every hit carries `availableQty`, `lowStock` (1–5 units: "Only N left") and
+    `availability` (`IN_STOCK`, `LOW_STOCK`, `OUT_OF_STOCK`: "Currently unavailable"), in results, typeahead products
+    and ads.
 
     Results pages may carry sponsored products (`ads=true`) at fixed slots, always labelled "Sponsored" with the
     reason they were shown (second-price auction on bid × relevance with a relevance floor). Clicks are reported with
@@ -273,7 +281,11 @@ components:
         reviewCount: {type: integer}
         inStock: {type: boolean}
         lowStock: {type: boolean, description: True when 1–5 units are left ("Only N left")}
-        availableQty: {type: integer}
+        availableQty: {type: integer, description: Units available across fulfilment nodes (N in "Only N left")}
+        availability:
+          type: string
+          enum: [IN_STOCK, LOW_STOCK, OUT_OF_STOCK]
+          description: LOW_STOCK shows "Only N left"; OUT_OF_STOCK shows "Currently unavailable".
         deliveryDays: {type: integer}
         imageUrl: {type: string}
         offerCount: {type: integer}
@@ -379,7 +391,15 @@ components:
         facets:
           type: object
           additionalProperties: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
-        semantic: {type: boolean}
+        semantic: {type: boolean, description: True when semantic (kNN) retrieval was fused into the ranking}
+        retrieval:
+          type: string
+          enum: [HYBRID, LEXICAL]
+          description: HYBRID = BM25 and kNN fused by reciprocal rank; LEXICAL = BM25 only.
+        semanticSkipped:
+          type: string
+          enum: [SHORT_QUERY, NOT_CONFIGURED, SORTED, DEEP_PAGE, EMBEDDER_UNAVAILABLE, EMBEDDER_TIMEOUT]
+          description: Why semantic retrieval was not used (LEXICAL pages only).
         tookMs: {type: integer, format: int64}
         searchId: {type: string, description: Identifies this search for click reporting}
     Suggestion:

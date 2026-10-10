@@ -25,6 +25,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/catalog"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/elastic"
+	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/embedder"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/sellers"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/config"
@@ -86,7 +87,20 @@ func run() error {
 	directory := newSellerDirectory(cfg, httpClient, log)
 	// S213: warm seller names before consuming, so a restart never changes indexed seller names.
 	warmDirectory(ctx, directory, cfg.SellerDirectory.WarmTimeout, log)
-	projector := app.NewProjector(index, catalog.NewClient(cfg.CatalogURL, httpClient), directory, cfg.Market, log)
+	embeddings := prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "indexer_embeddings_total", Help: "Product embeddings requested from ai-gateway by outcome.",
+	}, []string{"outcome"})
+	registry.MustRegister(embeddings)
+	var projectorOpts []app.ProjectorOption
+	var backfill app.EmbeddingBackfill
+	if e := newEmbedder(cfg, log); e != nil {
+		counted := countingEmbedder{next: e, counter: embeddings}
+		projectorOpts = append(projectorOpts, app.WithEmbedder(counted, cfg.Embeddings.Timeout))
+		backfill = app.NewEmbeddingBackfill(index, counted, cfg.Market, cfg.Embeddings.BackfillBatch,
+			cfg.Embeddings.Timeout, log)
+	}
+	projector := app.NewProjector(index, catalog.NewClient(cfg.CatalogURL, httpClient), directory, cfg.Market, log,
+		projectorOpts...)
 
 	dlq, err := events.NewKafkaPublisher(cfg.Kafka.Brokers)
 	if err != nil {
@@ -114,6 +128,9 @@ func run() error {
 	g.Go(func() error { return srv.Run(gctx) })
 	g.Go(func() error { return consumer.Run(gctx, handler) })
 	g.Go(func() error { return directory.RunRefresh(gctx, cfg.SellerDirectory.RefreshInterval) })
+	if backfill != nil {
+		g.Go(func() error { return backfill.Run(gctx, cfg.Embeddings.BackfillInterval) })
+	}
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("indexer: %w", err)
 	}
@@ -160,6 +177,40 @@ func warmDirectory(ctx context.Context, d sellers.Directory, timeout time.Durati
 			backoff = min(backoff*2, 8*time.Second)
 		}
 	}
+}
+
+// newEmbedder returns the ai-gateway embedder (indexer-service client, scope ai:use), or nil when embeddings are off.
+func newEmbedder(cfg config.Config, log *slog.Logger) port.Embedder {
+	e := cfg.Embeddings
+	if !e.Enabled || e.BaseURL == "" {
+		log.Info("embeddings off: products are indexed for lexical search only")
+		return nil
+	}
+	sd := cfg.SellerDirectory
+	if sd.TokenURL != "" && sd.ClientSecret == "" {
+		log.Warn("INDEXER_CLIENT_SECRET not set: embedding calls are unauthenticated")
+	}
+	timeout := e.Timeout
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	return embedder.New(embedder.Config{BaseURL: e.BaseURL, TokenURL: sd.TokenURL, ClientID: sd.ClientID,
+		ClientSecret: sd.ClientSecret, Scopes: e.Scopes, CacheSize: e.CacheSize}, &http.Client{Timeout: timeout})
+}
+
+type countingEmbedder struct {
+	next    port.Embedder
+	counter *prometheus.CounterVec
+}
+
+func (c countingEmbedder) Embed(ctx context.Context, text string) ([]float32, error) {
+	v, err := c.next.Embed(ctx, text)
+	if err != nil {
+		c.counter.WithLabelValues("error").Inc()
+		return nil, fmt.Errorf("embed: %w", err)
+	}
+	c.counter.WithLabelValues("ok").Inc()
+	return v, nil
 }
 
 type counting struct {

@@ -103,8 +103,8 @@ at:
     title: AI Gateway API
     description: >-
       Lola, the AfroTransact shopping agent (streaming chat with visible tool calls, grounded product cards and
-      action proposals that always need the shopper's tap), plus AI utilities: embeddings for search, listing writer,
-      translation, storefront taglines and trust-team triage. Models are served through OpenRouter with per-task
+      action proposals that always need the shopper's tap), plus AI utilities: embeddings for search, image moderation
+      for media uploads, listing writer, translation, storefront taglines and trust-team triage. Models are served through OpenRouter with per-task
       routing, fallbacks and per-user / per-feature budgets.
     version: v1
   events:
@@ -158,6 +158,12 @@ at:
         timeout: 5s
         max-retries: 2
         backoff: 200ms
+      # Vision models for media-service's image moderation hook (POST /v1/ai/moderate-image).
+      image-moderation:
+        models: [google/gemini-2.5-flash, openai/gpt-5-mini]
+        timeout: 8s
+        max-retries: 1
+        backoff: 250ms
     # USD per million tokens (input / output), from OpenRouter's model pages. Unknown models use default-price.
     default-price: {input: 15, output: 75}
     prices:
@@ -180,6 +186,8 @@ at:
       tagline: {user-daily-tokens: 50000, user-daily-cost-usd: 0.10, feature-daily-cost-usd: 20}
       triage: {user-daily-cost-usd: 5.00, feature-daily-cost-usd: 100}
       handoff-summary: {user-daily-tokens: 50000, feature-daily-cost-usd: 20}
+      # Per caller = media-service; degrade to the cheapest vision model rather than holding every upload.
+      image-moderation: {feature-daily-cost-usd: 50, degrade-on-exceed: true, hard-limit-factor: 2}
     # Platform APIs Lola calls with the shopper's relayed token (see infra/local/PORTS.md).
     downstream:
       timeout: ${DOWNSTREAM_TIMEOUT:5s}

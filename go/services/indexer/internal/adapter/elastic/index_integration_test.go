@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -110,6 +111,59 @@ func TestVersionGuardedProjection(t *testing.T) {
 	if got.SellerName != "AfroTransact Retail US" || got.Status != "SELLER_HIDDEN" {
 		t.Fatalf("preserve seller name failed: %+v", got)
 	}
+
+	// S036: embeddings. An upsert carrying a vector stores it; one without keeps it; the backfill finds LIVE
+	// documents without a vector and its write is version-guarded.
+	vec := make([]float32, searchindex.EmbeddingDimensions)
+	vec[0], vec[7] = 0.6, 0.8
+	withVec := live
+	withVec.ATIN, withVec.VariantATINs, withVec.Embedding = "AT00000003", []string{"AT0000000D"}, vec
+	must(t, idx.UpsertProduct(ctx, "us", withVec, 600, port.UpsertOptions{}))
+	noVec := withVec
+	noVec.Embedding, noVec.Title = nil, "Jollof Seasoning Blend, 8 oz"
+	must(t, idx.UpsertProduct(ctx, "us", noVec, 700, port.UpsertOptions{}))
+	// Elasticsearch 9 leaves vectors out of _source by default, so check the indexed field.
+	if !hasVector(t, es, "AT00000003") || get(t, es, "AT00000003").Title != "Jollof Seasoning Blend, 8 oz" {
+		t.Fatal("an upsert without a vector must keep the stored one")
+	}
+	plain := live
+	plain.ATIN, plain.VariantATINs = "AT00000004", []string{"AT0000000E"}
+	must(t, idx.UpsertProduct(ctx, "us", plain, 800, port.UpsertOptions{}))
+	cands, err := idx.MissingEmbeddings(ctx, "us", "", 10)
+	must(t, err)
+	if len(cands) != 1 || cands[0].ATIN != "AT00000004" || cands[0].Version != 800 || cands[0].Title == "" {
+		t.Fatalf("missing embeddings (LIVE only, without a vector): %+v", cands)
+	}
+	if next, err := idx.MissingEmbeddings(ctx, "us", "AT00000004", 10); err != nil || len(next) != 0 {
+		t.Fatalf("search_after paging: %+v %v", next, err)
+	}
+	stored, err := idx.SetEmbedding(ctx, "us", "AT00000004", vec, 799) // the document moved on: not stored
+	must(t, err)
+	if stored {
+		t.Fatal("a stale backfill write must be ignored")
+	}
+	stored, err = idx.SetEmbedding(ctx, "us", "AT00000004", vec, 800)
+	must(t, err)
+	if !stored || !hasVector(t, es, "AT00000004") {
+		t.Fatal("backfill write expected")
+	}
+	if cands, _ := idx.MissingEmbeddings(ctx, "us", "", 10); len(cands) != 0 {
+		t.Fatalf("nothing left to backfill: %+v", cands)
+	}
+}
+
+// hasVector reports whether the document's embedding is indexed.
+func hasVector(t *testing.T, es *elasticsearch.Client, atin string) bool {
+	t.Helper()
+	q := `{"query":{"bool":{"filter":[{"term":{"atin":"` + atin + `"}},{"exists":{"field":"embedding"}}]}}}`
+	res, err := es.Count(es.Count.WithIndex(searchindex.Alias("us")), es.Count.WithBody(strings.NewReader(q)))
+	must(t, err)
+	defer func() { _ = res.Body.Close() }()
+	var out struct {
+		Count int `json:"count"`
+	}
+	must(t, json.NewDecoder(res.Body).Decode(&out))
+	return out.Count == 1
 }
 
 func must(t *testing.T, err error) {

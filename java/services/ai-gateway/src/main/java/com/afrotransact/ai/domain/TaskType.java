@@ -18,5 +18,7 @@ public enum TaskType {
     /** Trust-team summaries of applications and listings. */
     TRIAGE,
     /** Text embeddings for semantic search. */
-    EMBEDDING
+    EMBEDDING,
+    /** Vision check of uploaded product and storefront images before they are published (media-service). */
+    IMAGE_MODERATION
 }

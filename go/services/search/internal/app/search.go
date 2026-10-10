@@ -36,6 +36,24 @@ func WithMarkets(markets []string) SearcherOption {
 	}
 }
 
+// WithEmbedTimeout replaces the 150 ms embedding budget.
+func WithEmbedTimeout(d time.Duration) SearcherOption {
+	return func(s *productSearcherImpl) {
+		if d > 0 {
+			s.embedTimeout = d
+		}
+	}
+}
+
+// WithMinSemanticWords replaces the 3-word minimum for semantic retrieval.
+func WithMinSemanticWords(n int) SearcherOption {
+	return func(s *productSearcherImpl) {
+		if n > 0 {
+			s.minSemanticWords = n
+		}
+	}
+}
+
 // WithAds blends sponsored products into pages that ask for them.
 func WithAds(ads AdServer) SearcherOption { return func(s *productSearcherImpl) { s.ads = ads } }
 
@@ -88,25 +106,21 @@ func (s *productSearcherImpl) Search(ctx context.Context, q domain.Query) (domai
 	if s.markets != nil && !s.markets[q.Market] {
 		return domain.Page{}, errors.Join(domain.ErrUnknownMarket, fmt.Errorf("market %q is not served", q.Market))
 	}
-	var vec []float32
-	if s.embedder != nil && len(strings.Fields(q.Text)) >= s.minSemanticWords {
-		ectx, cancel := context.WithTimeout(ctx, s.embedTimeout)
-		vec, err = s.embedder.Embed(ectx, q.Text)
-		cancel()
-		if err != nil {
-			s.log.WarnContext(ctx, "embedding failed; lexical only", "error", err)
-			vec = nil
-		}
-	}
+	vec, skipped := s.embed(ctx, q)
 	page, err := s.index.Search(ctx, q, vec)
 	if err != nil {
 		return domain.Page{}, fmt.Errorf("search %q: %w", q.Text, err)
 	}
-	page.Semantic = vec != nil
+	if page.Retrieval == "" {
+		page.Retrieval = domain.RetrievalLexical
+	}
+	if page.Retrieval == domain.RetrievalLexical && page.SemanticSkipped == "" {
+		page.SemanticSkipped = skipped
+	}
+	page.Semantic = page.Retrieval == domain.RetrievalHybrid
 	page.SearchID = newID()
 	for i := range page.Hits {
-		h := &page.Hits[i]
-		h.LowStock = h.InStock && h.AvailableQty > 0 && h.AvailableQty <= domain.LowStockThreshold
+		page.Hits[i].ApplyStockSignal()
 	}
 	if q.Ads && s.ads != nil {
 		page = s.ads.Inject(ctx, q, page)
@@ -115,6 +129,34 @@ func (s *productSearcherImpl) Search(ctx context.Context, q domain.Query) (domai
 		s.track(ctx, q, page)
 	}
 	return page, nil
+}
+
+// embed asks the AI gateway for the query embedding when semantic retrieval applies: natural-language queries
+// (3+ words) on the relevance ranking within the fused window. The embedder gets a 150 ms budget; when it fails or
+// times out the search is lexical and the reason is reported.
+func (s *productSearcherImpl) embed(ctx context.Context, q domain.Query) ([]float32, string) {
+	switch {
+	case len(strings.Fields(q.Text)) < s.minSemanticWords:
+		return nil, domain.SkipShortQuery
+	case s.embedder == nil:
+		return nil, domain.SkipNotConfigured
+	case q.Sort != domain.SortRelevance:
+		return nil, domain.SkipSorted
+	case (q.Page+1)*q.Size > domain.HybridWindow:
+		return nil, domain.SkipDeepPage
+	}
+	ectx, cancel := context.WithTimeout(ctx, s.embedTimeout)
+	defer cancel()
+	vec, err := s.embedder.Embed(ectx, q.Text)
+	if err != nil {
+		reason := domain.SkipUnavailable
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(ectx.Err(), context.DeadlineExceeded) {
+			reason = domain.SkipTimeout
+		}
+		s.log.WarnContext(ctx, "embedding failed; lexical only", "reason", reason, "error", err)
+		return nil, reason
+	}
+	return vec, ""
 }
 
 // track counts the search for analytics and publishes search.query.performed.
@@ -180,6 +222,9 @@ func (s *suggesterImpl) Suggest(ctx context.Context, market, prefix string) (dom
 	out, err := s.index.Suggest(ctx, strings.ToLower(market), prefix, 5)
 	if err != nil {
 		return domain.Suggestions{}, fmt.Errorf("suggest %q: %w", prefix, err)
+	}
+	for i := range out.Products {
+		out.Products[i].ApplyStockSignal()
 	}
 	return out, nil
 }

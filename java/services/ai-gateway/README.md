@@ -7,7 +7,8 @@ local port **8113**.
 ## What it does
 
 - **Model routing** (`ModelRouter` port, `SpringAiModelRouter` adapter): every call names a task — `INTENT`
-  (fast/cheap), `PLANNING` and `CHAT` (strong), `LISTING_WRITER`, `TRANSLATION`, `TRIAGE`, `EMBEDDING`. The routing
+  (fast/cheap), `PLANNING` and `CHAT` (strong), `LISTING_WRITER`, `TRANSLATION`, `TRIAGE`, `EMBEDDING`,
+  `IMAGE_MODERATION` (vision models). The routing
   table in `at.ai.routes` gives each task its models in fallback order, a per-call timeout and retries. 429/5xx are
   retried with exponential backoff, then the next model is tried; timeouts and other 4xx fall back immediately. Our own
   loop (not OpenRouter's `models` array) keeps routing provider-agnostic. Model ids live only in configuration.
@@ -31,6 +32,16 @@ local port **8113**.
   - `OutputModerator` port (rule-based adapter) reviews every sentence before it reaches the shopper.
 - **Hand-off**: the model (`handoff_to_support`) or rules hand the chat to support — stored in `ai_handoff` and
   published as `ai.handoff.requested` through the outbox with a redacted summary.
+
+## Image moderation (S030)
+
+media-service's AI hook: before a product or storefront image is published, media sends a JPEG preview (≤ 768 px,
+≤ 2 MB) with its own service token. The `image-moderation` route (vision models, OpenAI-compatible `image_url` data
+URI) answers `ALLOW`, `REVIEW` or `BLOCK` with labels from a fixed vocabulary; `ImageModerationPolicy` (domain) makes
+the labels imply a minimum decision (`WEAPONS`, `NUDITY` … block; `WATERMARK`, `CONTACT_INFO`, `TEXT_OVERLAY`,
+`NOT_A_PRODUCT`, `THIRD_PARTY_LOGO`, `MISLEADING` review) and turns an unreadable or unknown answer into `REVIEW`,
+never `ALLOW`. Text inside the image is treated as content, never as instructions. Billed to the `image-moderation`
+budget (degrades to the cheapest vision model above the daily limit). Advisory: media holds or publishes, staff decide.
 
 ## Lola's tools
 
@@ -57,7 +68,8 @@ Every downstream call is a port with a `RestClient` adapter that relays the call
 | POST | `/v1/lola/chat` (SSE) | any signed-in user |
 | POST | `/v1/lola/chat/complete` (JSON, same events) | any signed-in user |
 | GET | `/v1/lola/sessions/{id}/messages` | owner of the session |
-| POST | `/v1/embeddings` `{input, purpose}` → `{embedding, model, dimensions}` | `ai:use` (search service) |
+| POST | `/v1/embeddings` `{input, purpose}` → `{embedding, model, dimensions}` | `ai:use`: search-service (`search-query`, hybrid search S036) and indexer-service (`search-document`, product embeddings) |
+| POST | `/v1/ai/moderate-image` `{image (base64), contentType, purpose}` → `{decision, labels, model}` | `ai:use` (media-service, S030) — see below |
 | POST | `/v1/ai/listing-writer`, `/v1/ai/translate`, `/v1/ai/tagline` | `ai:use` — drafts only, never published |
 | POST | `/v1/ai/triage` | `ai:triage` — cited fields, decision always `HUMAN_REVIEW_REQUIRED` |
 | GET | `/v1/ai/usage/orgs?from=&to=` | `ai:usage.read` (seller-service) or staff `ai:manage`: AI credits per organisation and UTC day for metered billing (S206). Calls by seller / provider members are attributed to their organisation (`ai_usage.org_id`); 1 credit = 10,000 micro-dollars of estimated cost, rounded up per day |

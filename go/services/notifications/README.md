@@ -31,7 +31,7 @@ Dispatcher ◄──────────────────────
 | `internal/port` | `EmailSender` (+ optional `AttachmentCapable`), `AttachmentFetcher`, `SmsSender`, `PushSender`, `ChatSender`, `ConsentChecker`, `ConsentStore`, `TemplateStore`, `NotificationStore`, `ContactResolver`, `RecipientResolver`, `ContactInvalidator`, `StockAlertStore` |
 | `internal/app` | `Router`, `Notifier`, `Dispatcher`, `Ingest` (+ `rules.go`: topics and event rules), `StockAlerts`, `Receipts`, `SmsCompliance`, `Templates`, `Preferences`, `NotificationLog`, `Unsubscriber`, `Renderer` |
 | `internal/adapter/{resend,sendgrid,ses,smtp}` | email adapters (Resend uses `Idempotency-Key`); all four attach files |
-| `internal/adapter/mediafetch` | `AttachmentFetcher`: downloads signed media links from allow-listed hosts, size-limited, redirects re-checked |
+| `internal/adapter/mediafetch` | `AttachmentFetcher`: downloads signed media links from allow-listed hosts (or `host/path/` prefixes), size-limited, redirects re-checked. Media-hosted long-lived links (`<API_BASE_URL>/media/v1/l/…`, S250) are allowed by path prefix only (`attachments.mediaLinkBaseUrl` / `MEDIA_LINK_BASE_URL`, default `<API_BASE_URL>/media`) and redirect to the storage host |
 | `internal/adapter/{twilio,vonage,awssms}` | SMS adapters (AWS = End User Messaging `SendTextMessage`) |
 | `internal/adapter/{fcm,apns}` | push: FCM HTTP v1 (OAuth2 service account), APNs HTTP/2 with ES256 provider token |
 | `internal/adapter/whatsapp` | WhatsApp Cloud API (text, or approved template + parameters) |

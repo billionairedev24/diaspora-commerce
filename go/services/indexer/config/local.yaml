@@ -23,6 +23,16 @@ sellerDirectory:
   pageSize: 500
   warmTimeout: 30s
   refreshInterval: 30m
+# S036: every product document carries an embedding of its text for hybrid search (ai-gateway, client
+# indexer-service with scope ai:use). Failures never block indexing; the backfill fills missing vectors.
+embeddings:
+  enabled: false
+  baseUrl: http://localhost:8113
+  timeout: 5s
+  scopes: ["ai:use"]
+  cacheSize: 10000
+  backfillInterval: 15m
+  backfillBatch: 100
 retry:
   attempts: 4
   backoffMs: 250

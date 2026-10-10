@@ -70,7 +70,7 @@ components:
         page: {type: integer}
         total: {type: integer, format: int64}
         zeroResults: {type: boolean}
-        semantic: {type: boolean, description: kNN blended}
+        semantic: {type: boolean, description: 'Hybrid retrieval was used (BM25 and kNN over product embeddings, fused by reciprocal rank); false when lexical, including fallbacks after an embedder failure or timeout'}
         tookMs: {type: integer, format: int64}
         topAtins: {type: array, items: {type: string}, description: Up to 10 organic results in order}
         sponsoredAtins: {type: array, items: {type: string}}

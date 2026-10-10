@@ -12,6 +12,30 @@
 thresholds:
   ndcg10: 0.92
   precision5: 0.90
+# S036: natural-language queries (3+ words, so search asks for an embedding). The harness runs every query keyword-only
+# and hybrid (BM25 + kNN, reciprocal rank fusion) with the fake deterministic embeddings of concepts.yaml, prints both
+# and fails when hybrid falls below these thresholds or does not beat keyword-only on them. Measured: see README.
+semanticThresholds:
+  ndcg10: 0.80
+  precision5: 0.75
+semanticQueries:
+  - q: crunchy snacks for a road trip
+    judgements: {AT1PLA0001: 3, AT1PLA0002: 3, AT1PLA0003: 3, AT1CHI0001: 3, AT1PLA0005: 2}
+  - q: what goes into party jollof
+    judgements: {AT1JOL0001: 3, AT1JOL0002: 3, AT1JOL0003: 2, AT1JOL0004: 2, AT1MAG0001: 1}
+  - q: moisturiser for very dry skin
+    judgements: {AT1SHE0001: 3, AT1SHE0002: 3, AT1SHE0003: 1}
+  - q: outfit for a nigerian wedding
+    judgements: {AT1ANK0001: 3, AT1ANK0002: 3, AT1GEL0001: 3, AT1GEL0002: 2, AT1ANK0003: 1}
+  - q: hot pepper sauce for grilled meat
+    judgements: {AT1SHI0001: 3, AT1SUY0001: 3, AT1SUY0002: 3, AT1SHI0002: 2}
+  - q: something to make eba with
+    why: eba is made from gari; the turning stick is related
+    judgements: {AT1GAR0001: 3, AT1GAR0002: 3, AT1GAR0005: 3, AT1GAR0003: 2, AT1GAR0004: 2}
+  - q: drink made from hibiscus flowers
+    judgements: {AT1BIS0001: 3, AT1BIS0002: 3}
+  - q: graduation gift from ghana
+    judgements: {AT1KEN0001: 3, AT1KEN0002: 2}
 queries:
   - q: garri
     why: synonym of gari / cassava flakes; out-of-stock last; a new unrated listing is still a good match

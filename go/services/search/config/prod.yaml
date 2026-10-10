@@ -10,6 +10,12 @@ auth:
   issuer: https://auth.afrotransact.com
   audience: search
 aiGatewayUrl: http://ai-gateway:8080
+# S036 hybrid retrieval: 3+ word queries are embedded by ai-gateway (client search-service, scope ai:use) within
+# 150 ms; on failure or timeout the page is lexical and reports semanticSkipped.
+semantic:
+  timeout: 150ms
+  minWords: 3
+  scopes: ["ai:use"]
 kafka:
   brokers: []
   buffer: 10000

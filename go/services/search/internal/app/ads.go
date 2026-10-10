@@ -178,7 +178,7 @@ func (a *adServerImpl) sponsoredHit(q domain.Query, searchID string, w domain.Au
 		return domain.Hit{}, false
 	}
 	hit := c.Hit
-	hit.LowStock = hit.InStock && hit.AvailableQty > 0 && hit.AvailableQty <= domain.LowStockThreshold
+	hit.ApplyStockSignal()
 	hit.Sponsored = &domain.Sponsored{Label: domain.SponsoredLabel, Advertiser: c.Campaign.Advertiser,
 		CampaignID: c.Campaign.ID, Slot: slot, Token: token, Reason: domain.Explain(w, q.Text)}
 	return hit, true
