@@ -41,8 +41,6 @@ jobs:
           else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "::notice::$PORTAL does not exist yet."; fi
       - uses: pnpm/action-setup@v4
         if: steps.exists.outputs.exists == 'true'
-        with:
-          version: "10"
       - uses: actions/setup-node@v5
         if: steps.exists.outputs.exists == 'true'
         with:

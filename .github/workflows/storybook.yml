@@ -58,7 +58,6 @@ concurrency:
 
 env:
   NODE_VERSION: "22"
-  PNPM_VERSION: "10"
   UI_DIR: web/packages/ui
   PAGES_PROJECT: afrotransact-storybook
   # Same image locally: web/packages/ui/scripts/visual-docker.sh (keep the tag = @playwright/test and playwright, the
@@ -73,8 +72,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -107,8 +104,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -232,8 +227,6 @@ jobs:
         with:
           ref: ${{ github.head_ref || github.ref_name }}
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
