@@ -9,8 +9,8 @@ import { type ReactNode, useState } from 'react';
 import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
-import { storefrontUrl } from '@/lib/config';
 import { hrefOf, moduleOf } from '@/lib/modules';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 import { StaffSessionProvider } from '@/lib/session';
 
 import { Header } from './Header';
@@ -21,13 +21,14 @@ function Centered({ children }: { children: ReactNode }) {
 }
 
 function SignInPrompt() {
+  const storefrontUrl = useStorefrontUrl();
   const t = useT();
   const returnTo = typeof window !== 'undefined' ? window.location.href : '/';
   return (
     <Centered>
       <h1 className="m-0 text-2xl font-bold">{t('st.consoleShell.signInToTheStaff')}</h1>
       <p className="m-0 text-muted">{t('st.consoleShell.useYourAfrotransactComStaff')}</p>
-      <a className="rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={`${storefrontUrl()}/signin?returnTo=${encodeURIComponent(returnTo)}`}>
+      <a className="rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={`${storefrontUrl}/signin?returnTo=${encodeURIComponent(returnTo)}`}>
         {t('st.consoleShell.signIn')}
       </a>
     </Centered>
@@ -35,12 +36,13 @@ function SignInPrompt() {
 }
 
 function StaffOnly() {
+  const storefrontUrl = useStorefrontUrl();
   const t = useT();
   return (
     <Centered>
       <h1 className="m-0 text-2xl font-bold">{t('st.consoleShell.staffOnly')}</h1>
       <p className="m-0 text-muted">{t('st.consoleShell.theStaffConsoleIsFor')}</p>
-      <a href={storefrontUrl()}>{t('st.consoleShell.goToTheShop')}</a>
+      <a href={storefrontUrl}>{t('st.consoleShell.goToTheShop')}</a>
     </Centered>
   );
 }

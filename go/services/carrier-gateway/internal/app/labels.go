@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/port"
 )
@@ -32,6 +33,14 @@ type BuyRequest struct {
 	// RequestHash overrides the idempotency fingerprint (return labels hash the return request, not the service
 	// rate shopping picked, so a retry replays even when rates moved).
 	RequestHash string `json:"-"`
+	// Payer is who buys the label (the caller's organisation, or a platform caller); with Fulfilment it decides
+	// whether the label is charged to the seller (domain.BillingPolicy).
+	Payer      domain.LabelPayer `json:"-"`
+	Fulfilment domain.Fulfilment `json:"-"`
+	// ShipmentID and OrderID identify the order shipment the label is for (ShipmentID defaults to the shipment
+	// reference, which Seller Center sets to the shipment id).
+	ShipmentID string `json:"-"`
+	OrderID    string `json:"-"`
 }
 
 // LabelView is a label record with a short-lived document URL when the store can sign one.
@@ -56,6 +65,7 @@ type labelServiceImpl struct {
 	accounts port.AccountResolver
 	labels   port.LabelRepository
 	objects  port.ObjectStore
+	billing  domain.BillingPolicy
 	log      *slog.Logger
 	now      func() time.Time
 	urlTTL   time.Duration
@@ -63,10 +73,21 @@ type labelServiceImpl struct {
 
 var _ LabelService = (*labelServiceImpl)(nil)
 
-// NewLabelService returns a LabelService.
+// NewLabelService returns a LabelService. billing decides who pays for each label and the seller handling markup.
 func NewLabelService(carriers Carriers, accounts port.AccountResolver, labels port.LabelRepository, objects port.ObjectStore,
-	log *slog.Logger, now func() time.Time) LabelService {
-	return &labelServiceImpl{carriers: carriers, accounts: accounts, labels: labels, objects: objects, log: log, now: now, urlTTL: 10 * time.Minute}
+	billing domain.BillingPolicy, log *slog.Logger, now func() time.Time) LabelService {
+	return &labelServiceImpl{carriers: carriers, accounts: accounts, labels: labels, objects: objects, billing: billing, log: log,
+		now: now, urlTTL: 10 * time.Minute}
+}
+
+// labelEnvelope is the outbox row of a label event (key = carrier:trackingNumber, like the parcel's tracking events).
+func labelEnvelope(eventType string, rec domain.LabelRecord, at time.Time) (events.Envelope, error) {
+	payload, err := json.Marshal(rec.Event())
+	if err != nil {
+		return events.Envelope{}, fmt.Errorf("encode %s: %w", eventType, err)
+	}
+	return events.Envelope{ID: uuid.NewString(), Type: eventType, Aggregate: domain.EventAggregate,
+		AggregateID: rec.EventKey(), OccurredAt: at.UTC(), Payload: payload}, nil
 }
 
 func requestHash(req BuyRequest) string {
@@ -126,10 +147,21 @@ func (s *labelServiceImpl) Buy(ctx context.Context, req BuyRequest) (LabelView, 
 	if kind == "" {
 		kind = domain.KindOutbound
 	}
+	fulfilment := req.Fulfilment
+	if fulfilment == "" {
+		fulfilment = domain.FulfilmentSellerShipped
+	}
+	billTo, reason := s.billing.Decide(req.Payer, req.Shipment.OriginNode, kind, fulfilment)
+	shipmentID := req.ShipmentID
+	if shipmentID == "" {
+		shipmentID = req.Shipment.Reference
+	}
 	rec := domain.LabelRecord{
 		ID: uuid.NewString(), IdempotencyKey: req.Caller + ":" + req.IdempotencyKey, RequestHash: hash,
 		Reference: req.Shipment.Reference, OriginNode: req.Shipment.OriginNode, Carrier: req.Carrier, Service: req.Service,
 		Status: domain.LabelPurchasing, CreatedAt: s.now().UTC(), Kind: kind, RateChoice: req.RateChoice, BoxFree: req.BoxFree,
+		OrgID: strings.TrimSpace(req.Payer.OrgID), ShipmentID: shipmentID, OrderID: req.OrderID, Fulfilment: fulfilment,
+		BillTo: billTo, BillingReason: reason,
 	}
 	stored, created, err := s.labels.Reserve(ctx, rec)
 	if err != nil {
@@ -161,6 +193,10 @@ func (s *labelServiceImpl) Buy(ctx context.Context, req BuyRequest) (LabelView, 
 	rec.QRPayload, rec.DropOffNetwork = label.QRPayload, label.DropOffNetwork
 	rec.CostMinor, rec.Currency, rec.Format = label.CostMinor, label.Currency, label.Format
 	rec.LabelKey = rec.ObjectKey()
+	if rec.BillTo == domain.BillSeller {
+		rec.HandlingMinor = s.billing.Handling(rec.CostMinor)
+	}
+	rec.ChargeMinor = rec.Charge()
 	if err := s.store(ctx, rec.LabelKey, label); err != nil {
 		// Never keep a paid label we cannot print: void it at the carrier and free the key for a retry.
 		if verr := carrier.Void(context.WithoutCancel(ctx), label.TrackingNumber); verr != nil {
@@ -170,7 +206,11 @@ func (s *labelServiceImpl) Buy(ctx context.Context, req BuyRequest) (LabelView, 
 		return LabelView{}, fmt.Errorf("store label document: %w", err)
 	}
 	rec.Status, rec.TrackingState = domain.LabelPurchased, domain.StateLabelCreated
-	if err := s.labels.Complete(context.WithoutCancel(ctx), rec); err != nil {
+	purchased, err := labelEnvelope(domain.EventLabelPurchased, rec, s.now())
+	if err != nil {
+		return LabelView{}, err
+	}
+	if err := s.labels.Complete(context.WithoutCancel(ctx), rec, purchased); err != nil {
 		return LabelView{}, fmt.Errorf("complete label: %w", err)
 	}
 	if sub, ok := carrier.(port.TrackingSubscriber); ok {
@@ -250,9 +290,13 @@ func (s *labelServiceImpl) Void(ctx context.Context, id string) (LabelView, erro
 		return LabelView{}, fmt.Errorf("void at carrier: %w", err)
 	}
 	at := s.now().UTC()
-	if err := s.labels.MarkVoided(context.WithoutCancel(ctx), id, at); err != nil {
+	rec.Status, rec.VoidedAt = domain.LabelVoided, &at
+	voided, err := labelEnvelope(domain.EventLabelVoided, rec, at)
+	if err != nil {
+		return LabelView{}, err
+	}
+	if err := s.labels.MarkVoided(context.WithoutCancel(ctx), id, at, voided); err != nil {
 		return LabelView{}, fmt.Errorf("mark voided: %w", err)
 	}
-	rec.Status, rec.VoidedAt = domain.LabelVoided, &at
 	return LabelView{LabelRecord: rec}, nil
 }

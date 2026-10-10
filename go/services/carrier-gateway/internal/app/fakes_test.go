@@ -187,10 +187,11 @@ func (m *memStore) Reserve(_ context.Context, rec domain.LabelRecord) (domain.La
 	return rec, true, nil
 }
 
-func (m *memStore) Complete(_ context.Context, rec domain.LabelRecord) error {
+func (m *memStore) Complete(_ context.Context, rec domain.LabelRecord, purchased events.Envelope) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.labels[rec.ID] = rec
+	m.outbox = append(m.outbox, purchased)
 	m.shipments[skey(rec.Carrier, rec.TrackingNumber)] = domain.TrackedShipment{Carrier: rec.Carrier, TrackingNumber: rec.TrackingNumber,
 		LabelID: rec.ID, Reference: rec.Reference, State: domain.StateLabelCreated, Active: true}
 	return nil
@@ -217,12 +218,16 @@ func (m *memStore) Get(_ context.Context, id string) (domain.LabelRecord, error)
 	return l, nil
 }
 
-func (m *memStore) MarkVoided(_ context.Context, id string, at time.Time) error {
+func (m *memStore) MarkVoided(_ context.Context, id string, at time.Time, voided events.Envelope) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	l := m.labels[id]
+	if l.Status != domain.LabelPurchased {
+		return fmt.Errorf("%w: label is not purchased", domain.ErrConflict)
+	}
 	l.Status, l.VoidedAt = domain.LabelVoided, &at
 	m.labels[id] = l
+	m.outbox = append(m.outbox, voided)
 	return nil
 }
 

@@ -38,5 +38,10 @@
     "stylelint": "^17.16.0",
     "typescript": "5.9.3",
     "typescript-eslint": "^8.71.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "tinypool@<2.2.0": "2.2.0"
+    }
   }
 }

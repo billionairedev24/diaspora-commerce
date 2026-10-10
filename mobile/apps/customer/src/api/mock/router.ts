@@ -1,6 +1,6 @@
 /* MSW-style in-app mock backend for dev (EXPO_PUBLIC_MOCKS=1): a fetch replacement that answers BFF, identity and
    bookings routes from in-memory fixtures. It only runs when env.mocks is true (never in prod builds). */
-import { type Cart, type CartPackage, type DeliveryPromise, type ProductDetail, type ProductSummary, type SearchPage } from '@afrotransact/api-client';
+import { bffProblemType, type Cart, type CartPackage, type DeliveryPromise, type ProductDetail, type ProductSummary, type SearchPage } from '@afrotransact/api-client';
 
 import { type Booking, type CheckoutSummary, type OrderConfirmation, type OrderTracking } from '../types';
 import { mockDb, type MockLine, type MockShipment, nextId, productByAtin } from './db';
@@ -13,7 +13,7 @@ type Handler = (ctx: { req: Request; url: URL; params: Params; body: unknown }) 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const noContent = () => new Response(null, { status: 204 });
 const problem = (status: number, title: string, code: string, detail?: string) =>
-  new Response(JSON.stringify({ type: `https://errors.afrotransact.com/${code}`, title, status, code, detail: detail ?? title }), { status, headers: { 'Content-Type': 'application/problem+json' } });
+  new Response(JSON.stringify({ type: bffProblemType(code), title, status, code, detail: detail ?? title }), { status, headers: { 'Content-Type': 'application/problem+json' } });
 
 const TAX_RATE = 0.0825;
 const FREE_THRESHOLD = 3500;

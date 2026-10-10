@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/problem"
 )
 
 // Stable problem codes (contract: components.schemas.Problem.code).
@@ -129,9 +131,10 @@ func Unauthenticated() *Problem {
 	return NewProblem(http.StatusUnauthorized, CodeUnauthenticated, "Sign in required", "Sign in to continue.")
 }
 
-// ProblemTypeURI is the RFC 9457 type for a code, e.g. https://errors.afrotransact.com/bff.upstream-unavailable.
+// ProblemTypeURI is the RFC 9457 type for a code under the platform's single problem-type base (go/pkg/problem),
+// e.g. https://developers.afrotransact.com/problems/bff.upstream-unavailable.
 func ProblemTypeURI(code string) string {
-	return "https://errors.afrotransact.com/bff." + strings.ReplaceAll(strings.ToLower(code), "_", "-")
+	return problem.TypeURI("bff." + strings.ReplaceAll(strings.ToLower(code), "_", "-"))
 }
 
 // UpstreamError wraps an unexpected upstream answer (4xx we cannot map) as a 502.

@@ -11,13 +11,13 @@ RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q -pl services/${SERVICE} -am
     && java -Djarmode=tools -jar /app.jar extract --layers --launcher --destination /layers
 
 FROM eclipse-temurin:25-jre
-RUN useradd --system --uid 1000 app
+# The temurin base image already has an unprivileged user with uid/gid 1000 ("ubuntu"); the pod runs as 1000.
 WORKDIR /app
 COPY --from=build /layers/dependencies/ ./
 COPY --from=build /layers/spring-boot-loader/ ./
 COPY --from=build /layers/snapshot-dependencies/ ./
 COPY --from=build /layers/application/ ./
-USER 1000
+USER 1000:1000
 ENV SPRING_PROFILES_ACTIVE=prod JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -XX:+UseZGC"
 EXPOSE 8080
 ENTRYPOINT ["java", "org.springframework.boot.loader.launch.JarLauncher", "--server.port=8080"]

@@ -4,13 +4,16 @@ port: 8080
 docsEnabled: false
 redisUrl: ""
 market: us
+# Shared platform URLs (docs/engineering/environments.md). Helm injects PUBLIC_WEB_URL, SELLER_CENTER_URL,
+# STAFF_CONSOLE_URL and AUTH_ISSUER_URL from global.domain and they override these values. The CORS/CSRF origins,
+# the storefront origin, the OIDC issuer and (outside local) the OIDC redirect URI are derived from them; WEB_ORIGINS,
+# WEB_PUBLIC_ORIGIN, OIDC_ISSUER and OIDC_REDIRECT_URI override the derived values.
+platform:
+  publicWebUrl: https://afrotransact.com
+  sellerCenterUrl: https://seller.afrotransact.com
+  staffConsoleUrl: https://admin.afrotransact.com
+  authIssuerUrl: https://auth.afrotransact.com
 web:
-  origins:
-    - https://www.afrotransact.com
-    - https://afrotransact.com
-    - https://seller.afrotransact.com
-    - https://staff.afrotransact.com
-  publicOrigin: https://www.afrotransact.com
   bffPath: /api/bff
 session:
   cookieName: at_session
@@ -18,10 +21,7 @@ session:
   cookieDomain: ""
   idleTtl: 720h
 oidc:
-  issuer: https://auth.afrotransact.com
-  publicUrl: https://auth.afrotransact.com
   clientId: gateway-bff
-  redirectUri: https://www.afrotransact.com/api/bff/v1/auth/oidc/callback
   scopes: [openid, email, profile, phone, offline_access]
   audience: ""
   verifyBearer: true

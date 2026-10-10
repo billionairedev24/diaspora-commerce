@@ -9,8 +9,8 @@ import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { sellerApi } from '@/lib/api';
-import { storefrontUrl } from '@/lib/config';
 import { shortDate } from '@/lib/format';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 import { useSeller } from '@/lib/session';
 
 const NETWORKS: SocialNetworkKey[] = ['instagram', 'tiktok', 'facebook', 'youtube', 'whatsapp', 'website'];
@@ -35,6 +35,7 @@ function readableOn(bg: string): string {
 }
 
 export function PublicPageView() {
+  const storefrontUrl = useStorefrontUrl();
   const api = sellerApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -73,7 +74,7 @@ export function PublicPageView() {
   return (
     <ModulePage
       module={module}
-      actions={<a href={`${storefrontUrl()}${page.publicPath}`} target="_blank" rel="noreferrer">View my public page</a>}
+      actions={<a href={`${storefrontUrl}${page.publicPath}`} target="_blank" rel="noreferrer">View my public page</a>}
     >
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <form className="flex min-w-0 flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (validate()) save.mutate(form); }}>

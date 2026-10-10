@@ -42,7 +42,7 @@ Testcontainers ITs + JaCoCo; image from `java/Dockerfile` with `SERVICE=<svc>`).
 | `storybook.yml` (hand-written) | `web/packages/{ui,tokens,i18n}/**`, `web/apps/*/src/**/*.stories.tsx`, Seller Center components/styles used by app stories, root `package.json`/lockfile/workspace | `storybook build`; Vitest addon (`test:storybook`: render + `play` + axe serious/critical, v8 coverage gated and uploaded) and Playwright visual diffs vs committed baselines in the pinned Playwright image; Cloudflare Pages `afrotransact-storybook` (PR preview comment, production on main); `update-visual-baselines` label regenerates baselines |
 | `mobile.yml` | tags `mobile-v*`, main (`mobile/**`), manual | EAS build (production, auto-submit) on tags; EAS Update OTA to `preview` on main; dev/preview/production profiles |
 | `workflows.yml` | `.github/**`, `tools/ci/**`, PORTS.md | generated workflows up to date + actionlint |
-| env-urls step (to add, see below) | `java/**`, `go/**`, `web/**`, `mobile/**`, `infra/**` | `tools/ci/check_env_urls.py`: no hard-coded environment hosts |
+| env-urls step (to add, see below) | `java/**`, `go/**`, `web/**`, `mobile/**`, `infra/**`, `tools/ci/check_env_urls.py` | `tools/ci/check_env_urls.py` on the whole repository: no hard-coded environment hosts |
 
 Generated workflows: `python3 tools/ci/gen_workflows.py` reads the service table in
 `infra/local/PORTS.md`; add a service there and re-run. Workflows for services that do not exist yet are
@@ -52,15 +52,15 @@ harmless (their path filters never match and the `meta` job skips everything).
 
 `tools/ci/check_env_urls.py` (Python 3.10+, standard library only) fails when an environment-specific host is
 hard-coded where it does not belong: any `*.afrotransact.com` host in shared defaults or non-test source, a prod
-or other-environment host in dev/uat config, a dev/uat host in prod config, a host the edge does not serve, or a
-problem type outside `https://developers.afrotransact.com/problems/`. Hosts, settings and rules are in
-[environments.md](environments.md). Exit status 0 = clean, 1 = violations, 2 = usage error;
-`--format github` prints `::error file=…,line=…` annotations.
+or other-environment host in dev/uat config, a dev/uat host in prod config, a host the edge does not serve (also in
+`wrangler.jsonc` and `eas.json`, which list every environment), or a problem type outside
+`https://developers.afrotransact.com/problems/`. Hosts, settings and rules are in [environments.md](environments.md).
+Exit status 0 = clean, 1 = violations, 2 = usage error; `--format github` prints `::error file=…,line=…` annotations.
 
-CI step to add (by the workflow owners; `.github/` is not edited from here). It needs nothing beyond the
-runner's Python, so it fits next to the small repo-wide checks (`contracts.yml`, `workflows.yml`) or in a new
-`env-urls.yml` triggered on `java/**`, `go/**`, `web/**`, `mobile/**`, `infra/**` and
-`tools/ci/check_env_urls.py`:
+The whole repository passes (web, mobile and gateway-bff included), so the step runs without excludes. CI step to add
+(by the workflow owners; `.github/` is not edited from here). It needs nothing beyond the runner's Python, so it fits
+next to the small repo-wide checks (`contracts.yml`, `workflows.yml`) or in a new `env-urls.yml` triggered on
+`java/**`, `go/**`, `web/**`, `mobile/**`, `infra/**` and `tools/ci/check_env_urls.py`:
 
 ```yaml
   env-urls:
@@ -69,14 +69,28 @@ runner's Python, so it fits next to the small repo-wide checks (`contracts.yml`,
     steps:
       - uses: actions/checkout@v4
       - name: No hard-coded environment hosts
-        run: |
-          python3 tools/ci/check_env_urls.py --format github \
-            --exclude web --exclude mobile --exclude go/services/gateway-bff
+        run: python3 tools/ci/check_env_urls.py --format github
 ```
 
-The three `--exclude` flags are temporary: web, mobile and gateway-bff still hard-code hosts (the follow-up to
-the environment-URL change). Drop them once `python3 tools/ci/check_env_urls.py` passes for the whole
-repository; from then on the step guards everything.
+Do not add `--exclude` flags to it: a path that needs a host belongs in its environment's config file, or, for an
+identifier that only looks like a host, in the documented `EXCEPTIONS` list of the script.
+
+### Web and mobile deploys: per-environment values (change requests for the workflow owners)
+
+1. **`_web-app.yml`**: the deploy step runs `wrangler deploy --name <app>-<env>` without `--env`, so the `env.uat` /
+   `env.prod` vars (and the prod route) in `web/apps/storefront/wrangler.jsonc` are never selected and every
+   environment gets the top-level (dev) vars. Use `deploy --env ${TARGET}` for uat/prod (dev = top level, no `--env`)
+   and `versions upload --env preview --preview-alias pr-<n>` for previews; the Worker names in wrangler.jsonc are
+   already `<app>-<env>` (`storefront-dev`, `storefront-uat`, `storefront-prod`), so `--name` can go. The apps read
+   their settings on the server per request, so the single Next/OpenNext build is correct for every environment.
+2. **Seller Center and staff console** have no `wrangler.jsonc` / `@opennextjs/cloudflare` yet; when they get one, set
+   `BFF_ORIGIN` and `PUBLIC_WEB_URL` per environment in its vars (see environments.md, "Web and mobile settings").
+3. **`mobile.yml`**: `eas build --profile <p>` takes the `EXPO_PUBLIC_*` URLs from the profile's `env` in `eas.json`,
+   but `eas update --channel <p>` does not read build-profile env, so an OTA bundle built on the runner would fall back
+   to the local stack. Export the profile's env before `eas update` (for example
+   `eval "$(jq -r --arg p "$PROFILE" '.build[$p].env | to_entries[] | "export \(.key)=\(.value|@sh)"' eas.json)"`
+   in each app directory), or mirror the values into EAS environment variables and pass
+   `--environment <development|preview|production>`.
 
 ## Security of the pipeline
 

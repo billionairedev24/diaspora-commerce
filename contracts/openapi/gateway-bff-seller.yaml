@@ -22,7 +22,7 @@ info:
 
     **Errors** are RFC 9457 `application/problem+json` with a stable `code`. Services that are still being built
     (orders, bookings, offers) or that are unreachable answer 503 `UPSTREAM_UNAVAILABLE`
-    (`type https://errors.afrotransact.com/bff.upstream-unavailable`) with `Retry-After`.
+    (`type https://developers.afrotransact.com/problems/bff.upstream-unavailable`) with `Retry-After`.
 
     **Money** is always an integer amount in minor units (`*Minor`, cents for USD) plus an ISO 4217 `currency`.
 

@@ -61,10 +61,15 @@ export function shouldDisplay(category: string | undefined, server: ServerPrefs,
   }
 }
 
-/** Deep links (com.afrotransact.customer://… and https://www.afrotransact.com/app/…) → in-app path. */
-export function pathFromDeepLink(url: string): string | null {
-  const m = /^(?:com\.afrotransact\.customer:\/\/|https:\/\/(?:www\.)?afrotransact\.com\/app\/)([^?#]*)/.exec(url);
-  if (!m) return null;
-  const path = `/${(m[1] ?? '').replace(/^\/+/, '')}`;
+const APP_SCHEME = 'com.afrotransact.customer://';
+
+/** Deep links (com.afrotransact.customer://… and the environment's universal links <webUrl>/app/…) → in-app path. */
+export function pathFromDeepLink(url: string, webUrl?: string): string | null {
+  const universal = webUrl ? `${webUrl.replace(/\/+$/, '')}/app/` : null;
+  let rest: string;
+  if (url.startsWith(APP_SCHEME)) rest = url.slice(APP_SCHEME.length);
+  else if (universal && url.toLowerCase().startsWith(universal.toLowerCase())) rest = url.slice(universal.length);
+  else return null;
+  const path = `/${(rest.split(/[?#]/)[0] ?? '').replace(/^\/+/, '')}`;
   return /^\/(orders|bookings|product|cart|inbox|lola|services)(\/[^/]+)?$|^\/$/.test(path) ? path : '/';
 }

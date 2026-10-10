@@ -24,7 +24,7 @@ func (b boxFreeCarrier) BuyBoxFreeReturn(_ context.Context, s domain.Shipment, s
 
 func returnServices(carriers app.Carriers, store *memStore) app.ReturnLabelService {
 	rates := app.NewRateService(carriers, allAccounts(), &memCache{}, time.Second, time.Minute, quietLog)
-	labels := app.NewLabelService(carriers, allAccounts(), store, &memObjects{}, quietLog, time.Now)
+	labels := app.NewLabelService(carriers, allAccounts(), store, &memObjects{}, domain.BillingPolicy{}, quietLog, time.Now)
 	return app.NewReturnLabelService(carriers, rates, labels)
 }
 

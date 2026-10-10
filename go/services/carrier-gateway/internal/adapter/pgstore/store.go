@@ -76,14 +76,16 @@ func inTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx pgx.Tx) error) err
 const labelColumns = `l.id::text, l.idempotency_key, l.request_hash, l.reference, l.origin_node, l.carrier, l.service,
 	coalesce(l.tracking_number, ''), coalesce(l.carrier_shipment_id, ''), l.cost_minor, l.currency, l.label_format,
 	coalesce(l.label_key, ''), l.status, coalesce(t.state, ''), l.created_at, l.voided_at, l.kind, l.rate_choice,
-	l.box_free, l.qr_payload, l.drop_off_network`
+	l.box_free, l.qr_payload, l.drop_off_network, l.org_id, l.shipment_id, l.order_id, l.fulfilment, l.bill_to,
+	l.billing_reason, l.handling_minor, l.charge_minor`
 
 func scanLabel(row pgx.Row) (domain.LabelRecord, error) {
 	var r domain.LabelRecord
-	var carrier, service, format, status, state, kind, choice string
+	var carrier, service, format, status, state, kind, choice, fulfilment, billTo string
 	err := row.Scan(&r.ID, &r.IdempotencyKey, &r.RequestHash, &r.Reference, &r.OriginNode, &carrier, &service,
 		&r.TrackingNumber, &r.CarrierShipmentID, &r.CostMinor, &r.Currency, &format, &r.LabelKey, &status, &state,
-		&r.CreatedAt, &r.VoidedAt, &kind, &choice, &r.BoxFree, &r.QRPayload, &r.DropOffNetwork)
+		&r.CreatedAt, &r.VoidedAt, &kind, &choice, &r.BoxFree, &r.QRPayload, &r.DropOffNetwork, &r.OrgID, &r.ShipmentID,
+		&r.OrderID, &fulfilment, &billTo, &r.BillingReason, &r.HandlingMinor, &r.ChargeMinor)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.LabelRecord{}, domain.ErrNotFound
 	}
@@ -93,16 +95,19 @@ func scanLabel(row pgx.Row) (domain.LabelRecord, error) {
 	r.Carrier, r.Service, r.Format = domain.CarrierCode(carrier), domain.ServiceCode(service), domain.LabelFormat(format)
 	r.Status, r.TrackingState = domain.LabelStatus(status), domain.ShipmentState(state)
 	r.Kind, r.RateChoice = domain.LabelKind(kind), domain.RateChoice(choice)
+	r.Fulfilment, r.BillTo = domain.Fulfilment(fulfilment), domain.BillTo(billTo)
 	return r, nil
 }
 
 func (s *storeImpl) Reserve(ctx context.Context, rec domain.LabelRecord) (domain.LabelRecord, bool, error) {
 	tag, err := s.pool.Exec(ctx, `insert into shipment_label
 		(id, idempotency_key, request_hash, reference, origin_node, carrier, service, status, created_at, kind,
-		rate_choice, box_free)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) on conflict (idempotency_key) do nothing`,
+		rate_choice, box_free, org_id, shipment_id, order_id, fulfilment, bill_to, billing_reason)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		on conflict (idempotency_key) do nothing`,
 		rec.ID, rec.IdempotencyKey, rec.RequestHash, rec.Reference, rec.OriginNode, string(rec.Carrier), string(rec.Service),
-		string(domain.LabelPurchasing), rec.CreatedAt, string(kindOrOutbound(rec.Kind)), string(rec.RateChoice), rec.BoxFree)
+		string(domain.LabelPurchasing), rec.CreatedAt, string(kindOrOutbound(rec.Kind)), string(rec.RateChoice), rec.BoxFree,
+		rec.OrgID, rec.ShipmentID, rec.OrderID, string(rec.Fulfilment), string(rec.BillTo), rec.BillingReason)
 	if err != nil {
 		return domain.LabelRecord{}, false, fmt.Errorf("reserve label: %w", err)
 	}
@@ -117,14 +122,14 @@ func (s *storeImpl) Reserve(ctx context.Context, rec domain.LabelRecord) (domain
 	return existing, false, nil
 }
 
-func (s *storeImpl) Complete(ctx context.Context, rec domain.LabelRecord) error {
+func (s *storeImpl) Complete(ctx context.Context, rec domain.LabelRecord, purchased events.Envelope) error {
 	return inTx(ctx, s.pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `update shipment_label set tracking_number = $2, carrier_shipment_id = $3, cost_minor = $4,
 			currency = $5, label_format = $6, label_key = $7, status = 'purchased', qr_payload = $8,
-			drop_off_network = $9, updated_at = now()
+			drop_off_network = $9, handling_minor = $10, charge_minor = $11, updated_at = now()
 			where id = $1 and status = 'purchasing'`,
 			rec.ID, rec.TrackingNumber, rec.CarrierShipmentID, rec.CostMinor, rec.Currency, string(rec.Format), rec.LabelKey,
-			rec.QRPayload, rec.DropOffNetwork)
+			rec.QRPayload, rec.DropOffNetwork, rec.HandlingMinor, rec.ChargeMinor)
 		if err != nil {
 			return fmt.Errorf("complete label: %w", err)
 		}
@@ -139,7 +144,7 @@ func (s *storeImpl) Complete(ctx context.Context, rec domain.LabelRecord) error 
 		if err != nil {
 			return fmt.Errorf("track label: %w", err)
 		}
-		return nil
+		return enqueue(ctx, tx, purchased)
 	})
 }
 
@@ -162,7 +167,7 @@ func (s *storeImpl) Get(ctx context.Context, id string) (domain.LabelRecord, err
 		left join tracked_shipment t on t.label_id = l.id where l.id::text = $1`, id))
 }
 
-func (s *storeImpl) MarkVoided(ctx context.Context, id string, at time.Time) error {
+func (s *storeImpl) MarkVoided(ctx context.Context, id string, at time.Time, voided events.Envelope) error {
 	return inTx(ctx, s.pool, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx, `update shipment_label set status = 'voided', voided_at = $2, updated_at = now()
 			where id::text = $1 and status = 'purchased'`, id, at)
@@ -175,7 +180,7 @@ func (s *storeImpl) MarkVoided(ctx context.Context, id string, at time.Time) err
 		if _, err := tx.Exec(ctx, `update tracked_shipment set active = false, updated_at = now() where label_id::text = $1`, id); err != nil {
 			return fmt.Errorf("stop tracking: %w", err)
 		}
-		return nil
+		return enqueue(ctx, tx, voided)
 	})
 }
 

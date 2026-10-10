@@ -13,6 +13,13 @@ public enum Chart {
             Scope.JURISDICTION),
     CUSTOMER_REFUNDS_PAYABLE("2200", "Customer refunds payable", AccountType.LIABILITY, Scope.NONE),
     CHARGEBACK_RESERVE("2300", "Chargeback reserve withheld from seller", AccountType.LIABILITY, Scope.ORG),
+    /**
+     * What AfroTransact owes the carriers for labels bought on its platform carrier accounts (USPS, UPS, FedEx, DHL bill
+     * AfroTransact, not the seller): credited at the carrier's negotiated cost when a seller is charged for a label,
+     * debited back when the label is voided, and cleared when AfroTransact pays the carrier invoice.
+     */
+    CARRIER_LABELS_PAYABLE("2400", "Carrier labels payable (carrier invoices AfroTransact)", AccountType.LIABILITY,
+            Scope.NONE),
     COMMISSION_REVENUE("4000", "Commission revenue", AccountType.REVENUE, Scope.NONE),
     FBA_FEE_REVENUE("4100", "FBA fee revenue", AccountType.REVENUE, Scope.NONE),
     SHIPPING_REVENUE("4200", "AfroTransact shipping revenue", AccountType.REVENUE, Scope.NONE),
@@ -22,6 +29,8 @@ public enum Chart {
      * share. Never owed to anyone, never transferred or paid out; lines carry the Retail org for attribution.
      */
     RETAIL_SALES("4400", "AfroTransact Retail sales", AccountType.REVENUE, Scope.NONE),
+    /** Handling markup charged to sellers on top of the carrier cost of labels bought through AfroTransact. */
+    LABEL_HANDLING_REVENUE("4500", "Shipping label handling revenue", AccountType.REVENUE, Scope.NONE),
     STRIPE_FEES("5000", "Stripe processing fees", AccountType.EXPENSE, Scope.NONE),
     CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE);
 

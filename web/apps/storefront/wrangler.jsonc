@@ -1,6 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "afrotransact-storefront",
+  // One Worker per environment, named like the Workers routes in infra/cloudflare (storefront-<env>). The top level
+  // is dev; `wrangler deploy --env uat|prod` selects the others. Every var is read on the server per request
+  // (src/lib/config.ts), so one build serves every environment. Hosts: docs/engineering/environments.md.
+  "name": "storefront-dev",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
@@ -8,22 +11,25 @@
   "observability": { "enabled": true },
   "vars": {
     "BFF_ORIGIN": "https://api.dev.afrotransact.com/bff",
-    "NEXT_PUBLIC_SELLER_CENTER_URL": "https://sell.dev.afrotransact.com",
+    "SELLER_CENTER_URL": "https://seller.dev.afrotransact.com",
     "API_MOCKS": "0"
   },
   "env": {
+    // PR previews: a version of storefront-dev on the in-process mock BFF.
     "preview": {
-      "name": "afrotransact-storefront-preview",
-      "vars": { "API_MOCKS": "1", "BFF_ORIGIN": "", "NEXT_PUBLIC_SELLER_CENTER_URL": "https://sell.dev.afrotransact.com" }
+      "name": "storefront-dev",
+      "vars": { "API_MOCKS": "1", "BFF_ORIGIN": "", "SELLER_CENTER_URL": "https://seller.dev.afrotransact.com" }
     },
     "uat": {
-      "name": "afrotransact-storefront-uat",
-      "vars": { "API_MOCKS": "0", "BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "NEXT_PUBLIC_SELLER_CENTER_URL": "https://sell.uat.afrotransact.com" }
+      "name": "storefront-uat",
+      "vars": { "API_MOCKS": "0", "BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.uat.afrotransact.com" }
     },
     "prod": {
-      "name": "afrotransact-storefront",
-      "routes": [{ "pattern": "www.afrotransact.com", "custom_domain": true }],
-      "vars": { "API_MOCKS": "0", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "NEXT_PUBLIC_SELLER_CENTER_URL": "https://sell.afrotransact.com" }
+      "name": "storefront-prod",
+      // The prod storefront is the bare domain (same zone route as infra/cloudflare). www.afrotransact.com is not
+      // served as a second storefront: it redirects to the bare domain at the edge.
+      "routes": [{ "pattern": "afrotransact.com/*", "zone_name": "afrotransact.com" }],
+      "vars": { "API_MOCKS": "0", "BFF_ORIGIN": "https://api.afrotransact.com/bff", "SELLER_CENTER_URL": "https://seller.afrotransact.com" }
     }
   }
 }

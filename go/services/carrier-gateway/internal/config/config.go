@@ -11,6 +11,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/fedex"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/ups"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/usps"
+	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/domain"
 )
 
 // Config for carrier-gateway.
@@ -107,6 +108,15 @@ type Config struct {
 
 	Accounts accounts.Config `yaml:"accounts"`
 
+	// Billing decides who pays for labels (S256). Seller-shipped labels bought by a seller organisation are charged
+	// to it in the payments ledger at the carrier's negotiated cost plus this handling markup (0 by default).
+	Billing struct {
+		RetailOrgIDs       []string `yaml:"retailOrgIds" env:"RETAIL_ORG_ID"`
+		PlatformNodes      []string `yaml:"platformNodes"`
+		HandlingPct        float64  `yaml:"handlingPct" env:"LABEL_HANDLING_PCT"`
+		HandlingFixedMinor int64    `yaml:"handlingFixedMinor" env:"LABEL_HANDLING_FIXED_MINOR"`
+	} `yaml:"billing"`
+
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
 		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`
@@ -116,6 +126,12 @@ type Config struct {
 		OTLPEndpoint string  `yaml:"otlpEndpoint" env:"OTEL_EXPORTER_OTLP_ENDPOINT_HOST"`
 		SampleRatio  float64 `yaml:"sampleRatio" env:"TRACE_SAMPLING"`
 	} `yaml:"telemetry"`
+}
+
+// LabelBilling returns the label billing policy.
+func (c *Config) LabelBilling() domain.BillingPolicy {
+	return domain.BillingPolicy{RetailOrgIDs: c.Billing.RetailOrgIDs, PlatformNodes: c.Billing.PlatformNodes,
+		HandlingPct: c.Billing.HandlingPct, HandlingFixedMinor: c.Billing.HandlingFixedMinor}
 }
 
 // Resolve fills the settings derived from the shared platform URLs; call it after Load. Explicit values win.

@@ -15,6 +15,9 @@ File classes (anything else is not scanned):
            infra/k8s/platform/envs/<env>/**
            -> only hosts of that environment (a prod or other-env host fails)
   prod     the same files for prod, .env.production -> no dev/uat host
+  multi    files that hold every environment side by side: web wrangler.jsonc / wrangler.toml (vars per Worker
+           env), mobile eas.json (EXPO_PUBLIC_* per build profile) -> any environment's host, but only real
+           public hosts and the canonical problem-type base
 
 Always allowed (identifiers, not environment hosts):
   - email addresses (support@afrotransact.com, no-reply@mail.dev.afrotransact.com, ...)
@@ -30,7 +33,7 @@ fixtures/), as are generated clients (*/generated/*) and build output.
 
     python3 tools/ci/check_env_urls.py                     # whole repository
     python3 tools/ci/check_env_urls.py java go/pkg infra   # only these paths
-    python3 tools/ci/check_env_urls.py --exclude web --exclude mobile --exclude go/services/gateway-bff
+    python3 tools/ci/check_env_urls.py --exclude infra/terraform  # skip a path prefix (repeatable)
     python3 tools/ci/check_env_urls.py --format github     # ::error annotations for GitHub Actions
 
 Exit status: 0 clean, 1 violations found, 2 usage error.
@@ -121,8 +124,10 @@ def host_env(host: str) -> str:
 
 
 def classify(rel: str) -> str | None:
-    """'neutral', 'dev', 'uat', 'prod' or None (not scanned)."""
+    """'neutral', 'dev', 'uat', 'prod', 'multi' or None (not scanned)."""
     name = rel.rsplit("/", 1)[-1]
+    if name in ("wrangler.jsonc", "wrangler.json", "wrangler.toml", "eas.json"):
+        return "multi"
     m = re.fullmatch(r"application(?:-(\w+))?\.(?:ya?ml|properties)", name)
     if m:
         profile = m.group(1)
@@ -193,6 +198,8 @@ def scan_file(path: Path, rel: str, cls: str) -> list[Violation]:
                 out.append(Violation(rel, no, host, "not a public host of the platform (see infra/cloudflare "
                                      "local.hosts and docs/engineering/environments.md: <base>, seller., admin., "
                                      "api., auth., media.; www. in prod only)"))
+            elif cls == "multi":
+                continue
             elif cls == "neutral":
                 out.append(Violation(rel, no, host, f"{env} host in a shared default / source file: read it from a "
                                      "per-environment setting (PUBLIC_WEB_URL, AUTH_ISSUER_URL, ...) with a "

@@ -9,7 +9,7 @@ import { ModulePage } from '@/components/ui/ModulePage';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
-import { storefrontUrl } from '@/lib/config';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 import { useSeller } from '@/lib/session';
 
 const STATE = {
@@ -22,6 +22,7 @@ const STATE = {
 
 /** Onboarding: the only page before approval — application checklist, requested items and resume link. */
 export function OnboardingView() {
+  const storefrontUrl = useStorefrontUrl();
   const { orgId, isProvider } = useSeller();
   const q = useQuery(sellerQueries.onboarding(sellerApi(), orgId));
   return (
@@ -36,7 +37,7 @@ export function OnboardingView() {
           <div className="flex flex-wrap items-center gap-3">
             <strong className="flex-1 text-lg">Application {q.data.reference ?? ''}</strong>
             {q.data.canResume ? (
-              <a className="rounded-pill bg-primary px-5 py-2 text-sm font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={`${storefrontUrl()}/sell?resume=1`}>
+              <a className="rounded-pill bg-primary px-5 py-2 text-sm font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={`${storefrontUrl}/sell?resume=1`}>
                 {q.data.status === 'DRAFT' ? 'Continue application' : 'Upload requested document'}
               </a>
             ) : null}

@@ -7,8 +7,8 @@ import { type ReactNode } from 'react';
 
 import { teamError } from '@/components/team/TeamView';
 import { sellerApi } from '@/lib/api';
-import { storefrontUrl } from '@/lib/config';
 import { shortDate } from '@/lib/format';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 
 const linkClass =
   'inline-flex items-center justify-center rounded-pill px-6 py-2.5 font-bold no-underline hover:no-underline';
@@ -28,6 +28,7 @@ function Card({ title, children }: { title: string; children: ReactNode }) {
 /** Invitation accept page (S236): shows what the link is for (public lookup), then joins the signed-in person, or
     sends people without an account to sign up with the invitation (identity skips the email code and joins them). */
 export function AcceptInvitationView({ token }: { token: string }) {
+  const storefrontUrl = useStorefrontUrl();
   const api = sellerApi();
   const qc = useQueryClient();
   const lookup = useQuery({ queryKey: ['invitation', token], queryFn: () => api.lookupInvitation(token), enabled: token !== '', retry: false });
@@ -99,12 +100,12 @@ export function AcceptInvitationView({ token }: { token: string }) {
         <>
           <p className="m-0 text-sm text-muted">Sign in with {inv.email}, or create an account with that address if you don’t have one yet.</p>
           <div className="flex flex-wrap gap-2">
-            <a className={`${linkClass} bg-primary text-on-primary hover:bg-primary-hover hover:text-on-primary`} href={`${storefrontUrl()}/signin?returnTo=${encodeURIComponent(here)}`}>
+            <a className={`${linkClass} bg-primary text-on-primary hover:bg-primary-hover hover:text-on-primary`} href={`${storefrontUrl}/signin?returnTo=${encodeURIComponent(here)}`}>
               Sign in
             </a>
             <a
               className={`${linkClass} border border-border-strong text-ink-1000`}
-              href={`${storefrontUrl()}/signup?invitation=${encodeURIComponent(token)}&email=${encodeURIComponent(inv.email)}`}
+              href={`${storefrontUrl}/signup?invitation=${encodeURIComponent(token)}&email=${encodeURIComponent(inv.email)}`}
             >
               Create an account
             </a>

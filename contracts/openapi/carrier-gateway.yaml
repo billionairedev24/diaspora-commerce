@@ -60,6 +60,13 @@ paths:
       tags: [labels]
       operationId: buyLabel
       summary: Buy a label (permission shipping:label)
+      description: >-
+        Who pays is decided per label (billTo, billingReason). A seller organisation member buying an outbound label for
+        a seller-shipped shipment from its own origin (originNode = its org id) is charged for it: carrier.label.purchased
+        carries chargeMinor = the carrier's negotiated cost + the configured handling markup (billing.handlingPct /
+        handlingFixedMinor, 0 by default) and payments-service debits the seller's payable. AfroTransact Retail, FBA and
+        AFROTRANSACT_DELIVERY shipments, fulfilment-centre origins, returns and staff / service callers are AfroTransact's
+        own cost (billTo AFROTRANSACT). Voiding a seller-billed label credits the charge back once.
       parameters:
         - {name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}
       requestBody:
@@ -73,6 +80,9 @@ paths:
                 carrier: {$ref: '#/components/schemas/Carrier'}
                 service: {type: string, description: 'Carrier service code from a quote (USPS_GROUND_ADVANTAGE, 03, FEDEX_GROUND, P …)'}
                 shipment: {$ref: '#/components/schemas/Shipment'}
+                fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+                shipmentId: {type: string, description: Order shipment the label is for (defaults to shipment.reference)}
+                orderId: {type: string, description: Order the shipment belongs to (shown on the seller statement)}
       responses:
         '201':
           description: Label purchased (or the label previously bought with this key)
@@ -468,6 +478,21 @@ components:
         boxFree: {type: boolean, description: Label-free QR drop-off}
         qrPayload: {type: string, description: Code the customer shows at the drop-off location (box-free returns)}
         dropOffNetwork: {type: string, description: Where a box-free return is handed over}
+        orgId: {type: string, description: Organisation of the member who bought the label (empty for staff / services)}
+        shipmentId: {type: string}
+        orderId: {type: string}
+        fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        billTo: {type: string, enum: [SELLER, AFROTRANSACT], description: Who pays for the label}
+        billingReason:
+          type: string
+          enum: [SELLER_SHIPPED, RETAIL, FBA, AFROTRANSACT_DELIVERY, RETURN, PLATFORM_CALLER, PLATFORM_ORIGIN]
+        handlingMinor: {type: integer, description: Handling markup added to a seller-billed label (0 otherwise)}
+        chargeMinor: {type: integer, description: 'What the seller is charged: costMinor + handlingMinor when billTo is SELLER, else 0'}
+    Fulfilment:
+      type: string
+      enum: [SELLER_SHIPPED, FBA, AFROTRANSACT_DELIVERY]
+      default: SELLER_SHIPPED
+      description: How the shipment is fulfilled. Only SELLER_SHIPPED labels can be charged to the seller.
     ReturnLabel:
       allOf:
         - {$ref: '#/components/schemas/Label'}

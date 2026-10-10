@@ -126,7 +126,7 @@ the bookings provider routes are now served upstream.
 
 `config/<APP_ENV>.yaml` (local, dev, uat, prod) with env overrides: `PORT`, `REDIS_URL`, `SESSION_SIGNING_KEY` (≥ 32
 chars), `OIDC_CLIENT_SECRET`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL`, `OIDC_CLIENT_ID`, `OIDC_REDIRECT_URI`, `OIDC_AUDIENCE`,
-`WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `WEB_BFF_PATH`, `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_DOMAIN`,
+`PUBLIC_WEB_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`, `AUTH_ISSUER_URL`, `WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `WEB_BFF_PATH`, `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_DOMAIN`,
 `<UPSTREAM>_URL` (`SEARCH_URL`, `CATALOG_URL`, `INVENTORY_URL`, `CART_URL`, `GEO_URL`, `IDENTITY_URL`, `CONTENT_URL`,
 `PAYMENTS_URL`, `PROMISE_URL`, `ORDERS_URL`, `NOTIFICATIONS_URL`, `SELLER_URL`, `OFFERS_URL`, `BOOKINGS_URL`,
 `STOREFRONT_URL`, `MEDIA_URL`, `CARRIER_URL`, `TAX_RETURNS_URL`, `AI_GATEWAY_URL`), `STRIPE_PUBLISHABLE_KEY`, `RATE_LIMIT_AUTH_PER_MINUTE`,
@@ -134,11 +134,19 @@ chars), `OIDC_CLIENT_SECRET`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL`, `OIDC_CLIENT_ID`
 `TRACE_SAMPLING`, `DOCS_ENABLED`. Secrets (`REDIS_URL`, `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY`) come from the
 cloud secret store via External Secrets (Helm chart in `deploy/helm`).
 
-Local defaults: upstreams on their `infra/local/PORTS.md` ports, storefront origin `http://localhost:3000` (Seller Center
-`http://localhost:3001` is also allowed for CORS/CSRF), identity
-client secret `local-bff-secret`, cookie not `Secure` (plain-http localhost). In dev/uat/prod the OIDC redirect URI is
-`https://<storefront>/api/bff/v1/auth/oidc/callback` so the cookie stays first-party — identity must register it for
-`gateway-bff`.
+Shared platform URLs (`docs/engineering/environments.md`): `PUBLIC_WEB_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`
+and `AUTH_ISSUER_URL` are injected by the Helm library chart from `global.domain`; `config/<env>.yaml` keeps that
+environment's own hosts under `platform:` as the fallback (`config/local.yaml`: localhost). `Config.Resolve` derives
+the CORS/CSRF origins (storefront, Seller Center, staff console), the storefront origin (`PUBLIC_WEB_URL`), the OIDC
+issuer and browser URL (`AUTH_ISSUER_URL`) and, outside local, the OIDC redirect URI
+`<PUBLIC_WEB_URL>/api/bff/v1/auth/oidc/callback` (so the cookie stays first-party; identity registers it for
+`gateway-bff`). `WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL` and `OIDC_REDIRECT_URI` override
+the derived values. Problem types are `https://developers.afrotransact.com/problems/bff.<code>` (`go/pkg/problem`).
+
+Local defaults: upstreams on their `infra/local/PORTS.md` ports, storefront `http://localhost:3000`, Seller Center
+`http://localhost:3001` and staff console `http://localhost:3002` allowed for CORS/CSRF, identity `http://localhost:8100`,
+redirect URI `http://localhost:8200/login/oauth2/code/afrotransact`, identity client secret `local-bff-secret`, cookie
+not `Secure` (plain-http localhost).
 
 ## Run and test
 

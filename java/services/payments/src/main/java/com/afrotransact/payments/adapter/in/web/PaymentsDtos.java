@@ -18,6 +18,7 @@ import com.afrotransact.payments.domain.EffectiveFees;
 import com.afrotransact.payments.domain.FeeSchedule;
 import com.afrotransact.payments.domain.Fulfilment;
 import com.afrotransact.payments.domain.Journal;
+import com.afrotransact.payments.domain.LabelCharge;
 import com.afrotransact.payments.domain.LineSplit;
 import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.OrderLine;
@@ -31,6 +32,7 @@ import com.afrotransact.payments.domain.RecipientShare;
 import com.afrotransact.payments.domain.Refund;
 import com.afrotransact.payments.domain.Settlement;
 import com.afrotransact.payments.domain.ShipmentSettlement;
+import com.afrotransact.payments.domain.StatementLine;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -382,6 +384,11 @@ final class PaymentsDtos {
                                  List<HeldOrderResponse> onHold, long requestedOrInTransitMinor, long paidMinor,
                                  @Schema(description = "Provider fees (late cancellations) debited from or reserved "
                                          + "in the balance") long providerFeesMinor,
+                                 @Schema(description = "Shipping labels bought through AfroTransact and not yet "
+                                         + "recovered from a transfer; deducted from availableMinor, which may go "
+                                         + "negative. Negative when voided labels are owed back (paid with the next "
+                                         + "transfer). Details: GET /v1/payouts/label-charges")
+                                 long labelChargesMinor,
                                  long minimumPayoutMinor, boolean canRequestToday,
                                  @Schema(description = "Payouts are on a compliance hold: requests and approvals fail "
                                          + "with 422 payments.payouts_paused; the balance keeps accruing")
@@ -395,7 +402,8 @@ final class PaymentsDtos {
             return new PayoutBalanceResponse(b.orgId(), b.currency(), b.available().minor(), b.onHoldTotal().minor(),
                     b.onHold().stream().map(h -> new HeldOrderResponse(h.orderId(), h.amount().minor(),
                             h.releaseAt())).toList(), b.inFlight().minor(), b.paid().minor(),
-                    b.providerFees().minor(), b.minimum().minor(), b.canRequestToday(), b.payoutsPaused(),
+                    b.providerFees().minor(), b.labelCharges().minor(), b.minimum().minor(), b.canRequestToday(),
+                    b.payoutsPaused(),
                     b.payoutsPausedReason());
         }
     }
@@ -411,6 +419,40 @@ final class PaymentsDtos {
             return new ProviderFeeResponse(f.id(), f.orgId(), f.bookingId(), f.bookingReference(), f.amount().minor(),
                     f.amount().currency(), f.reason(), f.status().name(), f.stripeDebitId(), f.attempts(),
                     f.lastError(), f.nextAttemptAt(), f.createdAt(), f.collectedAt());
+        }
+    }
+
+    @Schema(description = "A shipping label bought through AfroTransact and charged to the seller (carrier cost + "
+            + "handling), credited back once if the label is voided")
+    record LabelChargeResponse(UUID id, String labelId, String orgId, String shipmentId, String orderId,
+                               String carrier, String service, String trackingNumber,
+                               @Schema(description = "The carrier's negotiated charge") long costMinor,
+                               @Schema(description = "AfroTransact handling markup (0 by default)")
+                               long handlingMinor,
+                               @Schema(description = "costMinor + handlingMinor") long amountMinor, String currency,
+                               @Schema(allowableValues = {"CHARGED", "CREDITED"}) String status,
+                               Instant purchasedAt, Instant chargedAt, Instant creditedAt) {
+
+        static LabelChargeResponse of(LabelCharge c) {
+            return new LabelChargeResponse(c.id(), c.labelId(), c.orgId(), c.shipmentId(), c.orderId(), c.carrier(),
+                    c.service(), c.trackingNumber(), c.cost().minor(), c.handling().minor(), c.amount().minor(),
+                    c.cost().currency(), c.status().name(), c.purchasedAt(), c.chargedAt(), c.creditedAt());
+        }
+    }
+
+    @Schema(description = "One line of the seller statement: a movement of the organisation's payable (credit to "
+            + "the seller positive). Label lines carry labelId, shipmentId, trackingNumber and carrier.")
+    record StatementLineResponse(UUID journalId,
+                                 @Schema(description = "CAPTURE, REFUND, TRANSFER, TRANSFER_REVERSAL, DISPUTE_OPENED, "
+                                         + "DISPUTE_WON, LABEL_CHARGE, LABEL_CREDIT, …") String kind,
+                                 Instant occurredAt, String orderId, String description, long amountMinor,
+                                 String currency, String labelId, String shipmentId, String trackingNumber,
+                                 String carrier) {
+
+        static StatementLineResponse of(StatementLine l) {
+            return new StatementLineResponse(l.journalId(), l.kind().name(), l.occurredAt(), l.orderId(),
+                    l.description(), l.amount().minor(), l.amount().currency(), l.labelId(), l.shipmentId(),
+                    l.trackingNumber(), l.carrier());
         }
     }
 

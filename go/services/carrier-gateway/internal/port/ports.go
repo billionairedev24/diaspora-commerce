@@ -70,14 +70,16 @@ type LabelRepository interface {
 	// Reserve inserts a purchasing row for rec.IdempotencyKey. When the key already exists it returns the stored
 	// row and false.
 	Reserve(ctx context.Context, rec domain.LabelRecord) (domain.LabelRecord, bool, error)
-	// Complete stores the purchased label and registers its tracking number as an active tracked shipment in
-	// state label_created, in one transaction.
-	Complete(ctx context.Context, rec domain.LabelRecord) error
+	// Complete stores the purchased label, registers its tracking number as an active tracked shipment in state
+	// label_created and writes the carrier.label.purchased outbox row, in one transaction.
+	Complete(ctx context.Context, rec domain.LabelRecord, purchased events.Envelope) error
 	// Release deletes a purchasing row after a failed purchase so the key can be retried.
 	Release(ctx context.Context, id string) error
 	Get(ctx context.Context, id string) (domain.LabelRecord, error)
-	// MarkVoided sets status voided and stops tracking the label.
-	MarkVoided(ctx context.Context, id string, at time.Time) error
+	// MarkVoided sets status voided, stops tracking the label and writes the carrier.label.voided outbox row, in
+	// one transaction. Only a purchased label can be voided (domain.ErrConflict otherwise), so the event is
+	// written once.
+	MarkVoided(ctx context.Context, id string, at time.Time, voided events.Envelope) error
 	Ping(ctx context.Context) error
 }
 

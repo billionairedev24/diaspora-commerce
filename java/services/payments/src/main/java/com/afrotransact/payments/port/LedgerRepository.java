@@ -7,6 +7,7 @@ import java.util.Optional;
 
 import com.afrotransact.payments.domain.AccountBalance;
 import com.afrotransact.payments.domain.Journal;
+import com.afrotransact.payments.domain.StatementLine;
 
 /** Append-only journal store (UPDATE / DELETE are rejected by database triggers). */
 public interface LedgerRepository {
@@ -27,6 +28,18 @@ public interface LedgerRepository {
 
     /** Seller payable balance per organisation for one order, non-zero only. */
     Map<String, Long> payableByOrg(String orderId, String currency);
+
+    /**
+     * Balance (credit positive) of the organisation's payable lines attributed to no order: label charges and credits
+     * not yet settled against a transfer. Negative while the seller owes AfroTransact for labels.
+     */
+    long unattributedPayable(String orgId, String currency);
+
+    /**
+     * The seller statement: movements of 2000:org in [from, to) by posting time, newest first, with the label, shipment
+     * and tracking number of label lines.
+     */
+    List<StatementLine> statement(String orgId, String currency, Instant from, Instant to, int limit);
 
     /** Net movement (debit positive) on 1000 Stripe clearing per Stripe reference for journals posted in [from, to). */
     Map<String, Long> clearingByRef(Instant from, Instant to, String currency);

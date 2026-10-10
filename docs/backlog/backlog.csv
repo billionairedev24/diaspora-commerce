@@ -757,7 +757,7 @@
 "S251","Story","Environment-aware domains and URLs","Remove hard-coded production hosts: per-env settings for public URLs, auth issuer, CORS, cookies, WebAuthn, media and upstreams; local defaults to localhost; one problem-type URI base; CI guard against prod hosts in non-prod config.","- Local, dev and uat run without any prod host in their config
 - Emails and redirects link to the environment's own hosts
 - CI fails when a prod host appears in non-prod config or source
-- docs/engineering/environments.md lists hosts per environment","E30","","Highest","8","config environments","cicd","In Progress"
+- docs/engineering/environments.md lists hosts per environment","E30","","Highest","8","config environments","cicd","Done"
 "S252","Story","AfroTransact Retail pays Stripe fee only","AfroTransact Retail is merchant of record: no commission, FBA fee, plans, metered billing or ads charges; its net goes to a Retail sales revenue account, never to a seller payable, transfer or payout; refunds and chargebacks debit Retail revenue.","- Retail lines carry zero commission and zero FBA fee
 - Retail net = items + shipping - Stripe fee share, posted to Retail sales revenue
 - No settlement transfer, payout or reversal for Retail

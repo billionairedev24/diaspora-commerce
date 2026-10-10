@@ -35,7 +35,9 @@ export function mockRevokeAccess(sub: string): void {
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
-const problem = (status: number, code: string, title: string, extra: Record<string, unknown> = {}) => json({ type: `https://errors.afrotransact.com/${code}`, title, status, code, detail: title, ...extra }, status);
+/** RFC 9457 problem types share one base in every environment (docs/engineering/environments.md). */
+const PROBLEM_TYPE_BASE = 'https://developers.afrotransact.com/problems/';
+const problem = (status: number, code: string, title: string, extra: Record<string, unknown> = {}) => json({ type: `${PROBLEM_TYPE_BASE}${code}`, title, status, code, detail: title, ...extra }, status);
 
 function toContract(r: Route) {
   return { ...r, depotNodeId: 'HOU-FC1', loadOutCompletedAt: r.loadOutCompleted ? new Date().toISOString() : undefined, endedAt: r.ended ? new Date().toISOString() : undefined };

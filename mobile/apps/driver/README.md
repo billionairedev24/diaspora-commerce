@@ -34,6 +34,12 @@ and SQLite; the web preview uses a `localStorage` outbox and the browser camera.
 
 ## Configuration
 
+The URLs come from the EAS build profile (`eas.json`: `development` = dev, `preview` = uat, `production` = prod;
+`development-mocks` = local on mocks); hosts per environment are in `docs/engineering/environments.md`. The code names
+no deployed host: `src/config/env.ts` falls back to the local stack on `EXPO_PUBLIC_DEV_HOST` (default `localhost`; the
+dev machine's LAN IP for a physical device, `10.0.2.2` for the Android emulator), and `app.config.ts` fails a dev, uat or
+prod build that leaves one of the URL variables unset.
+
 | Variable | local | dev | uat | prod |
 |---|---|---|---|---|
 | `EXPO_PUBLIC_APP_ENV` | `local` | `dev` | `uat` | `prod` |
@@ -43,6 +49,7 @@ and SQLite; the web preview uses a `localStorage` outbox and the browser camera.
 | `EXPO_PUBLIC_IDENTITY_URL` (push devices) | `http://localhost:8100` | `https://api.dev.afrotransact.com/identity` | `…uat…/identity` | `https://api.afrotransact.com/identity` |
 | `EXPO_PUBLIC_OIDC_CLIENT_ID` | `driver-app` | `driver-app` | `driver-app` | `driver-app` |
 | `EXPO_PUBLIC_MOCKS` | `1` (default) | `0` | `0` | always off |
+| `EXPO_PUBLIC_DEV_HOST` (local stack host) | `localhost` | - | - | - |
 
 Redirect: native `com.afrotransact.driver:/oauth2redirect`; web dev `http://localhost:8082/auth/callback`
 (`expo start --web --port 8082`). Bundle ids `com.afrotransact.driver[.<env>]`.

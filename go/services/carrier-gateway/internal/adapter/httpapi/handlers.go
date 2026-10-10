@@ -101,14 +101,22 @@ func (h *handlersImpl) rates(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) buyLabel(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		Carrier  domain.CarrierCode `json:"carrier"`
-		Service  domain.ServiceCode `json:"service"`
-		Shipment ShipmentDTO        `json:"shipment"`
+		Carrier    domain.CarrierCode `json:"carrier"`
+		Service    domain.ServiceCode `json:"service"`
+		Shipment   ShipmentDTO        `json:"shipment"`
+		Fulfilment string             `json:"fulfilment"`
+		ShipmentID string             `json:"shipmentId"`
+		OrderID    string             `json:"orderId"`
 	}
 	if !decode(w, r, &b) {
 		return
 	}
 	s, err := b.Shipment.toDomain()
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	f, err := domain.ParseFulfilment(b.Fulfilment)
 	if err != nil {
 		writeErr(w, r, err)
 		return
@@ -119,7 +127,8 @@ func (h *handlersImpl) buyLabel(w http.ResponseWriter, r *http.Request) {
 		caller = a.Subject
 	}
 	v, err := h.svc.Labels.Buy(r.Context(), app.BuyRequest{IdempotencyKey: r.Header.Get("Idempotency-Key"), Caller: caller,
-		Shipment: s, Carrier: b.Carrier, Service: b.Service})
+		Shipment: s, Carrier: b.Carrier, Service: b.Service, Payer: domain.LabelPayer{OrgID: a.OrgID, Platform: a.IsStaff()},
+		Fulfilment: f, ShipmentID: strings.TrimSpace(b.ShipmentID), OrderID: strings.TrimSpace(b.OrderID)})
 	respond(w, r, http.StatusCreated, v, err)
 }
 

@@ -136,7 +136,7 @@ func TestFirstPartySignIn(t *testing.T) {
 
 	// Passkeys: options, then the assertion signs in.
 	opts := b3.do("POST", "/v1/auth/passkey/options", map[string]any{}).json(t)
-	if opts["challengeId"] != "pk-1" || opts["rpId"] != "afrotransact.com" || opts["userVerification"] != "required" {
+	if opts["challengeId"] != "pk-1" || opts["rpId"] != "localhost" || opts["userVerification"] != "required" {
 		t.Fatalf("passkey options = %v", opts)
 	}
 	assertion := map[string]any{"challengeId": "pk-1", "id": "cred-1", "rawId": "cred-1", "type": "public-key",

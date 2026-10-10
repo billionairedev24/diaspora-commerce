@@ -416,7 +416,7 @@ export const shopperHandlers = [
   })),
 
   /* Login & security */
-  http.get('*/v1/account/security', route((ctx) => json({ ...me(ctx).security, passkeyRegistrationUrl: 'https://identity.dev.afrotransact.com/webauthn/register' }))),
+  http.get('*/v1/account/security', route((ctx) => json({ ...me(ctx).security, passkeyRegistrationUrl: 'http://localhost:8100/webauthn/register' }))),
   http.put('*/v1/account/password', route(async (ctx) => {
     const u = requireUser(ctx);
     const b = await body(ctx.request, PasswordChangeSchema);

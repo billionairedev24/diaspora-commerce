@@ -24,7 +24,11 @@ describe('notification deep links', () => {
 
   it('parses app deep links', () => {
     expect(pathFromDeepLink('com.afrotransact.customer://orders/AT-1')).toBe('/orders/AT-1');
-    expect(pathFromDeepLink('https://www.afrotransact.com/app/bookings/b1')).toBe('/bookings/b1');
+    const web = 'https://shop.example.test';
+    expect(pathFromDeepLink('https://shop.example.test/app/bookings/b1?utm=x', web)).toBe('/bookings/b1');
+    expect(pathFromDeepLink('https://shop.example.test/app/bookings/b1', `${web}/`)).toBe('/bookings/b1');
+    expect(pathFromDeepLink('https://shop.example.test/app/bookings/b1')).toBeNull();
+    expect(pathFromDeepLink('https://other.example.test/app/orders', web)).toBeNull();
     expect(pathFromDeepLink('com.afrotransact.customer://admin/x')).toBe('/');
     expect(pathFromDeepLink('https://other.example/app/orders')).toBeNull();
   });

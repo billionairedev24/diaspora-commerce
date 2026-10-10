@@ -5,6 +5,7 @@
 import { http, HttpResponse, type JsonBodyType } from 'msw';
 import { z } from 'zod';
 
+import { bffProblemType } from '../../problem-types';
 import { type AccessLevel, type ChartSpec } from '../../schemas/seller';
 import {
   type Customer360,
@@ -25,7 +26,6 @@ import { createFeeSchedule, feeRecords, feesOverview, feeView, searchFeeOrgs } f
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
 
-const PROBLEM_BASE = 'https://errors.afrotransact.com/bff.';
 export const MOCK_STAFF_ROLE_COOKIE = 'at_mock_staff_role';
 const DEFAULT_ROLES = ['platform.super_admin'];
 const SYNC_EXPORT_ROWS = 5000;
@@ -45,7 +45,7 @@ class StaffProblem extends Error {
 
 const problemResponse = (p: StaffProblem) =>
   HttpResponse.json(
-    { type: PROBLEM_BASE + p.code.toLowerCase().replace(/_/g, '-'), title: p.title, status: p.status, detail: p.message, code: p.code, ...(p.errors ? { errors: p.errors } : {}) } as JsonBodyType,
+    { type: bffProblemType(p.code), title: p.title, status: p.status, detail: p.message, code: p.code, ...(p.errors ? { errors: p.errors } : {}) } as JsonBodyType,
     { status: p.status, headers: { 'Content-Type': 'application/problem+json' } }
   );
 const invalid = (errors: Record<string, string>) => new StaffProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', errors);

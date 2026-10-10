@@ -3,7 +3,7 @@
 Stripe PaymentIntents, captures, refunds, Connect transfers and payouts, the immutable double-entry ledger,
 multi-seller settlement, fee schedules, chargebacks, reconciliation and shoppers' saved payment methods.
 Spring Boot 4.1 · Java 25 · PostgreSQL `payments` · port **8105**. Architecture §5 (Transactions, Ledger), §7
-(Stripe), §17b (Settlement & fees), §17d (webhooks). Stories S051–S057, S205, S214, S220.
+(Stripe), §17b (Settlement & fees), §17d (webhooks). Stories S051–S057, S205, S214, S220, S256.
 
 Wording: funds wait in a **settlement hold** (7 days after delivery / service completion). Stripe Connect accounts
 use the **manual payout schedule**; sellers are paid **on request**.
@@ -25,14 +25,16 @@ use the **manual payout schedule**; sellers are paid **on request**.
 | `stripe_customer`, `customer_payment_method` | Stripe Customer per AfroTransact customer; saved methods (display data only) |
 | `connected_account` | Stripe Connect account per organisation |
 | `provider_fee` | Fees providers owe (late provider cancellations), one per booking: OUTSTANDING → COLLECTED by a Stripe account debit (V5) |
+| `label_charge` | Shipping labels bought through AfroTransact and charged to the seller (S256, V8), one per carrier-gateway label id: carrier cost, handling, tracking number, shipment, CHARGED → CREDITED (or VOIDED when the void arrived first), charge / credit journals |
 | `idempotency_record`, `reconciliation_run` | Idempotency-Key responses; daily reconciliation reports |
 
 ### Chart of accounts
 
 `1000` Stripe clearing · `1100` Chargeback receivable · `1200:<org>` Provider fees receivable · `2000:<org>` Seller payable · `2100:<jurisdiction>` Sales tax
-payable (attributed to the seller) · `2200` Customer refunds payable · `2300:<org>` Chargeback reserve · `4000`
-Commission · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA lines) · `4300` Provider
-late-cancellation fees · `4400` AfroTransact Retail sales · `5000` Stripe fees · `5100` Chargeback losses.
+payable (attributed to the seller) · `2200` Customer refunds payable · `2300:<org>` Chargeback reserve · `2400` Carrier
+labels payable · `4000` Commission · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA lines) ·
+`4300` Provider late-cancellation fees · `4400` AfroTransact Retail sales · `4500` Shipping label handling · `5000`
+Stripe fees · `5100` Chargeback losses.
 
 `4400` holds AfroTransact Retail's net (items + all its shipping − its Stripe-fee share); its lines carry the Retail
 org id for attribution. Retail is the merchant of record, so there is never a `2000:<retail>` payable, a `2300` reserve,
@@ -48,6 +50,9 @@ a transfer, a reversal or a payout for it. Staff see Retail revenue as its own `
 | Won / lost | Dr 1000 / Cr 1100 and Dr 2300 / Cr 2000 · lost: Dr 2300 (+ 5100 platform part, + 4400 Retail part) / Cr 1100 |
 | Provider late-cancellation fee recorded | Dr 1200:<org> / Cr 4300 |
 | Fee collected (Stripe account debit) | Dr 1000 / Cr 1200:<org> |
+| Shipping label charged to a seller (S256) | Dr 2000:<org> (cost + handling, no order) / Cr 2400 (carrier cost), Cr 4500 (handling) |
+| Label voided | Dr 2400, Dr 4500 / Cr 2000:<org> (once per label) |
+| Label balance settled at a transfer | Dr 2000:<org> on the order / Cr 2000:<org> unattributed (recovery; the opposite for a credit owed back) |
 | Authorisation released | — (authorisations never reach the ledger; 1000 moves only at capture) |
 
 Every money-moving use case runs in a **SERIALIZABLE** transaction retried on SQLSTATE 40001/40P01 and optimistic
@@ -117,6 +122,8 @@ RFC 9457 problems with `code` `payments.*`. Reference pages `/swagger-ui.html`, 
 | `GET /v1/fee-schedules/effective?category=&orgId=&at=` | services (`payments:service`) or staff `payments:read`: commission bps (override / category / default / retail), card fee estimate |
 | `GET /v1/payouts/balance` · `POST /v1/payouts/requests` | org members / owner & finance roles with `payouts:request` |
 | `GET /v1/payouts/provider-fees?orgId=` | org members (own org) / staff |
+| `GET /v1/payouts/label-charges?orgId=` | org members (own org) / staff: shipping labels charged to the organisation (S256) with tracking number, shipment, order, cost, handling, status |
+| `GET /v1/payouts/statement?orgId=&currency=&from=&to=&limit=` | org members (own org) / staff: the seller statement — movements of `2000:<org>` (captures, refunds, transfers, chargebacks, `LABEL_CHARGE` / `LABEL_CREDIT` with labelId, shipmentId, trackingNumber), signed (credit to the seller positive), newest first, default last 90 days |
 | `GET /v1/payouts/requests?status=&orgId=` · `POST …/{id}/approve` · `/hold` · `/release` | Finance `payouts:approve` |
 | `GET /v1/reconciliation/runs` · `POST /v1/reconciliation/runs {date}` | `payments:read` / `payments:configure` |
 | `PUT/GET /v1/connected-accounts/{orgId}` | seller service or `payments:configure` |
@@ -173,6 +180,39 @@ OUTSTANDING, is retried with backoff after each settlement run, and is subtracte
 never be paid out first. Account debits need Express / Custom accounts (platform-controlled), which matches
 AfroTransact's manual payout schedule.
 
+### Shipping labels charged to sellers (S256)
+
+Consumed from `at.carrier-shipment.events`: `carrier.label.purchased` / `carrier.label.voided` (listener
+`payments-carrier-shipment-events`, inbox consumer `payments.carrier-shipment-events`, plus one `label_charge` row per
+label id, so a redelivered purchase or void never charges or credits twice). Event over API, like provider fees:
+carrier-gateway writes the event to its outbox in the purchase transaction, so buying a label gets no synchronous
+dependency on payments and replays are safe.
+
+- **What is charged:** the label's `amountMinor` = the carrier's negotiated charge (`costMinor`) + the handling markup
+  (`handlingMinor`). The markup lives in **carrier-gateway config** (`billing.handlingPct` / `handlingFixedMinor`,
+  default 0), not in the fee schedule: the fee schedule is an immutable, versioned commission table whose versions are
+  created through `POST /v1/fee-schedules` and the Seller Center/staff screens, and adding a label rate there means a
+  new column, API fields and UI; carrier-gateway already prices labels (account `adjustmentPct`) and puts the markup in
+  the event, so the ledger books exactly what the seller saw at purchase.
+- **Accounts:** Dr `2000:<org>` / Cr `2400` Carrier labels payable for the cost — the carrier bills AfroTransact's
+  platform account, so the cost is a liability to the carrier, cleared when AfroTransact pays the carrier invoice — and
+  Cr `4500` Shipping label handling for the markup (AfroTransact revenue). Charging the cost to revenue would overstate
+  revenue by pass-through money; 2400 makes "labels billed vs carrier invoices" a reconcilable balance.
+- **Who is charged:** only `billTo = SELLER` (carrier-gateway: an org member's outbound, seller-shipped label from its
+  own origin). Re-checked here: **AfroTransact Retail** (`RETAIL_ORG_ID`, merchant of record, pays Stripe fees only) and
+  **FBA / AfroTransact Delivery** shipments (AfroTransact's own shipping cost) are never charged, nor return labels,
+  whatever `billTo` says.
+- **Void / refund:** credits the charge back once (reverse journal, `CREDITED`). A void that overtakes its purchase is
+  stored as `VOIDED`, so the late purchase charges nothing.
+- **Insufficient balance:** the charge always posts. The lines carry no order, so they never change what an order's
+  settlement owes; `2000:<org>` may go negative. `GET /v1/payouts/balance` shows them as `labelChargesMinor` and
+  deducts them from `availableMinor`, which can go **negative**; payouts never exceed available, so nothing is paid out
+  until the seller has earned it back.
+- **Recovery:** before each Connect transfer of an order's payable, settlement nets the organisation's unattributed
+  label balance against it (`LABEL_RECOVERY` journal, a reclass inside `2000:<org>`): the transfer is smaller by the
+  outstanding charges, and larger by credits for labels voided after their charge was recovered. If the whole payable
+  goes to labels, no Stripe transfer is made.
+
 ## Webhooks (S052)
 
 `POST /v1/webhooks/stripe` verifies the signature with `Webhook.constructEvent` (tolerance 300 s), stores the event
@@ -198,6 +238,9 @@ shows the hold (S214): `payoutsPaused` and `payoutsPausedReason` (AUTO_PAST_DUE,
 CHARGES_DISABLED; null when not paused).
 
 `booking.cancelled` on `at.bookings.events` (late provider cancellations, see above).
+
+`carrier.label.purchased|voided` on `at.carrier-shipment.events` (shipping labels charged to sellers, see above; tracking
+and pickup events on that topic are ignored).
 
 ## Jobs & metrics
 
@@ -225,7 +268,7 @@ Local: `local` profile uses Stripe **test mode** on api.stripe.com — export a 
 
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64
-cd java && ./mvnw -B -f services/payments/pom.xml verify   # checkstyle, 57 unit + ArchUnit, 32 Testcontainers ITs
+cd java && ./mvnw -B -f services/payments/pom.xml verify   # checkstyle, 65 unit + ArchUnit, 38 Testcontainers ITs
 helm dependency build java/services/payments/deploy/helm
 helm template x java/services/payments/deploy/helm -f java/services/payments/deploy/helm/values-prod.yaml \
   | kubeconform -strict -ignore-missing-schemas

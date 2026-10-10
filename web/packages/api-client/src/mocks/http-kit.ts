@@ -2,17 +2,17 @@
 import { HttpResponse, type JsonBodyType } from 'msw';
 import { type z } from 'zod';
 
+import { bffProblemType } from '../problem-types';
 import { getSession, type MockSession, userById } from './db';
 import { MockProblem } from './service';
 
 export const SESSION_COOKIE = 'at_session';
-const PROBLEM_BASE = 'https://errors.afrotransact.com/';
 
 export interface Ctx { session: MockSession; isNew: boolean; request: Request; now: Date }
 
 export function problem(status: number, code: string, title: string, detail: string, extra: Record<string, unknown> = {}): HttpResponse<JsonBodyType> {
   return HttpResponse.json(
-    { type: PROBLEM_BASE + code.toLowerCase().replace(/_/g, '-'), title, status, detail, code, ...extra } as JsonBodyType,
+    { type: bffProblemType(code), title, status, detail, code, ...extra } as JsonBodyType,
     { status, headers: { 'Content-Type': 'application/problem+json' } }
   );
 }

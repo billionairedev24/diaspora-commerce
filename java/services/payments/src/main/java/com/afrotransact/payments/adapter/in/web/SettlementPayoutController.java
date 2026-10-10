@@ -1,20 +1,25 @@
 package com.afrotransact.payments.adapter.in.web;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.DeliveredRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.HoldRequest;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.LabelChargeResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutBalanceResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutRequestBody;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ProviderFeeResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.SettlementResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ShipmentSettlementResponse;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.StatementLineResponse;
+import com.afrotransact.payments.application.LabelChargeService;
 import com.afrotransact.payments.application.PayoutCommand;
 import com.afrotransact.payments.application.PayoutService;
 import com.afrotransact.payments.application.ProviderFeeService;
+import com.afrotransact.payments.application.SellerStatementService;
 import com.afrotransact.payments.application.SettlementService;
 import com.afrotransact.payments.domain.PayoutStatus;
 import com.afrotransact.payments.domain.SettlementKind;
@@ -39,12 +44,17 @@ class SettlementPayoutController {
     private final SettlementService settlements;
     private final PayoutService payouts;
     private final ProviderFeeService providerFees;
+    private final LabelChargeService labelCharges;
+    private final SellerStatementService statements;
 
     SettlementPayoutController(SettlementService settlements, PayoutService payouts,
-                               ProviderFeeService providerFees) {
+                               ProviderFeeService providerFees, LabelChargeService labelCharges,
+                               SellerStatementService statements) {
         this.settlements = settlements;
         this.payouts = payouts;
         this.providerFees = providerFees;
+        this.labelCharges = labelCharges;
+        this.statements = statements;
     }
 
     @Operation(summary = "Order delivered / service completed: start the settlement hold (payments:service)",
@@ -100,6 +110,33 @@ class SettlementPayoutController {
     @GetMapping("/v1/payouts/provider-fees")
     List<ProviderFeeResponse> providerFees(@RequestParam(required = false) String orgId) {
         return providerFees.ofOrg(orgId).stream().map(ProviderFeeResponse::of).toList();
+    }
+
+    @Operation(summary = "Shipping label charges of an organisation (labels bought through AfroTransact), newest "
+            + "first",
+            description = "Org members see their own; staff pass orgId. Each seller-shipped label bought through "
+                    + "carrier-gateway is debited from the payable at the carrier's cost plus handling (CHARGED) and "
+                    + "credited back once if voided (CREDITED). AfroTransact Retail and FBA / AfroTransact Delivery "
+                    + "labels are never charged. Outstanding charges reduce availableMinor until a transfer recovers "
+                    + "them.")
+    @GetMapping("/v1/payouts/label-charges")
+    List<LabelChargeResponse> labelCharges(@RequestParam(required = false) String orgId) {
+        return labelCharges.ofOrg(orgId).stream().map(LabelChargeResponse::of).toList();
+    }
+
+    @Operation(summary = "Seller statement: movements of the organisation's payable, newest first",
+            description = "Sales (captures), refunds, transfers, chargebacks and shipping labels as their own lines "
+                    + "(LABEL_CHARGE / LABEL_CREDIT with labelId, shipmentId and trackingNumber). Amounts are signed: "
+                    + "credit to the seller positive. Default period: the last 90 days. Org members see their own; "
+                    + "staff pass orgId.")
+    @GetMapping("/v1/payouts/statement")
+    List<StatementLineResponse> statement(@RequestParam(required = false) String orgId,
+                                          @RequestParam(required = false) String currency,
+                                          @RequestParam(required = false) Instant from,
+                                          @RequestParam(required = false) Instant to,
+                                          @RequestParam(defaultValue = "200") int limit) {
+        return statements.statement(orgId, currency, from, to, limit).stream().map(StatementLineResponse::of)
+                .toList();
     }
 
     @Operation(summary = "Request a payout (owner / finance roles, payouts:request)",

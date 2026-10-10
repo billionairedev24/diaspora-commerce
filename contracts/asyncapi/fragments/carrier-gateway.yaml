@@ -3,22 +3,26 @@ channels:
   carrierShipmentEvents:
     address: at.carrier-shipment.events
     description: >-
-      Carrier tracking and pickup-ready events from carrier-gateway, written to its Postgres outbox in the same
-      transaction as the tracking state and relayed by a SKIP LOCKED dispatcher (at-least-once). Key = "<carrier>:<trackingNumber>"
-      (or "pickup:<orderRef>"), so one parcel's events stay in order. Headers event-id, event-type, occurred-at.
-      Consumers de-duplicate on event-id. Tracking events are only published for scans newer than the last applied one;
-      orders applies `state` to the shipment state machine (carriers may only move transit steps).
+      Carrier tracking, label and pickup-ready events from carrier-gateway, written to its Postgres outbox in the same
+      transaction as the tracking or label state and relayed by a SKIP LOCKED dispatcher (at-least-once). Key =
+      "<carrier>:<trackingNumber>" (or "pickup:<orderRef>"), so one parcel's label purchase, scans and void stay in order.
+      Headers event-id, event-type, occurred-at. Consumers de-duplicate on event-id. Tracking events are only published
+      for scans newer than the last applied one; orders applies `state` to the shipment state machine (carriers may only
+      move transit steps).
     messages:
       carrierTrackingUpdated: {$ref: '#/components/messages/carrierTrackingUpdated'}
       carrierPickupReady: {$ref: '#/components/messages/carrierPickupReady'}
+      carrierLabelPurchased: {$ref: '#/components/messages/carrierLabelPurchased'}
+      carrierLabelVoided: {$ref: '#/components/messages/carrierLabelVoided'}
 operations:
   publishCarrierShipmentEvents:
     action: send
     channel: {$ref: '#/channels/carrierShipmentEvents'}
     summary: >-
       carrier-gateway publishes normalised tracking from UPS Track Alert, FedEx and DHL pushes and USPS polling, and
-      pickup-ready notices for counters, lockers and seller pickup. Consumed by orders (shipment states, promise
-      measurement) and notifications (customer updates).
+      pickup-ready notices for counters, lockers and seller pickup, and every label bought or voided through it.
+      Consumed by orders (shipment states, promise measurement), notifications (customer updates) and payments (label
+      charges: a label with billTo SELLER is debited from the seller's payable and credited back once when voided).
 components:
   messages:
     carrierTrackingUpdated:
@@ -31,6 +35,22 @@ components:
       title: An order is ready for collection at a pickup location
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CarrierPickupReady'}
+    carrierLabelPurchased:
+      name: carrier.label.purchased
+      title: A label was bought through carrier-gateway
+      summary: >-
+        Written once per label, in the transaction that completes the purchase (an idempotent replay of POST /v1/labels
+        publishes nothing). billTo SELLER means the buying organisation pays amountMinor (carrier cost + handling).
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CarrierLabelEvent'}
+    carrierLabelVoided:
+      name: carrier.label.voided
+      title: A purchased label was voided at the carrier
+      summary: >-
+        Written once per label, in the transaction that marks it voided (a second void is refused with 409). Carries the
+        same billing fields as the purchase, so a seller-billed label's charge can be credited back.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CarrierLabelEvent'}
   schemas:
     CarrierShipmentState:
       type: string
@@ -85,3 +105,36 @@ components:
         customerRef: {type: string}
         pickupCode: {type: [string, 'null']}
         readyAt: {type: string, format: date-time}
+    CarrierLabelEvent:
+      type: object
+      required: [labelId, originNode, carrier, service, trackingNumber, kind, fulfilment, billTo, billingReason, costMinor,
+        handlingMinor, amountMinor, currency, purchasedAt]
+      properties:
+        labelId: {type: string, format: uuid}
+        orgId: {type: string, description: Organisation of the member who bought the label (absent for staff / services)}
+        shipmentId: {type: string, description: Order shipment the label is for}
+        orderId: {type: string, description: Order of the shipment, when the caller gave it}
+        reference: {type: string, description: Reference printed on the label}
+        originNode: {type: string, description: FC id or seller org id the parcel leaves from}
+        carrier: {type: string, enum: [usps, ups, fedex, dhl]}
+        service: {type: string}
+        trackingNumber: {type: string}
+        kind: {type: string, enum: [outbound, return]}
+        fulfilment: {type: string, enum: [SELLER_SHIPPED, FBA, AFROTRANSACT_DELIVERY]}
+        billTo:
+          type: string
+          enum: [SELLER, AFROTRANSACT]
+          description: >-
+            SELLER only for an organisation member's outbound, seller-shipped label from its own origin that is not
+            AfroTransact Retail's; everything else (Retail, FBA, AfroTransact Delivery, FC origins, returns, staff and
+            services) is AfroTransact's own cost.
+        billingReason:
+          type: string
+          enum: [SELLER_SHIPPED, RETAIL, FBA, AFROTRANSACT_DELIVERY, RETURN, PLATFORM_CALLER, PLATFORM_ORIGIN]
+        costMinor: {type: integer, description: The carrier's negotiated charge for the label}
+        handlingMinor: {type: integer, description: Handling markup (carrier-gateway billing config; 0 unless billTo is SELLER)}
+        amountMinor: {type: integer, description: costMinor + handlingMinor; what a SELLER-billed label is charged}
+        currency: {type: string}
+        purchasedAt: {type: string, format: date-time}
+        voidedAt: {type: string, format: date-time, description: Set on carrier.label.voided}
+        voidReason: {type: string, enum: [VOIDED], description: Set on carrier.label.voided}

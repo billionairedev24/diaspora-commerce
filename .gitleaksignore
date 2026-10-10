@@ -1,0 +1,9 @@
+# Reviewed gitleaks findings in git history: all are test fixtures (random keys generated for unit/integration
+# tests, a Stripe-shaped string in a PII-scrubbing test). Fingerprint = commit:file:rule:line.
+63ce2d92e338652f1bbd1c3d796a6b7763fd74bf:web/packages/telemetry/test/telemetry.test.ts:stripe-access-token:27
+2fda1b5333f630835a1ea7534bc7c9e6b5e3164a:go/services/gateway-bff/internal/testkit/fakes_shopper.go:generic-api-key:392
+1821159fa5889654ebb56ae3f5356071fc45b479:java/services/identity/src/test/java/com/afrotransact/identity/adapter/out/crypto/EnvelopeSecretCipherTest.java:generic-api-key:18
+1821159fa5889654ebb56ae3f5356071fc45b479:java/services/identity/src/test/java/com/afrotransact/identity/adapter/out/crypto/EnvelopeSecretCipherTest.java:generic-api-key:19
+1821159fa5889654ebb56ae3f5356071fc45b479:java/services/identity/src/test/java/com/afrotransact/identity/it/DataProtectionIT.java:generic-api-key:58
+1821159fa5889654ebb56ae3f5356071fc45b479:java/services/identity/src/test/java/com/afrotransact/identity/it/DataProtectionIT.java:generic-api-key:60
+1821159fa5889654ebb56ae3f5356071fc45b479:java/services/identity/src/test/java/com/afrotransact/identity/it/DataProtectionIT.java:generic-api-key:61

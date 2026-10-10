@@ -10,7 +10,7 @@ Design source: `design/AfroTransact Mobile App.dc.html` (+ `design/ios-frame.jsx
 | S165 Shopping | Home, browse/search, product, cart grouped by shipper, checkout from `GET /v1/checkout/summary` (per-package delivery option, AfroTransact Delivery preferences, pickup points). Saved card → `POST /v1/checkout/orders` (+ `handleNextAction` for 3-D Secure); Apple Pay / Google Pay / new card / US bank → Stripe **PaymentSheet in deferred-intent mode built from the summary total**, whose confirm handler places the order with the PaymentMethod and returns the PaymentIntent client secret. Add payment method = SetupIntent + PaymentSheet (card with ZIP, US bank account via Financial Connections). Orders over $100 and wallet payments ask for Face ID (or the app passcode). |
 | S166 Orders | Orders list, tracking (steps, driver, 4-digit delivery code for hand-delivery / perishables), buy again, returns (items, reason, method) → RMA + QR code. |
 | S167 Bookings | Book a pro: providers, services, days/slots from the provider calendar, deposit via PaymentSheet on the bookings-service PaymentIntent, bookings list, appointment detail (accept/decline proposed time, reschedule, cancel with the **exact refund quoted before cancelling**, history). |
-| S168 Push | Device token registered with identity on every start and token refresh (`POST /v1/me/devices`, `app: customer`, `provider: apns` on iOS / `fcm` on Android), unregistered on sign-out (`DELETE /v1/me/devices`). Taps deep-link to the right screen; foreground pushes respect per-category switches + identity's `GET/PUT /v1/me/notification-preferences`. `com.afrotransact.customer://…` and `https://www.afrotransact.com/app/…` links route in-app. |
+| S168 Push | Device token registered with identity on every start and token refresh (`POST /v1/me/devices`, `app: customer`, `provider: apns` on iOS / `fcm` on Android), unregistered on sign-out (`DELETE /v1/me/devices`). Taps deep-link to the right screen; foreground pushes respect per-category switches + identity's `GET/PUT /v1/me/notification-preferences`. `com.afrotransact.customer://…` and the environment's universal links `<EXPO_PUBLIC_WEB_URL>/app/…` route in-app. |
 
 ## Run it
 
@@ -31,7 +31,12 @@ pnpm --filter @afrotransact/customer-app start        # uses EXPO_PUBLIC_* below
 
 ## Configuration
 
-`src/config/env.ts` resolves defaults per `EXPO_PUBLIC_APP_ENV`; any variable overrides its default.
+The URLs come from the EAS build profile (`eas.json`: `development` = dev, `preview` = uat, `production` = prod;
+`development-mocks` = local on mocks); hosts per environment are in `docs/engineering/environments.md`. The code names
+no deployed host: `src/config/env.ts` falls back to the local stack on `EXPO_PUBLIC_DEV_HOST` (default `localhost`; the
+dev machine's LAN IP for a physical device, `10.0.2.2` for the Android emulator), and `app.config.ts` fails a dev, uat or
+prod build that leaves one of the URL variables unset. Universal links (iOS associated domain `applinks:<web host>`,
+Android verified `https://<web host>/app` intent filter) use the host of `EXPO_PUBLIC_WEB_URL`; local builds have none.
 
 | Variable | local | dev | uat | prod |
 |---|---|---|---|---|
@@ -40,11 +45,12 @@ pnpm --filter @afrotransact/customer-app start        # uses EXPO_PUBLIC_* below
 | `EXPO_PUBLIC_OIDC_ISSUER` | `http://localhost:8100` | `https://auth.dev.afrotransact.com` | `https://auth.uat.afrotransact.com` | `https://auth.afrotransact.com` |
 | `EXPO_PUBLIC_IDENTITY_URL` (devices, prefs) | `http://localhost:8100` | `https://api.dev.afrotransact.com/identity` | `…uat…/identity` | `https://api.afrotransact.com/identity` |
 | `EXPO_PUBLIC_BOOKINGS_URL` | `http://localhost:8109` | `https://api.dev.afrotransact.com/bookings` | `…uat…/bookings` | `https://api.afrotransact.com/bookings` |
-| `EXPO_PUBLIC_WEB_URL` (legal, help, account pages) | `http://localhost:3000` | `https://www.dev.afrotransact.com` | `https://www.uat.afrotransact.com` | `https://www.afrotransact.com` |
+| `EXPO_PUBLIC_WEB_URL` (legal, help, account pages, share links, universal links) | `http://localhost:3000` | `https://dev.afrotransact.com` | `https://uat.afrotransact.com` | `https://afrotransact.com` |
 | `EXPO_PUBLIC_OIDC_CLIENT_ID` | `customer-app` | `customer-app` | `customer-app` | `customer-app` |
 | `EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_test_mock` | `pk_test_…` | `pk_test_…` | `pk_live_…` |
 | `EXPO_PUBLIC_STRIPE_MERCHANT_ID` | `merchant.com.afrotransact` | ← | ← | ← |
 | `EXPO_PUBLIC_MOCKS` | `1` (default) | `0` | `0` | always off |
+| `EXPO_PUBLIC_DEV_HOST` (local stack host) | `localhost` | - | - | - |
 
 Redirect: native `com.afrotransact.customer:/oauth2redirect`; web dev `http://localhost:8081/auth/callback`.
 Bundle ids: `com.afrotransact.customer` (prod) and `com.afrotransact.customer.<env>` for the others (same URL scheme:

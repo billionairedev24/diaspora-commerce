@@ -48,6 +48,19 @@ operations:
       ledger (Dr 1200:<org> / Cr 4300) and debited from the provider's Stripe connected account with an account debit
       (Dr 1000 / Cr 1200:<org>). Fees that cannot be debited yet stay OUTSTANDING, are retried after settlement
       transfers and are reserved out of the payout balance. Every other booking event is ignored.
+  consumePaymentsCarrierShipmentEvents:
+    action: receive
+    channel: {$ref: '#/channels/carrierShipmentEvents'}
+    summary: >-
+      payments-service (consumer group payments-service, listener payments-carrier-shipment-events, inbox consumer
+      payments.carrier-shipment-events) handles carrier.label.purchased and carrier.label.voided (S256). A label with
+      billTo SELLER, fulfilment SELLER_SHIPPED and kind outbound is charged to its organisation once per label (inbox on
+      event-id plus a unique label id): Dr 2000:<org> amountMinor / Cr 2400 carrier labels payable costMinor, Cr 4500
+      label handling revenue handlingMinor, even when that takes the payable below zero. A void credits the charge back
+      once with the reverse journal; a void that arrives first is remembered so the late purchase charges nothing.
+      AfroTransact Retail (RETAIL_ORG_ID) and FBA / AFROTRANSACT_DELIVERY labels are never charged, whatever billTo says.
+      Outstanding charges reserve the payout balance and are recovered from the organisation's next Connect transfer.
+      Tracking and pickup events are ignored.
   publishPaymentsPaymentEvents:
     action: send
     channel: {$ref: '#/channels/paymentsPaymentEvents'}

@@ -97,7 +97,7 @@ func TestRateWithoutAccountsIsRejected(t *testing.T) {
 }
 
 func newLabels(c *fakeCarrier, store *memStore) app.LabelService {
-	return app.NewLabelService(app.Carriers{c.code: c}, allAccounts(), store, &memObjects{}, quietLog, time.Now)
+	return app.NewLabelService(app.Carriers{c.code: c}, allAccounts(), store, &memObjects{}, domain.BillingPolicy{}, quietLog, time.Now)
 }
 
 func TestLabelPurchaseIsIdempotent(t *testing.T) {

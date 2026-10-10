@@ -1,7 +1,21 @@
-/* Expo app config. EXPO_PUBLIC_APP_ENV (local | dev | uat | prod) is set per EAS build profile (eas.json). */
+/* Expo app config. EXPO_PUBLIC_APP_ENV (local | dev | uat | prod) and the EXPO_PUBLIC_* URLs are set per EAS build
+   profile (eas.json); hosts per environment: docs/engineering/environments.md. */
 import { type ExpoConfig } from 'expo/config';
 
 const APP_ENV = process.env.EXPO_PUBLIC_APP_ENV ?? 'local';
+const DEPLOYED = APP_ENV === 'dev' || APP_ENV === 'uat' || APP_ENV === 'prod';
+
+/* A dev/uat/prod build must name its own hosts: src/config/env.ts would otherwise fall back to the local stack.
+   Keep in sync with REQUIRED_URL_VARS there. */
+const REQUIRED_URL_VARS = ['EXPO_PUBLIC_WEB_URL', 'EXPO_PUBLIC_BFF_URL', 'EXPO_PUBLIC_OIDC_ISSUER', 'EXPO_PUBLIC_IDENTITY_URL', 'EXPO_PUBLIC_BOOKINGS_URL'];
+if (DEPLOYED) {
+  const missing = REQUIRED_URL_VARS.filter((name) => !process.env[name]?.trim());
+  if (missing.length) throw new Error(`app.config: EXPO_PUBLIC_APP_ENV=${APP_ENV} needs ${missing.join(', ')} (set them in the eas.json build profile)`);
+}
+
+/* Universal links (iOS) / verified app links (Android) on the environment's storefront: https://<web host>/app/….
+   The storefront serves apple-app-site-association and assetlinks.json for it. Local builds have none. */
+const WEB_HOST = DEPLOYED ? new URL(process.env.EXPO_PUBLIC_WEB_URL ?? '').host : undefined;
 const SUFFIX = APP_ENV === 'prod' ? '' : `.${APP_ENV}`;
 /** Must match identity's customer-app client: com.afrotransact.customer:/oauth2redirect. */
 const SCHEME = 'com.afrotransact.customer';
@@ -19,7 +33,7 @@ const config: ExpoConfig = {
   ios: {
     bundleIdentifier: `com.afrotransact.customer${SUFFIX}`,
     supportsTablet: false,
-    associatedDomains: ['applinks:www.afrotransact.com'],
+    associatedDomains: WEB_HOST ? [`applinks:${WEB_HOST}`] : [],
     infoPlist: {
       NSFaceIDUsageDescription: 'Use Face ID to unlock AfroTransact and confirm payments over $100.',
       ITSAppUsesNonExemptEncryption: false
@@ -28,9 +42,9 @@ const config: ExpoConfig = {
   android: {
     package: `com.afrotransact.customer${SUFFIX}`,
     permissions: ['USE_BIOMETRIC', 'USE_FINGERPRINT', 'POST_NOTIFICATIONS'],
-    intentFilters: [
-      { action: 'VIEW', autoVerify: true, data: [{ scheme: 'https', host: 'www.afrotransact.com', pathPrefix: '/app' }], category: ['BROWSABLE', 'DEFAULT'] }
-    ]
+    intentFilters: WEB_HOST
+      ? [{ action: 'VIEW', autoVerify: true, data: [{ scheme: 'https', host: WEB_HOST, pathPrefix: '/app' }], category: ['BROWSABLE', 'DEFAULT'] }]
+      : []
   },
   web: { bundler: 'metro', output: 'single' },
   plugins: [

@@ -308,7 +308,7 @@ func TestProductDetail(t *testing.T) {
 	bff.Upstreams.FailInventory = true
 	r = b.do("GET", "/v1/products/ATSHEA0001", nil)
 	mustStatus(t, r, 503)
-	if r.header.Get("Retry-After") == "" || r.json(t)["type"] != "https://errors.afrotransact.com/bff.upstream-unavailable" {
+	if r.header.Get("Retry-After") == "" || r.json(t)["type"] != "https://developers.afrotransact.com/problems/bff.upstream-unavailable" {
 		t.Fatalf("unavailable problem = %v %s", r.header, r.body)
 	}
 	// Stock alerts: product and email checks first; notifications needs the shopper's own token (guests sign in).

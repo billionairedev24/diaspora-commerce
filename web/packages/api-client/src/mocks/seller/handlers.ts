@@ -5,6 +5,7 @@
 import { http, HttpResponse, type JsonBodyType } from 'msw';
 import { z } from 'zod';
 
+import { bffProblemType } from '../../problem-types';
 import {
   AvailabilityFormSchema,
   type BookingAction,
@@ -43,7 +44,6 @@ import {
 import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, SELLER_ORG } from './db';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
 
-const PROBLEM_BASE = 'https://errors.afrotransact.com/bff.';
 export const MOCK_ROLE_COOKIE = 'at_mock_role';
 
 class SellerProblem extends Error {
@@ -60,7 +60,7 @@ class SellerProblem extends Error {
 
 const problemResponse = (p: SellerProblem) =>
   HttpResponse.json(
-    { type: PROBLEM_BASE + p.code.toLowerCase().replace(/_/g, '-'), title: p.title, status: p.status, detail: p.message, code: p.code, ...(p.errors ? { errors: p.errors } : {}) } as JsonBodyType,
+    { type: bffProblemType(p.code), title: p.title, status: p.status, detail: p.message, code: p.code, ...(p.errors ? { errors: p.errors } : {}) } as JsonBodyType,
     { status: p.status, headers: { 'Content-Type': 'application/problem+json' } }
   );
 

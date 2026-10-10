@@ -237,15 +237,24 @@ class SettlementServiceImpl implements SettlementService {
     /** What happened to one transfer attempt. */
     private enum Outcome {
         CREATED,
-        BLOCKED
+        BLOCKED,
+        /** Nothing left to transfer once the organisation's label charges were recovered from the payable. */
+        RECOVERED
     }
 
-    private Outcome transfer(String orderId, String org, Money amount, Instant now) {
+    private Outcome transfer(String orderId, String org, Money payable, Instant now) {
         Optional<String> account = accounts.find(org);
         if (account.isEmpty()) {
             LOG.warn("Order {}: {} has no connected account; its net stays on hold", orderId, org);
             metrics.transfer("no_account");
             return Outcome.BLOCKED;
+        }
+        Money amount = settleLabels(orderId, org, payable, now);
+        if (!amount.isPositive()) {
+            LOG.info("Order {}: {}'s payable went to its outstanding label charges; nothing to transfer", orderId,
+                    org);
+            metrics.transfer("label_recovered");
+            return Outcome.RECOVERED;
         }
         int seq = settlements.transfers(orderId, org).size() + 1;
         StripeGateway.TransferSnapshot transfer;
@@ -267,5 +276,27 @@ class SettlementServiceImpl implements SettlementService {
                 PaymentsEventPayloads.TransferPayload.of(t));
         metrics.transfer("created");
         return Outcome.CREATED;
+    }
+
+    /**
+     * Label charges (S256) are the organisation's, not an order's: they sit on 2000:org without an order. Before an
+     * order's payable is transferred, outstanding charges are recovered from it (the transfer is smaller) and credits
+     * from labels voided after their charge was recovered are paid with it (the transfer is larger). A pure ledger
+     * reclass between the order's and the organisation's unattributed payable; returns what to transfer.
+     */
+    private Money settleLabels(String orderId, String org, Money payable, Instant now) {
+        long labels = ledgerReader.unattributedPayable(org, payable.currency());
+        if (labels == 0) {
+            return payable;
+        }
+        long recovered = labels < 0 ? Math.min(payable.minor(), -labels) : -labels;
+        if (recovered == 0) {
+            return payable;
+        }
+        Money adjustment = Money.of(recovered, payable.currency());
+        UUID id = UUID.randomUUID();
+        ledger.post(Postings.labelRecovery(id, now, "label-recovery:" + id, orderId, org, adjustment), SYSTEM);
+        LOG.info("Order {}: {} of {}'s label balance settled against its payable", orderId, adjustment, org);
+        return payable.minus(adjustment);
     }
 }

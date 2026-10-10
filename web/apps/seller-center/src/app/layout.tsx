@@ -12,7 +12,9 @@ import { type ReactNode } from 'react';
 
 import { messagesFor } from '@/i18n/catalogs';
 import { getLocale, getT } from '@/i18n/server';
+import { storefrontUrl } from '@/lib/config';
 import { Providers } from '@/lib/query/Providers';
+import { RuntimeConfigProvider } from '@/lib/runtime-config';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -38,7 +40,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         </a>
         <I18nProvider locale={locale} messages={messagesFor(locale)}>
           <WebVitalsReporter />
-          <Providers>{children}</Providers>
+          <RuntimeConfigProvider value={{ storefrontUrl: storefrontUrl() }}>
+            <Providers>{children}</Providers>
+          </RuntimeConfigProvider>
         </I18nProvider>
       </body>
     </html>

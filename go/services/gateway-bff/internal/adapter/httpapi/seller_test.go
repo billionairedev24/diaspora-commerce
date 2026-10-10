@@ -428,7 +428,7 @@ func TestSellerPendingUpstreamsAnswer503(t *testing.T) {
 	for _, path := range []string{"/v1/seller/orders", "/v1/seller/orders/AT-2026-000123"} {
 		r := b.do("GET", path, nil)
 		if r.status != 503 || problemCode(t, r) != "UPSTREAM_UNAVAILABLE" || r.header.Get("Retry-After") == "" ||
-			r.json(t)["type"] != "https://errors.afrotransact.com/bff.upstream-unavailable" {
+			r.json(t)["type"] != "https://developers.afrotransact.com/problems/bff.upstream-unavailable" {
 			t.Fatalf("%s = %d %s", path, r.status, r.body)
 		}
 	}

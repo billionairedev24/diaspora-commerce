@@ -90,8 +90,8 @@ class PayoutServiceImpl implements PayoutService {
         if (isRetail(org)) {
             // AfroTransact Retail is the merchant of record: its sales are AfroTransact revenue (4400), nothing is
             // held, transferred or paid out, and compliance holds do not apply.
-            return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, policy.minimum(currency),
-                    false, false, null);
+            return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, zero,
+                    policy.minimum(currency), false, false, null);
         }
         Money transferred = settlements.transferredTo(org, currency);
         Map<PayoutStatus, Long> totals = payouts.totals(org, currency);
@@ -103,7 +103,12 @@ class PayoutServiceImpl implements PayoutService {
         }
         // Provider fees are debited from (or, while outstanding, reserved in) the connected account balance.
         Money fees = providerFees.totalOf(org, currency);
-        Money available = transferred.minus(Money.of(consumed, currency)).minus(fees).max(zero);
+        // Label charges not yet recovered from a transfer (S256) are owed out of what was already transferred, so they
+        // reserve it and may take available below zero; payouts never exceed available. Credits from voided labels
+        // (negative) are paid with the next transfer, not from the connected account.
+        Money labelCharges = Money.of(-ledger.unattributedPayable(org, currency), currency);
+        Money available = transferred.minus(Money.of(consumed, currency)).minus(fees).max(zero)
+                .minus(labelCharges.max(zero));
         List<HeldOrder> held = new ArrayList<>();
         Money heldTotal = zero;
         for (Map.Entry<String, Long> e : ledger.payableByOrder(org, currency).entrySet()) {
@@ -120,7 +125,8 @@ class PayoutServiceImpl implements PayoutService {
         List<PayoutRequest> today = payouts.requestsOn(org, today());
         Optional<PayoutHold> hold = holds.find(org).filter(PayoutHold::paused);
         return new PayoutBalance(org, currency, available, held, heldTotal, Money.of(inFlight, currency),
-                Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), fees, policy.minimum(currency),
+                Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), fees, labelCharges,
+                policy.minimum(currency),
                 policy.canRequestToday(today), hold.isPresent(), hold.map(PayoutHold::reason).orElse(null));
     }
 

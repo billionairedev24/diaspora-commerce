@@ -4,6 +4,7 @@ export { applyBps, bpsToPercentText, formatBps, parsePercent } from './fees';
 export { type RequestOptions } from './http';
 export { readSse, type SseMessage, streamLola, toLolaEvent } from './lola';
 export { formatMoney, percentOff, splitMoney } from './money';
+export { bffProblemType, PROBLEM_TYPE_BASE } from './problem-types';
 export { accountKeys, careersKeys, cartKeys, productKeys, searchKeys, siteKeys } from './query/keys';
 export { accountQueries, careersQueries, cartQueries, productQueries, searchQueries, siteQueries } from './query/options';
 export { sellerKeys, sellerQueries } from './query/seller';

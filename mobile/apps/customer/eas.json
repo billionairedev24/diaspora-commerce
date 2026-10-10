@@ -1,5 +1,8 @@
 {
-  "cli": { "version": ">= 16.0.0", "appVersionSource": "remote" },
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
   "build": {
     "base": {
       "node": "22.12.0",
@@ -10,30 +13,69 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
-      "ios": { "simulator": true },
-      "env": { "EXPO_PUBLIC_APP_ENV": "dev", "EXPO_PUBLIC_MOCKS": "0" }
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "dev",
+        "EXPO_PUBLIC_MOCKS": "0",
+        "EXPO_PUBLIC_WEB_URL": "https://dev.afrotransact.com",
+        "EXPO_PUBLIC_BFF_URL": "https://api.dev.afrotransact.com/bff",
+        "EXPO_PUBLIC_OIDC_ISSUER": "https://auth.dev.afrotransact.com",
+        "EXPO_PUBLIC_IDENTITY_URL": "https://api.dev.afrotransact.com/identity",
+        "EXPO_PUBLIC_BOOKINGS_URL": "https://api.dev.afrotransact.com/bookings"
+      }
     },
     "development-mocks": {
-      "extends": "development",
-      "env": { "EXPO_PUBLIC_APP_ENV": "local", "EXPO_PUBLIC_MOCKS": "1" }
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development",
+      "ios": {
+        "simulator": true
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "local",
+        "EXPO_PUBLIC_MOCKS": "1"
+      }
     },
     "preview": {
       "extends": "base",
       "distribution": "internal",
       "channel": "preview",
-      "env": { "EXPO_PUBLIC_APP_ENV": "uat", "EXPO_PUBLIC_MOCKS": "0" }
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "uat",
+        "EXPO_PUBLIC_MOCKS": "0",
+        "EXPO_PUBLIC_WEB_URL": "https://uat.afrotransact.com",
+        "EXPO_PUBLIC_BFF_URL": "https://api.uat.afrotransact.com/bff",
+        "EXPO_PUBLIC_OIDC_ISSUER": "https://auth.uat.afrotransact.com",
+        "EXPO_PUBLIC_IDENTITY_URL": "https://api.uat.afrotransact.com/identity",
+        "EXPO_PUBLIC_BOOKINGS_URL": "https://api.uat.afrotransact.com/bookings"
+      }
     },
     "production": {
       "extends": "base",
       "channel": "production",
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_APP_ENV": "prod", "EXPO_PUBLIC_MOCKS": "0" }
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "prod",
+        "EXPO_PUBLIC_MOCKS": "0",
+        "EXPO_PUBLIC_WEB_URL": "https://afrotransact.com",
+        "EXPO_PUBLIC_BFF_URL": "https://api.afrotransact.com/bff",
+        "EXPO_PUBLIC_OIDC_ISSUER": "https://auth.afrotransact.com",
+        "EXPO_PUBLIC_IDENTITY_URL": "https://api.afrotransact.com/identity",
+        "EXPO_PUBLIC_BOOKINGS_URL": "https://api.afrotransact.com/bookings"
+      }
     }
   },
   "submit": {
     "production": {
-      "ios": { "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APP_ID" },
-      "android": { "track": "internal" }
+      "ios": {
+        "ascAppId": "REPLACE_WITH_APP_STORE_CONNECT_APP_ID"
+      },
+      "android": {
+        "track": "internal"
+      }
     }
   }
 }

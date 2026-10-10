@@ -89,7 +89,7 @@ func (u *Upstreams) firstPartyRoutes(mux *http.ServeMux) {
 		var b map[string]any
 		if authorized(w, r, &b) {
 			writeJSON(w, 200, map[string]any{"challengeId": "pk-1", "expiresAt": "2026-10-10T12:05:00Z", "publicKey": map[string]any{
-				"challenge": "Y2hhbGxlbmdl", "rpId": "afrotransact.com", "timeout": 60000, "userVerification": "required", "allowCredentials": []any{}}})
+				"challenge": "Y2hhbGxlbmdl", "rpId": "localhost", "timeout": 60000, "userVerification": "required", "allowCredentials": []any{}}})
 		}
 	})
 	mux.HandleFunc("POST /v1/auth/passkey/verify", func(w http.ResponseWriter, r *http.Request) {

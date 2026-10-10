@@ -108,6 +108,15 @@ accounts:
       - {carrier: usps, negotiated: false}
       - {carrier: ups, negotiated: true}
       - {carrier: fedex, negotiated: true}
+# Who pays for labels (S256). Seller-shipped labels bought by a seller organisation from its own origin are charged
+# to it in the payments ledger (carrier.label.purchased): the carrier's negotiated cost + handlingPct % + handlingFixedMinor
+# (both 0: sellers pay the carrier cost only). AfroTransact Retail (RETAIL_ORG_ID), FBA / AfroTransact Delivery
+# shipments, fulfilment-centre origins, returns and staff/service callers are AfroTransact's own cost.
+billing:
+  retailOrgIds: [org_afrotransact_retail]
+  platformNodes: [fc_houston_tx, fc_edison_nj, fc_atlanta_ga]
+  handlingPct: 0
+  handlingFixedMinor: 0
 auth:
   enabled: false
   issuer: http://localhost:8100

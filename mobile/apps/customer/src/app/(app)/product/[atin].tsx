@@ -5,6 +5,7 @@ import { ArrowUUpLeftIcon as ArrowUUpLeft, CalendarCheckIcon as CalendarCheck, C
 import { Share, StyleSheet, View } from 'react-native';
 
 import { useAddresses, useProduct } from '@/api/queries';
+import { env } from '@/config/env';
 import { useQuantity } from '@/features/shop/cartHooks';
 import { ProductImage, QtyStepper } from '@/features/shop/components';
 import { c, sp, t } from '@/theme';
@@ -24,7 +25,7 @@ export default function ProductScreen() {
   const header = (
     <View style={styles.header}>
       <IconButton icon={CaretLeft} label="Back" onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))} />
-      <IconButton icon={Export} label="Share" onPress={() => void Share.share({ message: `https://www.afrotransact.com/p/${atin}` })} />
+      <IconButton icon={Export} label="Share" onPress={() => void Share.share({ message: `${env.webUrl}/p/${atin}` })} />
     </View>
   );
   if (!d) return <Screen header={header}>{product.isError ? <AppText>We couldn’t load this product.</AppText> : <Loading />}</Screen>;

@@ -2886,7 +2886,7 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "type": "https://errors.afrotransact.com/validation-failed",
+                 *       "type": "https://developers.afrotransact.com/problems/bff.validation-failed",
                  *       "title": "Validation failed",
                  *       "status": 422,
                  *       "code": "VALIDATION_FAILED",
@@ -2907,7 +2907,7 @@ export interface components {
             content: {
                 /**
                  * @example {
-                 *       "type": "https://errors.afrotransact.com/stock-limit",
+                 *       "type": "https://developers.afrotransact.com/problems/bff.stock-limit",
                  *       "title": "Not enough stock",
                  *       "status": 409,
                  *       "code": "STOCK_LIMIT",

@@ -79,7 +79,7 @@ at:
         # scope auth:first-party call the first-party sign-in API (/v1/auth/*) and redeem its login tickets.
         secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:}}
         grant-types: [authorization_code, refresh_token, client_credentials]
-        redirect-uris: ["${PUBLIC_WEB_URL:https://afrotransact.com}/api/bff/v1/auth/oidc/callback", "https://www.${PLATFORM_DOMAIN:afrotransact.com}/api/bff/v1/auth/oidc/callback", "${API_BASE_URL:https://api.afrotransact.com}/login/oauth2/code/afrotransact"]
+        redirect-uris: ["${PUBLIC_WEB_URL:https://afrotransact.com}/api/bff/v1/auth/oidc/callback", "${API_BASE_URL:https://api.afrotransact.com}/login/oauth2/code/afrotransact"]
         scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read"]
       - client-id: seller-service
         name: Seller service

@@ -16,8 +16,10 @@ export function bffOrigin(): string {
   return env('BFF_ORIGIN') ?? 'http://localhost:8200';
 }
 
+/** Seller Center & Provider Hub origin (Sell on AfroTransact / Offer your services): the shared SELLER_CENTER_URL of the
+    environment (NEXT_PUBLIC_SELLER_CENTER_URL is still read), resolved per request on the server. */
 export function sellerCenterUrl(): string {
-  return env('NEXT_PUBLIC_SELLER_CENTER_URL') ?? 'http://localhost:3001';
+  return (env('SELLER_CENTER_URL') ?? env('NEXT_PUBLIC_SELLER_CENTER_URL') ?? 'http://localhost:3001').replace(/\/+$/, '');
 }
 
 /** Path the browser uses for every BFF call (same origin; the route handler proxies or mocks). */

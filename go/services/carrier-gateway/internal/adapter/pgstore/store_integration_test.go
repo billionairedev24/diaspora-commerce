@@ -84,7 +84,21 @@ func TestPostgresStore(t *testing.T) {
 
 	t.Run("label lifecycle and idempotency slot", func(t *testing.T) {
 		rec := domain.LabelRecord{ID: uuid.NewString(), IdempotencyKey: "org_1:k1", RequestHash: "h1", Reference: "PKG-1",
-			OriginNode: "fc_houston_tx", Carrier: domain.UPS, Service: "03", Status: domain.LabelPurchasing, CreatedAt: time.Now().UTC()}
+			OriginNode: "org_1", Carrier: domain.UPS, Service: "03", Status: domain.LabelPurchasing, CreatedAt: time.Now().UTC(),
+			OrgID: "org_1", ShipmentID: "shp-1", OrderID: "ord-1", Fulfilment: domain.FulfilmentSellerShipped,
+			BillTo: domain.BillSeller, BillingReason: domain.BillingSellerShipped}
+		labelEvent := func(typ string) events.Envelope {
+			return events.Envelope{ID: uuid.NewString(), Type: typ, Aggregate: domain.EventAggregate, AggregateID: "ups:1ZTEST1",
+				OccurredAt: time.Now().UTC(), Payload: []byte(`{"labelId":"` + rec.ID + `"}`)}
+		}
+		labelEvents := func(typ string) int {
+			var n int
+			if err := pool.QueryRow(ctx, `select count(*) from outbox where event_type = $1 and payload = $2`, typ,
+				[]byte(`{"labelId":"`+rec.ID+`"}`)).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			return n
+		}
 		got, created, err := store.Reserve(ctx, rec)
 		if err != nil || !created || got.ID != rec.ID {
 			t.Fatalf("reserve %v %v", created, err)
@@ -96,19 +110,29 @@ func TestPostgresStore(t *testing.T) {
 			t.Fatalf("second reserve must return the first row: %+v %v", got, err)
 		}
 		rec.TrackingNumber, rec.CostMinor, rec.Currency, rec.Format, rec.LabelKey = "1ZTEST1", 1102, "USD", domain.FormatZPL, "labels/ups/x.zpl"
-		rec.Status = domain.LabelPurchased
-		if err := store.Complete(ctx, rec); err != nil {
+		rec.Status, rec.HandlingMinor, rec.ChargeMinor = domain.LabelPurchased, 50, 1152
+		if err := store.Complete(ctx, rec, labelEvent(domain.EventLabelPurchased)); err != nil {
 			t.Fatal(err)
 		}
 		l, err := store.Get(ctx, rec.ID)
 		if err != nil || l.Status != domain.LabelPurchased || l.TrackingState != domain.StateLabelCreated || l.CostMinor != 1102 {
 			t.Fatalf("get %+v %v", l, err)
 		}
-		if err := store.MarkVoided(ctx, rec.ID, time.Now()); err != nil {
+		if l.OrgID != "org_1" || l.ShipmentID != "shp-1" || l.OrderID != "ord-1" || l.Fulfilment != domain.FulfilmentSellerShipped ||
+			l.BillTo != domain.BillSeller || l.BillingReason != domain.BillingSellerShipped || l.HandlingMinor != 50 || l.ChargeMinor != 1152 {
+			t.Fatalf("billing round trip %+v", l)
+		}
+		if n := labelEvents(domain.EventLabelPurchased); n != 1 {
+			t.Fatalf("purchase writes one carrier.label.purchased outbox row in its transaction, got %d", n)
+		}
+		if err := store.MarkVoided(ctx, rec.ID, time.Now(), labelEvent(domain.EventLabelVoided)); err != nil {
 			t.Fatal(err)
 		}
-		if err := store.MarkVoided(ctx, rec.ID, time.Now()); !errors.Is(err, domain.ErrConflict) {
+		if err := store.MarkVoided(ctx, rec.ID, time.Now(), labelEvent(domain.EventLabelVoided)); !errors.Is(err, domain.ErrConflict) {
 			t.Fatalf("double void: %v", err)
+		}
+		if n := labelEvents(domain.EventLabelVoided); n != 1 {
+			t.Fatalf("a label is voided (and credited) once: %d carrier.label.voided rows", n)
 		}
 		sh, err := store.GetShipment(ctx, domain.UPS, "1ZTEST1")
 		if err != nil || sh.Active || sh.LabelID != rec.ID {
@@ -122,7 +146,8 @@ func TestPostgresStore(t *testing.T) {
 		}
 		ret.TrackingNumber, ret.Currency, ret.Format, ret.LabelKey = "QR-RMA-1", "USD", domain.FormatPNG, "labels/ups/q.png"
 		ret.QRPayload, ret.DropOffNetwork = "QR:RMA-1", "UPS Store"
-		if err := store.Complete(ctx, ret); err != nil {
+		if err := store.Complete(ctx, ret, events.Envelope{ID: uuid.NewString(), Type: domain.EventLabelPurchased,
+			Aggregate: domain.EventAggregate, AggregateID: "ups:QR-RMA-1", OccurredAt: time.Now().UTC(), Payload: []byte(`{}`)}); err != nil {
 			t.Fatal(err)
 		}
 		r, err := store.Get(ctx, ret.ID)

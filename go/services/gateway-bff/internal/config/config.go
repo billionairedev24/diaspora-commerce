@@ -4,8 +4,11 @@ package config
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
+
+	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
 )
 
 // Upstream is one downstream service: base URL plus resilience tuning.
@@ -67,10 +70,22 @@ type Config struct {
 	RedisURL    string `yaml:"redisUrl" env:"REDIS_URL"`
 	Market      string `yaml:"market" env:"MARKET"`
 
+	// Platform holds the shared, environment-wide public URLs (names in go/pkg/config/platform.go). The Helm library
+	// chart injects them from global.domain; config/<env>.yaml carries that environment's own hosts as the fallback,
+	// config/local.yaml localhost. Env vars override YAML. Resolve derives the web and OIDC settings from them.
+	Platform struct {
+		PublicWebURL    string `yaml:"publicWebUrl" env:"PUBLIC_WEB_URL"`       // storefront
+		SellerCenterURL string `yaml:"sellerCenterUrl" env:"SELLER_CENTER_URL"` // Seller Center & Provider Hub
+		StaffConsoleURL string `yaml:"staffConsoleUrl" env:"STAFF_CONSOLE_URL"` // staff console
+		AuthIssuerURL   string `yaml:"authIssuerUrl" env:"AUTH_ISSUER_URL"`     // identity OIDC issuer
+	} `yaml:"platform"`
+
 	Web struct {
-		// Origins allowed for CORS and the CSRF Origin check (storefront, previews).
+		// Origins allowed for CORS and the CSRF Origin check. Default (Resolve): the storefront, Seller Center and staff
+		// console URLs of the platform section. WEB_ORIGINS (comma-separated) replaces the list, e.g. to add previews.
 		Origins []string `yaml:"origins" env:"WEB_ORIGINS"`
 		// PublicOrigin is where the storefront lives; sign-in callbacks redirect back to PublicOrigin + returnTo.
+		// Default (Resolve): PUBLIC_WEB_URL; WEB_PUBLIC_ORIGIN overrides.
 		PublicOrigin string `yaml:"publicOrigin" env:"WEB_PUBLIC_ORIGIN"`
 		// BFFPath is the path prefix under PublicOrigin that proxies to the BFF (the storefront's /api/bff).
 		BFFPath string `yaml:"bffPath" env:"WEB_BFF_PATH"`
@@ -86,14 +101,17 @@ type Config struct {
 	} `yaml:"session"`
 
 	OIDC struct {
-		// Issuer is the identity issuer (iss claim, JWKS at <issuer>/oauth2/jwks).
+		// Issuer is the identity issuer (iss claim, JWKS at <issuer>/oauth2/jwks). Default (Resolve): AUTH_ISSUER_URL;
+		// OIDC_ISSUER overrides.
 		Issuer string `yaml:"issuer" env:"OIDC_ISSUER"`
 		// PublicURL is identity as the browser reaches it (authorize redirects). Defaults to Issuer.
-		PublicURL    string   `yaml:"publicUrl" env:"OIDC_PUBLIC_URL"`
-		ClientID     string   `yaml:"clientId" env:"OIDC_CLIENT_ID"`
-		ClientSecret string   `env:"OIDC_CLIENT_SECRET"`
-		RedirectURI  string   `yaml:"redirectUri" env:"OIDC_REDIRECT_URI"`
-		Scopes       []string `yaml:"scopes"`
+		PublicURL    string `yaml:"publicUrl" env:"OIDC_PUBLIC_URL"`
+		ClientID     string `yaml:"clientId" env:"OIDC_CLIENT_ID"`
+		ClientSecret string `env:"OIDC_CLIENT_SECRET"`
+		// RedirectURI is the BFF callback registered at identity. Default (Resolve):
+		// <PublicOrigin><BFFPath>/v1/auth/oidc/callback, so the session cookie stays first-party.
+		RedirectURI string   `yaml:"redirectUri" env:"OIDC_REDIRECT_URI"`
+		Scopes      []string `yaml:"scopes"`
 		// Audience expected in bearer tokens from the mobile app (empty = not checked).
 		Audience string `yaml:"audience" env:"OIDC_AUDIENCE"`
 		// VerifyBearer enables JWKS verification of app bearer tokens (off only in tests).
@@ -157,6 +175,27 @@ func (c *Config) ApplyUpstreamEnv(lookup func(string) (string, bool)) {
 	}
 }
 
+// OIDCCallbackPath is the BFF's browser callback under Web.BFFPath (the storefront proxies <BFFPath> to the BFF).
+const OIDCCallbackPath = "/v1/auth/oidc/callback"
+
+// Resolve fills the web and OIDC settings from the shared platform URLs; call it after Load (and ApplyUpstreamEnv),
+// before Validate. Explicit values (YAML or WEB_ORIGINS, WEB_PUBLIC_ORIGIN, OIDC_ISSUER, OIDC_REDIRECT_URI) win.
+func (c *Config) Resolve() {
+	p := c.Platform
+	c.Web.PublicOrigin = strings.TrimRight(pkgconfig.FirstNonEmpty(c.Web.PublicOrigin, p.PublicWebURL), "/")
+	if len(c.Web.Origins) == 0 {
+		for _, o := range []string{p.PublicWebURL, p.SellerCenterURL, p.StaffConsoleURL} {
+			o = strings.TrimRight(strings.TrimSpace(o), "/")
+			if o != "" && !slices.Contains(c.Web.Origins, o) {
+				c.Web.Origins = append(c.Web.Origins, o)
+			}
+		}
+	}
+	c.OIDC.Issuer = pkgconfig.FirstNonEmpty(c.OIDC.Issuer, p.AuthIssuerURL)
+	c.OIDC.RedirectURI = pkgconfig.FirstNonEmpty(c.OIDC.RedirectURI,
+		pkgconfig.JoinURL(c.Web.PublicOrigin, strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath))
+}
+
 // Validate checks the settings the BFF cannot run without.
 func (c *Config) Validate(env string) error {
 	if c.RedisURL == "" {
@@ -173,6 +212,12 @@ func (c *Config) Validate(env string) error {
 	}
 	if c.OIDC.PublicURL == "" {
 		c.OIDC.PublicURL = c.OIDC.Issuer
+	}
+	if c.OIDC.Issuer == "" {
+		return fmt.Errorf("config: OIDC issuer is required (AUTH_ISSUER_URL or OIDC_ISSUER)")
+	}
+	if c.Web.PublicOrigin == "" || len(c.Web.Origins) == 0 || c.OIDC.RedirectURI == "" {
+		return fmt.Errorf("config: storefront origin is required (PUBLIC_WEB_URL or WEB_PUBLIC_ORIGIN)")
 	}
 	if c.Session.CookieName == "" {
 		c.Session.CookieName = "at_session"

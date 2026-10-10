@@ -94,7 +94,7 @@ func TestFacetsAndHelpers(t *testing.T) {
 	if domain.Money(599) != "$5.99" || domain.Money(-50) != "-$0.50" || domain.PageCount(25, 12) != 3 {
 		t.Fatal("money/page count")
 	}
-	if domain.ProblemTypeURI("UPSTREAM_UNAVAILABLE") != "https://errors.afrotransact.com/bff.upstream-unavailable" {
+	if domain.ProblemTypeURI("UPSTREAM_UNAVAILABLE") != "https://developers.afrotransact.com/problems/bff.upstream-unavailable" {
 		t.Fatal("problem type")
 	}
 }

@@ -9,8 +9,9 @@ Valkey · local port **8209**.
 | Rate shopping | `POST /v1/rates` fans out to every enabled carrier that has an account for the origin (FC or seller) in parallel with a **1.5 s overall budget**. Late carriers are reported `timeout`, failing ones `error`, and the result is flagged `partial`. Complete results are cached in Valkey for **10 minutes** per cart/shipment fingerprint (partial ones are not cached). Quotes carry negotiated vs list amounts; accounts can add an `adjustmentPct`. |
 | Labels | `POST /v1/labels` with `Idempotency-Key` (scoped per caller org). A `purchasing` row reserves the key before the carrier is called; a retry returns the same label, a different body is rejected (422), a failed purchase frees the key. Documents (PDF/ZPL) go to the `ObjectStore` (S3-compatible via aws-sdk-go-v2, or the filesystem locally); if storing fails the label is voided at the carrier. `shipment_label` keeps carrier, service, tracking number, cost, label key and status. |
 | Void | `POST /v1/labels/{id}/void` only while the tracking state is still `label_created` (before carrier acceptance). |
+| Label billing (S256) | Every label records who bought it (`orgId`), for which shipment (`shipmentId`, default `shipment.reference`; optional `orderId`) and who pays (`billTo`, `billingReason`, `handlingMinor`, `chargeMinor`). See *Label billing* below. |
 | Tracking | Push: `POST /v1/webhooks/{ups,fedex,dhl}` (credential/HMAC verified). Poll: USPS (config `polling.carriers`) for active, non-delivered numbers, claimed with `FOR UPDATE SKIP LOCKED`, every 2 h with exponential backoff up to 12 h on failures. Events are de-duplicated by (carrier, event id), applied in carrier-timestamp/sequence order, never regress (late scans are history only; delivered/returned are terminal) and mapped to `label_created, picked_up, in_transit, out_for_delivery, delivered, delivery_failed, returned, exception`. Numbers bought elsewhere (seller labels) are registered with `POST /v1/tracking`. |
-| Events | `carrier.tracking.updated` and `carrier.pickup.ready` on **`at.carrier-shipment.events`** via a Postgres outbox written in the same transaction; the dispatcher (`SKIP LOCKED`, per-aggregate ordering, backoff on broker failure) publishes with `go/pkg/events`. Contract: [`contracts/asyncapi/fragments/carrier-gateway.yaml`](../../../contracts/asyncapi/fragments/carrier-gateway.yaml). |
+| Events | `carrier.tracking.updated`, `carrier.pickup.ready`, `carrier.label.purchased` and `carrier.label.voided` on **`at.carrier-shipment.events`** via a Postgres outbox written in the same transaction (label events in the purchase-completion / void transaction, so each is written once per label; key `<carrier>:<trackingNumber>` like the parcel's scans); the dispatcher (`SKIP LOCKED`, per-aggregate ordering, backoff on broker failure) publishes with `go/pkg/events`. Contract: [`contracts/asyncapi/fragments/carrier-gateway.yaml`](../../../contracts/asyncapi/fragments/carrier-gateway.yaml). |
 | Pickups | `POST /v1/pickups` books a carrier pickup at an FC or seller. Customer pickup locations (S080): `GET/POST/PUT /v1/pickup-locations` for platform counters, lockers and seller pickup (address, timezone, weekly hours, typical ready time); sellers manage only their own org's `SELLER` locations, staff with `shipping:admin` manage all. `POST /v1/pickup-locations/{id}/ready` publishes `carrier.pickup.ready` for the customer notification. |
 | Addresses | `POST /v1/addresses/validate` uses the carrier's own validation (USPS for US, DHL abroad by default). |
 
@@ -19,6 +20,28 @@ tracking registration), `shipping:void`, `shipping:admin`. Errors are RFC 9457 w
 `carrier-gateway.{invalid-request, not-found, conflict, idempotency-key-reused, carrier-disabled, carrier-rejected,
 carrier-auth, carrier-unavailable, webhook-unverified, forbidden}`; `carrier-unavailable` (503 + `Retry-After`) is the
 only retryable class. Contract: [`contracts/openapi/carrier-gateway.yaml`](../../../contracts/openapi/carrier-gateway.yaml).
+
+## Label billing (S256)
+
+Labels are bought on AfroTransact's carrier accounts, so the carriers bill AfroTransact. `domain.BillingPolicy`
+decides per label who pays:
+
+| billTo / billingReason | When |
+|---|---|
+| `SELLER` / `SELLER_SHIPPED` | An organisation member (not staff / a service) buys an **outbound** label, `fulfilment` `SELLER_SHIPPED` (default), from its own origin (`originNode` = its org id, as Seller Center sends it) |
+| `AFROTRANSACT` / `RETAIL` | The organisation is AfroTransact Retail (`billing.retailOrgIds`, env `RETAIL_ORG_ID`): merchant of record, pays Stripe fees only |
+| `AFROTRANSACT` / `FBA`, `AFROTRANSACT_DELIVERY` | `fulfilment` says the shipment is FBA or AfroTransact Delivery: AfroTransact's own shipping cost |
+| `AFROTRANSACT` / `PLATFORM_ORIGIN` | The parcel leaves a fulfilment centre (`billing.platformNodes`) or another organisation's origin |
+| `AFROTRANSACT` / `RETURN`, `PLATFORM_CALLER` | Return labels; staff and service callers (e.g. fulfilment buying FC labels) |
+
+A seller-billed label costs the carrier's negotiated charge (`costMinor`, as the carrier returns it) **plus a handling
+markup** `round(cost × billing.handlingPct / 100) + billing.handlingFixedMinor` (env `LABEL_HANDLING_PCT`,
+`LABEL_HANDLING_FIXED_MINOR`; both **0** by default, validated at start-up). The markup is carrier-gateway config rather
+than a payments fee-schedule column: carrier-gateway already prices labels, and the event carries the exact amount, so
+payments books what the seller saw. `carrier.label.purchased` / `carrier.label.voided` carry org, shipment, order,
+label id, tracking number, cost, handling, amount and currency; payments-service debits `2000:<org>` for `billTo
+SELLER` (and re-checks the Retail / FBA exemptions) and credits it back once on the void. All labels are published, so
+other consumers can follow AfroTransact's own label spend too.
 
 ## Carrier adapters and assumptions
 
@@ -40,6 +63,7 @@ paths and API versions are in `config/<env>.yaml`** (`usps.paths`, `ups.paths`, 
 `USPS_PAYMENT_TOKEN`, `UPS_CLIENT_ID`, `UPS_CLIENT_SECRET`, `UPS_ACCOUNT`, `UPS_WEBHOOK_CREDENTIAL`, `FEDEX_CLIENT_ID`,
 `FEDEX_CLIENT_SECRET`, `FEDEX_ACCOUNT`, `FEDEX_WEBHOOK_SECRET`, `DHL_USERNAME`, `DHL_PASSWORD`, `DHL_ACCOUNT`,
 `DHL_WEBHOOK_SECRET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (empty → default chain / workload identity).
+Label billing: `RETAIL_ORG_ID`, `LABEL_HANDLING_PCT`, `LABEL_HANDLING_FIXED_MINOR` (YAML `billing`).
 Other overrides: `PUBLIC_BASE_URL` (webhook base; defaults to `<API_BASE_URL>/carrier-gateway`, the shared setting injected by the Helm library), `KAFKA_BROKERS`, `RATE_BUDGET`, `QUOTE_TTL`, `LABEL_STORE`, `S3_BUCKET`,
 `<CARRIER>_ENABLED`, `<CARRIER>_BASE_URL`, `AUTH_ENABLED`, `AUTH_ISSUER_URL`. Local/dev/uat use carrier sandboxes,
 prod the production hosts. A carrier that is enabled but has no credentials is skipped at start-up with a warning.

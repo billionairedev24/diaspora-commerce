@@ -7,18 +7,19 @@ import { List, SignOut } from '@phosphor-icons/react/ssr';
 import { useRouter } from 'next/navigation';
 
 import { useT } from '@/i18n/t';
-import { storefrontUrl } from '@/lib/config';
+import { useStorefrontUrl } from '@/lib/runtime-config';
 
-async function signOut() {
+async function signOut(storefrontUrl: string) {
   try {
     await fetch('/api/bff/v1/auth/sign-out', { method: 'POST', credentials: 'include' });
   } finally {
-    window.location.assign(storefrontUrl());
+    window.location.assign(storefrontUrl);
   }
 }
 
 /** Black top bar: logo, gold portal tag ("Seller Central" / "Provider Hub"), menu button on small screens, member. */
 export function Header({ session, onMenu }: { session: SellerSession | null; onMenu?: () => void }) {
+  const storefrontUrl = useStorefrontUrl();
   const t = useT();
   const router = useRouter();
   const provider = session?.portal === 'PROVIDER_HUB';
@@ -46,7 +47,7 @@ export function Header({ session, onMenu }: { session: SellerSession | null; onM
           <span className="hidden sm:inline">
             {session.user.firstName} {session.user.lastName.slice(0, 1)}.
           </span>
-          <IconButton label={t('sc.header.signOut')} onDark onClick={() => void signOut()}>
+          <IconButton label={t('sc.header.signOut')} onDark onClick={() => void signOut(storefrontUrl)}>
             <SignOut size={20} aria-hidden />
           </IconButton>
         </span>

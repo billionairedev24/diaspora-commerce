@@ -1,5 +1,9 @@
-/* Environment configuration (see README). EXPO_PUBLIC_* values are inlined at build time; unset ones fall back to the
-   defaults of EXPO_PUBLIC_APP_ENV (local | dev | uat | prod). */
+/* Environment configuration (see README). Every deployed URL comes from EXPO_PUBLIC_* variables that each EAS build
+   profile sets in eas.json (hosts per environment: docs/engineering/environments.md); the code names no deployed host.
+   Unset URLs fall back to the local stack on EXPO_PUBLIC_DEV_HOST (default localhost; the dev machine's LAN IP for a
+   physical device, 10.0.2.2 for the Android emulator), ports from infra/local/PORTS.md. app.config.ts fails a
+   dev/uat/prod build that leaves a URL unset (REQUIRED_URL_VARS). EXPO_PUBLIC_* values are inlined at build time, so
+   they must be read with static property access. */
 
 export type AppEnv = 'local' | 'dev' | 'uat' | 'prod';
 
@@ -19,12 +23,14 @@ export interface EnvConfig {
 
 type Urls = Pick<EnvConfig, 'fulfilmentUrl' | 'mediaUrl' | 'oidcIssuer' | 'identityApiUrl'>;
 
-const DEFAULTS: Record<AppEnv, Urls> = {
-  local: { fulfilmentUrl: 'http://localhost:8108', mediaUrl: 'http://localhost:8207', oidcIssuer: 'http://localhost:8100', identityApiUrl: 'http://localhost:8100' },
-  dev: { fulfilmentUrl: 'https://api.dev.afrotransact.com/fulfilment', mediaUrl: 'https://api.dev.afrotransact.com/media', oidcIssuer: 'https://auth.dev.afrotransact.com', identityApiUrl: 'https://api.dev.afrotransact.com/identity' },
-  uat: { fulfilmentUrl: 'https://api.uat.afrotransact.com/fulfilment', mediaUrl: 'https://api.uat.afrotransact.com/media', oidcIssuer: 'https://auth.uat.afrotransact.com', identityApiUrl: 'https://api.uat.afrotransact.com/identity' },
-  prod: { fulfilmentUrl: 'https://api.afrotransact.com/fulfilment', mediaUrl: 'https://api.afrotransact.com/media', oidcIssuer: 'https://auth.afrotransact.com', identityApiUrl: 'https://api.afrotransact.com/identity' }
-};
+/** The local stack on the dev machine (infra/local/PORTS.md): fulfilment 8108, media 8207, identity 8100. */
+export function localUrls(devHost = 'localhost'): Urls {
+  const h = devHost.trim() || 'localhost';
+  return { fulfilmentUrl: `http://${h}:8108`, mediaUrl: `http://${h}:8207`, oidcIssuer: `http://${h}:8100`, identityApiUrl: `http://${h}:8100` };
+}
+
+/** URL variables a dev/uat/prod build must set (checked by app.config.ts). */
+export const REQUIRED_URL_VARS = ['EXPO_PUBLIC_FULFILMENT_URL', 'EXPO_PUBLIC_MEDIA_URL', 'EXPO_PUBLIC_OIDC_ISSUER', 'EXPO_PUBLIC_IDENTITY_URL'] as const;
 
 export interface RawEnv {
   appEnv?: string;
@@ -34,20 +40,23 @@ export interface RawEnv {
   identityApiUrl?: string;
   oidcClientId?: string;
   mocks?: string;
+  /** Host of the local stack (EXPO_PUBLIC_DEV_HOST): localhost, a LAN IP or 10.0.2.2. */
+  devHost?: string;
 }
 
 const isAppEnv = (v: string | undefined): v is AppEnv => v === 'local' || v === 'dev' || v === 'uat' || v === 'prod';
 
 export function resolveEnv(raw: RawEnv): EnvConfig {
   const appEnv: AppEnv = isAppEnv(raw.appEnv) ? raw.appEnv : 'local';
-  const d = DEFAULTS[appEnv];
+  const d = localUrls(raw.devHost);
   const pick = (v: string | undefined, f: string) => (v && v.trim() ? v.trim() : f);
+  const url = (v: string | undefined, f: string) => pick(v, f).replace(/\/+$/, '');
   return {
     appEnv,
-    fulfilmentUrl: pick(raw.fulfilmentUrl, d.fulfilmentUrl),
-    mediaUrl: pick(raw.mediaUrl, d.mediaUrl),
-    oidcIssuer: pick(raw.oidcIssuer, d.oidcIssuer),
-    identityApiUrl: pick(raw.identityApiUrl, d.identityApiUrl),
+    fulfilmentUrl: url(raw.fulfilmentUrl, d.fulfilmentUrl),
+    mediaUrl: url(raw.mediaUrl, d.mediaUrl),
+    oidcIssuer: url(raw.oidcIssuer, d.oidcIssuer),
+    identityApiUrl: url(raw.identityApiUrl, d.identityApiUrl),
     oidcClientId: pick(raw.oidcClientId, 'driver-app'),
     redirectScheme: 'com.afrotransact.driver',
     mocks: appEnv !== 'prod' && (raw.mocks === undefined ? appEnv === 'local' : raw.mocks === '1' || raw.mocks === 'true')
@@ -61,5 +70,6 @@ export const env: EnvConfig = resolveEnv({
   oidcIssuer: process.env.EXPO_PUBLIC_OIDC_ISSUER,
   identityApiUrl: process.env.EXPO_PUBLIC_IDENTITY_URL,
   oidcClientId: process.env.EXPO_PUBLIC_OIDC_CLIENT_ID,
-  mocks: process.env.EXPO_PUBLIC_MOCKS
+  mocks: process.env.EXPO_PUBLIC_MOCKS,
+  devHost: process.env.EXPO_PUBLIC_DEV_HOST
 });

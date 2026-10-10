@@ -53,6 +53,7 @@ func run() error {
 		return fmt.Errorf("load config: %w", err)
 	}
 	cfg.ApplyUpstreamEnv(nil)
+	cfg.Resolve()
 	if err := cfg.Validate(loader.Env()); err != nil {
 		return fmt.Errorf("config: %w", err)
 	}

@@ -22,6 +22,8 @@ func (verifier) Verify(_ context.Context, token string) (auth.Actor, error) {
 	switch token {
 	case "ops":
 		return auth.Actor{Subject: "svc-orders", Type: "SERVICE", OrgID: "org_ops", Permissions: []string{app.PermRate, app.PermLabel}}, nil
+	case "seller":
+		return auth.Actor{Subject: "u-seller", Type: "USER", OrgID: "org_s", Permissions: []string{app.PermRate, app.PermLabel}}, nil
 	case "viewer":
 		return auth.Actor{Subject: "u", Type: "CUSTOMER"}, nil
 	default:
@@ -161,6 +163,20 @@ func TestLabelEndpoints(t *testing.T) {
 	res, out := call(t, srv, "POST", "/v1/labels", "ops", body, map[string]string{"Idempotency-Key": "k-1"})
 	if res.StatusCode != http.StatusCreated || out["trackingNumber"] != "1Z" || labels.got.IdempotencyKey != "k-1" || labels.got.Caller != "org_ops" {
 		t.Fatalf("%d %v %+v", res.StatusCode, out, labels.got)
+	}
+	if !labels.got.Payer.Platform || labels.got.Fulfilment != domain.FulfilmentSellerShipped {
+		t.Fatalf("a service caller is a platform payer; fulfilment defaults to seller-shipped: %+v", labels.got)
+	}
+	billed := strings.TrimSuffix(body, "}") + `,"fulfilment":"fba","shipmentId":"shp-9","orderId":"ord-9"}`
+	if res, _ := call(t, srv, "POST", "/v1/labels", "seller", billed, map[string]string{"Idempotency-Key": "k-3"}); res.StatusCode != http.StatusCreated ||
+		labels.got.Payer != (domain.LabelPayer{OrgID: "org_s"}) || labels.got.Fulfilment != domain.FulfilmentFBA ||
+		labels.got.ShipmentID != "shp-9" || labels.got.OrderID != "ord-9" {
+		t.Fatalf("seller payer and billing fields: %d %+v", res.StatusCode, labels.got)
+	}
+	bogus := strings.TrimSuffix(body, "}") + `,"fulfilment":"drone"}`
+	if res, out := call(t, srv, "POST", "/v1/labels", "seller", bogus, map[string]string{"Idempotency-Key": "k-4"}); res.StatusCode != http.StatusBadRequest ||
+		out["code"] != "carrier-gateway.invalid-request" {
+		t.Fatalf("unknown fulfilment: %d %v", res.StatusCode, out)
 	}
 	if res, _ := call(t, srv, "POST", "/v1/labels", "ops", body, nil); res.StatusCode != http.StatusBadRequest {
 		t.Fatalf("missing key: %d", res.StatusCode)

@@ -99,6 +99,16 @@ public record Journal(UUID id, String key, JournalType type, String orderId, Str
             return add(account, EntrySide.CREDIT, amount, orgId);
         }
 
+        /** A debit attributed to {@code orderId} instead of the journal's order. */
+        public Builder debitOrder(LedgerAccount account, Money amount, String orgId, String orderId) {
+            return add(account, EntrySide.DEBIT, amount, orgId, orderId);
+        }
+
+        /** A credit attributed to {@code orderId} instead of the journal's order. */
+        public Builder creditOrder(LedgerAccount account, Money amount, String orgId, String orderId) {
+            return add(account, EntrySide.CREDIT, amount, orgId, orderId);
+        }
+
         public Builder debit(LedgerAccount account, Money amount) {
             return debit(account, amount, null);
         }
@@ -108,13 +118,17 @@ public record Journal(UUID id, String key, JournalType type, String orderId, Str
         }
 
         private Builder add(LedgerAccount account, EntrySide side, Money amount, String orgId) {
+            return add(account, side, amount, orgId, null);
+        }
+
+        private Builder add(LedgerAccount account, EntrySide side, Money amount, String orgId, String lineOrder) {
             if (amount.isZero()) {
                 return this;
             }
             if (amount.isNegative()) {
-                lines.add(new JournalLine(account, side.opposite(), amount.negate(), orgId));
+                lines.add(new JournalLine(account, side.opposite(), amount.negate(), orgId, lineOrder));
             } else {
-                lines.add(new JournalLine(account, side, amount, orgId));
+                lines.add(new JournalLine(account, side, amount, orgId, lineOrder));
             }
             return this;
         }

@@ -1,3 +1,4 @@
+import { bffProblemType } from '@afrotransact/api-client/problem-types';
 import { type NextRequest } from 'next/server';
 
 import { bffOrigin, mocksEnabled } from '@/lib/config';
@@ -35,7 +36,7 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
     });
   } catch {
     return Response.json(
-      { type: 'https://errors.afrotransact.com/upstream-unavailable', title: 'Service unavailable', status: 503, code: 'UPSTREAM_UNAVAILABLE', detail: 'We couldn’t reach AfroTransact right now. Please try again.' },
+      { type: bffProblemType('UPSTREAM_UNAVAILABLE'), title: 'Service unavailable', status: 503, code: 'UPSTREAM_UNAVAILABLE', detail: 'We couldn’t reach AfroTransact right now. Please try again.' },
       { status: 503, headers: { 'content-type': 'application/problem+json' } }
     );
   }

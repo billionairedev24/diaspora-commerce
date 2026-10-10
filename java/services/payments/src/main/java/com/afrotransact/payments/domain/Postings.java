@@ -122,6 +122,56 @@ public final class Postings {
     }
 
     /**
+     * Shipping label bought by a seller through AfroTransact (S256): Dr 2000:org seller payable (cost + handling) /
+     * Cr 2400 carrier labels payable (the carrier's negotiated cost — the carrier bills AfroTransact's platform
+     * account) and Cr 4500 label handling revenue (the markup, usually zero). The lines carry no order: a label
+     * charge is the organisation's, not one order's, so it never changes what an order's settlement owes; it is
+     * recovered from the organisation's next transfers ({@link #labelRecovery}). No money moves, so 1000 and
+     * reconciliation are untouched. The payable may go negative.
+     */
+    public static Journal labelCharge(UUID id, Instant at, String key, LabelCharge c) {
+        return Journal.builder(JournalType.LABEL_CHARGE, key)
+                .description("Shipping label " + c.carrier() + " " + c.trackingNumber() + " for shipment "
+                        + c.shipmentId())
+                .debit(LedgerAccount.sellerPayable(c.orgId()), c.amount(), c.orgId())
+                .credit(LedgerAccount.of(Chart.CARRIER_LABELS_PAYABLE), c.cost(), c.orgId())
+                .credit(LedgerAccount.of(Chart.LABEL_HANDLING_REVENUE), c.handling(), c.orgId())
+                .build(id, at);
+    }
+
+    /** Voided label credited back to the seller: the exact reverse of {@link #labelCharge}. */
+    public static Journal labelCredit(UUID id, Instant at, String key, LabelCharge c) {
+        return Journal.builder(JournalType.LABEL_CREDIT, key)
+                .description("Voided shipping label " + c.carrier() + " " + c.trackingNumber() + " for shipment "
+                        + c.shipmentId() + " credited back")
+                .debit(LedgerAccount.of(Chart.CARRIER_LABELS_PAYABLE), c.cost(), c.orgId())
+                .debit(LedgerAccount.of(Chart.LABEL_HANDLING_REVENUE), c.handling(), c.orgId())
+                .credit(LedgerAccount.sellerPayable(c.orgId()), c.amount(), c.orgId())
+                .build(id, at);
+    }
+
+    /**
+     * Settles the organisation's unattributed label balance against an order's payable before that order is
+     * transferred: a positive {@code amount} recovers label charges (Dr 2000:org on the order / Cr 2000:org
+     * unattributed), so the transfer is smaller; a negative one pays a credit from voided labels back with the
+     * transfer (the opposite lines). Both lines stay on 2000:org, so the seller's total payable is unchanged.
+     */
+    public static Journal labelRecovery(UUID id, Instant at, String key, String orderId, String orgId,
+                                        Money amount) {
+        Journal.Builder b = Journal.builder(JournalType.LABEL_RECOVERY, key)
+                .description((amount.isNegative() ? "Voided label credits paid with order " : "Label charges "
+                        + "recovered from order ") + orderId);
+        if (amount.isNegative()) {
+            b.debit(LedgerAccount.sellerPayable(orgId), amount.negate(), orgId)
+                    .creditOrder(LedgerAccount.sellerPayable(orgId), amount.negate(), orgId, orderId);
+        } else {
+            b.debitOrder(LedgerAccount.sellerPayable(orgId), amount, orgId, orderId)
+                    .credit(LedgerAccount.sellerPayable(orgId), amount, orgId);
+        }
+        return b.build(id, at);
+    }
+
+    /**
      * Dispute opened: Stripe withdraws the amount (Dr 1100 chargeback receivable / Cr 1000) and each responsible
      * seller's payable is debited into a chargeback reserve (Dr 2000 / Cr 2300) until the outcome. Stripe's dispute fee
      * is AfroTransact's cost (Dr 5100). AfroTransact Retail's part has no payable to reserve: it stays in 1100 until

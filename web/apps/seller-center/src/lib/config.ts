@@ -15,9 +15,14 @@ export function bffOrigin(): string {
   return env('BFF_ORIGIN') ?? 'http://localhost:8200';
 }
 
-/** Storefront origin (sign-in, public pages). */
+/** Local default of the storefront origin (infra/local/PORTS.md). */
+export const DEFAULT_STOREFRONT_URL = 'http://localhost:3000';
+
+/** Storefront origin (sign-in, public pages): the shared PUBLIC_WEB_URL of the environment (NEXT_PUBLIC_STOREFRONT_URL is still
+    read), resolved on the server per request so one build serves every environment. Client components read it with
+    useStorefrontUrl() (src/lib/runtime-config.tsx); the root layout passes this value down. */
 export function storefrontUrl(): string {
-  return process.env.NEXT_PUBLIC_STOREFRONT_URL ?? 'http://localhost:3000';
+  return (env('PUBLIC_WEB_URL') ?? env('NEXT_PUBLIC_STOREFRONT_URL') ?? DEFAULT_STOREFRONT_URL).replace(/\/+$/, '');
 }
 
 /** Path the browser uses for every BFF call (same origin; the route handler proxies or mocks). */

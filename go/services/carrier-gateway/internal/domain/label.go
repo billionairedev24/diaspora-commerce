@@ -40,6 +40,24 @@ type LabelRecord struct {
 	BoxFree           bool          `json:"boxFree"`
 	QRPayload         string        `json:"qrPayload,omitempty"`
 	DropOffNetwork    string        `json:"dropOffNetwork,omitempty"`
+	// Billing (S256): who bought the label, for which shipment, and who pays for it.
+	OrgID         string     `json:"orgId,omitempty"`
+	ShipmentID    string     `json:"shipmentId,omitempty"`
+	OrderID       string     `json:"orderId,omitempty"`
+	Fulfilment    Fulfilment `json:"fulfilment,omitempty"`
+	BillTo        BillTo     `json:"billTo,omitempty"`
+	BillingReason string     `json:"billingReason,omitempty"`
+	HandlingMinor int64      `json:"handlingMinor"`
+	// ChargeMinor is what the seller is charged (cost + handling) when BillTo is SELLER, else 0.
+	ChargeMinor int64 `json:"chargeMinor"`
+}
+
+// Charge is what the buying seller pays for the label: carrier cost + handling when BillTo is SELLER, else 0.
+func (l LabelRecord) Charge() int64 {
+	if l.BillTo != BillSeller {
+		return 0
+	}
+	return l.CostMinor + l.HandlingMinor
 }
 
 // CanVoid reports whether the label can still be voided: purchased and not yet accepted by the carrier.

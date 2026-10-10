@@ -16,6 +16,7 @@ import com.afrotransact.payments.domain.JournalLine;
 import com.afrotransact.payments.domain.JournalType;
 import com.afrotransact.payments.domain.LedgerAccount;
 import com.afrotransact.payments.domain.Money;
+import com.afrotransact.payments.domain.StatementLine;
 import com.afrotransact.payments.port.LedgerRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -59,7 +60,7 @@ class JdbcLedgerRepository implements LedgerRepository {
                     .param("jid", j.id()).param("no", ++no).param("code", l.account().chart().code())
                     .param("key", l.account().key()).param("side", l.side().code())
                     .param("amount", l.amount().minor()).param("currency", l.amount().currency())
-                    .param("org", l.orgId()).param("orderId", j.orderId())
+                    .param("org", l.orgId()).param("orderId", l.orderId() != null ? l.orderId() : j.orderId())
                     .update();
         }
     }
@@ -78,7 +79,8 @@ class JdbcLedgerRepository implements LedgerRepository {
         List<Row> rows = jdbc.sql("""
                 select e.id, e.journal_key, e.type, e.order_id, e.payment_id, e.stripe_ref, e.description,
                        e.occurred_at, e.posted_at, l.line_no, l.account_code, l.account_key, l.side, l.amount_minor,
-                       l.currency, l.org_id
+                       l.currency, l.org_id,
+                       case when l.order_id is distinct from e.order_id then l.order_id end as line_order_id
                 from journal_entry e join journal_line l on l.journal_id = e.id
                 """ + where + " order by e.posted_at, e.id, l.line_no")
                 .param("v", value)
@@ -90,7 +92,7 @@ class JdbcLedgerRepository implements LedgerRepository {
                                         rs.getString("account_key")),
                                 EntrySide.ofCode(rs.getString("side")),
                                 Money.of(rs.getLong("amount_minor"), rs.getString("currency")),
-                                rs.getString("org_id"))))
+                                rs.getString("org_id"), rs.getString("line_order_id"))))
                 .list();
         Map<UUID, List<Row>> byJournal = new LinkedHashMap<>();
         rows.forEach(r -> byJournal.computeIfAbsent(r.id(), k -> new ArrayList<>()).add(r));
@@ -125,9 +127,9 @@ class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public Map<String, Long> payableByOrder(String orgId, String currency) {
         Map<String, Long> out = new LinkedHashMap<>();
-        jdbc.sql("select coalesce(l.order_id, '') as order_id, sum(-(" + SIGNED + ")) as balance "
+        jdbc.sql("select l.order_id, sum(-(" + SIGNED + ")) as balance "
                         + "from journal_line l where l.account_code = :code and l.account_key = :org "
-                        + "and l.currency = :currency group by l.order_id "
+                        + "and l.currency = :currency and l.order_id is not null group by l.order_id "
                         + "having sum(" + SIGNED + ") <> 0 order by l.order_id")
                 .param("code", Chart.SELLER_PAYABLE.code()).param("org", orgId).param("currency", currency)
                 .query(rs -> {
@@ -147,6 +149,42 @@ class JdbcLedgerRepository implements LedgerRepository {
                     out.put(rs.getString("account_key"), rs.getLong("balance"));
                 });
         return out;
+    }
+
+    @Override
+    public long unattributedPayable(String orgId, String currency) {
+        return jdbc.sql("select coalesce(sum(-(" + SIGNED + ")), 0) from journal_line l "
+                        + "where l.account_code = :code and l.account_key = :org and l.currency = :currency "
+                        + "and l.order_id is null")
+                .param("code", Chart.SELLER_PAYABLE.code()).param("org", orgId).param("currency", currency)
+                .query(Long.class).single();
+    }
+
+    @Override
+    public List<StatementLine> statement(String orgId, String currency, Instant from, Instant to, int limit) {
+        return jdbc.sql("""
+                select e.id, e.type, e.occurred_at, e.order_id, e.description, l.currency,
+                       sum(case l.side when 'C' then l.amount_minor else -l.amount_minor end) as amount,
+                       c.label_id, c.shipment_id, c.tracking_number, c.carrier
+                from journal_line l
+                join journal_entry e on e.id = l.journal_id
+                left join label_charge c on c.charge_journal_id = e.id or c.credit_journal_id = e.id
+                where l.account_code = :code and l.account_key = :org and l.currency = :currency
+                  and e.posted_at >= :from and e.posted_at < :to
+                group by e.id, e.type, e.occurred_at, e.order_id, e.description, e.posted_at, l.currency,
+                         c.label_id, c.shipment_id, c.tracking_number, c.carrier
+                having sum(case l.side when 'C' then l.amount_minor else -l.amount_minor end) <> 0
+                order by e.posted_at desc, e.id
+                limit :limit
+                """)
+                .param("code", Chart.SELLER_PAYABLE.code()).param("org", orgId).param("currency", currency)
+                .param("from", Sql.ts(from)).param("to", Sql.ts(to)).param("limit", limit)
+                .query((rs, n) -> new StatementLine(rs.getObject("id", UUID.class),
+                        JournalType.valueOf(rs.getString("type")), Sql.instant(rs, "occurred_at"),
+                        rs.getString("order_id"), rs.getString("description"),
+                        Money.of(rs.getLong("amount"), rs.getString("currency")), rs.getString("label_id"),
+                        rs.getString("shipment_id"), rs.getString("tracking_number"), rs.getString("carrier")))
+                .list();
     }
 
     @Override

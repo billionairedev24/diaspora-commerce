@@ -1,7 +1,16 @@
-/* Expo app config for AfroTransact Delivery. EXPO_PUBLIC_APP_ENV is set per EAS build profile (eas.json). */
+/* Expo app config for AfroTransact Delivery. EXPO_PUBLIC_APP_ENV and the EXPO_PUBLIC_* URLs are set per EAS build
+   profile (eas.json); hosts per environment: docs/engineering/environments.md. */
 import { type ExpoConfig } from 'expo/config';
 
 const APP_ENV = process.env.EXPO_PUBLIC_APP_ENV ?? 'local';
+
+/* A dev/uat/prod build must name its own hosts: src/config/env.ts would otherwise fall back to the local stack.
+   Keep in sync with REQUIRED_URL_VARS there. */
+const REQUIRED_URL_VARS = ['EXPO_PUBLIC_FULFILMENT_URL', 'EXPO_PUBLIC_MEDIA_URL', 'EXPO_PUBLIC_OIDC_ISSUER', 'EXPO_PUBLIC_IDENTITY_URL'];
+if (APP_ENV === 'dev' || APP_ENV === 'uat' || APP_ENV === 'prod') {
+  const missing = REQUIRED_URL_VARS.filter((name) => !process.env[name]?.trim());
+  if (missing.length) throw new Error(`app.config: EXPO_PUBLIC_APP_ENV=${APP_ENV} needs ${missing.join(', ')} (set them in the eas.json build profile)`);
+}
 const SUFFIX = APP_ENV === 'prod' ? '' : `.${APP_ENV}`;
 /** Must match identity's driver-app client: com.afrotransact.driver:/oauth2redirect. */
 const SCHEME = 'com.afrotransact.driver';
