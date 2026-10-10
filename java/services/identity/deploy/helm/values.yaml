@@ -51,7 +51,7 @@ monitoring:
 #   - SEARCH_CLIENT_SECRET (search-service, scopes ai:use ads:serve)
 #   - RETAIL_CLIENT_SECRET (retail-service, scopes catalog:read inventory:receive inventory:read media:write)
 #   - INVENTORY_CLIENT_SECRET (inventory-service, scopes catalog:read catalog:write shipping:label)
-#   - GATEWAY_BFF_CLIENT_SECRET, OFFERS_CLIENT_SECRET, INDEXER_CLIENT_SECRET, TRUSTOPS_CLIENT_SECRET,
+#   - GATEWAY_BFF_CLIENT_SECRET, OFFERS_CLIENT_SECRET, INDEXER_CLIENT_SECRET, MEDIA_CLIENT_SECRET, TRUSTOPS_CLIENT_SECRET,
 #     TAX_RETURNS_CLIENT_SECRET
 #   - BOOTSTRAP_ADMIN_EMAIL
 #   - BOOTSTRAP_ADMIN_PASSWORD

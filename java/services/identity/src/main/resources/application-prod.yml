@@ -140,12 +140,18 @@ at:
         secret: ${SEARCH_CLIENT_SECRET}
         grant-types: [client_credentials]
         scopes: [ai:use, ads:serve]
+      - client-id: media-service
+        name: Media service
+        type: confidential
+        secret: ${MEDIA_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [ai:use]
       - client-id: indexer-service
         name: Search indexer
         type: confidential
         secret: ${INDEXER_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [sellers:directory]
+        scopes: [sellers:directory, ai:use]
       - client-id: offers-service
         name: Offers service
         type: confidential
