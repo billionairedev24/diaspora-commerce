@@ -207,13 +207,38 @@ paths:
               schema: {$ref: '#/components/schemas/Template'}
         '400': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+  /v1/templates/{key}/sample:
+    get:
+      security: [{bearer: []}]
+      tags: [Templates]
+      operationId: getTemplateSample
+      summary: Sample data a template key renders with
+      description: |
+        The fields the key's event carries in production: a contract-shaped producer event run through the real
+        ingest (rule, `Enrich`, identity's first name), a producer's `notification.requested` payload, or a fixed
+        sample for keys no event maps to. The staff console prefills its preview with it; the template gallery
+        (`make template-gallery`) uses the same data. A stored key without a sample (e.g. a new key) gets
+        `source: none` and empty `data`. Requires `notifications:read`.
+      parameters:
+        - {name: key, in: path, required: true, schema: {type: string}, example: order.confirmed}
+      responses:
+        '200':
+          description: Sample data
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TemplateSample'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/templates/{key}/preview:
     post:
       security: [{bearer: []}]
       tags: [Templates]
       operationId: previewTemplate
       summary: Render a template version with sample data
-      description: Requires `notifications:read`.
+      description: |
+        Renders a stored version (`version`, 0 = latest, with locale fallback) or, with `draft`, unsaved content
+        (the staff console's live preview of a new version; it must compile and every placeholder must be in
+        `data`). Requires `notifications:read`.
       parameters:
         - {name: key, in: path, required: true, schema: {type: string}}
       requestBody:
@@ -692,6 +717,28 @@ components:
         locale: {type: string, default: en}
         version: {type: integer, description: "0 or omitted = latest"}
         market: {type: string}
+        data: {type: object, additionalProperties: true}
+        draft: {$ref: '#/components/schemas/TemplateDraft'}
+    TemplateDraft:
+      type: object
+      description: Unsaved template content to render instead of a stored version.
+      required: [bodyText]
+      properties:
+        category: {$ref: '#/components/schemas/Category'}
+        subject: {type: string, description: "Email subject, push title or WhatsApp template name"}
+        bodyHtml: {type: string}
+        bodyText: {type: string}
+    TemplateSample:
+      type: object
+      required: [key, area, source, eventTypes, data]
+      properties:
+        key: {type: string}
+        area: {type: string, enum: [account, orders, seller, payouts, bookings, trust, retail, marketing, security, other]}
+        source:
+          type: string
+          enum: [event, request, sample, none]
+          description: "event: a producer event through the real ingest; request: a producer's notification.requested; sample: fixed data for keys no event maps to; none: no sample"
+        eventTypes: {type: array, items: {type: string}, description: "Event types that send this template (rules.go)"}
         data: {type: object, additionalProperties: true}
     Rendered:
       type: object

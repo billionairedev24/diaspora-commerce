@@ -241,9 +241,9 @@ def main():
             print(summary)
             failures += 1
 
-    # Platform kustomize layers (env-independent + per-env Elasticsearch).
-    layers = ["namespaces", "edge", "observability"] + [f"secret-stores/{c}" for c in ["aws", "gcp", "azure", "none"]] + \
-             [f"elasticsearch/overlays/{e}" for e in envs]
+    # Platform kustomize layers (env-independent + per-env overlays).
+    layers = ["namespaces", "observability", "policies"] + [f"secret-stores/{c}" for c in ["aws", "gcp", "azure", "none"]] + \
+             [f"{layer}/overlays/{e}" for layer in ["edge", "elasticsearch", "openfga", "previews"] for e in envs]
     pdir = out / "platform"
     pdir.mkdir(exist_ok=True)
     for layer in layers:

@@ -14,5 +14,29 @@
 #     expired_at: 2026-12-31
 
 vulnerabilities: []
-misconfigurations: []
+misconfigurations:
+  - id: AZU-0057
+    # Paths are relative to the scan root: the repository (`trivy fs .`) or infra/ (`trivy config infra`).
+    paths: ["infra/terraform/bootstrap/azure/main.tf", "terraform/bootstrap/azure/main.tf"]
+    statement: >-
+      Queue logging is enabled with azurerm_storage_account_queue_properties (azurerm 4+ moved queue_properties out of
+      azurerm_storage_account); Trivy's check only reads the removed inline block. Blob reads/writes of the state are
+      audited through Entra ID sign-ins (shared keys are disabled). Owner: platform.
+    expired_at: 2027-04-10
+  - id: KSV-0125
+    paths:
+      - "java/services/*/deploy/helm/templates/all.yaml"
+      - "go/services/*/deploy/helm/templates/all.yaml"
+      - "infra/k8s/platform/openfga/base/*.yaml"
+      - "infra/k8s/platform/elasticsearch/base/setup-job.yaml"
+      - "infra/k8s/platform/edge/base/cloudflared.yaml"
+      - "k8s/platform/openfga/base/*.yaml"
+      - "k8s/platform/elasticsearch/base/setup-job.yaml"
+      - "k8s/platform/edge/base/cloudflared.yaml"
+    statement: >-
+      Trivy's default trusted-registry list does not include GHCR / the cloud registries. Service charts default to
+      GHCR and Argo CD replaces image.registry with the environment's registry (platform-values.yaml); Kyverno admits
+      only images signed by our pipelines. OpenFGA, the Elasticsearch setup job and cloudflared use pinned official images.
+      Owner: platform.
+    expired_at: 2027-04-10
 secrets: []

@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Scale-to-zero for preview namespaces (idle_scaler.py). Settings come from the overlay (preview-idle-scaler-settings).
+resources:
+  - idle-scaler.yaml
+configMapGenerator:
+  - name: preview-idle-scaler
+    namespace: previews-system
+    files:
+      - idle_scaler.py

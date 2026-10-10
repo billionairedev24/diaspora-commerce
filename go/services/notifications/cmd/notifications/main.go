@@ -139,6 +139,10 @@ func run() error {
 		resolver, contactCache = c, c
 	}
 	links := app.Links{Storefront: cfg.Links.Storefront, SellerCenter: cfg.Links.SellerCenter, ProviderHub: cfg.Links.ProviderHub}
+	samples, err := app.NewTemplateSamples(ctx, links)
+	if err != nil {
+		return fmt.Errorf("template samples: %w", err)
+	}
 	stockAlerts := app.NewStockAlerts(postgres.NewStockAlertStore(pool), notifier, resolver, links, log)
 	ingest := app.NewIngest(notifier, app.IngestConfig{Resolver: resolver, Links: links, StockAlerts: stockAlerts,
 		Contacts: contactCache}, log)
@@ -169,7 +173,7 @@ func run() error {
 	authn := func(h http.Handler) http.Handler { return authMW(contacts.Capture(h)) }
 	httpapi.New(httpapi.Deps{Notifier: notifier, Log: app.NewNotificationLog(store), Templates: templates,
 		Preferences: prefs, Receipts: receipts, Compliance: compliance, Unsubscriber: unsub, StockAlerts: stockAlerts,
-		Twilio: twilioV, Resend: resendV, SendGrid: sendGridV, Logger: log}).Register(srv.Mux(), authn)
+		Samples: samples, Twilio: twilioV, Resend: resendV, SendGrid: sendGridV, Logger: log}).Register(srv.Mux(), authn)
 
 	// ---- background workers ----
 	var wg sync.WaitGroup

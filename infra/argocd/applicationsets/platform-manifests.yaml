@@ -22,10 +22,12 @@ spec:
               elements:
                 - {component: namespaces, wave: "-10", manifestPath: infra/k8s/platform/namespaces}
                 - {component: secret-store, wave: "-3", manifestPath: infra/k8s/platform/secret-stores/CLOUD}
-                - {component: edge, wave: "-1", manifestPath: infra/k8s/platform/edge}
+                - {component: edge, wave: "-1", manifestPath: infra/k8s/platform/edge/overlays/ENV}
                 - {component: observability-content, wave: "0", manifestPath: infra/k8s/platform/observability}
                 - {component: elasticsearch, wave: "1", manifestPath: infra/k8s/platform/elasticsearch/overlays/ENV}
                 - {component: openfga, wave: "1", manifestPath: infra/k8s/platform/openfga/overlays/ENV}
+                - {component: policies, wave: "-2", manifestPath: infra/k8s/platform/policies}
+                - {component: previews, wave: "2", manifestPath: infra/k8s/platform/previews/overlays/ENV}   # dev only (S182)
   template:
     metadata:
       name: '{{ .component }}-{{ .argocd.env }}'

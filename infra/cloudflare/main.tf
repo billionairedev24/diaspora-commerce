@@ -26,15 +26,18 @@ locals {
 
   # Public hostnames for this environment.
   hosts = {
-    storefront    = local.base             # afrotransact.com | dev.afrotransact.com
-    seller-center = "seller.${local.base}" # seller.afrotransact.com
-    staff-console = "admin.${local.base}"  # admin.afrotransact.com
-    api           = "api.${local.base}"    # gateway-bff (BFF for web + mobile)
-    auth          = "auth.${local.base}"   # identity (Spring Authorization Server)
-    media         = "media.${local.base}"  # R2 public media
+    storefront    = local.base                 # afrotransact.com | dev.afrotransact.com
+    seller-center = "seller.${local.base}"     # seller.afrotransact.com
+    staff-console = "admin.${local.base}"      # admin.afrotransact.com
+    api           = "api.${local.base}"        # gateway-bff (BFF for web + mobile)
+    auth          = "auth.${local.base}"       # identity (Spring Authorization Server)
+    media         = "media.${local.base}"      # R2 public media
+    mcp           = "mcp.${local.base}"        # mcp-server (own host, MCP clients)
+    grafana       = "grafana.${local.base}"    # kube-prometheus-stack Grafana
+    developers    = "developers.${local.base}" # docs portal (Cloudflare Pages, pages.tf)
   }
   web_apps    = ["storefront", "seller-center", "staff-console"]
-  origin_apps = ["api", "auth"]
+  origin_apps = ["api", "auth", "mcp", "grafana"]
 
   tags = ["env:${var.environment}", "managed-by:opentofu"]
 }

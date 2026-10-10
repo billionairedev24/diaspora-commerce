@@ -8,7 +8,7 @@ Related: [testing.md](testing.md), [ci-cd.md](ci-cd.md).
 
 | Concern | Tool | Config | Blocks merge on | Where it runs |
 |---|---|---|---|---|
-| Code patterns (our rules + OWASP basics) | **Semgrep** | `tools/security/semgrep.yml` | ERROR-severity rules | per service + web (PR), repo-wide (weekly) |
+| Code patterns (our rules + OWASP basics) | **Semgrep** | `tools/security/semgrep.yml` | ERROR-severity findings of our rules (registry packs: SARIF report only until their first full scan is triaged) | per service + web (PR), repo-wide (main, weekly) |
 | Deep code analysis (dataflow) | **CodeQL** | GitHub default queries (`security-extended`) | high/critical alerts (branch protection) | `security.yml`, optional per service |
 | Secrets | **gitleaks** | `.gitleaks.toml` | any finding | per service (PR diff), `security.yml` (full history) |
 | Dependencies + IaC + secrets | **Trivy** fs / config | `trivy.yaml` (+ `tools/security/trivy-secret.yaml`, `trivyignore.yaml`) | CRITICAL (repo), CRITICAL+HIGH (per service) | per service, `security.yml` |
@@ -136,9 +136,11 @@ cd java && ./mvnw -B org.owasp:dependency-check-maven:12.1.0:aggregate -DnvdApiK
 
 ### Images: Trivy + Syft SBOM + cosign
 
-`.github/actions/publish-image` builds the image, scans it with Trivy (CRITICAL fails), generates an SPDX SBOM
-with Syft (artifact + `cosign attest --type spdxjson`) and signs it keylessly. Deploys verify signature and
-attestation. Add `trivy-config: trivy.yaml` to that step so image scans use the same ignore file.
+`.github/actions/publish-image` builds the image reproducibly (`SOURCE_DATE_EPOCH` = commit time, layer timestamps
+rewritten), checks the image policy (non-root `USER`, `EXPOSE 8080`, prod environment defaults, size budget: Go 60 MB,
+Java 450 MB), scans it with Trivy using `trivy.yaml` (CRITICAL fails), generates an SPDX SBOM with Syft (artifact +
+`cosign attest --type spdxjson`) and signs it keylessly. Deploys verify signature and attestation, and Kyverno
+(`infra/k8s/platform/policies/signed-images.yaml`) refuses unsigned images in the service namespaces.
 
 ### ZAP baseline
 
@@ -146,7 +148,13 @@ Passive DAST of the dev storefront and API (`security.yml`, weekly/manual); find
 
 ## 3. CI commands by workflow
 
-Copy-paste ready for the CI owner. Versions are pinned; bump them deliberately.
+All of the commands below are wired (S201): `_go-service.yml` / `_java-service.yml` (security + coverage gate),
+`_web-app.yml` (new `security` job; a finding blocks the deploy jobs), `.github/actions/publish-image` and
+`security.yml`. Versions are pinned; bump them deliberately. One deviation from the commands below: Semgrep gates on
+our rules (`run_semgrep.sh -- <paths>`) and runs the registry packs (`--registry --sarif`) as a separate
+`continue-on-error` step that only uploads SARIF. The packs were never run against this code base (semgrep.dev is not
+reachable from the dev container), so their ERROR findings must be triaged once in code scanning before they may block
+merges; then drop `continue-on-error`.
 
 ### `_go-service.yml` → job `security` (PR + main; `SERVICE_DIR=go/services/<svc>`)
 
@@ -260,3 +268,30 @@ Trivy totals for the repo (fs, vuln): 2 CRITICAL, 120 HIGH, 156 MEDIUM occurrenc
 | DS-0013 `RUN cd …` | fixed | `WORKDIR /src/services/<svc>` in every Go Dockerfile (`java/Dockerfile` had none) | grep; Trivy not re-run (not installed offline) |
 | KSV-0013 image tag `latest` | fixed | `at-service` library refuses `latest` and a missing tag/digest (`fail` with the service name); supports `image.digest`; service values use the sentinel `dev` until the deploy pipeline writes the git sha | 26 charts x dev/uat/prod x (platform-values + 4 clouds) rendered with helm + `kubeconform -strict` |
 | `go/go.work` still says `toolchain go1.27.1` | **open** | bump to `toolchain go1.27.2`: in workspace mode `GOTOOLCHAIN=auto` (local runs, `tools/security/govulncheck.sh`) otherwise selects 1.27.1 and still reports the stdlib vulns. CI is unaffected (`GOTOOLCHAIN: local` with Go 1.27.2) | — |
+
+### 5.2 Remediation status (S246: JS, Azure) and re-scan, 2026-10-10
+
+| Finding | Status | Change | Verified by |
+|---|---|---|---|
+| glob 10.3.3 (GHSA-5j98-mcp5-4vw2 / CVE-2025-64756, high, `>=10.2.0 <10.5.0`) | fixed | root `package.json` `pnpm.overrides` `"glob@>=10.2.0 <10.5.0": "10.5.0"` (only the vulnerable 10.x range; glob 7/8/13 untouched) | `pnpm install --frozen-lockfile`; docs portal build; storefront, seller-center and staff-console `next build` |
+| serialize-javascript 6.0.2 (GHSA-5c6j-r48x-rmvq high `<=7.0.2`, GHSA-qj8w-gfj5-8c6v moderate `<7.0.5`) | fixed | `"serialize-javascript@<7.0.5": "7.1.2"` (same CommonJS `serialize(obj, opts)` export; copy-webpack-plugin 11 and css-minimizer-webpack-plugin 5 of the docs portal; drops `randombytes`) | same builds (the portal's production build minifies CSS through it) |
+| tinypool 1.1.1 (CRITICAL) | fixed (earlier) | `"tinypool@<2.2.0": "2.2.0"` | Trivy: 0 CRITICAL |
+| AZU-0012 state storage account default action | fixed | `network_rules { default_action = "Deny", bypass = [AzureServices, Logging, Metrics], ip_rules = var.allowed_ips }` in `infra/terraform/bootstrap/azure` | `trivy config`: no AZU-0012 |
+| AZU-0057 storage logging | accepted (MEDIUM) | queue logging is configured with `azurerm_storage_account_queue_properties` (azurerm 4+ split resource), which Trivy's check does not read; entry with expiry in `tools/security/trivyignore.yaml` | `trivy config` |
+
+Trivy 0.69.1 re-scan of the working tree with `trivy.yaml` (`trivy fs .` and `trivy config infra`):
+
+- **CRITICAL: 0** (vulnerabilities, secrets, misconfigurations).
+- **HIGH: 41, all Maven** (owned by the Java services): jackson-core / jackson-databind 3.1.5 in
+  `java/libs/platform-events` (CVE-2026-89407, -89425, -68497, -91776, -91777; fixed in 3.1.7: the `jackson-bom.version`
+  override in `platform-parent` or Spring Boot 4.1.4), jackson-databind 3.0.1 resolved for `java/pom.xml`, ai-gateway,
+  mcp-server, offers and orders (CVE-2026-54512, -54513 and the above; Trivy reads the version from the pom files
+  without a full Maven resolution, so confirm what the jars carry with
+  `./mvnw dependency:tree -Dincludes=tools.jackson.core` before and after pinning), json-smart 2.5.0 in `java/pom.xml`
+  (CVE-2024-57699, fixed 2.5.2: manage `net.minidev:json-smart`). Per-service PR scans fail on these HIGH findings
+  until the Java owners land the overrides.
+- npm: 0 HIGH (4 MEDIUM: decode-uri-component 0.2.2, postcss-selector-parser 6.1.4, uuid 7.0.3 / 8.3.2, all
+  transitive). Go modules: 0.
+- IaC: 0 CRITICAL/HIGH; MEDIUM KSV-0125 (images from registries outside Trivy's default trusted list: GHCR
+  defaults in the service charts, which GitOps replaces with the cloud registry; OpenFGA and the ES setup job from
+  Docker Hub) and AZU-0057 (above), both in `tools/security/trivyignore.yaml` with an expiry.

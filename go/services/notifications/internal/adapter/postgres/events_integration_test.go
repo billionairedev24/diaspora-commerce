@@ -32,133 +32,30 @@ func (identityStub) OrgOwners(context.Context, string) ([]string, error) {
 	return []string{"owner-1", "owner-2"}, nil
 }
 
-// producerFixtures are payloads shaped like contracts/asyncapi/events.yaml, one per mapped event type (and one per
-// rule for multi-rule types). Templates use missingkey=error, so a field the ingest forgets to derive fails here.
-var producerFixtures = map[string][]map[string]any{
-	"identity.verification.requested": {{"recipient": map[string]any{"id": "u-1", "email": "otp@example.com"}, "channel": "email",
-		"code": "123456", "expiresInMinutes": 10, "expiresAt": "2026-10-10T10:10:00Z", "purpose": "EMAIL_VERIFICATION",
-		"userId": "u-1", "firstName": "Ada", "transactional": true}, {"recipient": map[string]any{"id": "u-1", "phone": "+15550002222"},
-		"channel": "sms", "code": "654321", "expiresInMinutes": 10, "expiresAt": "2026-10-10T10:10:00Z", "purpose": "PHONE_VERIFICATION",
-		"userId": "u-1", "transactional": true}},
-	"identity.invitation.created": {{"invitationId": uuid.NewString(), "orgId": "org_1", "orgName": "Mama Put", "orgKind": "SELLER",
-		"email": "invitee@example.com", "roleKey": "seller.catalog", "roleName": "Catalog manager", "token": "tok",
-		"acceptUrl": "https://seller.afrotransact.com/invitations/accept?token=tok", "expiresAt": "2026-10-17T10:00:00Z",
-		"expiresInDays": 7, "invitedBy": "owner-1", "inviterName": nil,
-		"recipient": map[string]any{"id": nil, "email": "invitee@example.com", "phone": nil}, "transactional": true}},
-	"identity.user.registered": {{"userId": "u-1", "email": "ada@example.com", "firstName": "Ada", "lastName": "Obi", "intent": "SELL",
-		"roles": []string{"account.seller_applicant"}, "method": "PASSWORD", "emailVerified": false, "smsConsent": false,
-		"registeredAt": "2026-10-10T10:00:00Z"}},
-	"orders.order.placed": {{"orderId": uuid.NewString(), "orderNumber": "AT-2026-7KQ3MD", "customerId": "cust-1", "currency": "USD",
-		"itemsMinor": 4000, "shippingMinor": 500, "taxMinor": 300, "discountMinor": 0, "totalMinor": 4800,
-		"placedAt": "2026-10-10T10:00:00Z", "shipments": []any{map[string]any{"shipmentId": uuid.NewString(), "sellerOrgId": "org_1",
-			"fulfilmentType": "RETAIL_1P", "deliveryMethod": "CARRIER", "promisedBy": "2026-10-14", "totalMinor": 4800,
-			"lines": []any{map[string]any{"variantAtin": "ATGARI0001", "quantity": 2}}}}}},
-	"orders.order.cancelled": {{"orderId": uuid.NewString(), "orderNumber": "AT-1", "customerId": "cust-1",
-		"code": "orders.all-shipments-cancelled", "wasPlaced": true, "cancelledAt": "2026-10-10T10:00:00Z"}},
-	"orders.shipment.status_changed": {
-		shipment("packed", "picked_up", "CARRIER"), shipment("picked_up", "out_for_delivery", "AFROTRANSACT_DELIVERY"),
-		shipment("packed", "ready", "PICKUP"), shipment("out_for_delivery", "delivery_failed", "AFROTRANSACT_DELIVERY"),
-	},
-	"orders.shipment.delivered": {{"orderId": uuid.NewString(), "orderNumber": "AT-1", "customerId": "cust-1", "shipmentId": uuid.NewString(),
-		"sellerOrgId": "org_1", "deliveredAt": "2026-10-10T10:00:00Z", "totalMinor": 4800, "lineIds": []string{}, "source": "driver"}},
-	"orders.shipment.cancelled": {{"orderId": uuid.NewString(), "orderNumber": "AT-1", "customerId": "cust-1", "shipmentId": uuid.NewString(),
-		"sellerOrgId": "org_1", "actorType": "CUSTOMER", "captured": true, "totalMinor": 1999, "currency": "USD",
-		"cancelledAt": "2026-10-10T10:00:00Z"}},
-	"seller.application.submitted":      {application("SUBMITTED", nil)},
-	"seller.application.info_requested": {application("REQUEST_INFO", []string{"business_permit", "tax_id"})},
-	"seller.application.approved":       {application("FINAL_APPROVE", nil)},
-	"seller.application.rejected":       {application("REJECT", nil)},
-	"seller.compliance.reminder": {{"orgId": "org_1", "accountId": "acct_1", "thresholdDays": 3, "manual": false,
-		"openItems": []string{"external_account"}, "currentDeadline": "2026-10-13T00:00:00Z", "channels": []string{"email", "sms", "in_app"},
-		"occurredAt": "2026-10-10T10:00:00Z"}},
-	"seller.compliance.changed": {{"orgId": "org_1", "accountId": "acct_1", "status": "ACTION_NEEDED", "previousStatus": "COMPLIANT",
-		"newItems": []string{"individual.id_number"}, "currentDeadline": nil, "chargesEnabled": true, "payoutsEnabled": true,
-		"payoutsPaused": false, "trigger": "account.updated", "channels": []string{"email"}, "occurredAt": "2026-10-10T10:00:00Z"}},
-	"seller.payouts.paused":    {enforcement("AUTO_PAST_DUE"), enforcement("SUSPENDED")},
-	"seller.payouts.resumed":   {enforcement("CLEARED"), enforcement("REINSTATED")},
-	"seller.listings.hidden":   {enforcement("CHARGES_DISABLED"), enforcement("SUSPENDED")},
-	"seller.listings.restored": {enforcement("CLEARED"), enforcement("REINSTATED")},
-	"payments.payout.paid":     {payout("PAID")},
-	"payments.payout.failed":   {payout("FAILED")},
-	"booking.confirmed":        {booking("CONFIRMED")},
-	"booking.cancelled":        {booking("CANCELLED_PROVIDER")},
-	"booking.declined":         {booking("DECLINED")},
-	"booking.rescheduled":      {booking("CONFIRMED")},
-	"booking.balance_unpaid":   {balanceUnpaid()},
-	"payments.intent.action_required": {{"paymentId": uuid.NewString(), "orderId": "BK-24018", "parentPaymentId": uuid.NewString(),
-		"customerId": "cust-1", "stripePaymentIntentId": nil, "amountMinor": 15000, "currency": "USD",
-		"reason": "authentication_required", "lineIds": []string{}}},
-	"trustops.claim.opened":            {claim("AWAITING_SELLER", nil), claim("AWAITING_SELLER", nil)},
-	"trustops.claim.decided":           {claim("RESOLVED_REFUND", "REFUND"), claim("RESOLVED_DENIED", "DENY")},
-	"trustops.claim.withdrawn":         {claim("WITHDRAWN", nil)},
-	"trustops.claim.response_due_soon": {claim("AWAITING_SELLER", nil)},
-	"trustops.claim.response_lapsed":   {claim("UNDER_REVIEW", nil)},
-	"trustops.moderation.decided":      {moderation("NEW_LISTING"), moderation("LIVE_LISTING")},
-	"trustops.seller.suspended": {{"orgId": "org_1", "status": "SUSPENDED", "reason": "POLICY_VIOLATION", "note": nil,
-		"actorId": "staff-1", "payoutsHeld": true, "buyBoxRestricted": true, "listingsHidden": true, "changedAt": "2026-10-10T10:00:00Z"}},
-	"trustops.seller.reinstated": {{"orgId": "org_1", "status": "ACTIVE", "reason": nil, "note": nil, "actorId": "staff-1",
-		"payoutsHeld": false, "buyBoxRestricted": false, "listingsHidden": false, "changedAt": "2026-10-10T10:00:00Z"}},
-	"content.career-application.received": {{"reference": "CAR-000123", "jobId": "j1", "jobTitle": "Backend Engineer", "team": "Platform",
-		"location": "Remote", "name": "Kofi Mensah", "email": "kofi@example.com", "resumeAssetId": "a1", "resumeFileName": "cv.pdf",
-		"submittedAt": "2026-10-10T10:00:00Z"}},
-	"content.newsletter.confirmation_requested": {{"subscriptionId": uuid.NewString(), "email": "news@example.com", "locale": "fr",
-		"confirmUrl": "https://afrotransact.com/newsletter/confirm?t=x", "unsubscribeUrl": "https://afrotransact.com/u", "expiresAt": "2026-10-11T10:00:00Z"}},
-}
-
-func shipment(from, to, method string) map[string]any {
-	return map[string]any{"orderId": uuid.NewString(), "orderNumber": "AT-1", "customerId": "cust-1", "shipmentId": uuid.NewString(),
-		"sellerOrgId": "org_1", "fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": method, "from": from, "to": to,
-		"actorType": "CARRIER", "actorId": "ups", "source": "carrier", "occurredAt": "2026-10-10T10:00:00Z",
-		"carrier": "ups", "trackingNumber": "1Z999", "promisedBy": "2026-10-14"}
-}
-
-func application(action string, items []string) map[string]any {
-	return map[string]any{"applicationId": "app_1", "reference": "APP-30201", "orgId": "org_1", "kind": "SELLER",
-		"applicantUserId": "applicant-1", "status": "PENDING_REVIEW", "action": action, "actorId": "staff-1",
-		"requestedItems": items, "displayName": "Mama Put Foods", "note": nil, "submissionCount": 1, "occurredAt": "2026-10-10T10:00:00Z"}
-}
-
-func enforcement(reason string) map[string]any {
-	e := map[string]any{"orgId": "org_1", "accountId": "acct_1", "reason": reason, "pastDue": []string{"external_account"},
-		"actorId": nil, "note": nil, "occurredAt": "2026-10-10T10:00:00Z"}
-	if reason == "SUSPENDED" {
-		e["accountId"], e["actorId"], e["note"], e["pastDue"] = nil, "trust-ops-service", "[PROHIBITED_ITEMS] Repeated prohibited listings", []string{}
+// seededTemplatesRender renders the latest version of every seeded key, locale and channel (real migrations) with the
+// key's sample data, as cmd/template-gallery does.
+func seededTemplatesRender(t *testing.T, pool *pgxpool.Pool) {
+	ctx := context.Background()
+	samples, err := app.NewTemplateSamples(ctx, app.Links{Storefront: "https://afrotransact.com",
+		SellerCenter: "https://seller.afrotransact.com", ProviderHub: "https://provider.afrotransact.com"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	return e
-}
-
-func claim(status string, outcome any) map[string]any {
-	return map[string]any{"claimId": uuid.NewString(), "reference": "AZ-10001", "type": "ITEM_NOT_RECEIVED", "status": status,
-		"orderId": uuid.NewString(), "orderNumber": "AT-2026-7KQ3MD", "shipmentId": nil, "sellerOrgId": "org_1", "customerId": "cust-1",
-		"amountMinor": 4800, "currency": "USD", "outcome": outcome, "refundMinor": nil, "refundId": nil,
-		"dueAt": "2026-10-13T10:00:00Z", "escalated": false}
-}
-
-func moderation(itemType string) map[string]any {
-	return map[string]any{"itemId": uuid.NewString(), "productId": uuid.NewString(), "atin": nil, "sellerOrgId": "org_1",
-		"title": "Zobo leaves 200g", "status": "REJECTED", "priority": "NORMAL", "reasonCode": "UNAPPROVED_HEALTH_CLAIM",
-		"note": nil, "escalationReason": nil, "aiRiskLevel": nil, "itemType": itemType, "reportSource": nil, "reportReason": nil,
-		"reports": 0, "decidedBy": "staff-1", "dueAt": "2026-10-11T10:00:00Z"}
-}
-
-func balanceUnpaid() map[string]any {
-	b := booking("CONFIRMED")
-	b["balanceMinor"], b["balanceState"], b["balanceFailure"] = 15000, "FAILED", "card_declined"
-	return b
-}
-
-func payout(status string) map[string]any {
-	return map[string]any{"payoutRequestId": uuid.NewString(), "orgId": "org_1", "amountMinor": 250000, "currency": "USD",
-		"status": status, "requestedAt": "2026-10-10T10:00:00Z"}
-}
-
-func booking(status string) map[string]any {
-	return map[string]any{"recipient": map[string]any{"id": "cust-1", "email": nil, "phone": nil, "timeZone": "America/Chicago"},
-		"firstName": "Ada", "serviceName": "Knotless braids", "providerName": "Kemi's Studio", "startsAt": "Sat, Oct 17 · 10:00 AM",
-		"location": "Houston, TX", "bookingReference": "BK-24018", "manageUrl": "https://afrotransact.com/bookings/BK-24018",
-		"bookingId": uuid.NewString(), "orgId": "org_2", "memberId": uuid.NewString(), "serviceId": uuid.NewString(), "status": status,
-		"startAt": "2026-10-17T15:00:00Z", "endAt": "2026-10-17T18:00:00Z", "priceMinor": 18000, "depositMinor": 3000,
-		"currency": "USD", "policy": "MODERATE", "refundedMinor": 3000}
+	entries, err := app.NewTemplateGallery(postgres.NewTemplateStore(pool), app.NewRenderer(), samples).Entries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) < 94 {
+		t.Fatalf("%d seeded templates, want at least 94", len(entries))
+	}
+	for _, e := range entries {
+		if e.Err != "" {
+			t.Errorf("%s/%s/%s v%d: %s", e.Template.Key, e.Template.Locale, e.Template.Channel, e.Template.Version, e.Err)
+		}
+		if e.Template.Channel == domain.ChannelSMS && (e.SMS == nil || e.SMS.Segments == 0) {
+			t.Errorf("%s/sms: no segment count", e.Template.Key)
+		}
+	}
 }
 
 func producerEvents(t *testing.T, pool *pgxpool.Pool) {
@@ -167,6 +64,7 @@ func producerEvents(t *testing.T, pool *pgxpool.Pool) {
 	ing := app.NewIngest(e.notifier, app.IngestConfig{Resolver: identityStub{},
 		Links: app.Links{Storefront: "https://afrotransact.com", SellerCenter: "https://seller.afrotransact.com",
 			ProviderHub: "https://provider.afrotransact.com"}}, discard)
+	producerFixtures := app.SampleEvents() // contract-shaped payloads, one per rule (shared with the template gallery)
 	types := make([]string, 0, len(app.DefaultEventRules))
 	for typ := range app.DefaultEventRules {
 		types = append(types, typ)

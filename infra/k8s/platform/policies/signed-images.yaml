@@ -1,0 +1,49 @@
+# Signed images only (S249, docs/engineering/ci-cd.md "Security of the pipeline"): every Pod in the AfroTransact service
+# namespaces (label app.kubernetes.io/part-of=afrotransact: afrotransact-<env> and preview namespaces) must run an image
+# signed keylessly by this repository's reusable service pipelines on main, with an SPDX SBOM attestation. The deploy
+# job copies image, signature and attestation to the cloud registry (cosign copy), so verification works there too.
+# Tags are resolved to digests (mutateDigest) so a re-pushed tag can never swap the image under a running release.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: afrotransact-signed-images
+  annotations:
+    policies.kyverno.io/title: Signed AfroTransact images
+    policies.kyverno.io/category: Supply chain
+    policies.kyverno.io/severity: high
+    policies.kyverno.io/description: >-
+      Images in AfroTransact service namespaces must carry a cosign keyless signature and an SPDX SBOM attestation
+      from .github/workflows/_java-service.yml or _go-service.yml on refs/heads/main.
+spec:
+  background: false
+  webhookTimeoutSeconds: 30
+  rules:
+    - name: signed-by-service-pipeline
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+              namespaceSelector:
+                matchLabels: {app.kubernetes.io/part-of: afrotransact}
+      verifyImages:
+        - imageReferences: ["*"]
+          failureAction: Enforce
+          mutateDigest: true
+          verifyDigest: true
+          required: true
+          attestors:
+            - entries:
+                - keyless:
+                    issuer: https://token.actions.githubusercontent.com
+                    subjectRegExp: '^https://github\.com/billionairedev24/diaspora-commerce/\.github/workflows/_(java|go)-service\.yml@refs/heads/main$'
+                    rekor:
+                      url: https://rekor.sigstore.dev
+          attestations:
+            - type: https://spdx.dev/Document
+              attestors:
+                - entries:
+                    - keyless:
+                        issuer: https://token.actions.githubusercontent.com
+                        subjectRegExp: '^https://github\.com/billionairedev24/diaspora-commerce/\.github/workflows/_(java|go)-service\.yml@refs/heads/main$'
+                        rekor:
+                          url: https://rekor.sigstore.dev

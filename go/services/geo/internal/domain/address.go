@@ -15,6 +15,10 @@ type Suggestion struct {
 	MainText      string `json:"mainText"`
 	SecondaryText string `json:"secondaryText"`
 	Provider      string `json:"provider"`
+	// Kind says what the suggestion is: address (street level), postal_code or locality.
+	Kind AddressKind `json:"kind,omitempty"`
+	// DistanceMeters is the straight-line distance from the bias point, when one was given and the provider knows it.
+	DistanceMeters *float64 `json:"distanceMeters,omitempty"`
 }
 
 // Address is a structured postal address.

@@ -76,3 +76,40 @@ func TestGetAssetPassesTheRequestedLinkLifetime(t *testing.T) {
 		t.Fatalf("purpose not allowed for the caller: status %d", rec.Code)
 	}
 }
+
+func (f *fakeMedia) ResolveLink(_ context.Context, token string) (string, error) {
+	switch token {
+	case "good":
+		return "https://bucket.example.test/po.pdf?X-Amz-Signature=abc", nil
+	case "old":
+		return "", app.ErrLinkExpired
+	default:
+		return "", app.ErrLinkInvalid
+	}
+}
+
+func TestLongLivedLinkRedirectsWithoutAToken(t *testing.T) {
+	mux := http.NewServeMux()
+	httpapi.New(&fakeMedia{}).Register(mux, func(http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) })
+	})
+	get := func(target string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), http.MethodGet, target, nil))
+		return rec
+	}
+	rec := get("/v1/l/good")
+	if rec.Code != http.StatusFound || !strings.HasPrefix(rec.Header().Get("Location"), "https://bucket.example.test/po.pdf") ||
+		rec.Header().Get("Cache-Control") != "no-store" || rec.Header().Get("Referrer-Policy") != "no-referrer" {
+		t.Fatalf("redirect: %d %v", rec.Code, rec.Header())
+	}
+	if rec := get("/v1/l/old"); rec.Code != http.StatusGone || !strings.Contains(rec.Body.String(), "media.link-expired") {
+		t.Fatalf("expired link: %d %s", rec.Code, rec.Body.String())
+	}
+	if rec := get("/v1/l/forged"); rec.Code != http.StatusNotFound {
+		t.Fatalf("invalid link: %d", rec.Code)
+	}
+	if rec := get("/v1/assets/a1"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("asset reads still need a token: %d", rec.Code)
+	}
+}

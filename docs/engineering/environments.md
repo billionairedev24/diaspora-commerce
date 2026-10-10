@@ -24,12 +24,16 @@ The edge is defined once in `infra/cloudflare` (`local.hosts` in `main.tf`): the
 
 The staff console is `admin.<base>` (the Cloudflare Worker route and the WAF admin allow-list rule both use
 `admin.`). `staff.`, `sell.`, `provider.`, `identity.` and `www.<env>.` hosts do not exist; Provider Hub is served
-by the Seller Center app. `mcp.`, `developers.` and `grafana.` are not created by `infra/cloudflare` yet (they are
-in use by mcp-server, the docs portal and kube-prometheus-stack); add them there before relying on them.
+by the Seller Center app. `mcp.` (mcp-server) and `grafana.` (kube-prometheus-stack) are origin hosts like `api.` and
+`auth.` (Cloudflare Tunnel or AOP ingress -> the edge Gateway -> HTTPRoutes in `infra/k8s/platform/edge/overlays/<env>`);
+`developers.` is the docs portal on Cloudflare Pages (`infra/cloudflare/pages.tf`).
 In prod `www.afrotransact.com` must redirect (301) to the bare domain, which is the only storefront origin (gateway-bff
-CORS/CSRF, OIDC callback, identity redirect URIs, universal links). Open item for `infra/cloudflare`: it still points
-`www.` at the storefront Worker (`cloudflare_workers_route.www` in `environment.tf`) instead of a redirect rule; until
-that changes, `www.` serves the storefront but its state-changing `/api/bff` calls fail the BFF's CORS/CSRF origin check.
+CORS/CSRF, OIDC callback, identity redirect URIs, universal links); `infra/cloudflare/environment.tf` does this with the
+`www to apex` dynamic redirect rule (path and query kept).
+
+Public API paths on `api.<base>` (edge HTTPRoute `api`, prefix stripped before the service sees it): `/bff` gateway-bff,
+`/identity`, `/bookings`, `/fulfilment`, `/media`, `/notifications`, `/carrier-gateway`, and `/payments/v1/webhooks`
+(Stripe webhooks only). Other services are internal.
 Local ports come from `infra/local/PORTS.md`.
 
 ## Shared settings
@@ -166,5 +170,23 @@ Files that hold every environment side by side (`wrangler.jsonc` / `wrangler.tom
 environment's hosts, but only real public hosts and the canonical problem-type base.
 
 Emails, problem types, label keys and the short documented `EXCEPTIONS` list in the script are allowed; tests,
-fixtures, generated clients, contracts and the docs portal are not scanned. See `docs/engineering/ci-cd.md` for
-the CI step.
+fixtures, generated clients, contracts and the docs portal are not scanned. Files under
+`infra/k8s/platform/<layer>/overlays/<env>/` count as that environment's files. CI: `env-urls.yml`
+(`docs/engineering/ci-cd.md`).
+
+## Per-environment configuration guard (S188)
+
+`python3 tools/ci/check_env_config.py` (`make env-check`, CI `env-urls.yml`) checks every service:
+
+| Rule | local | dev | uat | prod |
+|---|---|---|---|---|
+| Profiles: Java `application-<env>.yml`, Go `config/<env>.yaml`, Helm `values-<env>.yaml` (`env:` matches) | yes | yes | yes | yes |
+| API reference pages (Swagger UI, Scalar, Redoc): Java `at.api-docs.enabled` (+ springdoc off in prod), Go `docsEnabled` | on | on | on | off |
+| Trace sampling: Java `management.tracing.sampling.probability`, Go `telemetry.sampleRatio`, Helm `telemetry.sampling` (`TRACE_SAMPLING`) | 100% | 100% | 50% | 10% |
+| Sizing (S182): replicas / HPA | | 1, no HPA | 2+ | 2+ (HPA min or replicas) |
+| Spot pool toleration (`afrotransact.com/spot`) | | required | required | forbidden |
+| `resources.requests.cpu/memory` and `limits.memory`; no `image.tag: latest` | | yes | yes | yes |
+
+Secrets are never in these files: each service's `values.yaml` lists the keys it expects in
+`afrotransact/<env>/<service>` (rendered as an ExternalSecret), and `docs/runbooks/first-environment.md` lists them all
+with their sources. Local runs use the docker compose defaults (`infra/local`, local-only credentials).

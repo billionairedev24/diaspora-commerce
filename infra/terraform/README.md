@@ -7,8 +7,8 @@ stores - not the applications, pipelines or edge.
 
 ```
 infra/terraform/
-  modules/{aws,gcp,azure}/{network,cluster,postgres,cache,bucket,secrets,registry,identity,github-oidc}
-  modules/shared/{elastic,confluent}       same on every cloud
+  modules/{aws,gcp,azure}/{network,cluster,postgres,cache,bucket,secrets,registry,identity,github-oidc,budget}
+  modules/shared/{elastic,confluent,temporal}  same on every cloud (Elastic Cloud, Confluent Cloud, Temporal Cloud)
   modules/README.md                        the shared module contract (read this next)
   envs/{dev,uat,prod}/                     main.tf (identical) + sizing.tf (per env) + tfvars/backends
   bootstrap/{aws,gcp,azure}/               one-time remote-state bucket per account/project/subscription
@@ -35,8 +35,9 @@ dev while prod is on AWS).
 
 Credentials are never in files: locally use `aws sso login` / `gcloud auth application-default login` /
 `az login`; in CI the OIDC roles created by `github-oidc` are used. Elastic Cloud reads `EC_API_KEY`,
-Confluent reads `CONFLUENT_CLOUD_API_KEY` / `CONFLUENT_CLOUD_API_SECRET` (or set `enable_elastic` /
-`enable_confluent = false`).
+Confluent reads `CONFLUENT_CLOUD_API_KEY` / `CONFLUENT_CLOUD_API_SECRET`, Temporal Cloud reads
+`TEMPORAL_CLOUD_API_KEY` (or set `enable_elastic` / `enable_confluent` / `enable_temporal = false`).
+The first apply of a new environment, step by step per cloud: `docs/runbooks/first-environment.md`.
 
 **Switching an existing environment to another cloud** is a migration, not a flag flip: back up data,
 `tofu destroy` (OpenTofu warns that provider instances must outlive their resources - this is why), change
@@ -102,6 +103,8 @@ Order of environments: `dev` creates the account-wide GitHub OIDC provider/pool
 | Elastic / Confluent | hot only / Basic | hot + frozen / Standard | hot + warm + frozen, 3 zones / Standard multi-zone |
 | Backups / KYC retention | 3 d / 1 d (governance) | 7 d / 30 d | 30 d / 7 years (compliance, locked) |
 | Deletion protection | off | on | on |
+| Monthly cloud budget (`monthly_budget`, alerts 50/80/100% actual + 100% forecast) | $1,000 | $1,500 | $6,500 |
+| Temporal Cloud namespace retention | 3 d | 14 d | 30 d |
 
 Levers built in (S182, IaC side):
 
@@ -109,8 +112,12 @@ Levers built in (S182, IaC side):
 - **Spot pools** on every cloud with the same taint `afrotransact.com/spot=true:NoSchedule`; stateless
   services tolerate it in dev (see `values-dev.yaml`), the pool scales to zero. Karpenter (AWS) and GKE's
   optimize-utilization profile bin-pack; AKS node autoprovisioning can be enabled in `modules/azure/cluster`.
-- **Scale to zero in dev**: Aurora auto-pause, Confluent Basic, spot pool min 0; per-PR preview namespaces
-  scale to zero via infra/k8s (KEDA/downscaler).
+- **Scale to zero in dev**: Aurora auto-pause, Confluent Basic, spot pool min 0; preview namespaces (label
+  `afrotransact.com/preview=true`) scale to zero after 30 idle minutes and outside working hours via the
+  `preview-idle-scaler` CronJob (`infra/k8s/platform/previews`); web previews are Workers versions (per request).
+- **Budgets and alerts** (`modules/<cloud>/budget`): AWS Budgets (+ SNS topic), GCP Cloud Billing budget (+ email
+  channels), Azure consumption budget on the environment's resource group. Amounts per env in `sizing.tf`;
+  recipients `budget_notification_emails`; what to do when one fires: `docs/runbooks/cost.md`.
 - **No NAT for cloud APIs**: S3 gateway + interface endpoints (AWS), Private Google Access (GCP), private
   endpoints (Azure); NAT only carries third-party SaaS traffic and is single in dev/uat.
 - **Storage tiering**: lifecycle to IA/Nearline/Cool then Glacier IR/Coldline/Archive; exports expire after
@@ -119,6 +126,8 @@ Levers built in (S182, IaC side):
   Savings Plans + RDS reserved capacity (AWS), committed-use discounts (GCP), or Azure savings plan +
   reserved capacity; buy after 4-6 weeks of steady prod metrics. Spot and on-demand above the baseline.
 - **Search**: ILM hot-warm-frozen (`modules/shared/elastic/ilm`).
+- **Sizing guard**: `tools/ci/check_env_config.py` (CI `env-urls.yml`) fails a PR that gives dev more than one
+  replica or an HPA, drops the spot toleration in dev/uat, adds it in prod, or leaves requests/limits unset.
 
 ## 5. Cost comparison (launch scale)
 

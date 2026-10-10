@@ -1,0 +1,106 @@
+# Public routes for uat (hosts from infra/cloudflare local.hosts; docs/engineering/environments.md). Cloudflare
+# terminates TLS and forwards through the tunnel (or AOP-protected ingress) to the edge Gateway.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api
+  namespace: afrotransact-uat
+spec:
+  parentRefs: [{name: edge, namespace: ingress}]
+  hostnames: [api.uat.afrotransact.com]
+  rules:
+    # screen APIs for web and mobile (BFF_ORIGIN = <API_BASE_URL>/bff)
+    - matches: [{path: {type: PathPrefix, value: /bff}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
+      backendRefs: [{name: gateway-bff, port: 80}]
+    # mobile devices / notification preferences (EXPO_PUBLIC_IDENTITY_URL)
+    - matches: [{path: {type: PathPrefix, value: /identity}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
+      backendRefs: [{name: identity, port: 80}]
+    # customer app bookings
+    - matches: [{path: {type: PathPrefix, value: /bookings}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
+      backendRefs: [{name: bookings, port: 80}]
+    # driver app
+    - matches: [{path: {type: PathPrefix, value: /fulfilment}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
+      backendRefs: [{name: fulfilment, port: 80}]
+    # driver proof photos, upload signing
+    - matches: [{path: {type: PathPrefix, value: /media}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
+      backendRefs: [{name: media, port: 80}]
+    # provider webhooks (Resend, SendGrid, Twilio), PUBLIC_BASE_URL
+    - matches: [{path: {type: PathPrefix, value: /notifications}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
+      backendRefs: [{name: notifications, port: 80}]
+    # carrier webhooks (UPS, FedEx, DHL), PUBLIC_BASE_URL
+    - matches: [{path: {type: PathPrefix, value: /carrier-gateway}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
+      backendRefs: [{name: carrier-gateway, port: 80}]
+    # Stripe webhooks only (rewritten to /v1/webhooks)
+    - matches: [{path: {type: PathPrefix, value: /payments/v1/webhooks}}]
+      filters:
+        - type: URLRewrite
+          urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /v1/webhooks}}
+      backendRefs: [{name: payments, port: 80}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: auth
+  namespace: afrotransact-uat
+spec:
+  parentRefs: [{name: edge, namespace: ingress}]
+  hostnames: [auth.uat.afrotransact.com]
+  rules:
+    - backendRefs: [{name: identity, port: 80}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp
+  namespace: afrotransact-uat
+spec:
+  parentRefs: [{name: edge, namespace: ingress}]
+  hostnames: [mcp.uat.afrotransact.com]
+  rules:
+    - backendRefs: [{name: mcp-server, port: 80}]
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana
+  namespace: observability
+spec:
+  parentRefs: [{name: edge, namespace: ingress}]
+  hostnames: [grafana.uat.afrotransact.com]
+  rules:
+    - backendRefs: [{name: kube-prometheus-stack-grafana, port: 80}]
+---
+# Tunnel token for cloudflared (base/cloudflared.yaml): `cloudflared tunnel token <tofu output tunnel_id>`.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: cloudflared
+  namespace: ingress
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: platform-secrets}
+  target: {name: cloudflared}
+  data:
+    - secretKey: token
+      remoteRef: {key: afrotransact/uat/cloudflared, property: token}

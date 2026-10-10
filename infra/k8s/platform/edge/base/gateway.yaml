@@ -1,0 +1,67 @@
+# Shared edge Gateway (Envoy Gateway, Gateway API). HTTPRoutes attach to it from afrotransact-<env> and observability
+# (overlays/<env>/routes.yaml). The proxy runs in this namespace (Envoy Gateway deploy type GatewayNamespace, see
+# infra/k8s/platform/values/envoy-gateway.yaml) behind the Service "envoy-gateway" (EnvoyProxy "edge"), which is the
+# Cloudflare Tunnel origin (infra/cloudflare tunnel_service = http://envoy-gateway.ingress.svc.cluster.local:80).
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: edge
+  namespace: ingress
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  gatewayClassName: envoy
+  infrastructure:
+    parametersRef: {group: gateway.envoyproxy.io, kind: EnvoyProxy, name: edge}
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - {key: app.kubernetes.io/part-of, operator: In, values: [afrotransact, afrotransact-platform]}
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: "*.afrotransact.com"
+      tls:
+        mode: Terminate
+        certificateRefs: [{kind: Secret, name: afrotransact-wildcard-tls}]
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchExpressions:
+              - {key: app.kubernetes.io/part-of, operator: In, values: [afrotransact, afrotransact-platform]}
+---
+# Proxy parameters: a stable Service name for the tunnel / ingress origin and two replicas spread across zones.
+# Tunnel mode (default) keeps the Service ClusterIP; ingress mode (infra/cloudflare origin_mode = "ingress") patches
+# type LoadBalancer in the environment overlay and must enforce Authenticated Origin Pulls.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: edge
+  namespace: ingress
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        name: envoy-gateway
+        type: ClusterIP
+      envoyDeployment:
+        replicas: 2
+        container:
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {memory: 512Mi}

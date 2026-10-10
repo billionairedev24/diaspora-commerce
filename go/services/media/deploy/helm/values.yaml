@@ -30,7 +30,10 @@ monitoring:
   prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
 # Secret keys expected at afrotransact/<env>/media in the cloud secret store:
 #   - DB_URL
-#   - UPLOADTHING_API_KEY
+#   - UPLOADTHING_API_KEY      (or UPLOADTHING_TOKEN, the dashboard's base64 token)
+#   - LINK_SIGNING_KEY         (≥ 32 characters; signs media-hosted long-lived links, S250)
+#   - LINK_SIGNING_KEYS_PREVIOUS (optional, comma list, while rotating)
+#   - MEDIA_CLIENT_SECRET      (identity client media-service, scope ai:use: AI image moderation, S030)
 #   - R2_ACCESS_KEY_ID
 #   - R2_SECRET_ACCESS_KEY
 #   - AZURE_STORAGE_KEY

@@ -1,0 +1,92 @@
+# Preview namespaces scale to zero when idle (S182). The CronJob runs idle_scaler.py (see its docstring for the
+# rules): no HTTP requests for IDLE_MINUTES (or outside the uptime window) -> every Deployment / StatefulSet / Rollout in
+# namespaces labelled afrotransact.com/preview=true goes to 0 replicas; a new deploy or the
+# afrotransact.com/wake annotation brings them back. Only the dev overlay enables it (previews run in dev).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: previews-system
+  labels: {app.kubernetes.io/part-of: afrotransact-platform}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: preview-idle-scaler
+  namespace: previews-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: preview-idle-scaler
+rules:
+  # Reads workloads, changes only their scale subresource; its own bookkeeping lives in namespace annotations.
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, patch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets]
+    verbs: [get, list]
+  - apiGroups: [apps]
+    resources: [deployments/scale, statefulsets/scale]
+    verbs: [get, patch]
+  - apiGroups: [argoproj.io]
+    resources: [rollouts]
+    verbs: [get, list]
+  - apiGroups: [argoproj.io]
+    resources: [rollouts/scale]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: preview-idle-scaler
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: preview-idle-scaler}
+subjects:
+  - {kind: ServiceAccount, name: preview-idle-scaler, namespace: previews-system}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: preview-idle-scaler
+  namespace: previews-system
+spec:
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels: {app.kubernetes.io/name: preview-idle-scaler, app.kubernetes.io/part-of: afrotransact-platform}
+        spec:
+          serviceAccountName: preview-idle-scaler
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile: {type: RuntimeDefault}
+          tolerations:
+            - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
+          containers:
+            - name: scaler
+              image: python:3.13.15-slim
+              command: [python3, /opt/scaler/idle_scaler.py]
+              envFrom:
+                - configMapRef: {name: preview-idle-scaler-settings}
+              resources:
+                requests: {cpu: 10m, memory: 32Mi}
+                limits: {memory: 128Mi}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              volumeMounts:
+                - {name: script, mountPath: /opt/scaler, readOnly: true}
+          volumes:
+            - name: script
+              configMap: {name: preview-idle-scaler}

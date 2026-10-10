@@ -283,5 +283,26 @@ stock alerts (subscribe once, claim once per restock, end-to-end send) and retai
 supplier without identity, attachment reference stored, PDF attached by the dispatcher). Attachment tests use fakes
 (in-memory fetcher, fake HTTP transport for `mediafetch`) and never touch the network.
 
+### Template gallery
+
+`make template-gallery` (repo root; Docker needed, or `ARGS=--dsn=postgres://…` for a database it may migrate) writes
+`build/template-gallery/index.html` (gitignored): one self-contained page with the latest version of every seeded key,
+locale and channel. `cmd/template-gallery` runs the real migrations against a throwaway Testcontainers Postgres
+(`postgis/postgis:17-3.5`, `--image` or `NOTIFICATIONS_TEST_PG_IMAGE` to override), renders with the real `Renderer`
+and takes sample data from `app.NewTemplateSamples`: the contract-shaped producer fixtures in
+`internal/app/samples_fixtures.go` (`SampleEvents`, `SampleRequests`) run through the real ingest, so each template
+gets exactly the fields its rule's `Enrich` derives, plus `SampleData` for keys no event maps to (`booking.reminder`,
+`payout.requirement_due`). Emails show subject, sandboxed HTML (desktop / mobile width) and text part; SMS a phone bubble
+with characters, GSM-7 / UCS-2 encoding and segment count (`domain.CountSmsSegments`); push a notification card;
+WhatsApp a chat bubble; plus the sample data and the triggering event types from `rules.go`. A template that fails to
+render is listed at the top with its error. `--out` changes the path, `--repo` points at the monorepo when run from
+elsewhere (tokens and Figtree are inlined from `web/packages/tokens`).
+
+`TestEverySeededTemplateRendersWithSampleData` (unit, parses the seed migrations) and the Postgres integration test
+(real migrations) render every seeded template with its sample data, so a template edit that needs a field the event
+does not carry fails CI. A new event rule needs a fixture in `SampleEvents`; a key sent only through
+`notification.requested` needs an entry in `SampleData`. `GET /v1/templates/{key}/sample` serves the same data to the
+staff console's template editor.
+
 Container: `docker build -f services/notifications/Dockerfile go`. Helm: `deploy/helm` on the `at-service` library
 chart.

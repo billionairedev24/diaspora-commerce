@@ -185,3 +185,39 @@ func TestSendGridEvents(t *testing.T) {
 		t.Fatalf("%+v", evs)
 	}
 }
+
+type fakeTemplates struct {
+	app.Templates
+	stored map[string][]domain.Template
+}
+
+func (f fakeTemplates) List(_ context.Context, key string) ([]domain.Template, error) { return f.stored[key], nil }
+
+func TestTemplateSample(t *testing.T) {
+	samples, err := app.NewTemplateSamples(context.Background(), app.Links{Storefront: "https://afrotransact.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tpls := fakeTemplates{stored: map[string][]domain.Template{"brand.new": {{Key: "brand.new", Locale: "en", Channel: domain.ChannelEmail}}}}
+	reader := auth.Actor{Subject: "s1", Type: "STAFF", Permissions: []string{httpapi.PermRead}}
+	get := func(a auth.Actor, key string) (*httptest.ResponseRecorder, app.TemplateSample) {
+		rec := httptest.NewRecorder()
+		mux(httpapi.Deps{Templates: tpls, Samples: samples}, a).ServeHTTP(rec, httptest.NewRequestWithContext(context.Background(), "GET", "/v1/templates/"+key+"/sample", nil))
+		var s app.TemplateSample
+		_ = json.Unmarshal(rec.Body.Bytes(), &s)
+		return rec, s
+	}
+	rec, s := get(reader, "order.confirmed")
+	if rec.Code != http.StatusOK || s.Source != app.SampleFromEvent || s.Data["total"] != "$48.00" || s.EventTypes[0] != "orders.order.placed" || s.Area != app.AreaOrders {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+	if rec, s := get(reader, "brand.new"); rec.Code != http.StatusOK || s.Source != app.SampleNone || len(s.Data) != 0 {
+		t.Fatalf("stored key without sample: %d %s", rec.Code, rec.Body)
+	}
+	if rec, _ := get(reader, "no.such"); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown key: %d", rec.Code)
+	}
+	if rec, _ := get(auth.Actor{Subject: "c1", Type: "CUSTOMER"}, "order.confirmed"); rec.Code != http.StatusForbidden {
+		t.Fatalf("needs notifications:read: %d", rec.Code)
+	}
+}

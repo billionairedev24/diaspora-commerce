@@ -3,6 +3,7 @@
 package s3store
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -77,6 +78,31 @@ func (s *storeImpl) PrepareUpload(ctx context.Context, key, _, contentType strin
 		up.PublicURL = strings.TrimSuffix(s.opts.PublicBaseURL, "/") + "/" + key
 	}
 	return up, nil
+}
+
+// Put writes an object; public objects are served from PublicBaseURL (the bucket policy makes the purpose prefixes,
+// never quarantine/, publicly readable).
+func (s *storeImpl) Put(ctx context.Context, key, _, contentType string, data []byte, public bool) (string, string, error) {
+	in := &s3.PutObjectInput{
+		Bucket:        aws.String(s.opts.Bucket),
+		Key:           aws.String(key),
+		Body:          bytes.NewReader(data),
+		ContentType:   aws.String(contentType),
+		ContentLength: aws.Int64(int64(len(data))),
+	}
+	if public {
+		// Keys are unique per upload, so CDN copies never go stale.
+		in.CacheControl = aws.String("public, max-age=31536000, immutable")
+	}
+	_, err := s.client.PutObject(ctx, in)
+	if err != nil {
+		return "", "", fmt.Errorf("put %s: %w", key, err)
+	}
+	publicURL := ""
+	if public && s.opts.PublicBaseURL != "" {
+		publicURL = strings.TrimSuffix(s.opts.PublicBaseURL, "/") + "/" + key
+	}
+	return key, publicURL, nil
 }
 
 func (s *storeImpl) Open(ctx context.Context, key string, n int64) (io.ReadCloser, int64, string, error) {

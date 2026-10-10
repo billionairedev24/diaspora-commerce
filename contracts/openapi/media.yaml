@@ -7,15 +7,26 @@ info:
     photos and KYC documents (private, object-locked bucket on the primary cloud), plus private documents:
     retail purchase orders (PDF ≤ 10 MB), inbound shipping documents (PDF or image ≤ 15 MB), job applicants'
     résumés (PDF ≤ 5 MB) and staff exports (CSV or XLSX ≤ 50 MB). Flow: `POST /v1/uploads`
-    returns a short-lived upload URL; the client PUTs the file straight to storage; `POST /v1/assets/{id}/complete`
-    makes the service read the object back, detect its real type, measure it and apply the purpose rules
-    (type, size, minimum edge, white background for product main images). Rejected files are deleted.
+    returns a short-lived upload URL; the client PUTs the file straight to storage (as multipart/form-data in
+    `upload.formField` when it is set, which UploadThing requires); `POST /v1/assets/{id}/complete` makes the service
+    read the object back, detect its real type, measure it and apply the purpose rules (type, size, minimum edge,
+    white background for product main images). Rejected files are deleted.
+
+    **Moderation (public images: `product-image`, `storefront`).** Uploads land in quarantine (private) and are
+    published only when moderation passes: EXIF / XMP / IPTC metadata (GPS, camera) is stripped, a perceptual hash
+    finds duplicates (another seller's near-identical photo is held for review; the organisation's own is only noted)
+    and an AI hook (ai-gateway) checks the content, failing closed (held) or open (published with a note) as
+    configured. `moderation.verdict` is `PASSED` (public `url`), `HELD` (status `FLAGGED`, private until staff
+    review with `POST /v1/assets/{id}/review`) or `BLOCKED` (status `REJECTED`, deleted). Quality flags (minimum
+    edge, white background) never block publication.
 
     The document purposes (`purchase-order`, `shipping-document`, `career-resume`, `export`) accept the
     client-credentials tokens of `retail-service` and `gateway-bff` and refuse other service clients;
-    `purchase-order`, `shipping-document` and `export` are otherwise staff-only. Their signed download links may
-    last longer than the default 5 minutes (`urlTtlSeconds`, up to 14 days by default, configurable); every other
-    purpose keeps 5-minute links.
+    `purchase-order`, `shipping-document` and `export` are otherwise staff-only. User access tokens the BFF forwards
+    (minted for `gateway-bff`) act as that user. Signed download links of document purposes may last longer than
+    the default 5 minutes (`urlTtlSeconds`, up to 14 days by default, configurable): such links are media-hosted
+    (`GET /v1/l/{token}`), so they work for their whole lifetime on every cloud; every other purpose keeps 5-minute
+    links.
 servers:
   - {url: 'http://localhost:8207', description: local}
   - {url: 'https://api.dev.afrotransact.com/media', description: dev}
@@ -80,14 +91,56 @@ paths:
           description: >-
             Lifetime of the signed URL of a private asset. Purposes with long links (`purchase-order`,
             `shipping-document`, `career-resume`, `export`) get up to the configured maximum (14 days by default);
-            every other purpose is capped at 5 minutes. The store may cap it further (S3-compatible stores and
-            UploadThing sign for at most 7 days). `urlExpiresAt` tells the lifetime granted.
+            every other purpose is capped at 5 minutes. A lifetime above 5 minutes returns a media-hosted link
+            (`<media public URL>/v1/l/{token}`) that redirects each click to a fresh short-lived storage URL, so it is
+            not limited by what the store can sign; without a configured link signing key the store caps it (S3-compatible
+            stores and UploadThing sign for at most 7 days). `urlExpiresAt` tells the lifetime granted.
           schema: {type: integer, format: int64, minimum: 1, maximum: 31622400}
       responses:
         '200': {description: Asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
         '400': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+  /v1/assets/{id}/review:
+    post:
+      tags: [Assets]
+      operationId: reviewAsset
+      summary: Release or reject an image held by moderation (staff with media:moderate or catalog:moderate)
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: {type: string, enum: [APPROVE, REJECT]}
+                note: {type: string, maxLength: 500, description: Shown in the rejection reason}
+      responses:
+        '200': {description: Reviewed asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/l/{token}:
+    get:
+      tags: [Assets]
+      operationId: followLink
+      summary: Media-hosted long-lived document link (redirects to a fresh short-lived storage URL)
+      description: >-
+        The signed token is the credential (links are e-mailed to suppliers), so no bearer token is needed. Each
+        request is redirected (302) to a storage URL that lasts a few minutes; the link itself lasts until the expiry
+        it was issued with (`urlExpiresAt` of `GET /v1/assets/{id}`).
+      security: []
+      parameters:
+        - {name: token, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9_-]{20,120}$'}}
+      responses:
+        '302':
+          description: Redirect to the file
+          headers:
+            Location: {description: Short-lived storage URL, schema: {type: string, format: uri}}
+        '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
   /v1/assets:
     get:
       tags: [Assets]
@@ -118,8 +171,15 @@ components:
         url: {type: string}
         headers: {type: object, additionalProperties: {type: string}}
         key: {type: string}
-        publicUrl: {type: string}
+        publicUrl:
+          type: string
+          description: Empty for public images, which become public only after moderation (use the completed asset's `url`).
         expiresAt: {type: string, format: date-time}
+        formField:
+          type: string
+          description: >-
+            When set (UploadThing: `file`), send the file as multipart/form-data in this field instead of as the raw
+            body, and let the HTTP client set the multipart Content-Type.
     Asset:
       type: object
       properties:
@@ -142,3 +202,16 @@ components:
           type: string
           format: date-time
           description: When the signed `url` of a private asset stops working (absent for public assets).
+        moderation: {$ref: '#/components/schemas/Moderation'}
+    Moderation:
+      type: object
+      description: Checks a public image went through before it could be published (absent for other purposes).
+      properties:
+        verdict: {type: string, enum: [PASSED, HELD, BLOCKED]}
+        reasons: {type: array, items: {type: string}}
+        ai: {type: string, enum: [CHECKED, UNAVAILABLE, OFF], description: How the AI hook took part}
+        aiLabels: {type: array, items: {type: string}, description: 'AI labels such as WATERMARK or NUDITY'}
+        metadataStripped: {type: boolean, description: EXIF / XMP / text metadata was removed}
+        duplicateOf: {type: string, description: Closest earlier image with the same perceptual hash}
+        reviewedBy: {type: string}
+        reviewedAt: {type: string, format: date-time}

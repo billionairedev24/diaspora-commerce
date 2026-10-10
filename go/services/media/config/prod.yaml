@@ -2,6 +2,9 @@
 # The private store below is AWS S3; for GCP use name: gcs + endpoint https://storage.googleapis.com (HMAC keys),
 # for Azure use kind: azure-blob with account + AZURE_STORAGE_KEY. Cloudflare R2 is the alternative public store.
 port: 8080
+# Public API base (shared API_BASE_URL, injected by the Helm library); publicBaseUrl defaults to <apiBaseUrl>/media,
+# the base of media-hosted long-lived links.
+apiBaseUrl: https://api.afrotransact.com
 docsEnabled: false
 uploadthing:
   appId: afrotransact-prod
@@ -36,13 +39,33 @@ purposes:
 # Signed download links of private assets: 5 minutes by default; purchase orders, shipping documents, résumés and
 # exports may ask for longer ones (GET /v1/assets/{id}?urlTtlSeconds=) up to maxLongTtl. The store caps them too
 # (S3-compatible stores and UploadThing sign for at most 7 days).
+# Long links (above defaultTtl) are media-hosted redirect links <publicBaseUrl>/v1/l/<token> when LINK_SIGNING_KEY
+# (secret) is set: they last up to maxLongTtl on every cloud; each click gets a fresh storage URL of redirectTtl.
 links:
   defaultTtl: 5m
   maxLongTtl: 336h
+  redirectTtl: 5m
 auth:
   enabled: true
   issuer: https://auth.afrotransact.com
   audience: media
+  # S250: user tokens the BFF forwards (minted for gateway-bff) act as that user.
+  forwardedAudiences: [gateway-bff]
+# S030: public images (product-image, storefront) are uploaded into quarantine/ and published only after moderation:
+# purpose rules, EXIF/XMP stripping, perceptual-hash duplicates (Hamming distance ≤ duplicateDistance; another
+# seller's photo is held for review) and the AI hook on ai-gateway (client media-service, scope ai:use; secret
+# MEDIA_CLIENT_SECRET). failMode closed holds images while the hook is down; open publishes them with a note.
+moderation:
+  maxPixels: 40000000
+  duplicateDistance: 6
+  ai:
+    enabled: true
+    baseUrl: http://ai-gateway:8080
+    failMode: closed
+    timeout: 10s
+    # tokenUrl: defaults to <auth.issuer>/oauth2/token (AUTH_TOKEN_URL overrides)
+    clientId: media-service
+    scopes: ["ai:use"]
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampleRatio: 0.1

@@ -20,3 +20,11 @@ output "tunnel_id" {
 output "r2_media_bucket" {
   value = cloudflare_r2_bucket.media.name
 }
+
+output "pages_projects" {
+  description = "Cloudflare Pages projects (created by the pages_projects_owner run) and this environment's docs host."
+  value = {
+    projects        = keys(local.pages_projects)
+    developers_host = local.hosts["developers"]
+  }
+}

@@ -81,4 +81,25 @@ func TestPresignedUploadRoundTripOnMinIO(t *testing.T) {
 	if err := st.Delete(ctx, up.Key); err != nil {
 		t.Fatal(err)
 	}
+
+	// Publishing a moderated image: a server-side put under the public key.
+	pub := s3store.New(s3store.Options{Name: "minio", Endpoint: endpoint, Region: "us-east-1", Bucket: "media",
+		AccessKey: "minioadmin", SecretKey: "minioadmin", PathStyle: true, PublicBaseURL: "https://cdn.example.test/"})
+	key, publicURL, err := pub.Put(ctx, "product-image/org/b.jpg", "b.jpg", "image/jpeg", []byte("clean-jpeg"), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if key != "product-image/org/b.jpg" || publicURL != "https://cdn.example.test/product-image/org/b.jpg" {
+		t.Fatalf("put: %s %s", key, publicURL)
+	}
+	obj, err := admin.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String("media"), Key: aws.String(key)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := io.ReadAll(obj.Body)
+	_ = obj.Body.Close()
+	if string(stored) != "clean-jpeg" || aws.ToString(obj.ContentType) != "image/jpeg" ||
+		aws.ToString(obj.CacheControl) != "public, max-age=31536000, immutable" {
+		t.Fatalf("stored %q %s %s", stored, aws.ToString(obj.ContentType), aws.ToString(obj.CacheControl))
+	}
 }

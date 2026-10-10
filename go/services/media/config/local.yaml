@@ -1,6 +1,8 @@
 # media · local: everything goes to MinIO from infra/local (buckets media and kyc-evidence).
 port: 8207
 docsEnabled: true
+# Public API URL of media: the base of media-hosted long-lived links.
+publicBaseUrl: http://localhost:8207
 databaseUrl: postgres://media:media@localhost:5432/media
 stores:
   public:
@@ -35,13 +37,33 @@ purposes:
 # Signed download links of private assets: 5 minutes by default; purchase orders, shipping documents, résumés and
 # exports may ask for longer ones (GET /v1/assets/{id}?urlTtlSeconds=) up to maxLongTtl. The store caps them too
 # (S3-compatible stores and UploadThing sign for at most 7 days).
+# Long links (above defaultTtl) are media-hosted redirect links <publicBaseUrl>/v1/l/<token> when LINK_SIGNING_KEY
+# (secret) is set: they last up to maxLongTtl on every cloud; each click gets a fresh storage URL of redirectTtl.
 links:
   defaultTtl: 5m
   maxLongTtl: 336h
+  redirectTtl: 5m
 auth:
   enabled: false
   issuer: http://localhost:8100
   audience: media
+  # S250: user tokens the BFF forwards (minted for gateway-bff) act as that user.
+  forwardedAudiences: [gateway-bff]
+# S030: public images (product-image, storefront) are uploaded into quarantine/ and published only after moderation:
+# purpose rules, EXIF/XMP stripping, perceptual-hash duplicates (Hamming distance ≤ duplicateDistance; another
+# seller's photo is held for review) and the AI hook on ai-gateway (client media-service, scope ai:use; secret
+# MEDIA_CLIENT_SECRET). failMode closed holds images while the hook is down; open publishes them with a note.
+moderation:
+  maxPixels: 40000000
+  duplicateDistance: 6
+  ai:
+    enabled: false
+    baseUrl: http://localhost:8113
+    failMode: open
+    timeout: 10s
+    tokenUrl: ""
+    clientId: media-service
+    scopes: ["ai:use"]
 telemetry:
   otlpEndpoint: localhost:4318
   sampleRatio: 1.0

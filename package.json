@@ -41,7 +41,9 @@
   },
   "pnpm": {
     "overrides": {
-      "tinypool@<2.2.0": "2.2.0"
+      "tinypool@<2.2.0": "2.2.0",
+      "glob@>=10.2.0 <10.5.0": "10.5.0",
+      "serialize-javascript@<7.0.5": "7.1.2"
     }
   }
 }
