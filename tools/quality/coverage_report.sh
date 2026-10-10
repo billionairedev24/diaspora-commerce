@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Coverage summary + gate for every Java (JaCoCo XML) and Go (cover profile) service.
+# Coverage summary + gate for every Java (JaCoCo XML) and Go (cover profile) service, and web Vitest projects.
 #
 #   tools/quality/coverage_report.sh                     # summarise reports that already exist, gate on thresholds
 #   tools/quality/coverage_report.sh --run-go            # first run `go test -short -coverprofile` for each Go module
@@ -10,12 +10,15 @@
 #   Java: java/{services,libs}/*/target/site/jacoco/jacoco.xml   (written by `./mvnw verify`; includes *IT via failsafe)
 #   Go:   $GO_COVER_DIR/<module>.out (default go/.coverage/)      (written by --run-go or by CI: see docs/engineering/testing.md)
 #         cmd/ (main wiring) and internal/testkit (test helpers) are excluded from Go totals.
+#   Web:  web/packages/<pkg>/coverage/<project>/coverage-summary.json (Vitest v8 `json-summary` reporter), reported as
+#         service `<pkg>-<project>`, e.g. ui-storybook (`pnpm --filter @afrotransact/ui test:storybook`). Line %.
 #
 # Thresholds (line coverage %, first match wins): env > tools/quality/coverage-thresholds.conf > built-in defaults
 #   COVERAGE_MIN_JAVA      total line coverage per Java service                (default 75)
 #   COVERAGE_MIN_GO        total statement coverage per Go module              (default 60)
 #   COVERAGE_MIN_DOMAIN    Java domain packages (…/domain)                     (default 80)
 #   COVERAGE_MIN_DOMAIN_GO Go domain packages (internal/domain)                (default 80)
+#   COVERAGE_MIN_WEB       line coverage per web package/Vitest project        (default 0: set per project in the conf)
 #   Per-service overrides live in tools/quality/coverage-thresholds.conf as `<service>.<metric>=<pct>`.
 #
 # Output: a Markdown table on stdout (also appended to $GITHUB_STEP_SUMMARY when set) and coverage-summary.json in
@@ -30,7 +33,7 @@ RUN_GO=0
 FAIL=1
 SERVICES=()
 
-usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -77,7 +80,7 @@ go_dir, out_dir = os.environ["GO_COVER_DIR"], os.environ["OUT_DIR"]
 fail = os.environ["FAIL"] == "1"
 only = {s for s in os.environ["SERVICES_CSV"].split(",") if s}
 
-defaults = {"java": 75.0, "go": 60.0, "domain": 80.0, "domain_go": 80.0}
+defaults = {"java": 75.0, "go": 60.0, "domain": 80.0, "domain_go": 80.0, "web": 0.0}
 conf = {}
 if os.path.exists(conf_path):
     for line in open(conf_path):
@@ -85,7 +88,8 @@ if os.path.exists(conf_path):
         if line and "=" in line:
             k, v = (x.strip() for x in line.split("=", 1))
             conf[k] = float(v)
-env = {"java": "COVERAGE_MIN_JAVA", "go": "COVERAGE_MIN_GO", "domain": "COVERAGE_MIN_DOMAIN", "domain_go": "COVERAGE_MIN_DOMAIN_GO"}
+env = {"java": "COVERAGE_MIN_JAVA", "go": "COVERAGE_MIN_GO", "domain": "COVERAGE_MIN_DOMAIN", "domain_go": "COVERAGE_MIN_DOMAIN_GO",
+       "web": "COVERAGE_MIN_WEB"}
 
 def threshold(service, metric):
     if os.environ.get(env[metric]):
@@ -138,6 +142,16 @@ for prof in sorted(glob.glob(os.path.join(go_dir, "*.out"))):
     rows.append({"service": svc, "runtime": "go", "total": pct(cov, tot), "lines": tot, "domain": pct(dc, dt),
                  "min": threshold(svc, "go"), "min_domain": threshold(svc, "domain_go"), "source": os.path.relpath(prof, root)})
 
+# ---- Web: Vitest v8 json-summary per package and project (lines; no domain split)
+for summ in sorted(glob.glob(os.path.join(root, "web", "packages", "*", "coverage", "*", "coverage-summary.json"))):
+    parts = summ.split(os.sep)
+    svc = f"{parts[-4]}-{parts[-2]}"
+    if only and svc not in only:
+        continue
+    lines = json.load(open(summ))["total"]["lines"]
+    rows.append({"service": svc, "runtime": "web", "total": pct(lines["covered"], lines["total"]), "lines": lines["total"],
+                 "domain": None, "min": threshold(svc, "web"), "min_domain": None, "source": os.path.relpath(summ, root)})
+
 failures = []
 for r in rows:
     r["ok"] = True
@@ -151,9 +165,10 @@ for r in rows:
         r["ok"] = False; failures.append(f'{r["service"]} ({r["runtime"]}): domain {r["domain"]:.1f}% < {r["min_domain"]:.0f}%')
 
 fmt = lambda v: "—" if v is None else f"{v:.1f}%"
+fmin = lambda v: "—" if v is None else f"{v:.0f}%"
 md = ["| Service | Runtime | Total | Min | Domain | Min (domain) | Lines/stmts | Status |", "|---|---|---:|---:|---:|---:|---:|---|"]
 for r in sorted(rows, key=lambda r: (r["runtime"], r["service"])):
-    md.append(f'| {r["service"]} | {r["runtime"]} | {fmt(r["total"])} | {r["min"]:.0f}% | {fmt(r["domain"])} | {r["min_domain"]:.0f}% | {r["lines"]} | {"⚠️ no data" if r["ok"] is None else "✅" if r["ok"] else "❌"} |')
+    md.append(f'| {r["service"]} | {r["runtime"]} | {fmt(r["total"])} | {r["min"]:.0f}% | {fmt(r["domain"])} | {fmin(r["min_domain"])} | {r["lines"]} | {"⚠️ no data" if r["ok"] is None else "✅" if r["ok"] else "❌"} |')
 if not rows:
     md.append("| _no coverage reports found — run `./mvnw verify` or pass --run-go_ | | | | | | | |")
 text = "## Coverage\n\n" + "\n".join(md) + "\n"

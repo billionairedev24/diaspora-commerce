@@ -14,11 +14,8 @@ const withDirection: Decorator = (Story, ctx) => {
   );
 };
 
-/**
- * Under @storybook/test-runner (it tags the user agent) the addon's automatic scan is switched off: the runner's
- * postVisit hook (.storybook/test-runner.ts) runs axe itself and applies the serious/critical gate + known issues.
- */
-const underTestRunner = typeof navigator !== 'undefined' && navigator.userAgent.includes('StorybookTestRunner');
+/** WCAG 2.2 A/AA rule tags, identical to tests/e2e/support/a11y.ts. */
+const A11Y_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 const preview: Preview = {
   decorators: [withDirection],
@@ -28,10 +25,15 @@ const preview: Preview = {
       toolbar: { title: 'Direction', icon: 'transfer', items: [{ value: 'ltr', title: 'LTR' }, { value: 'rtl', title: 'RTL' }], dynamicTitle: true }
     }
   },
-  initialGlobals: { dir: 'ltr', a11y: { manual: underTestRunner } },
+  initialGlobals: { dir: 'ltr' },
   parameters: {
     layout: 'fullscreen',
-    a11y: { test: 'error' },
+    /*
+     * a11y addon: axe runs after every story (and its `play` function). Under Vitest (`pnpm test:storybook`, CI) a
+     * serious or critical violation fails the story (`impactLevels` filters the addon's toHaveNoViolations matcher);
+     * minor/moderate findings only show in the Storybook UI panel. Same WCAG tags as tests/e2e.
+     */
+    a11y: { test: 'error', options: { runOnly: { type: 'tag', values: A11Y_TAGS }, impactLevels: ['serious', 'critical'] } },
     controls: { expanded: true },
     viewport: {
       options: {

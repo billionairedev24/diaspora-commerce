@@ -1,10 +1,12 @@
 import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { type CountryCode } from 'libphonenumber-js/mobile';
-import { useState } from 'react';
-import { expect } from 'storybook/test';
+import { type FormEvent, useState } from 'react';
+import { expect, waitFor } from 'storybook/test';
 
+import { Button } from '../button/Button';
 import { mobile, rtl } from '../stories.helpers';
 import { Checkbox } from './Checkbox';
+import { ErrorSummary, type ErrorSummaryItem } from './ErrorSummary';
 import { PasswordField } from './PasswordField';
 import { PhoneInput } from './PhoneInput';
 import { Select, TextField } from './TextField';
@@ -94,6 +96,52 @@ export const Checkboxes: Story = {
     await userEvent.click(canvas.getByText(/I agree to AfroTransact’s Conditions of Use/));
     await expect(terms).toBeChecked();
     await expect(canvas.getByRole('checkbox', { name: 'Accept the terms' })).toBeInvalid();
+  }
+};
+function ErrorSummaryDemo() {
+  const [errors, setErrors] = useState<ErrorSummaryItem[]>([]);
+  const [submits, setSubmits] = useState(0);
+  const submit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    const next: ErrorSummaryItem[] = [];
+    if (!String(data.get('name') ?? '').trim()) next.push({ fieldId: 'es-name', message: 'Enter your full name' });
+    if (!/^\S+@\S+\.\S+$/.test(String(data.get('email') ?? ''))) next.push({ fieldId: 'es-email', message: 'Enter a valid email address' });
+    setErrors(next);
+    setSubmits((n) => n + 1);
+  };
+  const errorFor = (id: string) => errors.find((x) => x.fieldId === id)?.message;
+  return (
+    <form noValidate onSubmit={submit} style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
+      <ErrorSummary title={`There ${errors.length === 1 ? 'is 1 problem' : `are ${errors.length} problems`} with this form`} errors={errors} submitCount={submits} />
+      <TextField id="es-name" name="name" label="Full name" autoComplete="name" error={errorFor('es-name')} />
+      <TextField id="es-email" name="email" type="email" label="Email" autoComplete="email" defaultValue="adaeze@" error={errorFor('es-email')} />
+      <Button type="submit">Continue</Button>
+    </form>
+  );
+}
+export const ErrorSummaryStory: Story = {
+  name: 'Error summary',
+  render: () => <ErrorSummaryDemo />,
+  play: async ({ canvas, userEvent, step }) => {
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await step('a failed submit lists every error and takes focus', async () => {
+      await userEvent.click(canvas.getByRole('button', { name: 'Continue' }));
+      const summary = await canvas.findByRole('alert', { name: 'There are 2 problems with this form' });
+      await waitFor(() => expect(summary).toHaveFocus());
+      await expect(canvas.getAllByRole('link')).toHaveLength(2);
+    });
+    await step('a link moves focus to its field', async () => {
+      await userEvent.click(canvas.getByRole('link', { name: 'Enter a valid email address' }));
+      await expect(canvas.getByRole('textbox', { name: 'Email' })).toHaveFocus();
+    });
+    await step('fixing one field updates the summary on the next submit', async () => {
+      await userEvent.type(canvas.getByRole('textbox', { name: 'Full name' }), 'Adaeze Okafor');
+      await userEvent.click(canvas.getByRole('button', { name: 'Continue' }));
+      const summary = await canvas.findByRole('alert', { name: 'There is 1 problem with this form' });
+      await waitFor(() => expect(summary).toHaveFocus());
+      await expect(canvas.getAllByRole('link')).toHaveLength(1);
+    });
   }
 };
 export const RTL: Story = { ...rtl, render: () => <PhoneDemo initial="(713) 249-0142" /> };

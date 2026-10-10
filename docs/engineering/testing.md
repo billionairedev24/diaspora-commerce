@@ -131,7 +131,7 @@ Producers mirror it: assert every event type the service emits (`*Events` consta
 |---|---|---|
 | Java | JaCoCo `prepare-agent` (Surefire **and** Failsafe, via `argLine`) + `report` at `verify` (`java/platform-parent/pom.xml`) | `java/{services,libs}/<svc>/target/site/jacoco/jacoco.xml` |
 | Go | `go test -covermode=atomic -coverpkg=./... -coverprofile=<file> ./...` per module | `go/.coverage/<module>.out` (CI artifact) |
-| Web | Vitest `--coverage` (v8) per package (not gated yet) | `coverage/` |
+| Web | Vitest `--coverage` (v8) per package; gated so far: `@afrotransact/ui` stories (`test:storybook`) | `coverage/`; ui stories: `web/packages/ui/coverage/storybook/coverage-summary.json` |
 
 `tools/quality/coverage_report.sh` summarises every report into a Markdown table (also written to the GitHub
 step summary) plus `build/coverage/coverage-summary.json`, and **exits 1 when a service is below its threshold**:
@@ -145,7 +145,7 @@ tools/quality/coverage_report.sh --run-go --service search
 tools/quality/coverage_report.sh --no-fail
 ```
 
-Thresholds (`tools/quality/coverage-thresholds.conf`; `COVERAGE_MIN_{JAVA,GO,DOMAIN,DOMAIN_GO}` env vars win):
+Thresholds (`tools/quality/coverage-thresholds.conf`; `COVERAGE_MIN_{JAVA,GO,DOMAIN,DOMAIN_GO,WEB}` env vars win):
 
 | Metric | Default | Measured 2026-10-10 |
 |---|---:|---|
@@ -153,6 +153,7 @@ Thresholds (`tools/quality/coverage-thresholds.conf`; `COVERAGE_MIN_{JAVA,GO,DOM
 | Java domain packages | 80% | identity 96.6, offers 92.0, seller 92.7 |
 | Go total (statements, excl. `cmd/`, `testkit/`) | 60% | gateway-bff 81.9, promise 81.5, notifications 76.5, geo 63.0, cart 60.8, search 47.0 |
 | Go `internal/domain` | 80% | promise 93.8, notifications 84.8, search 84.2, gateway-bff 83.6, geo 81.1, cart 77.5 |
+| Web (line, per Vitest project; `<pkg>-<project>`) | none (per project) | ui-storybook 84.17 → `ui-storybook.web = 84` |
 
 Modules below a default have a **ratchet** override in the conf file (e.g. `search.go = 45`): it may only go up.
 Domain coverage below 80% is a review blocker even when the ratchet passes.
@@ -165,6 +166,8 @@ tools/quality/coverage_report.sh --service "$SVC"
 # _go-service.yml, verify job (Docker available, so ITs run)
 (cd go/services/$SVC && go test -race -covermode=atomic -coverpkg=./... -coverprofile=../../.coverage/$SVC.out ./...)
 tools/quality/coverage_report.sh --service "$SVC"
+# storybook.yml test job, after `pnpm --filter @afrotransact/ui test:storybook`
+tools/quality/coverage_report.sh --service ui-storybook
 ```
 
 ## 6. E2E (Playwright) — `tests/e2e`
@@ -202,37 +205,47 @@ E2E_STOREFRONT_URL=https://pr-123.preview… E2E_SELLER_URL=… E2E_BROWSERS=chr
   (static; delete `storybook-static/` afterwards).
 - CI: `.github/workflows/storybook.yml` (see [ci-cd.md](ci-cd.md#storybook-cloudflare-pages)).
 
-### Interaction and a11y tests (test runner)
+### Interaction and a11y tests (Vitest addon)
 
-`@storybook/test-runner` (Jest + Playwright Chromium) runs **against the static build** (`index.json` mode), so it
-tests exactly what is deployed:
+`@storybook/addon-vitest` turns every story into a Vitest test. The `storybook` project in
+`web/packages/ui/vitest.config.ts` (the `storybookTest` plugin) renders each story from `.storybook/main.ts` (ui and
+app stories) in **headless Playwright Chromium** (Vitest browser mode, `@vitest/browser-playwright`), through Vite with
+the same `viteFinal` as `storybook build`. The `unit` project (Testing Library in jsdom, `test/**`) is separate.
 
 ```bash
-pnpm --filter @afrotransact/ui build-storybook
-pnpm --filter @afrotransact/ui test-storybook:static   # serves storybook-static on :6007 and runs every story
+pnpm --filter @afrotransact/ui test:storybook   # all stories + v8 coverage -> coverage/storybook (delete afterwards)
+pnpm --filter @afrotransact/ui test             # unit project only (what `pnpm -r test` runs)
+pnpm --filter @afrotransact/ui exec vitest --project storybook src/overlay   # watch one folder
 ```
 
-- Every story is rendered: a render error, a console error or a failing `play` function fails it. A story that does
-  not compile already fails `storybook build`.
+Chromium comes from `PLAYWRIGHT_BROWSERS_PATH` (`/opt/pw-browsers` in the dev container, preinstalled in the CI
+image). The `playwright` dev dependency is pinned to the same 1.56.1 as `@playwright/test`, so it resolves the same
+Chromium build (1194). Never run `playwright install`. The Storybook UI's test widget runs the same project.
+
+- Every story is rendered. A render error, an uncaught exception or a failing `play` function fails it. A story that
+  does not compile already fails `storybook build`.
 - `play` functions (import `expect`, `fn`, `screen`, `waitFor`, `within` from `storybook/test`; use the `canvas` and
   `userEvent` from the play context) cover the interactive components: Button (click, keyboard, loading), text
-  field, password (live rules, show/hide), checkboxes, address autocomplete (type, arrow keys, Enter), quantity
-  stepper (stock limit, remove), ProductCard (add to cart → stepper → remove), Dialog (Esc, reopen, Apply, focus
-  trap), Menu, Tabs (arrow keys) and Toast (auto-dismiss). Query by role and accessible name, as in Playwright.
-  Portalled content (Radix dialogs/menus) is outside the canvas: use `screen`.
-- **axe on every story** (`.storybook/test-runner.ts` `postVisit`, WCAG 2.2 A/AA tags as in `tests/e2e`): serious
-  and critical violations fail. The addon's own scan is switched off under the runner (`globals.a11y.manual`), so
-  minor/moderate findings only show in the Storybook UI panel.
-- **Known issues**: `.storybook/a11y-known-issues.ts` maps an entry of `tests/e2e/support/a11y-known-issues.ts` (rule
-  + note) to story ids. It only applies while that e2e entry exists, so fixing the issue and deleting the e2e entry
-  re-arms the story gate. Allowed and fixed-but-still-listed findings are written to
-  `test-results/storybook-a11y.log` (CI: job summary + warnings). The list is empty today (the Stars contrast finding
-  on `commerce-primitives--rating` has been fixed).
+  field, password (live rules, show/hide), checkboxes, error summary (focus on failed submit, links focus the
+  field), address autocomplete (type, arrow keys, Enter), quantity stepper (stock limit, remove), ProductCard (add
+  to cart → stepper → remove), Dialog (Esc, reopen, Apply, focus trap), Menu, Tabs (arrow keys) and Toast
+  (auto-dismiss). Query by role and accessible name, as in Playwright. Portalled content (Radix dialogs/menus) is
+  outside the canvas: use `screen`. Each story file runs in one page, so a story must not depend on focus or state
+  left by the previous one.
+- **axe on every story** via `@storybook/addon-a11y`, set globally in `.storybook/preview.tsx`:
+  `parameters.a11y = { test: 'error', options: { runOnly: <WCAG 2.2 A/AA tags as in tests/e2e>, impactLevels:
+  ['serious', 'critical'] } }`. The scan runs after the `play` function. Serious and critical violations fail the
+  story; minor/moderate ones only show in the Storybook UI's Accessibility panel. Turn a story's scan off only with
+  `parameters.a11y.test = 'off'` and a reason next to it.
+- **No known-issue allowlist**: the test runner's `.storybook/a11y-known-issues.ts` was empty and has been removed.
+  If an allowance is ever needed, track it in `tests/e2e/support/a11y-known-issues.ts` first and give the story
+  `parameters.a11y.test = 'todo'` (reported, not failing) with a pointer to that entry.
+- **Coverage**: v8 over `src/**` (stories and `stories.helpers.ts` excluded), reporters `json-summary` and
+  `lcovonly`. `tools/quality/coverage_report.sh --service ui-storybook` gates it at `ui-storybook.web` in
+  `coverage-thresholds.conf` (84%, measured 84.17% lines on 2026-10-10). CI uploads it as `storybook-coverage`.
 - Opt a story out with the `skip-test` tag (and say why next to it).
-- Storybook 10 marks the test runner as no longer officially supported in favour of `@storybook/addon-vitest`. The
-  Vitest addon runs stories through Vite, not the static build, so we keep the runner while it works. It needs jest
-  30.4.x: jest-runtime 30.5 rejects the `module.register()` call Storybook makes when loading the runner config, so
-  the root `package.json` pins `@storybook/test-runner>jest*` with `pnpm.overrides`.
+- History: until 2026-10 this ran on `@storybook/test-runner` (Jest) against the static build, with a root
+  `pnpm.overrides` jest 30.4 pin. Both are gone. The static build is still what the visual test below checks.
 
 ### Visual regression (Playwright screenshots, baselines in the repo)
 
@@ -240,7 +253,7 @@ pnpm --filter @afrotransact/ui test-storybook:static   # serves storybook-static
 Each story loads on a fresh page and its `play` function runs. The screenshot is taken once Storybook reports the
 render `finished`, fonts and images have loaded, and animations are disabled. The viewport is fixed at 1024×720
 (375×740 for stories with the `mobile` viewport global). Baselines are PNGs (no LFS) in
-`web/packages/ui/visual-baselines/<story-id>.png`: 69 files, ~1 MB.
+`web/packages/ui/visual-baselines/<story-id>.png`: 70 files, ~1 MB.
 
 ```bash
 pnpm --filter @afrotransact/ui build-storybook
@@ -263,7 +276,8 @@ pnpm --filter @afrotransact/ui visual:update
   rasterisation and fallback fonts (Arabic in the RTL stories, symbols) come from the OS. Against the dev
   container's own Chromium (same build, other system fonts), 13 of 69 stories differ by ~1% of pixels. So update
   baselines with the `:docker` scripts or the CI label, never from macOS/Windows or a bare host. Bump the image tag
-  in `storybook.yml` and `scripts/visual-docker.sh` together with `@playwright/test`, then regenerate.
+  in `storybook.yml` and `scripts/visual-docker.sh` together with `@playwright/test` and `playwright` (the Vitest
+  browser provider), then regenerate.
 
 ## 8. Load tests (k6) — `tests/load`
 

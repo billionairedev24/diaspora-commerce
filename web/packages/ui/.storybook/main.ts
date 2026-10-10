@@ -51,7 +51,8 @@ const config: StorybookConfig = {
     '../stories/**/*.stories.@(ts|tsx)',
     '../../../apps/*/src/**/*.stories.@(ts|tsx)'
   ],
-  addons: ['@storybook/addon-a11y', '@storybook/addon-docs'],
+  // addon-vitest: the Storybook UI's test widget runs the `storybook` Vitest project (vitest.config.ts).
+  addons: ['@storybook/addon-a11y', '@storybook/addon-docs', '@storybook/addon-vitest'],
   framework: { name: '@storybook/react-vite', options: {} },
   core: { disableTelemetry: true },
   typescript: { reactDocgen: 'react-docgen-typescript' },
