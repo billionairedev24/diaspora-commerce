@@ -90,6 +90,35 @@ func TestRulesMatchAsyncAPIContract(t *testing.T) {
 	if !slices.Contains(byAddr[app.DefaultTopics[app.TopicInventory]], app.AvailabilityChangedType) {
 		t.Errorf("%s is not published on %s", app.AvailabilityChangedType, app.DefaultTopics[app.TopicInventory])
 	}
+	for _, typ := range app.ContactChangedTypes {
+		if !slices.Contains(byAddr[app.DefaultTopics[app.TopicIdentity]], typ) {
+			t.Errorf("contact change %s is not published on %s", typ, app.DefaultTopics[app.TopicIdentity])
+		}
+	}
+	// S230: every trust-ops decision that reaches a customer or seller is mapped.
+	for _, typ := range []string{"trustops.claim.opened", "trustops.claim.decided", "trustops.moderation.decided",
+		"trustops.seller.suspended", "trustops.seller.reinstated"} {
+		rules := app.DefaultEventRules[typ]
+		if len(rules) == 0 || rules[0].Topic != app.TopicTrustOps {
+			t.Errorf("%s: no rule on %s", typ, app.TopicTrustOps)
+		}
+	}
+	for typ, want := range map[string][]app.RecipientSource{
+		"trustops.claim.opened":  {app.RecipientUser, app.RecipientOrgOwners},
+		"trustops.claim.decided": {app.RecipientUser, app.RecipientOrgOwners},
+	} {
+		var got []app.RecipientSource
+		for _, r := range app.DefaultEventRules[typ] {
+			got = append(got, r.Recipient)
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("%s: recipients %v, want customer and seller owners %v", typ, got, want)
+		}
+	}
+	// trust-ops also publishes notification.requested on its topic; the superseded keys must be the ones it uses.
+	if !slices.Contains(byAddr[app.DefaultTopics[app.TopicTrustOps]], app.GenericEventType) {
+		t.Errorf("%s is not published on %s", app.GenericEventType, app.DefaultTopics[app.TopicTrustOps])
+	}
 }
 
 // TestEveryRuleHasSeededTemplates checks each rule's template exists (en) for every channel it sends on.
@@ -124,6 +153,9 @@ func TestEveryRuleHasSeededTemplates(t *testing.T) {
 	check("stock alerts", app.StockAlertTemplate, []domain.Channel{domain.ChannelEmail, domain.ChannelPush})
 	check("identity.verification sms override", "identity.verification", []domain.Channel{domain.ChannelSMS})
 	check("compliance in_app → push", "seller.compliance.reminder", []domain.Channel{domain.ChannelPush})
+	for key := range app.SupersededGenericTemplates {
+		check("superseded notification.requested", key, []domain.Channel{domain.ChannelEmail})
+	}
 }
 
 func TestResolveTopics(t *testing.T) {

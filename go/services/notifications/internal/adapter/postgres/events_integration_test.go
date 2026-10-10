@@ -35,7 +35,14 @@ func (identityStub) OrgOwners(context.Context, string) ([]string, error) {
 var producerFixtures = map[string][]map[string]any{
 	"identity.verification.requested": {{"recipient": map[string]any{"id": "u-1", "email": "otp@example.com"}, "channel": "email",
 		"code": "123456", "expiresInMinutes": 10, "expiresAt": "2026-10-10T10:10:00Z", "purpose": "EMAIL_VERIFICATION",
-		"userId": "u-1", "firstName": "Ada", "transactional": true}},
+		"userId": "u-1", "firstName": "Ada", "transactional": true}, {"recipient": map[string]any{"id": "u-1", "phone": "+15550002222"},
+		"channel": "sms", "code": "654321", "expiresInMinutes": 10, "expiresAt": "2026-10-10T10:10:00Z", "purpose": "PHONE_VERIFICATION",
+		"userId": "u-1", "transactional": true}},
+	"identity.invitation.created": {{"invitationId": uuid.NewString(), "orgId": "org_1", "orgName": "Mama Put", "orgKind": "SELLER",
+		"email": "invitee@example.com", "roleKey": "seller.catalog", "roleName": "Catalog manager", "token": "tok",
+		"acceptUrl": "https://seller.afrotransact.com/invitations/accept?token=tok", "expiresAt": "2026-10-17T10:00:00Z",
+		"expiresInDays": 7, "invitedBy": "owner-1", "inviterName": nil,
+		"recipient": map[string]any{"id": nil, "email": "invitee@example.com", "phone": nil}, "transactional": true}},
 	"identity.user.registered": {{"userId": "u-1", "email": "ada@example.com", "firstName": "Ada", "lastName": "Obi", "intent": "SELL",
 		"roles": []string{"account.seller_applicant"}, "method": "PASSWORD", "emailVerified": false, "smsConsent": false,
 		"registeredAt": "2026-10-10T10:00:00Z"}},
@@ -65,16 +72,28 @@ var producerFixtures = map[string][]map[string]any{
 	"seller.compliance.changed": {{"orgId": "org_1", "accountId": "acct_1", "status": "ACTION_NEEDED", "previousStatus": "COMPLIANT",
 		"newItems": []string{"individual.id_number"}, "currentDeadline": nil, "chargesEnabled": true, "payoutsEnabled": true,
 		"payoutsPaused": false, "trigger": "account.updated", "channels": []string{"email"}, "occurredAt": "2026-10-10T10:00:00Z"}},
-	"seller.payouts.paused":    {enforcement()},
-	"seller.payouts.resumed":   {enforcement()},
-	"seller.listings.hidden":   {enforcement()},
-	"seller.listings.restored": {enforcement()},
+	"seller.payouts.paused":    {enforcement("AUTO_PAST_DUE"), enforcement("SUSPENDED")},
+	"seller.payouts.resumed":   {enforcement("CLEARED"), enforcement("REINSTATED")},
+	"seller.listings.hidden":   {enforcement("CHARGES_DISABLED"), enforcement("SUSPENDED")},
+	"seller.listings.restored": {enforcement("CLEARED"), enforcement("REINSTATED")},
 	"payments.payout.paid":     {payout("PAID")},
 	"payments.payout.failed":   {payout("FAILED")},
 	"booking.confirmed":        {booking("CONFIRMED")},
 	"booking.cancelled":        {booking("CANCELLED_PROVIDER")},
 	"booking.declined":         {booking("DECLINED")},
 	"booking.rescheduled":      {booking("CONFIRMED")},
+	"booking.balance_unpaid":   {balanceUnpaid()},
+	"payments.intent.action_required": {{"paymentId": uuid.NewString(), "orderId": "BK-24018", "parentPaymentId": uuid.NewString(),
+		"customerId": "cust-1", "stripePaymentIntentId": nil, "amountMinor": 15000, "currency": "USD",
+		"reason": "authentication_required", "lineIds": []string{}}},
+	"trustops.claim.opened":       {claim("AWAITING_SELLER", nil), claim("AWAITING_SELLER", nil)},
+	"trustops.claim.decided":      {claim("RESOLVED_REFUND", "REFUND"), claim("RESOLVED_DENIED", "DENY")},
+	"trustops.claim.withdrawn":    {claim("WITHDRAWN", nil)},
+	"trustops.moderation.decided": {moderation("NEW_LISTING"), moderation("LIVE_LISTING")},
+	"trustops.seller.suspended": {{"orgId": "org_1", "status": "SUSPENDED", "reason": "POLICY_VIOLATION", "note": nil,
+		"actorId": "staff-1", "payoutsHeld": true, "buyBoxRestricted": true, "listingsHidden": true, "changedAt": "2026-10-10T10:00:00Z"}},
+	"trustops.seller.reinstated": {{"orgId": "org_1", "status": "ACTIVE", "reason": nil, "note": nil, "actorId": "staff-1",
+		"payoutsHeld": false, "buyBoxRestricted": false, "listingsHidden": false, "changedAt": "2026-10-10T10:00:00Z"}},
 	"content.career-application.received": {{"reference": "CAR-000123", "jobId": "j1", "jobTitle": "Backend Engineer", "team": "Platform",
 		"location": "Remote", "name": "Kofi Mensah", "email": "kofi@example.com", "resumeAssetId": "a1", "resumeFileName": "cv.pdf",
 		"submittedAt": "2026-10-10T10:00:00Z"}},
@@ -95,9 +114,33 @@ func application(action string, items []string) map[string]any {
 		"requestedItems": items, "displayName": "Mama Put Foods", "note": nil, "submissionCount": 1, "occurredAt": "2026-10-10T10:00:00Z"}
 }
 
-func enforcement() map[string]any {
-	return map[string]any{"orgId": "org_1", "accountId": "acct_1", "reason": "AUTO_PAST_DUE", "pastDue": []string{"external_account"},
-		"occurredAt": "2026-10-10T10:00:00Z"}
+func enforcement(reason string) map[string]any {
+	e := map[string]any{"orgId": "org_1", "accountId": "acct_1", "reason": reason, "pastDue": []string{"external_account"},
+		"actorId": nil, "note": nil, "occurredAt": "2026-10-10T10:00:00Z"}
+	if reason == "SUSPENDED" {
+		e["accountId"], e["actorId"], e["note"], e["pastDue"] = nil, "trust-ops-service", "[PROHIBITED_ITEMS] Repeated prohibited listings", []string{}
+	}
+	return e
+}
+
+func claim(status string, outcome any) map[string]any {
+	return map[string]any{"claimId": uuid.NewString(), "reference": "AZ-10001", "type": "ITEM_NOT_RECEIVED", "status": status,
+		"orderId": uuid.NewString(), "orderNumber": "AT-2026-7KQ3MD", "shipmentId": nil, "sellerOrgId": "org_1", "customerId": "cust-1",
+		"amountMinor": 4800, "currency": "USD", "outcome": outcome, "refundMinor": nil, "refundId": nil,
+		"dueAt": "2026-10-13T10:00:00Z", "escalated": false}
+}
+
+func moderation(itemType string) map[string]any {
+	return map[string]any{"itemId": uuid.NewString(), "productId": uuid.NewString(), "atin": nil, "sellerOrgId": "org_1",
+		"title": "Zobo leaves 200g", "status": "REJECTED", "priority": "NORMAL", "reasonCode": "UNAPPROVED_HEALTH_CLAIM",
+		"note": nil, "escalationReason": nil, "aiRiskLevel": nil, "itemType": itemType, "reportSource": nil, "reportReason": nil,
+		"reports": 0, "decidedBy": "staff-1", "dueAt": "2026-10-11T10:00:00Z"}
+}
+
+func balanceUnpaid() map[string]any {
+	b := booking("CONFIRMED")
+	b["balanceMinor"], b["balanceState"], b["balanceFailure"] = 15000, "FAILED", "card_declined"
+	return b
 }
 
 func payout(status string) map[string]any {
@@ -139,7 +182,8 @@ func producerEvents(t *testing.T, pool *pgxpool.Pool) {
 			}
 			var rows []domain.Notification
 			for _, addr := range []string{"otp@example.com", "u-1@example.com", "ada@example.com", "cust-1@example.com",
-				"applicant-1@example.com", "owner-1@example.com", "owner-2@example.com", "kofi@example.com", "news@example.com"} {
+				"applicant-1@example.com", "owner-1@example.com", "owner-2@example.com", "kofi@example.com", "news@example.com",
+				"invitee@example.com", "+15550001111", "+15550002222"} {
 				got, err := e.store.List(ctx, domain.ListFilter{Recipient: addr, Limit: 100})
 				if err != nil {
 					t.Fatal(err)
@@ -155,7 +199,7 @@ func producerEvents(t *testing.T, pool *pgxpool.Pool) {
 				continue
 			}
 			for _, r := range rows {
-				if strings.Contains(r.Subject+r.BodyText+r.BodyHTML, "<no value>") || r.Subject == "" {
+				if strings.Contains(r.Subject+r.BodyText+r.BodyHTML, "<no value>") || (r.Subject == "" && r.Channel != domain.ChannelSMS) {
 					t.Errorf("%s[%d]: %q / %q", typ, i, r.Subject, r.BodyText)
 				}
 			}
@@ -175,6 +219,30 @@ func producerEvents(t *testing.T, pool *pgxpool.Pool) {
 	}
 	if !found {
 		t.Fatal("order.confirmed not rendered")
+	}
+	// Variants: phone verification wording, invitation defaults, suspension wording, both parties of a claim.
+	want := map[string]map[string]string{
+		"+15550002222":        {"identity.verification.phone": "Your AfroTransact code is 654321"},
+		"invitee@example.com": {"org.invitation": "A teammate invited you to join Mama Put on AfroTransact as Catalog manager"},
+		"owner-1@example.com": {"seller.payouts.paused.suspended": "suspended (reason: prohibited items)",
+			"claim.seller_response_due": "Respond by Tue, Oct 13", "claim.decided.seller": "We refunded the customer $48.00",
+			"listing.taken_down": "reason: unapproved health claim", "seller.listings.restored.reinstated": "reinstated"},
+		"cust-1@example.com": {"claim.opened": "claim AZ-10001 (item not received)", "claim.decided": "refunding $48.00",
+			"booking.balance_unpaid": "$150.00 balance", "payment.authentication_required": "https://afrotransact.com/bookings/BK-24018"},
+	}
+	for addr, byKey := range want {
+		rows, _ := e.store.List(ctx, domain.ListFilter{Recipient: addr, Limit: 200})
+		for key, part := range byKey {
+			ok := false
+			for _, r := range rows {
+				if r.TemplateKey == key && strings.Contains(r.Subject+" "+r.BodyText, part) {
+					ok = true
+				}
+			}
+			if !ok {
+				t.Errorf("%s: no %s containing %q", addr, key, part)
+			}
+		}
 	}
 }
 

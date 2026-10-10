@@ -380,7 +380,7 @@
 - Filter by actor, entity and date","E18","","High","3","trust java","trust","Done"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
 - Reinstatement restores them","E18","","Medium","5","trust","trust","Done"
-"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","In Progress"
+"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","Done"
 "S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
 - SMS adapters: Twilio, Vonage, AWS End User Messaging
 - Push: FCM and APNs; WhatsApp: Meta Cloud API
@@ -673,7 +673,7 @@
 - Seller health uses fulfilment ship-by events for lateness","E18","","Medium","5","trust-ops orders fulfilment","trust","To Do"
 "S230","Story","Notifications for trust-ops events","Notifications subscribes to at.trustops.events and maps claim, moderation and enforcement events to templates for customers and seller owners.","- Claim opened/seller response due/decided notify the right parties
 - Moderation decisions notify the seller owners
-- Contract test covers the new rules","E19","","Medium","3","notifications trust-ops","notifications","In Progress"
+- Contract test covers the new rules","E19","","Medium","3","notifications trust-ops","notifications","Done"
 "S231","Story","Seller Center upstream gaps","Close the upstream gaps that make Seller Center routes return 503: BFF maps provider routes to bookings' /v1/providers/{orgId}/... using the active org; orders seller analytics; offers stock update; identity member directory and invitations; seller ship-from addresses stored in seller service; payout history for org finance roles.","- BFF provider routes call bookings with the token's org id
 - Orders exposes seller analytics (sales, orders, conversion by day)
 - Offers supports PUT stock for seller-fulfilled SKUs
@@ -702,3 +702,7 @@
 - Invitation email arrives with an accept link that works for new and existing users
 - Last-owner and owner-only rules surface clear errors
 - Seller service member list stays consistent with identity","E24","","High","5","seller-center bff identity notifications","seller-center","In Progress"
+"S237","Story","Trust-ops reminder and escalation event payloads","Trust-ops publishes seller response-due reminders and lapse events, includes sellerOrgId/customerId on escalation events and the decision note on claim.decided, and stops sending duplicate notification.requested for claims.","- Seller gets a reminder 24h before the response deadline
+- Escalation events carry the parties' ids
+- Claim decision emails include the staff note
+- No duplicate claim notifications","E18","","Medium","3","trust-ops notifications","trust","To Do"

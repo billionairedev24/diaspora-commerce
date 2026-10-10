@@ -23,6 +23,8 @@ const (
 	TopicBookings           = "bookings"
 	TopicContent            = "content"
 	TopicInventory          = "inventory"
+	TopicPayments           = "payments"
+	TopicTrustOps           = "trustOps"
 )
 
 // DefaultTopics are the AsyncAPI channel addresses (contracts/asyncapi/events.yaml) for each logical topic.
@@ -35,6 +37,8 @@ var DefaultTopics = map[string]string{
 	TopicBookings:           "at.bookings.events",
 	TopicContent:            "at.content.events",
 	TopicInventory:          "at.inventory.events",
+	TopicPayments:           "at.payment.events",
+	TopicTrustOps:           "at.trustops.events",
 }
 
 // ResolveTopics overlays configured addresses on DefaultTopics. Unknown names and empty addresses are errors, so a
@@ -106,8 +110,19 @@ const GenericEventType = "notification.requested"
 // AvailabilityChangedType is inventory's availability event; it drives back-in-stock alerts.
 const AvailabilityChangedType = "inventory.availability.changed"
 
+// ContactChangedTypes are identity events after which a user's cached contact details are stale (phone now
+// verified, channel switches or locale changed). They send nothing; the ingest drops the user's cache entry.
+var ContactChangedTypes = []string{"identity.user.phone-verified", "identity.notification-preferences.updated"}
+
+// SupersededGenericTemplates are notification.requested template keys that typed rules already cover. trust-ops
+// publishes notification.requested for claim.opened / claim.decided / claim.withdrawn next to its typed
+// trustops.claim.* events (with the seller org id as recipient.id, which identity cannot resolve as a user), so
+// those requests are ignored instead of notifying the customer twice.
+var SupersededGenericTemplates = map[string]bool{"claim.opened": true, "claim.decided": true, "claim.withdrawn": true}
+
 var (
 	chEmail          = []domain.Channel{domain.ChannelEmail}
+	chSMS            = []domain.Channel{domain.ChannelSMS}
 	chEmailPush      = []domain.Channel{domain.ChannelEmail, domain.ChannelPush}
 	chEmailSMS       = []domain.Channel{domain.ChannelEmail, domain.ChannelSMS}
 	chEmailSMSPush   = []domain.Channel{domain.ChannelEmail, domain.ChannelSMS, domain.ChannelPush}
@@ -115,14 +130,29 @@ var (
 	shipmentStatusTo = func(statuses ...string) func(map[string]any) bool {
 		return func(d map[string]any) bool { return slices.Contains(statuses, str(d, "to")) }
 	}
+	// fieldIs / fieldNot select rule variants on a payload field (purpose, reason, status).
+	fieldIs = func(k string, vals ...string) func(map[string]any) bool {
+		return func(d map[string]any) bool { return slices.Contains(vals, str(d, k)) }
+	}
+	fieldNot = func(k string, vals ...string) func(map[string]any) bool {
+		return func(d map[string]any) bool { return !slices.Contains(vals, str(d, k)) }
+	}
 )
 
 // DefaultEventRules are the platform's event → notification mappings, keyed by event type. Every type and topic is
 // checked against contracts/asyncapi/events.yaml by TestRulesMatchAsyncAPIContract.
 var DefaultEventRules = map[string][]EventRule{
 	// ---- identity (at.identity.events) ----
-	"identity.verification.requested": {{Topic: TopicIdentity, Template: "identity.verification", Channels: chEmail,
-		Recipient: RecipientPayload, IDField: "userId", Security: true}},
+	"identity.verification.requested": {
+		{Topic: TopicIdentity, Template: "identity.verification", Channels: chEmail, Recipient: RecipientPayload,
+			IDField: "userId", Security: true, When: fieldNot("purpose", "PHONE_VERIFICATION")},
+		// Phone verification (S234): sms to the number being verified, "Your AfroTransact code is …".
+		{Topic: TopicIdentity, Template: "identity.verification.phone", Channels: chSMS, Recipient: RecipientPayload,
+			IDField: "userId", Security: true, When: fieldIs("purpose", "PHONE_VERIFICATION")},
+	},
+	// The invitee usually has no account: recipient.email from the payload only, never looked up.
+	"identity.invitation.created": {{Topic: TopicIdentity, Template: "org.invitation", Channels: chEmail,
+		Recipient: RecipientPayload, Security: true, Enrich: enrichInvitation}},
 	"identity.user.registered": {{Topic: TopicIdentity, Template: "account.welcome", Channels: chEmail,
 		Recipient: RecipientPayload, IDField: "userId",
 		When:   func(d map[string]any) bool { return str(d, "intent") != "STAFF" },
@@ -167,14 +197,32 @@ var DefaultEventRules = map[string][]EventRule{
 	"seller.compliance.changed": {{Topic: TopicSellerCompliance, Template: "seller.compliance.action_needed",
 		Channels: chEmailSMS, Recipient: RecipientOrgOwners, IDField: "orgId", PayloadChannels: true,
 		When: complianceNeedsAction, Enrich: enrichComplianceChanged}},
-	"seller.payouts.paused": {{Topic: TopicSellerCompliance, Template: "seller.payouts.paused", Channels: chEmailSMS,
-		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichEnforcement}},
-	"seller.payouts.resumed": {{Topic: TopicSellerCompliance, Template: "seller.payouts.resumed", Channels: chEmail,
-		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichEnforcement}},
-	"seller.listings.hidden": {{Topic: TopicSellerCompliance, Template: "seller.listings.hidden", Channels: chEmailSMS,
-		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichEnforcement}},
-	"seller.listings.restored": {{Topic: TopicSellerCompliance, Template: "seller.listings.restored", Channels: chEmail,
-		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichEnforcement}},
+	// Reason SUSPENDED / REINSTATED comes from a Trust and Safety suspension, not Stripe: own wording, email only
+	// (trustops.seller.suspended already sends the email + sms announcement).
+	"seller.payouts.paused": {
+		{Topic: TopicSellerCompliance, Template: "seller.payouts.paused", Channels: chEmailSMS,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldNot("reason", "SUSPENDED"), Enrich: enrichEnforcement},
+		{Topic: TopicSellerCompliance, Template: "seller.payouts.paused.suspended", Channels: chEmail,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("reason", "SUSPENDED"), Enrich: enrichSuspensionHold},
+	},
+	"seller.payouts.resumed": {
+		{Topic: TopicSellerCompliance, Template: "seller.payouts.resumed", Channels: chEmail,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldNot("reason", "REINSTATED"), Enrich: enrichEnforcement},
+		{Topic: TopicSellerCompliance, Template: "seller.payouts.resumed.reinstated", Channels: chEmail,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("reason", "REINSTATED"), Enrich: enrichSuspensionHold},
+	},
+	"seller.listings.hidden": {
+		{Topic: TopicSellerCompliance, Template: "seller.listings.hidden", Channels: chEmailSMS,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldNot("reason", "SUSPENDED"), Enrich: enrichEnforcement},
+		{Topic: TopicSellerCompliance, Template: "seller.listings.hidden.suspended", Channels: chEmail,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("reason", "SUSPENDED"), Enrich: enrichSuspensionHold},
+	},
+	"seller.listings.restored": {
+		{Topic: TopicSellerCompliance, Template: "seller.listings.restored", Channels: chEmail,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldNot("reason", "REINSTATED"), Enrich: enrichEnforcement},
+		{Topic: TopicSellerCompliance, Template: "seller.listings.restored.reinstated", Channels: chEmail,
+			Recipient: RecipientOrgOwners, IDField: "orgId", When: fieldIs("reason", "REINSTATED"), Enrich: enrichSuspensionHold},
+	},
 
 	// ---- payouts (at.payout.events) ----
 	"payments.payout.paid": {{Topic: TopicPayouts, Template: "payout.paid", Channels: chEmailPush,
@@ -191,6 +239,40 @@ var DefaultEventRules = map[string][]EventRule{
 		Recipient: RecipientPayload}},
 	"booking.rescheduled": {{Topic: TopicBookings, Template: "booking.rescheduled", Channels: chEmailSMSPush,
 		Recipient: RecipientPayload}},
+	"booking.balance_unpaid": {{Topic: TopicBookings, Template: "booking.balance_unpaid", Channels: chEmailPush,
+		Recipient: RecipientPayload, Enrich: enrichBalanceUnpaid}},
+
+	// ---- payments (at.payment.events): off-session charge needs the customer to authenticate (SCA) ----
+	"payments.intent.action_required": {{Topic: TopicPayments, Template: "payment.authentication_required",
+		Channels: chEmailPush, Recipient: RecipientUser, IDField: "customerId", Enrich: enrichActionRequired}},
+
+	// ---- trust & safety (at.trustops.events), S230 ----
+	"trustops.claim.opened": {
+		{Topic: TopicTrustOps, Template: "claim.opened", Channels: chEmailPush, Recipient: RecipientUser,
+			IDField: "customerId", Enrich: enrichClaim},
+		// The seller's response window opens with the claim (dueAt = response deadline); trust-ops publishes no
+		// separate reminder, so this is the "seller response due" message.
+		{Topic: TopicTrustOps, Template: "claim.seller_response_due", Channels: chEmailSMS, Recipient: RecipientOrgOwners,
+			IDField: "sellerOrgId", When: fieldIs("status", "AWAITING_SELLER"), Enrich: enrichClaim},
+	},
+	"trustops.claim.decided": {
+		{Topic: TopicTrustOps, Template: "claim.decided", Channels: chEmailPush, Recipient: RecipientUser,
+			IDField: "customerId", Enrich: enrichClaim},
+		{Topic: TopicTrustOps, Template: "claim.decided.seller", Channels: chEmail, Recipient: RecipientOrgOwners,
+			IDField: "sellerOrgId", Enrich: enrichClaim},
+	},
+	"trustops.claim.withdrawn": {{Topic: TopicTrustOps, Template: "claim.withdrawn", Channels: chEmail,
+		Recipient: RecipientOrgOwners, IDField: "sellerOrgId", Enrich: enrichClaim}},
+	"trustops.moderation.decided": {
+		{Topic: TopicTrustOps, Template: "listing.rejected", Channels: chEmail, Recipient: RecipientOrgOwners,
+			IDField: "sellerOrgId", When: moderationRejected("NEW_LISTING"), Enrich: enrichModeration},
+		{Topic: TopicTrustOps, Template: "listing.taken_down", Channels: chEmailSMS, Recipient: RecipientOrgOwners,
+			IDField: "sellerOrgId", When: moderationRejected("LIVE_LISTING"), Enrich: enrichModeration},
+	},
+	"trustops.seller.suspended": {{Topic: TopicTrustOps, Template: "seller.suspended", Channels: chEmailSMS,
+		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichSellerEnforcement}},
+	"trustops.seller.reinstated": {{Topic: TopicTrustOps, Template: "seller.reinstated", Channels: chEmail,
+		Recipient: RecipientOrgOwners, IDField: "orgId", Enrich: enrichSellerEnforcement}},
 
 	// ---- content (at.content.events) ----
 	"content.career-application.received": {{Topic: TopicContent, Template: "careers.application_received",
@@ -344,4 +426,121 @@ func enrichBookingCancelled(d map[string]any, _ Links) {
 	if n, ok := integer(d, "refundedMinor"); ok && n > 0 {
 		d["refundNote"] = "We're refunding " + moneyField(d, "refundedMinor") + " to your original payment method."
 	}
+}
+
+// humanCode makes an enum readable: "ITEM_NOT_RECEIVED" → "item not received".
+func humanCode(s string) string {
+	return strings.TrimSpace(strings.ToLower(strings.NewReplacer("_", " ", ".", " ").Replace(s)))
+}
+
+// nullable normalises optional payload fields to "" so templates never render "<no value>" for a JSON null.
+func nullable(d map[string]any, keys ...string) {
+	for _, k := range keys {
+		d[k] = str(d, k)
+	}
+}
+
+func enrichInvitation(d map[string]any, _ Links) {
+	nullable(d, "inviterName")
+	setDefault(d, "inviterName", "A teammate")
+	setDefault(d, "orgName", "your team")
+	if _, ok := integer(d, "expiresInDays"); !ok {
+		d["expiresInDays"] = 7
+	}
+}
+
+// suspensionNote splits seller-service's "[REASON_CODE] note" suspension note into a readable reason and the note.
+func suspensionNote(note string) (reason, rest string) {
+	note = strings.TrimSpace(note)
+	if strings.HasPrefix(note, "[") {
+		if end := strings.Index(note, "]"); end > 0 {
+			return humanCode(note[1:end]), strings.TrimSpace(note[end+1:])
+		}
+	}
+	return "", note
+}
+
+func enrichSuspensionHold(d map[string]any, l Links) {
+	reason, note := suspensionNote(str(d, "note"))
+	if reason == "" {
+		reason = "a Trust and Safety review"
+	}
+	d["reasonText"], d["note"] = reason, note
+	d["actionUrl"] = join(l.SellerCenter, "/account-health")
+}
+
+func enrichSellerEnforcement(d map[string]any, l Links) {
+	nullable(d, "note")
+	d["reasonText"] = humanCode(str(d, "reason"))
+	setDefault(d, "reasonText", "a Trust and Safety review")
+	d["actionUrl"] = join(l.SellerCenter, "/account-health")
+}
+
+func enrichBalanceUnpaid(d map[string]any, _ Links) {
+	d["balance"] = moneyField(d, "balanceMinor")
+	if d["balance"] == "" {
+		price, _ := integer(d, "priceMinor")
+		deposit, _ := integer(d, "depositMinor")
+		cur := str(d, "currency")
+		if cur == "" {
+			cur = "USD"
+		}
+		d["balance"] = money(price-deposit, cur)
+	}
+}
+
+func enrichActionRequired(d map[string]any, l Links) {
+	d["amount"] = moneyField(d, "amountMinor")
+	ref := str(d, "orderId")
+	d["reference"] = ref
+	d["actionUrl"] = join(l.Storefront, "/orders")
+	if strings.HasPrefix(ref, "BK-") {
+		d["actionUrl"] = join(l.Storefront, "/bookings/"+ref)
+	}
+}
+
+func enrichClaim(d map[string]any, l Links) {
+	d["claimType"] = humanCode(str(d, "type"))
+	nullable(d, "orderNumber")
+	setDefault(d, "orderNumber", str(d, "orderId"))
+	d["amount"] = moneyField(d, "amountMinor")
+	d["dueDate"] = friendlyDate(str(d, "dueAt"))
+	setDefault(d, "dueDate", "within 3 days")
+	d["claimsUrl"] = join(l.Storefront, "/orders")
+	d["actionUrl"] = join(l.SellerCenter, "/orders")
+	refund := moneyField(d, "refundMinor")
+	if refund == "" {
+		refund = moneyField(d, "amountMinor")
+	}
+	switch {
+	case str(d, "outcome") == "REFUND" || str(d, "status") == "RESOLVED_REFUND":
+		d["outcomeText"] = "Good news: we're refunding " + refund + " to your original payment method. It can take 5–10 business days to show."
+		d["sellerOutcomeText"] = "We refunded the customer " + refund + " for this order."
+	default:
+		d["outcomeText"] = "After reviewing the details and evidence, we couldn't approve this claim."
+		d["sellerOutcomeText"] = "The claim was closed without a refund."
+	}
+}
+
+// moderationRejected matches a trust-ops rejection of a new submission (NEW_LISTING) or a take-down of a live
+// listing (LIVE_LISTING). Older events without itemType count as new listings.
+func moderationRejected(itemType string) func(map[string]any) bool {
+	return func(d map[string]any) bool {
+		if str(d, "status") != "REJECTED" {
+			return false
+		}
+		t := str(d, "itemType")
+		if t == "" {
+			t = "NEW_LISTING"
+		}
+		return t == itemType
+	}
+}
+
+func enrichModeration(d map[string]any, l Links) {
+	nullable(d, "note")
+	setDefault(d, "title", "your listing")
+	d["reasonText"] = humanCode(str(d, "reasonCode"))
+	setDefault(d, "reasonText", "our listing policies")
+	d["actionUrl"] = join(l.SellerCenter, "/listings")
 }

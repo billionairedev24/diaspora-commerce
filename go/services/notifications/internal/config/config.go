@@ -20,7 +20,7 @@ type Config struct {
 		Enabled bool     `yaml:"enabled" env:"KAFKA_ENABLED"`
 		Brokers []string `yaml:"brokers" env:"KAFKA_BROKERS"`
 		// Topics maps logical topic names (identity, orders, sellerApplications, sellerCompliance, payouts,
-		// bookings, content, inventory) to addresses; missing names default to the AsyncAPI channel addresses.
+		// bookings, content, inventory, payments, trustOps) to addresses; missing names default to the AsyncAPI channel addresses.
 		Topics map[string]string `yaml:"topics"`
 	} `yaml:"kafka"`
 	// Identity resolves recipients by user id / org id for events that carry no contact details.

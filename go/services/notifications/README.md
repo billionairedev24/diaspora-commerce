@@ -2,7 +2,8 @@
 
 Go service (port **8208** locally, Postgres database `notifications`) that sends templated, consent-checked
 email, SMS, push and WhatsApp messages with per-market provider failover, and records delivery receipts.
-Architecture: section 18 of `design/AfroTransact Architecture.dc.html`. Backlog: E19 (S121–S125), S211 (back-in-stock alerts), S217 (rules aligned with real producer events).
+Architecture: section 18 of `design/AfroTransact Architecture.dc.html`. Backlog: E19 (S121–S125), S211 (back-in-stock alerts), S217 (rules aligned with real producer events), S230 (trust-ops claims, moderation and
+suspensions), plus organisation invitations (S231) and phone verification (S234).
 
 ## How a message flows
 
@@ -25,7 +26,7 @@ Dispatcher ◄──────────────────────
 | Path | What |
 |---|---|
 | `internal/domain` | channels, categories, statuses, `Decide` consent rules, quiet hours, SMS keywords, circuit breakers, retry policy, `ProviderError` (retryable vs permanent) |
-| `internal/port` | `EmailSender`, `SmsSender`, `PushSender`, `ChatSender`, `ConsentChecker`, `ConsentStore`, `TemplateStore`, `NotificationStore`, `ContactResolver`, `RecipientResolver`, `StockAlertStore` |
+| `internal/port` | `EmailSender`, `SmsSender`, `PushSender`, `ChatSender`, `ConsentChecker`, `ConsentStore`, `TemplateStore`, `NotificationStore`, `ContactResolver`, `RecipientResolver`, `ContactInvalidator`, `StockAlertStore` |
 | `internal/app` | `Router`, `Notifier`, `Dispatcher`, `Ingest` (+ `rules.go`: topics and event rules), `StockAlerts`, `Receipts`, `SmsCompliance`, `Templates`, `Preferences`, `NotificationLog`, `Unsubscriber`, `Renderer` |
 | `internal/adapter/{resend,sendgrid,ses,smtp}` | email adapters (Resend uses `Idempotency-Key`) |
 | `internal/adapter/{twilio,vonage,awssms}` | SMS adapters (AWS = End User Messaging `SendTextMessage`) |
@@ -37,7 +38,7 @@ Dispatcher ◄──────────────────────
 | `internal/adapter/httpapi` | REST API, webhooks, one-click unsubscribe |
 | `internal/adapter/jwtcontact` | caller's own email/phone for test-send |
 | `internal/adapter/identity` | `RecipientResolver` over identity (client credentials `notifications-service`, scope `users:read`) |
-| `internal/adapter/contactcache` | TTL cache in front of the resolver (not-found cached briefly, errors never) |
+| `internal/adapter/contactcache` | TTL cache in front of the resolver (not-found cached briefly, errors never); `Forget(userId)` on identity contact changes |
 | `cmd/notifications` | explicit wiring (`main.go`) and provider construction from config (`providers.go`) |
 
 ## Rules
@@ -104,15 +105,21 @@ fragment `contracts/asyncapi/fragments/notifications.yaml`):
 | `bookings` | `at.bookings.events` |
 | `content` | `at.content.events` |
 | `inventory` | `at.inventory.events` |
+| `payments` | `at.payment.events` |
+| `trustOps` | `at.trustops.events` |
 
-Rules (`internal/app/rules.go`) map an event type to one or more templates. Recipients come from the payload's
-`recipient` block (or top-level `email`/`phone`), from an identity user id (`customerId`, `applicantUserId`), or from
-every owner of an organisation (`orgId`). Identity fills in missing email/phone/push tokens, first name, locale,
+Rules (`internal/app/rules.go`) map an event type to one or more templates (a rule's `When` picks variants, e.g. by
+`purpose`, `reason` or `status`). Recipients come from the payload's `recipient` block (or top-level `email`/`phone`),
+from an identity user id (`customerId`, `applicantUserId`), or from every owner of an organisation (`orgId`,
+`sellerOrgId`). Identity fills in missing email/phone/push tokens, first name, locale,
 time zone and market, and channels the user switched off in their account are dropped (except security messages).
 
 | Event type | Recipient | Template(s) | Channels |
 |---|---|---|---|
 | `identity.verification.requested` | payload (never looked up) | `identity.verification` | email, or the payload's `channel` |
+| … with `purpose=PHONE_VERIFICATION` | payload (never looked up) | `identity.verification.phone` ("Your AfroTransact code is …") | sms, or the payload's `channel` |
+| `identity.invitation.created` | payload `recipient.email` (never looked up: the invitee may have no account) | `org.invitation` (`orgName`, `roleName`, `inviterName` or "A teammate", `acceptUrl`, `expiresInDays`) | email |
+| `identity.user.phone-verified`, `identity.notification-preferences.updated` | — | none: the user's cached contact is dropped | — |
 | `identity.user.registered` (not STAFF) | payload `email` | `account.welcome` | email |
 | `orders.order.placed` | `customerId` | `order.confirmed` | email, sms, push |
 | `orders.order.cancelled` (only `wasPlaced`) | `customerId` | `order.cancelled` | email, push |
@@ -126,16 +133,32 @@ time zone and market, and channels the user switched off in their account are dr
 | `seller.compliance.reminder` | org owners | `seller.compliance.reminder` | payload `channels` (`in_app` → push), default email, sms |
 | `seller.compliance.changed` (new items, or → RESTRICTED_SOON / RESTRICTED) | org owners | `seller.compliance.action_needed` | as above |
 | `seller.payouts.paused` / `resumed`, `seller.listings.hidden` / `restored` | org owners | same name | email (+ sms for paused / hidden) |
+| … with `reason=SUSPENDED` / `REINSTATED` (Trust and Safety) | org owners | `seller.payouts.paused.suspended`, `seller.listings.hidden.suspended`, `seller.payouts.resumed.reinstated`, `seller.listings.restored.reinstated` (reason from the `[CODE] note`) | email (`trustops.seller.suspended` carries the sms) |
 | `payments.payout.paid` / `failed` | org owners | `payout.paid` / `payout.failed` | email + push / email + sms |
 | `booking.confirmed` / `cancelled` / `rescheduled` | payload `recipient` (+ identity) | same name | email, sms, push |
 | `booking.declined` | payload `recipient` (+ identity) | `booking.declined` | email, push |
+| `booking.balance_unpaid` | payload `recipient` (+ identity) | `booking.balance_unpaid` (update the card or authenticate; `balance`) | email, push |
+| `payments.intent.action_required` (with `customerId`) | `customerId` | `payment.authentication_required` (`amount`, `reference`, `actionUrl`: `/bookings/BK-…` or `/orders`) | email, push |
+| `trustops.claim.opened` | `customerId` | `claim.opened` | email, push |
+| … while `status=AWAITING_SELLER` | `sellerOrgId` owners | `claim.seller_response_due` (respond by `dueAt`) | email, sms |
+| `trustops.claim.decided` | `customerId` / `sellerOrgId` owners | `claim.decided` / `claim.decided.seller` (refund or denial) | email, push / email |
+| `trustops.claim.withdrawn` | `sellerOrgId` owners | `claim.withdrawn` | email |
+| `trustops.moderation.decided` with `status=REJECTED` | `sellerOrgId` owners | `listing.rejected` (`NEW_LISTING`) / `listing.taken_down` (`LIVE_LISTING`) | email / email, sms |
+| `trustops.seller.suspended` / `reinstated` | `orgId` owners | `seller.suspended` / `seller.reinstated` | email, sms / email |
 | `content.career-application.received` | payload `email` | `careers.application_received` | email |
 | `content.newsletter.confirmation_requested` | payload `email` | `newsletter.confirm` | email |
 | `inventory.availability.changed` | stock alerts | `stock.back_in_stock` | email, push |
 | `notification.requested` (any topic) | payload `recipient` (+ identity) | `templateKey` | `channels` |
 
+trust-ops also publishes `notification.requested` for `claim.opened`, `claim.decided` and `claim.withdrawn` (with the
+seller org id as `recipient.id`, which identity cannot resolve as a user). Those keys (`SupersededGenericTemplates`)
+are ignored on the generic path because the typed `trustops.claim.*` rules above already notify both parties.
+trust-ops publishes no separate "response due" reminder or lapse event, so the seller's deadline goes out once, when
+the claim opens.
+
 `TestRulesMatchAsyncAPIContract` parses `contracts/asyncapi/events.yaml` and fails when a mapped event type or topic
-is missing (or published on another topic); `TestEveryRuleHasSeededTemplates` checks every rule has a seeded template
+is missing (or published on another topic), when a contact-change type is not on the identity topic, or when the S230
+trust-ops rules (customer and seller owners for claims) are missing; `TestEveryRuleHasSeededTemplates` checks every rule has a seeded template
 per channel; the Postgres integration test renders a contract-shaped fixture of every mapped event.
 
 Each event id is recorded in the `inbox` table in the same transaction as its notifications, so redeliveries
@@ -166,7 +189,12 @@ publishes a reminder event) and `stock.back_in_stock`, each as the next version 
 staff-created version. `order.confirmed` and `shipment.out_for_delivery` get a new version because the real payloads
 carry no first name, formatted total or handover code: the ingest derives `firstName` (identity, else "there"),
 `total`/`amount` (minor units + currency), `itemCount`, `estimatedDelivery`, `trackingLine`, `refundNote`,
-`itemsText`, `deadline` and links (`orderUrl`, `portalUrl`, `actionUrl`, `productUrl`) from `links.*` config.
+`itemsText`, `deadline` and links (`orderUrl`, `portalUrl`, `actionUrl`, `productUrl`) from `links.*` config. `0005`
+adds the S230 trust-ops templates (claims, moderation, suspension), `org.invitation`, `identity.verification.phone`,
+the suspension / reinstatement variants of the seller enforcement templates, `booking.balance_unpaid` and
+`payment.authentication_required`; for those the ingest derives `claimType`, `amount`, `dueDate`, `outcomeText`,
+`sellerOutcomeText`, `reasonText`, `balance`, `reference`, `claimsUrl` and `actionUrl`, and turns JSON nulls in
+optional fields (`note`, `inviterName`, `orderNumber`) into empty strings or defaults.
 
 ## Configuration
 

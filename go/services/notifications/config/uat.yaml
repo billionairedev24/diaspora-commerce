@@ -21,6 +21,8 @@ kafka:
     bookings: at.bookings.events
     content: at.content.events
     inventory: at.inventory.events
+    payments: at.payment.events
+    trustOps: at.trustops.events
 # Recipient lookup by user / org id (client-credentials client notifications-service, scope users:read; the secret
 # comes from NOTIFICATIONS_CLIENT_SECRET).
 identity:

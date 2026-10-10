@@ -273,12 +273,19 @@ channels:
         $ref: '#/components/messages/mcpToolInvoked'
   notificationsIdentityEvents:
     address: at.identity.events
-    description: identity → one-time codes (payload recipient, security) and the welcome email.
+    description: identity → one-time codes and organisation invitations (payload recipient, never resolved through identity),
+      the welcome email, and contact changes that drop the user's cached contact lookup.
     messages:
       notificationsIdentityVerificationRequested:
         $ref: '#/components/messages/identityVerificationRequested'
       notificationsIdentityUserRegistered:
         $ref: '#/components/messages/identityUserRegistered'
+      notificationsIdentityInvitationCreated:
+        $ref: '#/components/messages/identityInvitationCreated'
+      notificationsIdentityUserPhoneVerified:
+        $ref: '#/components/messages/identityUserPhoneVerified'
+      notificationsIdentityNotificationPreferencesUpdated:
+        $ref: '#/components/messages/identityNotificationPreferencesUpdated'
       notificationsRequestedIdentity:
         $ref: '#/components/messages/notificationsRequested'
   notificationsOrderEvents:
@@ -311,7 +318,8 @@ channels:
         $ref: '#/components/messages/sellerApplicationRejected'
   notificationsSellerComplianceEvents:
     address: at.seller-compliance.events
-    description: Stripe compliance and enforcement → every owner of the organisation (orgId → identity owners).
+    description: Stripe compliance and enforcement, and Trust and Safety suspension holds (reason SUSPENDED / REINSTATED)
+      → every owner of the organisation (orgId → identity owners).
     messages:
       notificationsSellerComplianceChanged:
         $ref: '#/components/messages/sellerComplianceChanged'
@@ -345,6 +353,8 @@ channels:
         $ref: '#/components/messages/bookingsDeclined'
       notificationsBookingRescheduled:
         $ref: '#/components/messages/bookingsRescheduled'
+      notificationsBookingBalanceUnpaid:
+        $ref: '#/components/messages/bookingsBalanceUnpaid'
       notificationsRequestedBookings:
         $ref: '#/components/messages/notificationsRequested'
   notificationsContentEvents:
@@ -355,6 +365,31 @@ channels:
         $ref: '#/components/messages/contentCareerApplicationReceived'
       notificationsNewsletterConfirmationRequested:
         $ref: '#/components/messages/contentNewsletterConfirmationRequested'
+  notificationsPaymentEvents:
+    address: at.payment.events
+    description: payments → the customer when an off-session charge needs authentication (customerId resolved through identity).
+    messages:
+      notificationsPaymentIntentActionRequired:
+        $ref: '#/components/messages/paymentsIntentActionRequired'
+  notificationsTrustOpsEvents:
+    address: at.trustops.events
+    description: trust-ops (S230) → the customer (customerId resolved through identity) and every owner of the seller organisation
+      (sellerOrgId / orgId → identity owners) for claims, moderation decisions and suspensions.
+    messages:
+      notificationsTrustOpsClaimOpened:
+        $ref: '#/components/messages/trustOpsClaimOpened'
+      notificationsTrustOpsClaimDecided:
+        $ref: '#/components/messages/trustOpsClaimDecided'
+      notificationsTrustOpsClaimWithdrawn:
+        $ref: '#/components/messages/trustOpsClaimWithdrawn'
+      notificationsTrustOpsModerationDecided:
+        $ref: '#/components/messages/trustOpsModerationDecided'
+      notificationsTrustOpsSellerSuspended:
+        $ref: '#/components/messages/trustOpsSellerSuspended'
+      notificationsTrustOpsSellerReinstated:
+        $ref: '#/components/messages/trustOpsSellerReinstated'
+      notificationsRequestedTrustOps:
+        $ref: '#/components/messages/notificationsRequested'
   notificationsInventoryEvents:
     address: at.inventory.events
     description: inventory availability → back-in-stock alerts (SKU = variant ATIN; available > 0 sends each active alert
@@ -6865,8 +6900,11 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/notificationsIdentityEvents'
-    summary: identity.verification.requested → identity.verification (email, or the payload's channel; security, never resolved
-      through identity); identity.user.registered → account.welcome (email; not for STAFF).
+    summary: 'identity.verification.requested → identity.verification (email, or the payload''s channel; security, never resolved
+      through identity), or identity.verification.phone for purpose PHONE_VERIFICATION (sms); identity.invitation.created
+      → org.invitation (email to recipient.email only, never resolved through identity: the invitee may have no account);
+      identity.user.registered → account.welcome (email; not for STAFF); identity.user.phone-verified and identity.notification-preferences.updated
+      send nothing and drop the user''s cached contact lookup.'
   consumeNotificationsOrderEvents:
     action: receive
     channel:
@@ -6889,7 +6927,9 @@ operations:
     summary: 'seller.compliance.reminder → seller.compliance.reminder and seller.compliance.changed (new items, or status
       moved to RESTRICTED_SOON / RESTRICTED) → seller.compliance.action_needed, on the payload''s channels (in_app → push;
       reminder category: preferences and quiet hours apply); seller.payouts.paused / resumed and seller.listings.hidden /
-      restored → matching templates (email, plus sms when paused / hidden).'
+      restored → matching templates (email, plus sms when paused / hidden); with reason SUSPENDED / REINSTATED (Trust and
+      Safety) → seller.payouts.paused.suspended, seller.listings.hidden.suspended, seller.payouts.resumed.reinstated, seller.listings.restored.reinstated
+      (suspension wording, email only: trustops.seller.suspended carries the sms).'
   consumeNotificationsPayoutEvents:
     action: receive
     channel:
@@ -6900,14 +6940,31 @@ operations:
     channel:
       $ref: '#/channels/notificationsBookingsEvents'
     summary: 'booking.confirmed / cancelled / rescheduled → matching templates (email, sms, push); booking.declined → booking.declined
-      (email, push). booking.reminder has a template but no event yet: bookings can send it with notification.requested (templateKey
-      booking.reminder).'
+      (email, push); booking.balance_unpaid → booking.balance_unpaid to the customer (email, push: update the card or authenticate).
+      booking.reminder has a template but no event yet: bookings can send it with notification.requested (templateKey booking.reminder).'
   consumeNotificationsContentEvents:
     action: receive
     channel:
       $ref: '#/channels/notificationsContentEvents'
     summary: content.career-application.received → careers.application_received (email); content.newsletter.confirmation_requested
       → newsletter.confirm (email).
+  consumeNotificationsPaymentEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationsPaymentEvents'
+    summary: payments.intent.action_required with a customerId → payment.authentication_required to the customer (email, push;
+      link to the booking for BK- references, else the orders page). Other payment events are ignored.
+  consumeNotificationsTrustOpsEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationsTrustOpsEvents'
+    summary: trustops.claim.opened → claim.opened to the customer (email, push) and, while AWAITING_SELLER, claim.seller_response_due
+      to the seller owners (email, sms; deadline = dueAt); trustops.claim.decided → claim.decided to the customer (email,
+      push) and claim.decided.seller to the seller owners (email); trustops.claim.withdrawn → claim.withdrawn to the seller
+      owners (email); trustops.moderation.decided with status REJECTED → listing.rejected (NEW_LISTING; email) or listing.taken_down
+      (LIVE_LISTING; email, sms) to the seller owners; trustops.seller.suspended → seller.suspended (email, sms) and trustops.seller.reinstated
+      → seller.reinstated (email) to the seller owners. notification.requested with templateKey claim.opened, claim.decided
+      or claim.withdrawn is ignored (the typed claim events above cover both parties).
   consumeNotificationsInventoryEvents:
     action: receive
     channel:

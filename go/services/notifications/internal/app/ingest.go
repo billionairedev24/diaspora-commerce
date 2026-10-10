@@ -34,12 +34,14 @@ type Ingest interface {
 }
 
 // IngestConfig wires the ingest. Zero values are safe: nil Rules uses DefaultEventRules, a nil Resolver sends only
-// to addresses in payloads, a nil StockAlerts ignores inventory events.
+// to addresses in payloads, a nil StockAlerts ignores inventory events, a nil Contacts ignores ContactChangedTypes.
 type IngestConfig struct {
 	Rules       map[string][]EventRule
 	Resolver    port.RecipientResolver
 	Links       Links
 	StockAlerts StockAlerts
+	// Contacts drops cached contact details when identity reports a change (the contact cache).
+	Contacts port.ContactInvalidator
 }
 
 type ingestImpl struct {
@@ -70,6 +72,10 @@ func (h *ingestImpl) Handle(ctx context.Context, e events.Envelope) error {
 		}
 		return nil
 	}
+	if slices.Contains(ContactChangedTypes, e.Type) {
+		h.forgetContact(ctx, e)
+		return nil
+	}
 	rules, mapped := h.cfg.Rules[e.Type]
 	if e.Type != GenericEventType && !mapped {
 		return nil
@@ -85,6 +91,11 @@ func (h *ingestImpl) Handle(ctx context.Context, e events.Envelope) error {
 		return nil
 	}
 	var reqs []domain.Request
+	if e.Type == GenericEventType && SupersededGenericTemplates[p.TemplateKey] {
+		h.log.DebugContext(ctx, "notification request covered by a typed rule; skipped", "eventId", e.ID,
+			"templateKey", p.TemplateKey)
+		return nil
+	}
 	if e.Type == GenericEventType {
 		req, err := h.generic(ctx, p)
 		if err != nil {
@@ -108,6 +119,22 @@ func (h *ingestImpl) Handle(ctx context.Context, e events.Envelope) error {
 		return nil
 	}
 	return submitEvent(ctx, h.notifier, h.log, e, reqs)
+}
+
+// forgetContact drops the user's cached contact so the next lookup sees the change (verified phone, channel
+// switches, locale or time zone).
+func (h *ingestImpl) forgetContact(ctx context.Context, e events.Envelope) {
+	if h.cfg.Contacts == nil {
+		return
+	}
+	var p struct {
+		UserID string `json:"userId"`
+	}
+	if err := json.Unmarshal(e.Payload, &p); err != nil || p.UserID == "" {
+		h.log.WarnContext(ctx, "contact change without user id ignored", "eventId", e.ID, "type", e.Type)
+		return
+	}
+	h.cfg.Contacts.Forget(p.UserID)
 }
 
 // submitEvent enqueues an event's requests once per event id. Undeliverable requests are logged, not retried.

@@ -126,10 +126,15 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
-	resolver := recipientResolver(cfg, local, log)
+	var resolver port.RecipientResolver
+	var contactCache port.ContactInvalidator
+	if c := recipientResolver(cfg, local, log); c != nil {
+		resolver, contactCache = c, c
+	}
 	links := app.Links{Storefront: cfg.Links.Storefront, SellerCenter: cfg.Links.SellerCenter, ProviderHub: cfg.Links.ProviderHub}
 	stockAlerts := app.NewStockAlerts(postgres.NewStockAlertStore(pool), notifier, resolver, links, log)
-	ingest := app.NewIngest(notifier, app.IngestConfig{Resolver: resolver, Links: links, StockAlerts: stockAlerts}, log)
+	ingest := app.NewIngest(notifier, app.IngestConfig{Resolver: resolver, Links: links, StockAlerts: stockAlerts,
+		Contacts: contactCache}, log)
 
 	twilioV, resendV, sendGridV, err := verifiers(cfg)
 	if err != nil {
@@ -181,8 +186,8 @@ const localClientSecret = "local-notifications-service-secret" //nolint:gosec //
 
 // recipientResolver builds the identity lookup (client credentials + TTL cache). Without it, events that carry only
 // user or org ids cannot be delivered, so a missing secret outside local is logged loudly rather than crashing the
-// service that also sends OTPs.
-func recipientResolver(cfg config.Config, local bool, log *slog.Logger) port.RecipientResolver {
+// service that also sends OTPs. The cache is also the ContactInvalidator the ingest uses on contact-change events.
+func recipientResolver(cfg config.Config, local bool, log *slog.Logger) contactcache.Cache {
 	if !cfg.Identity.Enabled {
 		log.Warn("identity lookups disabled: only events with addresses in their payload are delivered")
 		return nil

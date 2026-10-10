@@ -129,6 +129,11 @@ type RecipientResolver interface {
 	OrgOwners(ctx context.Context, orgID string) ([]string, error)
 }
 
+// ContactInvalidator drops a user's cached contact details when identity reports that they changed.
+type ContactInvalidator interface {
+	Forget(userID string)
+}
+
 // StockAlertStore persists back-in-stock subscriptions.
 type StockAlertStore interface {
 	// Subscribe stores an active alert for (user, atin). It returns created=false when an active alert already

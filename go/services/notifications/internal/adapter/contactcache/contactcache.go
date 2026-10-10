@@ -34,15 +34,24 @@ type cacheImpl struct {
 	owners   map[string]entry[[]string]
 }
 
-var _ port.RecipientResolver = (*cacheImpl)(nil)
+var (
+	_ port.RecipientResolver  = (*cacheImpl)(nil)
+	_ port.ContactInvalidator = (*cacheImpl)(nil)
+)
+
+// Cache is a RecipientResolver whose contact entries can be dropped when identity reports a change.
+type Cache interface {
+	port.RecipientResolver
+	port.ContactInvalidator
+}
 
 // New wraps inner with a TTL cache. Transient errors are never cached.
-func New(inner port.RecipientResolver, opts Options) port.RecipientResolver {
+func New(inner port.RecipientResolver, opts Options) Cache {
 	return NewWithClock(inner, opts, time.Now)
 }
 
 // NewWithClock is New with an injectable clock (tests).
-func NewWithClock(inner port.RecipientResolver, opts Options, now func() time.Time) port.RecipientResolver {
+func NewWithClock(inner port.RecipientResolver, opts Options, now func() time.Time) Cache {
 	if opts.TTL <= 0 {
 		opts.TTL = 5 * time.Minute
 	}
@@ -58,6 +67,13 @@ func NewWithClock(inner port.RecipientResolver, opts Options, now func() time.Ti
 
 func (c *cacheImpl) Contact(ctx context.Context, userID string) (port.Contact, error) {
 	return cached(c, c.contacts, userID, func() (port.Contact, error) { return c.inner.Contact(ctx, userID) })
+}
+
+// Forget drops userID's contact entry (identity.user.phone-verified, identity.notification-preferences.updated).
+func (c *cacheImpl) Forget(userID string) {
+	c.mu.Lock()
+	delete(c.contacts, userID)
+	c.mu.Unlock()
 }
 
 func (c *cacheImpl) OrgOwners(ctx context.Context, orgID string) ([]string, error) {

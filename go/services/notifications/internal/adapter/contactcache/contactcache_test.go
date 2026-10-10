@@ -78,3 +78,20 @@ func TestCacheHonoursTTLAndNeverCachesErrors(t *testing.T) {
 		t.Fatalf("owners: %d", inner.calls)
 	}
 }
+
+func TestForgetDropsOnlyThatContact(t *testing.T) {
+	inner := &countingResolver{}
+	c := contactcache.New(inner, contactcache.Options{TTL: time.Hour})
+	ctx := context.Background()
+	_, _ = c.Contact(ctx, "u-1")
+	_, _ = c.Contact(ctx, "u-2")
+	_, _ = c.OrgOwners(ctx, "org_1")
+	c.Forget("u-1")
+	c.Forget("unknown")
+	_, _ = c.Contact(ctx, "u-1")
+	_, _ = c.Contact(ctx, "u-2")
+	_, _ = c.OrgOwners(ctx, "org_1")
+	if inner.calls != 4 {
+		t.Fatalf("only u-1 is looked up again: %d calls", inner.calls)
+	}
+}
