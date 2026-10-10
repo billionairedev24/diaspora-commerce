@@ -20,6 +20,8 @@ security:
 tags:
 - name: Identifiers
   description: GTIN / ISBN checks for the product builder
+- name: Public catalog
+  description: Anonymous reads of live products (storefront, cart, search)
 - name: Categories
   description: Browse tree, product-type schemas and new-category requests
 - name: Products
@@ -402,6 +404,46 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Product'
+  /v1/public/products/{atin}:
+    get:
+      tags:
+      - Public catalog
+      summary: A live product page by product ATIN
+      operationId: product
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicProduct'
+      security: []
+  /v1/public/variants/{atin}:
+    get:
+      tags:
+      - Public catalog
+      summary: A live variant (with its product) by variant ATIN — used by cart and checkout
+      operationId: variant
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicVariant'
+      security: []
 components:
   schemas:
     CreateProductRequest:
@@ -655,6 +697,46 @@ components:
       required:
       - parentCategoryId
       - productType
+    PublicProduct:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        ownerKind:
+          type: string
+        sellerOrgId:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        productType:
+          type: string
+        title:
+          type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+        images:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductImage'
+        variationTheme:
+          type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/Variant'
+    PublicVariant:
+      type: object
+      properties:
+        product:
+          $ref: '#/components/schemas/PublicProduct'
+        variant:
+          $ref: '#/components/schemas/Variant'
     ProductPage:
       type: object
       properties:

@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.afrotransact.catalog.application.CategoryService;
 import com.afrotransact.catalog.application.CreateProductCommand;
 import com.afrotransact.catalog.application.ProductService;
+import com.afrotransact.catalog.application.PublicCatalogService;
 import com.afrotransact.catalog.domain.CategoryLevel;
 import com.afrotransact.catalog.domain.CategoryNode;
 import com.afrotransact.catalog.domain.CategoryRequest;
@@ -20,6 +21,7 @@ import com.afrotransact.catalog.domain.ProductStatus;
 import com.afrotransact.catalog.domain.VariantDraft;
 import com.afrotransact.platform.test.PostgresTestContainer;
 import com.afrotransact.platform.web.error.ConflictException;
+import com.afrotransact.platform.web.error.NotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -45,12 +47,15 @@ class CatalogFlowIT {
 
     private final ProductService products;
     private final CategoryService categories;
+    private final PublicCatalogService publicCatalog;
     private final JdbcClient jdbc;
 
     @Autowired
-    CatalogFlowIT(ProductService products, CategoryService categories, JdbcClient jdbc) {
+    CatalogFlowIT(ProductService products, CategoryService categories, PublicCatalogService publicCatalog,
+                  JdbcClient jdbc) {
         this.products = products;
         this.categories = categories;
+        this.publicCatalog = publicCatalog;
         this.jdbc = jdbc;
     }
 
@@ -72,9 +77,16 @@ class CatalogFlowIT {
         assertThat(created.atin().value()).matches("AT[0-9A-Z]{8}");
         assertThat(created.variants()).hasSize(2).allSatisfy(v -> assertThat(v.atin()).isNotEqualTo(created.atin()));
 
+        assertThatThrownBy(() -> publicCatalog.liveProduct(created.atin().value()))
+                .isInstanceOf(NotFoundException.class);
+
         Product live = products.approve(created.id());
         assertThat(live.status()).isEqualTo(ProductStatus.LIVE);
         assertThat(live.version()).isEqualTo(1);
+
+        String variantAtin = live.variants().getFirst().atin().value();
+        assertThat(publicCatalog.liveVariant(variantAtin).product().id()).isEqualTo(created.id());
+        assertThat(publicCatalog.liveVariant(variantAtin).variant().sellerSku()).isEqualTo("AWD-M-GLD");
 
         List<String> events = jdbc.sql("select type from platform_outbox where aggregate_id = :id order by occurred_at")
                 .param("id", created.id().toString()).query(String.class).list();

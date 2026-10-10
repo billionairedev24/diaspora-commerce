@@ -1,0 +1,12 @@
+# UAT / staging: production-like, anonymised data, API reference pages on for testers.
+at:
+  api-docs:
+    enabled: true
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+management:
+  tracing:
+    sampling:
+      probability: 0.5

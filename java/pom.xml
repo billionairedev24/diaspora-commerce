@@ -18,5 +18,6 @@
         <module>libs/platform-security</module>
         <module>libs/platform-test</module>
         <module>services/catalog</module>
+        <module>services/inventory</module>
     </modules>
 </project>

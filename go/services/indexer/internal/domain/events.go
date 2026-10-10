@@ -39,7 +39,7 @@ type VariantPayload struct {
 // AvailabilityEvent mirrors inventory-service's inventory.availability.changed payload.
 type AvailabilityEvent struct {
 	SKU       string `json:"sku"`
-	Node      string `json:"node"`
+	Node      string `json:"nodeId"`
 	Available int    `json:"available"`
 	Version   int64  `json:"version"`
 }

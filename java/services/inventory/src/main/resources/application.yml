@@ -1,0 +1,97 @@
+spring:
+  application:
+    name: inventory-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/inventory}
+    username: ${DB_USER:inventory}
+    password: ${DB_PASSWORD:inventory}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+
+server:
+  port: ${PORT:8103}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: inventory-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  api-docs:
+    title: Inventory API
+    description: >-
+      Sellable stock for AfroTransact-owned (1P) products and seller stock held in AfroTransact fulfilment centres
+      (FBA): positions per SKU × node, lots with expiry (FEFO), all-or-nothing reservations, receipts, lot
+      operations and the append-only stock ledger.
+    version: v1
+  security:
+    public-paths:
+      - /v1/availability
+  events:
+    relay-enabled: true
+  inventory:
+    retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # Checkout holds are released automatically after this long unless confirmed (payment authorised).
+    reservation-ttl: ${RESERVATION_TTL:15m}
+    # FEFO skips lots that would expire within this many days of today (node-local date).
+    fefo-min-remaining-days: ${FEFO_MIN_REMAINING_DAYS:7}
+    shelf-life:
+      # Receipts quarantine lots whose remaining life is below max(min-days, min-fraction × shelf life).
+      min-days: 90
+      min-fraction: 0.5
+    jobs:
+      enabled: ${INVENTORY_JOBS_ENABLED:true}
+      reservation-sweep-interval: ${RESERVATION_SWEEP_INTERVAL:30s}
+      reservation-sweep-batch: 200
+      # Hourly so each node expires lots shortly after its own local midnight; the job is idempotent.
+      expire-lots-cron: ${EXPIRE_LOTS_CRON:0 5 * * * *}
+      markdown-cron: ${MARKDOWN_CRON:0 20 2 * * *}
+      reconciliation-cron: ${RECONCILIATION_CRON:0 40 2 * * *}
+      zone: ${JOBS_ZONE:UTC}

@@ -1,0 +1,7 @@
+# Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
+at:
+  security:
+    enabled: false
+logging:
+  level:
+    com.afrotransact: DEBUG

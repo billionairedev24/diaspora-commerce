@@ -220,26 +220,26 @@
 - Right panel shows recommendations / delivery map / help instead of blank space","E08","","Medium","5","orders web","orders","To Do"
 "S061","Story","Driver events update order status live","Driver pickup/delivery scans move shipment statuses in the back office immediately.","- 'Picked up' and 'Delivered' scans update the shipment within 5 seconds
 - Staff console reflects updates without refresh (SSE)","E08","","High","5","orders delivery","orders","To Do"
-"E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","To Do"
+"E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","In Progress"
 "S062","Story","Inventory positions and append-only ledger","inventory_position(sku, node, on_hand, reserved, inbound, damaged, version) + ledger.","- available = on_hand − reserved is published via events, never computed in clients
 - Every movement writes a ledger row with actor and reason
-- Nightly job reconciles ledger sums to positions and alerts on drift","E09","","Highest","8","inventory java","inventory","To Do"
+- Nightly job reconciles ledger sums to positions and alerts on drift","E09","","Highest","8","inventory java","inventory","Done"
 "S063","Story","Concurrent reservations without overselling","Reserve all lines in one transaction with row locks in key order; idempotent per order.","- SELECT … FOR UPDATE in key order prevents deadlocks
 - All lines reserve or none do
 - Retrying with the same order id never double-reserves
-- Flash-sale test: N+25 concurrent checkouts for N units ⇒ exactly N succeed","E09","","Highest","8","inventory java concurrency","inventory","To Do"
+- Flash-sale test: N+25 concurrent checkouts for N units ⇒ exactly N succeed","E09","","Highest","8","inventory java concurrency","inventory","Done"
 "S064","Story","Reservation lifecycle","RESERVE (TTL 15 min) → SHIP → RETURN_RESTOCK / RETURN_DAMAGED; adjustments with reasons.","- Expired reservations release automatically
 - Adjustments can never go below what is reserved
-- Returns put stock back or into damaged after inspection","E09","","High","5","inventory java","inventory","To Do"
+- Returns put stock back or into damaged after inspection","E09","","High","5","inventory java","inventory","Done"
 "S065","Story","Lots with expiry and FEFO allocation","Lots per SKU × FC × bin with made/expiry dates; earliest expiry picked first.","- Lot unique per (sku, lot_no, fc)
 - Picks allocate FEFO
 - Expired lots are blocked from sale nightly
-- Lots ≤ 30/60 days are flagged for markdown","E09","","High","5","inventory java","inventory","To Do"
+- Lots ≤ 30/60 days are flagged for markdown","E09","","High","5","inventory java","inventory","Done"
 "S066","Story","Inventory hub in the staff console","Overview, stock & lots, inbound, POs, suppliers, warehouses, labels, accounting and movements tabs gated by RBAC.","- Visible only to roles with inventory access
 - Lots can be quarantined, released or written off with reasons
-- Movement history traceable per lot for recalls","E09","","High","8","inventory staff-console","inventory","To Do"
+- Movement history traceable per lot for recalls","E09","","High","8","inventory staff-console","inventory","In Progress"
 "S067","Story","Seller FBA inventory","Sellers send stock into AfroTransact FCs with seller-specific unit labels.","- Inbound shipment plan with carton labels
-- Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","To Do"
+- Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","In Progress"
 "E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","To Do"
 "S068","Story","Product master for platform products","Category managers create 1P products with supplier, HTS code, duty, shelf life, storage, reorder point and price.","- SKU and GTIN (AfroTransact GS1 prefix, check digit) assigned automatically
 - Listing starts as Draft","E10","","High","3","retail java","retail","To Do"

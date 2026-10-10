@@ -87,6 +87,11 @@ class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public Optional<Product> findByVariantAtin(Atin variantAtin) {
+        return one(SELECT + " where id = (select product_id from product_variant where atin = :v)", variantAtin.value());
+    }
+
+    @Override
     public Optional<Product> findByVariantGtin(String gtin) {
         return one(SELECT + " where id = (select product_id from product_variant where gtin = :v limit 1)", gtin);
     }

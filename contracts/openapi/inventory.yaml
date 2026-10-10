@@ -1,0 +1,1462 @@
+openapi: 3.1.0
+info:
+  title: Inventory API
+  description: 'Sellable stock for AfroTransact-owned (1P) products and seller stock held in AfroTransact fulfilment centres
+    (FBA): positions per SKU × node, lots with expiry (FEFO), all-or-nothing reservations, receipts, lot operations and the
+    append-only stock ledger.'
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8103
+  description: local
+- url: https://api.dev.afrotransact.com/inventory
+  description: dev
+- url: https://api.uat.afrotransact.com/inventory
+  description: uat
+- url: https://api.afrotransact.com/inventory
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Stock
+  description: Storefront availability, positions and the stock ledger
+- name: Reconciliation
+  description: Positions recomputed from the ledger and lots; drift alerts
+- name: Receiving
+  description: Goods receipts from retail-service and FBA inbound (inventory:receive)
+- name: Returns
+  description: Returned units after inspection (inventory:adjust)
+- name: Lots
+  description: Batches with expiry, FEFO order, quarantine, write-off, cycle counts, transfers
+- name: Reservations
+  description: 'Checkout holds: reserve → confirm → commit (ship) or release. Called by the orders service (SERVICE principal
+    with inventory:reserve).'
+- name: Nodes
+  description: Fulfilment centres, origin hubs and warehouses
+paths:
+  /v1/availability:
+    get:
+      tags:
+      - Stock
+      summary: Sellable availability per SKU (summed over nodes) and per node
+      description: 'Public: storefront, search, cart and Lola read it. available = on hand − reserved.'
+      operationId: availability
+      parameters:
+      - name: skus
+        in: query
+        description: Comma-separated SKUs (max 100)
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
+        example: AT-JOL-6,AT-BAS-10
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Availability'
+      security: []
+  /v1/inbound:
+    post:
+      tags:
+      - Receiving
+      summary: Record expected inbound units (ASN); negative qty cancels
+      operationId: inbound
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboundRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Position'
+  /v1/lots:
+    get:
+      tags:
+      - Lots
+      summary: Search lots (inventory:read; sellers see their own), FEFO order within SKU × node
+      operationId: search
+      parameters:
+      - name: sku
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: ownerOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - SELLABLE
+          - QUARANTINE
+          - EXPIRED
+          - WRITTEN_OFF
+          - DAMAGED
+      - name: lotNo
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LotPage'
+  /v1/lots/expiry-runs:
+    post:
+      tags:
+      - Lots
+      summary: Run the lot expiry job now (inventory:adjust)
+      operationId: expireNow
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ExpiryRun'
+  /v1/lots/markdown:
+    get:
+      tags:
+      - Lots
+      summary: 'Markdown list: sellable lots expiring within 60 (or 30) days, soonest first'
+      operationId: markdown
+      parameters:
+      - name: within
+        in: query
+        description: WITHIN_60 (default, includes ≤ 30) or WITHIN_30
+        required: false
+        schema:
+          type: string
+          enum:
+          - NONE
+          - WITHIN_60
+          - WITHIN_30
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Lot'
+  /v1/lots/markdown-runs:
+    post:
+      tags:
+      - Lots
+      summary: Recompute markdown flags now (inventory:adjust); returns lots whose flag changed
+      operationId: markdownNow
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: integer
+                format: int32
+  /v1/lots/{id}:
+    get:
+      tags:
+      - Lots
+      summary: Get a lot
+      operationId: get_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Lot'
+  /v1/lots/{id}/adjust:
+    post:
+      tags:
+      - Lots
+      summary: 'Cycle count: post the counted quantity with a reason (ADJUST, inventory:adjust)'
+      description: Refused (422 inventory.below-reserved) when it would take on hand below reserved.
+      operationId: adjust
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CycleCountRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Lot'
+  /v1/lots/{id}/quarantine:
+    post:
+      tags:
+      - Lots
+      summary: Quarantine a sellable lot with a reason (inventory:adjust)
+      description: Blocks the lot from sale; refused while units are reserved.
+      operationId: quarantine
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Lot'
+  /v1/lots/{id}/release:
+    post:
+      tags:
+      - Lots
+      summary: Release a quarantined or damaged lot back to sale after inspection (inventory:adjust)
+      operationId: release_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Lot'
+  /v1/lots/{id}/transfer:
+    post:
+      tags:
+      - Lots
+      summary: Transfer unreserved units of a lot to another node (TRANSFER, inventory:adjust)
+      operationId: transfer
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TransferResult'
+  /v1/lots/{id}/write-off:
+    post:
+      tags:
+      - Lots
+      summary: Write off units of a lot with a reason (inventory:adjust)
+      description: Never touches reserved units. The lot becomes WRITTEN_OFF when nothing is left.
+      operationId: writeOff
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WriteOffRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Lot'
+  /v1/movements:
+    get:
+      tags:
+      - Stock
+      summary: Stock movement history, newest first (inventory:read)
+      description: Filter by lot for recalls, or by reference (order id, receipt, transfer).
+      operationId: movements
+      parameters:
+      - name: sku
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: lotId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: reference
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: ownerOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - RECEIVE
+          - PUT_AWAY
+          - RESERVE
+          - RELEASE
+          - SHIP
+          - RETURN_RESTOCK
+          - RETURN_DAMAGED
+          - ADJUST
+          - QUARANTINE
+          - RELEASE_QUARANTINE
+          - EXPIRE
+          - WRITE_OFF
+          - TRANSFER
+          - INBOUND
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MovementPage'
+  /v1/nodes:
+    get:
+      tags:
+      - Nodes
+      summary: List nodes (inventory:read)
+      operationId: list
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Node'
+    post:
+      tags:
+      - Nodes
+      summary: Create a node (inventory:adjust)
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNodeRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Node'
+  /v1/positions:
+    get:
+      tags:
+      - Stock
+      summary: Stock positions (inventory:read; sellers see only their own FBA stock)
+      operationId: positions
+      parameters:
+      - name: sku
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: ownerOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: lowStock
+        in: query
+        description: Only positions with 10 or fewer available
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PositionPage'
+  /v1/receipts:
+    post:
+      tags:
+      - Receiving
+      summary: Receive the lots of a completed goods receipt
+      description: Creates one lot per batch (RECEIVE + PUT_AWAY). Damaged units become a separate <lot>-DMG quarantine lot;
+        lots with remaining life below max(90 days, 50% of shelf life) are quarantined; expired lots or impossible dates reject
+        the receipt (422 inventory.lot-rejected).
+      operationId: receive
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiptRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReceiptResult'
+  /v1/reconciliation/runs:
+    post:
+      tags:
+      - Reconciliation
+      summary: Run reconciliation now (inventory:adjust)
+      operationId: run
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReconciliationRun'
+  /v1/reconciliation/runs/latest:
+    get:
+      tags:
+      - Reconciliation
+      summary: Latest reconciliation run (staff, inventory:read)
+      operationId: latest
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReconciliationRun'
+  /v1/reservations:
+    post:
+      tags:
+      - Reservations
+      summary: Reserve all lines of an order, or none
+      description: 'Locks positions in (sku, node) order, allocates lots FEFO and holds stock for the reservation TTL (15
+        min). The order id is the idempotency key: a retry returns the existing reservation with 200 and replayed=true and
+        never reserves twice.'
+      operationId: reserve
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        description: Unique per attempt; replays return the stored result
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveRequest'
+        required: true
+      responses:
+        '201':
+          description: Reserved
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '200':
+          description: Replay of an earlier reservation for this order
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '409':
+          description: inventory.insufficient-stock with per-SKU shortfalls
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /v1/reservations/{orderId}:
+    get:
+      tags:
+      - Reservations
+      summary: Get the reservation of an order (orders service or staff)
+      operationId: get
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Reservation'
+  /v1/reservations/{orderId}/commit:
+    post:
+      tags:
+      - Reservations
+      summary: 'Ship the order: SHIP movements, lot decrements and COGS at lot landed cost'
+      description: 'Idempotent: committing a committed reservation returns the same result with replayed=true.'
+      operationId: commit
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CommitResult'
+  /v1/reservations/{orderId}/confirm:
+    post:
+      tags:
+      - Reservations
+      summary: 'Payment authorised: keep the hold until shipment (no more TTL)'
+      operationId: confirm
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Reservation'
+  /v1/reservations/{orderId}/release:
+    post:
+      tags:
+      - Reservations
+      summary: Release a held reservation (cancellation or payment failure)
+      description: 'Idempotent: releasing a released or expired reservation returns it unchanged.'
+      operationId: release
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Reservation'
+  /v1/returns:
+    post:
+      tags:
+      - Returns
+      summary: Restock a returned unit or move it to the lot's -DMG lot
+      description: RETURN_RESTOCK puts units back into their sellable lot; RETURN_DAMAGED holds them in <lot>-DMG. Never more
+        than the order shipped.
+      operationId: accept
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReturnRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReturnResult'
+components:
+  schemas:
+    ReturnRequest:
+      type: object
+      description: A returned item after inspection
+      properties:
+        orderId:
+          type: string
+          minLength: 1
+        sku:
+          type: string
+          minLength: 1
+        lotId:
+          type: string
+          format: uuid
+        qty:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        condition:
+          type: string
+          enum:
+          - RESTOCK
+          - DAMAGED
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - condition
+      - orderId
+      - reason
+      - sku
+    Lot:
+      type: object
+      description: A batch of one SKU at one node with dates, bin, unit landed cost and status
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        lotNo:
+          type: string
+        nodeId:
+          type: string
+        ownerOrg:
+          type: string
+        bin:
+          type: string
+        qtyOnHand:
+          type: integer
+          format: int32
+        qtyReserved:
+          type: integer
+          format: int32
+        qtyAvailable:
+          type: integer
+          format: int32
+        mfgDate:
+          type: string
+          format: date
+        expDate:
+          type: string
+          format: date
+        receivedAt:
+          type: string
+          format: date-time
+        unitLandedCostMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        status:
+          type: string
+        reason:
+          type: string
+        markdownFlag:
+          type: string
+        receiptRef:
+          type: string
+        version:
+          type: integer
+          format: int64
+    ReturnResult:
+      type: object
+      properties:
+        orderId:
+          type: string
+        sku:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        condition:
+          type: string
+          enum:
+          - RESTOCK
+          - DAMAGED
+        lot:
+          $ref: '#/components/schemas/Lot'
+        replayed:
+          type: boolean
+    ReserveLine:
+      type: object
+      properties:
+        sku:
+          type: string
+          maxLength: 64
+          minLength: 0
+        nodeId:
+          type: string
+          description: Node chosen by the promise service; omit to let inventory choose
+        qty:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 1
+      required:
+      - sku
+    ReserveRequest:
+      type: object
+      description: All lines are reserved or none; orderId makes the call idempotent
+      properties:
+        orderId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReserveLine'
+          maxItems: 100
+          minItems: 0
+      required:
+      - lines
+      - orderId
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+        properties:
+          type: object
+          additionalProperties: {}
+    LotAllocation:
+      type: object
+      properties:
+        lotId:
+          type: string
+          format: uuid
+        lotNo:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        expDate:
+          type: string
+          format: date
+        unitLandedCostMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    Reservation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+        status:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReservationLine'
+        replayed:
+          type: boolean
+    ReservationLine:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+        sku:
+          type: string
+        nodeId:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        allocations:
+          type: array
+          items:
+            $ref: '#/components/schemas/LotAllocation'
+    ReleaseRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+    CommitResult:
+      type: object
+      description: Shipped reservation with COGS at lot landed cost
+      properties:
+        reservation:
+          $ref: '#/components/schemas/Reservation'
+        cogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Money'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineCost'
+        replayed:
+          type: boolean
+    LineCost:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+        sku:
+          type: string
+        nodeId:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        cogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Money'
+    Money:
+      type: object
+      properties:
+        currency:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+    PositionDrift:
+      type: object
+      properties:
+        sku:
+          type: string
+        nodeId:
+          type: string
+        position:
+          $ref: '#/components/schemas/StockLevels'
+        ledger:
+          $ref: '#/components/schemas/StockLevels'
+        lots:
+          $ref: '#/components/schemas/StockLevels'
+    ReconciliationRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ranAt:
+          type: string
+          format: date-time
+        positionsChecked:
+          type: integer
+          format: int32
+        driftUnits:
+          type: integer
+          format: int64
+        clean:
+          type: boolean
+        drifts:
+          type: array
+          items:
+            $ref: '#/components/schemas/PositionDrift'
+    StockLevels:
+      type: object
+      properties:
+        onHand:
+          type: integer
+          format: int32
+        reserved:
+          type: integer
+          format: int32
+        damaged:
+          type: integer
+          format: int32
+        inbound:
+          type: integer
+          format: int32
+    ReceiptLine:
+      type: object
+      properties:
+        sku:
+          type: string
+          maxLength: 64
+          minLength: 0
+        lotNo:
+          type: string
+          maxLength: 59
+          minLength: 0
+        mfgDate:
+          type: string
+          format: date
+        expDate:
+          type: string
+          format: date
+        qtyGood:
+          type: integer
+          format: int32
+          minimum: 0
+        qtyDamaged:
+          type: integer
+          format: int32
+          minimum: 0
+        bin:
+          type: string
+          maxLength: 30
+          minLength: 0
+        unitLandedCostMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+        shelfLifeDays:
+          type: integer
+          format: int32
+          description: Shelf life from manufacture in days (short-dated rule)
+          exclusiveMinimum: 0
+      required:
+      - currency
+      - lotNo
+      - sku
+    ReceiptRequest:
+      type: object
+      description: Lots of a completed goods receipt
+      properties:
+        receiptRef:
+          type: string
+          maxLength: 80
+          minLength: 0
+        nodeId:
+          type: string
+          minLength: 1
+        ownerOrg:
+          type: string
+          description: FBA seller org; omit for AfroTransact Retail (1P)
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReceiptLine'
+          maxItems: 500
+          minItems: 0
+      required:
+      - lines
+      - nodeId
+      - receiptRef
+    ReceiptResult:
+      type: object
+      properties:
+        receiptRef:
+          type: string
+        nodeId:
+          type: string
+        ownerOrg:
+          type: string
+        lots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lot'
+        replayed:
+          type: boolean
+    CreateNodeRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+          pattern: '[A-Z0-9][A-Z0-9-]{1,19}'
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        kind:
+          type: string
+          enum:
+          - FULFILMENT_CENTRE
+          - ORIGIN_HUB
+          - WAREHOUSE
+        country:
+          type: string
+          maxLength: 2
+          minLength: 2
+        timezone:
+          type: string
+          minLength: 1
+        temperatureZones:
+          type: array
+          items:
+            type: string
+            minLength: 1
+      required:
+      - country
+      - id
+      - kind
+      - name
+      - timezone
+    Node:
+      type: object
+      description: Fulfilment centre, origin hub or warehouse
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+          enum:
+          - FULFILMENT_CENTRE
+          - ORIGIN_HUB
+          - WAREHOUSE
+        country:
+          type: string
+        timezone:
+          type: string
+        temperatureZones:
+          type: array
+          items:
+            type: string
+        active:
+          type: boolean
+    WriteOffRequest:
+      type: object
+      description: qty omitted = all unreserved units of the lot
+      properties:
+        qty:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    TransferRequest:
+      type: object
+      properties:
+        toNodeId:
+          type: string
+          minLength: 1
+        toBin:
+          type: string
+          maxLength: 30
+          minLength: 0
+        qty:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+      - toNodeId
+    TransferResult:
+      type: object
+      properties:
+        reference:
+          type: string
+        from:
+          $ref: '#/components/schemas/Lot'
+        to:
+          $ref: '#/components/schemas/Lot'
+    ReasonRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    CycleCountRequest:
+      type: object
+      description: Counted quantity of the lot; the difference is posted as ADJUST
+      properties:
+        countedQty:
+          type: integer
+          format: int32
+          minimum: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    ExpiryRun:
+      type: object
+      properties:
+        expired:
+          type: integer
+          format: int32
+        deferred:
+          type: integer
+          format: int32
+    InboundRequest:
+      type: object
+      description: Expected units from an advance shipping notice
+      properties:
+        sku:
+          type: string
+          minLength: 1
+        nodeId:
+          type: string
+          minLength: 1
+        ownerOrg:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        reference:
+          type: string
+          maxLength: 120
+          minLength: 0
+      required:
+      - nodeId
+      - sku
+    Position:
+      type: object
+      description: Stock of one SKU at one node; available = onHand − reserved
+      properties:
+        sku:
+          type: string
+        nodeId:
+          type: string
+        ownerOrg:
+          type: string
+        onHand:
+          type: integer
+          format: int32
+        reserved:
+          type: integer
+          format: int32
+        available:
+          type: integer
+          format: int32
+        inbound:
+          type: integer
+          format: int32
+        damaged:
+          type: integer
+          format: int32
+        version:
+          type: integer
+          format: int64
+    PositionPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Position'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    Movement:
+      type: object
+      description: One append-only ledger row with deltas and before/after levels
+      properties:
+        id:
+          type: integer
+          format: int64
+        occurredAt:
+          type: string
+          format: date-time
+        type:
+          type: string
+        sku:
+          type: string
+        nodeId:
+          type: string
+        ownerOrg:
+          type: string
+        lotId:
+          type: string
+          format: uuid
+        lotNo:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        delta:
+          $ref: '#/components/schemas/StockLevels'
+        before:
+          $ref: '#/components/schemas/StockLevels'
+        after:
+          $ref: '#/components/schemas/StockLevels'
+        reference:
+          type: string
+        actor:
+          type: string
+        reason:
+          type: string
+        correlationId:
+          type: string
+    MovementPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Movement'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    LotPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lot'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    Availability:
+      type: object
+      properties:
+        sku:
+          type: string
+        available:
+          type: integer
+          format: int32
+        inbound:
+          type: integer
+          format: int32
+        inStock:
+          type: boolean
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeAvailability'
+    NodeAvailability:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        available:
+          type: integer
+          format: int32
+        inbound:
+          type: integer
+          format: int32
+        version:
+          type: integer
+          format: int64
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

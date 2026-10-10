@@ -20,6 +20,9 @@ public interface ProductRepository {
 
     Optional<Product> findByAtin(Atin atin);
 
+    /** Finds the product that owns the variant with this ATIN. */
+    Optional<Product> findByVariantAtin(Atin variantAtin);
+
     /** Finds the product whose variant carries {@code gtin} (one product page per manufacturer barcode). */
     Optional<Product> findByVariantGtin(String gtin);
 

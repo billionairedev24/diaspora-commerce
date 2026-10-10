@@ -70,6 +70,7 @@ at:
       - /v1/categories
       - /v1/product-types
       - /v1/product-types/*
+      - /v1/public/**
   events:
     relay-enabled: true
   catalog:

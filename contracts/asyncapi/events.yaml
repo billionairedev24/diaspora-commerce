@@ -25,6 +25,40 @@ channels:
         $ref: '#/components/messages/catalogCategoryRequestApproved'
       catalogCategoryRequestRejected:
         $ref: '#/components/messages/catalogCategoryRequestRejected'
+  inventoryStockEvents:
+    address: at.inventory.events
+    description: Stock and lot changes from inventory-service (key = SKU, so one SKU's events stay in order). Headers event-id,
+      event-type, occurred-at. Consumers de-duplicate on event-id and ignore availability events whose version is not newer
+      than the one they hold for (sku, nodeId).
+    messages:
+      inventoryAvailabilityChanged:
+        $ref: '#/components/messages/inventoryAvailabilityChanged'
+      inventoryLotCreated:
+        $ref: '#/components/messages/inventoryLotCreated'
+      inventoryLotQuarantined:
+        $ref: '#/components/messages/inventoryLotQuarantined'
+      inventoryLotReleased:
+        $ref: '#/components/messages/inventoryLotReleased'
+      inventoryLotExpired:
+        $ref: '#/components/messages/inventoryLotExpired'
+      inventoryLotWrittenOff:
+        $ref: '#/components/messages/inventoryLotWrittenOff'
+  inventoryReservationEvents:
+    address: at.inventory-reservation.events
+    description: Checkout reservations (key = order id).
+    messages:
+      inventoryReservationHeld:
+        $ref: '#/components/messages/inventoryReservationHeld'
+      inventoryReservationCommitted:
+        $ref: '#/components/messages/inventoryReservationCommitted'
+      inventoryReservationReleased:
+        $ref: '#/components/messages/inventoryReservationReleased'
+  inventoryReconciliationEvents:
+    address: at.inventory-reconciliation.events
+    description: Nightly reconciliation alerts (key = run id).
+    messages:
+      inventoryReconciliationDriftDetected:
+        $ref: '#/components/messages/inventoryReconciliationDriftDetected'
 components:
   messages:
     catalogProductCreated:
@@ -76,6 +110,88 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/CatalogCategoryRequestEvent'
+    inventoryAvailabilityChanged:
+      name: inventory.availability.changed
+      title: Available units of a SKU at a node changed
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryAvailabilityChanged'
+    inventoryLotCreated:
+      name: inventory.lot.created
+      title: Lot received (sellable, short-dated quarantine, -DMG, transfer destination or damaged return)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryLotEvent'
+    inventoryLotQuarantined:
+      name: inventory.lot.quarantined
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryLotEvent'
+    inventoryLotReleased:
+      name: inventory.lot.released
+      title: Quarantined or damaged lot released back to sale
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryLotEvent'
+    inventoryLotExpired:
+      name: inventory.lot.expired
+      title: Lot passed its expiry date and is blocked from sale (nightly job)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryLotEvent'
+    inventoryLotWrittenOff:
+      name: inventory.lot.written_off
+      title: Units written off (qty = units written off in this event)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryLotEvent'
+    inventoryReservationHeld:
+      name: inventory.reservation.held
+      title: All lines of an order reserved (checkout hold with TTL)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryReservationEvent'
+    inventoryReservationCommitted:
+      name: inventory.reservation.committed
+      title: Order shipped; cogs carries the landed cost of the shipped lots
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryReservationEvent'
+    inventoryReservationReleased:
+      name: inventory.reservation.released
+      title: Hold released (status RELEASED on cancel / payment failure, EXPIRED after the TTL)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryReservationEvent'
+    inventoryReconciliationDriftDetected:
+      name: inventory.reconciliation.drift_detected
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        type: object
+        required:
+        - runId
+        - driftUnits
+        - positions
+        properties:
+          runId:
+            type: string
+            format: uuid
+          driftUnits:
+            type: integer
+            format: int64
+          positions:
+            type: integer
+            description: Number of positions with drift
   schemas:
     EventHeaders:
       properties:
@@ -175,6 +291,186 @@ components:
           - PENDING_REVIEW
           - APPROVED
           - REJECTED
+    InventoryAvailabilityChanged:
+      type: object
+      required:
+      - sku
+      - nodeId
+      - ownerOrg
+      - available
+      - onHand
+      - reserved
+      - version
+      properties:
+        sku:
+          type: string
+        nodeId:
+          type: string
+          examples:
+          - HOU-FC
+        ownerOrg:
+          type: string
+          description: AfroTransact Retail for 1P
+          the seller org for FBA stock: null
+        available:
+          type: integer
+          description: on hand − reserved
+        onHand:
+          type: integer
+        reserved:
+          type: integer
+        inbound:
+          type: integer
+        damaged:
+          type: integer
+          description: Units present but blocked from sale (quarantine
+          damaged: null
+          expired): null
+        version:
+          type: integer
+          format: int64
+          description: Position version; ignore events with an older version
+    InventoryLotEvent:
+      type: object
+      required:
+      - lotId
+      - sku
+      - lotNo
+      - nodeId
+      - ownerOrg
+      - qtyOnHand
+      - qty
+      - status
+      - unitLandedCostMinor
+      - currency
+      properties:
+        lotId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        lotNo:
+          type: string
+        nodeId:
+          type: string
+        ownerOrg:
+          type: string
+        bin:
+          type:
+          - string
+          - 'null'
+        qtyOnHand:
+          type: integer
+        qty:
+          type: integer
+          description: Units affected by this event
+        status:
+          type: string
+          enum:
+          - SELLABLE
+          - QUARANTINE
+          - EXPIRED
+          - WRITTEN_OFF
+          - DAMAGED
+        mfgDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        expDate:
+          type:
+          - string
+          - 'null'
+          format: date
+        unitLandedCostMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        reason:
+          type:
+          - string
+          - 'null'
+        receiptRef:
+          type:
+          - string
+          - 'null'
+    InventoryReservationEvent:
+      type: object
+      required:
+      - reservationId
+      - orderId
+      - status
+      - lines
+      properties:
+        reservationId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+        status:
+          type: string
+          enum:
+          - HELD
+          - COMMITTED
+          - RELEASED
+          - EXPIRED
+        expiresAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        reason:
+          type:
+          - string
+          - 'null'
+        cogs:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryMoney'
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              lineNo:
+                type: integer
+              sku:
+                type: string
+              nodeId:
+                type: string
+              qty:
+                type: integer
+              allocations:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    lotId:
+                      type: string
+                      format: uuid
+                    lotNo:
+                      type: string
+                    qty:
+                      type: integer
+                    expDate:
+                      type:
+                      - string
+                      - 'null'
+                      format: date
+                    unitLandedCostMinor:
+                      type: integer
+                      format: int64
+                    currency:
+                      type: string
+    InventoryMoney:
+      type: object
+      properties:
+        currency:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
 defaultContentType: application/json
 info:
   description: Every domain event on the bus. Topics are at.<aggregate>.events, keyed by aggregate id; headers carry event-id,
@@ -191,6 +487,22 @@ operations:
     action: send
     channel:
       $ref: '#/channels/catalogCategoryRequestEvents'
+  publishInventoryStockEvents:
+    action: send
+    channel:
+      $ref: '#/channels/inventoryStockEvents'
+    summary: inventory-service publishes availability (available = on hand − reserved) and lot lifecycle events via its transactional
+      outbox. Search indexer, storefront, cart, promise, Lola and finance (GL postings) consume them.
+  publishInventoryReservationEvents:
+    action: send
+    channel:
+      $ref: '#/channels/inventoryReservationEvents'
+    summary: Reservation lifecycle for the orders saga and finance (COGS on committed).
+  publishInventoryReconciliationEvents:
+    action: send
+    channel:
+      $ref: '#/channels/inventoryReconciliationEvents'
+    summary: Raised when positions differ from the ledger or lots; alerts the inventory channel.
 servers:
   cloud:
     description: Confluent Cloud (same on AWS, GCP and Azure)
