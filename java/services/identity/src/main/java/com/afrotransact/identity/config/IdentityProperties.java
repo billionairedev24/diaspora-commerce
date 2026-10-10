@@ -20,6 +20,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param social            social provider client credentials, keyed by provider id (google, apple, facebook)
  * @param bootstrapAdmin    first super administrator (created when missing; leave email blank to skip)
  * @param clients           OAuth clients seeded at start-up (upserted by client id)
+ * @param firstParty        first-party sign-in API (clients allowed to call it and redeem login tickets)
+ * @param signInProtection  brute-force protection limits (per account and per IP)
  */
 @ConfigurationProperties(prefix = "at.identity")
 public record IdentityProperties(
@@ -33,7 +35,9 @@ public record IdentityProperties(
         List<String> corsAllowedOrigins,
         Map<String, Social> social,
         BootstrapAdmin bootstrapAdmin,
-        List<Client> clients) {
+        List<Client> clients,
+        FirstParty firstParty,
+        SignInProtection signInProtection) {
 
     public IdentityProperties {
         homeUrl = homeUrl == null ? "/" : homeUrl;
@@ -46,6 +50,38 @@ public record IdentityProperties(
         social = social == null ? Map.of() : Map.copyOf(social);
         bootstrapAdmin = bootstrapAdmin == null ? new BootstrapAdmin(null, null, null, null, null) : bootstrapAdmin;
         clients = clients == null ? List.of() : List.copyOf(clients);
+        firstParty = firstParty == null ? new FirstParty(null) : firstParty;
+        signInProtection = signInProtection == null ? new SignInProtection(null, null) : signInProtection;
+    }
+
+    /** @param clientIds confidential clients allowed to use the first-party sign-in API (default gateway-bff) */
+    public record FirstParty(List<String> clientIds) {
+
+        public FirstParty {
+            clientIds = clientIds == null || clientIds.isEmpty() ? List.of("gateway-bff") : List.copyOf(clientIds);
+        }
+    }
+
+    /** Lockout limits; defaults: 5 failures per account / 30 per IP within 15 minutes, 15 min doubling to 4 h. */
+    public record SignInProtection(Limit account, Limit ip) {
+
+        public SignInProtection {
+            account = account == null ? new Limit(5, null, null, null) : account;
+            ip = ip == null ? new Limit(30, null, null, null) : ip;
+        }
+    }
+
+    /**
+     * @param maxFailures failed attempts within {@code window} that lock the key
+     * @param lockout     first lockout; doubled for every consecutive lockout up to {@code maxLockout}
+     */
+    public record Limit(int maxFailures, Duration window, Duration lockout, Duration maxLockout) {
+
+        public Limit {
+            window = window == null ? Duration.ofMinutes(15) : window;
+            lockout = lockout == null ? Duration.ofMinutes(15) : lockout;
+            maxLockout = maxLockout == null ? Duration.ofHours(4) : maxLockout;
+        }
     }
 
     /**

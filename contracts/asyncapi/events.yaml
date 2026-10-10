@@ -91,6 +91,12 @@ channels:
         $ref: '#/components/messages/catalogProductHidden'
       catalogProductRestored:
         $ref: '#/components/messages/catalogProductRestored'
+      catalogProductFlagged:
+        $ref: '#/components/messages/catalogProductFlagged'
+      catalogProductTakenDown:
+        $ref: '#/components/messages/catalogProductTakenDown'
+      catalogProductReinstated:
+        $ref: '#/components/messages/catalogProductReinstated'
   catalogCategoryRequestEvents:
     address: at.category-request.events
     description: New-category requests (key = request id).
@@ -544,6 +550,38 @@ channels:
     messages:
       sellerSubscriptionChanged:
         $ref: '#/components/messages/sellerSubscriptionChanged'
+  taxReturnsEvents:
+    address: at.taxreturns.events
+    description: 'Returns (RMAs), refunds and the tax ledger from tax-returns-service, written to its transactional outbox
+      in the same transaction as the change. Keys: RMA id for returns.rma.*, refund id for returns.refund.*, order id for
+      tax.*. Headers event-id, event-type, occurred-at; consumers de-duplicate on event-id. Money is in minor units of `currency`.'
+    messages:
+      returnsRmaRequested:
+        $ref: '#/components/messages/returnsRmaRequested'
+      returnsRmaApproved:
+        $ref: '#/components/messages/returnsRmaApproved'
+      returnsRmaRejected:
+        $ref: '#/components/messages/returnsRmaRejected'
+      returnsRmaCancelled:
+        $ref: '#/components/messages/returnsRmaCancelled'
+      returnsRmaLabelIssued:
+        $ref: '#/components/messages/returnsRmaLabelIssued'
+      returnsRmaInTransit:
+        $ref: '#/components/messages/returnsRmaInTransit'
+      returnsRmaReceived:
+        $ref: '#/components/messages/returnsRmaReceived'
+      returnsRmaInspected:
+        $ref: '#/components/messages/returnsRmaInspected'
+      returnsRmaRefunded:
+        $ref: '#/components/messages/returnsRmaRefunded'
+      returnsRefundIssued:
+        $ref: '#/components/messages/returnsRefundIssued'
+      returnsRefundFailed:
+        $ref: '#/components/messages/returnsRefundFailed'
+      taxSaleRecorded:
+        $ref: '#/components/messages/taxSaleRecorded'
+      taxRefundReversed:
+        $ref: '#/components/messages/taxRefundReversed'
   trustOpsEvents:
     address: at.trustops.events
     description: Trust & safety decisions and the audit stream from trust-ops-service (transactional outbox). Key = product
@@ -729,6 +767,27 @@ components:
     catalogProductRestored:
       name: catalog.product.restored
       title: The owner's listings were restored (sellerHidden = false; status is the product's own status)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductEvent'
+    catalogProductFlagged:
+      name: catalog.product.flagged
+      title: A live listing was reported, flagged by staff or flagged automatically
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductFlagged'
+    catalogProductTakenDown:
+      name: catalog.product.taken_down
+      title: Trust and Safety took a live or paused listing down (status TAKEN_DOWN, reasonCode set)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductEvent'
+    catalogProductReinstated:
+      name: catalog.product.reinstated
+      title: A takedown was reversed (status is the listing's status before the takedown, LIVE or PAUSED)
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1698,6 +1757,97 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/SellerSubscriptionChanged'
+    returnsRmaRequested:
+      name: returns.rma.requested
+      title: A customer started a return (or reported a problem with a perishable item)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRma'
+    returnsRmaApproved:
+      name: returns.rma.approved
+      title: Approved by the seller or staff, or auto-approved (AfroTransact-fulfilled, low value, seller SLA passed)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRma'
+    returnsRmaRejected:
+      name: returns.rma.rejected
+      title: Rejected by the seller / staff, or every line failed inspection
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRma'
+    returnsRmaCancelled:
+      name: returns.rma.cancelled
+      title: The customer cancelled before drop-off / pickup
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRma'
+    returnsRmaLabelIssued:
+      name: returns.rma.label_issued
+      title: 'Drop-off: carrier label + QR payload issued; driver pickup: handover code issued (not in the payload)'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRma'
+    returnsRmaInTransit:
+      name: returns.rma.in_transit
+      title: First carrier scan or driver pickup
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRma'
+    returnsRmaReceived:
+      name: returns.rma.received
+      title: The parcel arrived at the seller or the AfroTransact return centre
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRma'
+    returnsRmaInspected:
+      name: returns.rma.inspected
+      title: Inspection outcome per line (PASS / FAIL, RESTOCK / DAMAGED)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRma'
+    returnsRmaRefunded:
+      name: returns.rma.refunded
+      title: The return is closed with its refund issued
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRma'
+    returnsRefundIssued:
+      name: returns.refund.issued
+      title: payments-service accepted the refund (seller transfer portion and commission reversed by payments)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRefund'
+    returnsRefundFailed:
+      name: returns.refund.failed
+      title: payments-service refused the refund (4xx); staff can retry
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ReturnsRefund'
+    taxSaleRecorded:
+      name: tax.sale.recorded
+      title: Tax collected on a placed order, per line and seller
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/TaxLedgerEntry'
+    taxRefundReversed:
+      name: tax.refund.reversed
+      title: Tax given back by a refund (booked negative in the month of the refund)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/TaxLedgerEntry'
     trustOpsModerationQueued:
       name: trustops.moderation.queued
       title: A listing entered the moderation queue
@@ -2202,6 +2352,7 @@ components:
           - LIVE
           - REJECTED
           - PAUSED
+          - TAKEN_DOWN
         title:
           type: string
         categoryId:
@@ -2215,6 +2366,12 @@ components:
           type:
           - string
           - 'null'
+          description: 'Moderation note; on a takedown "[REASON_CODE] Taken down: note"'
+        reasonCode:
+          type:
+          - string
+          - 'null'
+          description: Takedown reason code (catalog.product.taken_down only; ListingReasonCode)
         sellerHidden:
           type: boolean
           description: The owner's listings are hidden by seller-service compliance enforcement (seller.listings.hidden).
@@ -2239,6 +2396,91 @@ components:
                 type: string
               quantity:
                 type: integer
+    CatalogProductFlagged:
+      type: object
+      required:
+      - flagId
+      - productId
+      - atin
+      - ownerKind
+      - ownerOrgId
+      - status
+      - title
+      - source
+      - reasonCode
+      - occurredAt
+      properties:
+        flagId:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+          pattern: ^AT[0-9A-Z]{8}$
+        ownerKind:
+          type: string
+          enum:
+          - SELLER
+          - PLATFORM
+        ownerOrgId:
+          type: string
+        status:
+          type: string
+          enum:
+          - LIVE
+          - PAUSED
+        title:
+          type: string
+        categoryId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        productTypeCode:
+          type: string
+        sellerHidden:
+          type: boolean
+        source:
+          type: string
+          enum:
+          - CUSTOMER_REPORT
+          - STAFF
+          - AUTOMATED
+        reasonCode:
+          type: string
+          enum:
+          - PROHIBITED_ITEM
+          - UNAPPROVED_HEALTH_CLAIM
+          - RESTRICTED_INGREDIENT
+          - COUNTERFEIT
+          - IMAGE_POLICY
+          - MISLEADING_CONTENT
+          - LABELLING
+          - SHIPPING_METHOD
+          - DUPLICATE_LISTING
+          - WRONG_CATEGORY
+          - OTHER
+        details:
+          type:
+          - string
+          - 'null'
+          description: Reporter's description (required for OTHER)
+        reporterId:
+          type:
+          - string
+          - 'null'
+          description: Token subject of the shopper
+          staff member or service client: null
+        riskLevel:
+          type:
+          - string
+          - 'null'
+          description: Optional risk level of an automated flag (e.g. HIGH)
+        occurredAt:
+          type: string
+          format: date-time
     CatalogCategoryRequestEvent:
       type: object
       properties:
@@ -5583,6 +5825,314 @@ components:
         occurredAt:
           type: string
           format: date-time
+    ReturnsRma:
+      type: object
+      required:
+      - rmaId
+      - number
+      - orderId
+      - orderNumber
+      - shipmentId
+      - customerId
+      - sellerOrgId
+      - fulfilmentType
+      - method
+      - status
+      - refundState
+      - currency
+      - estimateMinor
+      - lines
+      - occurredAt
+      properties:
+        rmaId:
+          type: string
+          format: uuid
+        number:
+          type: string
+          examples:
+          - RMA-7KQ3MD2X
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        sellerOrgId:
+          type: string
+        fulfilmentType:
+          type: string
+          enum:
+          - SELLER_FULFILLED
+          - FBA_AFROTRANSACT
+          - RETAIL_1P
+        method:
+          type: string
+          enum:
+          - DROP_OFF
+          - DRIVER_PICKUP
+          - NO_RETURN
+        status:
+          type: string
+          enum:
+          - REQUESTED
+          - APPROVED
+          - AUTO_APPROVED
+          - LABEL_ISSUED
+          - IN_TRANSIT
+          - RECEIVED
+          - INSPECTED
+          - REFUNDED
+          - REJECTED
+          - CANCELLED
+        autoApproved:
+          type: boolean
+        refundAtFirstScan:
+          type: boolean
+        refundState:
+          type: string
+          enum:
+          - NONE
+          - PENDING
+          - ISSUED
+          - FAILED
+        currency:
+          type: string
+        estimateMinor:
+          type: integer
+          format: int64
+        approvalDueAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Seller decision deadline
+        carrier:
+          type:
+          - string
+          - 'null'
+        trackingNumber:
+          type:
+          - string
+          - 'null'
+        dropOffBy:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        decisionNote:
+          type:
+          - string
+          - 'null'
+        actor:
+          type: string
+          description: CUSTOMER:<id>, SELLER_MEMBER:<id>, STAFF:<id>, CARRIER:<carrier>, SYSTEM:…
+        occurredAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              lineId:
+                type: string
+              atin:
+                type:
+                - string
+                - 'null'
+              quantity:
+                type: integer
+              reason:
+                type: string
+                enum:
+                - DAMAGED
+                - DEFECTIVE
+                - WRONG_ITEM
+                - NOT_AS_DESCRIBED
+                - MISSING_PARTS
+                - EXPIRED_OR_SPOILED
+                - ARRIVED_LATE
+                - NO_LONGER_NEEDED
+                - ORDERED_BY_MISTAKE
+                - BETTER_PRICE_AVAILABLE
+              outcome:
+                type:
+                - string
+                - 'null'
+                enum:
+                - PASS
+                - FAIL
+                - null
+              condition:
+                type:
+                - string
+                - 'null'
+                enum:
+                - RESTOCK
+                - DAMAGED
+                - null
+    ReturnsRefund:
+      type: object
+      required:
+      - refundId
+      - kind
+      - orderId
+      - paymentId
+      - status
+      - currency
+      - itemsMinor
+      - shippingMinor
+      - taxMinor
+      - restockingFeeMinor
+      - totalMinor
+      - lines
+      - occurredAt
+      properties:
+        refundId:
+          type: string
+          format: uuid
+          description: Also the Idempotency-Key sent to payments
+        kind:
+          type: string
+          enum:
+          - RETURN
+          - ADJUSTMENT
+        rmaId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        rmaNumber:
+          type:
+          - string
+          - 'null'
+        orderId:
+          type: string
+          format: uuid
+        paymentId:
+          type: string
+          format: uuid
+        paymentsRefundId:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          enum:
+          - PENDING
+          - ISSUED
+          - FAILED
+        currency:
+          type: string
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        restockingFeeMinor:
+          type: integer
+          format: int64
+        totalMinor:
+          type: integer
+          format: int64
+          description: items + shipping + tax (the fee is already deducted)
+        failure:
+          type:
+          - string
+          - 'null'
+        occurredAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              lineId:
+                type: string
+              quantity:
+                type: integer
+              itemsMinor:
+                type: integer
+                format: int64
+              shippingMinor:
+                type: integer
+                format: int64
+              taxMinor:
+                type: integer
+                format: int64
+              restockingFeeMinor:
+                type: integer
+                format: int64
+    TaxLedgerEntry:
+      type: object
+      required:
+      - orderId
+      - currency
+      - taxMinor
+      - occurredAt
+      - lines
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type:
+          - string
+          - 'null'
+          description: tax.sale.recorded only
+        refundRef:
+          type:
+          - string
+          - 'null'
+          description: 'tax.refund.reversed only: payments refund id'
+        jurisdiction:
+          type:
+          - string
+          - 'null'
+          examples:
+          - US-TX
+          description: tax.sale.recorded only
+        localJurisdiction:
+          type:
+          - string
+          - 'null'
+          examples:
+          - US-TX-770
+        currency:
+          type: string
+        taxMinor:
+          type: integer
+          format: int64
+          description: Positive; refunds are booked negative in the ledger
+        occurredAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              lineId:
+                type: string
+              sellerOrgId:
+                type:
+                - string
+                - 'null'
+              taxableMinor:
+                type: integer
+                format: int64
+              taxMinor:
+                type: integer
+                format: int64
     TrustOpsModerationEvent:
       type: object
       required:
@@ -5958,7 +6508,12 @@ operations:
     action: send
     channel:
       $ref: '#/channels/catalogProductEvents'
-    summary: catalog-service publishes product lifecycle events via its transactional outbox.
+    summary: 'catalog-service publishes product lifecycle events via its transactional outbox. catalog.product.flagged: a
+      live listing was reported by a shopper (POST /v1/public/products/{atin}/reports), flagged by staff or flagged automatically
+      by a service client (POST /v1/products/{id}/flags); trust-ops-service queues it as a live-listing moderation item. catalog.product.taken_down
+      / reinstated: Trust and Safety removed a live or paused listing (POST /v1/products/{id}/takedown, status TAKEN_DOWN,
+      hidden from public reads) or reversed it (POST /v1/products/{id}/restore, back to LIVE or PAUSED). Read models keep
+      a product public only while its status is LIVE and sellerHidden is false.'
   publishCatalogCategoryRequestEvents:
     action: send
     channel:
@@ -5970,7 +6525,8 @@ operations:
     summary: 'catalog-service (consumer group catalog-service, inbox-deduplicated) handles seller.listings.hidden / restored:
       records the organisation''s suppression (org_listing_suppression), hides its products from the public catalog API and
       publishes catalog.product.hidden / restored for every product of the organisation. Older decisions never override newer
-      ones (occurredAt).'
+      ones (occurredAt). This covers Stripe compliance enforcement and Trust and Safety suspension (reason SUSPENDED / REINSTATED)
+      alike.'
   publishContentEvents:
     action: send
     channel:
@@ -6244,6 +6800,34 @@ operations:
     channel:
       $ref: '#/channels/sellerSubscriptionEvents'
     summary: Plan changes, trials and dunning; identity / feature limits and finance consume them.
+  publishTaxReturnsEvents:
+    action: send
+    channel:
+      $ref: '#/channels/taxReturnsEvents'
+    summary: 'tax-returns publishes every RMA transition (notifications: return started, label / QR, refund on its way; seller
+      center queues; trust-ops follows rejected and failed-after-refund inspections), refunds it orchestrated through payments-service,
+      and tax ledger entries (finance and seller statements).'
+  receiveTaxReturnsOrderEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/ordersOrderEvents'
+    summary: tax-returns (consumer group tax-returns-service, inbox-deduplicated) keeps a snapshot of orders.order.placed
+      (lines, sellers, fulfilment, ship-to) and books one SALE tax entry per line; orders.shipment.delivered starts the return
+      window of the shipment.
+  receiveTaxReturnsPaymentEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/paymentsPaymentEvents'
+    summary: tax-returns consumes payments.refunded (inbox-deduplicated) and books the tax reversal of every refunded line,
+      keyed by the payments refund id (FAILED refunds void it), so cancellations and staff refunds made elsewhere also reduce
+      the monthly liability.
+  receiveTaxReturnsCarrierEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/carrierShipmentEvents'
+    summary: 'tax-returns consumes carrier.tracking.updated for return labels (matched by carrier + tracking number or reference
+      = RMA number): picked_up / in_transit / out_for_delivery → in transit (refund at first scan where policy allows), delivered
+      → received.'
   publishTrustOpsEvents:
     action: send
     channel:

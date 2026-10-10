@@ -18,6 +18,10 @@ public final class IdentityEvents {
     public static final String ROLE_REVOKED = "identity.role.revoked";
     public static final String PERMISSION_GRANTED = "identity.permission.granted";
     public static final String PERMISSION_REVOKED = "identity.permission.revoked";
+    public static final String SIGN_IN_LOCKED = "identity.sign-in.locked";
+    public static final String DEVICE_REGISTERED = "identity.device.registered";
+    public static final String DEVICE_UNREGISTERED = "identity.device.unregistered";
+    public static final String NOTIFICATION_PREFERENCES_UPDATED = "identity.notification-preferences.updated";
 
     private IdentityEvents() {
     }

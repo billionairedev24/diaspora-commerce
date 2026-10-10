@@ -11,6 +11,9 @@ channels:
       catalogProductResumed: {$ref: '#/components/messages/catalogProductResumed'}
       catalogProductHidden: {$ref: '#/components/messages/catalogProductHidden'}
       catalogProductRestored: {$ref: '#/components/messages/catalogProductRestored'}
+      catalogProductFlagged: {$ref: '#/components/messages/catalogProductFlagged'}
+      catalogProductTakenDown: {$ref: '#/components/messages/catalogProductTakenDown'}
+      catalogProductReinstated: {$ref: '#/components/messages/catalogProductReinstated'}
   catalogCategoryRequestEvents:
     address: at.category-request.events
     description: New-category requests (key = request id).
@@ -22,7 +25,14 @@ operations:
   publishCatalogProductEvents:
     action: send
     channel: {$ref: '#/channels/catalogProductEvents'}
-    summary: catalog-service publishes product lifecycle events via its transactional outbox.
+    summary: >-
+      catalog-service publishes product lifecycle events via its transactional outbox. catalog.product.flagged: a
+      live listing was reported by a shopper (POST /v1/public/products/{atin}/reports), flagged by staff or flagged
+      automatically by a service client (POST /v1/products/{id}/flags); trust-ops-service queues it as a
+      live-listing moderation item. catalog.product.taken_down / reinstated: Trust and Safety removed a live or
+      paused listing (POST /v1/products/{id}/takedown, status TAKEN_DOWN, hidden from public reads) or reversed it
+      (POST /v1/products/{id}/restore, back to LIVE or PAUSED). Read models keep a product public only while its
+      status is LIVE and sellerHidden is false.
   publishCatalogCategoryRequestEvents:
     action: send
     channel: {$ref: '#/channels/catalogCategoryRequestEvents'}
@@ -33,7 +43,8 @@ operations:
       catalog-service (consumer group catalog-service, inbox-deduplicated) handles seller.listings.hidden / restored:
       records the organisation's suppression (org_listing_suppression), hides its products from the public catalog
       API and publishes catalog.product.hidden / restored for every product of the organisation. Older decisions
-      never override newer ones (occurredAt).
+      never override newer ones (occurredAt). This covers Stripe compliance enforcement and Trust and Safety
+      suspension (reason SUSPENDED / REINSTATED) alike.
 components:
   messages:
     catalogProductCreated:
@@ -67,6 +78,21 @@ components:
       title: The owner's listings were restored (sellerHidden = false; status is the product's own status)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogProductEvent'}
+    catalogProductFlagged:
+      name: catalog.product.flagged
+      title: A live listing was reported, flagged by staff or flagged automatically
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogProductFlagged'}
+    catalogProductTakenDown:
+      name: catalog.product.taken_down
+      title: Trust and Safety took a live or paused listing down (status TAKEN_DOWN, reasonCode set)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogProductEvent'}
+    catalogProductReinstated:
+      name: catalog.product.reinstated
+      title: A takedown was reversed (status is the listing's status before the takedown, LIVE or PAUSED)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogProductEvent'}
     catalogCategoryRequestCreated:
       name: catalog.category-request.created
       headers: {$ref: '#/components/schemas/EventHeaders'}
@@ -88,11 +114,14 @@ components:
         atin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
         ownerKind: {type: string, enum: [SELLER, PLATFORM]}
         ownerOrgId: {type: string}
-        status: {type: string, enum: [IN_REVIEW, PENDING_CATEGORY_APPROVAL, LIVE, REJECTED, PAUSED]}
+        status: {type: string, enum: [IN_REVIEW, PENDING_CATEGORY_APPROVAL, LIVE, REJECTED, PAUSED, TAKEN_DOWN]}
         title: {type: string}
         categoryId: {type: [string, 'null'], format: uuid}
         productTypeCode: {type: string}
-        note: {type: [string, 'null']}
+        note: {type: [string, 'null'], description: 'Moderation note; on a takedown "[REASON_CODE] Taken down: note"'}
+        reasonCode:
+          type: [string, 'null']
+          description: Takedown reason code (catalog.product.taken_down only; ListingReasonCode)
         sellerHidden:
           type: boolean
           description: >-
@@ -109,6 +138,29 @@ components:
               priceMinor: {type: integer, format: int64}
               currency: {type: string}
               quantity: {type: integer}
+    CatalogProductFlagged:
+      type: object
+      required: [flagId, productId, atin, ownerKind, ownerOrgId, status, title, source, reasonCode, occurredAt]
+      properties:
+        flagId: {type: string, format: uuid}
+        productId: {type: string, format: uuid}
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        ownerKind: {type: string, enum: [SELLER, PLATFORM]}
+        ownerOrgId: {type: string}
+        status: {type: string, enum: [LIVE, PAUSED]}
+        title: {type: string}
+        categoryId: {type: [string, 'null'], format: uuid}
+        productTypeCode: {type: string}
+        sellerHidden: {type: boolean}
+        source: {type: string, enum: [CUSTOMER_REPORT, STAFF, AUTOMATED]}
+        reasonCode:
+          type: string
+          enum: [PROHIBITED_ITEM, UNAPPROVED_HEALTH_CLAIM, RESTRICTED_INGREDIENT, COUNTERFEIT, IMAGE_POLICY,
+                 MISLEADING_CONTENT, LABELLING, SHIPPING_METHOD, DUPLICATE_LISTING, WRONG_CATEGORY, OTHER]
+        details: {type: [string, 'null'], description: Reporter's description (required for OTHER)}
+        reporterId: {type: [string, 'null'], description: Token subject of the shopper, staff member or service client}
+        riskLevel: {type: [string, 'null'], description: Optional risk level of an automated flag (e.g. HIGH)}
+        occurredAt: {type: string, format: date-time}
     CatalogCategoryRequestEvent:
       type: object
       properties:

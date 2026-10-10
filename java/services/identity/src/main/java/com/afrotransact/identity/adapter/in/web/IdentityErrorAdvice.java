@@ -4,6 +4,7 @@ import java.net.URI;
 
 import com.afrotransact.identity.domain.IdentityRuleViolation;
 import com.afrotransact.identity.domain.RateLimitExceeded;
+import com.afrotransact.identity.domain.SignInFailed;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -14,7 +15,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-/** Maps identity rule violations (422 with field errors), rate limits (429 + Retry-After) and lost updates (409). */
+/**
+ * Maps identity rule violations (422 with field errors), failed sign-in steps (401), rate limits and sign-in lockouts
+ * (429 + Retry-After) and lost updates (409).
+ */
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class IdentityErrorAdvice {
@@ -42,6 +46,18 @@ class IdentityErrorAdvice {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
                 .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds))
                 .body(pd);
+    }
+
+    @ExceptionHandler(SignInFailed.class)
+    ProblemDetail signInFailed(SignInFailed ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        pd.setType(URI.create(TYPE_BASE + ex.code()));
+        pd.setTitle("Sign-in failed");
+        pd.setProperty("code", ex.code());
+        if (ex.attemptsLeft() != null) {
+            pd.setProperty("attemptsLeft", ex.attemptsLeft());
+        }
+        return pd;
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

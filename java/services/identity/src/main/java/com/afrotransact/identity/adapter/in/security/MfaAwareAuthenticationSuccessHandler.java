@@ -8,6 +8,7 @@ import com.afrotransact.identity.application.SignInService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,13 +26,16 @@ public class MfaAwareAuthenticationSuccessHandler implements AuthenticationSucce
     public static final String MFA_PAGE = "/login/mfa";
 
     private final SignInService signIn;
+    private final HostedLoginProtection protection;
     private final TrustedBrowserCookie trustedBrowser;
     private final SecurityContextRepository contexts;
     private final AuthenticationSuccessHandler next;
 
-    public MfaAwareAuthenticationSuccessHandler(SignInService signIn, TrustedBrowserCookie trustedBrowser,
+    public MfaAwareAuthenticationSuccessHandler(SignInService signIn, HostedLoginProtection protection,
+                                                TrustedBrowserCookie trustedBrowser,
                                                 SecurityContextRepository contexts, String defaultTargetUrl) {
         this.signIn = signIn;
+        this.protection = protection;
         this.trustedBrowser = trustedBrowser;
         this.contexts = contexts;
         SavedRequestAwareAuthenticationSuccessHandler saved = new SavedRequestAwareAuthenticationSuccessHandler();
@@ -45,6 +49,9 @@ public class MfaAwareAuthenticationSuccessHandler implements AuthenticationSucce
         UUID userId = UUID.fromString(authentication.getName());
         SecondFactorChallenge challenge = signIn.challenge(userId, trustedBrowser.read(request), false);
         if (!challenge.required()) {
+            if (authentication instanceof UsernamePasswordAuthenticationToken) {
+                protection.succeeded(request, userId);
+            }
             next.onAuthenticationSuccess(request, response, authentication);
             return;
         }

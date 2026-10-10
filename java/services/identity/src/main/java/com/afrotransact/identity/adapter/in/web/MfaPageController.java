@@ -8,6 +8,9 @@ import java.util.UUID;
 import com.afrotransact.identity.adapter.in.security.MfaPendingAuthentication;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
 import com.afrotransact.identity.application.SecondFactorChallenge;
+import com.afrotransact.identity.application.SignInAccount;
+import com.afrotransact.identity.application.SignInAttempt;
+import com.afrotransact.identity.application.SignInProtectionService;
 import com.afrotransact.identity.application.SignInService;
 import com.afrotransact.identity.domain.MfaFactor;
 import com.afrotransact.identity.domain.RateLimitExceeded;
@@ -33,14 +36,16 @@ import org.springframework.web.bind.annotation.RestController;
 class MfaPageController {
 
     private final SignInService signIn;
+    private final SignInProtectionService protection;
     private final SecurityContextRepository contexts;
     private final RequestCache requestCache;
     private final TrustedBrowserCookie trustedBrowser;
     private final String homeUrl;
 
-    MfaPageController(SignInService signIn, SecurityContextRepository contexts, RequestCache requestCache,
-                      TrustedBrowserCookie trustedBrowser, LoginPageSettings settings) {
+    MfaPageController(SignInService signIn, SignInProtectionService protection, SecurityContextRepository contexts,
+                      RequestCache requestCache, TrustedBrowserCookie trustedBrowser, LoginPageSettings settings) {
         this.signIn = signIn;
+        this.protection = protection;
         this.contexts = contexts;
         this.requestCache = requestCache;
         this.trustedBrowser = trustedBrowser;
@@ -125,10 +130,22 @@ class MfaPageController {
             response.sendRedirect("/login/mfa?error");
             return;
         }
+        String email = signIn.findAccount(userId.toString()).map(SignInAccount::email).orElse(null);
+        if (protection.lockedFor(email, request.getRemoteAddr()).isPresent()) {
+            lockedOut(request, response);
+            return;
+        }
         if (!signIn.verifySecondFactor(userId, parsed, code)) {
+            boolean locked = protection.recordFailure(attempt(request, userId, email, parsed, "wrong-code"))
+                    .isPresent();
+            if (locked) {
+                lockedOut(request, response);
+                return;
+            }
             response.sendRedirect("/login/mfa?error");
             return;
         }
+        protection.recordSuccess(attempt(request, userId, email, parsed, null));
         Authentication firstFactor = pending.get().firstFactor();
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(firstFactor);
@@ -141,6 +158,20 @@ class MfaPageController {
         SavedRequest saved = requestCache.getRequest(request, response);
         requestCache.removeRequest(request, response);
         response.sendRedirect(saved != null ? saved.getRedirectUrl() : homeUrl);
+    }
+
+    /** Locked while two-step verification was pending: drop the half-finished sign-in. */
+    private void lockedOut(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        SecurityContext empty = SecurityContextHolder.createEmptyContext();
+        SecurityContextHolder.setContext(empty);
+        contexts.saveContext(empty, request, response);
+        response.sendRedirect("/login?error=locked");
+    }
+
+    private static SignInAttempt attempt(HttpServletRequest request, UUID userId, String email, MfaFactor factor,
+                                         String reason) {
+        return new SignInAttempt(userId, email, request.getRemoteAddr(), request.getHeader("User-Agent"), null,
+                SignInAttempt.HOSTED, "MFA_" + factor.name(), reason);
     }
 
     private static Optional<MfaPendingAuthentication> pending() {

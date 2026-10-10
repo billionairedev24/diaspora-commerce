@@ -15,8 +15,10 @@ at:
     webauthn:
       rp-id: localhost
       rp-name: AfroTransact (local)
+      # identity's own pages and the storefront origins whose sign-in forms run the passkey ceremony
       allowed-origins:
         - http://localhost:8100
+        - http://localhost:3000
     cors-allowed-origins:
       - http://localhost:3000
       - http://localhost:3001
@@ -70,11 +72,12 @@ at:
         name: Gateway BFF
         type: confidential
         # GATEWAY_BFF_CLIENT_SECRET (BFF_CLIENT_SECRET still accepted). Authorization code + PKCE + refresh tokens;
-        # the callback lives on the storefront origin so the session cookie stays first-party.
+        # the callback lives on the storefront origin so the session cookie stays first-party. Client credentials with
+        # scope auth:first-party call the first-party sign-in API (/v1/auth/*) and redeem its login tickets.
         secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:local-bff-secret}}
-        grant-types: [authorization_code, refresh_token]
+        grant-types: [authorization_code, refresh_token, client_credentials]
         redirect-uris: [http://localhost:3000/api/bff/v1/auth/oidc/callback, http://localhost:8200/login/oauth2/code/afrotransact]
-        scopes: [openid, profile, email, phone, offline_access]
+        scopes: [openid, profile, email, phone, offline_access, "auth:first-party"]
       - client-id: seller-service
         name: Seller service
         type: confidential
@@ -98,7 +101,7 @@ at:
         type: confidential
         secret: ${FULFILMENT_CLIENT_SECRET:local-fulfilment-service-secret}
         grant-types: [client_credentials]
-        scopes: [payments:service, orders:update-status, inventory:reserve]
+        scopes: [orders:update-status, inventory:reserve, delivery:relay]
       - client-id: payments-service
         name: Payments service
         type: confidential
@@ -111,6 +114,12 @@ at:
         secret: ${NOTIFICATIONS_CLIENT_SECRET:local-notifications-service-secret}
         grant-types: [client_credentials]
         scopes: [users:read]
+      - client-id: trust-ops-service
+        name: Trust & safety operations service
+        type: confidential
+        secret: ${TRUSTOPS_CLIENT_SECRET:local-trust-ops-secret}
+        grant-types: [client_credentials]
+        scopes: [catalog:moderate, payments:service, compliance:hold, offers:write, ai:triage, users:read]
       - client-id: search-service
         name: Search service
         type: confidential

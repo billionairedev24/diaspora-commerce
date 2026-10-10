@@ -8,6 +8,7 @@ import com.afrotransact.identity.domain.OrgKind;
 import com.afrotransact.identity.domain.OrgMembership;
 import com.afrotransact.identity.domain.OrgStatus;
 import com.afrotransact.identity.domain.Organization;
+import com.afrotransact.identity.domain.RoleKeys;
 import com.afrotransact.identity.port.OrganizationRepository;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
@@ -75,5 +76,16 @@ class JdbcOrganizationRepository implements OrganizationRepository {
     public boolean removeMember(String orgId, UUID userId) {
         return jdbc.sql("delete from org_membership where org_id = :o and user_id = :u")
                 .param("o", orgId).param("u", userId).update() == 1;
+    }
+
+    @Override
+    public List<UUID> ownerUserIds(String orgId) {
+        return jdbc.sql("""
+                select m.user_id from org_membership m join user_account u on u.id = m.user_id
+                where m.org_id = :o and m.role_key in (:roles) and u.enabled
+                order by m.created_at, m.user_id
+                """)
+                .param("o", orgId).param("roles", List.of(RoleKeys.SELLER_OWNER, RoleKeys.PROVIDER_OWNER))
+                .query(UUID.class).list();
     }
 }

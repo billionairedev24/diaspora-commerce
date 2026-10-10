@@ -10,14 +10,21 @@ import com.afrotransact.identity.adapter.in.security.AccountUserDetailsService;
 import com.afrotransact.identity.adapter.in.security.EnabledProviderAuthorizationRequestResolver;
 import com.afrotransact.identity.adapter.in.security.FederatedOAuth2UserService;
 import com.afrotransact.identity.adapter.in.security.FederatedOidcUserService;
+import com.afrotransact.identity.adapter.in.security.HostedLoginProtection;
+import com.afrotransact.identity.adapter.in.security.LoginTicketAuthenticationFilter;
+import com.afrotransact.identity.adapter.in.security.LoginTicketAuthenticationProvider;
 import com.afrotransact.identity.adapter.in.security.MfaAwareAuthenticationSuccessHandler;
 import com.afrotransact.identity.adapter.in.security.MfaChallengeAccessDeniedHandler;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationConverter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationProvider;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
+import com.afrotransact.identity.adapter.out.passkey.WebAuthnPasskeyAssertions;
 import com.afrotransact.identity.application.FederatedLoginService;
+import com.afrotransact.identity.application.FirstPartySignInService;
 import com.afrotransact.identity.application.IdentityProviderService;
+import com.afrotransact.identity.application.SignInProtectionService;
 import com.afrotransact.identity.application.SignInService;
+import com.afrotransact.identity.port.PasskeyAssertions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -25,6 +32,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -34,21 +42,27 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
+import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.savedrequest.RequestCache;
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 import org.springframework.security.web.webauthn.management.JdbcPublicKeyCredentialUserEntityRepository;
+import org.springframework.security.web.webauthn.api.PublicKeyCredentialRpEntity;
 import org.springframework.security.web.webauthn.management.JdbcUserCredentialRepository;
 import org.springframework.security.web.webauthn.management.PublicKeyCredentialUserEntityRepository;
 import org.springframework.security.web.webauthn.management.UserCredentialRepository;
+import org.springframework.security.web.webauthn.management.WebAuthnRelyingPartyOperations;
+import org.springframework.security.web.webauthn.management.Webauthn4JRelyingPartyOperations;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -56,9 +70,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 /**
  * Three filter chains.
  * <ol>
- *   <li>Authorization server endpoints (authorize, token, JWKS, discovery, userinfo, revocation, logout).</li>
+ *   <li>Authorization server endpoints (authorize, token, JWKS, discovery, userinfo, revocation, logout). The
+ *   authorize endpoint also accepts a first-party {@code login_ticket} from gateway-bff.</li>
  *   <li>{@code /v1/**}: stateless JSON API protected by this server's own access tokens.</li>
- *   <li>Browser sign-in: password form, social login, passkeys (WebAuthn), two-step verification.</li>
+ *   <li>Browser sign-in: password form (brute-force protected), social login, passkeys (WebAuthn), two-step
+ *   verification.</li>
  * </ol>
  */
 @Configuration(proxyBeanMethods = false)
@@ -74,7 +90,9 @@ class SecurityConfiguration {
     @Order(Ordered.HIGHEST_PRECEDENCE)
     SecurityFilterChain authorizationServerChain(HttpSecurity http, OAuth2TokenGenerator<?> tokenGenerator,
                                                  RegisteredClientRepository clients,
-                                                 SecurityContextRepository contexts, RequestCache requestCache)
+                                                 SecurityContextRepository contexts, RequestCache requestCache,
+                                                 FirstPartySignInService firstParty, UserDetailsService accounts,
+                                                 AuthorizationServerSettings settings)
             throws Exception {
         http.oauth2AuthorizationServer(as -> {
             http.securityMatcher(as.getEndpointsMatcher());
@@ -95,6 +113,10 @@ class SecurityConfiguration {
                 .exceptionHandling(e -> e
                         .defaultAuthenticationEntryPointFor(new LoginUrlAuthenticationEntryPoint("/login"), html)
                         .accessDeniedHandler(new MfaChallengeAccessDeniedHandler(requestCache)));
+        // Before the authorization request is pre-validated (it captures the principal), after the context is loaded.
+        http.addFilterAfter(new LoginTicketAuthenticationFilter(new ProviderManager(
+                new LoginTicketAuthenticationProvider(firstParty, accounts)), settings.getAuthorizationEndpoint()),
+                SecurityContextHolderFilter.class);
         return http.build();
     }
 
@@ -119,15 +141,19 @@ class SecurityConfiguration {
     SecurityFilterChain browserChain(HttpSecurity http, IdentityProperties props, SignInService signIn,
                                      TrustedBrowserCookie trustedBrowser, SecurityContextRepository contexts,
                                      RequestCache requestCache, ClientRegistrationRepository registrations,
-                                     IdentityProviderService providers, FederatedLoginService federated)
+                                     IdentityProviderService providers, FederatedLoginService federated,
+                                     SignInProtectionService protection)
             throws Exception {
+        HostedLoginProtection hostedProtection = new HostedLoginProtection(protection);
         MfaAwareAuthenticationSuccessHandler success = new MfaAwareAuthenticationSuccessHandler(signIn,
-                trustedBrowser, contexts, props.homeUrl());
+                hostedProtection, trustedBrowser, contexts, props.homeUrl());
         http.authorizeHttpRequests(a -> a.requestMatchers(PUBLIC_BROWSER_PATHS).permitAll()
                         .anyRequest().authenticated())
                 .securityContext(c -> c.securityContextRepository(contexts))
                 .requestCache(r -> r.requestCache(requestCache))
-                .formLogin(f -> f.loginPage("/login").successHandler(success).permitAll())
+                .addFilterBefore(hostedProtection, UsernamePasswordAuthenticationFilter.class)
+                .formLogin(f -> f.loginPage("/login").successHandler(success).failureHandler(hostedProtection)
+                        .permitAll())
                 .oauth2Login(o -> o.loginPage("/login")
                         .clientRegistrationRepository(registrations)
                         .authorizationEndpoint(e -> e.authorizationRequestResolver(
@@ -169,6 +195,24 @@ class SecurityConfiguration {
     @Bean
     UserCredentialRepository userCredentialRepository(JdbcTemplate jdbc) {
         return new JdbcUserCredentialRepository(jdbc);
+    }
+
+    /**
+     * One WebAuthn relying party for the hosted pages ({@code webAuthn()} picks this bean up) and the first-party
+     * passkey API. Allowed origins include the storefront origins whose own forms run the ceremony.
+     */
+    @Bean
+    WebAuthnRelyingPartyOperations webAuthnRelyingPartyOperations(PublicKeyCredentialUserEntityRepository userEntities,
+                                                                   UserCredentialRepository credentials,
+                                                                   IdentityProperties props) {
+        return new Webauthn4JRelyingPartyOperations(userEntities, credentials, PublicKeyCredentialRpEntity.builder()
+                .id(props.webauthn().rpId()).name(props.webauthn().rpName()).build(),
+                new HashSet<>(props.webauthn().allowedOrigins()));
+    }
+
+    @Bean
+    PasskeyAssertions passkeyAssertions(WebAuthnRelyingPartyOperations relyingParty, IdentityProperties props) {
+        return new WebAuthnPasskeyAssertions(relyingParty, props.webauthn().rpId());
     }
 
     /** Browser apps call the token endpoint (public PKCE clients) and the /v1 API cross-origin. */

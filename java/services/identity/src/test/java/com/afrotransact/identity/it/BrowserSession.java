@@ -121,6 +121,21 @@ final class BrowserSession {
                 null);
     }
 
+    /** Confidential client (e.g. gateway-bff): code + PKCE verifier, HTTP Basic client authentication. */
+    Tokens exchangeConfidential(String clientId, String secret, String redirectUri, String code, String verifier) {
+        return token(Map.of("grant_type", "authorization_code", "code", code, "redirect_uri", redirectUri,
+                "code_verifier", verifier), basic(clientId, secret));
+    }
+
+    Tokens refreshConfidential(String clientId, String secret, String refreshToken) {
+        return token(Map.of("grant_type", "refresh_token", "refresh_token", refreshToken), basic(clientId, secret));
+    }
+
+    private static String basic(String clientId, String secret) {
+        return "Basic " + Base64.getEncoder().encodeToString((clientId + ":" + secret)
+                .getBytes(StandardCharsets.UTF_8));
+    }
+
     Tokens clientCredentials(String clientId, String secret, String scope) {
         String basic = Base64.getEncoder().encodeToString((clientId + ":" + secret).getBytes(StandardCharsets.UTF_8));
         return token(Map.of("grant_type", "client_credentials", "scope", scope), "Basic " + basic);
@@ -211,12 +226,12 @@ final class BrowserSession {
         return v == null || v.isNull() ? null : v.asString();
     }
 
-    private static String location(HttpResponse<String> r) {
+    static String location(HttpResponse<String> r) {
         return r.headers().firstValue("Location").orElseThrow(() -> new IllegalStateException("No redirect: "
                 + r.statusCode() + " " + r.body()));
     }
 
-    private static String code(String redirect) {
+    static String code(String redirect) {
         Matcher m = Pattern.compile("[?&]code=([^&]+)").matcher(redirect);
         if (!m.find()) {
             throw new IllegalStateException("No authorization code in " + redirect);
@@ -248,13 +263,13 @@ final class BrowserSession {
         return URLEncoder.encode(s, StandardCharsets.UTF_8);
     }
 
-    private static String randomVerifier() {
+    static String randomVerifier() {
         byte[] bytes = new byte[32];
         new SecureRandom().nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
-    private static String challenge(String verifier) {
+    static String challenge(String verifier) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(verifier.getBytes(StandardCharsets.US_ASCII));
             return Base64.getUrlEncoder().withoutPadding().encodeToString(digest);

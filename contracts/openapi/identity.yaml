@@ -21,16 +21,29 @@ security:
 tags:
 - name: Two-step verification
   description: Authenticator app, SMS codes and recovery codes
+- name: Notification preferences
+  description: Account-level email, SMS and push switches and marketing opt-in, read by notifications-service (security messages
+    such as one-time codes always go out)
 - name: Address book
   description: The signed-in customer's saved delivery addresses
 - name: Login & security
   description: Password, active sessions, linked social accounts and passkeys
 - name: Access control
   description: Module matrix, capabilities, people and change log (access:read to view, access:admin to change)
+- name: Devices
+  description: Push notification devices of the signed-in shopper (customer app, web) or driver (driver app)
 - name: Organisations
   description: Seller/provider organisations mirrored from the seller service (orgs:manage)
+- name: Internal lookups
+  description: 'Service-to-service lookups for notifications-service: SERVICE principals (client credentials) with users:read.
+    404 = unknown user or organisation.'
 - name: Accounts
   description: Unified sign-up and email verification (public)
+- name: First-party sign-in
+  description: Password, two-step and passkey sign-in for the storefront's own forms, called by gateway-bff only (client-credentials
+    token, scope auth:first-party). A completed sign-in returns a one-time loginTicket that the BFF redeems on GET /oauth2/authorize?…&login_ticket=…
+    (authorization code + PKCE), then exchanges the code at /oauth2/token. Failed attempts count towards per-account and per-IP
+    lockouts (429 identity.sign-in-locked with Retry-After).
 - name: Identity providers
   description: Which social sign-in buttons appear (Developers › Identity providers)
 - name: Me
@@ -63,7 +76,7 @@ paths:
       tags:
       - Accounts
       summary: Confirm the email address with the 6-digit code
-      operationId: verify
+      operationId: verify_1
       requestBody:
         content:
           application/json:
@@ -556,6 +569,101 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/UserAccess'
+  /v1/auth/mfa/sms:
+    post:
+      tags:
+      - First-party sign-in
+      summary: Text a sign-in code for an MFA challenge
+      operationId: sms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaSmsRequest'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SmsCodeResponse'
+  /v1/auth/mfa/verify:
+    post:
+      tags:
+      - First-party sign-in
+      summary: Verify an authenticator, text-message or recovery code (returns a login ticket)
+      operationId: verify
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MfaVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SignInStepResponse'
+  /v1/auth/passkey/options:
+    post:
+      tags:
+      - First-party sign-in
+      summary: Start a passkey sign-in (WebAuthn assertion options)
+      operationId: passkeyOptions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyOptionsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PasskeyOptionsResponse'
+  /v1/auth/passkey/verify:
+    post:
+      tags:
+      - First-party sign-in
+      summary: Verify a passkey assertion (returns a login ticket; passkeys need no second factor)
+      operationId: passkeyVerify
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyVerifyRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SignInStepResponse'
+  /v1/auth/password:
+    post:
+      tags:
+      - First-party sign-in
+      summary: Sign in with email and password (returns an MFA challenge or a login ticket)
+      operationId: password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordSignInRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SignInStepResponse'
   /v1/identity-providers:
     get:
       tags:
@@ -572,6 +680,53 @@ paths:
                 items:
                   $ref: '#/components/schemas/IdentityProvider'
       security: []
+  /v1/internal/orgs/{orgId}/owners:
+    get:
+      tags:
+      - Internal lookups
+      summary: Owner accounts of a seller or provider organisation
+      operationId: owners
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgOwners'
+  /v1/internal/users/{userId}/contact:
+    get:
+      tags:
+      - Internal lookups
+      summary: 'How to reach a user: email, verified phone, push tokens, locale, time zone, market, channel switches'
+      operationId: contact
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: app
+        in: query
+        description: Only push tokens of this app
+        required: false
+        schema:
+          type: string
+          enum:
+          - customer
+          - driver
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserContact'
   /v1/me:
     get:
       tags:
@@ -627,7 +782,7 @@ paths:
       tags:
       - Address book
       summary: List saved addresses (default first)
-      operationId: list
+      operationId: list_1
       responses:
         '200':
           description: OK
@@ -716,6 +871,69 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Address'
+  /v1/me/devices:
+    get:
+      tags:
+      - Devices
+      summary: Devices registered for push notifications
+      operationId: list
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Device'
+    post:
+      tags:
+      - Devices
+      summary: Register or refresh a push token (call on every app start and token refresh)
+      operationId: register
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Device'
+    delete:
+      tags:
+      - Devices
+      summary: Unregister a push token (sign-out); succeeds when it is not registered
+      operationId: unregister
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnregisterDeviceRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
+  /v1/me/devices/{deviceId}:
+    delete:
+      tags:
+      - Devices
+      summary: Remove a registered device
+      operationId: remove_1
+      parameters:
+      - name: deviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
   /v1/me/linked-accounts:
     get:
       tags:
@@ -854,6 +1072,37 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/RecoveryCodes'
+  /v1/me/notification-preferences:
+    get:
+      tags:
+      - Notification preferences
+      summary: 'Notification switches (defaults: email, SMS and push on; marketing off)'
+      operationId: get
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NotificationPreferences'
+    put:
+      tags:
+      - Notification preferences
+      summary: Replace the notification switches
+      operationId: put
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPreferencesRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NotificationPreferences'
   /v1/me/passkeys:
     get:
       tags:
@@ -1112,6 +1361,55 @@ components:
       required:
       - confirmPassword
       - newPassword
+    NotificationPreferencesRequest:
+      type: object
+      properties:
+        email:
+          type: boolean
+        sms:
+          type: boolean
+        push:
+          type: boolean
+        marketingOptIn:
+          type: boolean
+        locale:
+          type: string
+          examples:
+          - fr-CA
+          maxLength: 35
+          minLength: 0
+        timeZone:
+          type: string
+          examples:
+          - America/Chicago
+          maxLength: 64
+          minLength: 0
+      required:
+      - email
+      - marketingOptIn
+      - push
+      - sms
+    NotificationPreferences:
+      type: object
+      properties:
+        email:
+          type: boolean
+        sms:
+          type: boolean
+        push:
+          type: boolean
+        marketingOptIn:
+          type: boolean
+        marketingOptInAt:
+          type: string
+          format: date-time
+        locale:
+          type: string
+        timeZone:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
     SelectOrgRequest:
       type: object
       properties:
@@ -1319,6 +1617,76 @@ components:
         codeExpiresAt:
           type: string
           format: date-time
+    RegisterDeviceRequest:
+      type: object
+      properties:
+        platform:
+          type: string
+          enum:
+          - ios
+          - android
+          - web
+          minLength: 1
+        token:
+          type: string
+          description: FCM registration token or APNs device token
+          maxLength: 4096
+          minLength: 0
+        app:
+          type: string
+          enum:
+          - customer
+          - driver
+          minLength: 1
+        deviceName:
+          type: string
+          examples:
+          - Ada's iPhone
+          maxLength: 120
+          minLength: 0
+        provider:
+          type: string
+          description: Push transport; default apns for ios, fcm for android and web
+          enum:
+          - fcm
+          - apns
+      required:
+      - app
+      - platform
+      - token
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        app:
+          type: string
+          enum:
+          - customer
+          - driver
+        platform:
+          type: string
+          enum:
+          - ios
+          - android
+          - web
+        provider:
+          type: string
+          enum:
+          - fcm
+          - apns
+        tokenSuffix:
+          type: string
+          description: Last 6 characters of the token
+        deviceName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
     AddressRequest:
       type: object
       description: Fill from address autocomplete (geo service); verified = geo validation passed
@@ -1410,6 +1778,187 @@ components:
           type: boolean
         isDefault:
           type: boolean
+    PasswordSignInRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          maxLength: 254
+          minLength: 0
+        password:
+          type: string
+          maxLength: 1024
+          minLength: 0
+        trustedDeviceToken:
+          type: string
+          description: Token from an earlier verification with trustDevice=true; skips the second factor for 30 days
+          maxLength: 200
+          minLength: 0
+        clientIp:
+          type: string
+          description: End user's IP address (throttling, audit)
+          examples:
+          - 203.0.113.7
+          minLength: 1
+          pattern: ^[0-9A-Fa-f:.]{2,45}$
+        userAgent:
+          type: string
+          description: End user's User-Agent
+          maxLength: 512
+          minLength: 0
+      required:
+      - clientIp
+      - email
+      - password
+    SecondFactorOptions:
+      type: object
+      properties:
+        totp:
+          type: boolean
+        sms:
+          type: boolean
+        smsHint:
+          type: string
+          description: Masked phone, e.g. •••• 0142
+        recoveryCode:
+          type: boolean
+    SignInStepResponse:
+      type: object
+      description: 'MFA_REQUIRED: continue with challengeId and one of factors. AUTHENTICATED: redeem loginTicket (single
+        use, 60 s) on /oauth2/authorize.'
+      properties:
+        status:
+          type: string
+          enum:
+          - MFA_REQUIRED
+          - AUTHENTICATED
+        challengeId:
+          type: string
+          format: uuid
+        challengeExpiresAt:
+          type: string
+          format: date-time
+        factors:
+          $ref: '#/components/schemas/SecondFactorOptions'
+        userId:
+          type: string
+          format: uuid
+        loginTicket:
+          type: string
+        loginTicketExpiresAt:
+          type: string
+          format: date-time
+        trustedDeviceToken:
+          type: string
+        trustedDeviceExpiresAt:
+          type: string
+          format: date-time
+    PasskeyVerifyRequest:
+      type: object
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        credential:
+          type: object
+          description: 'PublicKeyCredential from navigator.credentials.get (JSON with base64url fields: id, rawId, type, response.{authenticatorData,
+            clientDataJSON, signature, userHandle}, clientExtensionResults, authenticatorAttachment)'
+        clientIp:
+          type: string
+          minLength: 1
+          pattern: ^[0-9A-Fa-f:.]{2,45}$
+        userAgent:
+          type: string
+          maxLength: 512
+          minLength: 0
+      required:
+      - challengeId
+      - clientIp
+      - credential
+    PasskeyOptionsRequest:
+      type: object
+      properties:
+        clientIp:
+          type: string
+          minLength: 1
+          pattern: ^[0-9A-Fa-f:.]{2,45}$
+        userAgent:
+          type: string
+          maxLength: 512
+          minLength: 0
+      required:
+      - clientIp
+    PasskeyOptionsResponse:
+      type: object
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
+        publicKey:
+          type: object
+          description: 'PublicKeyCredentialRequestOptions for navigator.credentials.get (challenge base64url, rpId, timeout
+            ms, userVerification=required, no allowCredentials: discoverable passkeys)'
+    MfaVerifyRequest:
+      type: object
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        factor:
+          type: string
+          enum:
+          - TOTP
+          - SMS
+          - RECOVERY_CODE
+          minLength: 1
+        code:
+          type: string
+          maxLength: 32
+          minLength: 0
+        trustDevice:
+          type: boolean
+          description: Return a trustedDeviceToken (30 days) to skip the second factor next time
+        clientIp:
+          type: string
+          minLength: 1
+          pattern: ^[0-9A-Fa-f:.]{2,45}$
+        userAgent:
+          type: string
+          maxLength: 512
+          minLength: 0
+      required:
+      - challengeId
+      - clientIp
+      - code
+      - factor
+    MfaSmsRequest:
+      type: object
+      properties:
+        challengeId:
+          type: string
+          format: uuid
+        clientIp:
+          type: string
+          minLength: 1
+          pattern: ^[0-9A-Fa-f:.]{2,45}$
+        userAgent:
+          type: string
+          maxLength: 512
+          minLength: 0
+      required:
+      - challengeId
+      - clientIp
+    SmsCodeResponse:
+      type: object
+      properties:
+        sentTo:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
     CreateStaffUserRequest:
       type: object
       properties:
@@ -1650,6 +2199,81 @@ components:
         linkPathTemplate:
           type: string
           description: 'Start linking by visiting this path on the authorization server while signed in: /oauth2/authorization/{provider}'
+    ChannelPreferences:
+      type: object
+      description: false = drop the channel (except security messages)
+      properties:
+        email:
+          type: boolean
+        sms:
+          type: boolean
+        push:
+          type: boolean
+    PushTarget:
+      type: object
+      properties:
+        token:
+          type: string
+        platform:
+          type: string
+          description: Push transport
+          enum:
+          - fcm
+          - apns
+        app:
+          type: string
+          enum:
+          - customer
+          - driver
+        os:
+          type: string
+          enum:
+          - ios
+          - android
+          - web
+    UserContact:
+      type: object
+      properties:
+        userId:
+          type: string
+        firstName:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        phone:
+          type: string
+          description: E.164
+        phoneVerified:
+          type: boolean
+          description: 'false: the number was never confirmed with a code; do not text it'
+        locale:
+          type: string
+          description: BCP 47, null = default
+        timeZone:
+          type: string
+          description: IANA zone, null = market zone
+        market:
+          type: string
+          description: ISO country, e.g. US
+        pushTokens:
+          type: array
+          items:
+            $ref: '#/components/schemas/PushTarget'
+        preferences:
+          $ref: '#/components/schemas/ChannelPreferences'
+        marketingOptIn:
+          type: boolean
+    OrgOwners:
+      type: object
+      properties:
+        orgId:
+          type: string
+        ownerUserIds:
+          type: array
+          items:
+            type: string
     IdentityProvider:
       type: object
       properties:
@@ -1744,6 +2368,15 @@ components:
         size:
           type: integer
           format: int32
+    UnregisterDeviceRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 4096
+          minLength: 0
+      required:
+      - token
   securitySchemes:
     bearer:
       type: http

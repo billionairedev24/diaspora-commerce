@@ -2,9 +2,11 @@ package com.afrotransact.identity.config;
 
 import java.time.Clock;
 import java.util.HashSet;
+import java.util.Set;
 
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
 import com.afrotransact.identity.adapter.in.web.LoginPageSettings;
+import com.afrotransact.identity.application.FirstPartySignInSettings;
 import com.afrotransact.identity.adapter.out.notification.LoggingVerificationCodeSender;
 import com.afrotransact.identity.adapter.out.notification.OutboxVerificationCodeSender;
 import com.afrotransact.identity.domain.AccessPolicy;
@@ -14,6 +16,7 @@ import com.afrotransact.identity.domain.DefaultAddressBookPolicy;
 import com.afrotransact.identity.domain.DefaultLandingPolicy;
 import com.afrotransact.identity.domain.DefaultMfaPolicy;
 import com.afrotransact.identity.domain.DefaultPasswordPolicy;
+import com.afrotransact.identity.domain.DefaultSignInThrottlePolicy;
 import com.afrotransact.identity.domain.DefaultSignUpPolicy;
 import com.afrotransact.identity.domain.DefaultTotpAuthenticator;
 import com.afrotransact.identity.domain.DefaultVerificationPolicy;
@@ -22,6 +25,7 @@ import com.afrotransact.identity.domain.LibPhoneNumberPolicy;
 import com.afrotransact.identity.domain.MfaPolicy;
 import com.afrotransact.identity.domain.PasswordPolicy;
 import com.afrotransact.identity.domain.PhoneNumberPolicy;
+import com.afrotransact.identity.domain.SignInThrottlePolicy;
 import com.afrotransact.identity.domain.SignUpPolicy;
 import com.afrotransact.identity.domain.TotpAuthenticator;
 import com.afrotransact.identity.domain.VerificationPolicy;
@@ -105,5 +109,20 @@ class IdentityConfiguration {
     @Bean
     TrustedBrowserCookie trustedBrowserCookie(IdentityProperties props) {
         return new TrustedBrowserCookie(props.mfa().secureCookies());
+    }
+
+    @Bean
+    SignInThrottlePolicy signInThrottlePolicy(IdentityProperties props) {
+        return new DefaultSignInThrottlePolicy(limits(props.signInProtection().account()),
+                limits(props.signInProtection().ip()));
+    }
+
+    @Bean
+    FirstPartySignInSettings firstPartySignInSettings(IdentityProperties props) {
+        return new FirstPartySignInSettings(Set.copyOf(props.firstParty().clientIds()));
+    }
+
+    private static DefaultSignInThrottlePolicy.Limits limits(IdentityProperties.Limit l) {
+        return new DefaultSignInThrottlePolicy.Limits(l.maxFailures(), l.window(), l.lockout(), l.maxLockout());
     }
 }

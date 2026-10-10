@@ -689,3 +689,6 @@
 - order placed events include nodeId, perishable, street and lat/lng per shipment
 - Dispatch role can read delivery briefs
 - 150 m proof-of-delivery check applies to all stops","E12","","High","5","orders fulfilment identity","delivery","To Do"
+"S234","Story","Phone number verification","Identity verifies phone numbers by SMS code independently of MFA so notifications can text verified numbers.","- User can verify a phone with a 6-digit SMS code
+- phoneVerified is true after verification
+- Changing the phone resets verification","E02","","Medium","2","identity notifications","identity","To Do"

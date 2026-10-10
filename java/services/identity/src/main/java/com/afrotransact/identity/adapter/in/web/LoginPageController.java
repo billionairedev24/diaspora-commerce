@@ -34,9 +34,11 @@ class LoginPageController {
         StringBuilder body = new StringBuilder("<h1>Sign in</h1>");
         if (request.getParameter("error") != null) {
             body.append("<p class=\"error\" role=\"alert\">")
-                    .append("social".equals(request.getParameter("error"))
-                            ? "We couldn't sign you in with that provider."
-                            : "Email or password is incorrect, or the email isn't confirmed yet.")
+                    .append(switch (String.valueOf(request.getParameter("error"))) {
+                        case "social" -> "We couldn't sign you in with that provider.";
+                        case "locked" -> "Too many sign-in attempts. Wait a few minutes, or reset your password.";
+                        default -> "Email or password is incorrect, or the email isn't confirmed yet.";
+                    })
                     .append("</p>");
         }
         if (request.getParameter("logout") != null) {

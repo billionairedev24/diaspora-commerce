@@ -20,6 +20,9 @@ claims with `JwtActorResolver` (java/libs/platform-security) or `auth.Require` (
 | MFA | TOTP (RFC 6238, otpauth URI for the QR code, replay-protected), SMS codes (outbox event), 10 hashed recovery codes, "trust this browser" for 30 days. Staff always need a second factor (SMS to the phone on file if nothing is enrolled) and cannot turn MFA off. Passkey sign-ins skip the prompt (phishing-resistant). |
 | Passkeys | Spring Security 7 `webAuthn()` with JDBC repositories (`user_entities`, `user_credentials`): `/webauthn/register/options`, `/webauthn/register`, `/webauthn/authenticate/options`, `/login/webauthn`, management page `/webauthn/register`. `PasskeyService` lists/removes them over the API and refuses to remove the last sign-in method. |
 | Social login | Google (OIDC) via its own consent page; Apple (OIDC, form_post) and Facebook registrations exist but are disabled by default. A provider is offered only when it has client credentials **and** is enabled in `identity_provider` (`PUT /v1/admin/identity-providers/{id}`). Accounts created from provider-verified emails skip email verification; a verified email matching an existing account links to it; signing in with a provider while already signed in links it. |
+| First-party sign-in | `gateway-bff` only: password, TOTP/SMS/recovery-code and passkey steps as JSON (`/v1/auth/*`), ending in a one-time **login ticket** that the BFF redeems on the normal authorization-code flow (`/oauth2/authorize?…&login_ticket=…`). See [First-party sign-in](#first-party-sign-in-s209). |
+| Brute-force protection | Per account (normalised email, also for unknown emails) and per IP: 5 / 30 failures within 15 min lock for 15 min, doubling per consecutive lockout up to 4 h (`at.identity.sign-in-protection`). Applies to the first-party API **and** the hosted `/login` and `/login/mfa` pages. 429 `identity.sign-in-locked` + `Retry-After`; append-only `sign_in_audit`; `identity.sign-in.locked` events. |
+| Push devices & preferences | Shoppers and drivers register push tokens (`/v1/me/devices`) and set email/SMS/push switches and marketing opt-in (`/v1/me/notification-preferences`); notifications-service reads both through `GET /v1/internal/users/{id}/contact`. |
 | Sessions | Login sessions live in Spring Session JDBC (works with several replicas). "Sessions" in Login & security are OAuth authorizations with a live refresh/access token; revoking deletes them. |
 
 ## Sign-in flow (browser)
@@ -34,6 +37,117 @@ Pages are served by the authorization server itself (`/login`, `/login/mfa`, `/w
 passwords. Public clients (web apps, mobile) use PKCE; the client setting
 `settings.client.afrotransact.public-refresh-tokens` lets a public client receive rotating refresh tokens
 (Spring Authorization Server does not issue them to public clients by default).
+
+## First-party sign-in (S209)
+
+The storefront keeps its own two-column sign-in, MFA and passkey forms. The browser never talks to identity: the
+storefront posts to gateway-bff, which calls identity server-to-server with its **client-credentials token**
+(`gateway-bff`, scope `auth:first-party`; any other caller gets 403 `identity.first-party-client-required`). When every
+factor is done, identity returns a **login ticket** (256-bit random, SHA-256 stored, single use, 60 s, bound to the
+client). The BFF redeems it on the **normal authorization-code flow**: a `LoginTicketAuthenticationFilter` on the
+authorization server chain authenticates `GET /oauth2/authorize?…&login_ticket=…` for that request only (no session
+login), so the code, token response, `pt`/`roles`/`perms`/`org` claims, `auth_time`, refresh-token rotation, session
+listing and revocation are exactly those of the hosted flow.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser (storefront forms)
+    participant F as gateway-bff
+    participant I as identity
+    F->>I: POST /oauth2/token grant_type=client_credentials scope=auth:first-party (Basic gateway-bff)
+    I-->>F: service access token (cache until exp - 30 s)
+    B->>F: POST /v1/auth/sign-in {email, password}
+    F->>I: POST /v1/auth/password {email, password, clientIp, userAgent, trustedDeviceToken?}
+    alt second factor required
+        I-->>F: 200 {status: MFA_REQUIRED, challengeId, factors{totp, sms, smsHint, recoveryCode}}
+        F-->>B: MFA form (challengeId)
+        opt text me a code
+            B->>F: resend / choose SMS
+            F->>I: POST /v1/auth/mfa/sms {challengeId, clientIp}
+            I-->>F: 202 {sentTo, expiresAt}
+        end
+        B->>F: POST /v1/auth/mfa/verify {challengeId, code, trustDevice}
+        F->>I: POST /v1/auth/mfa/verify {challengeId, factor, code, trustDevice, clientIp, userAgent}
+        I-->>F: 200 {status: AUTHENTICATED, loginTicket, trustedDeviceToken?}
+    else no second factor (or trusted device)
+        I-->>F: 200 {status: AUTHENTICATED, loginTicket}
+    end
+    Note over B,I: Passkey: POST /v1/auth/passkey/options → {challengeId, publicKey}; browser runs<br/>navigator.credentials.get({publicKey}); POST /v1/auth/passkey/verify {challengeId, credential} → AUTHENTICATED
+    F->>I: GET /oauth2/authorize?response_type=code&client_id=gateway-bff&redirect_uri=…&scope=…&state&nonce&code_challenge(S256)&login_ticket=… (do not follow redirects)
+    I-->>F: 302 Location: redirect_uri?code=…&state=…
+    F->>I: POST /oauth2/token grant_type=authorization_code, code, redirect_uri, code_verifier (Basic gateway-bff)
+    I-->>F: access, refresh and ID tokens (usual claims)
+    F-->>B: Set-Cookie at_session (rotated), merged cart, {redirectTo}
+```
+
+### What the BFF calls
+
+1. **Service token.** `POST {issuer}/oauth2/token` with HTTP Basic `gateway-bff:$OIDC_CLIENT_SECRET`,
+   `grant_type=client_credentials&scope=auth:first-party`. Cache it; send it as `Authorization: Bearer` on every
+   `/v1/auth/*` call. Always pass the **end user's** IP (`clientIp`, required, from the trusted `X-Forwarded-For` hop)
+   and `userAgent`; never the BFF's own address, or IP lockouts would hit everyone.
+2. **Password.** `POST /v1/auth/password` `{email, password, clientIp, userAgent, trustedDeviceToken?}`.
+   `trustedDeviceToken` is the value from an earlier `trustDevice` verification, kept by the BFF in an HttpOnly, Secure,
+   SameSite=Lax cookie (30 days). Response `status`:
+   * `MFA_REQUIRED`: `challengeId` (10 min, 5 wrong codes) and `factors` → return the challenge to the MFA form
+     (the BFF contract already uses `challengeId`).
+   * `AUTHENTICATED`: `loginTicket` → step 5.
+3. **Second factor.** Optional `POST /v1/auth/mfa/sms {challengeId, clientIp}` (202 `{sentTo, expiresAt}`; 429 when
+   asked too often), then `POST /v1/auth/mfa/verify {challengeId, factor: TOTP|SMS|RECOVERY_CODE, code, trustDevice,
+   clientIp, userAgent}` → `AUTHENTICATED` with `loginTicket` and, when `trustDevice`, `trustedDeviceToken` +
+   `trustedDeviceExpiresAt` to store in the cookie.
+4. **Passkey.** `POST /v1/auth/passkey/options {clientIp, userAgent}` → `{challengeId, expiresAt, publicKey}`. The
+   storefront decodes the base64url `challenge` and calls `navigator.credentials.get({publicKey})` (discoverable
+   passkey, `userVerification: required`, RP id = the storefront's registrable domain, origin must be listed in
+   `at.identity.webauthn.allowed-origins`). It posts the `PublicKeyCredential` JSON (base64url fields, e.g.
+   `credential.toJSON()`) back; the BFF forwards `POST /v1/auth/passkey/verify {challengeId, credential, clientIp,
+   userAgent}` → `AUTHENTICATED` (passkeys need no second factor). A challenge is good for one assertion.
+5. **Redeem the ticket** within 60 s, exactly like `GET /v1/auth/login` but server-side: generate `state`, `nonce` and
+   a PKCE verifier, `GET {identity}/oauth2/authorize?response_type=code&client_id=gateway-bff&redirect_uri=<the
+   registered callback, e.g. https://<storefront>/api/bff/v1/auth/oidc/callback>&scope=openid profile email phone
+   offline_access&state=…&nonce=…&code_challenge=…&code_challenge_method=S256&login_ticket=<ticket>` **without
+   following redirects**. Expect `302` to `redirect_uri?code=…&state=…` (check `state`); a `400 {"error":
+   "invalid_grant"}` means the ticket was unknown, used, expired or for another client — ask the user to sign in again.
+6. **Exchange** the code as the callback does today (`POST /oauth2/token`, Basic auth, `code_verifier`), verify the ID
+   token (JWKS, audience, nonce), rotate the session id, store tokens, merge the guest cart and answer the storefront
+   with the post-sign-in redirect.
+
+### Errors (RFC 9457, `code` property)
+
+| Status | `code` | Meaning |
+|---|---|---|
+| 401 | `identity.invalid-credentials` | Wrong email or password (same for unknown emails; timing equalised) |
+| 401 | `identity.invalid-code` | Wrong second-factor code; `attemptsLeft` on the challenge |
+| 401 | `identity.challenge-invalid` | Challenge unknown, expired, used up, completed or started by another client |
+| 401 | `identity.passkey-rejected` | Assertion failed (signature, challenge, origin, RP id, user verification) |
+| 403 | `identity.email-not-verified`, `identity.account-disabled` | Right password, but the account cannot sign in |
+| 403 | `identity.first-party-client-required` | Caller is not a first-party client service token |
+| 429 | `identity.sign-in-locked` | Account or IP locked; `Retry-After` / `retryAfterSeconds` |
+
+Failed passwords, codes and passkey assertions count towards the lockouts. The account counter is cleared only when a
+sign-in completes (not after the password when a second factor is pending), so a leaked password does not buy unlimited
+code guesses. Passkey steps check the IP lock only (they cannot be guessed). Every attempt is written to
+`sign_in_audit` (`channel` first-party or hosted; outcomes SUCCEEDED, FAILED, MFA_REQUIRED, LOCKED, BLOCKED,
+TICKET_REDEEMED, TICKET_REJECTED).
+
+## Service lookups for notifications
+
+`GET /v1/internal/users/{userId}/contact` (client credentials, `pt=SERVICE`, `users:read`; `?app=customer|driver`
+filters push tokens):
+
+```json
+{"userId": "5b0f…", "firstName": "Adaeze", "email": "ada@example.com", "emailVerified": true,
+ "phone": "+17132490142", "phoneVerified": false, "locale": "fr-CA", "timeZone": "America/Toronto", "market": "US",
+ "pushTokens": [{"token": "…", "platform": "apns", "app": "customer", "os": "ios"}],
+ "preferences": {"email": true, "sms": true, "push": false}, "marketingOptIn": true}
+```
+
+`pushTokens[].platform` is the **transport** (`fcm` / `apns`) that notifications-service routes on; the device OS is
+`os`. `phoneVerified` is true only for a phone confirmed with a code (SMS sign-in factor). `market` is the default
+delivery address's country, else the active organisation's. `GET /v1/internal/orgs/{orgId}/owners` →
+`{orgId, ownerUserIds}`. Mobile apps register tokens with `POST /v1/me/devices` on every start and token refresh, and
+call `DELETE /v1/me/devices {token}` on sign-out.
 
 ## REST API (`/v1`, JSON, RFC 9457 problem details)
 
@@ -55,6 +169,11 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `GET /v1/me/linked-accounts`, `DELETE /v1/me/linked-accounts/{provider}` | user | Linked social accounts (cannot unlink the last sign-in method) |
 | `GET /v1/me/passkeys`, `DELETE /v1/me/passkeys/{credentialId}` | user | Passkeys |
 | `GET /v1/me/mfa`; `POST /v1/me/mfa/totp`, `…/totp/confirm`, `DELETE …/totp`; `POST /v1/me/mfa/sms`, `…/sms/confirm`, `DELETE …/sms`; `POST /v1/me/mfa/recovery-codes` | user | Two-step verification |
+| `GET /v1/me/devices`, `POST /v1/me/devices`, `DELETE /v1/me/devices` (body `{token}`), `DELETE /v1/me/devices/{id}` | user (driver app: `delivery:operate`) | Push tokens: `platform` ios/android/web, `app` customer/driver, optional `provider` fcm/apns (default apns for iOS, else fcm), `deviceName`. A token belongs to one account (re-registering moves it); 10 per app, least recently seen evicted. Responses show only `tokenSuffix`. |
+| `GET/PUT /v1/me/notification-preferences` | user | `email`, `sms`, `push` (default on), `marketingOptIn` (default off, `marketingOptInAt` recorded), optional `locale` (BCP 47) and `timeZone` (IANA) |
+| `GET /v1/internal/users/{userId}/contact?app=` | SERVICE + `users:read` | Contact for notifications (shape below); 404 for unknown or non-UUID ids |
+| `GET /v1/internal/orgs/{orgId}/owners` | SERVICE + `users:read` | `{orgId, ownerUserIds}`: enabled `seller.owner` / `provider.owner` members; 404 for unknown orgs |
+| `POST /v1/auth/password`, `/v1/auth/mfa/sms`, `/v1/auth/mfa/verify`, `/v1/auth/passkey/options`, `/v1/auth/passkey/verify` | SERVICE `gateway-bff` + `auth:first-party` | First-party sign-in (S209), see below |
 | `GET /v1/admin/permissions`, `GET /v1/admin/roles?portal=` | `access:read` | Permission catalogue, roles with permissions |
 | `PUT/DELETE /v1/admin/roles/{role}/permissions/{perm}` | `access:admin` | Capabilities tab |
 | `GET /v1/admin/users?q=`, `GET /v1/admin/users/{id}`, `POST /v1/admin/users` | read / admin | People tab, provision staff/driver accounts |
@@ -83,7 +202,10 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 notifications service: `recipient`, `channel` email/sms, `code`, `expiresInMinutes`, `purpose`),
 `identity.role.granted` / `identity.role.revoked`, `identity.permission.granted` / `identity.permission.revoked`
 (direct grant or role capability change, key = role key for the latter), `identity.user.disabled` /
-`identity.user.enabled`. Schemas: [`contracts/asyncapi/fragments/identity.yaml`](../../../contracts/asyncapi/fragments/identity.yaml).
+`identity.user.enabled`, `identity.sign-in.locked` (key = user id, or `ip:<address>` for IP lockouts; `scope`,
+`channel` first-party/hosted, `lockouts`, `lockoutSeconds`, `lockedUntil`), `identity.device.registered` /
+`identity.device.unregistered` (`deviceId`, `app`, `platform`, `provider`; never the token),
+`identity.notification-preferences.updated` (the switches, `locale`, `timeZone`). Schemas: [`contracts/asyncapi/fragments/identity.yaml`](../../../contracts/asyncapi/fragments/identity.yaml).
 
 ### Consumed (consumer group `identity-service`, inbox-deduplicated, `CONSUMERS_ENABLED`)
 
@@ -105,6 +227,13 @@ name, status APPROVED, market = country) and makes `applicantUserId` and every `
   become `varchar(80)` holding seller-service ids (`org_…`); pre-existing UUID ids stay valid as text. Adds
   `organization.market`.
 - `V7__ai_mcp_permissions.sql`: `ai:use`, `ai:triage`, `mcp:shopper`, `mcp:seller`, `mcp:staff` and their role grants.
+- `V11__devices_preferences_first_party_sign_in.sql`: permissions `users:read` (upserted, description widened to the
+  service lookups), `auth:first-party` and `sellers:enforce` (granted to `platform.super_admin`,
+  `platform.trust_safety`, `platform.operations_manager`) and `delivery:dispatch:read` (`platform.customer_support`);
+  tables `push_device` (unique `token_hash`),
+  `notification_preference`, `sign_in_challenge` (MFA / passkey, client-bound, 5 attempts), `login_ticket` (SHA-256
+  only, 60 s, single use), `sign_in_throttle` (scope ACCOUNT/IP, failures, window, `locked_until`, `lockouts`) and the
+  append-only `sign_in_audit` (trigger rejects UPDATE/DELETE).
 
 ## Permission catalogue
 
@@ -156,7 +285,10 @@ name, status APPROVED, market = country) and makes `applicantUserId` and every `
 | `team:manage` | team | Invite members and assign organisation roles |
 | `billing:manage` | team | Plan, subscription and billing |
 | `support:respond` | support | Answer customer messages and tickets |
-| `users:read` | support | Look up customer accounts |
+| `users:read` | support | Look up customer accounts; services: contact details and organisation owners |
+| `auth:first-party` | access | Service access to the first-party sign-in API (gateway-bff only) |
+| `sellers:enforce` | trust | Suspend, reinstate and recompute seller health (super admin, trust & safety, operations manager) |
+| `delivery:dispatch:read` | delivery | View dispatch boards, routes and driver assignments (read-only; customer support) |
 | `config:edit` | platform | Platform configuration: plans, markets, storefront settings |
 | `flags:manage` | platform | Feature flags |
 | `markets:manage` | platform | Activate countries and states |
@@ -214,14 +346,21 @@ Module access matrix: 27 platform modules × 15 platform roles, 10 Seller Center
 | `SIGNING_KEY_PEM`, `SIGNING_KEY_ID` | RS256 private key (PKCS#8 PEM) and `kid`; required outside `local` |
 | `AUTH_ISSUER`, `HOME_URL` | issuer URL (`http://localhost:8100` locally), post-login fallback |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (+ `APPLE_*`, `FACEBOOK_*`) | social sign-in; unset → provider not registered |
-| `BFF_CLIENT_SECRET`, `SELLER_SERVICE_CLIENT_SECRET` | confidential client secrets (hashed with BCrypt before storage) |
+| `GATEWAY_BFF_CLIENT_SECRET` (or `BFF_CLIENT_SECRET`), `SELLER_SERVICE_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET`, … | confidential client secrets (hashed with BCrypt before storage) |
 | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_PHONE` | first super administrator (skipped when unset) |
 
 Other settings (`at.identity.*`): `staff-email-domains`, `verification.sender` (`outbox` | `log`), `mfa.*`,
 `webauthn.{rp-id,rp-name,allowed-origins}`, `cors-allowed-origins`, and `clients` — the OAuth clients seeded (upserted by
 client id) at start-up per environment: `storefront`, `seller-center`, `staff-console`, `customer-app`, `driver-app`
-(public, PKCE, rotating refresh tokens), `gateway-bff` (confidential) and `seller-service` (client credentials,
-`orgs:manage users:read`). Access tokens 5 minutes; refresh tokens 30 days (12 h staff console, 14 h driver app).
+(public, PKCE, rotating refresh tokens), `gateway-bff` (confidential: authorization code + PKCE + refresh tokens, and
+client credentials with `auth:first-party` for the first-party sign-in API), and service clients with client
+credentials, e.g. `seller-service` (`orgs:manage users:read`), `notifications-service` (`users:read`) and
+`trust-ops-service` (`catalog:moderate payments:service compliance:hold offers:write ai:triage users:read`, secret
+`TRUSTOPS_CLIENT_SECRET`), `fulfilment-service` (`orders:update-status inventory:reserve delivery:relay`).
+Client-credentials tokens always carry `pt=SERVICE` and their granted scopes in `perms`.
+`webauthn.allowed-origins` lists identity's own origin and the storefront origins (their forms run the passkey
+ceremony for the first-party API); `first-party.client-ids` (default `[gateway-bff]`) and
+`sign-in-protection.{account,ip}.{max-failures,window,lockout,max-lockout}` tune the S209 behaviour. Access tokens 5 minutes; refresh tokens 30 days (12 h staff console, 14 h driver app).
 
 ## Run locally
 
@@ -245,7 +384,13 @@ client credentials, sign-up → email code → authorization code + PKCE → cus
 rejection, start selling → org approval → landing and `org`/`perms`, staff sign-in with SMS second factor, role/grant
 changes visible on the next token, disable revokes sessions, module matrix and identity-provider switches (real redirect
 to Google's consent page), social sign-up/linking, WebAuthn ceremony endpoints, TOTP enrolment + recovery code +
-trusted browser, resend rate limit.
+trusted browser, resend rate limit. `FirstPartySignInIT` drives the BFF flow end to end: password → MFA challenge → wrong
+TOTP (attempts left) → TOTP with trust-device → login ticket → `/oauth2/authorize?login_ticket` → code → `/oauth2/token`
+(client secret + PKCE) → claims, ID-token nonce, refresh; ticket and challenge replay rejected; trusted device skips
+MFA; passkey assertion (software ES256 authenticator) → ticket → tokens; only `gateway-bff` may call; account lockout
+(also blocks the hosted form) and IP lockout with audit rows and events; devices, preferences, contact and org-owner
+lookups; `trust-ops-service` tokens are SERVICE principals. Unit tests cover the throttle policy, challenge/ticket
+rules, the first-party service (Mockito), the login-ticket filter and WebAuthn assertion verification.
 
 ## Not covered here
 
@@ -253,6 +398,9 @@ trusted browser, resend rate limit.
 - TOTP secrets are stored unencrypted in `mfa_totp` (protected by database access controls); envelope encryption with
   a KMS key is a follow-up.
 - Token Exchange (RFC 8693), DPoP for mobile and the device-code grant from the architecture document are not enabled yet.
+- `phoneVerified` in the contact lookup is true only when the account phone was confirmed as an SMS sign-in factor;
+  there is no separate phone-verification step at sign-up yet, so notifications-service will not text other numbers.
+- Lockout notices to the account owner (security email on `identity.sign-in.locked`) need a notifications rule.
 
 ## Address book
 

@@ -52,4 +52,32 @@ public final class IdentityEventPayloads {
     /** {@code identity.user.disabled} / {@code identity.user.enabled}. */
     public record UserStatusChanged(String userId, String actorId, String reason, Instant at) {
     }
+
+    /**
+     * {@code identity.sign-in.locked}: too many failed sign-in attempts locked an account (key = user id) or a client
+     * IP address (key = {@code ip:<address>}) until {@code lockedUntil}.
+     *
+     * @param scope   ACCOUNT or IP
+     * @param channel {@code first-party} (BFF sign-in API) or {@code hosted} (authorization server pages)
+     */
+    public record SignInLocked(String scope, String userId, String ip, String channel, int lockouts,
+                               long lockoutSeconds, Instant lockedUntil, Instant at) {
+    }
+
+    /**
+     * {@code identity.device.registered} / {@code identity.device.unregistered}: a push token was added to or removed
+     * from an account (the token itself is not published; read it with the contact lookup).
+     *
+     * @param app      customer or driver
+     * @param platform ios, android or web
+     * @param provider fcm or apns
+     */
+    public record DeviceChanged(String userId, String deviceId, String app, String platform, String provider,
+                                Instant at) {
+    }
+
+    /** {@code identity.notification-preferences.updated}: account-level channel switches changed. */
+    public record NotificationPreferencesUpdated(String userId, boolean email, boolean sms, boolean push,
+                                                 boolean marketingOptIn, String locale, String timeZone, Instant at) {
+    }
 }

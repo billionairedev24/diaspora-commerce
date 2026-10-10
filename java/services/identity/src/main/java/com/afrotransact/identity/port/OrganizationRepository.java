@@ -20,4 +20,7 @@ public interface OrganizationRepository {
     boolean setMember(String orgId, UUID userId, String roleKey);
 
     boolean removeMember(String orgId, UUID userId);
+
+    /** Members with an owner role ({@code seller.owner} / {@code provider.owner}) whose accounts are enabled. */
+    List<UUID> ownerUserIds(String orgId);
 }
