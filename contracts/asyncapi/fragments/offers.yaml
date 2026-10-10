@@ -1,0 +1,192 @@
+# AsyncAPI 3.0 fragment for offers-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  offersEvents:
+    address: at.offers.events
+    description: >-
+      Offers, buy box and coupon events from offers-service via its transactional outbox. Offer and buy box events are
+      keyed by the variant ATIN (so one product variant's offer changes and buy box decisions stay in order); coupon
+      events are keyed by coupon id. Headers event-id, event-type, occurred-at; consumers de-duplicate on event-id.
+    messages:
+      offersOfferCreated: {$ref: '#/components/messages/offersOfferCreated'}
+      offersOfferUpdated: {$ref: '#/components/messages/offersOfferUpdated'}
+      offersOfferWithdrawn: {$ref: '#/components/messages/offersOfferWithdrawn'}
+      offersBuyBoxChanged: {$ref: '#/components/messages/offersBuyBoxChanged'}
+      offersCouponCreated: {$ref: '#/components/messages/offersCouponCreated'}
+      offersCouponUpdated: {$ref: '#/components/messages/offersCouponUpdated'}
+      offersCouponRedeemed: {$ref: '#/components/messages/offersCouponRedeemed'}
+      offersCouponReleased: {$ref: '#/components/messages/offersCouponReleased'}
+operations:
+  publishOffersEvents:
+    action: send
+    channel: {$ref: '#/channels/offersEvents'}
+    summary: >-
+      offers.offer.*: search indexer (offer count, price range), cart (price changes on saved lines), seller center.
+      offers.buybox.changed: indexer and storefront caches refresh the card price / seller / fulfilment badge; published
+      when the winner, its price, the listed offer count or the lowest landed price changes (winner null = currently
+      unavailable). offers.coupon.redeemed / released: payments-service books PLATFORM-funded discounts as marketing
+      expense and deducts SELLER-funded ones (per-line allocation) from that seller's payout.
+  consumeOffersCatalogProductEvents:
+    action: receive
+    channel: {$ref: '#/channels/catalogProductEvents'}
+    summary: >-
+      offers-service (consumer group offers-service, inbox-deduplicated) handles catalog.product.created by creating the
+      creating seller's NEW offer per variant (price, quantity and SKU from the event; AfroTransact Retail products get
+      Fulfilled by AfroTransact offers), not live until approved. approved / resumed make every offer on the page live;
+      rejected / paused take them off sale. The buy box of every affected ATIN is recomputed.
+  consumeOffersInventoryStockEvents:
+    action: receive
+    channel: {$ref: '#/channels/inventoryStockEvents'}
+    summary: >-
+      inventory.availability.changed keeps the availability projection (sku, nodeId) used for Fulfilled by AfroTransact
+      offers (matched on ownerOrg = seller org and sku = the offer's inventory SKU). Events whose version is not newer
+      than the stored one are ignored. Lot events are ignored. Affected buy boxes are recomputed.
+  consumeOffersSellerComplianceEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerComplianceEvents'}
+    summary: >-
+      seller.listings.hidden suppresses every offer of the organisation (not listed, cannot win the buy box);
+      seller.listings.restored restores them. Buy boxes of the organisation's ATINs are recomputed.
+  consumeOffersSellerOrgEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerOrgEvents'}
+    summary: seller.org.approved / updated → the seller display name shown as "Sold by" on offers.
+components:
+  messages:
+    offersOfferCreated:
+      name: offers.offer.created
+      title: A seller offer was attached to a catalog variant (API or catalog.product.created)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersOfferEvent'}
+    offersOfferUpdated:
+      name: offers.offer.updated
+      title: Terms, status (paused / resumed) or product live state changed
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersOfferEvent'}
+    offersOfferWithdrawn:
+      name: offers.offer.withdrawn
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersOfferEvent'}
+    offersBuyBoxChanged:
+      name: offers.buybox.changed
+      title: Buy box winner or headline numbers of an ATIN changed (winnerOfferId null = currently unavailable)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersBuyBoxChanged'}
+    offersCouponCreated:
+      name: offers.coupon.created
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersCouponEvent'}
+    offersCouponUpdated:
+      name: offers.coupon.updated
+      title: Coupon paused, activated or expired
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersCouponEvent'}
+    offersCouponRedeemed:
+      name: offers.coupon.redeemed
+      title: Coupon used on an order (funding recorded for settlement)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersCouponRedemption'}
+    offersCouponReleased:
+      name: offers.coupon.released
+      title: Use given back (order cancelled or payment failed)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OffersCouponRedemption'}
+  schemas:
+    OffersOfferEvent:
+      type: object
+      required: [offerId, atin, productAtin, sellerOrgId, sellerKind, sellerSku, condition, priceMinor, shippingMinor,
+                 landedPriceMinor, currency, fulfilment, handlingDays, status, productLive]
+      properties:
+        offerId: {type: string, format: uuid}
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$', description: Variant ATIN}
+        productAtin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        sellerOrgId: {type: string, examples: [org_lagostextilehub00001]}
+        sellerKind: {type: string, enum: [PLATFORM, SELLER]}
+        sellerSku: {type: string}
+        condition: {type: string, enum: [NEW, RENEWED, USED_LIKE_NEW, USED_VERY_GOOD, USED_GOOD, USED_ACCEPTABLE]}
+        priceMinor: {type: integer, format: int64}
+        listPriceMinor: {type: [integer, 'null'], format: int64}
+        shippingMinor: {type: integer, format: int64}
+        landedPriceMinor: {type: integer, format: int64, description: price + shipping}
+        currency: {type: string, examples: [USD]}
+        fulfilment: {type: string, enum: [AFROTRANSACT, SELLER]}
+        handlingDays: {type: integer}
+        shipFrom:
+          type: [object, 'null']
+          properties:
+            city: {type: [string, 'null']}
+            region: {type: [string, 'null']}
+            country: {type: [string, 'null']}
+            postalCode: {type: [string, 'null']}
+        status: {type: string, enum: [ACTIVE, PAUSED, WITHDRAWN]}
+        productLive: {type: boolean}
+    OffersBuyBoxChanged:
+      type: object
+      required: [atin, currency, offerCount, reasonCodes, trigger, decidedAt]
+      properties:
+        atin: {type: string}
+        productAtin: {type: [string, 'null']}
+        currency: {type: string}
+        previousWinnerOfferId: {type: [string, 'null'], format: uuid}
+        winnerOfferId: {type: [string, 'null'], format: uuid}
+        winnerSellerOrgId: {type: [string, 'null']}
+        winnerSellerKind: {type: [string, 'null'], enum: [PLATFORM, SELLER, null]}
+        priceMinor: {type: [integer, 'null'], format: int64}
+        listPriceMinor: {type: [integer, 'null'], format: int64}
+        shippingMinor: {type: [integer, 'null'], format: int64}
+        landedPriceMinor: {type: [integer, 'null'], format: int64}
+        fulfilment: {type: [string, 'null'], enum: [AFROTRANSACT, SELLER, null]}
+        availableQty: {type: [integer, 'null']}
+        offerCount: {type: integer, description: Listed offers (winner included)}
+        minLandedPriceMinor: {type: [integer, 'null'], format: int64}
+        minPriceMinor: {type: [integer, 'null'], format: int64}
+        reasonCodes:
+          type: array
+          items: {type: string, examples: [HIGHEST_SCORE, LOWEST_LANDED_PRICE, FULFILLED_BY_AFROTRANSACT, FASTEST_DELIVERY]}
+        trigger: {type: string, examples: [offers.offer.updated, inventory.availability.changed, seller.listings.hidden]}
+        decidedAt: {type: string, format: date-time}
+    OffersCouponEvent:
+      type: object
+      required: [couponId, code, type, value, currency, scope, funding, status, startsAt]
+      properties:
+        couponId: {type: string, format: uuid}
+        code: {type: string}
+        type: {type: string, enum: [PERCENT, FIXED, FREE_SHIPPING]}
+        value: {type: integer, format: int64, description: Percent for PERCENT, minor units for FIXED, 0 for FREE_SHIPPING}
+        currency: {type: string}
+        maxDiscountMinor: {type: [integer, 'null'], format: int64}
+        scope: {type: string, enum: [SITEWIDE, FIRST_ORDER, CATEGORY, SELLER, PRODUCT, FULFILLED_BY_AFROTRANSACT]}
+        scopeRef: {type: [string, 'null']}
+        minSpendMinor: {type: integer, format: int64}
+        totalLimit: {type: integer, description: 0 = unlimited}
+        perCustomerLimit: {type: integer, description: 0 = unlimited}
+        clipRequired: {type: boolean}
+        funding: {type: string, enum: [PLATFORM, SELLER]}
+        fundedByOrg: {type: [string, 'null']}
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: [string, 'null'], format: date-time}
+        status: {type: string, enum: [ACTIVE, PAUSED, EXPIRED]}
+        redeemedCount: {type: integer, format: int64}
+    OffersCouponRedemption:
+      type: object
+      required: [redemptionId, couponId, code, customerId, orderId, currency, discountMinor, shippingDiscountMinor,
+                 funding, lines, status]
+      properties:
+        redemptionId: {type: string, format: uuid}
+        couponId: {type: string, format: uuid}
+        code: {type: string}
+        customerId: {type: string}
+        orderId: {type: string}
+        currency: {type: string}
+        discountMinor: {type: integer, format: int64}
+        shippingDiscountMinor: {type: integer, format: int64}
+        funding: {type: string, enum: [PLATFORM, SELLER]}
+        fundedByOrg: {type: [string, 'null'], description: Seller whose payout is reduced (SELLER funding)}
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              lineRef: {type: string, description: Offer id}
+              sellerOrgId: {type: string}
+              discountMinor: {type: integer, format: int64}
+        status: {type: string, enum: [REDEEMED, RELEASED]}

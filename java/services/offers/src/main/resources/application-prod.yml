@@ -1,0 +1,21 @@
+# Production: reference pages off (published on developers.afrotransact.com), sampled traces.
+at:
+  offers:
+    catalog:
+      # In-cluster service name of catalog-service (Helm chart `catalog`, port 8080).
+      base-url: ${CATALOG_URL:http://catalog:8080}
+  api-docs:
+    enabled: false
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:30}
+management:
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:0.1}

@@ -1,0 +1,1645 @@
+openapi: 3.1.0
+info:
+  title: Offers API
+  description: Seller offers on shared product pages (many sellers per ATIN), buy box selection with reasons, the "other sellers
+    on this product" listing, and coupons & promotions (validate / idempotent redeem).
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8102
+  description: local
+- url: https://api.dev.afrotransact.com/offers
+  description: dev
+- url: https://api.uat.afrotransact.com/offers
+  description: uat
+- url: https://api.afrotransact.com/offers
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Coupons
+  description: 'Coupons & promotions: manage, clip, validate and redeem'
+- name: Offers
+  description: Seller offers on existing catalog products (offers:read / offers:write)
+- name: Public offers
+  description: 'Anonymous storefront reads: buy box, other sellers, offers for the cart'
+- name: Buy box
+  description: Why an offer wins or loses, audit trail and seller performance inputs
+paths:
+  /v1/buy-boxes/{atin}/explanation:
+    get:
+      tags:
+      - Buy box
+      summary: Score breakdown of an ATIN's buy box (offers:read)
+      description: Every factor's points with a sentence; ineligible offers list why.
+      operationId: explain
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          default: USD
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BuyBoxExplanation'
+  /v1/buy-boxes/{atin}/history:
+    get:
+      tags:
+      - Buy box
+      summary: Audit trail of winner changes, newest first (staff)
+      operationId: history
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEntry'
+  /v1/coupons:
+    get:
+      tags:
+      - Coupons
+      summary: 'List coupons (staff: all, filterable; sellers: their own)'
+      operationId: list_1
+      parameters:
+      - name: funding
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PLATFORM
+          - SELLER
+      - name: fundedByOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - EXPIRED
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Coupon'
+    post:
+      tags:
+      - Coupons
+      summary: Create a coupon
+      description: 'PLATFORM funding: staff with coupons:platform:write. SELLER funding: coupons:write, funded by (and only
+        applicable to) the caller''s organisation.'
+      operationId: create_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCouponRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Coupon'
+  /v1/coupons/redemptions:
+    post:
+      tags:
+      - Coupons
+      summary: Redeem a coupon on an order (orders-service; SERVICE / STAFF principal)
+      description: Requires Idempotency-Key. Same key + same body → the original redemption (200, replayed); same key + different
+        body → 409 offers.idempotency-key-reused; not applicable → 422 offers.coupon-not-applicable with reason.
+      operationId: redeem
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        description: Unique per order and coupon, e.g. the order id
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponCartRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CouponRedemption'
+  /v1/coupons/redemptions/{id}/release:
+    post:
+      tags:
+      - Coupons
+      summary: Release a redemption (order cancelled / payment failed); idempotent
+      operationId: release
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CouponRedemption'
+  /v1/coupons/validate:
+    post:
+      tags:
+      - Coupons
+      summary: Price a coupon against a cart (cart / checkout); nothing is recorded
+      description: 'Always 200: applicable=false carries a stable rejection code (NOT_FOUND, EXPIRED, BELOW_MINIMUM_SPEND,
+        CUSTOMER_LIMIT_REACHED …).'
+      operationId: validate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponCartRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CouponQuote'
+  /v1/coupons/{code}/clip:
+    post:
+      tags:
+      - Coupons
+      summary: Clip a coupon (signed-in customer; idempotent)
+      operationId: clip
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Coupon'
+  /v1/coupons/{id}:
+    get:
+      tags:
+      - Coupons
+      summary: Get a coupon
+      operationId: get_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Coupon'
+  /v1/coupons/{id}/status:
+    post:
+      tags:
+      - Coupons
+      summary: Pause, activate or expire a coupon
+      operationId: status
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CouponStatusRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Coupon'
+  /v1/offers:
+    get:
+      tags:
+      - Offers
+      summary: List offers (own organisation; staff may filter by org)
+      operationId: list
+      parameters:
+      - name: sellerOrgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: atin
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - WITHDRAWN
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OfferPage'
+    post:
+      tags:
+      - Offers
+      summary: Create an offer on an existing live variant (by ATIN or GTIN)
+      description: The seller organisation is the token's org claim. 404 offers.product-not-found when the ATIN/GTIN has no
+        live product page; 409 offers.offer-exists when you already offer the same ATIN in that condition. Triggers a buy
+        box recomputation.
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOfferRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Offer'
+  /v1/offers/{id}:
+    get:
+      tags:
+      - Offers
+      summary: Get an offer
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Offer'
+    patch:
+      tags:
+      - Offers
+      summary: Change price, shipping, quantity, handling time, ship-from, condition or fulfilment
+      description: 'Optimistic: 409 offers.concurrent-update when the offer changed meanwhile.'
+      operationId: update
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOfferRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Offer'
+  /v1/offers/{id}/pause:
+    post:
+      tags:
+      - Offers
+      summary: Pause an active offer (it leaves the buy box and the listing)
+      operationId: pause
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Offer'
+  /v1/offers/{id}/resume:
+    post:
+      tags:
+      - Offers
+      summary: Resume a paused offer
+      operationId: resume
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Offer'
+  /v1/offers/{id}/withdraw:
+    post:
+      tags:
+      - Offers
+      summary: Withdraw an offer for good (frees the SKU and condition slot)
+      operationId: withdraw
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Offer'
+  /v1/public/atins/{atin}/offers:
+    get:
+      tags:
+      - Public offers
+      summary: Buy box and "Other sellers on AfroTransact" for a variant ATIN
+      description: buyBox = winner with reasons; otherOffers = every other listed offer sorted by landed price (price + shipping)
+        with badges. Maps to the BFF ProductDetail.buyBox / otherOffers.
+      operationId: offers
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          default: USD
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BuyBox'
+      security: []
+  /v1/public/buy-boxes:
+    get:
+      tags:
+      - Public offers
+      summary: Buy boxes of up to 50 variant ATINs (search cards, variant picker, cart)
+      operationId: buyBoxes
+      parameters:
+      - name: atins
+        in: query
+        description: Comma-separated variant ATINs (max 50)
+        required: true
+        schema:
+          type: array
+          items:
+            type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          default: USD
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BuyBoxList'
+      security: []
+  /v1/public/coupons/clippable:
+    get:
+      tags:
+      - Public offers
+      - Coupons
+      summary: Clip-to-apply coupons that cover an offer of this ATIN (product page)
+      operationId: clippable
+      parameters:
+      - name: atin
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          default: USD
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicCoupon'
+      security: []
+  /v1/public/offers/{offerId}:
+    get:
+      tags:
+      - Public offers
+      summary: One offer by id — cart uses it to add a non-buy-box offer
+      description: buyable is false when the offer cannot be bought now; 404 when withdrawn or unknown.
+      operationId: offer
+      parameters:
+      - name: offerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicOfferDetail'
+      security: []
+  /v1/public/products/{productAtin}/buy-boxes:
+    get:
+      tags:
+      - Public offers
+      summary: Buy boxes of every variant of a product page that has offers
+      operationId: productBuyBoxes
+      parameters:
+      - name: productAtin
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+          default: USD
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BuyBoxList'
+      security: []
+  /v1/sellers/{orgId}/performance:
+    put:
+      tags:
+      - Buy box
+      summary: Set seller performance inputs (staff / seller-health job with offers:write)
+      description: Recomputes the buy box of every ATIN the seller offers.
+      operationId: performance
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellerPerformanceRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerStanding'
+  /v1/sellers/{orgId}/standing:
+    get:
+      tags:
+      - Buy box
+      summary: Seller standing used by the buy box (own org; staff any)
+      operationId: standing
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerStanding'
+components:
+  schemas:
+    SellerPerformanceRequest:
+      type: object
+      description: Null rates mean unknown (neutral defaults)
+      properties:
+        rating:
+          type: number
+          format: double
+          maximum: 5
+          minimum: 0
+        onTimeRate:
+          type: number
+          format: double
+          maximum: 1
+          minimum: 0
+        defectRate:
+          type: number
+          format: double
+          maximum: 1
+          minimum: 0
+        restricted:
+          type: boolean
+    SellerStanding:
+      type: object
+      properties:
+        orgId:
+          type: string
+        displayName:
+          type: string
+        rating:
+          type: number
+          format: double
+        onTimeRate:
+          type: number
+          format: double
+        defectRate:
+          type: number
+          format: double
+        restricted:
+          type: boolean
+        listingsHidden:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+    CreateOfferRequest:
+      type: object
+      description: Exactly one of atin (variant ATIN) or gtin
+      properties:
+        atin:
+          type: string
+          example: AT0000ABCD
+          pattern: AT[0-9A-Z]{8}
+        gtin:
+          type: string
+          example: '4006381333931'
+          pattern: '[0-9 -]{8,17}'
+        sellerOrgId:
+          type: string
+          description: Staff / service only; sellers always offer for their own organisation
+        sellerSku:
+          type: string
+          example: JOL-8
+          maxLength: 40
+          minLength: 0
+        inventorySku:
+          type: string
+          description: inventory-service SKU for Fulfilled by AfroTransact stock (defaults to sellerSku)
+          maxLength: 40
+          minLength: 0
+        condition:
+          type: string
+          default: NEW
+          enum:
+          - NEW
+          - RENEWED
+          - USED_LIKE_NEW
+          - USED_VERY_GOOD
+          - USED_GOOD
+          - USED_ACCEPTABLE
+        priceMinor:
+          type: integer
+          format: int64
+          example: 899
+          exclusiveMinimum: 0
+        listPriceMinor:
+          type: integer
+          format: int64
+          description: Strike-through list price, ≥ price
+          exclusiveMinimum: 0
+        currency:
+          type: string
+          default: USD
+          example: USD
+          pattern: '[A-Za-z]{3}'
+        shippingMinor:
+          type: integer
+          format: int64
+          description: Shipping charge added to the price (landed price)
+          minimum: 0
+        fulfilment:
+          type: string
+          enum:
+          - AFROTRANSACT
+          - SELLER
+        quantity:
+          type: integer
+          format: int32
+          description: Seller-declared stock (required for SELLER fulfilment)
+          minimum: 0
+        handlingDays:
+          type: integer
+          format: int32
+          default: 2
+          description: Days to hand the order to the carrier
+          maximum: 30
+          minimum: 0
+        shipFrom:
+          $ref: '#/components/schemas/ShipFrom'
+      required:
+      - fulfilment
+      - sellerSku
+    ShipFrom:
+      type: object
+      description: Where a seller-fulfilled order ships from
+      properties:
+        city:
+          type: string
+          example: Houston
+          maxLength: 80
+          minLength: 0
+        region:
+          type: string
+          example: TX
+          maxLength: 80
+          minLength: 0
+        country:
+          type: string
+          example: US
+          pattern: '[A-Z]{2}'
+        postalCode:
+          type: string
+          example: '77002'
+          maxLength: 12
+          minLength: 0
+    Offer:
+      type: object
+      description: A seller's offer as seen in seller center
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        productAtin:
+          type: string
+        productId:
+          type: string
+          format: uuid
+        gtin:
+          type: string
+        categoryId:
+          type: string
+          format: uuid
+        sellerOrgId:
+          type: string
+        sellerName:
+          type: string
+        sellerKind:
+          type: string
+          enum:
+          - PLATFORM
+          - SELLER
+        sellerSku:
+          type: string
+        inventorySku:
+          type: string
+        condition:
+          type: string
+          enum:
+          - NEW
+          - RENEWED
+          - USED_LIKE_NEW
+          - USED_VERY_GOOD
+          - USED_GOOD
+          - USED_ACCEPTABLE
+        priceMinor:
+          type: integer
+          format: int64
+        listPriceMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        landedPriceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        fulfilment:
+          type: string
+          enum:
+          - AFROTRANSACT
+          - SELLER
+        quantity:
+          type: integer
+          format: int32
+          description: Seller-declared quantity (SELLER fulfilment)
+        availableQty:
+          type: integer
+          format: int32
+          description: Sellable units now
+        stockStatus:
+          type: string
+          enum:
+          - IN_STOCK
+          - LOW_STOCK
+          - OUT_OF_STOCK
+        handlingDays:
+          type: integer
+          format: int32
+        deliveryDays:
+          type: integer
+          format: int32
+        shipFrom:
+          $ref: '#/components/schemas/ShipFrom'
+        shipsFrom:
+          type: string
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - WITHDRAWN
+        productLive:
+          type: boolean
+        suppressed:
+          type: boolean
+          description: Hidden by seller enforcement or restriction
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    CreateCouponRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          example: WELCOME10
+          minLength: 1
+          pattern: '[A-Za-z0-9]{3,20}'
+        description:
+          type: string
+          maxLength: 300
+          minLength: 0
+        type:
+          type: string
+          enum:
+          - PERCENT
+          - FIXED
+          - FREE_SHIPPING
+        value:
+          type: integer
+          format: int64
+          description: Percent (1–100) for PERCENT, minor units for FIXED, 0 for FREE_SHIPPING
+          example: 10
+          minimum: 0
+        currency:
+          type: string
+          default: USD
+          pattern: '[A-Za-z]{3}'
+        maxDiscountMinor:
+          type: integer
+          format: int64
+          description: Cap for PERCENT coupons
+        scope:
+          type: string
+          enum:
+          - SITEWIDE
+          - FIRST_ORDER
+          - CATEGORY
+          - SELLER
+          - PRODUCT
+          - FULFILLED_BY_AFROTRANSACT
+        scopeRef:
+          type: string
+          description: Category id (CATEGORY), seller org id (SELLER) or ATIN (PRODUCT)
+        minSpendMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        totalLimit:
+          type: integer
+          format: int32
+          description: 0 = unlimited
+          minimum: 0
+        perCustomerLimit:
+          type: integer
+          format: int32
+          description: 0 = unlimited
+          minimum: 0
+        clipRequired:
+          type: boolean
+          description: Customers must clip the coupon before it applies
+        funding:
+          type: string
+          description: PLATFORM = AfroTransact-funded (staff); SELLER = seller-funded
+          enum:
+          - PLATFORM
+          - SELLER
+        fundedByOrg:
+          type: string
+          description: Staff only, for seller-funded coupons; defaults to the caller's org
+        startsAt:
+          type: string
+          format: date-time
+          description: Defaults to now
+        endsAt:
+          type: string
+          format: date-time
+          description: Exclusive end; null = open-ended
+      required:
+      - code
+      - funding
+      - scope
+      - type
+    Coupon:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum:
+          - PERCENT
+          - FIXED
+          - FREE_SHIPPING
+        value:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        maxDiscountMinor:
+          type: integer
+          format: int64
+        scope:
+          type: string
+          enum:
+          - SITEWIDE
+          - FIRST_ORDER
+          - CATEGORY
+          - SELLER
+          - PRODUCT
+          - FULFILLED_BY_AFROTRANSACT
+        scopeRef:
+          type: string
+        minSpendMinor:
+          type: integer
+          format: int64
+        totalLimit:
+          type: integer
+          format: int32
+        perCustomerLimit:
+          type: integer
+          format: int32
+        clipRequired:
+          type: boolean
+        funding:
+          type: string
+          enum:
+          - PLATFORM
+          - SELLER
+        fundedByOrg:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - EXPIRED
+        redeemedCount:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    CouponStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - EXPIRED
+      required:
+      - status
+    CouponCartLine:
+      type: object
+      properties:
+        offerId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          format: int32
+          maximum: 999
+          minimum: 1
+      required:
+      - offerId
+    CouponCartRequest:
+      type: object
+      description: Prices come from the offers; only quantities are trusted
+      properties:
+        code:
+          type: string
+          maxLength: 20
+          minLength: 0
+        customerId:
+          type: string
+          description: 'Service callers: the customer; customers act for themselves'
+        orderId:
+          type: string
+          description: Required to redeem
+        currency:
+          type: string
+          default: USD
+          pattern: '[A-Za-z]{3}'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/CouponCartLine'
+          maxItems: 100
+          minItems: 0
+        shippingMinor:
+          type: integer
+          format: int64
+          description: Shipping total (FREE_SHIPPING discounts it)
+          minimum: 0
+        firstOrder:
+          type: boolean
+          description: Customer has no previous order (FIRST_ORDER coupons)
+      required:
+      - code
+      - lines
+    CouponQuote:
+      type: object
+      properties:
+        code:
+          type: string
+        couponId:
+          type: string
+          format: uuid
+        applicable:
+          type: boolean
+        rejection:
+          type: string
+          enum:
+          - NOT_FOUND
+          - NOT_ACTIVE
+          - NOT_STARTED
+          - EXPIRED
+          - CURRENCY_MISMATCH
+          - NOT_CLIPPED
+          - TOTAL_LIMIT_REACHED
+          - CUSTOMER_LIMIT_REACHED
+          - FIRST_ORDER_ONLY
+          - NO_ELIGIBLE_ITEMS
+          - BELOW_MINIMUM_SPEND
+          - NO_SHIPPING_TO_DISCOUNT
+        message:
+          type: string
+        currency:
+          type: string
+        eligibleSubtotalMinor:
+          type: integer
+          format: int64
+        discountMinor:
+          type: integer
+          format: int64
+        shippingDiscountMinor:
+          type: integer
+          format: int64
+        totalDiscountMinor:
+          type: integer
+          format: int64
+        funding:
+          type: string
+          enum:
+          - PLATFORM
+          - SELLER
+        fundedByOrg:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineDiscount'
+    LineDiscount:
+      type: object
+      properties:
+        lineRef:
+          type: string
+        sellerOrgId:
+          type: string
+        discountMinor:
+          type: integer
+          format: int64
+    CouponRedemption:
+      type: object
+      description: funding / fundedByOrg / lines drive settlement
+      properties:
+        id:
+          type: string
+          format: uuid
+        couponId:
+          type: string
+          format: uuid
+        code:
+          type: string
+        customerId:
+          type: string
+        orderId:
+          type: string
+        currency:
+          type: string
+        discountMinor:
+          type: integer
+          format: int64
+        shippingDiscountMinor:
+          type: integer
+          format: int64
+        totalDiscountMinor:
+          type: integer
+          format: int64
+        funding:
+          type: string
+          enum:
+          - PLATFORM
+          - SELLER
+        fundedByOrg:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineDiscount'
+        status:
+          type: string
+          enum:
+          - REDEEMED
+          - RELEASED
+        createdAt:
+          type: string
+          format: date-time
+        releasedAt:
+          type: string
+          format: date-time
+        replayed:
+          type: boolean
+    UpdateOfferRequest:
+      type: object
+      description: Only the fields present change; listPriceMinor 0 clears it
+      properties:
+        condition:
+          type: string
+          enum:
+          - NEW
+          - RENEWED
+          - USED_LIKE_NEW
+          - USED_VERY_GOOD
+          - USED_GOOD
+          - USED_ACCEPTABLE
+        priceMinor:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+        listPriceMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        shippingMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        fulfilment:
+          type: string
+          enum:
+          - AFROTRANSACT
+          - SELLER
+        quantity:
+          type: integer
+          format: int32
+          minimum: 0
+        handlingDays:
+          type: integer
+          format: int32
+          maximum: 30
+          minimum: 0
+        shipFrom:
+          $ref: '#/components/schemas/ShipFrom'
+        inventorySku:
+          type: string
+          maxLength: 40
+          minLength: 0
+    BuyBox:
+      type: object
+      description: Buy box with reasons plus every other listed offer, sorted by landed price. buyBox is null when no offer
+        is eligible ("Currently unavailable").
+      properties:
+        atin:
+          type: string
+        currency:
+          type: string
+        buyBox:
+          $ref: '#/components/schemas/PublicOffer'
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuyBoxReason'
+        otherOffers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicOffer'
+        offerCount:
+          type: integer
+          format: int32
+        minLandedPriceMinor:
+          type: integer
+          format: int64
+        minPriceMinor:
+          type: integer
+          format: int64
+    BuyBoxList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuyBox'
+    BuyBoxReason:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    OfferSeller:
+      type: object
+      description: Maps to BFF Seller (city = ship-from city or 'AfroTransact')
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+          enum:
+          - PLATFORM
+          - SELLER
+        city:
+          type: string
+    PublicOffer:
+      type: object
+      description: Maps 1:1 to the BFF Offer (delivery comes from promise-service)
+      properties:
+        offerId:
+          type: string
+        atin:
+          type: string
+        productAtin:
+          type: string
+        seller:
+          $ref: '#/components/schemas/OfferSeller'
+        condition:
+          type: string
+          enum:
+          - NEW
+          - RENEWED
+          - USED_LIKE_NEW
+          - USED_VERY_GOOD
+          - USED_GOOD
+          - USED_ACCEPTABLE
+        priceMinor:
+          type: integer
+          format: int64
+        listPriceMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        landedPriceMinor:
+          type: integer
+          format: int64
+          description: price + shipping
+        currency:
+          type: string
+        fulfilment:
+          type: string
+          description: AFROTRANSACT = Fulfilled by AfroTransact; SELLER = Ships from seller
+          enum:
+          - AFROTRANSACT
+          - SELLER
+        availableQty:
+          type: integer
+          format: int32
+        stockStatus:
+          type: string
+          enum:
+          - IN_STOCK
+          - LOW_STOCK
+          - OUT_OF_STOCK
+        handlingDays:
+          type: integer
+          format: int32
+        deliveryDays:
+          type: integer
+          format: int32
+          description: Handling + transit estimate used by the buy box
+        shipsFrom:
+          type: string
+        soldBy:
+          type: string
+        buyBoxRank:
+          type: integer
+          format: int32
+          description: 1 = buy box winner; 0 = listed, not eligible for the buy box
+        score:
+          type: number
+          format: double
+        badges:
+          type: array
+          items:
+            type: string
+            enum:
+            - BUY_BOX_WINNER
+            - LOWEST_PRICE
+            - FASTEST_DELIVERY
+            - FULFILLED_BY_AFROTRANSACT
+            - SHIPS_FROM_SELLER
+            - SOLD_BY_AFROTRANSACT
+            - LOW_STOCK
+            - RENEWED
+            - USED
+    PublicOfferDetail:
+      type: object
+      description: One offer for add-to-cart (works for non-buy-box offers)
+      properties:
+        offer:
+          $ref: '#/components/schemas/PublicOffer'
+        buyable:
+          type: boolean
+          description: False when the offer is paused, out of stock, its product is not live or its seller is suppressed
+        notEligible:
+          type: array
+          items:
+            type: string
+            enum:
+            - NOT_ACTIVE
+            - PRODUCT_NOT_LIVE
+            - OUT_OF_STOCK
+            - SELLER_LISTINGS_HIDDEN
+            - SELLER_RESTRICTED
+            - CONDITION_NOT_NEW
+            - SELLER_HEALTH_BELOW_THRESHOLD
+    PublicCoupon:
+      type: object
+      description: A clip-to-apply coupon shown on the product page
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        type:
+          type: string
+          enum:
+          - PERCENT
+          - FIXED
+          - FREE_SHIPPING
+        value:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        maxDiscountMinor:
+          type: integer
+          format: int64
+        minSpendMinor:
+          type: integer
+          format: int64
+        scope:
+          type: string
+          enum:
+          - SITEWIDE
+          - FIRST_ORDER
+          - CATEGORY
+          - SELLER
+          - PRODUCT
+          - FULFILLED_BY_AFROTRANSACT
+        endsAt:
+          type: string
+          format: date-time
+    OfferPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Offer'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        currency:
+          type: string
+        previousWinnerOfferId:
+          type: string
+          format: uuid
+        winnerOfferId:
+          type: string
+          format: uuid
+        trigger:
+          type: string
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditedOffer'
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuyBoxReason'
+        decidedAt:
+          type: string
+          format: date-time
+    AuditedOffer:
+      type: object
+      properties:
+        offerId:
+          type: string
+          format: uuid
+        sellerOrgId:
+          type: string
+        rank:
+          type: integer
+          format: int32
+        score:
+          type: number
+          format: double
+        buyBoxEligible:
+          type: boolean
+        listable:
+          type: boolean
+        ineligibility:
+          type: array
+          items:
+            type: string
+            enum:
+            - NOT_ACTIVE
+            - PRODUCT_NOT_LIVE
+            - OUT_OF_STOCK
+            - SELLER_LISTINGS_HIDDEN
+            - SELLER_RESTRICTED
+            - CONDITION_NOT_NEW
+            - SELLER_HEALTH_BELOW_THRESHOLD
+        landedPriceMinor:
+          type: integer
+          format: int64
+        availableQty:
+          type: integer
+          format: int32
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreComponent'
+    ScoreComponent:
+      type: object
+      properties:
+        factor:
+          type: string
+          enum:
+          - LANDED_PRICE
+          - FULFILMENT
+          - DELIVERY_SPEED
+          - SELLER_PERFORMANCE
+          - STOCK_DEPTH
+        points:
+          type: number
+          format: double
+        maxPoints:
+          type: number
+          format: double
+        detail:
+          type: string
+    BuyBoxExplanation:
+      type: object
+      description: Sellers see the winner and their own offers; staff see all
+      properties:
+        atin:
+          type: string
+        currency:
+          type: string
+        winnerOfferId:
+          type: string
+          format: uuid
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/BuyBoxReason'
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluatedOffer'
+    EvaluatedOffer:
+      type: object
+      properties:
+        offerId:
+          type: string
+          format: uuid
+        sellerOrgId:
+          type: string
+        rank:
+          type: integer
+          format: int32
+        score:
+          type: number
+          format: double
+        buyBoxEligible:
+          type: boolean
+        listable:
+          type: boolean
+        ineligibility:
+          type: array
+          items:
+            type: string
+            enum:
+            - NOT_ACTIVE
+            - PRODUCT_NOT_LIVE
+            - OUT_OF_STOCK
+            - SELLER_LISTINGS_HIDDEN
+            - SELLER_RESTRICTED
+            - CONDITION_NOT_NEW
+            - SELLER_HEALTH_BELOW_THRESHOLD
+        priceMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        landedPriceMinor:
+          type: integer
+          format: int64
+        fulfilment:
+          type: string
+          enum:
+          - AFROTRANSACT
+          - SELLER
+        condition:
+          type: string
+          enum:
+          - NEW
+          - RENEWED
+          - USED_LIKE_NEW
+          - USED_VERY_GOOD
+          - USED_GOOD
+          - USED_ACCEPTABLE
+        availableQty:
+          type: integer
+          format: int32
+        deliveryDays:
+          type: integer
+          format: int32
+        components:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreComponent'
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

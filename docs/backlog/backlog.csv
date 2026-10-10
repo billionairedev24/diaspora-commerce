@@ -148,18 +148,18 @@
 "S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation
 - Ranking boosts in-stock and Fulfilled-by-AfroTransact items
 - A relevance test set runs in CI","E04","","Medium","5","search","search","To Do"
-"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","In Progress"
+"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","Done"
 "S040","Story","Offers service: create offer on existing product","Sellers attach price, stock and condition to an existing ATIN instead of duplicating the page.","- Offer created from catalog.product.created for the creating seller
 - Other sellers can add an offer by ATIN or GTIN
-- Offer price, handling time and fulfilment type are stored","E05","","Highest","5","offers java","offers","In Progress"
+- Offer price, handling time and fulfilment type are stored","E05","","Highest","5","offers java","offers","Done"
 "S041","Story","Buy box selection","Pick the winning offer by landed price, delivery promise, seller health and stock; 1P competes under the same rules.","- Winner recomputed on price/stock/health change
 - Ineligible offers (no stock, restricted seller) never win
-- Selection rules are audited and documented","E05","","High","5","offers java","offers","In Progress"
+- Selection rules are audited and documented","E05","","High","5","offers java","offers","Done"
 "S042","Story","Coupons & promotions","Platform- or seller-funded coupons with scope, minimum spend, limits and dates.","- Coupon types: percent, fixed, free shipping
 - Usage limits per coupon and per customer are enforced
-- Funding source (AfroTransact or seller) is recorded for settlement","E05","","Medium","5","offers java","offers","In Progress"
+- Funding source (AfroTransact or seller) is recorded for settlement","E05","","Medium","5","offers java","offers","Done"
 "S043","Story","Other sellers on product page","Product page lists other offers for the same item with price, delivery and seller rating.","- All eligible offers listed with landed price
-- Customers can add a non-buy-box offer to cart","E05","","Medium","3","offers","offers","In Progress"
+- Customers can add a non-buy-box offer to cart","E05","","Medium","3","offers","offers","Done"
 "E06","Epic","Cart & checkout","Amazon-style cart split per seller, stock-capped quantities, and a clean three-step checkout saga.","","","Cart & checkout","High","","checkout","checkout","In Progress"
 "S044","Story","Cart service (Redis + Postgres)","Carts with price snapshots, save for later and merge on login.","- Quantities can never exceed sellable stock
 - Lines that lose stock are flagged and excluded from checkout
@@ -642,3 +642,12 @@
 - Bookings reads fees from the payments fee schedule instead of config","E07","","High","8","payments bookings","payments","In Progress"
 "S221","Story","Service search by ZIP and ratings","Bookings service search honours ZIP/service area (via geo zones) and returns real ratings from reviews.","- Search filters by provider service area for the ZIP
 - Ratings come from reviews instead of 0","E15","","Medium","3","bookings geo","bookings","To Do"
+"S222","Story","Storefront and cart use offers service","BFF product detail, search cards and add-to-cart use offers (buy box, other sellers, offer lookup); cart validates offer buyable; orders validates and redeems coupons.","- Product page buy box and Other sellers come from offers
+- Search cards show offer count and min price
+- Cart rejects non-buyable offers
+- Checkout validates, redeems and releases coupons idempotently","E05","","Highest","5","bff offers cart orders","offers","To Do"
+"S223","Story","Seller performance feed for the buy box","A seller-health job computes late shipment, cancellation and defect rates from orders and fulfilment events and updates offers' seller performance.","- Metrics computed daily per seller from order events
+- Offers seller performance updated via API
+- Buy box weights reviewed with product owner","E05","","Medium","5","offers orders","offers","To Do"
+"S224","Story","GTIN lookup readable by service tokens","Catalog makes /v1/identifiers/gtin/{code} callable by service clients (offers) without requiring the seller to hold catalog:write.","- Service token with catalog:read can look up GTINs
+- Offers GTIN lookup works for sellers without catalog:write","E03","","Medium","1","catalog offers","catalog","To Do"

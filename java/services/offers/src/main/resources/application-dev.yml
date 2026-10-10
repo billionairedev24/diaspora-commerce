@@ -1,0 +1,12 @@
+# Shared dev cluster: per-PR preview namespaces; API reference pages on.
+at:
+  offers:
+    catalog:
+      # In-cluster service name of catalog-service (Helm chart `catalog`, port 8080).
+      base-url: ${CATALOG_URL:http://catalog:8080}
+  api-docs:
+    enabled: true
+management:
+  tracing:
+    sampling:
+      probability: 1.0
