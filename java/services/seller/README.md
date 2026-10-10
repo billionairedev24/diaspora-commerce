@@ -10,8 +10,8 @@ Architecture: §7 (Sellers, payments and subscriptions) and §17d (Stripe Connec
 
 | Table | What it holds |
 |---|---|
-| `organisation` | `org_…` id, kind `SELLER · PROVIDER`, legal and display name, country, status `DRAFT · PENDING_REVIEW · FLAGGED · AWAITING_FINAL_APPROVAL · INFO_REQUESTED · APPROVED · REJECTED · SUSPENDED` |
-| `org_member` | user id (identity-service) + org role key; the applicant becomes `seller.owner` / `provider.owner` |
+| `organisation` | `org_…` id, kind `SELLER · PROVIDER` (onboarding portal), offering `PRODUCTS · SERVICES · BOTH` (S215, set at approval), legal and display name, country, status `DRAFT · PENDING_REVIEW · FLAGGED · AWAITING_FINAL_APPROVAL · INFO_REQUESTED · APPROVED · REJECTED · SUSPENDED` |
+| `org_member` | user id (identity-service) + org role key; the applicant becomes `seller.owner` / `provider.owner`. Mirrors identity (S236), see [Members](#members-s236) |
 | `application` | one per organisation and per applicant: `APP-…` reference, status, current step, wizard sections (`data` jsonb), prefilled fields, reviewer / final approver, failed checks, requested items, reason code. DB check: final approver ≠ reviewer |
 | `application_event` | timeline: action, from → to status, actor, reason code, note, items, time |
 | `document_access_log` | every reviewer view of a document and of unmasked PII |
@@ -136,12 +136,54 @@ subscription; failures are retried by a job). Billing page (owner / finance read
 `invoice.payment_failed` (dunning `RETRYING` / `FINAL_ATTEMPT_FAILED`, status `PAST_DUE`),
 `customer.subscription.updated` / `deleted`.
 
+## Metered usage (S206)
+
+FBA storage, sponsored-products spend and AI credits are billed on **Stripe Billing meters** next to the plan
+subscription. A metering run pulls usage per organisation and UTC day for a period from three ports (HTTP adapters
+with the `seller-service` client-credentials token, scopes `inventory:storage.read ads:spend.read ai:usage.read`):
+
+| Meter | Source | Unit (meter event value) | Stripe meter / metered price |
+|---|---|---|---|
+| `FBA_STORAGE` | inventory `GET /v1/storage/usage` (cubic-feet-days) | hundredths of a cubic-foot-day | `fba_storage_cubic_feet_days` / `metered_fba_storage` |
+| `ADS_SPEND` | content `GET /v1/ads/spend` (USD only) | cents | `ads_spend_cents` / `metered_ads_spend` |
+| `AI_CREDITS` | ai-gateway `GET /v1/ai/usage/orgs` | credits (1 credit = 1¢ of model cost) | `ai_credits` / `metered_ai_credits` |
+
+Each day's quantity is stored in `usage_daily` (overwritten by every read, days the source no longer reports drop to
+0), and only the difference to what Stripe already has (`reported_quantity`) is sent as a meter event with
+identifier `<org>:<meter>:<day>:r<revision>` (also the idempotency key), so runs are **idempotent and re-runnable per
+period**. Usage that drops after it was reported is never sent negative: the day is flagged `CORRECTION` for a
+credit. Organisations without a Stripe customer (free plans) stay pending; days older than 35 days can't be sent
+(Stripe limit). The first report for a paid subscription adds the three metered prices to it
+(`metered_subscription_item`), so Stripe invoices carry the usage lines; `invoice.*` webhooks store the invoice lines
+(`invoice.lines`, metered lines recognised by lookup key or subscription item). A lease (`usage_run_lease`) keeps one
+run at a time across replicas; every run is recorded in `usage_run`.
+
+| Endpoint | Who |
+|---|---|
+| `GET /v1/orgs/{orgId}/billing/usage?from=&to=` | owner / finance members; staff with `seller:billing` or `billing:usage`. Default period: the current subscription period (month to date without one). Per meter: quantity, reported, estimated amount, days with `REPORTED · PENDING · CORRECTION` |
+| `POST /v1/billing/usage/runs {from, to}` · `GET /v1/billing/usage/runs` | staff with `billing:usage` (≤ 93 days, ending today at the latest; 409 `seller.usage-run-in-progress`) |
+| `GET /v1/orgs/{orgId}/billing/invoices` | now with `lines[]` (`metered`, `meter`) and `meteredAmountCents` |
+
+Job: `metering-cron` (`0 20 1 * * *` UTC) meters the two previous UTC days. Config `at.seller.metering.*`:
+`INVENTORY_URL`, `CONTENT_URL`, `AI_GATEWAY_URL`, `AUTH_TOKEN_URI`, `SELLER_SERVICE_CLIENT_ID`,
+`SELLER_SERVICE_CLIENT_SECRET` (blank = no token, local), `METERING_TIMEOUT`.
+
+## Members (S236)
+
+identity-service is the source of truth for organisation members. seller keeps `org_member` (used by its own
+authorisation, e.g. owner / finance checks on billing) consistent by consuming `identity.role.granted` /
+`identity.role.revoked` with `orgId` from `at.identity.events` (consumer group `seller-service`, inbox-deduplicated,
+`SELLER_CONSUMERS_ENABLED`): grants add the member or change its role unless the stored row is newer; revokes remove
+it while it still holds that role. Mirroring was chosen over dropping the table because seller's access checks fall
+back to the member list when a token's org/roles are stale, and the applicant must be a member before identity
+knows the organisation.
+
 ## Events (outbox → Kafka, `contracts/asyncapi/fragments/seller.yaml`)
 
 | Topic (key) | Types | Consumers |
 |---|---|---|
 | `at.seller-application.events` (application id) | `seller.application.submitted / flagged / info_requested / approved / rejected` | notifications, staff console, trust-ops |
-| `at.seller-org.events` (org id) | `seller.org.approved`, `seller.org.updated` (also on suspend / reinstate) | identity (unlock back office, mirror org and status), indexer and cart (display name) |
+| `at.seller-org.events` (org id) | `seller.org.approved`, `seller.org.updated` (also on suspend / reinstate); `kind` is `BOTH` when the organisation offers products and services, `primaryKind` the onboarding portal (S215) | identity (unlock back office, mirror org and status), indexer and cart (display name) |
 | `at.seller-compliance.events` (org id) | `seller.compliance.changed`, `seller.compliance.reminder`, `seller.payouts.paused / resumed`, `seller.listings.hidden / restored` (reasons `AUTO_PAST_DUE · MANUAL · DEAUTHORIZED · CHARGES_DISABLED · CLEARED · SUSPENDED · REINSTATED`; `accountId` is null for an organisation without a connected account) | notifications (email + SMS + in-app), payments (payout holds), catalog / offers / bookings / indexer (visibility), trust-ops (audit) |
 | `at.seller-subscription.events` (org id) | `seller.subscription.changed` | identity (plan limits), finance |
 

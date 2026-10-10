@@ -9,6 +9,7 @@ import com.afrotransact.seller.application.BillingOverview;
 import com.afrotransact.seller.application.PlanOffer;
 import com.afrotransact.seller.domain.FirstCharge;
 import com.afrotransact.seller.domain.Invoice;
+import com.afrotransact.seller.domain.InvoiceLine;
 import com.afrotransact.seller.domain.PaymentMethod;
 import com.afrotransact.seller.domain.PlanPricing;
 import com.afrotransact.seller.domain.PlanQuote;
@@ -104,15 +105,31 @@ final class BillingDtos {
                                    String accountType, Boolean makeDefault) {
     }
 
+    @Schema(name = "InvoiceLine", description = "Plan, proration or metered usage line (S206)")
+    record InvoiceLineResponse(String description, long amountCents, Long quantity, boolean metered,
+                               @Schema(allowableValues = {"FBA_STORAGE", "ADS_SPEND", "AI_CREDITS"},
+                                       description = "Usage meter of a metered line") String meter,
+                               Instant periodStart, Instant periodEnd) {
+
+        static InvoiceLineResponse of(InvoiceLine l) {
+            return new InvoiceLineResponse(l.description(), l.amountCents(), l.quantity(), l.metered(),
+                    l.meter() == null ? null : l.meter().name(), l.periodStart(), l.periodEnd());
+        }
+    }
+
     @Schema(name = "Invoice")
     record InvoiceResponse(String id, String number, Instant periodStart, Instant periodEnd, long amountDueCents,
                            long amountPaidCents, String currency, String status, String billingReason,
-                           String hostedInvoiceUrl, String invoicePdf, Instant createdAt) {
+                           String hostedInvoiceUrl, String invoicePdf, Instant createdAt,
+                           List<InvoiceLineResponse> lines,
+                           @Schema(description = "Sum of the metered usage lines") long meteredAmountCents) {
 
         static InvoiceResponse of(Invoice i) {
             return new InvoiceResponse(i.stripeInvoiceId(), i.number(), i.periodStart(), i.periodEnd(),
                     i.amountDueCents(), i.amountPaidCents(), i.currency(), i.status(), i.billingReason(),
-                    i.hostedInvoiceUrl(), i.invoicePdf(), i.createdAt());
+                    i.hostedInvoiceUrl(), i.invoicePdf(), i.createdAt(),
+                    i.lines().stream().map(InvoiceLineResponse::of).toList(),
+                    i.meteredLines().stream().mapToLong(InvoiceLine::amountCents).sum());
         }
     }
 }

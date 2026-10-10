@@ -4,6 +4,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.ai.domain.UsageTotals;
@@ -29,15 +30,16 @@ class JdbcUsageLedger implements UsageLedger {
         LocalDate day = LocalDate.ofInstant(e.at(), ZoneOffset.UTC);
         tx.executeWithoutResult(status -> {
             jdbc.sql("""
-                    insert into ai_usage (id, usage_day, occurred_at, subject, feature, task, model, prompt_tokens,
-                                          completion_tokens, cost_micros, degraded, fallback)
-                    values (:id, :day, :at, :subject, :feature, :task, :model, :prompt, :completion, :cost,
+                    insert into ai_usage (id, usage_day, occurred_at, subject, org_id, feature, task, model,
+                                          prompt_tokens, completion_tokens, cost_micros, degraded, fallback)
+                    values (:id, :day, :at, :subject, :org, :feature, :task, :model, :prompt, :completion, :cost,
                             :degraded, :fallback)
                     """)
                     .param("id", UUID.randomUUID())
                     .param("day", Date.valueOf(day))
                     .param("at", Timestamp.from(e.at()))
                     .param("subject", e.subject())
+                    .param("org", e.orgId())
                     .param("feature", e.feature())
                     .param("task", e.task())
                     .param("model", e.model())
@@ -60,6 +62,23 @@ class JdbcUsageLedger implements UsageLedger {
     @Override
     public UsageTotals featureTotals(String feature, LocalDate day) {
         return totals(day, "FEATURE", feature);
+    }
+
+    @Override
+    public List<OrgDayUsage> orgUsage(LocalDate from, LocalDate to) {
+        return jdbc.sql("""
+                select org_id, usage_day, count(*) as calls, sum(prompt_tokens + completion_tokens) as tokens,
+                       sum(cost_micros) as cost
+                from ai_usage
+                where org_id is not null and usage_day between :from and :to
+                group by org_id, usage_day
+                order by org_id, usage_day
+                """)
+                .param("from", Date.valueOf(from))
+                .param("to", Date.valueOf(to))
+                .query((rs, n) -> new OrgDayUsage(rs.getString("org_id"), rs.getDate("usage_day").toLocalDate(),
+                        rs.getLong("calls"), rs.getLong("tokens"), rs.getLong("cost")))
+                .list();
     }
 
     private void rollUp(LocalDate day, String scope, String key, long tokens, long cost) {

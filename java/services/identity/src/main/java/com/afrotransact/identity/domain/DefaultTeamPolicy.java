@@ -7,12 +7,13 @@ public class DefaultTeamPolicy implements TeamPolicy {
 
     @Override
     public Portal portalOf(OrgKind kind) {
-        return kind == OrgKind.SELLER ? Portal.SELLER : Portal.PROVIDER;
+        // BOTH runs its back office in Seller Center, which shows the seller and provider groups.
+        return kind == OrgKind.PROVIDER ? Portal.PROVIDER : Portal.SELLER;
     }
 
     @Override
     public String teamModuleKey(OrgKind kind) {
-        return kind == OrgKind.SELLER ? "sTeam" : "pTeam";
+        return kind == OrgKind.PROVIDER ? "pTeam" : "sTeam";
     }
 
     @Override
@@ -22,6 +23,13 @@ public class DefaultTeamPolicy implements TeamPolicy {
 
     @Override
     public void requireRoleFor(OrgKind kind, Role role) {
+        if (kind == OrgKind.BOTH) {
+            if (role.portal() != Portal.SELLER && role.portal() != Portal.PROVIDER) {
+                throw new IdentityRuleViolation("identity.wrong-portal", "Use a seller or provider role",
+                        Map.of("roleKey", "Choose a seller.* or provider.* role for this organisation"));
+            }
+            return;
+        }
         Portal expected = portalOf(kind);
         if (role.portal() != expected) {
             throw new IdentityRuleViolation("identity.wrong-portal", "Use a " + expected.wire() + " role",

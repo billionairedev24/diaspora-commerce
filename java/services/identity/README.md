@@ -27,6 +27,15 @@ claims with `JwtActorResolver` (java/libs/platform-security) or `auth.Require` (
 | Push devices & preferences | Shoppers and drivers register push tokens (`/v1/me/devices`) and set email/SMS/push switches and marketing opt-in (`/v1/me/notification-preferences`); notifications-service reads both through `GET /v1/internal/users/{id}/contact`. |
 | Sessions | Login sessions live in Spring Session JDBC (works with several replicas). "Sessions" in Login & security are OAuth authorizations with a live refresh/access token; revoking deletes them. |
 
+## Organisation kind BOTH and markets (S215)
+
+`seller.org.*` events may carry kind `BOTH` (sells products and offers services) with `primaryKind` (onboarding
+portal). Identity stores it as is: members of a BOTH organisation may hold `seller.*` or `provider.*` roles, the
+owner role granted on approval follows `primaryKind`, the team module is `sTeam` (Seller Center), the token `pt` is
+`SELLER_MEMBER` or `PROVIDER_MEMBER` from the member's role, and landing is Seller Center. `GET /v1/me` organisations
+and `/v1/orgs/*` responses return kind `BOTH`. `organization.market` holds content-service market codes (ISO 3166-1
+alpha-2, `UK` → `GB`; V15 normalises existing rows and adds a check constraint); other values are not stored.
+
 ## Organisation teams and invitations (S231)
 
 Seller Center's team page reads identity's member directory instead of showing bare user ids. Identity's

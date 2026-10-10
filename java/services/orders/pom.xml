@@ -82,6 +82,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-restclient</artifactId>
         </dependency>
+        <!-- Valkey pub/sub: the live shipment feed fans out to every replica (S219). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>

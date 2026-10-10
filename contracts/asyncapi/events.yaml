@@ -4061,6 +4061,7 @@ components:
           enum:
           - SELLER
           - PROVIDER
+          - BOTH
         email:
           type: string
           format: email
@@ -5186,6 +5187,7 @@ components:
           - FULFILMENT_OPS
           - CARRIER
           - COURIER
+          - PICKUP_POINT
           - SYSTEM
         actorId:
           type: string
@@ -6643,6 +6645,24 @@ components:
           enum:
           - SELLER
           - PROVIDER
+          - BOTH
+          description: BOTH (S215) when the organisation sells products and offers services (offering BOTH)
+        primaryKind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+          description: Portal it onboarded through; decides the owner role (seller.owner / provider.owner) for BOTH
+        offering:
+          type:
+          - string
+          - 'null'
+          enum:
+          - PRODUCTS
+          - SERVICES
+          - BOTH
+          - null
+          description: What it sells; null before approval
         legalName:
           type:
           - string
@@ -7773,7 +7793,9 @@ operations:
     summary: 'identity-service (consumer group identity-service, inbox-deduplicated) mirrors seller organisations with the
       seller org id (org_…) as the organisation id and token org claim. seller.org.approved: organisation APPROVED, applicantUserId
       and ownerUserIds become members with seller.owner / provider.owner (identity.role.granted is published) and get it as
-      their active organisation when they have none. seller.org.updated: name, kind, status and market (country) are refreshed.'
+      their active organisation when they have none. seller.org.updated: name, kind, status and market (country) are refreshed.
+      S215: kind BOTH is mirrored as an organisation whose members may hold seller.* or provider.* roles (owner role from
+      primaryKind); market is stored as content''s market code (ISO 3166-1 alpha-2, UK → GB), other values are not stored.'
   publishIndexerDeadLetters:
     action: send
     channel:
@@ -7950,8 +7972,13 @@ operations:
     action: receive
     channel:
       $ref: '#/channels/carrierShipmentEvents'
-    summary: orders consumes carrier.tracking.updated (inbox-deduplicated, idempotent per carrier event id) and applies the
-      transit steps to carrier shipments; scans older than the last applied one are ignored.
+    summary: 'orders consumes carrier.tracking.updated (inbox-deduplicated, idempotent per carrier event id) and applies the
+      transit steps to carrier shipments; scans older than the last applied one are ignored. carrier.pickup.ready (S219, same
+      topic, inbox-deduplicated): orderRef names the order (id or number) or one shipment; the order''s pickup shipments (delivery
+      method PICKUP, matching pickup location when both are set, customerRef equal to the order''s customer) that are confirmed
+      or packed move to ready with actor PICKUP_POINT and source carrier (which also triggers the pickup capture); shipments
+      already ready or further along are left as they are. Every transition is published as orders.shipment.status_changed
+      and pushed to GET /v1/shipments/stream on every replica through Valkey pub/sub (channel at:orders:shipment-status).'
   consumePaymentsSellerComplianceEvents:
     action: receive
     channel:
@@ -8029,6 +8056,14 @@ operations:
       refreshes the seller display name on indexed documents (and its directory, which it warms on start from GET /v1/orgs/directory,
       scope sellers:directory), cart refreshes it; identity mirrors name, status and market. Also published when Trust and
       Safety suspends (status SUSPENDED) or reinstates (status back to APPROVED) an organisation.'
+  receiveSellerIdentityRoleEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/identityEvents'
+    summary: 'S236: seller-service (consumer group seller-service, inbox-deduplicated) keeps its org_member list consistent
+      with identity, the source of truth for organisation members. identity.role.granted with orgId adds the member or changes
+      its role (unless the stored row is newer); identity.role.revoked with orgId removes the member while it still holds
+      that role. Organisations seller does not know and roles without orgId are ignored.'
   publishSellerComplianceEvents:
     action: send
     channel:

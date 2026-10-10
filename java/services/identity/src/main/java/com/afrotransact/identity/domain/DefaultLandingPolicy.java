@@ -49,11 +49,11 @@ public class DefaultLandingPolicy implements LandingPolicy {
 
     private static Landing orgLanding(AccessProfile profile, OrgKind kind, String applicantRole, Landing approved,
                                       Landing onboarding) {
-        boolean hasApproved = profile.memberships().stream().anyMatch(m -> m.kind() == kind && m.approved());
+        boolean hasApproved = profile.memberships().stream().anyMatch(m -> m.kind().actsAs(kind) && m.approved());
         if (hasApproved) {
             return approved;
         }
-        boolean pending = profile.memberships().stream().anyMatch(m -> m.kind() == kind);
+        boolean pending = profile.memberships().stream().anyMatch(m -> m.kind().actsAs(kind));
         if (pending || profile.holdsRole(applicantRole)) {
             return onboarding;
         }

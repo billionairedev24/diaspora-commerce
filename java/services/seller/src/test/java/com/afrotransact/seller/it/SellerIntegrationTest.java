@@ -60,6 +60,7 @@ import tools.jackson.databind.json.JsonMapper;
     "at.events.relay-enabled=false",
     "spring.kafka.bootstrap-servers=localhost:1",
     "at.seller.jobs.enabled=false",
+    "at.seller.consumers.enabled=false",
     "at.seller.stripe.secret-key=sk_test_seller_it",
     "at.seller.stripe.connect-webhook-secret=" + SellerIntegrationTest.CONNECT_SECRET,
     "at.seller.stripe.billing-webhook-secret=" + SellerIntegrationTest.BILLING_SECRET,
@@ -92,6 +93,9 @@ abstract class SellerIntegrationTest {
         registry.add("at.seller.stripe.api-base", STRIPE::baseUrl);
         registry.add("at.seller.stripe.files-base", STRIPE::baseUrl);
         registry.add("at.seller.media.base-url", STRIPE::baseUrl);
+        registry.add("at.seller.metering.inventory-url", STRIPE::baseUrl);
+        registry.add("at.seller.metering.content-url", STRIPE::baseUrl);
+        registry.add("at.seller.metering.ai-url", STRIPE::baseUrl);
     }
 
     JdbcClient jdbc;
@@ -134,9 +138,14 @@ abstract class SellerIntegrationTest {
 
     /** Drives an application through onboarding and both review steps; returns the approved org id. */
     String approvedSeller(String user, String planCode, Cadence cadence) {
+        return approvedSeller(user, planCode, cadence, Offering.PRODUCTS);
+    }
+
+    /** Same, offering products or products and services (S215: BOTH). */
+    String approvedSeller(String user, String planCode, Cadence cadence, Offering offering) {
         TestActors.as(TestActors.applicant(user));
         onboarding.start(OrgKind.SELLER);
-        onboarding.saveStep(OnboardingStep.BUSINESS, StepInput.business(new BusinessSection(Offering.PRODUCTS,
+        onboarding.saveStep(OnboardingStep.BUSINESS, StepInput.business(new BusinessSection(offering,
                 EntityType.SINGLE_MEMBER_LLC, "US", "Store " + user, user + "@example.com", "+17132490142", null)));
         onboarding.saveStep(OnboardingStep.BUSINESS_DETAILS, StepInput.businessDetails(new BusinessDetailsInput(null,
                 null, "Store " + user + " LLC", null, "12-3456789", null, "TX", LocalDate.of(2020, 1, 1), ADDRESS,
@@ -149,8 +158,11 @@ abstract class SellerIntegrationTest {
                 "Chase", "021000021", "000123456789", "000123456789", null)));
         onboarding.saveStep(OnboardingStep.PLAN, StepInput.plan(new PlanSection(planCode, cadence,
                 PaymentMethodKind.CARD, "pm_card_" + user.replace("-", ""), "visa", "4242", 12, 2030)));
+        List<ComplianceSection.ServiceLicence> services = offering.includesServices()
+                ? List.of(new ComplianceSection.ServiceLicence("Gele tying", false, null, null, null, null))
+                : List.of();
         onboarding.saveStep(OnboardingStep.CATALOG_COMPLIANCE, StepInput.compliance(new ComplianceSection(
-                List.of("fashion"), null, null, List.of(), null, true, true, "Ade")));
+                List.of("fashion"), null, null, services, null, true, true, "Ade")));
         ApplicationView submitted = onboarding.submit();
         String appId = submitted.application().id();
         TestActors.as(TestActors.staff("reviewer-" + user, SellerPermissions.APPLICATIONS_REVIEW));

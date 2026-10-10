@@ -13,6 +13,8 @@ public final class InventoryPermissions {
     public static final String RETURNS = "inventory:returns";
     /** Reserve / confirm / commit / release; only SERVICE principals (orders service) hold it. */
     public static final String RESERVE = "inventory:reserve";
+    /** Read daily FBA storage volume of every owner; SERVICE principals (seller-service metered billing, S206). */
+    public static final String STORAGE_READ = "inventory:storage.read";
 
     private InventoryPermissions() {
     }

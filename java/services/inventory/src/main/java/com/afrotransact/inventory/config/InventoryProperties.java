@@ -1,5 +1,6 @@
 package com.afrotransact.inventory.config;
 
+import java.math.BigDecimal;
 import java.time.Duration;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -12,10 +13,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param fefoMinRemainingDays FEFO skips lots expiring within this many days
  * @param shelfLife            receipt short-dated rule
  * @param jobs                 scheduled job settings
+ * @param storage              FBA storage metering
  */
 @ConfigurationProperties(prefix = "at.inventory")
 public record InventoryProperties(String retailOrgId, Duration reservationTtl, Integer fefoMinRemainingDays,
-                                  ShelfLife shelfLife, Jobs jobs) {
+                                  ShelfLife shelfLife, Jobs jobs, Storage storage) {
 
     public InventoryProperties {
         retailOrgId = retailOrgId == null ? "org_afrotransact_retail" : retailOrgId;
@@ -23,6 +25,15 @@ public record InventoryProperties(String retailOrgId, Duration reservationTtl, I
         fefoMinRemainingDays = fefoMinRemainingDays == null ? 7 : fefoMinRemainingDays;
         shelfLife = shelfLife == null ? new ShelfLife(null, null) : shelfLife;
         jobs = jobs == null ? new Jobs(null, null) : jobs;
+        storage = storage == null ? new Storage(null) : storage;
+    }
+
+    /** FBA storage metering: volume billed for a unit whose SKU has no dimensions yet (default 0.25 ft³). */
+    public record Storage(BigDecimal defaultUnitCubicFeet) {
+
+        public Storage {
+            defaultUnitCubicFeet = defaultUnitCubicFeet == null ? new BigDecimal("0.25") : defaultUnitCubicFeet;
+        }
     }
 
     /** Short-dated rule: remaining life below max(minDays, minFraction × shelf life) is quarantined. */

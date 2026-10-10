@@ -32,6 +32,12 @@ spring:
           issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
   # Temporal (temporal-spring-boot-starter). The checkout worker polls task queue "orders-checkout" in the namespace
   # of the environment. Cloud environments add mTLS (Temporal Cloud) in application-<env>.yml.
+  data:
+    redis:
+      # Valkey: live shipment feed fan-out across replicas (S219).
+      url: ${REDIS_URL:redis://localhost:6379}
+      timeout: ${REDIS_TIMEOUT:500ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:1s}
   temporal:
     connection:
       target: ${TEMPORAL_TARGET:localhost:7233}
@@ -46,6 +52,10 @@ server:
   shutdown: graceful
 
 management:
+  health:
+    redis:
+      # The live feed degrades to this replica when Valkey is down; that must not take the pod out of service.
+      enabled: false
   endpoints:
     web:
       exposure:
@@ -87,6 +97,10 @@ at:
   events:
     relay-enabled: true
   orders:
+    live-feed:
+      # valkey: every replica's SSE subscribers get every transition (pub/sub); local: this replica only.
+      fanout: ${LIVE_FEED_FANOUT:valkey}
+      channel: ${LIVE_FEED_CHANNEL:at:orders:shipment-status}
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
     # How long checkout waits for the payment authorisation; matches inventory's reservation TTL.
     payment-timeout: ${CHECKOUT_PAYMENT_TIMEOUT:15m}

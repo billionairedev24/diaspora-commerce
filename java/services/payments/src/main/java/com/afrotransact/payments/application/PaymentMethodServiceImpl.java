@@ -65,6 +65,25 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
     }
 
     @Override
+    public EphemeralKeyResult createEphemeralKey(String stripeVersion, String idempotencyKey) {
+        String customerId = access.customer().subject();
+        String version = stripeVersion == null || stripeVersion.isBlank() ? DEFAULT_EPHEMERAL_KEY_VERSION
+                : stripeVersion.trim();
+        if (!version.matches("\\d{4}-\\d{2}-\\d{2}(\\.[a-z]+)?")) {
+            throw new PaymentsRuleViolation("payments.invalid-request", "Unknown Stripe API version",
+                    Map.of("stripeVersion", "Expected a Stripe API version such as 2025-08-27.basil"));
+        }
+        return tx.serializable(() -> {
+            StripeCustomer customer = ensureCustomer(customerId);
+            String key = "ephemeral-key:" + customerId + ":" + (idempotencyKey == null || idempotencyKey.isBlank()
+                    ? UUID.randomUUID() : idempotencyKey);
+            StripeGateway.EphemeralKeySnapshot k = stripe.createEphemeralKey(customer.stripeCustomerId(), version,
+                    key);
+            return new EphemeralKeyResult(customer.stripeCustomerId(), k.secret(), k.expiresAt());
+        });
+    }
+
+    @Override
     public WalletMethod setDefault(String paymentMethodId) {
         String customerId = access.customer().subject();
         return tx.serializable(() -> {

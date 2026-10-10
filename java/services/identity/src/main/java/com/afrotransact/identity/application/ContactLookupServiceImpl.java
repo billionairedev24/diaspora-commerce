@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import com.afrotransact.identity.domain.MarketCodes;
 import com.afrotransact.identity.domain.NotificationPreferences;
 import com.afrotransact.identity.domain.PostalAddress;
 import com.afrotransact.identity.domain.PushApp;
@@ -78,8 +79,8 @@ class ContactLookupServiceImpl implements ContactLookupService {
         String fromAddress = addresses.findByUser(u.id()).stream()
                 .max(Comparator.comparing(PostalAddress::isDefault).thenComparing(PostalAddress::updatedAt))
                 .map(PostalAddress::country).orElse(null);
-        if (fromAddress != null) {
-            return fromAddress;
+        if (MarketCodes.normalise(fromAddress) != null) {
+            return MarketCodes.normalise(fromAddress);
         }
         return u.activeOrgId() == null ? null : orgs.findById(u.activeOrgId()).map(o -> o.market()).orElse(null);
     }

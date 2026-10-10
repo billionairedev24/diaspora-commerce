@@ -19,7 +19,11 @@ final class MeDtos {
     }
 
     @Schema(name = "Org")
-    record OrgResponse(String id, String kind, String name, String status, String role) {
+    record OrgResponse(String id,
+                       @Schema(allowableValues = {"SELLER", "PROVIDER", "BOTH"},
+                               description = "BOTH: sells products and offers services (Seller Center shows both "
+                                       + "the seller and provider navigation groups)") String kind,
+                       String name, String status, String role) {
 
         static OrgResponse of(OrgMembership m) {
             return new OrgResponse(m.orgId(), m.kind().name(), m.orgName(), m.status().name(), m.roleKey());

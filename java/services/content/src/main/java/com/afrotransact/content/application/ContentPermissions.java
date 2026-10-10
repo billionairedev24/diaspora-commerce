@@ -30,6 +30,8 @@ public final class ContentPermissions {
     public static final String ADS_MANAGE = "ads:manage";
     /** Service scope of search-service: read the campaigns eligible to serve. */
     public static final String ADS_SERVE = "ads:serve";
+    /** Service scope of seller-service: read charged ads spend per organisation and day (metered billing, S206). */
+    public static final String ADS_SPEND_READ = "ads:spend.read";
 
     private ContentPermissions() {
     }

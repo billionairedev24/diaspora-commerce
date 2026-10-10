@@ -5,6 +5,7 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import com.afrotransact.orders.port.LocalShipmentFeed;
 import com.afrotransact.orders.port.ShipmentFeed;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -12,11 +13,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * Live shipment status feed over server-sent events for the staff console (all shipments) and the seller center (own
- * organisation). In-process: each replica pushes the transitions it applied; behind several replicas the console
- * reconnects and re-reads (or a Kafka fan-out of orders.shipment.status_changed replaces this).
+ * organisation): the subscribers of this replica. Every transition reaches every replica through the
+ * {@link ShipmentFeed} adapter (Valkey pub/sub fan-out, S219), which delivers it here.
  */
 @Component
-class SseShipmentFeed implements ShipmentFeed {
+class SseShipmentFeed implements LocalShipmentFeed {
 
     private static final Duration TIMEOUT = Duration.ofMinutes(30);
 
@@ -41,7 +42,7 @@ class SseShipmentFeed implements ShipmentFeed {
     }
 
     @Override
-    public void publish(Update update) {
+    public void deliver(ShipmentFeed.Update update) {
         for (Subscriber s : subscribers) {
             if (s.orgId().isPresent() && !s.orgId().get().equals(update.sellerOrgId())) {
                 continue;

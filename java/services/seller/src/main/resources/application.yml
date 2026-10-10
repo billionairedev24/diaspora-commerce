@@ -20,6 +20,12 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    consumer:
+      group-id: ${KAFKA_GROUP:seller-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
   mvc:
     problemdetails:
       enabled: true
@@ -96,10 +102,26 @@ at:
     media:
       base-url: ${MEDIA_BASE_URL:http://localhost:8207}
       service-token: ${MEDIA_SERVICE_TOKEN:}
+    consumers:
+      # identity.role.granted / revoked (S236: org_member mirrors identity). Off in tests without a broker.
+      enabled: ${SELLER_CONSUMERS_ENABLED:true}
+      identity-topic: ${IDENTITY_EVENTS_TOPIC:at.identity.events}
+    # S206 metered billing: usage sources (service token of the seller-service client, scopes
+    # inventory:storage.read ads:spend.read ai:usage.read) and the daily metering run.
+    metering:
+      inventory-url: ${INVENTORY_URL:http://localhost:8103}
+      content-url: ${CONTENT_URL:http://localhost:8112}
+      ai-url: ${AI_GATEWAY_URL:http://localhost:8113}
+      token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
+      client-id: ${SELLER_SERVICE_CLIENT_ID:seller-service}
+      client-secret: ${SELLER_SERVICE_CLIENT_SECRET:}
+      timeout: ${METERING_TIMEOUT:10s}
     jobs:
       enabled: ${SELLER_JOBS_ENABLED:true}
       # Hourly: reminders 7/3/1 days before current_deadline (idempotent per threshold).
       reminder-cron: ${REMINDER_CRON:0 15 * * * *}
       plan-change-cron: ${PLAN_CHANGE_CRON:0 5 * * * *}
       activation-retry-interval: ${ACTIVATION_RETRY_INTERVAL:10m}
+      # Daily: meters the two previous UTC days (late usage is picked up; re-runs only send differences).
+      metering-cron: ${METERING_CRON:0 20 1 * * *}
       zone: ${JOBS_ZONE:UTC}

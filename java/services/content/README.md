@@ -102,7 +102,7 @@ Back office (JWT): `/v1/slots`, `/v1/placements[/{id}[/submit|/approve|/reject|/
 `/v1/consent/cookies/{name}`, `/v1/flags[/{key}[/kill-switch]]`, `/v1/careers/admin/jobs`, `POST|PUT /v1/careers/jobs`,
 `/v1/careers/applications`, `/v1/audit`, `/v1/ads/campaigns[/{id}[/pause|/resume|/end|/report]]` (sellers with
 `ads:manage` for their organisation, staff with `content:ads.view|edit`). Service: `GET /v1/ads/serving?market=`
-(`ads:serve`, search-service).
+(`ads:serve`, search-service). `GET /v1/ads/spend?from=&to=` (scope `ads:spend.read`, seller-service metered billing S206; staff `content:ads.view|edit`): charged spend per organisation, UTC day and currency.
 
 Permissions (edit implies view): `content:placements.view|edit|approve`, `content:markets.view|edit`,
 `content:site.view|edit`, `content:legal.view|edit`, `content:flags.view|edit`, `content:careers.view|edit`,

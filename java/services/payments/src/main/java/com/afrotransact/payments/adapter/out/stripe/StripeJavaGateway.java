@@ -15,6 +15,7 @@ import com.stripe.exception.StripeException;
 import com.stripe.model.BalanceTransaction;
 import com.stripe.model.Charge;
 import com.stripe.model.Customer;
+import com.stripe.model.EphemeralKey;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethod;
 import com.stripe.model.Payout;
@@ -28,6 +29,7 @@ import com.stripe.param.BalanceTransactionListParams;
 import com.stripe.param.ChargeCreateParams;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerUpdateParams;
+import com.stripe.param.EphemeralKeyCreateParams;
 import com.stripe.param.PaymentIntentCancelParams;
 import com.stripe.param.PaymentIntentCaptureParams;
 import com.stripe.param.PaymentIntentCreateParams;
@@ -224,6 +226,18 @@ class StripeJavaGateway implements StripeGateway {
         return call(() -> {
             Customer c = client.v1().customers().create(params, key(idempotencyKey));
             return c.getId();
+        });
+    }
+
+    @Override
+    public EphemeralKeySnapshot createEphemeralKey(String stripeCustomerId, String stripeVersion,
+                                                   String idempotencyKey) {
+        EphemeralKeyCreateParams params = EphemeralKeyCreateParams.builder().setCustomer(stripeCustomerId)
+                .setStripeVersion(stripeVersion).build();
+        return call(() -> {
+            EphemeralKey k = client.v1().ephemeralKeys().create(params, key(idempotencyKey));
+            return new EphemeralKeySnapshot(k.getId(), k.getSecret(),
+                    k.getExpires() == null ? null : Instant.ofEpochSecond(k.getExpires()));
         });
     }
 

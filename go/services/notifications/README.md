@@ -191,7 +191,7 @@ publishes a reminder event) and `stock.back_in_stock`, each as the next version 
 staff-created version. `order.confirmed` and `shipment.out_for_delivery` get a new version because the real payloads
 carry no first name, formatted total or handover code: the ingest derives `firstName` (identity, else "there"),
 `total`/`amount` (minor units + currency), `itemCount`, `estimatedDelivery`, `trackingLine`, `refundNote`,
-`itemsText`, `deadline` and links (`orderUrl`, `portalUrl`, `actionUrl`, `productUrl`) from `links.*` config. `0005`
+`itemsText`, `deadline` and links (`orderUrl`, `portalUrl`, `actionUrl`, `productUrl`) from `links.*` config. `programName` / `portalUrl` come from the organisation kind (`domain.OrgKind`, S215): `PROVIDER` → Provider Hub; `SELLER` and `BOTH` (sells products and services) → Seller Center — for seller applications (`kind`) and organisation invitations (`orgKind`). `0005`
 adds the S230 trust-ops templates (claims, moderation, suspension), `org.invitation`, `identity.verification.phone`,
 the suspension / reinstatement variants of the seller enforcement templates, `booking.balance_unpaid` and
 `payment.authentication_required`; for those the ingest derives `claimType`, `amount`, `dueDate`, `outcomeText`,

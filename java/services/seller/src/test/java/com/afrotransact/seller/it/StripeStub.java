@@ -57,6 +57,11 @@ final class StripeStub {
                 .willReturn(json(subscription("{{request.pathSegments.[2]}}", "active"))));
         wm.stubFor(WireMock.delete(WireMock.urlPathMatching("/v1/subscriptions/sub_[A-Za-z0-9]+"))
                 .willReturn(json(subscription("{{request.pathSegments.[2]}}", "canceled"))));
+        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/billing/meter_events"))
+                .willReturn(json("{\"object\":\"billing.meter_event\",\"event_name\":\"x\","
+                        + "\"identifier\":\"x\",\"payload\":{},\"timestamp\":0,\"livemode\":false}")));
+        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/subscription_items"))
+                .willReturn(json("{\"id\":\"si_" + RANDOM + "\",\"object\":\"subscription_item\"}")));
         wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/assets/[A-Za-z0-9-]+"))
                 .willReturn(json("{\"id\":\"{{request.pathSegments.[2]}}\",\"fileName\":\"document.pdf\","
                         + "\"contentType\":\"application/pdf\",\"status\":\"READY\","

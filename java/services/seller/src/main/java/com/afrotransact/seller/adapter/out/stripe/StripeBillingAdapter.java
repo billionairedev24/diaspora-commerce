@@ -1,5 +1,6 @@
 package com.afrotransact.seller.adapter.out.stripe;
 
+import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -11,12 +12,15 @@ import com.stripe.model.Customer;
 import com.stripe.model.Price;
 import com.stripe.model.StripeCollection;
 import com.stripe.model.Subscription;
+import com.stripe.model.SubscriptionItem;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerUpdateParams;
 import com.stripe.param.PaymentMethodAttachParams;
 import com.stripe.param.PriceListParams;
+import com.stripe.param.billing.MeterEventCreateParams;
 import com.stripe.param.SubscriptionCreateParams;
+import com.stripe.param.SubscriptionItemCreateParams;
 import com.stripe.param.SubscriptionUpdateParams;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -99,6 +103,27 @@ public class StripeBillingAdapter implements StripeBillingGateway {
     @Override
     public SubscriptionSnapshot cancelNow(String subscriptionId) {
         return snapshot(StripeCalls.call("cancellation", () -> client.v1().subscriptions().cancel(subscriptionId)));
+    }
+
+    @Override
+    public void reportMeterEvent(String eventName, String customerId, long value, String identifier,
+                                 Instant timestamp) {
+        MeterEventCreateParams params = MeterEventCreateParams.builder().setEventName(eventName)
+                .setIdentifier(identifier).setTimestamp(timestamp.getEpochSecond())
+                .putPayload("stripe_customer_id", customerId).putPayload("value", Long.toString(value))
+                .build();
+        RequestOptions options = RequestOptions.builder().setIdempotencyKey("meter-" + identifier).build();
+        StripeCalls.call("meter event", () -> client.v1().billing().meterEvents().create(params, options));
+    }
+
+    @Override
+    public String addSubscriptionItem(String subscriptionId, String lookupKey, String idempotencyKey) {
+        SubscriptionItemCreateParams params = SubscriptionItemCreateParams.builder().setSubscription(subscriptionId)
+                .setPrice(price(lookupKey)).putMetadata("metered_lookup_key", lookupKey).build();
+        RequestOptions options = RequestOptions.builder().setIdempotencyKey(idempotencyKey).build();
+        SubscriptionItem item = StripeCalls.call("metered subscription item",
+                () -> client.v1().subscriptionItems().create(params, options));
+        return item.getId();
     }
 
     private String price(String lookupKey) {

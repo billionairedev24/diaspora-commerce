@@ -81,6 +81,20 @@ class IdentityFlowIT {
     }
 
     @Test
+    void bothOrganisationsAndContentMarketCodesAreMirrored() {
+        String orgId = "org_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+        assertThat(sellerOrgs.approved(new SellerOrgChange(UUID.randomUUID(), orgId, "BOTH", "PROVIDER",
+                "Ama Studio LLC", "Ama's", "uk", "APPROVED", List.of(), null, Instant.now()))).isTrue();
+        assertThat(jdbc.sql("select kind || ' ' || market from organization where id = :o").param("o", orgId)
+                .query(String.class).single()).isEqualTo("BOTH GB");
+        // A country that is not a market code leaves the stored market as it was.
+        assertThat(sellerOrgs.updated(new SellerOrgChange(UUID.randomUUID(), orgId, "BOTH", "PROVIDER", null,
+                "Ama's", "Texas", "APPROVED", List.of(), null, Instant.now()))).isTrue();
+        assertThat(jdbc.sql("select market from organization where id = :o").param("o", orgId)
+                .query(String.class).single()).isEqualTo("GB");
+    }
+
+    @Test
     void servesDiscoveryAndJwks() {
         BrowserSession s = new BrowserSession(base());
         JsonNode discovery = BrowserSession.json(s.get(base() + "/.well-known/openid-configuration").body());
@@ -235,8 +249,8 @@ class IdentityFlowIT {
 
         String orgId = "org_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
         UUID eventId = UUID.randomUUID();
-        SellerOrgChange approved = new SellerOrgChange(eventId, orgId, "SELLER", "Bisi Foods LLC", "Bisi's Pantry",
-                "us", "APPROVED", List.of(userId), userId, Instant.parse("2026-10-01T10:00:00Z"));
+        SellerOrgChange approved = new SellerOrgChange(eventId, orgId, "SELLER", "SELLER", "Bisi Foods LLC",
+                "Bisi's Pantry", "us", "APPROVED", List.of(userId), userId, Instant.parse("2026-10-01T10:00:00Z"));
         assertThat(sellerOrgs.approved(approved)).isTrue();
         assertThat(sellerOrgs.approved(approved)).as("redelivery is a no-op").isFalse();
         assertThat(jdbc.sql("select count(*) from org_membership where org_id = :o and role_key = 'seller.owner'")
@@ -252,11 +266,11 @@ class IdentityFlowIT {
         assertThat(strings(after.accessClaims().get("perms"))).contains("catalog:write");
         assertThat(landing(s, after.accessToken())).isEqualTo("seller-center");
 
-        assertThat(sellerOrgs.updated(new SellerOrgChange(UUID.randomUUID(), orgId, "SELLER", "Bisi Foods LLC",
+        assertThat(sellerOrgs.updated(new SellerOrgChange(UUID.randomUUID(), orgId, "SELLER", null, "Bisi Foods LLC",
                 "Bisi's Kitchen", "US", "APPROVED", List.of(userId), null, Instant.now()))).isTrue();
         assertThat(jdbc.sql("select name from organization where id = :o").param("o", orgId)
                 .query(String.class).single()).isEqualTo("Bisi's Kitchen");
-        assertThat(sellerOrgs.updated(new SellerOrgChange(UUID.randomUUID(), orgId, "SELLER", null, null, null,
+        assertThat(sellerOrgs.updated(new SellerOrgChange(UUID.randomUUID(), orgId, "SELLER", null, null, null, null,
                 "SUSPENDED", List.of(), null, Instant.now()))).isTrue();
         Tokens suspended = s.refreshPublic(STOREFRONT, after.refreshToken());
         assertThat(suspended.accessClaims().get("org").asString()).isEqualTo(orgId);

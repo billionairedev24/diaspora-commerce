@@ -83,6 +83,17 @@ public interface StripeGateway {
     /** Sets {@code invoice_settings.default_payment_method} of the customer. */
     void setDefaultPaymentMethod(String stripeCustomerId, String paymentMethodId, String idempotencyKey);
 
+    /**
+     * Ephemeral key of a Stripe Customer for the mobile PaymentSheet (S241).
+     *
+     * @param stripeVersion the Stripe API version the mobile SDK asked for
+     */
+    EphemeralKeySnapshot createEphemeralKey(String stripeCustomerId, String stripeVersion, String idempotencyKey);
+
+    /** An ephemeral key: the secret is handed to the shopper's app only. */
+    record EphemeralKeySnapshot(String id, String secret, Instant expiresAt) {
+    }
+
     /** A SetupIntent. */
     record SetupIntentSnapshot(String id, String clientSecret, String status) {
     }

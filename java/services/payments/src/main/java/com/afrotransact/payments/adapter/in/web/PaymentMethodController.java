@@ -2,9 +2,12 @@ package com.afrotransact.payments.adapter.in.web;
 
 import java.util.List;
 
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.EphemeralKeyRequest;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.EphemeralKeyResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PaymentMethodResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.SetupIntentRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.SetupIntentResponse;
+import com.afrotransact.payments.application.EphemeralKeyResult;
 import com.afrotransact.payments.application.PaymentMethodService;
 import com.afrotransact.payments.application.SetupIntentResult;
 import io.swagger.v3.oas.annotations.Operation;
@@ -46,6 +49,19 @@ class PaymentMethodController {
                                     @RequestBody(required = false) SetupIntentRequest body) {
         SetupIntentResult r = methods.createSetupIntent(body == null ? List.of() : body.types(), idempotencyKey);
         return new SetupIntentResponse(r.setupIntentId(), r.clientSecret(), r.status());
+    }
+
+    @Operation(summary = "PaymentSheet: ephemeral key for the shopper's Stripe Customer (shopper token)",
+            description = "Returns {customerId, ephemeralKeySecret, expiresAt} for the Stripe Customer linked to the "
+                    + "signed-in shopper, creating the customer on first use. gateway-bff's POST "
+                    + "/v1/account/payment-sheet calls it with the shopper's token. Optional Idempotency-Key.")
+    @PostMapping("/v1/customers/me/ephemeral-keys")
+    @ResponseStatus(HttpStatus.CREATED)
+    EphemeralKeyResponse ephemeralKey(@RequestHeader(value = PaymentController.IDEMPOTENCY_KEY, required = false)
+                                      String idempotencyKey,
+                                      @RequestBody(required = false) EphemeralKeyRequest body) {
+        EphemeralKeyResult r = methods.createEphemeralKey(body == null ? null : body.stripeVersion(), idempotencyKey);
+        return new EphemeralKeyResponse(r.customerId(), r.ephemeralKeySecret(), r.expiresAt());
     }
 
     @Operation(summary = "Make a saved method the default")

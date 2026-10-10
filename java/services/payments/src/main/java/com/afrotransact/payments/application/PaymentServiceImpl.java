@@ -39,6 +39,8 @@ import com.afrotransact.payments.port.StripeGateway.BalanceTxn;
 import com.afrotransact.payments.port.StripeGateway.IntentSnapshot;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
+import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
 
@@ -167,8 +169,33 @@ class PaymentServiceImpl implements PaymentService {
 
     @Override
     public Payment getByOrder(String orderId) {
+        Actor actor = access.current();
+        if (actor.type() == PrincipalType.CUSTOMER) {
+            // S241: shoppers read only their own orders' payments; staff and services keep their access below.
+            Payment p = payments.findByOrderId(orderId).orElseThrow(() -> notFound(orderId));
+            if (!ownedBy(p, actor.subject())) {
+                throw new ForbiddenActionException("payments.not-your-order",
+                        "This order's payment belongs to another customer");
+            }
+            return p;
+        }
         access.reader();
         return payments.findByOrderId(orderId).orElseThrow(() -> notFound(orderId));
+    }
+
+    /**
+     * The shopper owns the payment when the order's customer id (metadata {@code customer_id} from orders, or
+     * {@code afrotransact_customer_id}) is the token subject, or the payment's Stripe Customer is the shopper's.
+     */
+    private boolean ownedBy(Payment p, String subject) {
+        if (subject == null || subject.isBlank()) {
+            return false;
+        }
+        if (subject.equals(p.metadata().get("customer_id")) || subject.equals(p.metadata()
+                .get("afrotransact_customer_id")) || subject.equals(p.customerId())) {
+            return true;
+        }
+        return p.customerId() != null && wallet.stripeCustomerOf(subject).map(p.customerId()::equals).orElse(false);
     }
 
     @Override

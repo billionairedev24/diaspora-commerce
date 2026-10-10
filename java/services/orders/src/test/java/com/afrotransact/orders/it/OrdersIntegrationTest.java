@@ -58,6 +58,7 @@ import tools.jackson.databind.json.JsonMapper;
     "spring.kafka.bootstrap-servers=localhost:1",
     "at.orders.consumers.enabled=false",
     "at.orders.jobs.enabled=false",
+    "at.orders.live-feed.fanout=local",
     "at.orders.checkout-response-timeout=15s",
     "at.orders.oauth.client-secret=test-orders-secret",
     "at.orders.upstreams.timeout=3s",

@@ -91,8 +91,15 @@ class ModelAccessServiceImpl implements ModelAccessService {
     private void record(Caller caller, AiFeature feature, TaskType task, String model, TokenUsage usage,
                         boolean degraded, boolean fallback) {
         long cost = prices.costMicros(model, usage);
-        ledger.record(new UsageLedger.Entry(caller.subject(), feature.key(), task.name(), model, usage, cost, degraded,
-                fallback, Instant.now(clock)));
+        ledger.record(new UsageLedger.Entry(caller.subject(), billableOrg(caller), feature.key(), task.name(), model,
+                usage, cost, degraded, fallback, Instant.now(clock)));
         metrics.usage(task.name(), model, usage, cost);
+    }
+
+    /** Seller and provider members are billed to the organisation they act for (AI credits, S206). */
+    static String billableOrg(Caller caller) {
+        boolean member = "SELLER_MEMBER".equals(caller.principalType())
+                || "PROVIDER_MEMBER".equals(caller.principalType());
+        return member && caller.orgId() != null && !caller.orgId().isBlank() ? caller.orgId() : null;
     }
 }

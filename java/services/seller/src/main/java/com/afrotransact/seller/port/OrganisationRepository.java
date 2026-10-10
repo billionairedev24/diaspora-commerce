@@ -1,5 +1,6 @@
 package com.afrotransact.seller.port;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,20 @@ public interface OrganisationRepository {
     Optional<Organisation> lock(String id);
 
     void addMember(OrgMember member);
+
+    /**
+     * Sets the member's role from identity (S236) unless the stored row is newer or already has that role.
+     *
+     * @return true when a row was created or its role changed
+     */
+    boolean syncMember(OrgMember member);
+
+    /**
+     * Removes the member when it still holds {@code roleKey} and was not changed after {@code at}.
+     *
+     * @return true when a row was deleted
+     */
+    boolean removeMember(String orgId, String userId, String roleKey, Instant at);
 
     Optional<OrgMember> findMember(String orgId, String userId);
 

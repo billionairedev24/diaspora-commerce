@@ -1,10 +1,15 @@
 package com.afrotransact.orders.application;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.orders.domain.ActorKind;
+import com.afrotransact.orders.domain.DeliveryMethod;
+import com.afrotransact.orders.domain.Order;
+import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.domain.TransitionActor;
 import com.afrotransact.orders.domain.TransitionDecision;
@@ -69,6 +74,74 @@ class CarrierEventServiceImpl implements CarrierEventService {
             LOG.warn("Carrier event for shipment {} refused: {}", shipmentId.get(), refused.getMessage());
             return Result.REFUSED;
         }
+    }
+
+    @Override
+    @Transactional
+    public Result pickupReady(UUID eventId, PickupReady notice) {
+        if (!inbox.firstDelivery(CONSUMER, eventId)) {
+            return Result.DUPLICATE;
+        }
+        Optional<Order> order = orderOf(notice.orderRef());
+        if (order.isEmpty()) {
+            LOG.info("Pickup-ready notice for {} matches no order", notice.orderRef());
+            return Result.UNMATCHED;
+        }
+        if (notice.customerRef() != null && !notice.customerRef().isBlank()
+                && !notice.customerRef().equals(order.get().customerId())) {
+            LOG.warn("Pickup-ready notice for order {} names another customer; ignored", order.get().number());
+            return Result.UNMATCHED;
+        }
+        boolean byShipment = order.get().shipments().stream().anyMatch(s -> s.id().equals(notice.orderRef()));
+        List<Shipment> candidates = new ArrayList<>();
+        for (Shipment s : order.get().shipments()) {
+            boolean named = !byShipment || s.id().equals(notice.orderRef());
+            boolean sameLocation = s.pickupLocationId() == null || notice.locationId() == null
+                    || s.pickupLocationId().equals(notice.locationId());
+            if (named && s.deliveryMethod() == DeliveryMethod.PICKUP && sameLocation) {
+                candidates.add(s);
+            }
+        }
+        if (candidates.isEmpty()) {
+            return Result.UNMATCHED;
+        }
+        String reason = "Ready for collection" + (notice.locationName() == null ? "" : " at " + notice.locationName());
+        int applied = 0;
+        int unchanged = 0;
+        for (Shipment s : candidates) {
+            try {
+                ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(s.id(),
+                        ShipmentStatus.READY, (o, sh) -> new TransitionActor(ActorKind.PICKUP_POINT,
+                        notice.locationId(), null), reason, TransitionSource.CARRIER, "pickup-ready:" + eventId,
+                        notice.readyAt(), null, null));
+                if (outcome.applied()) {
+                    applied++;
+                } else {
+                    unchanged++;
+                }
+            } catch (TransitionRefused refused) {
+                LOG.info("Pickup-ready notice for shipment {} not applied: {}", s.id(), refused.getMessage());
+            }
+        }
+        if (applied > 0) {
+            return Result.APPLIED;
+        }
+        return unchanged > 0 ? Result.UNCHANGED : Result.REFUSED;
+    }
+
+    private Optional<Order> orderOf(String ref) {
+        if (ref == null || ref.isBlank()) {
+            return Optional.empty();
+        }
+        String r = ref.trim();
+        if (isUuid(r)) {
+            Optional<Order> byId = orders.findById(r);
+            if (byId.isPresent()) {
+                return byId;
+            }
+            return orders.orderIdOfShipment(r).flatMap(orders::findById);
+        }
+        return orders.findByNumber(r.toUpperCase(Locale.ROOT));
     }
 
     private Optional<String> match(Scan scan) {

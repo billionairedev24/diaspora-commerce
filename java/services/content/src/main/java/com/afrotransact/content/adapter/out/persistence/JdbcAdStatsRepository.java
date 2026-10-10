@@ -127,6 +127,22 @@ class JdbcAdStatsRepository implements AdStatsRepository {
     }
 
     @Override
+    public List<OrgDaySpend> spendByOrg(LocalDate from, LocalDate to) {
+        return jdbc.sql("""
+                select k.seller_org_id, d.day, k.currency, sum(d.clicks) as clicks, sum(d.spend_minor) as spend
+                from ad_campaign_daily d join ad_campaign k on k.id = d.campaign_id
+                where d.day between :from and :to
+                group by k.seller_org_id, d.day, k.currency
+                having sum(d.spend_minor) > 0
+                order by k.seller_org_id, d.day, k.currency
+                """)
+                .param("from", Date.valueOf(from)).param("to", Date.valueOf(to))
+                .query((rs, n) -> new OrgDaySpend(rs.getString("seller_org_id"), rs.getDate("day").toLocalDate(),
+                        rs.getString("currency"), rs.getLong("clicks"), rs.getLong("spend")))
+                .list();
+    }
+
+    @Override
     public List<CampaignDay> days(String campaignId, LocalDate from, LocalDate to) {
         return jdbc.sql("""
                 select day, impressions, clicks, spend_minor, attributed_orders, attributed_sales_minor

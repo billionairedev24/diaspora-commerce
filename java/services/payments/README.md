@@ -69,6 +69,7 @@ RFC 9457 problems with `code` `payments.*`. Reference pages `/swagger-ui.html`, 
 | Endpoint | Who |
 |---|---|
 | `POST /v1/payments` · `GET /v1/payments/{id}?refresh=` · `GET /v1/payments?orderId=` | orders (SERVICE, `payments:service`, Idempotency-Key) |
+| `GET /v1/payments?orderId=` (S241) | also the order's shopper (CUSTOMER token whose subject is the order's `customer_id` metadata or owns its Stripe Customer); other shoppers get `403 payments.not-your-order`; staff `payments:read` and services unchanged |
 | `POST /v1/payments/{id}/capture` · `/cancel` · `/refunds` · `GET …/captures` · `…/refunds` | orders, bookings |
 | `POST /v1/payments/{id}/release` (Idempotency-Key) | bookings (`payments:service`): release the uncaptured rest after a deposit capture |
 | `POST /v1/payments/{id}/off-session-charges` (Idempotency-Key) · `GET …/off-session-charges` | bookings (`payments:service`): charge lines on a saved card off-session |
@@ -82,6 +83,7 @@ RFC 9457 problems with `code` `payments.*`. Reference pages `/swagger-ui.html`, 
 | `GET /v1/reconciliation/runs` · `POST /v1/reconciliation/runs {date}` | `payments:read` / `payments:configure` |
 | `PUT/GET /v1/connected-accounts/{orgId}` | seller service or `payments:configure` |
 | `GET /v1/customers/me/payment-methods` · `POST /v1/customers/me/setup-intents` · `POST …/{id}/default` · `DELETE …/{id}` | the shopper (CUSTOMER token relayed by gateway-bff) |
+| `POST /v1/customers/me/ephemeral-keys {stripeVersion?}` → `{customerId, ephemeralKeySecret, expiresAt}` | the shopper: PaymentSheet (S241) for the shopper's Stripe Customer, created on first use; gateway-bff `POST /v1/account/payment-sheet` calls it |
 | `POST /v1/webhooks/stripe` | Stripe (public; `Stripe-Signature` verified) |
 
 Payout rules: minimum USD 25, one request per day (failed payouts don't count), never more than available, only

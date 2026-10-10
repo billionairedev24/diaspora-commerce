@@ -55,13 +55,18 @@ class OrgController {
     }
 
     @Schema(name = "Organisation")
-    record OrgResponse(String id, String kind, String legalName, String displayName, String country, String status,
+    record OrgResponse(String id,
+                       @Schema(description = "Onboarding portal (role prefix)", allowableValues = {"SELLER", "PROVIDER"})
+                       String kind,
+                       @Schema(description = "What the organisation sells; null until approved",
+                               allowableValues = {"PRODUCTS", "SERVICES", "BOTH"}) String offering,
+                       String legalName, String displayName, String country, String status,
                        List<MemberView> members, Instant createdAt, Instant updatedAt) {
 
         static OrgResponse of(OrgView v) {
             var o = v.organisation();
-            return new OrgResponse(o.id(), o.kind().name(), o.legalName(), o.displayName(), o.country(),
-                    o.status().name(), v.members().stream().map(OrgResponse::member).toList(), o.createdAt(),
+            return new OrgResponse(o.id(), o.kind().name(), o.offering() == null ? null : o.offering().name(),
+                    o.legalName(), o.displayName(), o.country(), o.status().name(), v.members().stream().map(OrgResponse::member).toList(), o.createdAt(),
                     o.updatedAt());
         }
 

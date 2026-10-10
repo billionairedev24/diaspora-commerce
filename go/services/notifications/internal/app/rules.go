@@ -364,16 +364,17 @@ func enrichShipmentCancelled(d map[string]any, l Links) {
 	}
 }
 
-var programNames = map[string]string{"SELLER": "Seller Center", "PROVIDER": "Provider Hub"}
-
-func enrichApplication(d map[string]any, l Links) {
-	kind := str(d, "kind")
-	d["programName"] = programNames["SELLER"]
+// portal sets programName and portalUrl from an organisation kind (S215: BOTH uses Seller Center).
+func portal(d map[string]any, l Links, kind domain.OrgKind) {
+	d["programName"] = kind.ProgramName()
 	d["portalUrl"] = l.SellerCenter
-	if kind == "PROVIDER" {
-		d["programName"] = programNames["PROVIDER"]
+	if kind.UsesProviderHub() {
 		d["portalUrl"] = l.ProviderHub
 	}
+}
+
+func enrichApplication(d map[string]any, l Links) {
+	portal(d, l, domain.ParseOrgKind(str(d, "kind")))
 	setDefault(d, "displayName", "your business")
 	d["requestedItemsText"] = humanList(stringList(d, "requestedItems"))
 	if d["requestedItemsText"] == "" {
@@ -445,8 +446,9 @@ func nullable(d map[string]any, keys ...string) {
 	}
 }
 
-func enrichInvitation(d map[string]any, _ Links) {
+func enrichInvitation(d map[string]any, l Links) {
 	nullable(d, "inviterName")
+	portal(d, l, domain.ParseOrgKind(str(d, "orgKind")))
 	setDefault(d, "inviterName", "A teammate")
 	setDefault(d, "orgName", "your team")
 	if _, ok := integer(d, "expiresInDays"); !ok {

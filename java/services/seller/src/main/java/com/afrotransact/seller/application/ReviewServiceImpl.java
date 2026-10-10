@@ -172,6 +172,9 @@ class ReviewServiceImpl implements ReviewService {
             String display = app.data().business() == null ? null : app.data().business().storeName();
             String country = app.data().business() == null ? null : app.data().business().country();
             next = next.withProfile(legal, display == null ? legal : display, country, now);
+            if (app.data().business() != null && app.data().business().offering() != null) {
+                next = next.withOffering(app.data().business().offering(), now);
+            }
         }
         return orgs.update(next);
     }

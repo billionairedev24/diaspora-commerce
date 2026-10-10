@@ -1506,6 +1506,7 @@ components:
           enum:
           - SELLER
           - PROVIDER
+          - BOTH
           minLength: 1
         name:
           type: string
@@ -1532,12 +1533,19 @@ components:
           - org_3k2j9x8q7w6e5r4t3y2u
         kind:
           type: string
+          enum:
+          - SELLER
+          - PROVIDER
+          - BOTH
         name:
           type: string
         status:
           type: string
         market:
           type: string
+          description: Market code as content-service defines it (ISO 3166-1 alpha-2)
+          examples:
+          - US
         updatedAt:
           type: string
           format: date-time
@@ -1688,6 +1696,12 @@ components:
           type: string
         kind:
           type: string
+          description: 'BOTH: sells products and offers services (Seller Center shows both the seller and provider navigation
+            groups)'
+          enum:
+          - SELLER
+          - PROVIDER
+          - BOTH
         name:
           type: string
         status:
@@ -1824,6 +1838,7 @@ components:
           enum:
           - SELLER
           - PROVIDER
+          - BOTH
         email:
           type: string
         roleKey:
@@ -2084,6 +2099,7 @@ components:
           enum:
           - SELLER
           - PROVIDER
+          - BOTH
         email:
           type: string
         roleKey:
@@ -2115,6 +2131,7 @@ components:
           enum:
           - SELLER
           - PROVIDER
+          - BOTH
         roleKey:
           type: string
           description: The member's role now

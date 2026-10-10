@@ -89,7 +89,7 @@ at:
         type: confidential
         secret: ${SELLER_SERVICE_CLIENT_SECRET:local-seller-secret}
         grant-types: [client_credentials]
-        scopes: [orgs:manage, users:read]
+        scopes: [orgs:manage, users:read, "inventory:storage.read", "ads:spend.read", "ai:usage.read"]
       - client-id: orders-service
         name: Orders service
         type: confidential
@@ -131,7 +131,7 @@ at:
         type: confidential
         secret: ${TRUSTOPS_CLIENT_SECRET:local-trust-ops-secret}
         grant-types: [client_credentials]
-        scopes: [catalog:moderate, payments:service, compliance:hold, offers:write, ai:triage, users:read, orders:lookup, sellers:enforce]
+        scopes: [catalog:moderate, payments:service, compliance:hold, offers:write, ai:triage, users:read, orders:lookup, sellers:enforce, "bookings:reviews:moderate"]
       - client-id: search-service
         name: Search service
         type: confidential
@@ -155,7 +155,7 @@ at:
         type: confidential
         secret: ${RETAIL_CLIENT_SECRET:local-retail-service-secret}
         grant-types: [client_credentials]
-        scopes: [inventory:receive, inventory:adjust, inventory:read]
+        scopes: [inventory:receive, inventory:adjust, inventory:read, "media:write"]
       - client-id: mcp-client
         name: AI agents (MCP)
         type: public

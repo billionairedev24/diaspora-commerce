@@ -41,6 +41,8 @@ tags:
     the owner changes billing.
 - name: Organisations
   description: Seller and provider organisations
+- name: Metered usage
+  description: FBA storage, sponsored-products spend and AI credits billed on Stripe Billing meters (S206)
 - name: Stripe webhooks
   description: Signature-verified (Stripe-Signature) and de-duplicated by event id
 paths:
@@ -293,6 +295,42 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Application'
+  /v1/billing/usage/runs:
+    get:
+      tags:
+      - Metered usage
+      summary: Recent metering runs (staff with billing:usage)
+      operationId: runs
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UsageRun'
+    post:
+      tags:
+      - Metered usage
+      summary: Re-run metering for a period (staff with billing:usage)
+      description: Re-reads every source for [from, to] (at most 93 days, ending today at the latest), stores each day's usage
+        and sends Stripe meter events for the differences only. Idempotent; 409 seller.usage-run-in-progress while another
+        run holds the lease.
+      operationId: run
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UsageRunRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UsageRun'
   /v1/compliance/accounts:
     get:
       tags:
@@ -794,6 +832,39 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Billing'
+  /v1/orgs/{orgId}/billing/usage:
+    get:
+      tags:
+      - Metered usage
+      summary: 'Usage statement: metered usage per meter and day (owner / finance; staff)'
+      description: Defaults to the current subscription period (month to date without one). Owner and finance members; staff
+        with seller:billing or billing:usage.
+      operationId: statement
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UsageStatement'
   /v1/orgs/{orgId}/enforcement:
     get:
       tags:
@@ -1868,6 +1939,64 @@ components:
           type: string
           maxLength: 1000
           minLength: 0
+    UsageRunRequest:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+      required:
+      - from
+      - to
+    UsageRun:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        trigger:
+          type: string
+          enum:
+          - JOB
+          - STAFF
+        status:
+          type: string
+          enum:
+          - RUNNING
+          - COMPLETED
+          - PARTIAL
+          - FAILED
+        rowsChanged:
+          type: integer
+          format: int32
+        reported:
+          type: integer
+          format: int32
+        pending:
+          type: integer
+          format: int32
+        corrections:
+          type: integer
+          format: int32
+        failedSources:
+          type: array
+          items:
+            type: string
+        startedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
     ReviewDecision:
       type: object
       properties:
@@ -2238,6 +2367,17 @@ components:
           type: string
         kind:
           type: string
+          description: Onboarding portal (role prefix)
+          enum:
+          - SELLER
+          - PROVIDER
+        offering:
+          type: string
+          description: What the organisation sells; null until approved
+          enum:
+          - PRODUCTS
+          - SERVICES
+          - BOTH
         legalName:
           type: string
         displayName:
@@ -2290,6 +2430,79 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlanPrice'
+    UsageDayLine:
+      type: object
+      properties:
+        day:
+          type: string
+          format: date
+        quantity:
+          type: number
+        reportedQuantity:
+          type: number
+        status:
+          type: string
+          enum:
+          - REPORTED
+          - PENDING
+          - CORRECTION
+        error:
+          type: string
+    UsageMeterLine:
+      type: object
+      properties:
+        meter:
+          type: string
+          enum:
+          - FBA_STORAGE
+          - ADS_SPEND
+          - AI_CREDITS
+        label:
+          type: string
+          examples:
+          - FBA storage
+        unit:
+          type: string
+          description: Unit of quantity
+          examples:
+          - cubic-foot-day
+        quantity:
+          type: number
+        reportedQuantity:
+          type: number
+          description: What Stripe Billing has received
+        unitPriceMicros:
+          type: integer
+          format: int64
+          description: Estimated price of one unit in micro-dollars
+        estimatedAmountCents:
+          type: integer
+          format: int64
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageDayLine'
+    UsageStatement:
+      type: object
+      description: Metered usage for a period; the Stripe invoice is authoritative
+      properties:
+        orgId:
+          type: string
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        currency:
+          type: string
+        meters:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageMeterLine'
+        estimatedTotalCents:
+          type: integer
+          format: int64
     Invoice:
       type: object
       properties:
@@ -2320,6 +2533,41 @@ components:
         invoicePdf:
           type: string
         createdAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceLine'
+        meteredAmountCents:
+          type: integer
+          format: int64
+          description: Sum of the metered usage lines
+    InvoiceLine:
+      type: object
+      description: Plan, proration or metered usage line (S206)
+      properties:
+        description:
+          type: string
+        amountCents:
+          type: integer
+          format: int64
+        quantity:
+          type: integer
+          format: int64
+        metered:
+          type: boolean
+        meter:
+          type: string
+          description: Usage meter of a metered line
+          enum:
+          - FBA_STORAGE
+          - ADS_SPEND
+          - AI_CREDITS
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
           type: string
           format: date-time
     OrgPublicView:

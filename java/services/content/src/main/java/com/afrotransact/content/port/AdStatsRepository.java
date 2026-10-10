@@ -34,8 +34,22 @@ public interface AdStatsRepository {
     /** Attributes an order line once; false when the line is already attributed. */
     boolean insertAttribution(String orderId, String lineId, AttributableClick click, long salesMinor, Instant at);
 
+    /**
+     * Charged spend per seller organisation, UTC day and currency for days in [from, to] (only non-zero rows), ordered
+     * by organisation, day and currency.
+     */
+    List<OrgDaySpend> spendByOrg(LocalDate from, LocalDate to);
+
     /** Days in [from, to] that have data, oldest first. */
     List<CampaignDay> days(String campaignId, LocalDate from, LocalDate to);
+
+    /**
+     * Ads spend of one organisation on one UTC day.
+     *
+     * @param spendMinor charged clicks in minor units of {@code currency}
+     */
+    record OrgDaySpend(String sellerOrgId, LocalDate day, String currency, long clicks, long spendMinor) {
+    }
 
     /**
      * A click an order line can be attributed to.

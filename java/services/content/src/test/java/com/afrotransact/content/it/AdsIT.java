@@ -188,6 +188,44 @@ class AdsIT extends ContentIntegrationTest {
                 .param("id", id).query(Long.class).single()).isEqualTo(4);
     }
 
+    @Test
+    void chargedSpendIsReportedPerOrganisationAndDayForMeteredBilling() {
+        String org = "org_spend_" + UUID.randomUUID().toString().substring(0, 8);
+        TestActors.as(seller(org));
+        String id = json(post("/v1/ads/campaigns", campaign(org, 50, 5000, "AT1SPD0001"))).get("id").asString();
+        Instant now = Instant.now();
+        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        delivery.click(UUID.randomUUID(), click(id, "clk-spend-" + id + "-1", 30, "cus_s1", now));
+        delivery.click(UUID.randomUUID(), click(id, "clk-spend-" + id + "-2", 45, "cus_s2", now));
+        // A redelivered click (same click id) is never charged twice, so the report is stable.
+        delivery.click(UUID.randomUUID(), click(id, "clk-spend-" + id + "-2", 45, "cus_s2", now));
+
+        // Sellers and shoppers cannot read other organisations' spend.
+        assertThat(get("/v1/ads/spend?from=" + today + "&to=" + today).statusCode()).isEqualTo(403);
+
+        TestActors.as(new Actor("seller-service", PrincipalType.SERVICE, Optional.empty(), Set.of(),
+                Set.of(ContentPermissions.ADS_SPEND_READ)));
+        HttpResponse<String> r = get("/v1/ads/spend?from=" + today.minusDays(1) + "&to=" + today);
+        assertThat(r.statusCode()).as(r.body()).isEqualTo(200);
+        assertThat(r.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+        List<JsonNode> mine = new ArrayList<>();
+        json(r).get("items").forEach(i -> {
+            if (i.get("sellerOrgId").asString().equals(org)) {
+                mine.add(i);
+            }
+        });
+        assertThat(mine).hasSize(1);
+        assertThat(mine.getFirst().get("day").asString()).isEqualTo(today.toString());
+        assertThat(mine.getFirst().get("currency").asString()).isEqualTo("USD");
+        assertThat(mine.getFirst().get("clicks").asLong()).isEqualTo(2);
+        assertThat(mine.getFirst().get("spendMinor").asLong()).isEqualTo(75);
+
+        assertThat(get("/v1/ads/spend?from=" + today + "&to=" + today.minusDays(1)).statusCode()).isEqualTo(422);
+        assertThat(get("/v1/ads/spend?from=" + today.minusDays(200) + "&to=" + today).statusCode()).isEqualTo(422);
+        TestActors.as(search());
+        assertThat(get("/v1/ads/spend?from=" + today + "&to=" + today).statusCode()).isEqualTo(403);
+    }
+
     private static AdClick click(String campaignId, String clickId, long price, String customer, Instant at) {
         return new AdClick(clickId, campaignId, "AT1EGU0001", List.of("AT1EGU0001V"), customer, price, "US", "egusi", at);
     }

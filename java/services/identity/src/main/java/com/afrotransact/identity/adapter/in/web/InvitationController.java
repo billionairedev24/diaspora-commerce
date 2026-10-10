@@ -32,7 +32,7 @@ class InvitationController {
     }
 
     @Schema(name = "InvitationPreview", description = "What an invite link is for; shown before signing in or up")
-    record PreviewResponse(String orgName, @Schema(allowableValues = {"SELLER", "PROVIDER"}) String orgKind,
+    record PreviewResponse(String orgName, @Schema(allowableValues = {"SELLER", "PROVIDER", "BOTH"}) String orgKind,
                            String email, String roleKey, String roleLabel,
                            @Schema(allowableValues = {"PENDING", "ACCEPTED", "REVOKED", "EXPIRED"}) String status,
                            Instant expiresAt) {
@@ -45,7 +45,7 @@ class InvitationController {
 
     @Schema(name = "AcceptedInvitation")
     record AcceptedResponse(UUID invitationId, String orgId, String orgName,
-                            @Schema(allowableValues = {"SELLER", "PROVIDER"}) String orgKind,
+                            @Schema(allowableValues = {"SELLER", "PROVIDER", "BOTH"}) String orgKind,
                             @Schema(description = "The member's role now") String roleKey, UUID userId,
                             @Schema(description = "Was already a member; the role was left unchanged") boolean alreadyMember) {
 

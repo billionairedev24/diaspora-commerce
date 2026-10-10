@@ -2,6 +2,7 @@ package com.afrotransact.seller.adapter.in.scheduling;
 
 import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.ComplianceService;
+import com.afrotransact.seller.application.UsageMeteringService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -20,10 +21,18 @@ class SellerJobs {
 
     private final ComplianceService compliance;
     private final BillingService billing;
+    private final UsageMeteringService metering;
 
-    SellerJobs(ComplianceService compliance, BillingService billing) {
+    SellerJobs(ComplianceService compliance, BillingService billing, UsageMeteringService metering) {
         this.compliance = compliance;
         this.billing = billing;
+        this.metering = metering;
+    }
+
+    /** S206: meters the two previous UTC days; a replica that finds the lease taken skips (seller.usage-run-…). */
+    @Scheduled(cron = "${at.seller.jobs.metering-cron:0 20 1 * * *}", zone = "UTC")
+    void metering() {
+        run("metering", metering::runScheduled);
     }
 
     @Scheduled(cron = "${at.seller.jobs.reminder-cron:0 15 * * * *}", zone = "${at.seller.jobs.zone:UTC}")

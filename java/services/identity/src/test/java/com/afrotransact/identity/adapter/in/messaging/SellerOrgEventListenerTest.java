@@ -67,6 +67,15 @@ class SellerOrgEventListenerTest {
     }
 
     @Test
+    void carriesKindBothAndThePrimaryKind() {
+        listener.onMessage(rec("seller.org.updated", UUID.randomUUID().toString(), """
+                {"orgId":"org_both","kind":"BOTH","primaryKind":"PROVIDER","offering":"BOTH","status":"APPROVED"}
+                """));
+        assertThat(changes.getFirst().kind()).isEqualTo("BOTH");
+        assertThat(changes.getFirst().primaryKind()).isEqualTo("PROVIDER");
+    }
+
+    @Test
     void routesUpdatesAndIgnoresOtherTypesMissingIdsAndGarbage() {
         listener.onMessage(rec("seller.org.updated", UUID.randomUUID().toString(),
                 "{\"orgId\":\"org_a\",\"kind\":\"PROVIDER\",\"status\":\"SUSPENDED\"}"));

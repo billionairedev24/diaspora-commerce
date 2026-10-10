@@ -60,6 +60,7 @@ Every downstream call is a port with a `RestClient` adapter that relays the call
 | POST | `/v1/embeddings` `{input, purpose}` → `{embedding, model, dimensions}` | `ai:use` (search service) |
 | POST | `/v1/ai/listing-writer`, `/v1/ai/translate`, `/v1/ai/tagline` | `ai:use` — drafts only, never published |
 | POST | `/v1/ai/triage` | `ai:triage` — cited fields, decision always `HUMAN_REVIEW_REQUIRED` |
+| GET | `/v1/ai/usage/orgs?from=&to=` | `ai:usage.read` (seller-service) or staff `ai:manage`: AI credits per organisation and UTC day for metered billing (S206). Calls by seller / provider members are attributed to their organisation (`ai_usage.org_id`); 1 credit = 10,000 micro-dollars of estimated cost, rounded up per day |
 
 SSE events of a Lola turn, in order: `tool_call` (label such as "Searching for jollof seasoning") → `tool_result`
 (cards, offers, promise, order, services) → `action_proposal` (add to cart, checkout, book, return; always

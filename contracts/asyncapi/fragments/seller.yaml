@@ -53,6 +53,14 @@ operations:
       which it warms on start from GET /v1/orgs/directory, scope sellers:directory), cart refreshes it;
       identity mirrors name, status and market. Also published when Trust and Safety suspends (status SUSPENDED) or
       reinstates (status back to APPROVED) an organisation.
+  receiveSellerIdentityRoleEvents:
+    action: receive
+    channel: {$ref: '#/channels/identityEvents'}
+    summary: >-
+      S236: seller-service (consumer group seller-service, inbox-deduplicated) keeps its org_member list consistent
+      with identity, the source of truth for organisation members. identity.role.granted with orgId adds the member or
+      changes its role (unless the stored row is newer); identity.role.revoked with orgId removes the member while it
+      still holds that role. Organisations seller does not know and roles without orgId are ignored.
   publishSellerComplianceEvents:
     action: send
     channel: {$ref: '#/channels/sellerComplianceEvents'}
@@ -172,7 +180,15 @@ components:
       required: [orgId, kind, status, occurredAt]
       properties:
         orgId: {type: string}
-        kind: {type: string, enum: [SELLER, PROVIDER]}
+        kind:
+          type: string
+          enum: [SELLER, PROVIDER, BOTH]
+          description: BOTH (S215) when the organisation sells products and offers services (offering BOTH)
+        primaryKind:
+          type: string
+          enum: [SELLER, PROVIDER]
+          description: Portal it onboarded through; decides the owner role (seller.owner / provider.owner) for BOTH
+        offering: {type: [string, 'null'], enum: [PRODUCTS, SERVICES, BOTH, null], description: What it sells; null before approval}
         legalName: {type: [string, 'null']}
         displayName: {type: [string, 'null']}
         country: {type: [string, 'null']}

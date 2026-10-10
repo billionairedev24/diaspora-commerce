@@ -41,7 +41,9 @@ operations:
       seller org id (org_…) as the organisation id and token org claim. seller.org.approved: organisation APPROVED,
       applicantUserId and ownerUserIds become members with seller.owner / provider.owner (identity.role.granted is
       published) and get it as their active organisation when they have none. seller.org.updated: name, kind, status
-      and market (country) are refreshed.
+      and market (country) are refreshed. S215: kind BOTH is mirrored as an organisation whose members may hold
+      seller.* or provider.* roles (owner role from primaryKind); market is stored as content's market code (ISO
+      3166-1 alpha-2, UK → GB), other values are not stored.
 components:
   messages:
     identityUserRegistered:
@@ -275,7 +277,7 @@ components:
         invitationId: {type: string, format: uuid}
         orgId: {type: string, examples: [org_3k2j9x8q7w6e5r4t3y2u]}
         orgName: {type: string, examples: [Mama Put]}
-        orgKind: {type: string, enum: [SELLER, PROVIDER]}
+        orgKind: {type: string, enum: [SELLER, PROVIDER, BOTH]}
         email: {type: string, format: email}
         roleKey: {type: string, examples: [seller.catalog, provider.practitioner]}
         roleName: {type: string, examples: [Catalog manager]}

@@ -270,3 +270,29 @@ func TestIdentityOutageRedeliversAndUnknownUserSkips(t *testing.T) {
 		t.Fatal("no address, nothing to send")
 	}
 }
+
+func TestBothOrganisationsUseSellerCenter(t *testing.T) {
+	store := newFakeStore()
+	res := &fakeResolver{contacts: map[string]port.Contact{"app-user": ada()}}
+	ing := newIngest(store, res, "programName", "portalUrl")
+	handle(t, ing, "seller.application.approved", map[string]any{"applicationId": "app_2", "reference": "APP-30202",
+		"orgId": "org_2", "kind": "BOTH", "applicantUserId": "app-user", "status": "APPROVED",
+		"action": "FINAL_APPROVE", "actorId": "staff"})
+	if len(store.enqueued) == 0 {
+		t.Fatal("nothing enqueued")
+	}
+	body := store.enqueued[0].BodyText
+	if !strings.Contains(body, "programName=Seller Center") || strings.Contains(body, "provider.test") {
+		t.Errorf("%q", body)
+	}
+
+	inv := newFakeStore()
+	ing = newIngest(inv, &fakeResolver{}, "programName", "portalUrl")
+	handle(t, ing, "identity.invitation.created", map[string]any{"invitationId": "inv-2", "orgId": "org_2",
+		"orgName": "Ama's", "orgKind": "BOTH", "email": "new@example.com", "roleKey": "provider.practitioner",
+		"roleName": "Practitioner", "token": "t", "acceptUrl": "https://seller.test/invitations/accept?token=t",
+		"recipient": map[string]any{"email": "new@example.com"}, "transactional": true})
+	if len(inv.enqueued) != 1 || !strings.Contains(inv.enqueued[0].BodyText, "programName=Seller Center") {
+		t.Fatalf("%v", summary(inv.enqueued))
+	}
+}

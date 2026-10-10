@@ -19,6 +19,8 @@ import java.util.Set;
  *   <li><b>Customers</b> may cancel a shipment until it is packed.</li>
  *   <li><b>Carriers and couriers</b> only move forward: an event for an earlier step than the current one is ignored,
  *       never applied (a failed delivery may be re-attempted).</li>
+ *   <li><b>Pickup points</b> ({@code carrier.pickup.ready}) only mark a pickup shipment ready: from confirmed or
+ *       packed; a shipment already ready or further along is left as it is.</li>
  * </ul>
  */
 public final class DefaultShipmentTransitionPolicy implements ShipmentTransitionPolicy {
@@ -35,6 +37,9 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
     public TransitionDecision decide(Shipment shipment, ShipmentStatus to, ActorKind actor) {
         if (actor == ActorKind.CARRIER || actor == ActorKind.COURIER) {
             return transit(shipment, to, actor);
+        }
+        if (actor == ActorKind.PICKUP_POINT) {
+            return pickupReady(shipment, to);
         }
         Map<ShipmentStatus, Set<ShipmentStatus>> rules = rules(actor, shipment.fulfilmentType(),
                 shipment.deliveryMethod());
@@ -99,6 +104,27 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
         return TransitionDecision.allow();
     }
 
+    /** carrier.pickup.ready: a pickup shipment that is confirmed or packed becomes ready; never moves backwards. */
+    private static TransitionDecision pickupReady(Shipment s, ShipmentStatus to) {
+        if (to != ShipmentStatus.READY) {
+            throw TransitionRefused.forbidden(ActorKind.PICKUP_POINT, to, s.fulfilmentType());
+        }
+        if (s.deliveryMethod() != DeliveryMethod.PICKUP) {
+            throw TransitionRefused.forbidden("Pickup-ready notices only apply to pickup shipments");
+        }
+        ShipmentStatus from = s.status();
+        if (from == ShipmentStatus.READY) {
+            return TransitionDecision.unchanged();
+        }
+        if (from.terminal() || from.rank() > ShipmentStatus.READY.rank()) {
+            return TransitionDecision.ignore("shipment is already " + from.wire());
+        }
+        if (from != ShipmentStatus.CONFIRMED && from != ShipmentStatus.PACKED) {
+            throw TransitionRefused.invalid(from, to);
+        }
+        return TransitionDecision.allow();
+    }
+
     private static Map<ShipmentStatus, Set<ShipmentStatus>> rules(ActorKind actor, FulfilmentType type,
                                                                   DeliveryMethod method) {
         return switch (actor) {
@@ -109,7 +135,7 @@ public final class DefaultShipmentTransitionPolicy implements ShipmentTransition
             case SELLER -> type == FulfilmentType.SELLER_FULFILLED ? sellerSteps(method) : Map.of();
             case PLATFORM_ADMIN -> type == FulfilmentType.SELLER_FULFILLED ? oversight(method) : everyStep(method);
             case FULFILMENT_OPS -> type == FulfilmentType.SELLER_FULFILLED ? Map.of() : everyStep(method);
-            case CARRIER, COURIER -> Map.of();
+            case CARRIER, COURIER, PICKUP_POINT -> Map.of();
         };
     }
 

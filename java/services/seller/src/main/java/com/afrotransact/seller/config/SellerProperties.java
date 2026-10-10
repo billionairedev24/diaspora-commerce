@@ -1,5 +1,6 @@
 package com.afrotransact.seller.config;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 
@@ -13,9 +14,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param crypto        field-encryption keys (key id → base64 32-byte AES key) and the active key id
  * @param media         media-service base URL and service token
  * @param jobs          scheduled jobs switch
+ * @param metering      usage sources of metered billing (S206) and the seller-service client credentials
  */
 @ConfigurationProperties(prefix = "at.seller")
-public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto crypto, Media media, Jobs jobs) {
+public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto crypto, Media media, Jobs jobs,
+                               Metering metering) {
 
     public SellerProperties {
         liveCountries = liveCountries == null || liveCountries.isEmpty() ? List.of("US") : List.copyOf(liveCountries);
@@ -23,6 +26,21 @@ public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto
         crypto = crypto == null ? new Crypto(null, null) : crypto;
         media = media == null ? new Media(null, null) : media;
         jobs = jobs == null ? new Jobs(null) : jobs;
+        metering = metering == null ? new Metering(null, null, null, null, null, null, null) : metering;
+    }
+
+    /** Usage sources (inventory, content, ai-gateway) called with the seller-service client-credentials token. */
+    public record Metering(String inventoryUrl, String contentUrl, String aiUrl, String tokenUri, String clientId,
+                           String clientSecret, Duration timeout) {
+
+        public Metering {
+            inventoryUrl = inventoryUrl == null ? "http://localhost:8103" : inventoryUrl;
+            contentUrl = contentUrl == null ? "http://localhost:8112" : contentUrl;
+            aiUrl = aiUrl == null ? "http://localhost:8113" : aiUrl;
+            tokenUri = tokenUri == null ? "http://localhost:8100/oauth2/token" : tokenUri;
+            clientId = clientId == null ? "seller-service" : clientId;
+            timeout = timeout == null ? Duration.ofSeconds(10) : timeout;
+        }
     }
 
     /** Stripe settings. Secrets only from env (STRIPE_SECRET_KEY, STRIPE_*_WEBHOOK_SECRET). */

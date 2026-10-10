@@ -86,6 +86,9 @@ at:
       # Receipts quarantine lots whose remaining life is below max(min-days, min-fraction × shelf life).
       min-days: 90
       min-fraction: 0.5
+    storage:
+      # FBA storage billing (S206): volume of one unit whose SKU has no dimensions yet.
+      default-unit-cubic-feet: ${STORAGE_DEFAULT_UNIT_CUBIC_FEET:0.25}
     jobs:
       enabled: ${INVENTORY_JOBS_ENABLED:true}
       reservation-sweep-interval: ${RESERVATION_SWEEP_INTERVAL:30s}
@@ -94,4 +97,6 @@ at:
       expire-lots-cron: ${EXPIRE_LOTS_CRON:0 5 * * * *}
       markdown-cron: ${MARKDOWN_CRON:0 20 2 * * *}
       reconciliation-cron: ${RECONCILIATION_CRON:0 40 2 * * *}
+      # Hourly: retakes today's (UTC) storage snapshot; the last run of the day stands. Idempotent.
+      storage-snapshot-cron: ${STORAGE_SNAPSHOT_CRON:0 55 * * * *}
       zone: ${JOBS_ZONE:UTC}

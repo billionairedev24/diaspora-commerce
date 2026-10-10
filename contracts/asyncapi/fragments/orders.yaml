@@ -33,7 +33,13 @@ operations:
     channel: {$ref: '#/channels/carrierShipmentEvents'}
     summary: >-
       orders consumes carrier.tracking.updated (inbox-deduplicated, idempotent per carrier event id) and applies the
-      transit steps to carrier shipments; scans older than the last applied one are ignored.
+      transit steps to carrier shipments; scans older than the last applied one are ignored. carrier.pickup.ready
+      (S219, same topic, inbox-deduplicated): orderRef names the order (id or number) or one shipment; the order's
+      pickup shipments (delivery method PICKUP, matching pickup location when both are set, customerRef equal to the
+      order's customer) that are confirmed or packed move to ready with actor PICKUP_POINT and source carrier (which
+      also triggers the pickup capture); shipments already ready or further along are left as they are. Every
+      transition is published as orders.shipment.status_changed and pushed to GET /v1/shipments/stream on every
+      replica through Valkey pub/sub (channel at:orders:shipment-status).
 components:
   messages:
     ordersOrderPlaced:
@@ -165,7 +171,7 @@ components:
         deliveryMethod: {type: string, enum: [CARRIER, AFROTRANSACT_DELIVERY, PICKUP]}
         from: {$ref: '#/components/schemas/OrdersShipmentStatus'}
         to: {$ref: '#/components/schemas/OrdersShipmentStatus'}
-        actorType: {type: string, enum: [CUSTOMER, SELLER, PLATFORM_ADMIN, FULFILMENT_OPS, CARRIER, COURIER, SYSTEM]}
+        actorType: {type: string, enum: [CUSTOMER, SELLER, PLATFORM_ADMIN, FULFILMENT_OPS, CARRIER, COURIER, PICKUP_POINT, SYSTEM]}
         actorId: {type: string}
         source: {type: string, enum: [api, carrier, driver, system]}
         reason: {type: [string, 'null']}

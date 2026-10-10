@@ -139,6 +139,16 @@ Published on `at.order.events` (key = order id; `contracts/asyncapi/fragments/or
 `orders.shipment.cancelled`. `orders.order.placed` shipments carry `nodeId`, `perishable`, ship-to street lines and
 `lat`/`lng` for dispatch. Consumed: `payments.intent.*` (`at.payment.events`), `carrier.tracking.updated`
 (`at.carrier-shipment.events`, matched by label reference = shipment id or carrier + tracking number).
+`carrier.pickup.ready` (same topic, S219): `orderRef` = order id, order number or shipment id; the order's pickup
+shipments (matching `customerRef` and pickup location) that are confirmed or packed move to ready with actor
+`PICKUP_POINT` (pickup capture follows); ready or later shipments are left alone.
+
+**Live feed across replicas (S219).** `GET /v1/shipments/stream` subscribers live on one replica; every committed
+transition is published on the Valkey pub/sub channel `at:orders:shipment-status` and every replica delivers it to
+its own subscribers, so staff on any replica see every transition (well within 2 s). `at.orders.live-feed.fanout`
+(`LIVE_FEED_FANOUT`): `valkey` (default; `REDIS_URL`) or `local` (single replica). If Valkey is unreachable the
+update is still delivered on the replica that applied it; the Redis health indicator is off so Valkey never takes
+pods out of service. `LiveFeedFanoutIT` runs two application contexts against one PostgreSQL and one Valkey.
 
 ## Upstreams (ports → RestClient adapters)
 

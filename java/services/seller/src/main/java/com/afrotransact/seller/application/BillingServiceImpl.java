@@ -18,6 +18,7 @@ import com.afrotransact.seller.domain.Cadence;
 import com.afrotransact.seller.domain.DefaultApplicationRules;
 import com.afrotransact.seller.domain.DunningState;
 import com.afrotransact.seller.domain.Invoice;
+import com.afrotransact.seller.domain.InvoiceLine;
 import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.PaymentMethod;
 import com.afrotransact.seller.domain.PaymentMethodKind;
@@ -41,6 +42,7 @@ import com.afrotransact.seller.port.StripeBillingGateway;
 import com.afrotransact.seller.port.StripeEvent;
 import com.afrotransact.seller.port.SubscriptionRepository;
 import com.afrotransact.seller.port.SubscriptionSnapshot;
+import com.afrotransact.seller.port.UsageRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.slf4j.Logger;
@@ -63,6 +65,7 @@ class BillingServiceImpl implements BillingService {
     private final ApplicationRepository apps;
     private final OrganisationRepository orgs;
     private final StripeBillingGateway stripe;
+    private final UsageRepository usage;
     private final AccessGuard access;
     private final DomainEventPublisher events;
     private final TransactionOperations tx;
@@ -70,8 +73,8 @@ class BillingServiceImpl implements BillingService {
 
     BillingServiceImpl(SubscriptionRepository subs, PaymentMethodRepository methods, InvoiceRepository invoices,
                        PlanRepository plans, ApplicationRepository apps, OrganisationRepository orgs,
-                       StripeBillingGateway stripe, AccessGuard access, DomainEventPublisher events,
-                       TransactionOperations tx, Clock clock) {
+                       StripeBillingGateway stripe, UsageRepository usage, AccessGuard access,
+                       DomainEventPublisher events, TransactionOperations tx, Clock clock) {
         this.subs = subs;
         this.methods = methods;
         this.invoices = invoices;
@@ -79,6 +82,7 @@ class BillingServiceImpl implements BillingService {
         this.apps = apps;
         this.orgs = orgs;
         this.stripe = stripe;
+        this.usage = usage;
         this.access = access;
         this.events = events;
         this.tx = tx;
@@ -297,7 +301,8 @@ class BillingServiceImpl implements BillingService {
             String orgId = found.get().orgId();
             invoices.upsert(new Invoice(inv.id(), orgId, inv.number(), inv.periodStart(), inv.periodEnd(),
                     inv.amountDue(), inv.amountPaid(), inv.currency(), inv.status(), inv.billingReason(),
-                    inv.hostedInvoiceUrl(), inv.invoicePdf(), inv.created() == null ? now : inv.created()));
+                    inv.hostedInvoiceUrl(), inv.invoicePdf(), inv.created() == null ? now : inv.created(),
+                    inv.lines().stream().map(this::resolveMeter).toList()));
             Subscription sub = subs.lock(orgId).orElseThrow();
             if ("invoice.payment_failed".equals(e.type())) {
                 DunningState d = inv.nextPaymentAttempt() == null ? DunningState.FINAL_ATTEMPT_FAILED
@@ -342,6 +347,14 @@ class BillingServiceImpl implements BillingService {
             return "applied";
         }
         return "ignored";
+    }
+
+    /** A line without a known lookup key is metered when it bills one of our metered subscription items. */
+    private InvoiceLine resolveMeter(InvoiceLine line) {
+        if (line.metered() || line.subscriptionItemId() == null) {
+            return line;
+        }
+        return usage.meterOfItem(line.subscriptionItemId()).map(line::withMeter).orElse(line);
     }
 
     private Boolean applyChange(String orgId) {

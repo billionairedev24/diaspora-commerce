@@ -477,4 +477,17 @@ final class PaymentsDtos {
 
     record SetupIntentResponse(String setupIntentId, String clientSecret, String status) {
     }
+
+    @Schema(name = "EphemeralKeyRequest")
+    record EphemeralKeyRequest(@Schema(description = "Stripe API version of the mobile SDK; default 2025-08-27.basil",
+            examples = "2025-08-27.basil") String stripeVersion) {
+    }
+
+    @Schema(name = "EphemeralKey", description = "PaymentSheet setup for the signed-in shopper (S241)")
+    record EphemeralKeyResponse(@Schema(description = "The shopper's Stripe Customer", examples = "cus_Q1w2e3r4")
+                                String customerId,
+                                @Schema(description = "Ephemeral key secret for the PaymentSheet (never log it)")
+                                String ephemeralKeySecret,
+                                Instant expiresAt) {
+    }
 }

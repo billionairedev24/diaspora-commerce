@@ -49,11 +49,20 @@ public class DefaultAccessPolicy implements AccessPolicy {
         } else if (driver) {
             type = PrincipalType.DRIVER;
         } else if (active.isPresent()) {
-            type = active.get().kind() == OrgKind.SELLER ? PrincipalType.SELLER_MEMBER : PrincipalType.PROVIDER_MEMBER;
+            type = memberType(active.get());
         } else {
             type = PrincipalType.CUSTOMER;
         }
         return new EffectiveAccess(type, active.map(OrgMembership::orgId), roles, perms, staff);
+    }
+
+    /** BOTH organisations: the member's role decides (provider.* acts in the provider portal). */
+    private static PrincipalType memberType(OrgMembership m) {
+        OrgKind kind = m.kind();
+        if (kind == OrgKind.BOTH) {
+            kind = m.roleKey() != null && m.roleKey().startsWith("provider.") ? OrgKind.PROVIDER : OrgKind.SELLER;
+        }
+        return kind == OrgKind.SELLER ? PrincipalType.SELLER_MEMBER : PrincipalType.PROVIDER_MEMBER;
     }
 
     @Override

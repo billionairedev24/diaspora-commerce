@@ -20,6 +20,8 @@ public final class SellerPermissions {
     public static final String SELLERS_ENFORCE = "sellers:enforce";
     /** Staff access to any organisation's plan, payment methods and invoices. */
     public static final String BILLING = "seller:billing";
+    /** Staff: every organisation's metered usage statements, and re-running metering for a period (S206). */
+    public static final String USAGE = "billing:usage";
 
     private SellerPermissions() {
     }

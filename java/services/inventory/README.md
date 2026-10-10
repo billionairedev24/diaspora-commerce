@@ -16,6 +16,8 @@ Lots & landed cost, Availability & storefront, Jobs & alerts). Stories S062–S0
 | `stock_movement` | **Append-only ledger** (trigger rejects UPDATE/DELETE/TRUNCATE): type, sku, node, lot, qty, deltas and before/after of every bucket, reference, actor, reason, correlation id |
 | `idempotency_record` | Stored responses of receipts, returns, write-offs, cycle counts and transfers per `Idempotency-Key` |
 | `reconciliation_run` | Nightly drift reports |
+| `sku_dimension` | Unit dimensions (inches) and derived cubic feet per SKU (S206) |
+| `storage_snapshot` | Per day × owner × fulfilment centre: units physically held (on hand + damaged), units without dimensions, cubic feet |
 
 Invariants (checked by reconciliation): `on_hand = Σ SELLABLE lot qty = Σ ledger Δon_hand`, `reserved = Σ lot
 qty_reserved = Σ ledger Δreserved`, `damaged = Σ QUARANTINE/DAMAGED/EXPIRED lot qty = Σ ledger Δdamaged`.
@@ -76,6 +78,9 @@ All writes return RFC 9457 problems with `code` `inventory.*`. Reference pages: 
 | `POST /v1/lots/{id}/quarantine` · `/release` · `/write-off` · `/adjust` · `/transfer` | `inventory:adjust` | reason required; optional `Idempotency-Key` |
 | `POST /v1/lots/expiry-runs` · `/v1/lots/markdown-runs` | `inventory:adjust` | run nightly jobs on demand |
 | `POST /v1/reconciliation/runs` · `GET …/latest` | adjust · staff read | drift report |
+| `PUT /v1/skus/{sku}/dimensions` · `GET …` | `inventory:adjust` or `inventory:receive` · `inventory:read` | unit dimensions for FBA storage billing (S206) |
+| `POST /v1/storage/snapshots` | `inventory:adjust` | retake today's storage snapshot (idempotent) |
+| `GET /v1/storage/usage?from=&to=&ownerOrg=` | SERVICE `inventory:storage.read` (seller-service), staff `inventory:read`; sellers: own org | cubic-feet-days per owner and UTC day (≤ 93 days) |
 
 Sellers (`SELLER_MEMBER` with `inventory:read`) only ever see positions, lots and movements whose `owner_org` is
 their organisation (other orgs' lots answer 404). Super admins (`*`) may call reservation endpoints for the
@@ -96,6 +101,7 @@ flash-sale drill; everyone else must be a SERVICE principal.
 | Reservation sweep | every 30 s | release HELD reservations past TTL (`SKIP LOCKED`) |
 | Lot expiry | hourly `0 5 * * * *` | lots past expiry at the node's **local** date → `EXPIRED`, moved to damaged, event; reserved lots deferred |
 | Markdown flags | `0 20 2 * * *` | sellable lots ≤ 60 / ≤ 30 days → `WITHIN_60` / `WITHIN_30` |
+| Storage snapshot | hourly `0 55 * * * *` (UTC) | retakes today's snapshot of stock in fulfilment centres; the last of the day stands; unmeasured SKUs count `storage.default-unit-cubic-feet` (0.25) |
 | Reconciliation | `0 40 2 * * *` | positions vs ledger sums vs lot sums in one REPEATABLE READ snapshot; gauge `inventory_reconciliation_drift`; WARN log + event on drift |
 
 ## Configuration

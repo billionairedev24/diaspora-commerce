@@ -4,6 +4,7 @@ import com.afrotransact.inventory.application.InventorySettings;
 import com.afrotransact.inventory.application.LotLifecycleService;
 import com.afrotransact.inventory.application.ReconciliationService;
 import com.afrotransact.inventory.application.ReservationService;
+import com.afrotransact.inventory.application.StorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -23,13 +24,15 @@ class InventoryJobs {
     private final ReservationService reservations;
     private final LotLifecycleService lots;
     private final ReconciliationService reconciliation;
+    private final StorageService storage;
     private final InventorySettings settings;
 
     InventoryJobs(ReservationService reservations, LotLifecycleService lots, ReconciliationService reconciliation,
-                  InventorySettings settings) {
+                  StorageService storage, InventorySettings settings) {
         this.reservations = reservations;
         this.lots = lots;
         this.reconciliation = reconciliation;
+        this.storage = storage;
         this.settings = settings;
     }
 
@@ -57,6 +60,11 @@ class InventoryJobs {
     @Scheduled(cron = "${at.inventory.jobs.reconciliation-cron:0 40 2 * * *}", zone = "${at.inventory.jobs.zone:UTC}")
     void reconcile() {
         run("reconciliation", reconciliation::reconcile);
+    }
+
+    @Scheduled(cron = "${at.inventory.jobs.storage-snapshot-cron:0 55 * * * *}", zone = "UTC")
+    void snapshotStorage() {
+        run("storage-snapshot", storage::snapshotTodayAsJob);
     }
 
     private static void run(String job, Runnable body) {

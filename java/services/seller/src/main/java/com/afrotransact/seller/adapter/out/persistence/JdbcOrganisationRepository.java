@@ -2,9 +2,11 @@ package com.afrotransact.seller.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
+import com.afrotransact.seller.domain.Offering;
 import com.afrotransact.seller.domain.OrgKind;
 import com.afrotransact.seller.domain.OrgMember;
 import com.afrotransact.seller.domain.OrgStatus;
@@ -26,11 +28,12 @@ class JdbcOrganisationRepository implements OrganisationRepository {
     @Override
     public Organisation insert(Organisation o) {
         jdbc.sql("""
-                insert into organisation (id, kind, legal_name, display_name, country, status, created_at, updated_at,
-                                          version)
-                values (:id, :kind, :legal, :display, :country, :status, :created, :updated, 0)
+                insert into organisation (id, kind, legal_name, display_name, country, offering, status, created_at,
+                                          updated_at, version)
+                values (:id, :kind, :legal, :display, :country, :offering, :status, :created, :updated, 0)
                 """)
                 .param("id", o.id()).param("kind", o.kind().name()).param("legal", o.legalName())
+                .param("offering", o.offering() == null ? null : o.offering().name())
                 .param("display", o.displayName()).param("country", o.country()).param("status", o.status().name())
                 .param("created", Sql.ts(o.createdAt())).param("updated", Sql.ts(o.updatedAt()))
                 .update();
@@ -41,10 +44,11 @@ class JdbcOrganisationRepository implements OrganisationRepository {
     public Organisation update(Organisation o) {
         int rows = jdbc.sql("""
                 update organisation set legal_name = :legal, display_name = :display, country = :country,
-                       status = :status, updated_at = :updated, version = version + 1
+                       offering = :offering, status = :status, updated_at = :updated, version = version + 1
                 where id = :id and version = :version
                 """)
                 .param("legal", o.legalName()).param("display", o.displayName()).param("country", o.country())
+                .param("offering", o.offering() == null ? null : o.offering().name())
                 .param("status", o.status().name()).param("updated", Sql.ts(o.updatedAt())).param("id", o.id())
                 .param("version", o.version())
                 .update();
@@ -69,12 +73,38 @@ class JdbcOrganisationRepository implements OrganisationRepository {
     @Override
     public void addMember(OrgMember m) {
         jdbc.sql("""
-                insert into org_member (org_id, user_id, role_key, created_at) values (:org, :user, :role, :at)
-                on conflict (org_id, user_id) do update set role_key = excluded.role_key
+                insert into org_member (org_id, user_id, role_key, created_at, updated_at)
+                values (:org, :user, :role, :at, :updated)
+                on conflict (org_id, user_id) do update set role_key = excluded.role_key,
+                    updated_at = excluded.updated_at
                 """)
                 .param("org", m.orgId()).param("user", m.userId()).param("role", m.roleKey())
-                .param("at", Sql.ts(m.createdAt()))
+                .param("at", Sql.ts(m.createdAt())).param("updated", Sql.ts(m.updatedAt()))
                 .update();
+    }
+
+    @Override
+    public boolean syncMember(OrgMember m) {
+        return jdbc.sql("""
+                insert into org_member (org_id, user_id, role_key, created_at, updated_at)
+                values (:org, :user, :role, :at, :at)
+                on conflict (org_id, user_id) do update set role_key = excluded.role_key,
+                    updated_at = excluded.updated_at
+                where org_member.updated_at <= excluded.updated_at and org_member.role_key <> excluded.role_key
+                """)
+                .param("org", m.orgId()).param("user", m.userId()).param("role", m.roleKey())
+                .param("at", Sql.ts(m.updatedAt()))
+                .update() == 1;
+    }
+
+    @Override
+    public boolean removeMember(String orgId, String userId, String roleKey, Instant at) {
+        return jdbc.sql("""
+                delete from org_member
+                where org_id = :org and user_id = :user and role_key = :role and updated_at <= :at
+                """)
+                .param("org", orgId).param("user", userId).param("role", roleKey).param("at", Sql.ts(at))
+                .update() == 1;
     }
 
     @Override
@@ -91,12 +121,17 @@ class JdbcOrganisationRepository implements OrganisationRepository {
 
     private static OrgMember member(ResultSet rs, int n) throws SQLException {
         return new OrgMember(rs.getString("org_id"), rs.getString("user_id"), rs.getString("role_key"),
-                Sql.instant(rs, "created_at"));
+                Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"));
     }
 
     private static Organisation map(ResultSet rs, int n) throws SQLException {
         return new Organisation(rs.getString("id"), OrgKind.valueOf(rs.getString("kind")), rs.getString("legal_name"),
-                rs.getString("display_name"), rs.getString("country"), OrgStatus.valueOf(rs.getString("status")),
+                rs.getString("display_name"), rs.getString("country"), offering(rs.getString("offering")),
+                OrgStatus.valueOf(rs.getString("status")),
                 Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"), rs.getLong("version"));
+    }
+
+    private static Offering offering(String value) {
+        return value == null ? null : Offering.valueOf(value);
     }
 }

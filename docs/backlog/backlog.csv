@@ -185,7 +185,7 @@
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
 - Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","Done"
-"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","In Progress"
+"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","Done"
 "S051","Story","Payments service with Stripe PaymentIntents","Create, confirm (3-D Secure), capture per shipment and refund through Stripe.","- Manual capture per shipment on carrier acceptance
 - 3-D Secure test card triggers authentication
 - Declined test card returns a clear error
@@ -208,7 +208,7 @@
 - Finance can approve, hold or release payout requests","E07","","High","8","payments java stripe","payments","Done"
 "S057","Story","Refund and chargeback reversals","Partial refunds reverse matching transfer and commission; chargebacks debit the responsible seller.","- Partial refund per line updates the ledger
 - Chargeback debits the seller's balance and notifies them","E07","","High","5","payments java","payments","Done"
-"E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","In Progress"
+"E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","Done"
 "S058","Story","Order and sub-order model","One order, one shipment per seller/fulfilment node, each cancellable separately.","- Order totals equal the sum of shipments plus tax
 - Each shipment can be cancelled before it is packed","E08","","Highest","5","orders java","orders","Done"
 "S059","Story","Shipment state machine with actor rules","placed → confirmed → packed → ready → picked_up → in_transit → out_for_delivery → delivered (+ failed, returned, cancelled).","- Seller-fulfilled: only the seller confirms, packs and marks ready
@@ -294,7 +294,7 @@
 - SOS alerts dispatch immediately","E12","","High","8","delivery mobile","delivery","Done"
 "S088","Story","Dispatch console","Plan routes per zone, assign drivers and reassign failed stops.","- Driver events stream into Delivery dispatch
 - Failed stops can be reassigned to another route","E12","","Medium","8","delivery staff-console","delivery","Done"
-"E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","In Progress"
+"E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","Done"
 "S089","Story","Resumable application with autosave","Applicants can save, sign out and resume exactly where they left off.","- Draft autosaves after every change
 - Save & sign out returns to 'Welcome back' and resumes on sign-in
 - No sidebar or back-office navigation while applying","E13","","Highest","5","onboarding java web","onboarding","Done"
@@ -464,7 +464,7 @@
 - About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","Done"
 "S150","Story","Services browsing and provider pages","Find a provider, see their designed page and book.","- Provider page renders the provider's chosen layout and approved links
 - Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","Done"
-"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","In Progress"
+"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","Done"
 "S151","Story","Seller Center app shell with grouped, fixed sidebar","Fixed sidebar grouped into collapsible sections; collapsed by default except the active group.","- Sidebar doesn't scroll with the page
 - Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","Done"
 "S152","Story","Orders management with labels and status updates","TanStack server-driven table; open rows in a sheet; buy labels; update allowed statuses.","- Sellers can confirm, pack and mark ready only
@@ -597,7 +597,7 @@
 - Payments consumes seller.payouts.paused/resumed; catalog/bookings/indexer consume seller.listings.hidden/restored","E13","","Highest","8","onboarding identity events","onboarding","Done"
 "S206","Story","Metered billing usage (FBA storage, ads, AI credits)","Report usage to Stripe Billing meters for plan add-ons.","- Usage events aggregated daily per org
 - Stripe meter events sent idempotently
-- Invoices show metered lines","E14","","Medium","5","billing stripe","billing","In Progress"
+- Invoices show metered lines","E14","","Medium","5","billing stripe","billing","Done"
 "S207","Story","Global MCP rate limits and durable audit","Move per-pod MCP rate-limit buckets to Valkey and give mcp.tool.invoked a durable path (outbox or local spool) so audit events survive broker outages.","- Rate limits are enforced across all replicas using Valkey token buckets
 - Audit events are spooled and replayed when Kafka is unavailable
 - Load test shows limits hold with 3 replicas","E21","","Medium","5","mcp ai","ai","Done"
@@ -624,7 +624,7 @@
 - Seller Center shows a banner when paused","E14","","Medium","1","payments","billing","Done"
 "S215","Story","Org kind 'both' and market alignment","Seller emits BOTH when an org sells products and services; identity's market is aligned with content's market codes.","- Seller org events can carry BOTH
 - identity market values match content market codes
-- Navigation in Seller Center shows both groups for BOTH orgs","E13","","Low","3","seller identity","onboarding","In Progress"
+- Navigation in Seller Center shows both groups for BOTH orgs","E13","","Low","3","seller identity","onboarding","Done"
 "S216","Story","Page hide and restore for large seller catalogs","Catalog pages through an org's products on hide/restore instead of loading all of them in one transaction.","- Hide/restore processes products in pages of 500
 - Large catalog (50k) hide completes without timeouts","E03","","Low","2","catalog","catalog","Done"
 "S217","Story","Align notification rules with real producer events","Notifications' event rules and topics are speculative (at.seller.events, order.placed). Map the real event types and topics from contracts/asyncapi/events.yaml and resolve recipients (email/phone/push) from identity when payloads carry only user ids.","- Rules cover orders.order.placed, orders.order.cancelled (wasPlaced), orders.shipment.status_changed/delivered/cancelled, seller application and compliance events, bookings events and identity verification
@@ -635,7 +635,7 @@
 - Cancelling one of several AfroTransact shipments releases only its stock
 - Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","Done"
 "S219","Story","Cluster-wide shipment status stream","SSE shipment stream fans out across replicas via Kafka or Valkey pub/sub, and orders consumes carrier.pickup.ready.","- Staff on any replica see every transition within 2s
-- carrier.pickup.ready moves eligible shipments forward","E08","","Medium","3","orders","orders","In Progress"
+- carrier.pickup.ready moves eligible shipments forward","E08","","Medium","3","orders","orders","Done"
 "S220","Story","Payments support for long-dated bookings","Payments adds release of remaining authorisation after partial capture, off-session charges on saved cards for balances beyond the auth window, and debiting provider late-cancellation fees.","- Remaining authorisation can be released after a deposit capture
 - Balance can be charged off-session on a saved card with SCA fallback
 - Provider late-cancellation fee is debited from the provider balance
@@ -701,7 +701,7 @@
 "S236","Story","Team management end to end","BFF and Seller Center use identity's member directory and invitations (list, invite, revoke, accept page, remove, role change with error mapping); notifications sends invitation emails; seller service mirrors identity role events or stops keeping its own member list.","- Team page shows real names, roles and pending invitations
 - Invitation email arrives with an accept link that works for new and existing users
 - Last-owner and owner-only rules surface clear errors
-- Seller service member list stays consistent with identity","E24","","High","5","seller-center bff identity notifications","seller-center","In Progress"
+- Seller service member list stays consistent with identity","E24","","High","5","seller-center bff identity notifications","seller-center","Done"
 "S237","Story","Trust-ops reminder and escalation event payloads","Trust-ops publishes seller response-due reminders and lapse events, includes sellerOrgId/customerId on escalation events and the decision note on claim.decided, and stops sending duplicate notification.requested for claims.","- Seller gets a reminder 24h before the response deadline
 - Escalation events carry the parties' ids
 - Claim decision emails include the staff note
@@ -723,7 +723,7 @@
 - 'plantian chips' finds plantain chips","E04","","Medium","8","search ads bff seller-center staff-console","search","Done"
 "S241","Story","Payment ownership checks and PaymentSheet customer key","Payments checks the caller owns the order on GET /v1/payments?orderId= and issues Stripe customer ephemeral keys for mobile PaymentSheet.","- Non-owners get 403 on order payment reads
 - Ephemeral key endpoint returns customer id and key for the signed-in shopper
-- BFF payment-sheet route works","E07","","Highest","3","payments security mobile","payments","In Progress"
+- BFF payment-sheet route works","E07","","Highest","3","payments security mobile","payments","Done"
 "S242","Story","Streaming support in go/pkg/httpserver","Shared Go HTTP server supports flushing through its response recorder and per-route write timeouts for long-lived streams (SSE), removing BFF workarounds.","- Recorder implements http.Flusher
 - SSE routes are exempt from the 30s write timeout
 - BFF Lola relay uses the shared server without workarounds","E01","","Medium","2","go platform","foundation","In Progress"
@@ -732,3 +732,8 @@
 - Media issues long-lived links only for these purposes","E18","","Medium","5","trust-ops notifications media","trust","In Progress"
 "S244","Story","Fix flaky BarcodeIT prefill cache test","catalog BarcodeIT.unknownGtinFallsBackToManualEntryAndTheMissIsCachedButErrorsAreNot fails intermittently.","- Test passes 20 consecutive runs
 - Root cause documented","E33","","Medium","1","catalog test","quality","In Progress"
+"S245","Story","BOTH orgs, billing usage and payment sheet in the apps","Seller Center shows both nav groups and role sets for BOTH orgs; billing page shows usage statement and metered invoice lines; staff console runs metering; BFF payment-sheet uses payments ephemeral keys; Stripe metered prices and meters created per environment.","- BOTH org members see seller and provider sections
+- Usage statement and metered invoice lines visible to finance roles
+- Staff can re-run metering for a period
+- Mobile PaymentSheet lists saved cards
+- Stripe prices metered_fba_storage, metered_ads_spend, metered_ai_credits exist in every environment","E24","","High","5","seller-center staff-console bff payments","seller-center","To Do"

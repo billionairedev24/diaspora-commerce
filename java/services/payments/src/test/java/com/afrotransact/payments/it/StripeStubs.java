@@ -124,6 +124,14 @@ final class StripeStubs {
                 "{\"id\":\"" + stripeCustomerId + "\",\"object\":\"customer\"}");
     }
 
+    void ephemeralKey(String stripeCustomerId, String keyId, long expires) {
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/ephemeral_keys"))
+                .withRequestBody(WireMock.containing("customer=" + stripeCustomerId)),
+                "{\"id\":\"" + keyId + "\",\"object\":\"ephemeral_key\",\"secret\":\"ek_test_" + keyId
+                        + "\",\"expires\":" + expires + ",\"associated_objects\":[{\"id\":\"" + stripeCustomerId
+                        + "\",\"type\":\"customer\"}]}");
+    }
+
     void setupIntent(String stripeCustomerId, String setupIntentId) {
         json(WireMock.post(WireMock.urlPathEqualTo("/v1/setup_intents"))
                 .withRequestBody(WireMock.containing("customer=" + stripeCustomerId)),

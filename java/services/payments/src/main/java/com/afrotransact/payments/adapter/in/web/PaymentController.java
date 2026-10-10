@@ -82,7 +82,10 @@ class PaymentController {
         return PaymentResponse.of(payments.get(id, refresh), false);
     }
 
-    @Operation(summary = "Get the payment of an order")
+    @Operation(summary = "Get the payment of an order",
+            description = "Services with payments:service and staff with payments:read read any order's payment. "
+                    + "Shoppers (CUSTOMER tokens) read only their own orders' payments; another shopper's order is "
+                    + "403 payments.not-your-order (S241).")
     @GetMapping("/v1/payments")
     PaymentResponse byOrder(@RequestParam String orderId) {
         return PaymentResponse.of(payments.getByOrder(orderId), false);

@@ -14,6 +14,11 @@ public enum ActorKind {
     CARRIER,
     /** AfroTransact Delivery driver (driver app, delivery:operate). */
     COURIER,
+    /**
+     * A pickup point (platform counter, locker or seller pickup) reporting through carrier-gateway's
+     * {@code carrier.pickup.ready} that a pickup order is ready for collection (S219).
+     */
+    PICKUP_POINT,
     /** The checkout saga itself. */
     SYSTEM
 }

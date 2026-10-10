@@ -39,8 +39,9 @@ class SellerOrgEventListener {
 
     /** Wire format of seller-service's OrgEventPayload (contracts/asyncapi/fragments/seller.yaml SellerOrgEvent). */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record OrgEventMessage(String orgId, String kind, String legalName, String displayName, String country,
-                           String status, List<String> ownerUserIds, String applicantUserId, Instant occurredAt) {
+    record OrgEventMessage(String orgId, String kind, String primaryKind, String legalName, String displayName,
+                           String country, String status, List<String> ownerUserIds, String applicantUserId,
+                           Instant occurredAt) {
     }
 
     @KafkaListener(id = "identity-seller-org", groupId = "${spring.kafka.consumer.group-id:identity-service}",
@@ -68,8 +69,9 @@ class SellerOrgEventListener {
             LOG.warn("Skipping {} event {} without orgId", type, eventId.get());
             return;
         }
-        SellerOrgChange change = new SellerOrgChange(eventId.get(), m.orgId(), m.kind(), m.legalName(),
-                m.displayName(), m.country(), m.status(), m.ownerUserIds(), m.applicantUserId(), m.occurredAt());
+        SellerOrgChange change = new SellerOrgChange(eventId.get(), m.orgId(), m.kind(), m.primaryKind(),
+                m.legalName(), m.displayName(), m.country(), m.status(), m.ownerUserIds(), m.applicantUserId(),
+                m.occurredAt());
         if (ORG_APPROVED.equals(type)) {
             sync.approved(change);
         } else {

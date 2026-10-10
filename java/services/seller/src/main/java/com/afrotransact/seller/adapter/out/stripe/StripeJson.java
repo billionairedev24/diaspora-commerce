@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 
+import com.afrotransact.seller.domain.InvoiceLine;
 import com.afrotransact.seller.domain.RequirementError;
 import com.afrotransact.seller.domain.RequirementsSnapshot;
 import com.afrotransact.seller.port.InvoiceSnapshot;
@@ -70,7 +71,37 @@ final class StripeJson {
                 text(i, "billing_reason"), i.path("amount_due").asLong(0), i.path("amount_paid").asLong(0),
                 i.path("currency").asString("usd"), epoch(i.path("period_start")), epoch(i.path("period_end")),
                 text(i, "hosted_invoice_url"), text(i, "invoice_pdf"), i.path("attempt_count").asInt(0),
-                epoch(i.path("next_payment_attempt")), epoch(i.path("created")));
+                epoch(i.path("next_payment_attempt")), epoch(i.path("created")), lines(i.path("lines").path("data")));
+    }
+
+    /**
+     * Invoice lines. The price's lookup key is read from {@code price} (older API versions) or
+     * {@code pricing.price_details} when Stripe expanded it; metered usage lines are recognised by the
+     * {@code metered_*} lookup keys of the meters.
+     */
+    private static List<InvoiceLine> lines(JsonNode data) {
+        List<InvoiceLine> out = new ArrayList<>();
+        if (!data.isArray()) {
+            return out;
+        }
+        for (JsonNode l : data) {
+            String lookup = text(l.path("price"), "lookup_key");
+            if (lookup == null) {
+                lookup = text(l.path("pricing").path("price_details").path("price"), "lookup_key");
+            }
+            if (lookup == null) {
+                lookup = text(l.path("metadata"), "metered_lookup_key");
+            }
+            String item = idOf(l.path("subscription_item"));
+            if (item == null) {
+                item = idOf(l.path("parent").path("subscription_item_details").path("subscription_item"));
+            }
+            JsonNode q = l.path("quantity");
+            out.add(new InvoiceLine(text(l, "description"), l.path("amount").asLong(0),
+                    q.isNumber() ? q.asLong() : null, lookup, item, InvoiceLine.meterOf(lookup),
+                    epoch(l.path("period").path("start")), epoch(l.path("period").path("end"))));
+        }
+        return out;
     }
 
     static String text(JsonNode n, String field) {

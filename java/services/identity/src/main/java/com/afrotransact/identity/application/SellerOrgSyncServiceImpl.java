@@ -9,11 +9,11 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.identity.application.IdentityEventPayloads.RoleChanged;
+import com.afrotransact.identity.domain.MarketCodes;
 import com.afrotransact.identity.domain.OrgIds;
 import com.afrotransact.identity.domain.OrgKind;
 import com.afrotransact.identity.domain.OrgStatus;
 import com.afrotransact.identity.domain.Organization;
-import com.afrotransact.identity.domain.RoleKeys;
 import com.afrotransact.identity.domain.UserAccount;
 import com.afrotransact.identity.port.AccessChangeLog;
 import com.afrotransact.identity.port.OrganizationRepository;
@@ -60,7 +60,7 @@ class SellerOrgSyncServiceImpl implements SellerOrgSyncService {
         if (org.isEmpty()) {
             return false;
         }
-        String ownerRole = org.get().kind() == OrgKind.SELLER ? RoleKeys.SELLER_OWNER : RoleKeys.PROVIDER_OWNER;
+        String ownerRole = org.get().kind().ownerRole(primaryKind(change.primaryKind()));
         Set<String> members = new LinkedHashSet<>();
         if (change.applicantUserId() != null) {
             members.add(change.applicantUserId());
@@ -95,12 +95,20 @@ class SellerOrgSyncServiceImpl implements SellerOrgSyncService {
         }
         String name = firstNonBlank(change.displayName(), change.legalName(),
                 orgs.findById(change.orgId()).map(Organization::name).orElse(null), change.orgId());
-        String market = change.country() == null || change.country().isBlank() ? null
-                : change.country().trim().toUpperCase(Locale.ROOT);
+        // S215: identity's market uses content's market codes (ISO 3166-1 alpha-2); unknown values are not stored.
+        String market = MarketCodes.normalise(change.country());
+        if (market == null && change.country() != null && !change.country().isBlank()) {
+            LOG.warn("Organisation {}: country {} is not a market code; market left unchanged", change.orgId(),
+                    change.country());
+        }
         Instant at = change.occurredAt() == null ? Instant.now(clock) : change.occurredAt();
         Organization saved = orgs.upsert(new Organization(change.orgId(), kind, name, status, market, at));
         changeLog.append(ACTOR, "org.upserted", null, null, change.orgId(), kind + " " + status);
         return Optional.of(saved);
+    }
+
+    private static OrgKind primaryKind(String raw) {
+        return raw != null && "PROVIDER".equalsIgnoreCase(raw.trim()) ? OrgKind.PROVIDER : OrgKind.SELLER;
     }
 
     private void grantOwner(Organization org, String rawUserId, String roleKey) {

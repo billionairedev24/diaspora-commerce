@@ -46,15 +46,19 @@ class OrganizationController {
     }
 
     @Schema(name = "UpsertOrgRequest")
-    record UpsertOrgRequest(@NotBlank @Schema(allowableValues = {"SELLER", "PROVIDER"}) String kind,
+    record UpsertOrgRequest(@NotBlank @Schema(allowableValues = {"SELLER", "PROVIDER", "BOTH"}) String kind,
                             @NotBlank @Size(max = 200) String name,
                             @NotBlank @Schema(allowableValues = {"PENDING", "APPROVED", "SUSPENDED", "REJECTED"})
                             String status) {
     }
 
     @Schema(name = "Organization")
-    record OrgResponse(@Schema(examples = "org_3k2j9x8q7w6e5r4t3y2u") String id, String kind, String name,
-                       String status, String market, Instant updatedAt) {
+    record OrgResponse(@Schema(examples = "org_3k2j9x8q7w6e5r4t3y2u") String id,
+                       @Schema(allowableValues = {"SELLER", "PROVIDER", "BOTH"}) String kind, String name,
+                       String status,
+                       @Schema(description = "Market code as content-service defines it (ISO 3166-1 alpha-2)",
+                               examples = "US") String market,
+                       Instant updatedAt) {
     }
 
     @Schema(name = "SetMemberRequest")
@@ -86,7 +90,7 @@ class OrganizationController {
 
     @Schema(name = "OrgInvitation", description = "An invitation to join an organisation")
     record InvitationResponse(UUID id, String orgId, String orgName,
-                              @Schema(allowableValues = {"SELLER", "PROVIDER"}) String orgKind, String email,
+                              @Schema(allowableValues = {"SELLER", "PROVIDER", "BOTH"}) String orgKind, String email,
                               String roleKey, String roleLabel,
                               @Schema(allowableValues = {"PENDING", "ACCEPTED", "REVOKED", "EXPIRED"}) String status,
                               @Schema(description = "User id (or client id) of the inviter") String invitedBy,

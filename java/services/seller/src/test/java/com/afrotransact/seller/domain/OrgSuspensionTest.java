@@ -13,7 +13,7 @@ class OrgSuspensionTest {
     private static final Instant NOW = Instant.parse("2026-10-10T10:00:00Z");
 
     private static Organisation org(OrgStatus status) {
-        return new Organisation("org_1", OrgKind.SELLER, "Store LLC", "Store", "US", status, NOW, NOW, 0);
+        return new Organisation("org_1", OrgKind.SELLER, "Store LLC", "Store", "US", null, status, NOW, NOW, 0);
     }
 
     @Test

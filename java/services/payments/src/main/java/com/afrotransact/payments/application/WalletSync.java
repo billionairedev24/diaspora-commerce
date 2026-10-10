@@ -50,6 +50,11 @@ class WalletSync {
     }
 
     /** The shopper's Stripe Customer, created (idempotently per shopper) on first use; locked. */
+    /** The shopper's Stripe Customer id, if one was created. */
+    Optional<String> stripeCustomerOf(String customerId) {
+        return wallet.findCustomer(customerId).map(StripeCustomer::stripeCustomerId);
+    }
+
     StripeCustomer ensureCustomer(String customerId) {
         Optional<StripeCustomer> existing = wallet.lockCustomer(customerId);
         if (existing.isPresent()) {
