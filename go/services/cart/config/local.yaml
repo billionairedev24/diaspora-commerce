@@ -6,6 +6,7 @@ redisUrl: redis://localhost:6379/0
 guestTtlDays: 30
 catalogUrl: http://localhost:8101
 inventoryUrl: http://localhost:8103
+offersUrl: http://localhost:8102
 retailOrgId: org_afrotransact_retail
 sellerNames: {}
 auth:

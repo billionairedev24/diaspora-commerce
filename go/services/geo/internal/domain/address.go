@@ -3,6 +3,7 @@ package domain
 
 import (
 	"errors"
+	"math"
 	"regexp"
 	"strings"
 )
@@ -95,4 +96,18 @@ func Same(a, b Address) bool {
 	return n(a.Line1) == n(b.Line1) && n(a.Line2) == n(b.Line2) && n(a.City) == n(b.City) &&
 		n(a.State) == n(b.State) && n(a.PostalCode)[:min(5, len(n(a.PostalCode)))] ==
 		n(b.PostalCode)[:min(5, len(n(b.PostalCode)))]
+}
+
+// ErrInvalidPoint is returned for coordinates outside [-90, 90] × [-180, 180].
+var ErrInvalidPoint = errors.New("invalid coordinates")
+
+// ErrNoAddress is returned by a reverse geocoder that answered but has no address at the point (ocean, wilderness).
+var ErrNoAddress = errors.New("no address at this point")
+
+// CheckPoint validates a latitude / longitude pair.
+func CheckPoint(lat, lon float64) error {
+	if math.IsNaN(lat) || math.IsNaN(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180 {
+		return ErrInvalidPoint
+	}
+	return nil
 }

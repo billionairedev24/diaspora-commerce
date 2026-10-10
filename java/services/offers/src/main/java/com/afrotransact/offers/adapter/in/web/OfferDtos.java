@@ -7,6 +7,7 @@ import java.util.UUID;
 import com.afrotransact.offers.application.CreateOfferCommand;
 import com.afrotransact.offers.application.OfferView;
 import com.afrotransact.offers.application.PageView;
+import com.afrotransact.offers.application.StockUpdate;
 import com.afrotransact.offers.application.UpdateOfferCommand;
 import com.afrotransact.offers.domain.Fulfilment;
 import com.afrotransact.offers.domain.Offer;
@@ -127,5 +128,19 @@ final class OfferDtos {
             return "AfroTransact";
         }
         return o.shipFrom() == null ? null : o.shipFrom().label();
+    }
+
+    @Schema(name = "StockUpdateRequest", description = "Absolute quantity on hand for a seller-fulfilled SKU")
+    record StockUpdateRequest(@NotNull @Min(0) @Max(99_999) @Schema(example = "24") Integer quantity,
+                              @Size(max = 40) @Schema(example = "STOCK_TAKE",
+                                      description = "STOCK_TAKE, DAMAGED, FOUND, RETURNED or OTHER") String reason) {
+    }
+
+    @Schema(name = "StockUpdate", description = "The quantity now declared on the SKU's offers")
+    record StockUpdateResponse(String sku, int quantity, String reason, List<UUID> offerIds) {
+
+        static StockUpdateResponse of(StockUpdate u) {
+            return new StockUpdateResponse(u.sku(), u.quantity(), u.reason(), u.offerIds());
+        }
     }
 }

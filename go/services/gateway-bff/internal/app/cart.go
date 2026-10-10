@@ -9,7 +9,9 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -17,7 +19,8 @@ import (
 )
 
 // CartService maps the contract's cart (lineId/savedId, selection for checkout, stock-capped quantities with
-// STOCK_LIMIT problems) onto the cart service. Line and saved ids are variant ATINs. The cart service has no line
+// STOCK_LIMIT problems) onto the cart service. Line and saved ids are variant ATINs; a line's offerId is the
+// offers-service offer the shopper chose (validated through offers before the cart service is called). The cart service has no line
 // selection, so the BFF keeps the deselected lines in Valkey keyed by the cart owner (new lines start selected).
 type CartService interface {
 	Get(ctx context.Context, c *domain.Caller) (domain.Cart, error)
@@ -37,6 +40,8 @@ type CartDeps struct {
 	Cart      port.CartClient
 	Catalog   port.CatalogClient
 	Inventory port.InventoryClient
+	// Offers validates offer ids (buyable) for add-to-cart; optional (without it offer ids are ATINs).
+	Offers    port.StorefrontOffersClient
 	Selection port.SelectionStore
 	Sessions  SessionService
 	Estimator domain.Estimator
@@ -103,7 +108,7 @@ func cartErr(err error, notFoundCode string) error {
 			return domain.NewProblem(http.StatusNotFound, domain.CodeSavedNotFound, "Saved item not found", "That item is no longer saved.").WithCause(err)
 		}
 		return lineNotFound().WithCause(err)
-	case port.CartNotSellable:
+	case port.CartNotSellable, port.CartOfferNotBuyable:
 		return offerNotFound().WithCause(err)
 	case port.CartInvalid:
 		return domain.ValidationProblem(map[string]string{"quantity": firstNonEmpty(p.Detail, "Invalid quantity")}).WithCause(err)
@@ -127,8 +132,10 @@ var onlyRe = regexp.MustCompile(`only (\d+) available`)
 // number in the cart service's message.
 func (s *cartServiceImpl) stockProblem(ctx context.Context, atin, title, detail string, inCart, requested int) *domain.Problem {
 	available := -1
-	if m, err := s.d.Inventory.Available(ctx, []string{atin}); err == nil {
-		available = m[atin]
+	if atin != "" {
+		if m, err := s.d.Inventory.Available(ctx, []string{atin}); err == nil {
+			available = m[atin]
+		}
 	}
 	if available < 0 {
 		available = 0
@@ -136,7 +143,7 @@ func (s *cartServiceImpl) stockProblem(ctx context.Context, atin, title, detail 
 			available, _ = strconv.Atoi(g[1])
 		}
 	}
-	if title == "" {
+	if title == "" && atin != "" {
 		if v, err := s.d.Catalog.Variant(ctx, atin); err == nil {
 			title = v.Product.Title
 		}
@@ -212,19 +219,55 @@ func (s *cartServiceImpl) resolveOffer(ctx context.Context, offerID string) (str
 	return p.Variants[0].ATIN, p.Title, nil
 }
 
+var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// offerLine validates an offers-service offer id: it must exist and be buyable now. Out of stock answers like the
+// cart's stock problems; anything else that stops the purchase is OFFER_NOT_FOUND.
+func (s *cartServiceImpl) offerLine(ctx context.Context, c *domain.Caller, offerID string, qty int) (string, error) {
+	d, err := s.d.Offers.Offer(ctx, offerID)
+	if err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			return "", offerNotFound().WithCause(err)
+		}
+		return "", mapErr("offers", err)
+	}
+	if !d.Buyable {
+		if slices.Contains(d.NotEligible, "OUT_OF_STOCK") {
+			return "", domain.StockProblem("", 0, s.inCart(ctx, c, d.Offer.ATIN), qty)
+		}
+		return "", offerNotFound()
+	}
+	return d.Offer.ATIN, nil
+}
+
+func (s *cartServiceImpl) inCart(ctx context.Context, c *domain.Caller, atin string) int {
+	if cur, ok, err := s.fetch(ctx, c); err == nil && ok {
+		if l, found := cur.Line(atin); found {
+			return l.Quantity
+		}
+	}
+	return 0
+}
+
 func (s *cartServiceImpl) Add(ctx context.Context, c *domain.Caller, offerID string, qty int) (domain.Cart, error) {
-	atin, title, err := s.resolveOffer(ctx, offerID)
+	var atin, title, chosen string
+	var err error
+	if s.d.Offers != nil && uuidRe.MatchString(offerID) {
+		chosen = strings.ToLower(offerID)
+		atin, err = s.offerLine(ctx, c, chosen, qty)
+	} else {
+		atin, title, err = s.resolveOffer(ctx, offerID)
+	}
 	if err != nil {
 		return domain.Cart{}, err
 	}
-	up, err := s.d.Cart.Add(ctx, owner(c), atin, qty)
+	up, err := s.d.Cart.Add(ctx, owner(c), atin, chosen, qty)
 	if err != nil {
 		if p, ok := isStock(err); ok {
-			inCart := 0
-			if cur, ok, ferr := s.fetch(ctx, c); ferr == nil && ok {
-				if l, found := cur.Line(atin); found {
-					inCart = l.Quantity
-				}
+			inCart := s.inCart(ctx, c, atin)
+			if chosen != "" {
+				// Seller-declared stock: the cart service's "only N available" is the authority.
+				return domain.Cart{}, s.stockProblem(ctx, "", title, p.Detail, inCart, inCart+qty).WithCause(err)
 			}
 			return domain.Cart{}, s.stockProblem(ctx, atin, title, p.Detail, inCart, inCart+qty).WithCause(err)
 		}
@@ -433,7 +476,7 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 			qty := max(1, l.Quantity)
 			sel := !deselected[l.VariantATIN] && !l.Unavailable
 			line := domain.CartLine{
-				LineID: l.VariantATIN, ATIN: firstNonEmpty(l.ProductATIN, l.VariantATIN), OfferID: l.VariantATIN, Title: l.Title,
+				LineID: l.VariantATIN, ATIN: firstNonEmpty(l.ProductATIN, l.VariantATIN), OfferID: firstNonEmpty(l.OfferID, l.VariantATIN), Title: l.Title,
 				Unit: info[l.VariantATIN].unit, Department: info[l.VariantATIN].department, ImageURL: strPtr(l.ImageURL),
 				PriceMinor: l.PriceMinor, LineTotalMinor: l.PriceMinor * int64(qty), Quantity: qty,
 				MaxQuantity: domain.MaxQuantity(available), AvailableQty: available, StockStatus: domain.StockStatusFor(available), Selected: sel,
@@ -466,7 +509,7 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 	}
 	for _, l := range up.Saved {
 		cart.Saved = append(cart.Saved, domain.SavedItem{SavedID: l.VariantATIN, ATIN: firstNonEmpty(l.ProductATIN, l.VariantATIN),
-			OfferID: l.VariantATIN, Title: l.Title, ImageURL: strPtr(l.ImageURL), PriceMinor: l.PriceMinor,
+			OfferID: firstNonEmpty(l.OfferID, l.VariantATIN), Title: l.Title, ImageURL: strPtr(l.ImageURL), PriceMinor: l.PriceMinor,
 			Available: l.Available > 0 && !l.Unavailable})
 	}
 	cart.AllSelected = lineCount > 0 && allSelected

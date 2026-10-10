@@ -238,7 +238,11 @@ paths:
       operationId: createStockAlert
       security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: '"Email me when available" for an out-of-stock product'
-      description: Signed-in customers may omit the email; guests must provide one.
+      description: |
+        Arms a back-in-stock alert at the notifications service for the requested variant (the product's first
+        variant for a product ATIN), with the shopper's own token: signing in is required (401 for guests). The
+        email defaults to the account's; a typed one overrides it. Subscribing again while the alert is active is a
+        no-op (still 201).
       parameters:
         - $ref: '#/components/parameters/Atin'
       requestBody:
@@ -252,6 +256,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/StockAlert'}
+        '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
   /v1/cart:
@@ -418,6 +423,12 @@ paths:
       operationId: signIn
       security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Email + password sign-in (step 1); usually continues with two-step verification
+      description: |
+        Runs on identity's first-party sign-in API (the BFF's client-credentials token, the shopper's IP and user
+        agent). `authenticated` means the session is signed in (cookie rotated) — go to `redirectTo`;
+        `mfa_required` continues on the code form. A trusted device (cookie `at_trusted_device`, set after
+        "trust this device") skips the second factor. 401 `INVALID_CREDENTIALS`; 403 when the email is not
+        verified or the account is disabled; 429 `RATE_LIMITED` with `Retry-After` while the account or IP is locked.
       requestBody:
         required: true
         content:
@@ -426,6 +437,8 @@ paths:
       responses:
         '200': {$ref: '#/components/responses/AuthResult'}
         '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
   /v1/auth/mfa/verify:
@@ -433,7 +446,11 @@ paths:
       tags: [Auth]
       operationId: verifyMfa
       security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Two-step verification code (authenticator app or SMS)
+      summary: Two-step verification code (authenticator app, SMS or a recovery code)
+      description: |
+        `method` picks the factor (default: the authenticator app when enrolled, SMS after a code was texted).
+        `trustDevice` keeps an HttpOnly `at_trusted_device` cookie for 30 days. Wrong code: 422 `INVALID_CODE`;
+        expired challenge: 410 `CHALLENGE_EXPIRED`; lockout: 429 with `Retry-After`.
       requestBody:
         required: true
         content:
@@ -441,6 +458,31 @@ paths:
             schema: {$ref: '#/components/schemas/VerifyCodeRequest'}
       responses:
         '200': {$ref: '#/components/responses/AuthResult'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/auth/mfa/sms:
+    post:
+      tags: [Auth]
+      operationId: sendMfaCode
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Text the two-step verification code instead (or again)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId]
+              properties:
+                challengeId: {type: string}
+      responses:
+        '202':
+          description: Code sent; verify it with method sms
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthResult'}
         '410': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
@@ -450,7 +492,10 @@ paths:
       operationId: signUp
       security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Create an account (same fields for customers, sellers and providers — role is decided server-side)
-      description: Sends a 6-digit code to the email address; the account is created when the code is verified.
+      description: >-
+        Sends a 6-digit code to the email address; the account is created when the code is verified. With
+        `invitationToken` (organisation invite link, same email) identity starts the account verified and joins the
+        organisation: the answer is `authenticated` with `redirectTo` the sign-in page, and no code is sent.
       requestBody:
         required: true
         content:
@@ -515,6 +560,7 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PasskeyOptions'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
   /v1/auth/passkey/verify:
     post:
       tags: [Auth]
@@ -529,7 +575,10 @@ paths:
       responses:
         '200': {$ref: '#/components/responses/AuthResult'}
         '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
         '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
   /v1/auth/sign-out:
     post:
       tags: [Auth]
@@ -619,6 +668,55 @@ paths:
               schema: {$ref: '#/components/schemas/Address'}
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+  /v1/account/phone/verification:
+    post:
+      tags: [Account]
+      operationId: startPhoneVerification
+      summary: Text a 6-digit code to the account phone number
+      description: >-
+        identity `POST /v1/me/phone/verification`. 10-minute expiry; at most one code per 30 seconds and five per hour
+        (429 with `Retry-After`). 422 `PHONE_MISSING` without a phone; 409 `CONFLICT` when already verified.
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '202':
+          description: Code sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PhoneCodeSent'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/phone/verification/confirm:
+    post:
+      tags: [Account]
+      operationId: confirmPhoneVerification
+      summary: Confirm the account phone number with the SMS code
+      description: >-
+        identity `POST /v1/me/phone/verification/confirm`. Wrong code: 422 `INVALID_CODE` on `code`; expired, used, too
+        many attempts or the phone changed since: 410 `CHALLENGE_EXPIRED` (send a new code).
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: {type: string, pattern: '^\d{6}$'}
+      responses:
+        '200':
+          description: Verified
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PhoneVerification'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/account/payment-methods:
     get:
       tags: [Account]
@@ -734,6 +832,35 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+  /v1/account/stock-alerts:
+    get:
+      tags: [Account]
+      operationId: listStockAlerts
+      summary: My back-in-stock alerts (active and already sent), newest first
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/StockAlertItem'}}
+        '401': {$ref: '#/components/responses/Problem'}
+  /v1/account/stock-alerts/{atin}:
+    delete:
+      tags: [Account]
+      operationId: removeStockAlert
+      summary: Stop a back-in-stock alert for a variant
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/Atin'
+      responses:
+        '204': {description: Removed}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/checkout/summary:
     get:
       tags: [Checkout]
@@ -801,6 +928,51 @@ paths:
                 required: [jobs]
                 properties:
                   jobs: {type: array, items: {$ref: '#/components/schemas/Job'}}
+  /v1/careers/uploads:
+    post:
+      tags: [Careers]
+      operationId: requestResumeUpload
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Signed direct upload for a résumé (PDF, at most 5 MB)
+      description: |
+        Returns a short-lived URL from the media service (private storage). PUT the file there with the given
+        headers, then call `…/uploads/{assetId}/complete` and apply with `resumeAssetId`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fileName, contentType, size]
+              properties:
+                fileName: {type: string, maxLength: 200}
+                contentType: {type: string, enum: [application/pdf]}
+                size: {type: integer, format: int64, minimum: 1, maximum: 5242880}
+      responses:
+        '201':
+          description: Upload instructions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResumeUpload'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/careers/uploads/{assetId}/complete:
+    post:
+      tags: [Careers]
+      operationId: completeResumeUpload
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Check the uploaded résumé (real type and size) and finalise it
+      parameters:
+        - {name: assetId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Résumé ready; use assetId as resumeAssetId
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResumeAsset'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
   /v1/careers/jobs/{jobId}/applications:
     post:
       tags: [Careers]
@@ -927,7 +1099,7 @@ components:
             Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, PRODUCT_NOT_FOUND, OFFER_NOT_FOUND,
             LINE_NOT_FOUND, SAVED_NOT_FOUND, STOCK_LIMIT, OUT_OF_STOCK, INVALID_CREDENTIALS, INVALID_CODE, CHALLENGE_EXPIRED,
             EMAIL_TAKEN, WEAK_PASSWORD, PROVIDER_DISABLED, ZIP_NOT_SERVICEABLE, PAYMENT_DECLINED, IDEMPOTENCY_CONFLICT,
-            STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE.
+            STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING.
         errors:
           type: object
           additionalProperties: {type: string}
@@ -991,7 +1163,7 @@ components:
       type: object
       required: [offerId, seller, priceMinor, listPriceMinor, currency, fulfilment, availableQty, stockStatus, delivery]
       properties:
-        offerId: {type: string}
+        offerId: {type: string, description: offers-service offer id (add it to the cart as offerId)}
         seller: {$ref: '#/components/schemas/Seller'}
         priceMinor: {type: integer}
         listPriceMinor: {type: [integer, 'null']}
@@ -1090,6 +1262,37 @@ components:
       properties:
         atin: {$ref: '#/components/schemas/Atin'}
         status: {type: string, enum: [subscribed]}
+    StockAlertItem:
+      type: object
+      required: [atin, productTitle, status, createdAt, notifiedAt]
+      properties:
+        atin: {$ref: '#/components/schemas/Atin'}
+        productTitle: {type: string}
+        status: {type: string, enum: [active, notified], description: notified = the back-in-stock email was sent}
+        createdAt: {type: string, format: date-time}
+        notifiedAt: {type: [string, 'null'], format: date-time}
+    ResumeUpload:
+      type: object
+      required: [assetId, upload, maxBytes]
+      properties:
+        assetId: {type: string}
+        maxBytes: {type: integer, format: int64}
+        upload:
+          type: object
+          required: [method, url, headers]
+          properties:
+            method: {type: string}
+            url: {type: string}
+            headers: {type: object, additionalProperties: {type: string}}
+            expiresAt: {type: [string, 'null'], format: date-time}
+    ResumeAsset:
+      type: object
+      required: [assetId, contentType, bytes, status]
+      properties:
+        assetId: {type: string}
+        contentType: {type: string}
+        bytes: {type: integer, format: int64}
+        status: {type: string, enum: [READY]}
     FacetBucket:
       type: object
       required: [value, label, count]
@@ -1209,7 +1412,7 @@ components:
       type: object
       required: [offerId, quantity]
       properties:
-        offerId: {type: string}
+        offerId: {type: string, description: "The offers-service offer id (buy box or Other sellers; validated as buyable), or a product / variant ATIN when offers has none"}
         quantity: {type: integer, minimum: 1, maximum: 99}
     UpdateCartLineRequest:
       type: object
@@ -1423,6 +1626,8 @@ components:
             email: {type: string}
             initials: {type: string}
             roles: {type: array, items: {type: string}}
+            phone: {type: string, description: 'Masked account phone (•••• 0142); absent when identity is unavailable or no phone is set'}
+            phoneVerified: {type: boolean, description: Whether the account phone passed SMS verification}
         counts:
           type: [object, 'null']
           description: Badges for the account menu.
@@ -1439,6 +1644,18 @@ components:
         email: {type: string, format: email}
         password: {type: string, minLength: 1}
         returnTo: {type: string}
+    PhoneCodeSent:
+      type: object
+      required: [sentTo, expiresAt]
+      properties:
+        sentTo: {type: string, description: 'Masked phone, e.g. •••• 0142'}
+        expiresAt: {type: string, format: date-time}
+    PhoneVerification:
+      type: object
+      required: [phoneVerified]
+      properties:
+        phoneVerified: {type: boolean}
+        verifiedAt: {type: string, format: date-time}
     SignUpRequest:
       type: object
       required: [firstName, lastName, email, phone, password, termsAccepted, smsConsent]
@@ -1451,12 +1668,14 @@ components:
         termsAccepted: {type: boolean, const: true}
         smsConsent: {type: boolean, description: 'Separate, optional SMS opt-in (AfroTransact Alerts)'}
         returnTo: {type: string}
+        invitationToken: {type: string, maxLength: 200, description: Token from an organisation invitation link (Seller Center accept page)}
     VerifyCodeRequest:
       type: object
       required: [challengeId, code]
       properties:
         challengeId: {type: string}
-        code: {type: string, pattern: '^\d{6}$'}
+        code: {type: string, pattern: '^(\d{6}|[A-Za-z0-9-]{8,20})$', description: '6-digit code, or a recovery code with method recovery'}
+        method: {type: string, enum: [totp, sms, recovery], description: Two-step sign-in only; defaults to the factor offered first}
         trustDevice: {type: boolean}
     ResendResponse:
       type: object
@@ -1650,6 +1869,10 @@ components:
         paymentMethodId: {type: string, description: Saved Stripe payment method; omit when paying with a wallet}
         wallet: {type: string, enum: [apple_pay, google_pay, link]}
         gift: {type: boolean}
+        couponCode:
+          type: string
+          maxLength: 20
+          description: Coupon validated and redeemed by orders with the offers service (released if the order fails or is cancelled); 422 with errors.couponCode when it does not apply
         deliverySelections:
           type: array
           items:

@@ -24,6 +24,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/catalog"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/inventory"
+	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/offers"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/pgrepo"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/redisrepo"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/app"
@@ -77,7 +78,7 @@ func run() error {
 	users := pgrepo.New(pool)
 	svc := app.NewCartService(guests, users,
 		catalog.New(cfg.CatalogURL, httpClient, 30*time.Second, cfg.RetailOrgID, cfg.SellerNames),
-		inventory.New(cfg.InventoryURL, httpClient))
+		inventory.New(cfg.InventoryURL, httpClient), offers.New(cfg.OffersURL, httpClient, 15*time.Second))
 
 	var verifier auth.Verifier
 	if cfg.Auth.Enabled {

@@ -42,9 +42,13 @@ class CheckoutWorkflowTest {
     }
 
     private static CheckoutInput input(String orderId) {
+        return input(orderId, null);
+    }
+
+    private static CheckoutInput input(String orderId, String coupon) {
         return new CheckoutInput(orderId, "AT-2026-TESTAB", "customer-1", "key-1", "checkout-" + orderId, "USD",
                 new ShipTo("addr-1", "Ada", "+17135550142", "1 Main St", null, "Houston", "TX", "77002", "US", null),
-                List.of(), List.of(), 900, Instant.now());
+                List.of(), List.of(), 900, Instant.now(), coupon);
     }
 
     private CheckoutWorkflow start(CheckoutInput input) {
@@ -195,5 +199,51 @@ class CheckoutWorkflowTest {
         workflows.start(in);
         workflows.signalPayment(in.workflowId(), false, "late");
         assertThat(activities.count("prepare")).isEqualTo(1);
+    }
+
+    @Test
+    void couponIsValidatedRedeemedAndKeptWhenTheOrderIsPlaced() {
+        CheckoutInput in = input(UUID.randomUUID().toString(), "WELCOME10");
+        CheckoutWorkflow wf = start(in);
+        awaitPhase(wf, CheckoutProgress.Phase.AWAITING_PAYMENT);
+        wf.paymentAuthorized();
+        assertThat(result(in, client).phase()).isEqualTo(CheckoutProgress.Phase.PLACED);
+        assertThat(activities.count("validateCoupon")).isEqualTo(1);
+        assertThat(activities.count("redeemCoupon")).isEqualTo(1);
+        assertThat(activities.calls.keySet()).noneMatch(k -> k.startsWith("releaseCoupon"));
+    }
+
+    @Test
+    void failedPaymentReleasesTheRedeemedCoupon() {
+        CheckoutInput in = input(UUID.randomUUID().toString(), "WELCOME10");
+        CheckoutWorkflow wf = start(in);
+        awaitPhase(wf, CheckoutProgress.Phase.AWAITING_PAYMENT);
+        wf.paymentFailed("card declined");
+        assertThat(result(in, client).phase()).isEqualTo(CheckoutProgress.Phase.FAILED);
+        assertThat(activities.count("releaseCoupon:red-1")).isEqualTo(1);
+        assertThat(activities.count("releaseReservation")).isEqualTo(1);
+    }
+
+    @Test
+    void couponThatDoesNotApplyStopsBeforeReserving() {
+        activities.failCouponWith = CheckoutCodes.COUPON_NOT_APPLICABLE;
+        CheckoutInput in = input(UUID.randomUUID().toString(), "OLDCODE");
+        start(in);
+        CheckoutProgress p = result(in, client);
+        assertThat(p.phase()).isEqualTo(CheckoutProgress.Phase.FAILED);
+        assertThat(p.failureCode()).isEqualTo(CheckoutCodes.COUPON_NOT_APPLICABLE);
+        assertThat(activities.count("reserve")).isZero();
+        assertThat(activities.count("redeemCoupon")).isZero();
+        assertThat(activities.calls.keySet()).noneMatch(k -> k.startsWith("releaseCoupon"));
+    }
+
+    @Test
+    void ordersWithoutACouponNeverCallOffers() {
+        CheckoutInput in = input(UUID.randomUUID().toString());
+        CheckoutWorkflow wf = start(in);
+        awaitPhase(wf, CheckoutProgress.Phase.AWAITING_PAYMENT);
+        wf.paymentAuthorized();
+        result(in, client);
+        assertThat(activities.count("validateCoupon") + activities.count("redeemCoupon")).isZero();
     }
 }

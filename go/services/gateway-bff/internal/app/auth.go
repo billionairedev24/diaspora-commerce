@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -28,9 +28,13 @@ type AuthService interface {
 	SignUp(ctx context.Context, c *domain.Caller, req SignUpRequest) (domain.AuthResult, error)
 	VerifyEmail(ctx context.Context, c *domain.Caller, challengeID, code string) (domain.AuthResult, error)
 	ResendEmailCode(ctx context.Context, challengeID string) (int, error)
-	// FirstPartyCredentials covers password sign-in, MFA verification and passkeys, which identity only offers on
-	// its hosted pages today (no JSON API), so the BFF answers 503 and the storefront falls back to hosted login.
-	FirstPartyCredentials(ctx context.Context) error
+	// SignIn, SendMFACode, VerifyMFA, PasskeyOptions and PasskeyVerify run the storefront's own sign-in forms on
+	// identity's first-party API (auth_firstparty.go).
+	SignIn(ctx context.Context, c *domain.Caller, in SignInInput) (FirstPartyResult, error)
+	SendMFACode(ctx context.Context, c *domain.Caller, challengeID string) (domain.AuthResult, error)
+	VerifyMFA(ctx context.Context, c *domain.Caller, in VerifyMFAInput) (FirstPartyResult, error)
+	PasskeyOptions(ctx context.Context, c *domain.Caller, userAgent string) (domain.PasskeyOptions, error)
+	PasskeyVerify(ctx context.Context, c *domain.Caller, challengeID string, credential json.RawMessage, userAgent string) (FirstPartyResult, error)
 }
 
 // SignUpRequest is the storefront sign-up form.
@@ -43,6 +47,9 @@ type SignUpRequest struct {
 	TermsAccepted bool   `json:"termsAccepted"`
 	SMSConsent    bool   `json:"smsConsent"`
 	ReturnTo      string `json:"returnTo"`
+	// InvitationToken comes from an organisation invite link: identity starts the account verified (no email code)
+	// and joins the organisation, so the person goes straight to sign-in.
+	InvitationToken string `json:"invitationToken"`
 }
 
 // AuthOptions configure sign-in.
@@ -54,8 +61,10 @@ type AuthOptions struct {
 	WebOrigin         string // storefront origin for post-login redirects
 	BFFPath           string // storefront path that proxies to the BFF, e.g. /api/bff
 	StateTTL          time.Duration
-	Clock             Clock
-	Log               *slog.Logger
+	// FirstParty is identity's first-party sign-in API (password, MFA, passkeys); nil disables those forms (503).
+	FirstParty port.FirstPartyClient
+	Clock      Clock
+	Log        *slog.Logger
 }
 
 type authServiceImpl struct {
@@ -156,15 +165,30 @@ func (a *authServiceImpl) Callback(ctx context.Context, c *domain.Caller, code, 
 	if code == "" {
 		return a.signinError("missing_code")
 	}
+	if err := a.complete(ctx, c, code, *req); err != nil {
+		return a.signinError(err.Error())
+	}
+	return strings.TrimSuffix(a.o.WebOrigin, "/") + req.ReturnTo
+}
+
+// signInFailure is a short reason for /signin?error= (never contains tokens).
+type signInFailure string
+
+func (f signInFailure) Error() string { return string(f) }
+
+// complete exchanges the code (PKCE), verifies the ID token, rotates the session id (carrying guest ZIP and cart
+// over), merges the guest cart and saves the signed-in session. Shared by the hosted callback and first-party
+// sign-in.
+func (a *authServiceImpl) complete(ctx context.Context, c *domain.Caller, code string, req port.AuthRequest) error {
 	tokens, err := a.identity.ExchangeCode(ctx, code, req.Verifier, a.o.RedirectURI)
 	if err != nil {
 		a.o.Log.WarnContext(ctx, "authorization code exchange failed", "error", err)
-		return a.signinError("exchange_failed")
+		return signInFailure("exchange_failed")
 	}
 	profile, err := a.verifier.VerifyIDToken(ctx, tokens.IDToken, req.Nonce)
 	if err != nil {
 		a.o.Log.WarnContext(ctx, "id token rejected", "error", err)
-		return a.signinError("invalid_token")
+		return signInFailure("invalid_token")
 	}
 	// Rotate the session id: carry guest state over to a fresh session and delete the old one.
 	old := c.Session
@@ -188,10 +212,11 @@ func (a *authServiceImpl) Callback(ctx context.Context, c *domain.Caller, code, 
 	c.App = false
 	c.Session = next
 	c.SessionRotated = true
+	c.BearerToken, c.Subject = tokens.AccessToken, profile.Subject
 	if err := a.sessions.Save(ctx, c); err != nil {
-		return a.signinError("session_unavailable")
+		return signInFailure("session_unavailable")
 	}
-	return strings.TrimSuffix(a.o.WebOrigin, "/") + req.ReturnTo
+	return nil
 }
 
 func (a *authServiceImpl) SignOut(ctx context.Context, c *domain.Caller) error {
@@ -229,7 +254,8 @@ func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, 
 	me, err := a.identity.Me(ctx, c.BearerToken)
 	switch {
 	case err == nil:
-		user = domain.MeUser{ID: firstNonEmpty(me.ID, c.Subject), FirstName: me.FirstName, LastName: me.LastName, Email: me.Email, Roles: me.Roles}
+		user = domain.MeUser{ID: firstNonEmpty(me.ID, c.Subject), FirstName: me.FirstName, LastName: me.LastName, Email: me.Email, Roles: me.Roles,
+			Phone: strPtr(maskPhone(me.Phone)), PhoneVerified: ptr(me.PhoneVerified)}
 	case isUnauthorized(err):
 		return domain.Me{Authenticated: false}, nil
 	default:
@@ -268,15 +294,32 @@ func maskEmail(e string) string {
 	return string(r[0]) + strings.Repeat("•", max(1, min(6, len(r)-1))) + "@" + dom
 }
 
+// maskPhone keeps the last four digits (•••• 0142).
+func maskPhone(p string) string {
+	digits := strings.Map(func(r rune) rune {
+		if r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, p)
+	if len(digits) < 4 {
+		return ""
+	}
+	return "•••• " + digits[len(digits)-4:]
+}
+
 const resendAfterSeconds = 30
 
 func (a *authServiceImpl) SignUp(ctx context.Context, _ *domain.Caller, req SignUpRequest) (domain.AuthResult, error) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	err := a.identity.SignUp(ctx, port.IdentitySignUp{FirstName: strings.TrimSpace(req.FirstName), LastName: strings.TrimSpace(req.LastName),
 		Email: email, Phone: req.Phone, Password: req.Password, ConfirmPassword: req.Password, TermsAccepted: req.TermsAccepted,
-		SMSConsent: req.SMSConsent, Intent: "shop"})
+		SMSConsent: req.SMSConsent, Intent: "shop", InvitationToken: strings.TrimSpace(req.InvitationToken)})
 	if err != nil {
 		return domain.AuthResult{}, mapIdentityErr(err)
+	}
+	if strings.TrimSpace(req.InvitationToken) != "" {
+		return domain.AuthResult{Status: "authenticated", RedirectTo: a.hostedLogin(req.ReturnTo)}, nil
 	}
 	id := randomID(18)
 	if err := a.ephemeral.PutChallenge(ctx, id, port.Challenge{Email: email, ReturnTo: domain.SafeReturnTo(req.ReturnTo)}, 15*time.Minute); err != nil {
@@ -319,12 +362,6 @@ func (a *authServiceImpl) ResendEmailCode(ctx context.Context, challengeID strin
 		return 0, mapIdentityErr(err)
 	}
 	return resendAfterSeconds, nil
-}
-
-func (a *authServiceImpl) FirstPartyCredentials(context.Context) error {
-	p := domain.UpstreamUnavailable("identity")
-	p.Detail = "Sign in with your password, a code or a passkey on the AfroTransact sign-in page."
-	return p.WithCause(errors.New("identity has no first-party credential API; use GET /v1/auth/login"))
 }
 
 // mapIdentityErr maps identity's problem codes onto the contract's.

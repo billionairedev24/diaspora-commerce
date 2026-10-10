@@ -82,6 +82,8 @@ func (u *Upstreams) sellerRoutes(mux *http.ServeMux) {
 }
 
 func (u *Upstreams) identitySellerRoutes(mux *http.ServeMux) {
+	u.teamRoutes(mux)
+	u.phoneRoutes(mux)
 	mux.HandleFunc("PUT /v1/me/active-org", func(w http.ResponseWriter, r *http.Request) {
 		sub, ok := bearerSub(w, r)
 		if !ok {
@@ -112,11 +114,6 @@ func (u *Upstreams) identitySellerRoutes(mux *http.ServeMux) {
 			{"key": "sHome", "label": "Home", "levels": map[string]string{"seller.owner": "full", "seller.fulfilment": "view"}},
 			{"key": "sOrders", "label": "Orders", "levels": map[string]string{"seller.owner": "full", "seller.fulfilment": "full"}},
 		}})
-	})
-	mux.HandleFunc("PUT /v1/orgs/{orgId}/members/{userId}", func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := bearerSub(w, r); ok {
-			w.WriteHeader(204)
-		}
 	})
 }
 
@@ -316,6 +313,91 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 			{"sku": "OFADA-5LB", "nodeId": "HOU1", "ownerOrg": SellerOrgID, "onHand": 120, "reserved": 8, "available": 112, "inbound": 40},
 			{"sku": "OFADA-10LB", "nodeId": "ATL1", "ownerOrg": SellerOrgID, "onHand": 9, "reserved": 2, "available": 7, "inbound": 0}}, "total": 2})
 	})
+	// seller ship-from addresses (one org's list, default first)
+	shipFrom := []map[string]any{}
+	listShipFrom := func(w http.ResponseWriter, status int) {
+		out := []map[string]any{}
+		for _, a := range shipFrom {
+			if a["isDefault"] == true {
+				out = append([]map[string]any{a}, out...)
+			} else {
+				out = append(out, a)
+			}
+		}
+		writeJSON(w, status, out)
+	}
+	mux.HandleFunc("GET /v1/orgs/{id}/ship-from-addresses", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		if r.PathValue("id") != SellerOrgID {
+			problem(w, 403, "seller.org-role-required", "not your organisation", nil)
+			return
+		}
+		listShipFrom(w, 200)
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/ship-from-addresses", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		var a map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&a)
+		a["id"] = newUUID()
+		a["version"] = 0
+		a["isDefault"] = len(shipFrom) == 0 || a["makeDefault"] == true
+		if a["isDefault"] == true {
+			for _, x := range shipFrom {
+				x["isDefault"] = false
+			}
+		}
+		delete(a, "makeDefault")
+		shipFrom = append(shipFrom, a)
+		writeJSON(w, 201, a)
+	})
+	mux.HandleFunc("PUT /v1/orgs/{id}/ship-from-addresses/{aid}", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		for _, a := range shipFrom {
+			if a["id"] == r.PathValue("aid") {
+				if v, ok := b["version"].(float64); ok && int(v) != a["version"].(int) {
+					problem(w, 409, "seller.concurrent-update", "changed by someone else", nil)
+					return
+				}
+				for k, v := range b {
+					if k != "version" && k != "makeDefault" {
+						a[k] = v
+					}
+				}
+				a["version"] = a["version"].(int) + 1
+				writeJSON(w, 200, a)
+				return
+			}
+		}
+		problem(w, 404, "seller.ship-from-not-found", "not found", nil)
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/ship-from-addresses/{aid}/default", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		for _, a := range shipFrom {
+			a["isDefault"] = a["id"] == r.PathValue("aid")
+		}
+		listShipFrom(w, 200)
+	})
+	mux.HandleFunc("DELETE /v1/orgs/{id}/ship-from-addresses/{aid}", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		for i, a := range shipFrom {
+			if a["id"] == r.PathValue("aid") {
+				shipFrom = append(shipFrom[:i], shipFrom[i+1:]...)
+				if a["isDefault"] == true && len(shipFrom) > 0 {
+					shipFrom[0]["isDefault"] = true
+				}
+				listShipFrom(w, 200)
+				return
+			}
+		}
+		problem(w, 404, "seller.ship-from-not-found", "not found", nil)
+	})
 	mux.HandleFunc("POST /v1/uploads", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 201, map[string]any{"asset": map[string]any{"id": "asset-1", "status": "PENDING"}, "upload": map[string]any{"method": "PUT",
 			"url": "https://uploads.example/asset-1", "headers": map[string]string{"Content-Type": "image/webp"}, "publicUrl": "https://img.example/asset-1.webp", "expiresAt": "2026-10-10T12:15:00Z"}})
@@ -437,53 +519,144 @@ func (u *Upstreams) ordersRoutes(mux *http.ServeMux) {
 }
 
 func (u *Upstreams) bookingsRoutes(mux *http.ServeMux) {
-	card := func(id, status string, start time.Time) map[string]any {
-		return map[string]any{"id": id, "reference": "BK-" + id, "customerName": "Folake Bello", "serviceName": "Cornrows · 8–10 rows", "startAt": start.Format(time.RFC3339),
-			"endAt": start.Add(2 * time.Hour).Format(time.RFC3339), "durationMinutes": 120, "status": status, "priceMinor": 7500, "depositMinor": 2000, "currency": "USD", "depositState": "held"}
+	// Bookings' Provider Hub routes are org-scoped: /v1/providers/{orgId}/… (the BFF maps the active org).
+	booking := func(id, status string, start time.Time) map[string]any {
+		return map[string]any{"id": id, "reference": "BK-" + id, "orgId": ProviderOrgID, "customer": map[string]any{"name": "Folake Bello"},
+			"service": map[string]any{"name": "Cornrows · 8–10 rows", "durationMinutes": 120, "priceMinor": 7500, "depositMinor": 2000,
+				"currency": "usd", "memberName": "Ama"},
+			"status": status, "startAt": start.Format(time.RFC3339), "endAt": start.Add(2 * time.Hour).Format(time.RFC3339),
+			"payment": map[string]any{"state": "AUTHORIZED", "refundedMinor": 0}}
 	}
 	start := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
-	mux.HandleFunc("GET /v1/providers/me/calendar", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"timezone": "America/Chicago", "openHours": []map[string]any{{"day": "TUE", "ranges": []map[string]string{{"start": "10:00", "end": "18:00"}}}},
-			"bookings": []any{card("24011", "CONFIRMED", start), card("24018", "REQUESTED", start.Add(24*time.Hour))}})
+	org := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.PathValue("org") != ProviderOrgID {
+			problem(w, 403, "bookings.forbidden", "Not a member of this provider", nil)
+			return false
+		}
+		return true
+	}
+	mux.HandleFunc("GET /v1/providers/{org}/calendar", func(w http.ResponseWriter, r *http.Request) {
+		if !org(w, r) {
+			return
+		}
+		writeJSON(w, 200, map[string]any{"orgId": ProviderOrgID, "timeZone": "America/Chicago", "from": r.URL.Query().Get("from"), "to": r.URL.Query().Get("to"),
+			"days":     []map[string]any{{"memberId": "m-1", "date": "2026-10-13", "open": []map[string]string{{"start": "10:00", "end": "18:00"}}, "timeOff": false}},
+			"bookings": []any{booking("24011", "CONFIRMED", start), booking("24018", "REQUESTED", start.Add(24*time.Hour))}})
 	})
-	mux.HandleFunc("GET /v1/providers/me/bookings", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, []any{card("24018", "REQUESTED", start.Add(24*time.Hour))})
+	mux.HandleFunc("GET /v1/providers/{org}/bookings", func(w http.ResponseWriter, r *http.Request) {
+		if !org(w, r) {
+			return
+		}
+		switch r.URL.Query().Get("status") {
+		case "REQUESTED":
+			writeJSON(w, 200, []any{booking("24018", "REQUESTED", start.Add(24*time.Hour))})
+		case "":
+			writeJSON(w, 200, []any{booking("24011", "COMPLETED", start), booking("24018", "REQUESTED", start.Add(24*time.Hour))})
+		default:
+			writeJSON(w, 200, []any{})
+		}
 	})
 	mux.HandleFunc("POST /v1/bookings/{id}/{action}", func(w http.ResponseWriter, r *http.Request) {
-		st := map[string]string{"confirm": "CONFIRMED", "decline": "DECLINED", "propose": "RESCHEDULE_PROPOSED", "complete": "COMPLETED", "no-show": "NO_SHOW", "cancel": "CANCELLED_PROVIDER"}[r.PathValue("action")]
-		writeJSON(w, 200, card(r.PathValue("id"), st, start.Add(24*time.Hour)))
+		st := map[string]string{"confirm": "CONFIRMED", "decline": "DECLINED", "propose-time": "RESCHEDULE_PROPOSED", "complete": "COMPLETED", "no-show": "NO_SHOW", "cancel": "CANCELLED_PROVIDER"}[r.PathValue("action")]
+		if st == "" || r.Header.Get("Idempotency-Key") == "" {
+			problem(w, 400, "bookings.invalid", "unknown action or missing Idempotency-Key", nil)
+			return
+		}
+		if st == "CANCELLED_PROVIDER" {
+			writeJSON(w, 200, map[string]any{"booking": booking(r.PathValue("id"), st, start.Add(24*time.Hour))})
+			return
+		}
+		writeJSON(w, 200, booking(r.PathValue("id"), st, start.Add(24*time.Hour)))
 	})
-	avail := map[string]any{"timezone": "America/Chicago", "weekly": []map[string]any{{"day": "MON", "ranges": []any{}}, {"day": "TUE", "ranges": []map[string]string{{"start": "10:00", "end": "18:00"}}}},
-		"blockedDates": []any{}, "rules": map[string]any{"leadMinutes": 720, "horizonDays": 30, "bufferMinutes": 30, "stepMinutes": 30, "maxPerDay": 3, "instantBooking": false, "autoAcceptReschedule": true}}
-	mux.HandleFunc("GET /v1/providers/me/availability", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, avail) })
-	mux.HandleFunc("PUT /v1/providers/me/availability", func(w http.ResponseWriter, r *http.Request) {
+	rules := map[string]any{"leadMinutes": 720, "horizonDays": 30, "bufferMinutes": 30, "stepMinutes": 30, "maxPerDay": 3, "instantBooking": false, "autoAcceptReschedule": true}
+	policy := map[string]any{"kind": "MODERATE", "label": "Moderate", "freeHours": 48, "tiers": []map[string]any{{"hoursBefore": 48, "shareBps": 10000}, {"hoursBefore": 24, "shareBps": 5000}},
+		"noShow": "DEPOSIT", "rescheduleHours": 48, "maxReschedules": 2}
+	mux.HandleFunc("GET /v1/providers/{org}/settings", func(w http.ResponseWriter, r *http.Request) {
+		if !org(w, r) {
+			return
+		}
+		writeJSON(w, 200, map[string]any{"orgId": ProviderOrgID, "displayName": "Ama's Braiding Studio", "timeZone": "America/Chicago", "currency": "USD",
+			"rules": rules, "policy": policy})
+	})
+	mux.HandleFunc("PUT /v1/providers/{org}/settings", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if !org(w, r) {
+			return
+		}
+		if b["displayName"] == nil || b["timeZone"] == nil {
+			problem(w, 400, "bookings.invalid", "displayName and timeZone are required", nil)
+			return
+		}
+		writeJSON(w, 200, b)
+	})
+	mux.HandleFunc("GET /v1/providers/{org}/team", func(w http.ResponseWriter, r *http.Request) {
+		if !org(w, r) {
+			return
+		}
+		writeJSON(w, 200, []any{map[string]any{"id": "m-1", "orgId": ProviderOrgID, "userId": "someone-else", "displayName": "Ama", "role": "OWNER",
+			"bookable": true, "active": true, "hours": map[string]any{"days": map[string]any{"TUESDAY": []map[string]string{{"start": "10:00", "end": "18:00"}}}}}})
+	})
+	mux.HandleFunc("PUT /v1/providers/{org}/team/{member}/hours", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if !org(w, r) || r.PathValue("member") != "m-1" {
+			return
+		}
+		writeJSON(w, 200, map[string]any{"id": "m-1", "hours": b})
+	})
+	mux.HandleFunc("GET /v1/providers/{org}/team/{member}/overrides", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, []any{map[string]any{"date": "2026-12-25", "closed": true, "ranges": []any{}, "note": "Christmas"}})
+	})
+	mux.HandleFunc("PUT /v1/providers/{org}/team/{member}/overrides", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&b)
 		writeJSON(w, 200, b)
 	})
-	svc := map[string]any{"id": "s1a", "name": "Knotless box braids · medium", "description": "Hair included", "durationMinutes": 300, "priceMinor": 18000, "depositMinor": 4000,
-		"currency": "USD", "active": true, "takeHome": map[string]any{"commissionPercent": 10, "commissionMinor": 1800, "cardFeesMinor": 552, "takeHomeMinor": 15648}}
-	mux.HandleFunc("GET /v1/providers/me/services", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, []any{svc}) })
-	mux.HandleFunc("POST /v1/providers/me/services", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 201, svc) })
-	mux.HandleFunc("PATCH /v1/providers/me/services/{id}", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, svc) })
-	mux.HandleFunc("GET /v1/providers/me/cancellation-policy", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"kind": "MODERATE"})
+	mux.HandleFunc("DELETE /v1/providers/{org}/team/{member}/overrides/{date}", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })
+	svc := map[string]any{"id": "s1a", "orgId": ProviderOrgID, "name": "Knotless box braids · medium", "description": "Hair included", "category": "hair & beauty",
+		"durationMinutes": 300, "priceMinor": 18000, "depositMinor": 4000, "currency": "USD", "modes": []string{"IN_PERSON"}, "active": true,
+		"takeHome": map[string]any{"commissionBps": 1000, "commissionMinor": 1800, "cardFeesMinor": 552, "takeHomeMinor": 15648}}
+	mux.HandleFunc("GET /v1/providers/{org}/services", func(w http.ResponseWriter, r *http.Request) {
+		if org(w, r) {
+			writeJSON(w, 200, []any{svc})
+		}
 	})
-	mux.HandleFunc("PUT /v1/providers/me/cancellation-policy", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/providers/{org}/services", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&b)
-		writeJSON(w, 200, b)
+		if b["modes"] == nil {
+			problem(w, 400, "bookings.invalid", "modes are required", nil)
+			return
+		}
+		writeJSON(w, 200, svc)
 	})
-	mux.HandleFunc("GET /v1/providers/me/earnings", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"currency": "USD", "commissionPercent": 10, "heldMinor": 4000, "rows": []map[string]any{
-			{"bookingId": "23990", "reference": "BK-23990", "customerName": "Chioma Eze", "serviceName": "Fulani braids", "startAt": "2026-10-08T15:00:00Z", "status": "COMPLETED",
-				"collectedMinor": 16000, "commissionMinor": 1600, "cardFeesMinor": 494, "lateCancelFeeMinor": 0},
-			{"bookingId": "23970", "reference": "BK-23970", "customerName": "Ama K.", "serviceName": "Cornrows", "startAt": "2026-10-05T15:00:00Z", "status": "CANCELLED_PROVIDER",
-				"collectedMinor": 0, "commissionMinor": 0, "cardFeesMinor": 0, "lateCancelFeeMinor": 1500}}})
+	mux.HandleFunc("GET /v1/providers/{org}/services/{id}", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, svc) })
+	mux.HandleFunc("PUT /v1/providers/{org}/services/{id}", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, svc) })
+	mux.HandleFunc("POST /v1/providers/{org}/services/{id}/deactivate", func(w http.ResponseWriter, _ *http.Request) {
+		off := map[string]any{}
+		for k, v := range svc {
+			off[k] = v
+		}
+		off["active"] = false
+		writeJSON(w, 200, off)
 	})
-	mux.HandleFunc("GET /v1/providers/me/analytics", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(w, 200, map[string]any{"days": []map[string]any{{"date": "2026-10-10", "bookings": 5, "depositMinor": 26000}},
-			"byService": []map[string]any{{"service": "Box braids", "bookings": 64}}, "byStatus": []map[string]any{{"status": "Completed", "count": 168}},
-			"weeks": []map[string]any{{"week": "W1", "paidOutMinor": 240000, "pendingMinor": 60000}}})
+	mux.HandleFunc("POST /v1/providers/{org}/services/{id}/activate", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, svc) })
+	mux.HandleFunc("PUT /v1/providers/{org}/cancellation-policy", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if org(w, r) {
+			writeJSON(w, 200, map[string]any{"orgId": ProviderOrgID, "policy": policy})
+		}
+	})
+	mux.HandleFunc("GET /v1/providers/{org}/earnings", func(w http.ResponseWriter, r *http.Request) {
+		if !org(w, r) {
+			return
+		}
+		writeJSON(w, 200, map[string]any{"orgId": ProviderOrgID, "currency": "usd", "depositsOnHoldMinor": 4000, "rows": []map[string]any{
+			{"bookingId": "23990", "reference": "BK-23990", "customer": "Chioma Eze", "serviceName": "Fulani braids", "startAt": "2026-10-08T15:00:00Z", "status": "COMPLETED",
+				"collectedMinor": 16000, "commissionBps": 1000, "commissionMinor": 1600, "cardFeesMinor": 494, "providerFeeMinor": 0, "netMinor": 13906},
+			{"bookingId": "23970", "reference": "BK-23970", "customer": "Ama K.", "serviceName": "Cornrows", "startAt": "2026-10-05T15:00:00Z", "status": "CANCELLED_PROVIDER",
+				"collectedMinor": 0, "commissionBps": 1000, "commissionMinor": 0, "cardFeesMinor": 0, "providerFeeMinor": 1500, "netMinor": -1500}}})
 	})
 }

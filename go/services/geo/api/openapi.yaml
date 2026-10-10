@@ -74,6 +74,24 @@ paths:
       responses:
         '200': {description: Place, content: {application/json: {schema: {$ref: '#/components/schemas/Address'}}}}
         '404': {$ref: '#/components/responses/Problem'}
+  /v1/reverse:
+    get:
+      tags: [Addresses]
+      operationId: reverseGeocode
+      summary: ZIP, city, state and country at a point (deliver-to by device location)
+      description: |
+        Providers in order: Google Geocoding (when a key is configured), then OpenStreetMap Nominatim (and the offline
+        fixture list locally). A provider that fails or knows no address hands over to the next. Coordinates are
+        rounded to 4 decimals (~11 m) before they leave the service. `lon` is accepted as an alias of `lng`.
+      security: []
+      parameters:
+        - {name: lat, in: query, required: true, schema: {type: number, minimum: -90, maximum: 90}}
+        - {name: lng, in: query, required: true, schema: {type: number, minimum: -180, maximum: 180}}
+      responses:
+        '200': {description: Nearest postal address, content: {application/json: {schema: {$ref: '#/components/schemas/Address'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
   /v1/zones/covering:
     get:
       tags: [Zones]

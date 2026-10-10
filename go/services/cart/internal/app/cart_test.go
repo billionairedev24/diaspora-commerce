@@ -7,6 +7,7 @@ import (
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/port"
 )
 
 type memRepo struct {
@@ -76,13 +77,33 @@ var (
 func svc(conflicts int) (app.CartService, *memRepo) {
 	guests, users := &memRepo{carts: map[string]domain.Cart{}}, &memRepo{carts: map[string]domain.Cart{}, conflicts: conflicts}
 	return app.NewCartService(guests, users, offers{"ATJOL00001": jollof, "ATDRS00001": dress},
-		stock{"ATJOL00001": 3, "ATDRS00001": 10}), guests
+		stock{"ATJOL00001": 3, "ATDRS00001": 10}, marketplace), guests
+}
+
+// lookup is a fake offers service keyed by offer id.
+type lookup map[string]port.LiveOffer
+
+func (l lookup) Offer(_ context.Context, id string) (port.LiveOffer, error) {
+	o, ok := l[id]
+	if !ok {
+		return port.LiveOffer{}, port.ErrOfferNotFound
+	}
+	return o, nil
+}
+
+// marketplace: a second seller offers the jollof variant; a paused offer exists for the dress.
+var marketplace = lookup{
+	"off-lagos-jollof": {OfferID: "off-lagos-jollof", VariantATIN: "ATJOL00001", SellerOrgID: "org_lagos",
+		SellerName: "Lagos Pantry", SellerKind: "SELLER", Fulfilment: "SELLER", PriceMinor: 749, Currency: "USD",
+		Available: 6, Buyable: true},
+	"off-paused-dress": {OfferID: "off-paused-dress", VariantATIN: "ATDRS00001", SellerOrgID: "org_lagos",
+		Fulfilment: "SELLER", PriceMinor: 6000, Currency: "USD", Available: 0, Buyable: false},
 }
 
 func TestAddRetriesOnConcurrentChange(t *testing.T) {
 	s, _ := svc(2)
 	user := domain.Owner{Kind: domain.OwnerUser, ID: "u1"}
-	v, err := s.Add(context.Background(), user, "ATJOL00001", 2)
+	v, err := s.Add(context.Background(), user, "ATJOL00001", "", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +114,7 @@ func TestAddRetriesOnConcurrentChange(t *testing.T) {
 
 func TestNonLiveProductCannotBeAdded(t *testing.T) {
 	s, _ := svc(0)
-	_, err := s.Add(context.Background(), domain.Owner{Kind: domain.OwnerGuest, ID: "g"}, "ATNOPE0001", 1)
+	_, err := s.Add(context.Background(), domain.Owner{Kind: domain.OwnerGuest, ID: "g"}, "ATNOPE0001", "", 1)
 	if !errors.Is(err, app.ErrNotSellable) {
 		t.Fatalf("expected ErrNotSellable, got %v", err)
 	}
@@ -104,13 +125,13 @@ func TestGuestMergesIntoCustomerOnSignIn(t *testing.T) {
 	ctx := context.Background()
 	guest := domain.Owner{Kind: domain.OwnerGuest, ID: "11111111-1111-1111-1111-111111111111"}
 	user := domain.Owner{Kind: domain.OwnerUser, ID: "u1"}
-	if _, err := s.Add(ctx, guest, "ATJOL00001", 2); err != nil {
+	if _, err := s.Add(ctx, guest, "ATJOL00001", "", 2); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Add(ctx, user, "ATJOL00001", 2); err != nil {
+	if _, err := s.Add(ctx, user, "ATJOL00001", "", 2); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Add(ctx, guest, "ATDRS00001", 1); err != nil {
+	if _, err := s.Add(ctx, guest, "ATDRS00001", "", 1); err != nil {
 		t.Fatal(err)
 	}
 	v, err := s.MergeGuest(ctx, user, guest.ID)
@@ -129,13 +150,70 @@ func TestOrderedLinesAreCleared(t *testing.T) {
 	s, _ := svc(0)
 	ctx := context.Background()
 	user := domain.Owner{Kind: domain.OwnerUser, ID: "u1"}
-	_, _ = s.Add(ctx, user, "ATJOL00001", 1)
-	_, _ = s.Add(ctx, user, "ATDRS00001", 1)
+	_, _ = s.Add(ctx, user, "ATJOL00001", "", 1)
+	_, _ = s.Add(ctx, user, "ATDRS00001", "", 1)
 	if err := s.RemoveOrdered(ctx, user, []string{"ATJOL00001", "ATDRS00001"}); err != nil {
 		t.Fatal(err)
 	}
 	v, _ := s.View(ctx, user)
 	if v.ItemCount != 0 {
 		t.Fatalf("cart should be empty after checkout, got %d", v.ItemCount)
+	}
+}
+
+func TestOfferLinesUseTheOffersService(t *testing.T) {
+	s, _ := svc(0)
+	ctx := context.Background()
+	user := domain.Owner{Kind: domain.OwnerUser, ID: "u1"}
+	v, err := s.Add(ctx, user, "", "off-lagos-jollof", 5) // inventory has only 3 of the retail SKU; the seller has 6
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := v.Packages[0].Lines[0]
+	if l.OfferID != "off-lagos-jollof" || l.SellerName != "Lagos Pantry" || l.PriceMinor != 749 || l.Title != "Jollof Seasoning" ||
+		l.Available != 6 || l.Unavailable || v.SubtotalMinor != 5*749 {
+		t.Fatalf("offer line %+v (subtotal %d)", l, v.SubtotalMinor)
+	}
+	if _, err := s.SetQuantity(ctx, user, "ATJOL00001", 7); !errors.Is(err, domain.ErrQuantityTooHigh) {
+		t.Fatalf("expected the offer's stock to cap the stepper, got %v", err)
+	}
+	if _, err := s.SetQuantity(ctx, user, "ATJOL00001", 6); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNonBuyableOrMismatchedOffersAreRejected(t *testing.T) {
+	s, _ := svc(0)
+	ctx := context.Background()
+	guest := domain.Owner{Kind: domain.OwnerGuest, ID: "g"}
+	if _, err := s.Add(ctx, guest, "ATDRS00001", "off-paused-dress", 1); !errors.Is(err, app.ErrNotBuyable) {
+		t.Fatalf("expected ErrNotBuyable, got %v", err)
+	}
+	if _, err := s.Add(ctx, guest, "ATDRS00001", "off-lagos-jollof", 1); !errors.Is(err, app.ErrOfferMismatch) {
+		t.Fatalf("expected ErrOfferMismatch, got %v", err)
+	}
+	if _, err := s.Add(ctx, guest, "", "off-unknown", 1); !errors.Is(err, app.ErrNotSellable) {
+		t.Fatalf("expected ErrNotSellable, got %v", err)
+	}
+}
+
+func TestOfferThatStopsBeingBuyableMakesTheLineUnavailable(t *testing.T) {
+	guests, users := &memRepo{carts: map[string]domain.Cart{}}, &memRepo{carts: map[string]domain.Cart{}}
+	market := lookup{"off-lagos-jollof": marketplace["off-lagos-jollof"]}
+	s := app.NewCartService(guests, users, offers{"ATJOL00001": jollof}, stock{"ATJOL00001": 3}, market)
+	ctx := context.Background()
+	user := domain.Owner{Kind: domain.OwnerUser, ID: "u1"}
+	if _, err := s.Add(ctx, user, "ATJOL00001", "off-lagos-jollof", 2); err != nil {
+		t.Fatal(err)
+	}
+	paused := market["off-lagos-jollof"]
+	paused.Buyable = false
+	market["off-lagos-jollof"] = paused
+	v, err := s.View(ctx, user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v.Packages[0].Lines[0].Unavailable || v.Checkoutable {
+		t.Fatalf("expected an unavailable line, got %+v", v)
 	}
 }

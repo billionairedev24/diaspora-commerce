@@ -1,14 +1,17 @@
 package com.afrotransact.offers.application;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.UUID;
 
 import com.afrotransact.offers.application.BuyBoxEvaluator.Evaluated;
+import com.afrotransact.offers.domain.BuyBoxReason;
 import com.afrotransact.offers.domain.Offer;
 import com.afrotransact.offers.domain.OfferRuleViolation;
 import com.afrotransact.offers.domain.OfferStatus;
@@ -37,12 +40,7 @@ class OfferListingServiceImpl implements OfferListingService {
     @Override
     @Transactional(readOnly = true)
     public List<BuyBoxView> buyBoxes(List<String> atins, String currency) {
-        Set<String> wanted = new LinkedHashSet<>();
-        atins.stream().filter(a -> a != null && !a.isBlank()).map(a -> a.trim().toUpperCase(Locale.ROOT))
-                .forEach(wanted::add);
-        if (wanted.isEmpty() || wanted.size() > MAX_BATCH) {
-            throw new OfferRuleViolation("Ask for 1 to " + MAX_BATCH + " ATINs");
-        }
+        Set<String> wanted = normaliseBatch(atins);
         String cur = normalise(currency);
         List<OfferView> views = evaluator.views(offers.findOpenByAtins(wanted));
         List<BuyBoxView> out = new ArrayList<>();
@@ -50,6 +48,45 @@ class OfferListingServiceImpl implements OfferListingService {
             out.add(evaluator.buyBoxView(evaluator.decide(atin, cur, views)));
         }
         return out;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<BuyBoxView> productSummaries(List<String> productAtins, String currency) {
+        Set<String> wanted = normaliseBatch(productAtins);
+        String cur = normalise(currency);
+        List<OfferView> views = evaluator.views(offers.findOpenByProductAtins(wanted));
+        Map<String, Set<String>> variantsByProduct = new HashMap<>();
+        views.forEach(v -> variantsByProduct.computeIfAbsent(v.offer().productAtin(), k -> new TreeSet<>())
+                .add(v.offer().atin()));
+        List<BuyBoxView> out = new ArrayList<>();
+        for (String product : wanted) {
+            ListedOffer best = null;
+            List<BuyBoxReason> reasons = List.of();
+            int count = 0;
+            Long minLanded = null;
+            Long minPrice = null;
+            for (String atin : variantsByProduct.getOrDefault(product, Set.of())) {
+                BuyBoxView box = evaluator.buyBoxView(evaluator.decide(atin, cur, views));
+                count += box.offerCount();
+                minLanded = min(minLanded, box.minLandedPriceMinor());
+                minPrice = min(minPrice, box.minPriceMinor());
+                if (box.winner() != null && (best == null
+                        || box.winner().landedPriceMinor() < best.landedPriceMinor())) {
+                    best = box.winner();
+                    reasons = box.reasons();
+                }
+            }
+            out.add(new BuyBoxView(product, cur, best, reasons, List.of(), count, minLanded, minPrice));
+        }
+        return out;
+    }
+
+    private static Long min(Long a, Long b) {
+        if (a == null) {
+            return b;
+        }
+        return b == null ? a : Math.min(a, b);
     }
 
     @Override
@@ -75,6 +112,16 @@ class OfferListingServiceImpl implements OfferListingService {
         List<OfferView> views = evaluator.views(offers.findOpenByAtins(List.of(offer.atin())));
         Evaluated e = evaluator.decide(offer.atin(), offer.currency(), views);
         return evaluator.listedOffer(e, offerId);
+    }
+
+    private static Set<String> normaliseBatch(List<String> atins) {
+        Set<String> wanted = new LinkedHashSet<>();
+        atins.stream().filter(a -> a != null && !a.isBlank()).map(a -> a.trim().toUpperCase(Locale.ROOT))
+                .forEach(wanted::add);
+        if (wanted.isEmpty() || wanted.size() > MAX_BATCH) {
+            throw new OfferRuleViolation("Ask for 1 to " + MAX_BATCH + " ATINs");
+        }
+        return wanted;
     }
 
     private static String normalise(String currency) {

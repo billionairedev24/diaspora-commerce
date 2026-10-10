@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/adapter/httpclient"
@@ -284,6 +285,9 @@ func (o *ordersImpl) Place(ctx context.Context, bearer, key string, req domain.P
 	if req.Wallet != "" {
 		body["wallet"] = req.Wallet
 	}
+	if code := strings.TrimSpace(req.CouponCode); code != "" {
+		body["couponCode"] = code
+	}
 	var out domain.OrderConfirmation
 	res, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/orders", Bearer: bearer, JSON: body,
 		Header: http.Header{"Idempotency-Key": {key}}, RetryUnsafe: true}, &out)
@@ -315,17 +319,32 @@ func (o *ordersImpl) StartReturn(ctx context.Context, bearer string, r domain.St
 	return out, err
 }
 
-// ---------------------------------------------------------------- notifications (planned)
+// ---------------------------------------------------------------- notifications (contracts/openapi/notifications.yaml)
 
 type notificationsImpl struct{ c httpclient.Client }
 
 var _ port.NotificationsClient = (*notificationsImpl)(nil)
 
-// NewNotifications returns the notifications client (POST /v1/stock-alerts).
+// NewNotifications returns the notifications client for back-in-stock alerts (POST/GET /v1/stock-alerts,
+// DELETE /v1/stock-alerts/{atin}), always with the shopper's own token.
 func NewNotifications(c httpclient.Client) port.NotificationsClient { return &notificationsImpl{c: c} }
 
-func (n *notificationsImpl) SubscribeStockAlert(ctx context.Context, atin, email, bearer string) error {
-	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/stock-alerts", Bearer: bearer,
-		JSON: map[string]string{"atin": atin, "email": email}}, nil)
+func (n *notificationsImpl) SubscribeStockAlert(ctx context.Context, bearer string, in port.StockAlertInput) error {
+	// 201 armed, 200 already active: both succeed.
+	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/stock-alerts", Bearer: bearer, JSON: in}, nil)
+	return err
+}
+
+func (n *notificationsImpl) StockAlerts(ctx context.Context, bearer string) ([]port.StockAlert, error) {
+	res, err := call(ctx, n.c, httpclient.Request{Path: "/v1/stock-alerts", Bearer: bearer}, nil)
+	if err != nil {
+		return nil, err
+	}
+	items, _, err := itemsOf[port.StockAlert](res.Body)
+	return items, err
+}
+
+func (n *notificationsImpl) RemoveStockAlert(ctx context.Context, bearer, atin string) error {
+	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/stock-alerts/" + url.PathEscape(atin), Bearer: bearer}, nil)
 	return err
 }

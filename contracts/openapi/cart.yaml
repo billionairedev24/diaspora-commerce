@@ -6,7 +6,9 @@ info:
     Shopping cart split into packages per seller and fulfilment type, with save-for-later and guest-to-customer
     merge on sign-in. Quantities are always capped by live sellable stock from inventory; prices are snapshotted
     when a line is added and the live price is shown with a `priceChanged` flag. Lines without a live offer or stock
-    are marked `unavailable` and excluded from checkout. Guests are identified by the `X-Guest-Cart` header, which
+    are marked `unavailable` and excluded from checkout. A line can name an offers-service offer (`offerId`, e.g. a
+    seller from "Other sellers on AfroTransact"): its seller, price and stock then come from the offers service and
+    the line becomes unavailable as soon as the offer is no longer buyable. Guests are identified by the `X-Guest-Cart` header, which
     the service issues on first use; signed-in customers by their access token.
 servers:
   - {url: 'http://localhost:8203', description: local}
@@ -31,7 +33,13 @@ paths:
     post:
       tags: [Cart]
       operationId: addToCart
-      summary: Add a variant to the cart, capped by sellable stock
+      summary: Add a variant (or a specific offer of it) to the cart, capped by sellable stock
+      description: |
+        Send `variantAtin`, `offerId` or both. With `offerId` the offer is validated against the offers service:
+        unknown or withdrawn → 409 `cart.not-sellable`; paused, out of stock, product not live or seller suppressed →
+        409 `cart.offer-not-buyable`; an offer of another variant → 422 `cart.invalid`. Prices always come from the
+        offers service (never from the client). One line per variant: adding another seller's offer of a variant
+        already in the cart switches that line to the new offer.
       parameters: [{$ref: '#/components/parameters/Guest'}]
       requestBody:
         required: true
@@ -39,13 +47,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [variantAtin]
               properties:
                 variantAtin: {type: string}
+                offerId: {type: string, format: uuid, description: offers-service offer id}
                 quantity: {type: integer, minimum: 1, default: 1}
       responses:
         '200': {$ref: '#/components/responses/Cart'}
         '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
   /v1/cart/items/{atin}:
     put:
       tags: [Cart]
@@ -122,12 +131,13 @@ components:
         X-Guest-Cart: {schema: {type: string}, description: Guest cart id (store it client-side)}
       content: {application/json: {schema: {$ref: '#/components/schemas/CartView'}}}
     Problem:
-      description: RFC 9457 problem (cart.insufficient-stock, cart.not-sellable, cart.concurrent-update …)
+      description: RFC 9457 problem (cart.insufficient-stock, cart.not-sellable, cart.offer-not-buyable, cart.concurrent-update …)
       content: {application/problem+json: {schema: {type: object, properties: {type: {type: string}, status: {type: integer}, detail: {type: string}, code: {type: string}}}}}
   schemas:
     LineView:
       type: object
       properties:
+        offerId: {type: string, description: offers-service offer of the line (absent for catalog-only lines)}
         variantAtin: {type: string}
         productAtin: {type: string}
         title: {type: string}

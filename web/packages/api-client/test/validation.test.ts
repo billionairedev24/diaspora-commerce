@@ -73,7 +73,9 @@ describe('careers application schema', () => {
   it('validates the application form', () => {
     const r = JobApplicationFormSchema.safeParse({ name: 'Al', email: 'x', linkedin: 'https://example.com', workAuthorization: '', resumeFileName: '', consent: false });
     expect(r.success).toBe(false);
-    expect(new Set(r.error?.issues.map((i) => i.path[0]))).toEqual(new Set(['name', 'email', 'linkedin', 'workAuthorization', 'resumeFileName', 'consent']));
-    expect(JobApplicationFormSchema.safeParse({ name: 'Ama Owusu', email: 'ama@example.com', linkedin: '', workAuthorization: 'Yes', resumeFileName: 'cv.pdf', consent: true }).success).toBe(true);
+    expect(new Set(r.error?.issues.map((i) => i.path[0]))).toEqual(new Set(['name', 'email', 'linkedin', 'workAuthorization', 'resumeFileName', 'resumeAssetId', 'consent']));
+    const ok = { name: 'Ama Owusu', email: 'ama@example.com', linkedin: '', workAuthorization: 'Yes', resumeFileName: 'cv.pdf', consent: true };
+    expect(JobApplicationFormSchema.safeParse(ok).success).toBe(false); // the résumé must be uploaded first
+    expect(JobApplicationFormSchema.safeParse({ ...ok, resumeAssetId: 'asset-1' }).success).toBe(true);
   });
 });

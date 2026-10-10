@@ -188,7 +188,7 @@ func TestBodyLimitAndMalformedJSON(t *testing.T) {
 }
 
 func TestDeliveryLocation(t *testing.T) {
-	_, b := setup(t, testkit.Options{})
+	bff, b := setup(t, testkit.Options{})
 	loc := b.do("GET", "/v1/delivery-location", nil).json(t)
 	if loc["label"] != "Houston 77042" || loc["serviceable"] != true {
 		t.Fatalf("default = %v", loc)
@@ -209,11 +209,14 @@ func TestDeliveryLocation(t *testing.T) {
 		t.Fatalf("code = %s", c)
 	}
 	mustStatus(t, b.do("PUT", "/v1/delivery-location", map[string]any{"zip": "1234"}), 422)
-	// Reverse geocoding is not served by geo yet.
-	r = b.do("PUT", "/v1/delivery-location", map[string]any{"lat": 29.7, "lon": -95.5})
-	mustStatus(t, r, 503)
-	if c := problemCode(t, r); c != "UPSTREAM_UNAVAILABLE" {
-		t.Fatalf("code = %s", c)
+	// Deliver-to by device location: geo GET /v1/reverse?lat=&lng= → ZIP, city, state.
+	r = b.do("PUT", "/v1/delivery-location", map[string]any{"lat": 29.7376, "lon": -95.5134})
+	mustStatus(t, r, 200)
+	if got := r.json(t); got["zip"] != "77042" || got["label"] != "Houston 77042" {
+		t.Fatalf("location by coordinates = %v", got)
+	}
+	if bff.Upstreams.CallCount("GET /v1/reverse") != 1 {
+		t.Fatal("geo reverse geocoding was not called")
 	}
 	sugs := b.do("GET", "/v1/geo/address-suggestions?q=9800", nil).json(t)
 	s := sugs["suggestions"].([]any)[0].(map[string]any)
@@ -308,10 +311,10 @@ func TestProductDetail(t *testing.T) {
 	if r.header.Get("Retry-After") == "" || r.json(t)["type"] != "https://errors.afrotransact.com/bff.upstream-unavailable" {
 		t.Fatalf("unavailable problem = %v %s", r.header, r.body)
 	}
-	// Stock alerts need notifications (not built yet) after the product and email checks.
+	// Stock alerts: product and email checks first; notifications needs the shopper's own token (guests sign in).
 	mustStatus(t, b.do("POST", "/v1/products/ATNOPE0000/stock-alerts", map[string]any{"email": "a@example.com"}), 404)
 	mustStatus(t, b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{}), 422)
-	mustStatus(t, b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{"email": "a@example.com"}), 503)
+	mustStatus(t, b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{"email": "a@example.com"}), 401)
 }
 
 func TestPendingUpstreamsAnswer503(t *testing.T) {

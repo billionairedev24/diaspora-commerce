@@ -43,8 +43,10 @@ type Owner struct {
 // Key is the storage key, e.g. user:123 or guest:abc.
 func (o Owner) Key() string { return string(o.Kind) + ":" + o.ID }
 
-// Offer is what the cart knows about a purchasable variant at a point in time.
+// Offer is what the cart knows about a purchasable variant at a point in time. OfferID is the offers-service offer
+// the shopper chose (empty for lines added before offers, which follow the catalog's single seller).
 type Offer struct {
+	OfferID     string            `json:"offerId,omitempty"`
 	VariantATIN string            `json:"variantAtin"`
 	ProductATIN string            `json:"productAtin"`
 	Title       string            `json:"title"`
@@ -94,6 +96,10 @@ func (c *Cart) Add(o Offer, qty, available int, now time.Time) error {
 			return fmt.Errorf("%w: only %d available", ErrQuantityTooHigh, limit)
 		}
 		c.Lines[i].Quantity = next
+		if c.Lines[i].OfferID != o.OfferID {
+			// Another seller's offer of the same variant: the line follows the shopper's latest choice.
+			c.Lines[i].AddedPriceMinor = o.PriceMinor
+		}
 		c.Lines[i].Offer = o
 		return nil
 	}

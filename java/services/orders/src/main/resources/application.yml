@@ -148,6 +148,7 @@ at:
       promise-url: ${PROMISE_URL:http://localhost:8204}
       content-url: ${CONTENT_URL:http://localhost:8112}
       catalog-url: ${CATALOG_URL:http://localhost:8101}
+      offers-url: ${OFFERS_URL:http://localhost:8102}
     topics:
       payment-events: at.payment.events
       carrier-events: at.carrier-shipment.events

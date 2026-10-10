@@ -68,6 +68,48 @@ func (o *orgAccessImpl) Invite(ctx context.Context, bearer, orgID, email, roleKe
 	return inv, err
 }
 
+func (o *orgAccessImpl) Members(ctx context.Context, bearer, orgID string) ([]port.OrgMember, error) {
+	var out struct {
+		Items []port.OrgMember `json:"items"`
+	}
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/members", Bearer: bearer}, &out)
+	return out.Items, err
+}
+
+func (o *orgAccessImpl) Invitations(ctx context.Context, bearer, orgID string) ([]port.Invitation, error) {
+	var out struct {
+		Items []port.Invitation `json:"items"`
+	}
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orgs/" + url.PathEscape(orgID) + "/invitations", Bearer: bearer}, &out)
+	return out.Items, err
+}
+
+func (o *orgAccessImpl) RevokeInvitation(ctx context.Context, bearer, orgID, invitationID string) error {
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodDelete, Bearer: bearer,
+		Path: "/v1/orgs/" + url.PathEscape(orgID) + "/invitations/" + url.PathEscape(invitationID)}, nil)
+	return err
+}
+
+func (o *orgAccessImpl) RemoveMember(ctx context.Context, bearer, orgID, userID string) error {
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodDelete, Bearer: bearer,
+		Path: "/v1/orgs/" + url.PathEscape(orgID) + "/members/" + url.PathEscape(userID)}, nil)
+	return err
+}
+
+func (o *orgAccessImpl) LookupInvitation(ctx context.Context, token string) (port.InvitationPreview, error) {
+	var out port.InvitationPreview
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/invitations/lookup", RetryUnsafe: true,
+		JSON: map[string]string{"token": token}}, &out)
+	return out, err
+}
+
+func (o *orgAccessImpl) AcceptInvitation(ctx context.Context, bearer, token string) (port.AcceptedInvitation, error) {
+	var out port.AcceptedInvitation
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/invitations/accept", Bearer: bearer,
+		JSON: map[string]string{"token": token}}, &out)
+	return out, err
+}
+
 // ---------------------------------------------------------------- seller service (contracts/openapi/seller.yaml)
 
 type sellerServiceImpl struct{ c httpclient.Client }
@@ -151,4 +193,40 @@ func (s *sellerServiceImpl) MakeDefaultPaymentMethod(ctx context.Context, bearer
 
 func (s *sellerServiceImpl) RemovePaymentMethod(ctx context.Context, bearer, orgID, id string) ([]port.SellerPaymentMethod, error) {
 	return s.paymentMethods(ctx, http.MethodDelete, bearer, orgPath(orgID, "/billing/payment-methods/"+url.PathEscape(id)))
+}
+
+// ---------------------------------------------------------------- seller: ship-from addresses
+
+func shipFromPath(orgID, rest string) string {
+	return "/v1/orgs/" + url.PathEscape(orgID) + "/ship-from-addresses" + rest
+}
+
+func (s *sellerServiceImpl) ShipFrom(ctx context.Context, bearer, orgID string) ([]port.ShipFromAddress, error) {
+	var out []port.ShipFromAddress
+	_, err := call(ctx, s.c, httpclient.Request{Path: shipFromPath(orgID, ""), Bearer: bearer}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) CreateShipFrom(ctx context.Context, bearer, orgID string, in port.ShipFromInput) (port.ShipFromAddress, error) {
+	var out port.ShipFromAddress
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: shipFromPath(orgID, ""), Bearer: bearer, JSON: in}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) UpdateShipFrom(ctx context.Context, bearer, orgID, id string, in port.ShipFromInput) (port.ShipFromAddress, error) {
+	var out port.ShipFromAddress
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: shipFromPath(orgID, "/"+url.PathEscape(id)), Bearer: bearer, JSON: in}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) DefaultShipFrom(ctx context.Context, bearer, orgID, id string) ([]port.ShipFromAddress, error) {
+	var out []port.ShipFromAddress
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: shipFromPath(orgID, "/"+url.PathEscape(id)+"/default"), Bearer: bearer}, &out)
+	return out, err
+}
+
+func (s *sellerServiceImpl) DeleteShipFrom(ctx context.Context, bearer, orgID, id string) ([]port.ShipFromAddress, error) {
+	var out []port.ShipFromAddress
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodDelete, Path: shipFromPath(orgID, "/"+url.PathEscape(id)), Bearer: bearer}, &out)
+	return out, err
 }

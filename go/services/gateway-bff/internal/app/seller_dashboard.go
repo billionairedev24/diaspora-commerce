@@ -111,12 +111,12 @@ func (s *sellerDashboardImpl) gather(ctx context.Context, c *domain.Caller, sc s
 	}
 	if sc.kind() == domain.OrgKindProvider {
 		wg.Go(func() {
-			if v, err := s.r.d.Bookings.Analytics(ctx, b, from, to); err == nil {
+			if v, err := s.r.d.Bookings.Analytics(ctx, b, sc.provider(), from, to); err == nil {
 				lock(func() { src.bookings = &v })
 			}
 		})
 		wg.Go(func() {
-			if v, err := s.r.d.Bookings.Requests(ctx, b); err == nil {
+			if v, err := s.r.d.Bookings.Requests(ctx, b, sc.provider()); err == nil {
 				n := len(v)
 				lock(func() { src.requests = &n })
 			}
@@ -187,6 +187,10 @@ func (s *sellerDashboardImpl) seller(ctx context.Context, c *domain.Caller, sc s
 		d.Kpis = append(d.Kpis,
 			domain.Kpi{Label: "To ship", Value: fmt.Sprintf("%d", a.ToShip), Detail: "Buy labels and mark ready", Tone: map[bool]string{true: "attention", false: "positive"}[a.ToShip > 0]},
 			domain.Kpi{Label: fmt.Sprintf("Sales, %d days", days), Value: moneyLabel(sales), Detail: fmt.Sprintf("%d units", units), Tone: "positive"})
+		if a.Totals.Checkouts > 0 {
+			d.Kpis = append(d.Kpis, domain.Kpi{Label: "Checkout conversion", Value: fmt.Sprintf("%.0f%%", a.Totals.ConversionRate*100),
+				Detail: fmt.Sprintf("%d of %d checkouts paid", a.Totals.Orders, a.Totals.Checkouts), Tone: "neutral"})
+		}
 		if a.ToShip > 0 {
 			d.Todo = append(d.Todo, domain.TodoItem{Label: fmt.Sprintf("%d orders to ship — buy labels", a.ToShip), Module: "orders", Tone: "info"})
 		}

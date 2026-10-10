@@ -342,6 +342,45 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Offer'
+  /v1/offers/stock/{sku}:
+    put:
+      tags:
+      - Offers
+      summary: Set the stock of a seller-fulfilled SKU (seller center inventory adjustments)
+      description: Sets the declared quantity of every open offer of the caller's organisation with this seller SKU and recomputes
+        their buy boxes. 404 offers.sku-not-found when none of your offers uses the SKU (other organisations' SKUs are never
+        visible); 409 offers.stock-managed-by-inventory for Fulfilled-by-AfroTransact offers. An absolute quantity is idempotent,
+        so Idempotency-Key is accepted and needs no replay store.
+      operationId: setStock
+      parameters:
+      - name: sku
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: sellerOrgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StockUpdateRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StockUpdate'
   /v1/offers/{id}:
     get:
       tags:
@@ -481,11 +520,14 @@ paths:
       tags:
       - Public offers
       summary: Buy boxes of up to 50 variant ATINs (search cards, variant picker, cart)
+      description: 'by=variant (default): one buy box per variant ATIN. by=product: the ATINs are product ATINs (search hits)
+        and each item summarises the product page: the best variant winner, its reasons, offerCount and lowest prices across
+        every variant; otherOffers is empty.'
       operationId: buyBoxes
       parameters:
       - name: atins
         in: query
-        description: Comma-separated variant ATINs (max 50)
+        description: Comma-separated ATINs (max 50)
         required: true
         schema:
           type: array
@@ -497,6 +539,13 @@ paths:
         schema:
           type: string
           default: USD
+      - name: by
+        in: query
+        description: variant | product
+        required: false
+        schema:
+          type: string
+          default: variant
       responses:
         '200':
           description: OK
@@ -673,6 +722,40 @@ components:
         updatedAt:
           type: string
           format: date-time
+    StockUpdateRequest:
+      type: object
+      description: Absolute quantity on hand for a seller-fulfilled SKU
+      properties:
+        quantity:
+          type: integer
+          format: int32
+          example: 24
+          maximum: 99999
+          minimum: 0
+        reason:
+          type: string
+          description: STOCK_TAKE, DAMAGED, FOUND, RETURNED or OTHER
+          example: STOCK_TAKE
+          maxLength: 40
+          minLength: 0
+      required:
+      - quantity
+    StockUpdate:
+      type: object
+      description: The quantity now declared on the SKU's offers
+      properties:
+        sku:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        reason:
+          type: string
+        offerIds:
+          type: array
+          items:
+            type: string
+            format: uuid
     CreateOfferRequest:
       type: object
       description: Exactly one of atin (variant ATIN) or gtin

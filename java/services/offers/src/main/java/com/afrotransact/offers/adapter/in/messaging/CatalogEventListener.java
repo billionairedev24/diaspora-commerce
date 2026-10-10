@@ -18,7 +18,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Consumes {@code catalog.product.*} from {@code at.product.events} (key = product id). created → the creating
- * seller's offers; approved / resumed / rejected / paused → offers on the page become live or not. Malformed
+ * seller's offers; approved / resumed / reinstated / rejected / paused / taken_down → offers on the page become live
+ * or not (a takedown suppresses them: off the buy box and every public read). Malformed
  * messages are logged and skipped; use-case failures propagate so the container retries the record.
  */
 @Component
@@ -26,7 +27,8 @@ class CatalogEventListener {
 
     static final String CREATED = "catalog.product.created";
     static final Set<String> STATUS_EVENTS = Set.of("catalog.product.approved", "catalog.product.rejected",
-            "catalog.product.paused", "catalog.product.resumed");
+            "catalog.product.paused", "catalog.product.resumed", "catalog.product.taken_down",
+            "catalog.product.reinstated");
 
     private static final Logger LOG = LoggerFactory.getLogger(CatalogEventListener.class);
 

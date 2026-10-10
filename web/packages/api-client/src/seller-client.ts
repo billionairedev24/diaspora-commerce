@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { type ApiClientOptions, createRequester } from './http';
 import {
+  type AcceptedInvitation,
+  AcceptedInvitationSchema,
   type Asset,
   AssetSchema,
   type Availability,
@@ -36,6 +38,8 @@ import {
   GtinCheckSchema,
   type InventoryView,
   InventoryViewSchema,
+  type InvitationPreview,
+  InvitationPreviewSchema,
   type LabelPurchase,
   LabelPurchaseSchema,
   type ListingPage,
@@ -69,6 +73,10 @@ import {
   type ServiceInput,
   type ServiceOffer,
   ServiceOfferSchema,
+  type ShipFromAddress,
+  ShipFromAddressSchema,
+  type ShipFromInput,
+  ShipFromListSchema,
   type ShipmentStatus,
   type StockAdjustment,
   type StockAdjustmentRequest,
@@ -126,6 +134,17 @@ export function createSellerApiClient(options: ApiClientOptions) {
     buyLabel: (orderNumber: string, shipmentId: string, body: { carrier: string; service: string; parcel: Parcel; shipFrom: SellerAddress }, key: string): Promise<LabelPurchase> =>
       request(`${shipment(orderNumber, shipmentId)}/labels`, LabelPurchaseSchema, { method: 'POST', body, headers: idem(key) }),
 
+    /* Ship-from addresses (seller service) */
+    listShipFrom: async (signal?: AbortSignal): Promise<ShipFromAddress[]> => (await request('/v1/seller/ship-from-addresses', ShipFromListSchema, { signal })).items,
+    createShipFrom: (input: ShipFromInput): Promise<ShipFromAddress> =>
+      request('/v1/seller/ship-from-addresses', ShipFromAddressSchema, { method: 'POST', body: input }),
+    updateShipFrom: (id: string, input: ShipFromInput): Promise<ShipFromAddress> =>
+      request(`/v1/seller/ship-from-addresses/${enc(id)}`, ShipFromAddressSchema, { method: 'PUT', body: input }),
+    defaultShipFrom: async (id: string): Promise<ShipFromAddress[]> =>
+      (await request(`/v1/seller/ship-from-addresses/${enc(id)}/default`, ShipFromListSchema, { method: 'POST' })).items,
+    deleteShipFrom: async (id: string): Promise<ShipFromAddress[]> =>
+      (await request(`/v1/seller/ship-from-addresses/${enc(id)}`, ShipFromListSchema, { method: 'DELETE' })).items,
+
     /* Listings & builder */
     listListings: (q: ListingsQuery, signal?: AbortSignal): Promise<ListingPage> =>
       request('/v1/seller/listings', ListingPageSchema, { query: { status: q.status, q: q.q, page: String(q.page), size: String(q.size) }, signal }),
@@ -165,6 +184,13 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/team/invitations', TeamMemberSchema, { method: 'POST', body: { email, roleKey } }),
     assignRole: (userId: string, roleKey: string): Promise<TeamView> =>
       request(`/v1/seller/team/members/${enc(userId)}`, TeamViewSchema, { method: 'PUT', body: { roleKey } }),
+    removeMember: (userId: string): Promise<TeamView> => request(`/v1/seller/team/members/${enc(userId)}`, TeamViewSchema, { method: 'DELETE' }),
+    revokeInvitation: (invitationId: string): Promise<TeamView> =>
+      request(`/v1/seller/team/invitations/${enc(invitationId)}`, TeamViewSchema, { method: 'DELETE' }),
+    lookupInvitation: (token: string): Promise<InvitationPreview> =>
+      request('/v1/seller/invitations/lookup', InvitationPreviewSchema, { method: 'POST', body: { token } }),
+    acceptInvitation: (token: string): Promise<AcceptedInvitation> =>
+      request('/v1/seller/invitations/accept', AcceptedInvitationSchema, { method: 'POST', body: { token } }),
 
     /* Provider Hub */
     getCalendar: (from: string, to: string, signal?: AbortSignal): Promise<CalendarView> =>

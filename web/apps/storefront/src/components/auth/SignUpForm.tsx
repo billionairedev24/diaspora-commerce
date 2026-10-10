@@ -24,14 +24,17 @@ export interface SignUpFormProps {
   demo: boolean;
   smsProgram: string;
   links: { terms: string; privacy: string; sms: string };
+  /** Organisation invitation token: identity starts the account verified and joins the organisation (no email code). */
+  invitation?: string;
+  invitedEmail?: string;
 }
 
 /** Unified account creation (customers, sellers and providers share it — the role is decided server-side). */
-export function SignUpForm({ providers, returnTo, demo, smsProgram, links }: SignUpFormProps) {
+export function SignUpForm({ providers, returnTo, demo, smsProgram, links, invitation = '', invitedEmail = '' }: SignUpFormProps) {
   const api = browserApi();
   const done = useAuthSuccess();
   const toast = useToast();
-  const [v, setV] = useState({ firstName: '', lastName: '', email: '', phoneCountry: 'US' as CountryCode, phone: '', password: '', confirmPassword: '', termsAccepted: false, smsConsent: false });
+  const [v, setV] = useState({ firstName: '', lastName: '', email: invitedEmail, phoneCountry: 'US' as CountryCode, phone: '', password: '', confirmPassword: '', termsAccepted: false, smsConsent: false });
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -62,7 +65,7 @@ export function SignUpForm({ providers, returnTo, demo, smsProgram, links }: Sig
     setBusy(true);
     setFormError(null);
     try {
-      const r = await api.signUp(toSignUpRequest(parsed.data, returnTo));
+      const r = await api.signUp(toSignUpRequest(parsed.data, returnTo, invitation || undefined));
       if (r.status === 'verification_required') setVerify({ challengeId: r.challengeId, destination: r.destination });
       else if (r.status === 'authenticated') await done(r.redirectTo);
     } catch (err) {
@@ -103,6 +106,7 @@ export function SignUpForm({ providers, returnTo, demo, smsProgram, links }: Sig
   return (
     <form onSubmit={submit} noValidate className={styles.form} style={{ width: '100%' }}>
       <h1 className={styles.h1}>{t('auth.signupTitle')}</h1>
+      {invitation ? <p className={styles.hint}>{t('auth.invitationHint')}</p> : null}
       {errorList.length > 0 && (
         <div className={styles.summary} role="alert">
           {t('auth.errorSummary', { n: errorList.length })}

@@ -54,7 +54,7 @@ func loadRouter(t *testing.T) routers.Router {
 // handlers, backed by fake upstreams, and validates every response against contracts/openapi/gateway-bff.yaml.
 func TestContractConformance(t *testing.T) {
 	router := loadRouter(t)
-	bff, b := setup(t, testkit.Options{Content: true, Payments: true, Promise: true})
+	bff, b := setup(t, testkit.Options{Content: true, Payments: true, Promise: true, Offers: true, Notifications: true})
 	validated := map[string]int{}
 	b.onResponse = func(req *http.Request, rec *httptest.ResponseRecorder) {
 		route, params, err := router.FindRoute(req)
@@ -95,6 +95,11 @@ func TestContractConformance(t *testing.T) {
 	b.do("GET", "/v1/products/ATNOPE0000", nil)
 	b.do("POST", "/v1/products/ATNOPE0000/stock-alerts", map[string]any{"email": "ada@example.com"})
 	b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{})
+	b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{"email": "ada@example.com"})
+	b.do("GET", "/v1/products/ATSHEAV001", nil)
+	b.do("PUT", "/v1/delivery-location", map[string]any{"lat": 29.7376, "lon": -95.5134})
+	b.do("POST", "/v1/cart/items", map[string]any{"offerId": testkit.OfferAccraSheaID, "quantity": 1})
+	b.do("POST", "/v1/cart/items", map[string]any{"offerId": testkit.OfferPausedID, "quantity": 1})
 	// Cart.
 	b.do("GET", "/v1/cart", nil)
 	b.do("POST", "/v1/cart/items", map[string]any{"offerId": "ATSHEA0001", "quantity": 2})
@@ -120,6 +125,16 @@ func TestContractConformance(t *testing.T) {
 	b.do("GET", "/v1/auth/oidc/google/authorize", nil)
 	b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "bad", "password": ""})
 	b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "x", "code": "1"})
+	b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "locked@example.com", "password": "whatever"})
+	b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "ada@example.com", "password": testkit.FirstPartyPassword, "returnTo": "/cart"})
+	b.do("POST", "/v1/auth/mfa/sms", map[string]any{"challengeId": "ch-1"})
+	b.do("POST", "/v1/auth/mfa/sms", map[string]any{"challengeId": "unknown"})
+	b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "ch-1", "code": "000000"})
+	b.do("POST", "/v1/auth/passkey/options", map[string]any{})
+	b.do("POST", "/v1/auth/passkey/verify", map[string]any{"challengeId": "pk-0", "id": "cred", "rawId": "cred", "type": "public-key",
+		"response": map[string]any{"clientDataJSON": "e30", "authenticatorData": "AA", "signature": "AA", "userHandle": nil}})
+	b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "ch-1", "code": testkit.FirstPartyCode, "method": "sms"})
+	b.do("POST", "/v1/auth/sign-out", nil)
 	b.do("POST", "/v1/auth/email-verification/resend", map[string]any{"challengeId": "unknown"})
 	r := b.do("POST", "/v1/auth/sign-up", map[string]any{"firstName": "Ada", "lastName": "Obi", "email": "ada@example.com",
 		"phone": "+17135550142", "password": "Str0ngPassword!", "termsAccepted": true, "smsConsent": true})
@@ -138,12 +153,25 @@ func TestContractConformance(t *testing.T) {
 	b.do("GET", "/v1/account/addresses", nil)
 	b.do("DELETE", "/v1/account/addresses/nope", nil)
 	b.do("GET", "/v1/account/payment-methods", nil)
+	b.do("POST", "/v1/account/phone/verification/confirm", map[string]any{"code": "12"})
+	b.do("POST", "/v1/account/phone/verification", nil)
+	b.do("POST", "/v1/account/phone/verification/confirm", map[string]any{"code": "000000"})
+	b.do("POST", "/v1/account/phone/verification/confirm", map[string]any{"code": testkit.PhoneCode})
+	b.do("POST", "/v1/account/phone/verification", nil)
+	b.do("GET", "/v1/me", nil)
+	b.do("POST", "/v1/products/ATGARI0001/stock-alerts", map[string]any{})
+	b.do("GET", "/v1/account/stock-alerts", nil)
+	b.do("DELETE", "/v1/account/stock-alerts/ATGARIV001", nil)
+	b.do("DELETE", "/v1/account/stock-alerts/ATGARIV001", nil)
 	b.do("POST", "/v1/account/payment-methods/setup-intents", nil)
 	b.do("POST", "/v1/cart/items", map[string]any{"offerId": "ATSHEAV001", "quantity": 1})
 	b.do("GET", "/v1/checkout/summary", nil)
 	b.do("POST", "/v1/checkout/orders", map[string]any{"addressId": "", "deliverySelections": []any{}})
 	// Careers.
 	b.do("GET", "/v1/careers/jobs", nil)
+	b.do("POST", "/v1/careers/uploads", map[string]any{"fileName": "cv.pdf", "contentType": "application/pdf", "size": 120000})
+	b.do("POST", "/v1/careers/uploads", map[string]any{"fileName": "cv.docx", "contentType": "application/pdf", "size": 9000000})
+	b.do("POST", "/v1/careers/uploads/0b0b0b0b-0000-4000-8000-000000000001/complete", nil)
 	b.do("POST", "/v1/careers/jobs/eng-1/applications", map[string]any{"name": "Ada Obi", "email": "ada@example.com", "linkedin": "", "workAuthorization": "Yes", "resumeAssetId": "ast_123", "resumeFileName": "cv.pdf", "consent": true})
 	b.do("POST", "/v1/careers/jobs/eng-9/applications", map[string]any{"name": "Ada Obi", "email": "ada@example.com", "linkedin": "", "workAuthorization": "Yes", "resumeAssetId": "ast_123", "resumeFileName": "cv.pdf", "consent": true})
 	b.do("POST", "/v1/auth/sign-out", nil)
@@ -153,7 +181,8 @@ func TestContractConformance(t *testing.T) {
 		"removeCartLine", "selectAllCartLines", "saveForLater", "moveToCart", "removeSaved", "getMe", "startHostedLogin",
 		"startSocialLogin", "signIn", "verifyMfa", "signUp", "verifyEmail", "resendEmailCode", "signOut", "listAddresses",
 		"createAddress", "deleteAddress", "listPaymentMethods", "createSetupIntent", "getCheckoutSummary", "placeOrder",
-		"listJobs", "applyToJob"} {
+		"listJobs", "applyToJob", "sendMfaCode", "passkeyOptions", "passkeyVerify", "listStockAlerts", "removeStockAlert",
+		"requestResumeUpload", "completeResumeUpload", "startPhoneVerification", "confirmPhoneVerification"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)
 		}

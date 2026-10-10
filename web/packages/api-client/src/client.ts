@@ -10,12 +10,26 @@ import {
   type PasskeyAssertion,
   type PasskeyOptions,
   PasskeyOptionsSchema,
+  type PhoneCodeSent,
+  PhoneCodeSentSchema,
+  type PhoneVerification,
+  PhoneVerificationSchema,
   ResendResponseSchema,
   type SignInRequest,
   type SignUpRequest,
   type VerifyCodeRequest
 } from './schemas/auth';
-import { type ApplicationReceipt, ApplicationReceiptSchema, type Job, type JobApplicationForm, JobsSchema } from './schemas/careers';
+import {
+  type ApplicationReceipt,
+  ApplicationReceiptSchema,
+  type Job,
+  type JobApplicationForm,
+  JobsSchema,
+  type ResumeAsset,
+  ResumeAssetSchema,
+  type ResumeUpload,
+  ResumeUploadSchema
+} from './schemas/careers';
 import { type AddToCartRequest, type Cart, CartSchema, type UpdateCartLineRequest } from './schemas/cart';
 import { type ProductDetail, ProductDetailSchema, type StockAlert, StockAlertSchema } from './schemas/catalog';
 import { type Home, HomeSchema } from './schemas/home';
@@ -73,6 +87,9 @@ export function createApiClient(options: ApiClientOptions) {
     signIn: (body: SignInRequest): Promise<AuthResult> => request('/v1/auth/sign-in', AuthResultSchema, { method: 'POST', body }),
     verifyMfa: (body: VerifyCodeRequest): Promise<AuthResult> => request('/v1/auth/mfa/verify', AuthResultSchema, { method: 'POST', body }),
     signUp: (body: SignUpRequest): Promise<AuthResult> => request('/v1/auth/sign-up', AuthResultSchema, { method: 'POST', body }),
+    startPhoneVerification: (): Promise<PhoneCodeSent> => request('/v1/account/phone/verification', PhoneCodeSentSchema, { method: 'POST' }),
+    confirmPhoneVerification: (code: string): Promise<PhoneVerification> =>
+      request('/v1/account/phone/verification/confirm', PhoneVerificationSchema, { method: 'POST', body: { code } }),
     verifyEmail: (body: VerifyCodeRequest): Promise<AuthResult> => request('/v1/auth/email-verification/verify', AuthResultSchema, { method: 'POST', body }),
     resendEmailCode: (challengeId: string) => request('/v1/auth/email-verification/resend', ResendResponseSchema, { method: 'POST', body: { challengeId } }),
     passkeyOptions: (): Promise<PasskeyOptions> => request('/v1/auth/passkey/options', PasskeyOptionsSchema, { method: 'POST', body: {} }),
@@ -84,6 +101,11 @@ export function createApiClient(options: ApiClientOptions) {
 
     /* Careers */
     getJobs: async (signal?: AbortSignal): Promise<Job[]> => (await request('/v1/careers/jobs', JobsSchema, { signal })).jobs,
+    /** Signed direct upload for a résumé (media service; PDF ≤ 5 MB). PUT the file to upload.url, then complete. */
+    requestResumeUpload: (input: { fileName: string; contentType: string; size: number }): Promise<ResumeUpload> =>
+      request('/v1/careers/uploads', ResumeUploadSchema, { method: 'POST', body: input }),
+    completeResumeUpload: (assetId: string): Promise<ResumeAsset> =>
+      request(`/v1/careers/uploads/${encodeURIComponent(assetId)}/complete`, ResumeAssetSchema, { method: 'POST' }),
     applyToJob: (jobId: string, form: JobApplicationForm): Promise<ApplicationReceipt> =>
       request(`/v1/careers/jobs/${encodeURIComponent(jobId)}/applications`, ApplicationReceiptSchema, { method: 'POST', body: form }),
 
@@ -96,3 +118,18 @@ export function createApiClient(options: ApiClientOptions) {
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
+
+/**
+ * Uploads a résumé through the media service's signed upload: ask the BFF for a URL, PUT the file straight to storage
+ * (no BFF credentials), then let media check it. Returns the asset id to send as resumeAssetId.
+ */
+export async function uploadResume(
+  api: Pick<ApiClient, 'requestResumeUpload' | 'completeResumeUpload'>,
+  file: { name: string; type: string; size: number } & Blob,
+  put: (url: string, init: RequestInit) => Promise<Response> = (url, init) => fetch(url, init)
+): Promise<ResumeAsset> {
+  const ticket = await api.requestResumeUpload({ fileName: file.name, contentType: file.type || 'application/pdf', size: file.size });
+  const res = await put(ticket.upload.url, { method: ticket.upload.method, headers: ticket.upload.headers, body: file });
+  if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+  return api.completeResumeUpload(ticket.assetId);
+}

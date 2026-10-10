@@ -3,6 +3,7 @@ package port
 
 import (
 	"context"
+	"errors"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/domain"
 )
@@ -24,4 +25,28 @@ type OfferReader interface {
 // AvailabilityReader returns sellable quantities per variant ATIN (inventory SKU).
 type AvailabilityReader interface {
 	Available(ctx context.Context, variantATINs []string) (map[string]int, error)
+}
+
+// LiveOffer is one offers-service offer as the cart needs it: seller, fulfilment, price, sellable units and whether
+// it can be bought now (paused, out of stock, product not live or seller suppressed ⇒ not buyable).
+type LiveOffer struct {
+	OfferID     string
+	VariantATIN string
+	ProductATIN string
+	SellerOrgID string
+	SellerName  string
+	SellerKind  string
+	Fulfilment  string
+	PriceMinor  int64
+	Currency    string
+	Available   int
+	Buyable     bool
+}
+
+// ErrOfferNotFound is returned by OfferLookup when the offer is unknown or withdrawn.
+var ErrOfferNotFound = errors.New("offer not found")
+
+// OfferLookup reads one offer from the offers service (GET /v1/public/offers/{offerId}).
+type OfferLookup interface {
+	Offer(ctx context.Context, offerID string) (LiveOffer, error)
 }

@@ -1,0 +1,6 @@
+.card { max-width: 640px; margin-top: var(--at-space-8); background: var(--at-color-surface); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); padding: var(--at-space-6); display: flex; flex-direction: column; gap: var(--at-space-3); }
+.title { margin: 0; font-size: var(--at-text-xl); font-weight: var(--at-weight-bold); }
+.muted { margin: 0; color: var(--at-color-text-muted); line-height: var(--at-leading-relaxed); }
+.verified { margin: 0; color: var(--at-color-success); font-weight: var(--at-weight-bold); }
+.row { display: flex; gap: var(--at-space-2); flex-wrap: wrap; align-items: flex-end; }
+.error { margin: 0; color: var(--at-color-danger); font-size: var(--at-text-sm); }

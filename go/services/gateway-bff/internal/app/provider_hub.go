@@ -116,10 +116,11 @@ func (p *providerHubImpl) Calendar(ctx context.Context, c *domain.Caller, from, 
 	if err != nil {
 		return domain.CalendarView{}, err
 	}
-	if _, err := p.r.require(ctx, c, kindProvider, "calendar", domain.LevelView); err != nil {
+	sc, err := p.r.require(ctx, c, kindProvider, "calendar", domain.LevelView)
+	if err != nil {
 		return domain.CalendarView{}, err
 	}
-	cal, err := p.r.d.Bookings.Calendar(ctx, c.BearerToken, start, end)
+	cal, err := p.r.d.Bookings.Calendar(ctx, c.BearerToken, sc.provider(), start, end)
 	if err != nil {
 		return domain.CalendarView{}, mapErr("bookings", err)
 	}
@@ -134,10 +135,11 @@ func (p *providerHubImpl) Calendar(ctx context.Context, c *domain.Caller, from, 
 }
 
 func (p *providerHubImpl) Requests(ctx context.Context, c *domain.Caller) ([]domain.BookingCard, error) {
-	if _, err := p.r.require(ctx, c, kindProvider, "requests", domain.LevelView); err != nil {
+	sc, err := p.r.require(ctx, c, kindProvider, "requests", domain.LevelView)
+	if err != nil {
 		return nil, err
 	}
-	list, err := p.r.d.Bookings.Requests(ctx, c.BearerToken)
+	list, err := p.r.d.Bookings.Requests(ctx, c.BearerToken, sc.provider())
 	if err != nil {
 		return nil, mapErr("bookings", err)
 	}
@@ -183,10 +185,11 @@ func (p *providerHubImpl) availability(a domain.Availability) domain.Availabilit
 }
 
 func (p *providerHubImpl) Hours(ctx context.Context, c *domain.Caller) (domain.Availability, error) {
-	if _, err := p.r.require(ctx, c, kindProvider, "hours", domain.LevelView); err != nil {
+	sc, err := p.r.require(ctx, c, kindProvider, "hours", domain.LevelView)
+	if err != nil {
 		return domain.Availability{}, err
 	}
-	a, err := p.r.d.Bookings.Availability(ctx, c.BearerToken)
+	a, err := p.r.d.Bookings.Availability(ctx, c.BearerToken, sc.provider())
 	if err != nil {
 		return domain.Availability{}, mapErr("bookings", err)
 	}
@@ -197,10 +200,11 @@ func (p *providerHubImpl) SaveHours(ctx context.Context, c *domain.Caller, a dom
 	if errs := a.Validate(); len(errs) > 0 {
 		return domain.Availability{}, domain.ValidationProblem(errs)
 	}
-	if _, err := p.r.require(ctx, c, kindProvider, "hours", domain.LevelEdit); err != nil {
+	sc, err := p.r.require(ctx, c, kindProvider, "hours", domain.LevelEdit)
+	if err != nil {
 		return domain.Availability{}, err
 	}
-	out, err := p.r.d.Bookings.SaveAvailability(ctx, c.BearerToken, p.availability(a))
+	out, err := p.r.d.Bookings.SaveAvailability(ctx, c.BearerToken, sc.provider(), p.availability(a))
 	if err != nil {
 		return domain.Availability{}, mapErr("bookings", err)
 	}
@@ -215,10 +219,11 @@ func serviceOf(s domain.ServiceOffer) domain.ServiceOffer {
 }
 
 func (p *providerHubImpl) Services(ctx context.Context, c *domain.Caller) ([]domain.ServiceOffer, error) {
-	if _, err := p.r.require(ctx, c, kindProvider, "services", domain.LevelView); err != nil {
+	sc, err := p.r.require(ctx, c, kindProvider, "services", domain.LevelView)
+	if err != nil {
 		return nil, err
 	}
-	list, err := p.r.d.Bookings.Services(ctx, c.BearerToken)
+	list, err := p.r.d.Bookings.Services(ctx, c.BearerToken, sc.provider())
 	if err != nil {
 		return nil, mapErr("bookings", err)
 	}
@@ -233,10 +238,11 @@ func (p *providerHubImpl) CreateService(ctx context.Context, c *domain.Caller, i
 	if errs := in.Validate(); len(errs) > 0 {
 		return domain.ServiceOffer{}, domain.ValidationProblem(errs)
 	}
-	if _, err := p.r.require(ctx, c, kindProvider, "services", domain.LevelEdit); err != nil {
+	sc, err := p.r.require(ctx, c, kindProvider, "services", domain.LevelEdit)
+	if err != nil {
 		return domain.ServiceOffer{}, err
 	}
-	s, err := p.r.d.Bookings.CreateService(ctx, c.BearerToken, in)
+	s, err := p.r.d.Bookings.CreateService(ctx, c.BearerToken, sc.provider(), in)
 	if err != nil {
 		return domain.ServiceOffer{}, mapErr("bookings", err)
 	}
@@ -247,10 +253,11 @@ func (p *providerHubImpl) UpdateService(ctx context.Context, c *domain.Caller, i
 	if errs := in.Validate(); len(errs) > 0 {
 		return domain.ServiceOffer{}, domain.ValidationProblem(errs)
 	}
-	if _, err := p.r.require(ctx, c, kindProvider, "services", domain.LevelEdit); err != nil {
+	sc, err := p.r.require(ctx, c, kindProvider, "services", domain.LevelEdit)
+	if err != nil {
 		return domain.ServiceOffer{}, err
 	}
-	s, err := p.r.d.Bookings.UpdateService(ctx, c.BearerToken, id, in)
+	s, err := p.r.d.Bookings.UpdateService(ctx, c.BearerToken, sc.provider(), id, in)
 	if err != nil {
 		return domain.ServiceOffer{}, mapErr("bookings", err)
 	}
@@ -258,10 +265,11 @@ func (p *providerHubImpl) UpdateService(ctx context.Context, c *domain.Caller, i
 }
 
 func (p *providerHubImpl) Policy(ctx context.Context, c *domain.Caller) (domain.CancellationPolicy, error) {
-	if _, err := p.r.require(ctx, c, kindProvider, "policy", domain.LevelView); err != nil {
+	sc, err := p.r.require(ctx, c, kindProvider, "policy", domain.LevelView)
+	if err != nil {
 		return domain.CancellationPolicy{}, err
 	}
-	pol, err := p.r.d.Bookings.Policy(ctx, c.BearerToken)
+	pol, err := p.r.d.Bookings.Policy(ctx, c.BearerToken, sc.provider())
 	if err != nil {
 		return domain.CancellationPolicy{}, mapErr("bookings", err)
 	}
@@ -276,10 +284,11 @@ func (p *providerHubImpl) SavePolicy(ctx context.Context, c *domain.Caller, in d
 	if errs := in.Validate(); len(errs) > 0 {
 		return domain.CancellationPolicy{}, domain.ValidationProblem(errs)
 	}
-	if _, err := p.r.require(ctx, c, kindProvider, "policy", domain.LevelEdit); err != nil {
+	sc, err := p.r.require(ctx, c, kindProvider, "policy", domain.LevelEdit)
+	if err != nil {
 		return domain.CancellationPolicy{}, err
 	}
-	out, err := p.r.d.Bookings.SavePolicy(ctx, c.BearerToken, in)
+	out, err := p.r.d.Bookings.SavePolicy(ctx, c.BearerToken, sc.provider(), in)
 	if err != nil {
 		return domain.CancellationPolicy{}, mapErr("bookings", err)
 	}
@@ -305,7 +314,7 @@ func (p *providerHubImpl) Earnings(ctx context.Context, c *domain.Caller, from, 
 		fees    []port.ProviderFeeResponse
 		feesErr error
 	)
-	wg.Go(func() { e, eErr = p.r.d.Bookings.Earnings(ctx, c.BearerToken, start, end) })
+	wg.Go(func() { e, eErr = p.r.d.Bookings.Earnings(ctx, c.BearerToken, sc.provider(), start, end) })
 	wg.Go(func() { fees, feesErr = p.r.d.Payouts.ProviderFees(ctx, c.BearerToken, sc.org.ID) })
 	wg.Wait()
 	if eErr != nil {

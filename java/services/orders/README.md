@@ -42,6 +42,11 @@ on its first payments line, so captures and refunds use the same allocation.
 5. **wait** for `paymentAuthorized` / `paymentFailed` signals — from `payments.intent.succeeded|failed|canceled`
    (Kafka `at.payment.events`) or `POST /v1/checkout/{number}/confirm` (orders asks payments) — for 15 minutes
    (the reservation TTL).
+   With a `couponCode` (behind `Workflow.getVersion("coupons-v1")`): **validateCoupon** (offers
+   `POST /v1/coupons/validate`, lines by `offerId`; not applicable ⇒ `422 orders.coupon-not-applicable`) after pricing,
+   and **redeemCoupon** (`POST /v1/coupons/redemptions`, `Idempotency-Key` = order id) before the payment; line
+   discounts reduce items and tax, shipping discounts reduce shipments. Compensation **releaseCoupon**
+   (`POST /v1/coupons/redemptions/{id}/release`); cancelling every live shipment also releases it.
 6. **place** — `POST /v1/reservations/{id}/confirm`, shipments → `placed` (actor SYSTEM), order `PLACED`,
    `orders.order.placed`; **clearCart** `POST /v1/carts/{customerId}/ordered` (`cart:service`).
 
@@ -123,14 +128,16 @@ RFC 9457 problems with `code` `orders.*`. Reference pages `/swagger-ui.html`, `/
 | `GET /v1/admin/orders?number&customer&seller&status&shipmentStatus&from&to` | staff `orders:read` | search |
 | `POST /v1/shipments/{id}/transitions {to, reason}` | seller / staff / fulfilment service | actor rules above |
 | `POST /v1/shipments/{id}/tracking {carrier, trackingNumber}` | seller / staff | carrier label for webhook matching |
-| `POST /v1/shipments/{id}/courier-events` · `GET …/delivery-brief` | driver `delivery:operate` | proof of delivery |
+| `POST /v1/shipments/{id}/courier-events` · `GET …/delivery-brief` | driver `delivery:operate`; fulfilment SERVICE with `delivery:relay` (actor = body `driverId`); brief also `delivery:dispatch` | proof of delivery |
+| `GET /v1/seller/analytics?from=&to=` (`org=` for staff) | seller `orders:read` | sales, orders, checkouts and conversion by day, totals, top products |
 | `GET /v1/shipments/stream` | staff / seller `orders:read` | SSE live feed |
 
 ## Events
 
 Published on `at.order.events` (key = order id; `contracts/asyncapi/fragments/orders.yaml`):
 `orders.order.placed`, `orders.order.cancelled`, `orders.shipment.status_changed`, `orders.shipment.delivered`,
-`orders.shipment.cancelled`. Consumed: `payments.intent.*` (`at.payment.events`), `carrier.tracking.updated`
+`orders.shipment.cancelled`. `orders.order.placed` shipments carry `nodeId`, `perishable`, ship-to street lines and
+`lat`/`lng` for dispatch. Consumed: `payments.intent.*` (`at.payment.events`), `carrier.tracking.updated`
 (`at.carrier-shipment.events`, matched by label reference = shipment id or carrier + tracking number).
 
 ## Upstreams (ports → RestClient adapters)
@@ -145,7 +152,7 @@ read with the customer's token. 4xx = refusal (not retried), 5xx / 408 / 429 / I
 `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `ORDERS_CLIENT_SECRET`, `TEMPORAL_TLS_CERT`, `TEMPORAL_TLS_KEY`,
 `HANDOVER_CODE_KEY`. Temporal: `TEMPORAL_TARGET` (local `localhost:7233`), `TEMPORAL_NAMESPACE` (one per
 environment, `afrotransact-<env>` on Temporal Cloud with mTLS in dev / uat / prod), `TEMPORAL_START_WORKERS`.
-Other knobs: `CHECKOUT_PAYMENT_TIMEOUT` (15m), upstream URLs (`CART_URL`, `INVENTORY_URL`, `PAYMENTS_URL`, …),
+Other knobs: `CHECKOUT_PAYMENT_TIMEOUT` (15m), upstream URLs (`CART_URL`, `INVENTORY_URL`, `PAYMENTS_URL`, `OFFERS_URL`, …),
 `ORDERS_JOBS_ENABLED`, `ORDERS_CONSUMERS_ENABLED`, per-state tax table and shipping fees under `at.orders.*`.
 
 ## Run and test

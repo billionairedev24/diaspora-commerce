@@ -128,6 +128,78 @@ func (d SellerDirectory) Describe(ownerKind, sellerOrgID string) (domain.Seller,
 	return domain.Seller{ID: id, Name: name, Kind: domain.SellerKindSeller, City: ""}, domain.ShipsFromSeller
 }
 
+func normFulfilment(f string) string {
+	if f == domain.FulfilledByAfroTransact {
+		return f
+	}
+	return domain.ShipsFromSeller
+}
+
+func normSellerKind(k string) string {
+	if k == domain.SellerKindPlatform {
+		return k
+	}
+	return domain.SellerKindSeller
+}
+
+// offerFromPublic maps an offers-service offer (with its delivery promise) onto the contract's Offer.
+func offerFromPublic(o port.PublicOffer, delivery domain.DeliveryPromise) domain.Offer {
+	kind := normSellerKind(o.Seller.Kind)
+	qty := max(0, o.AvailableQty)
+	status := o.StockStatus
+	if status != domain.InStock && status != domain.LowStock && status != domain.OutOfStock {
+		status = domain.StockStatusFor(qty)
+	}
+	var list *int64
+	if o.ListPriceMinor != nil && *o.ListPriceMinor > o.PriceMinor {
+		list = o.ListPriceMinor
+	}
+	return domain.Offer{OfferID: o.OfferID, Seller: domain.Seller{ID: firstNonEmpty(o.Seller.ID, "seller"),
+		Name: firstNonEmpty(o.Seller.Name, sellerFallback(kind)), Kind: kind, City: o.Seller.City},
+		PriceMinor: o.PriceMinor, ListPriceMinor: list, Currency: firstNonEmpty(strings.ToUpper(o.Currency), domain.Currency),
+		Fulfilment: normFulfilment(o.Fulfilment), AvailableQty: qty, StockStatus: status, Delivery: delivery}
+}
+
+// withOffers puts the offers-service view on product cards: offer count and lowest price across sellers, and the
+// buy box winner (offer id, price, seller, fulfilment, stock) so "Add to cart" on a card adds the winning offer.
+// Cards keep the search data when offers is not wired, cannot answer, or has no offer for the product.
+func withOffers(ctx context.Context, offers port.StorefrontOffersClient, cards []domain.ProductSummary) []domain.ProductSummary {
+	if offers == nil || len(cards) == 0 {
+		return cards
+	}
+	atins := make([]string, 0, len(cards))
+	for _, c := range cards {
+		atins = append(atins, c.ATIN)
+	}
+	boxes, err := offers.ProductSummaries(ctx, atins)
+	if err != nil {
+		return cards
+	}
+	for i, c := range cards {
+		bb, ok := boxes[c.ATIN]
+		if !ok || bb.OfferCount == 0 {
+			continue
+		}
+		c.OfferCount = bb.OfferCount
+		if bb.MinPriceMinor != nil {
+			c.MinOfferPriceMinor = *bb.MinPriceMinor
+		}
+		if w := bb.BuyBox; w != nil {
+			o := offerFromPublic(*w, c.Delivery)
+			c.OfferID, c.PriceMinor, c.ListPriceMinor, c.Currency = o.OfferID, o.PriceMinor, o.ListPriceMinor, o.Currency
+			c.SellerName, c.SellerKind, c.SellerCity, c.Fulfilment = o.Seller.Name, o.Seller.Kind, o.Seller.City, o.Fulfilment
+			c.AvailableQty, c.StockStatus = o.AvailableQty, o.StockStatus
+			c.InStock, c.LowStock = o.StockStatus != domain.OutOfStock, o.StockStatus == domain.LowStock
+			c.MinOfferPriceMinor = min(c.MinOfferPriceMinor, c.PriceMinor)
+			if c.MinOfferPriceMinor == 0 {
+				c.MinOfferPriceMinor = c.PriceMinor
+			}
+		}
+		cards[i] = c
+	}
+	return cards
+}
+
 // summaryFromHit maps a search-service hit to a product card.
 func summaryFromHit(h port.SearchHit, est domain.Estimator, now time.Time) domain.ProductSummary {
 	qty := max(0, h.AvailableQty)

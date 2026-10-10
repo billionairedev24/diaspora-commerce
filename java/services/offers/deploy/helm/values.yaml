@@ -33,6 +33,7 @@ monitoring:
 #   - DB_USER
 #   - DB_PASSWORD
 #   - KAFKA_BOOTSTRAP
+#   - OFFERS_CLIENT_SECRET
 secrets:
   enabled: true
   store: platform-secrets

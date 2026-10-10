@@ -39,8 +39,12 @@ func (k *cartImpl) Get(ctx context.Context, o port.CartOwner) (port.UpstreamCart
 	return k.do(ctx, o, http.MethodGet, "/v1/cart", nil)
 }
 
-func (k *cartImpl) Add(ctx context.Context, o port.CartOwner, atin string, qty int) (port.UpstreamCart, error) {
-	return k.do(ctx, o, http.MethodPost, "/v1/cart/items", map[string]any{"variantAtin": atin, "quantity": qty})
+func (k *cartImpl) Add(ctx context.Context, o port.CartOwner, atin, offerID string, qty int) (port.UpstreamCart, error) {
+	body := map[string]any{"variantAtin": atin, "quantity": qty}
+	if offerID != "" {
+		body["offerId"] = offerID
+	}
+	return k.do(ctx, o, http.MethodPost, "/v1/cart/items", body)
 }
 
 func (k *cartImpl) SetQuantity(ctx context.Context, o port.CartOwner, atin string, qty int) (port.UpstreamCart, error) {

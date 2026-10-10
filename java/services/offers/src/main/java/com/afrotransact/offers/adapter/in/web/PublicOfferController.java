@@ -7,6 +7,7 @@ import java.util.UUID;
 import com.afrotransact.offers.adapter.in.web.PublicDtos.BuyBoxListResponse;
 import com.afrotransact.offers.adapter.in.web.PublicDtos.BuyBoxResponse;
 import com.afrotransact.offers.adapter.in.web.PublicDtos.OfferDetailResponse;
+import com.afrotransact.offers.application.BuyBoxView;
 import com.afrotransact.offers.application.OfferListingService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -43,13 +44,19 @@ class PublicOfferController {
         return ResponseEntity.ok().cacheControl(SHORT).body(BuyBoxResponse.of(listing.offers(atin, currency)));
     }
 
-    @Operation(summary = "Buy boxes of up to 50 variant ATINs (search cards, variant picker, cart)")
+    @Operation(summary = "Buy boxes of up to 50 variant ATINs (search cards, variant picker, cart)",
+            description = "by=variant (default): one buy box per variant ATIN. by=product: the ATINs are product "
+                    + "ATINs (search hits) and each item summarises the product page: the best variant winner, its "
+                    + "reasons, offerCount and lowest prices across every variant; otherOffers is empty.")
     @GetMapping("/buy-boxes")
     ResponseEntity<BuyBoxListResponse> buyBoxes(
-            @Parameter(description = "Comma-separated variant ATINs (max 50)") @RequestParam List<String> atins,
-            @RequestParam(defaultValue = "USD") String currency) {
+            @Parameter(description = "Comma-separated ATINs (max 50)") @RequestParam List<String> atins,
+            @RequestParam(defaultValue = "USD") String currency,
+            @Parameter(description = "variant | product") @RequestParam(defaultValue = "variant") String by) {
+        List<BuyBoxView> views = "product".equalsIgnoreCase(by) ? listing.productSummaries(atins, currency)
+                : listing.buyBoxes(atins, currency);
         return ResponseEntity.ok().cacheControl(SHORT).body(new BuyBoxListResponse(
-                listing.buyBoxes(atins, currency).stream().map(BuyBoxResponse::of).toList()));
+                views.stream().map(BuyBoxResponse::of).toList()));
     }
 
     @Operation(summary = "Buy boxes of every variant of a product page that has offers")

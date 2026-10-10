@@ -1,4 +1,4 @@
-export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike } from './client';
+export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, uploadResume } from './client';
 export { ApiError, isApiError } from './errors';
 export { type RequestOptions } from './http';
 export { formatMoney, percentOff, splitMoney } from './money';

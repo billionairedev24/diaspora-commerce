@@ -10,6 +10,7 @@ type Config struct {
 	GuestTTLDays int               `yaml:"guestTtlDays" env:"GUEST_TTL_DAYS"`
 	CatalogURL   string            `yaml:"catalogUrl" env:"CATALOG_URL"`
 	InventoryURL string            `yaml:"inventoryUrl" env:"INVENTORY_URL"`
+	OffersURL    string            `yaml:"offersUrl" env:"OFFERS_URL"`
 	RetailOrgID  string            `yaml:"retailOrgId" env:"RETAIL_ORG_ID"`
 	SellerNames  map[string]string `yaml:"sellerNames"`
 	Auth         struct {

@@ -4,7 +4,7 @@
 import { http, HttpResponse, type JsonBodyType } from 'msw';
 import { z } from 'zod';
 
-import { SignInRequestSchema, SignUpRequestSchema, VerifyCodeRequestSchema } from '../schemas/auth';
+import { CodeSchema, SignInRequestSchema, SignUpRequestSchema, VerifyCodeRequestSchema } from '../schemas/auth';
 import { JobApplicationFormSchema } from '../schemas/careers';
 import { AddToCartRequestSchema, SelectAllRequestSchema, UpdateCartLineRequestSchema } from '../schemas/cart';
 import { StockAlertRequestSchema } from '../schemas/catalog';
@@ -98,7 +98,8 @@ function me(ctx: Ctx) {
   if (!u) return { authenticated: false, user: null, counts: null };
   return {
     authenticated: true,
-    user: { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email, initials: (u.firstName[0] ?? '') + (u.lastName[0] ?? ''), roles: u.roles },
+    user: { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email, initials: (u.firstName[0] ?? '') + (u.lastName[0] ?? ''), roles: u.roles,
+      ...(u.phone ? { phone: '•••• ' + u.phone.slice(-4) } : {}), phoneVerified: phoneVerified.has(u.id) },
     counts: u.id === 'u_adaeze' ? { orders: 2, returns: 0, addresses: 2, paymentMethods: 3 } : { orders: 0, returns: 0, addresses: 0, paymentMethods: 0 }
   };
 }
@@ -117,6 +118,9 @@ function takeChallenge(id: string, kind: string) {
   if (!c || c.kind !== kind || c.expiresAt < Date.now()) throw new MockProblem(410, 'CHALLENGE_EXPIRED', 'Verification expired', 'That code has expired. Start again.');
   return c;
 }
+
+/** Accounts whose phone passed the mock SMS check (code DEMO_CODE). */
+const phoneVerified = new Set<string>();
 
 function requireUser(ctx: Ctx) {
   const u = userById(ctx.session.userId);
@@ -241,6 +245,11 @@ export const handlers = [
       throw new MockProblem(422, 'WEAK_PASSWORD', 'Password too weak', 'Password must meet all the rules.', { errors: { password: 'Password must meet all the rules' } });
     }
     const pending = { id: nextId('u'), firstName: req.firstName, lastName: req.lastName, email, password: req.password, phone: req.phone, roles: ['customer'] };
+    if (req.invitationToken) {
+      /* An organisation invite link: the account starts verified and joined, no email code. */
+      getDb().users.set(email, pending);
+      return json({ status: 'authenticated', redirectTo: `/signin?returnTo=${encodeURIComponent(safeReturn(req.returnTo))}` }, 201);
+    }
     const id = challenge('email', safeReturn(req.returnTo), { pending });
     return json({ status: 'verification_required', challengeId: id, destination: maskEmail(email), resendAfterSeconds: 30 }, 201);
   })),
@@ -298,6 +307,17 @@ export const handlers = [
 
   /* Careers */
   http.get('*/v1/careers/jobs', route(() => json({ jobs: JOBS }))),
+  http.post('*/v1/careers/uploads', route(async (ctx) => {
+    const b = (await ctx.request.json()) as { fileName?: string; contentType?: string; size?: number };
+    if (b.contentType !== 'application/pdf' || !(b.size && b.size > 0 && b.size <= 5 * 1024 * 1024)) {
+      throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'Upload your résumé as a PDF of 5 MB or less.');
+    }
+    const id = `resume-${Date.now()}`;
+    return json({ assetId: id, maxBytes: 5 * 1024 * 1024, upload: { method: 'PUT', url: `${new URL(ctx.request.url).origin}/api/bff/mock-resume-uploads/${id}`,
+      headers: { 'Content-Type': 'application/pdf' }, expiresAt: new Date(Date.now() + 15 * 60_000).toISOString() } }, 201);
+  })),
+  http.put('*/mock-resume-uploads/:id', () => new HttpResponse(null, { status: 200 })),
+  http.post('*/v1/careers/uploads/:assetId/complete', route((_ctx, p) => json({ assetId: p.assetId, contentType: 'application/pdf', bytes: 120000, status: 'READY' }))),
   http.post('*/v1/careers/jobs/:jobId/applications', route(async (ctx, p) => {
     if (!JOBS.some((j) => j.id === p.jobId)) throw new MockProblem(404, 'JOB_NOT_FOUND', 'Role not found', 'This role is no longer open.');
     await body(ctx.request, JobApplicationFormSchema);
@@ -305,6 +325,19 @@ export const handlers = [
   })),
 
   /* Account (next phase pages; authenticated) */
+  http.post('*/v1/account/phone/verification', route((ctx) => {
+    const u = requireUser(ctx);
+    if (!u.phone) throw new MockProblem(422, 'PHONE_MISSING', 'No phone number', 'Add a mobile number to your profile first.', { errors: { phone: 'Add a mobile number to your profile first.' } });
+    if (phoneVerified.has(u.id)) throw new MockProblem(409, 'CONFLICT', 'Already verified', 'Your phone number is already verified.');
+    return json({ sentTo: '•••• ' + u.phone.slice(-4), expiresAt: new Date(Date.now() + 10 * 60_000).toISOString() }, 202);
+  })),
+  http.post('*/v1/account/phone/verification/confirm', route(async (ctx) => {
+    const u = requireUser(ctx);
+    const { code } = await body(ctx.request, z.object({ code: CodeSchema }));
+    if (code !== DEMO_CODE) throw new MockProblem(422, 'INVALID_CODE', 'Incorrect code', 'That code is incorrect or expired.', { errors: { code: 'That code is incorrect or expired.' } });
+    phoneVerified.add(u.id);
+    return json({ phoneVerified: true, verifiedAt: new Date().toISOString() });
+  })),
   http.get('*/v1/account/addresses', route((ctx) => {
     requireUser(ctx);
     return json({ items: [

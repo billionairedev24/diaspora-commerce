@@ -1,13 +1,15 @@
-// Package nominatim implements port.Autocompleter with OpenStreetMap Nominatim. Respects the usage policy:
-// identifying User-Agent, max 1 request per second, and results cached for an hour.
+// Package nominatim implements port.Autocompleter and port.ReverseGeocoder with OpenStreetMap Nominatim. Respects
+// the usage policy: identifying User-Agent, max 1 request per second, and results cached for an hour.
 package nominatim
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,7 +20,13 @@ import (
 
 type entry struct {
 	at   time.Time
-	data []result
+	body []byte
+}
+
+// Provider is Nominatim as both an autocompleter and a reverse geocoder; one instance shares the rate limit and cache.
+type Provider interface {
+	port.Autocompleter
+	port.ReverseGeocoder
 }
 
 type nominatimImpl struct {
@@ -32,10 +40,10 @@ type nominatimImpl struct {
 	cache map[string]entry
 }
 
-var _ port.Autocompleter = (*nominatimImpl)(nil)
+var _ Provider = (*nominatimImpl)(nil)
 
-// New returns a Nominatim autocompleter. base defaults to the public instance; self-host for production volume.
-func New(base, userAgent string, client *http.Client) port.Autocompleter {
+// New returns a Nominatim provider. base defaults to the public instance; self-host for production volume.
+func New(base, userAgent string, client *http.Client) Provider {
 	if base == "" {
 		base = "https://nominatim.openstreetmap.org"
 	}
@@ -67,7 +75,8 @@ type result struct {
 func (n *nominatimImpl) Suggest(ctx context.Context, input, _, country string, limit int) ([]domain.Suggestion, error) {
 	q := url.Values{"q": {input}, "format": {"jsonv2"}, "addressdetails": {"1"},
 		"countrycodes": {strings.ToLower(country)}, "limit": {fmt.Sprint(limit)}}
-	rs, err := n.get(ctx, "/search?"+q.Encode())
+	var rs []result
+	err := n.get(ctx, "/search?"+q.Encode(), &rs)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +99,8 @@ func (n *nominatimImpl) Suggest(ctx context.Context, input, _, country string, l
 
 func (n *nominatimImpl) Resolve(ctx context.Context, id, _ string) (domain.Address, error) {
 	ref := strings.TrimPrefix(id, "o:")
-	rs, err := n.get(ctx, "/lookup?"+url.Values{"osm_ids": {ref}, "format": {"jsonv2"}, "addressdetails": {"1"}}.Encode())
+	var rs []result
+	err := n.get(ctx, "/lookup?"+url.Values{"osm_ids": {ref}, "format": {"jsonv2"}, "addressdetails": {"1"}}.Encode(), &rs)
 	if err != nil {
 		return domain.Address{}, err
 	}
@@ -100,11 +110,40 @@ func (n *nominatimImpl) Resolve(ctx context.Context, id, _ string) (domain.Addre
 	return toAddress(rs[0]), nil
 }
 
-func (n *nominatimImpl) get(ctx context.Context, path string) ([]result, error) {
+// Reverse answers GET /reverse (zoom 18 = building level); "Unable to geocode" means no address at the point.
+func (n *nominatimImpl) Reverse(ctx context.Context, lat, lon float64) (domain.Address, error) {
+	q := url.Values{"lat": {strconv.FormatFloat(lat, 'f', -1, 64)}, "lon": {strconv.FormatFloat(lon, 'f', -1, 64)},
+		"format": {"jsonv2"}, "addressdetails": {"1"}, "zoom": {"18"}}
+	var r struct {
+		result
+		Error string `json:"error"`
+	}
+	if err := n.get(ctx, "/reverse?"+q.Encode(), &r); err != nil {
+		return domain.Address{}, err
+	}
+	if r.Error != "" || r.OSMID == 0 {
+		return domain.Address{}, domain.ErrNoAddress
+	}
+	return toAddress(r.result), nil
+}
+
+// get fetches path (rate limited, cached for an hour) and decodes the JSON into out.
+func (n *nominatimImpl) get(ctx context.Context, path string, out any) error {
+	body, err := n.fetch(ctx, path)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("nominatim decode: %w", err)
+	}
+	return nil
+}
+
+func (n *nominatimImpl) fetch(ctx context.Context, path string) ([]byte, error) {
 	n.mu.Lock()
 	if e, ok := n.cache[path]; ok && time.Since(e.at) < time.Hour {
 		n.mu.Unlock()
-		return e.data, nil
+		return e.body, nil
 	}
 	if wait := n.interval - time.Since(n.last); wait > 0 {
 		n.mu.Unlock()
@@ -131,14 +170,14 @@ func (n *nominatimImpl) get(ctx context.Context, path string) ([]result, error) 
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("nominatim: status %d", res.StatusCode)
 	}
-	var rs []result
-	if err := json.NewDecoder(res.Body).Decode(&rs); err != nil {
-		return nil, fmt.Errorf("nominatim decode: %w", err)
+	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		return nil, fmt.Errorf("nominatim read: %w", err)
 	}
 	n.mu.Lock()
-	n.cache[path] = entry{at: time.Now(), data: rs}
+	n.cache[path] = entry{at: time.Now(), body: body}
 	n.mu.Unlock()
-	return rs, nil
+	return body, nil
 }
 
 func toAddress(r result) domain.Address {

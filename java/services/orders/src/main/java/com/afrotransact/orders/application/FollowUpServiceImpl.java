@@ -9,8 +9,10 @@ import java.util.Objects;
 
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.Shipment;
+import com.afrotransact.orders.port.CouponsClient;
 import com.afrotransact.orders.port.FollowUpRepository;
 import com.afrotransact.orders.port.InventoryClient;
+import com.afrotransact.orders.port.OrderCouponRepository;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.UpstreamFailure;
@@ -28,7 +30,8 @@ import org.springframework.transaction.support.TransactionOperations;
  *       on the first AfroTransact-fulfilled pickup.</li>
  *   <li>SETTLE — every live shipment delivered: payments starts the settlement hold for the order.</li>
  *   <li>CANCEL — captured: line refund. Not captured: when nothing is left, cancel the PaymentIntent; release the
- *       reservation when no AfroTransact-fulfilled shipment remains.</li>
+ *       reservation when no AfroTransact-fulfilled shipment remains; release the order's coupon redemption
+ *       (offers-service) once every shipment is cancelled.</li>
  * </ul>
  * Tasks are claimed with a lease and retried with exponential backoff; upstream calls are idempotent.
  */
@@ -42,16 +45,21 @@ class FollowUpServiceImpl implements FollowUpService {
     private final OrderRepository orders;
     private final PaymentsClient payments;
     private final InventoryClient inventory;
+    private final CouponsClient coupons;
+    private final OrderCouponRepository orderCoupons;
     private final TransactionOperations tx;
     private final OrdersSettings settings;
     private final Clock clock;
 
     FollowUpServiceImpl(FollowUpRepository tasks, OrderRepository orders, PaymentsClient payments,
-                        InventoryClient inventory, TransactionOperations tx, OrdersSettings settings, Clock clock) {
+                        InventoryClient inventory, CouponsClient coupons, OrderCouponRepository orderCoupons,
+                        TransactionOperations tx, OrdersSettings settings, Clock clock) {
         this.tasks = tasks;
         this.orders = orders;
         this.payments = payments;
         this.inventory = inventory;
+        this.coupons = coupons;
+        this.orderCoupons = orderCoupons;
         this.tx = tx;
         this.settings = settings;
         this.clock = clock;
@@ -129,6 +137,9 @@ class FollowUpServiceImpl implements FollowUpService {
             return;
         }
         boolean nothingLeft = order.shipments().stream().noneMatch(Shipment::live);
+        if (nothingLeft) {
+            releaseCoupon(order);
+        }
         if (nothingLeft && order.paymentId() != null) {
             try {
                 payments.cancel(order.paymentId(), reason);
@@ -158,6 +169,20 @@ class FollowUpServiceImpl implements FollowUpService {
                         + "until the order ships (inventory has no partial release)", s.id(), order.number());
             }
         }
+    }
+
+    /** Gives the coupon back when the whole order is cancelled (offers release is idempotent). */
+    private void releaseCoupon(Order order) {
+        orderCoupons.find(order.id()).filter(c -> !c.released()).ifPresent(c -> {
+            try {
+                coupons.release(c.redemptionId());
+            } catch (UpstreamFailure f) {
+                if (f.status() != 404) {
+                    throw f;
+                }
+            }
+            orderCoupons.markReleased(order.id(), Instant.now(clock));
+        });
     }
 
     private static String requirePayment(Order order) {

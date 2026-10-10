@@ -6,6 +6,8 @@ import java.util.UUID;
 import com.afrotransact.offers.adapter.in.web.OfferDtos.CreateOfferRequest;
 import com.afrotransact.offers.adapter.in.web.OfferDtos.OfferPageResponse;
 import com.afrotransact.offers.adapter.in.web.OfferDtos.OfferResponse;
+import com.afrotransact.offers.adapter.in.web.OfferDtos.StockUpdateRequest;
+import com.afrotransact.offers.adapter.in.web.OfferDtos.StockUpdateResponse;
 import com.afrotransact.offers.adapter.in.web.OfferDtos.UpdateOfferRequest;
 import com.afrotransact.offers.application.OfferService;
 import com.afrotransact.offers.application.OfferView;
@@ -18,7 +20,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -84,5 +88,18 @@ class OfferController {
     @PostMapping("/{id}/withdraw")
     OfferResponse withdraw(@PathVariable UUID id) {
         return OfferResponse.of(offers.withdraw(id));
+    }
+
+    @Operation(summary = "Set the stock of a seller-fulfilled SKU (seller center inventory adjustments)",
+            description = "Sets the declared quantity of every open offer of the caller's organisation with this "
+                    + "seller SKU and recomputes their buy boxes. 404 offers.sku-not-found when none of your offers "
+                    + "uses the SKU (other organisations' SKUs are never visible); 409 "
+                    + "offers.stock-managed-by-inventory for Fulfilled-by-AfroTransact offers. An absolute "
+                    + "quantity is idempotent, so Idempotency-Key is accepted and needs no replay store.")
+    @PutMapping("/stock/{sku}")
+    StockUpdateResponse setStock(@PathVariable String sku, @Valid @RequestBody StockUpdateRequest body,
+                                 @RequestParam(required = false) String sellerOrgId,
+                                 @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        return StockUpdateResponse.of(offers.setSellerStock(sku, body.quantity(), body.reason(), sellerOrgId));
     }
 }

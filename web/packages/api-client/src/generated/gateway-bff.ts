@@ -165,7 +165,10 @@ export interface paths {
         put?: never;
         /**
          * "Email me when available" for an out-of-stock product
-         * @description Signed-in customers may omit the email; guests must provide one.
+         * @description Arms a back-in-stock alert at the notifications service for the requested variant (the product's first
+         *     variant for a product ATIN), with the shopper's own token: signing in is required (401 for guests). The
+         *     email defaults to the account's; a typed one overrides it. Subscribing again while the alert is active is a
+         *     no-op (still 201).
          */
         post: operations["createStockAlert"];
         delete?: never;
@@ -377,7 +380,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Email + password sign-in (step 1); usually continues with two-step verification */
+        /**
+         * Email + password sign-in (step 1); usually continues with two-step verification
+         * @description Runs on identity's first-party sign-in API (the BFF's client-credentials token, the shopper's IP and user
+         *     agent). `authenticated` means the session is signed in (cookie rotated) — go to `redirectTo`;
+         *     `mfa_required` continues on the code form. A trusted device (cookie `at_trusted_device`, set after
+         *     "trust this device") skips the second factor. 401 `INVALID_CREDENTIALS`; 403 when the email is not
+         *     verified or the account is disabled; 429 `RATE_LIMITED` with `Retry-After` while the account or IP is locked.
+         */
         post: operations["signIn"];
         delete?: never;
         options?: never;
@@ -394,8 +404,30 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Two-step verification code (authenticator app or SMS) */
+        /**
+         * Two-step verification code (authenticator app, SMS or a recovery code)
+         * @description `method` picks the factor (default: the authenticator app when enrolled, SMS after a code was texted).
+         *     `trustDevice` keeps an HttpOnly `at_trusted_device` cookie for 30 days. Wrong code: 422 `INVALID_CODE`;
+         *     expired challenge: 410 `CHALLENGE_EXPIRED`; lockout: 429 with `Retry-After`.
+         */
         post: operations["verifyMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/mfa/sms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Text the two-step verification code instead (or again) */
+        post: operations["sendMfaCode"];
         delete?: never;
         options?: never;
         head?: never;
@@ -413,7 +445,7 @@ export interface paths {
         put?: never;
         /**
          * Create an account (same fields for customers, sellers and providers — role is decided server-side)
-         * @description Sends a 6-digit code to the email address; the account is created when the code is verified.
+         * @description Sends a 6-digit code to the email address; the account is created when the code is verified. With `invitationToken` (organisation invite link, same email) identity starts the account verified and joins the organisation: the answer is `authenticated` with `redirectTo` the sign-in page, and no code is sent.
          */
         post: operations["signUp"];
         delete?: never;
@@ -562,6 +594,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/phone/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Text a 6-digit code to the account phone number
+         * @description identity `POST /v1/me/phone/verification`. 10-minute expiry; at most one code per 30 seconds and five per hour (429 with `Retry-After`). 422 `PHONE_MISSING` without a phone; 409 `CONFLICT` when already verified.
+         */
+        post: operations["startPhoneVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/phone/verification/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm the account phone number with the SMS code
+         * @description identity `POST /v1/me/phone/verification/confirm`. Wrong code: 422 `INVALID_CODE` on `code`; expired, used, too many attempts or the phone changed since: 410 `CHALLENGE_EXPIRED` (send a new code).
+         */
+        post: operations["confirmPhoneVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/payment-methods": {
         parameters: {
             query?: never;
@@ -665,6 +737,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/stock-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My back-in-stock alerts (active and already sent), newest first */
+        get: operations["listStockAlerts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/stock-alerts/{atin}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Stop a back-in-stock alert for a variant */
+        delete: operations["removeStockAlert"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/checkout/summary": {
         parameters: {
             query?: never;
@@ -721,6 +827,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/careers/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Signed direct upload for a résumé (PDF, at most 5 MB)
+         * @description Returns a short-lived URL from the media service (private storage). PUT the file there with the given
+         *     headers, then call `…/uploads/{assetId}/complete` and apply with `resumeAssetId`.
+         */
+        post: operations["requestResumeUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/careers/uploads/{assetId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check the uploaded résumé (real type and size) and finalise it */
+        post: operations["completeResumeUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/careers/jobs/{jobId}/applications": {
         parameters: {
             query?: never;
@@ -753,7 +897,7 @@ export interface components {
              * @description Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, PRODUCT_NOT_FOUND, OFFER_NOT_FOUND,
              *     LINE_NOT_FOUND, SAVED_NOT_FOUND, STOCK_LIMIT, OUT_OF_STOCK, INVALID_CREDENTIALS, INVALID_CODE, CHALLENGE_EXPIRED,
              *     EMAIL_TAKEN, WEAK_PASSWORD, PROVIDER_DISABLED, ZIP_NOT_SERVICEABLE, PAYMENT_DECLINED, IDEMPOTENCY_CONFLICT,
-             *     STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE.
+             *     STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING.
              */
             code?: string;
             errors?: {
@@ -817,6 +961,7 @@ export interface components {
             city: string;
         };
         Offer: {
+            /** @description offers-service offer id (add it to the cart as offerId) */
             offerId: string;
             seller: components["schemas"]["Seller"];
             priceMinor: number;
@@ -899,6 +1044,41 @@ export interface components {
             atin: components["schemas"]["Atin"];
             /** @enum {string} */
             status: "subscribed";
+        };
+        StockAlertItem: {
+            atin: components["schemas"]["Atin"];
+            productTitle: string;
+            /**
+             * @description notified = the back-in-stock email was sent
+             * @enum {string}
+             */
+            status: "active" | "notified";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            notifiedAt: string | null;
+        };
+        ResumeUpload: {
+            assetId: string;
+            /** Format: int64 */
+            maxBytes: number;
+            upload: {
+                method: string;
+                url: string;
+                headers: {
+                    [key: string]: string;
+                };
+                /** Format: date-time */
+                expiresAt?: string | null;
+            };
+        };
+        ResumeAsset: {
+            assetId: string;
+            contentType: string;
+            /** Format: int64 */
+            bytes: number;
+            /** @enum {string} */
+            status: "READY";
         };
         FacetBucket: {
             value: string;
@@ -995,6 +1175,7 @@ export interface components {
             sellerCount: number;
         };
         AddToCartRequest: {
+            /** @description The offers-service offer id (buy box or Other sellers; validated as buyable), or a product / variant ATIN when offers has none */
             offerId: string;
             quantity: number;
         };
@@ -1156,6 +1337,10 @@ export interface components {
                 email: string;
                 initials: string;
                 roles: string[];
+                /** @description Masked account phone (•••• 0142); absent when identity is unavailable or no phone is set */
+                phone?: string;
+                /** @description Whether the account phone passed SMS verification */
+                phoneVerified?: boolean;
             } | null;
             /** @description Badges for the account menu. */
             counts: {
@@ -1171,6 +1356,17 @@ export interface components {
             password: string;
             returnTo?: string;
         };
+        PhoneCodeSent: {
+            /** @description Masked phone, e.g. •••• 0142 */
+            sentTo: string;
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        PhoneVerification: {
+            phoneVerified: boolean;
+            /** Format: date-time */
+            verifiedAt?: string;
+        };
         SignUpRequest: {
             firstName: string;
             lastName: string;
@@ -1185,10 +1381,18 @@ export interface components {
             /** @description Separate, optional SMS opt-in (AfroTransact Alerts) */
             smsConsent: boolean;
             returnTo?: string;
+            /** @description Token from an organisation invitation link (Seller Center accept page) */
+            invitationToken?: string;
         };
         VerifyCodeRequest: {
             challengeId: string;
+            /** @description 6-digit code, or a recovery code with method recovery */
             code: string;
+            /**
+             * @description Two-step sign-in only; defaults to the factor offered first
+             * @enum {string}
+             */
+            method?: "totp" | "sms" | "recovery";
             trustDevice?: boolean;
         };
         ResendResponse: {
@@ -1341,6 +1545,8 @@ export interface components {
             /** @enum {string} */
             wallet?: "apple_pay" | "google_pay" | "link";
             gift?: boolean;
+            /** @description Coupon validated and redeemed by orders with the offers service (released if the order fails or is cancelled); 422 with errors.couponCode when it does not apply */
+            couponCode?: string;
             deliverySelections: {
                 packageId: string;
                 /** @enum {string} */
@@ -1770,6 +1976,7 @@ export interface operations {
                     "application/json": components["schemas"]["StockAlert"];
                 };
             };
+            401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
         };
@@ -1999,6 +2206,8 @@ export interface operations {
         responses: {
             200: components["responses"]["AuthResult"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -2017,6 +2226,36 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["AuthResult"];
+            403: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    sendMfaCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    challengeId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Code sent; verify it with method sms */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthResult"];
+                };
+            };
             410: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             429: components["responses"]["TooManyRequests"];
@@ -2109,6 +2348,7 @@ export interface operations {
                     "application/json": components["schemas"]["PasskeyOptions"];
                 };
             };
+            429: components["responses"]["TooManyRequests"];
         };
     };
     passkeyVerify: {
@@ -2126,7 +2366,10 @@ export interface operations {
         responses: {
             200: components["responses"]["AuthResult"];
             401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
             410: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     signOut: {
@@ -2268,6 +2511,62 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+        };
+    };
+    startPhoneVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Code sent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneCodeSent"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmPhoneVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    code: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Verified */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhoneVerification"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     listPaymentMethods: {
@@ -2440,6 +2739,51 @@ export interface operations {
             422: components["responses"]["ValidationProblem"];
         };
     };
+    listStockAlerts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Alerts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["StockAlertItem"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+        };
+    };
+    removeStockAlert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                atin: components["parameters"]["Atin"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
     getCheckoutSummary: {
         parameters: {
             query?: {
@@ -2523,6 +2867,63 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    requestResumeUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    fileName: string;
+                    /** @enum {string} */
+                    contentType: "application/pdf";
+                    /** Format: int64 */
+                    size: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Upload instructions */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeUpload"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    completeResumeUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Résumé ready; use assetId as resumeAssetId */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeAsset"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
         };
     };
     applyToJob: {

@@ -19,6 +19,7 @@ type SearchService interface {
 
 type searchServiceImpl struct {
 	search    port.SearchClient
+	offers    port.StorefrontOffersClient
 	location  LocationService
 	estimator domain.Estimator
 	market    string
@@ -27,9 +28,10 @@ type searchServiceImpl struct {
 
 var _ SearchService = (*searchServiceImpl)(nil)
 
-// NewSearchService returns the SearchService.
-func NewSearchService(search port.SearchClient, location LocationService, estimator domain.Estimator, market string, clock Clock) SearchService {
-	return &searchServiceImpl{search: search, location: location, estimator: estimator, market: market, clock: clock}
+// NewSearchService returns the SearchService. offers is optional: with it, cards carry the offer count, the lowest
+// price across sellers and the buy box winner (one batch call per page).
+func NewSearchService(search port.SearchClient, offers port.StorefrontOffersClient, location LocationService, estimator domain.Estimator, market string, clock Clock) SearchService {
+	return &searchServiceImpl{search: search, offers: offers, location: location, estimator: estimator, market: market, clock: clock}
 }
 
 // toParams translates BFF filters to search-service parameters (price bucket → min/max, fastest → relevance
@@ -72,6 +74,7 @@ func (s *searchServiceImpl) Search(ctx context.Context, c *domain.Caller, q doma
 	for _, h := range res.Hits {
 		hits = append(hits, summaryFromHit(h, s.estimator, now))
 	}
+	hits = withOffers(ctx, s.offers, hits)
 	if q.Sort == domain.SortFastest {
 		sort.SliceStable(hits, func(i, j int) bool { return hits[i].Delivery.Days < hits[j].Delivery.Days })
 	}
@@ -145,5 +148,6 @@ func (s *searchServiceImpl) Suggest(ctx context.Context, _ *domain.Caller, q str
 		}
 		out.Products = append(out.Products, summaryFromHit(h, s.estimator, now))
 	}
+	out.Products = withOffers(ctx, s.offers, out.Products)
 	return out, nil
 }

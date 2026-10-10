@@ -28,6 +28,8 @@ tags:
 - name: Shipments
   description: 'Shipment state machine: seller queue, status transitions per actor, courier events with proof, tracking, staff
     search'
+- name: Seller analytics
+  description: Seller Center dashboard figures (orders:read)
 paths:
   /v1/admin/orders:
     get:
@@ -342,6 +344,41 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrderView'
+  /v1/seller/analytics:
+    get:
+      tags:
+      - Seller analytics
+      summary: Sales, orders and checkout conversion by day for the token's organisation
+      description: Every day of [from, to] (business time zone, inclusive; default the last 30 days, at most 366) with sales
+        (items − discounts of paid, not cancelled or returned shipments), units, paid orders, checkouts that reached payment
+        and conversionRate = orders / checkouts; plus top products, paid orders by fulfilment and shipments waiting to ship.
+      operationId: sellerAnalytics
+      parameters:
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: org
+        in: query
+        description: 'Staff only: seller organisation'
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerAnalytics'
   /v1/seller/shipments:
     get:
       tags:
@@ -647,6 +684,12 @@ components:
           type: string
         instructions:
           type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
     ShipmentActionResult:
       type: object
       properties:
@@ -787,6 +830,11 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+        driverId:
+          type: string
+          description: 'fulfilment-service relays (delivery:relay): the driver the event is from'
+          maxLength: 120
+          minLength: 0
       required:
       - eventId
       - status
@@ -902,6 +950,11 @@ components:
           description: apple_pay | google_pay | link
         gift:
           type: boolean
+        couponCode:
+          type: string
+          description: 'Coupon code: validated and redeemed with offers-service, released when the order fails or is cancelled'
+          maxLength: 20
+          minLength: 0
       required:
       - addressId
     DeliverySelection:
@@ -1000,6 +1053,96 @@ components:
           $ref: '#/components/schemas/ShipTo'
         shipment:
           $ref: '#/components/schemas/ShipmentView'
+    Day:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        salesMinor:
+          type: integer
+          format: int64
+        units:
+          type: integer
+          format: int32
+        orders:
+          type: integer
+          format: int32
+        checkouts:
+          type: integer
+          format: int32
+        conversionRate:
+          type: number
+          format: double
+    FulfilmentCount:
+      type: object
+      properties:
+        fulfilment:
+          type: string
+        orders:
+          type: integer
+          format: int32
+    Product:
+      type: object
+      properties:
+        atin:
+          type: string
+        title:
+          type: string
+        revenueMinor:
+          type: integer
+          format: int64
+        units:
+          type: integer
+          format: int32
+    SellerAnalytics:
+      type: object
+      properties:
+        sellerOrgId:
+          type: string
+        currency:
+          type: string
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/Day'
+        topProducts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Product'
+        byFulfilment:
+          type: array
+          items:
+            $ref: '#/components/schemas/FulfilmentCount'
+        toShip:
+          type: integer
+          format: int32
+        totals:
+          $ref: '#/components/schemas/Totals'
+    Totals:
+      type: object
+      properties:
+        salesMinor:
+          type: integer
+          format: int64
+        units:
+          type: integer
+          format: int32
+        orders:
+          type: integer
+          format: int32
+        checkouts:
+          type: integer
+          format: int32
+        conversionRate:
+          type: number
+          format: double
     OrderPageOrderView:
       type: object
       properties:

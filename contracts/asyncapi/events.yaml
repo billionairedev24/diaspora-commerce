@@ -630,8 +630,8 @@ channels:
   trustOpsEvents:
     address: at.trustops.events
     description: Trust & safety decisions and the audit stream from trust-ops-service (transactional outbox). Key = product
-      id (moderation), claim id (claims, notification requests), seller org id (seller events), support case id, or "audit-log"
-      for trustops.audit.recorded (one key, so the audit stream keeps its order). Headers event-id, event-type, occurred-at.
+      id (moderation), claim id (claims), seller org id (seller events), support case id, or "audit-log" for trustops.audit.recorded
+      (one key, so the audit stream keeps its order). Headers event-id, event-type, occurred-at.
     messages:
       trustOpsModerationQueued:
         $ref: '#/components/messages/trustOpsModerationQueued'
@@ -641,6 +641,10 @@ channels:
         $ref: '#/components/messages/trustOpsModerationDecided'
       trustOpsClaimOpened:
         $ref: '#/components/messages/trustOpsClaimOpened'
+      trustOpsClaimResponseDueSoon:
+        $ref: '#/components/messages/trustOpsClaimResponseDueSoon'
+      trustOpsClaimResponseLapsed:
+        $ref: '#/components/messages/trustOpsClaimResponseLapsed'
       trustOpsClaimSellerResponded:
         $ref: '#/components/messages/trustOpsClaimSellerResponded'
       trustOpsClaimEscalated:
@@ -659,8 +663,6 @@ channels:
         $ref: '#/components/messages/trustOpsSupportCaseOpened'
       trustOpsAuditRecorded:
         $ref: '#/components/messages/trustOpsAuditRecorded'
-      trustOpsNotificationRequested:
-        $ref: '#/components/messages/notificationsRequested'
 components:
   messages:
     aiHandoffRequested:
@@ -1940,7 +1942,8 @@ components:
         $ref: '#/components/schemas/TrustOpsModerationEvent'
     trustOpsModerationEscalated:
       name: trustops.moderation.escalated
-      title: A listing was escalated (by a reviewer, or automatically when its SLA was breached)
+      title: A listing was escalated (by a reviewer, or automatically when its SLA was breached). Carries sellerOrgId and,
+        for a shopper-reported live listing, the reporting customer's customerId.
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1959,6 +1962,22 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/TrustOpsClaimEvent'
+    trustOpsClaimResponseDueSoon:
+      name: trustops.claim.response_due_soon
+      title: 'Reminder to the seller: the claim still awaits their response and the deadline (dueAt) is within 24 h. Sent
+        once per claim by the SLA sweep (idempotent: claim.response_reminder_sent_at).'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/TrustOpsClaimEvent'
+    trustOpsClaimResponseLapsed:
+      name: trustops.claim.response_lapsed
+      title: The seller's response window passed without an answer; the claim moved to staff review (status UNDER_REVIEW,
+        dueAt = decision deadline, responseDueAt = the missed seller deadline).
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/TrustOpsClaimEvent'
     trustOpsClaimSellerResponded:
       name: trustops.claim.seller_responded
       headers:
@@ -1967,13 +1986,16 @@ components:
         $ref: '#/components/schemas/TrustOpsClaimEvent'
     trustOpsClaimEscalated:
       name: trustops.claim.escalated
+      title: Staff escalated a claim, or the sweep did when the decision SLA was breached (reason). Carries sellerOrgId and
+        customerId.
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/TrustOpsClaimEvent'
     trustOpsClaimDecided:
       name: trustops.claim.decided
-      title: Staff decided a claim (refund through payments-service, or denial)
+      title: Staff decided a claim (refund through payments-service, or denial). decisionNote is the staff note shown to both
+        parties.
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -4482,6 +4504,33 @@ components:
               totalMinor:
                 type: integer
                 format: int64
+              nodeId:
+                type:
+                - string
+                - 'null'
+                description: Fulfilment node of AfroTransact-fulfilled shipments (inventory reservation)
+              perishable:
+                type: boolean
+                description: Frozen or chilled food (no safe place; handover code)
+              shipToLine1:
+                type:
+                - string
+                - 'null'
+                description: Ship-to street line (AfroTransact Delivery routing)
+              shipToLine2:
+                type:
+                - string
+                - 'null'
+              lat:
+                type:
+                - number
+                - 'null'
+                description: Ship-to latitude when the address book knows it
+              lng:
+                type:
+                - number
+                - 'null'
+                description: Ship-to longitude when the address book knows it
               lines:
                 type: array
                 items:
@@ -6411,6 +6460,11 @@ components:
           - 'null'
         sellerOrgId:
           type: string
+        customerId:
+          type:
+          - string
+          - 'null'
+          description: The shopper who reported a live listing (CUSTOMER_REPORT); null otherwise
         title:
           type: string
         status:
@@ -6568,6 +6622,38 @@ components:
           description: Seller response or decision deadline
         escalated:
           type: boolean
+        escalationReason:
+          type:
+          - string
+          - 'null'
+        reason:
+          type:
+          - string
+          - 'null'
+          description: Escalation reason (trustops.claim.escalated from the SLA sweep)
+        decisionNote:
+          type:
+          - string
+          - 'null'
+          description: Staff note on the decision (trustops.claim.decided; the denial reason, or an optional note on a refund)
+        remindedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: trustops.claim.response_due_soon only
+        responseDueAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: 'trustops.claim.response_lapsed only: the seller deadline that passed'
+        lapsedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: trustops.claim.response_lapsed only
     TrustOpsSellerEnforcement:
       type: object
       required:
@@ -7140,8 +7226,10 @@ operations:
     channel:
       $ref: '#/channels/trustOpsEvents'
     summary: trust-ops-service publishes moderation, claim, seller-enforcement, seller-health, support-case and audit events
-      via its transactional outbox, plus notification.requested (templates claim.opened, claim.decided, claim.withdrawn; recipient
-      id = customer subject or seller org id) so both parties of a claim are notified.
+      via its transactional outbox. Claim notifications come from the typed trustops.claim.* events (they carry sellerOrgId
+      and customerId); trust-ops no longer publishes notification.requested. The SLA sweep publishes trustops.claim.response_due_soon
+      once per claim, 24 h (TRUSTOPS_SLA_SELLER_RESPONSE_REMINDER) before the seller's deadline, and trustops.claim.response_lapsed
+      when the window passes without an answer.
   consumeTrustOpsCatalogProductEvents:
     action: receive
     channel:

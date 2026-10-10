@@ -36,6 +36,8 @@ type SiteDeps struct {
 	Search    port.SearchClient
 	Catalog   port.CatalogClient
 	Inventory port.InventoryClient
+	// Offers (optional) adds offer counts, lowest prices and the buy box winner to rail cards.
+	Offers    port.StorefrontOffersClient
 	Location  LocationService
 	Estimator domain.Estimator
 	Sellers   SellerDirectory
@@ -226,7 +228,7 @@ func (s *siteServiceImpl) railItems(ctx context.Context, src domain.RailSource) 
 	if len(out) == 0 && firstErr != nil {
 		return nil, fmt.Errorf("rail search: %w", firstErr)
 	}
-	return out, nil
+	return withOffers(ctx, s.d.Offers, out), nil
 }
 
 // byATIN builds cards for explicitly placed products from catalog + inventory (unknown products are skipped).
@@ -274,7 +276,7 @@ func (s *siteServiceImpl) byATIN(ctx context.Context, atins []string, limit int,
 			res = append(res, *p)
 		}
 	}
-	return res
+	return withOffers(ctx, s.d.Offers, res)
 }
 
 func validEmail(e string) bool {

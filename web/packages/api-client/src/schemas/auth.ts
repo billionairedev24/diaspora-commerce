@@ -14,7 +14,10 @@ export const MeSchema = z.object({
       lastName: z.string(),
       email: z.string(),
       initials: z.string(),
-      roles: z.array(z.string())
+      roles: z.array(z.string()),
+      /** Masked account phone (•••• 0142). */
+      phone: z.string().optional(),
+      phoneVerified: z.boolean().optional()
     })
     .nullable(),
   counts: z.object({ orders: z.number().int(), returns: z.number().int(), addresses: z.number().int(), paymentMethods: z.number().int() }).nullable()
@@ -36,6 +39,11 @@ export const AuthResultSchema = z.discriminatedUnion('status', [
 ]);
 export type AuthResult = z.infer<typeof AuthResultSchema>;
 
+export const PhoneCodeSentSchema = z.object({ sentTo: z.string(), expiresAt: z.string() });
+export type PhoneCodeSent = z.infer<typeof PhoneCodeSentSchema>;
+export const PhoneVerificationSchema = z.object({ phoneVerified: z.boolean(), verifiedAt: z.string().optional() });
+export type PhoneVerification = z.infer<typeof PhoneVerificationSchema>;
+
 export const CodeSchema = z.string().regex(/^\d{6}$/, 'Enter the 6-digit code.');
 
 export const VerifyCodeRequestSchema = z.object({ challengeId: z.string(), code: CodeSchema, trustDevice: z.boolean().optional() });
@@ -52,7 +60,9 @@ export const SignUpRequestSchema = z.object({
   password: z.string(),
   termsAccepted: z.literal(true),
   smsConsent: z.boolean(),
-  returnTo: z.string().optional()
+  returnTo: z.string().optional(),
+  /** Token from an organisation invitation link: the account starts verified and joins the organisation. */
+  invitationToken: z.string().max(200).optional()
 });
 export type SignUpRequest = z.infer<typeof SignUpRequestSchema>;
 
@@ -109,7 +119,7 @@ export const SignUpFormSchema = z
 export type SignUpForm = z.infer<typeof SignUpFormSchema>;
 
 /** Converts a validated sign-up form into the BFF request. */
-export function toSignUpRequest(form: SignUpForm, returnTo?: string): SignUpRequest {
+export function toSignUpRequest(form: SignUpForm, returnTo?: string, invitationToken?: string): SignUpRequest {
   const phone = isCountryCode(form.phoneCountry) ? toE164(form.phone, form.phoneCountry) : null;
   if (!phone) throw new Error('Invalid phone number');
   return {
@@ -120,6 +130,7 @@ export function toSignUpRequest(form: SignUpForm, returnTo?: string): SignUpRequ
     password: form.password,
     termsAccepted: true,
     smsConsent: form.smsConsent,
-    ...(returnTo ? { returnTo } : {})
+    ...(returnTo ? { returnTo } : {}),
+    ...(invitationToken ? { invitationToken } : {})
   };
 }

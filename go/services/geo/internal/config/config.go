@@ -8,7 +8,9 @@ type Config struct {
 	DatabaseURL string `yaml:"databaseUrl" env:"DB_URL"`
 	// Providers in priority order: google-places, osm-nominatim, fixture. Google is skipped without a key.
 	Providers []string `yaml:"providers" env:"GEO_PROVIDERS"`
-	Google    struct {
+	// ReverseProviders in priority order: google-geocoding, osm-nominatim, fixture. Google is skipped without a key.
+	ReverseProviders []string `yaml:"reverseProviders" env:"GEO_REVERSE_PROVIDERS"`
+	Google           struct {
 		APIKey string `env:"GOOGLE_PLACES_API_KEY"`
 	} `yaml:"google"`
 	Nominatim struct {

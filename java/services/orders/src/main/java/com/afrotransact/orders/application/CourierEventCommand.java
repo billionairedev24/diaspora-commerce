@@ -12,7 +12,9 @@ import com.afrotransact.orders.domain.CourierProof;
  * @param occurredAt when the driver did it
  * @param proof      photo, handover method / code, recipient, safe place, failure reason, position
  * @param note       free text
+ * @param driverId   the driver fulfilment-service relays for (SERVICE callers with delivery:relay); ignored for
+ *                   driver tokens
  */
 public record CourierEventCommand(String eventId, String status, Instant occurredAt, CourierProof proof,
-                                  String note) {
+                                  String note, String driverId) {
 }

@@ -66,9 +66,9 @@ func (g *geoImpl) Zip(ctx context.Context, zip string) (port.GeoAddress, error) 
 	}, func(http.Header) time.Duration { return g.zipTTL })
 }
 
-// Reverse is planned in geo as GET /v1/reverse?lat=&lon= (not served yet → upstream unavailable).
+// Reverse is geo's GET /v1/reverse?lat=&lng= (Google Geocoding, then Nominatim); 404 when no address is there.
 func (g *geoImpl) Reverse(ctx context.Context, lat, lon float64) (port.GeoAddress, error) {
-	v := url.Values{"lat": {strconv.FormatFloat(lat, 'f', 6, 64)}, "lon": {strconv.FormatFloat(lon, 'f', 6, 64)}}
+	v := url.Values{"lat": {strconv.FormatFloat(lat, 'f', 6, 64)}, "lng": {strconv.FormatFloat(lon, 'f', 6, 64)}}
 	var out port.GeoAddress
 	_, err := call(ctx, g.c, httpclient.Request{Path: "/v1/reverse", Query: v}, &out)
 	return out, err

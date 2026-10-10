@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
@@ -55,12 +56,31 @@ func emailOK(e string) bool {
 	return err == nil && a.Address == e
 }
 
-// signIn validates the form (422 like the contract) and then explains that identity only signs in on its hosted
-// pages today (503 UPSTREAM_UNAVAILABLE); the storefront offers GET /v1/auth/login instead.
+// TrustedDeviceCookie keeps identity's trusted-device token (HttpOnly, 30 days) so the second factor is skipped on
+// this browser.
+const TrustedDeviceCookie = "at_trusted_device"
+
+// firstPartyReply answers a sign-in step and keeps (or refreshes) the trusted-device cookie.
+func (h *handlersImpl) firstPartyReply(w http.ResponseWriter, r *http.Request, res app.FirstPartyResult, err error) {
+	if err == nil && res.TrustedDevice != "" {
+		maxAge := int(time.Until(res.TrustedDeviceExpiry).Seconds())
+		if maxAge <= 0 {
+			maxAge = 30 * 24 * 3600
+		}
+		// HttpOnly + SameSite=Lax; Secure follows SESSION_COOKIE_SECURE (off only for plain-http localhost).
+		http.SetCookie(w, &http.Cookie{Name: TrustedDeviceCookie, Value: res.TrustedDevice, Path: "/", Domain: h.o.CookieDomain, //nolint:gosec // see above
+			MaxAge: maxAge, HttpOnly: true, Secure: h.o.CookieSecure, SameSite: http.SameSiteLaxMode})
+	}
+	h.reply(w, r, http.StatusOK, res.Result, err)
+}
+
+// signIn validates the form (422 like the contract) and signs in with identity's first-party API: either the
+// shopper is signed in (session rotated) or a two-step verification challenge comes back.
 func (h *handlersImpl) signIn(w http.ResponseWriter, r *http.Request) {
 	var b struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		ReturnTo string `json:"returnTo"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
@@ -77,22 +97,39 @@ func (h *handlersImpl) signIn(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, domain.ValidationProblem(errs))
 		return
 	}
-	h.reply(w, r, 0, nil, h.s.Auth.FirstPartyCredentials(r.Context()))
+	trusted := ""
+	if ck, err := r.Cookie(TrustedDeviceCookie); err == nil {
+		trusted = ck.Value
+	}
+	res, err := h.s.Auth.SignIn(r.Context(), callerFrom(r.Context()), app.SignInInput{Email: b.Email, Password: b.Password,
+		ReturnTo: b.ReturnTo, UserAgent: r.UserAgent(), TrustedDevice: trusted})
+	h.firstPartyReply(w, r, res, err)
 }
 
 type verifyCode struct {
 	ChallengeID string `json:"challengeId"`
 	Code        string `json:"code"`
+	Method      string `json:"method"`
 	TrustDevice bool   `json:"trustDevice"`
 }
+
+var recoveryRe = regexp.MustCompile(`^[A-Za-z0-9-]{8,20}$`)
 
 func (v verifyCode) problems() map[string]string {
 	errs := map[string]string{}
 	if v.ChallengeID == "" {
 		errs["challengeId"] = "Required"
 	}
-	if !codeRe.MatchString(v.Code) {
+	switch {
+	case v.Method == "recovery":
+		if !recoveryRe.MatchString(v.Code) {
+			errs["code"] = "Enter one of your recovery codes"
+		}
+	case !codeRe.MatchString(v.Code):
 		errs["code"] = "Enter the 6-digit code"
+	}
+	if v.Method != "" && v.Method != "totp" && v.Method != "sms" && v.Method != "recovery" {
+		errs["method"] = "Choose totp, sms or recovery"
 	}
 	return errs
 }
@@ -107,7 +144,24 @@ func (h *handlersImpl) verifyMfa(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, domain.ValidationProblem(errs))
 		return
 	}
-	h.reply(w, r, 0, nil, h.s.Auth.FirstPartyCredentials(r.Context()))
+	res, err := h.s.Auth.VerifyMFA(r.Context(), callerFrom(r.Context()), app.VerifyMFAInput{ChallengeID: b.ChallengeID, Code: b.Code,
+		Method: b.Method, TrustDevice: b.TrustDevice, UserAgent: r.UserAgent()})
+	h.firstPartyReply(w, r, res, err)
+}
+
+// sendMfaCode texts the sign-in code (the shopper chose SMS on the two-step form).
+func (h *handlersImpl) sendMfaCode(w http.ResponseWriter, r *http.Request) {
+	var b verifyCode
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	if b.ChallengeID == "" {
+		h.reply(w, r, 0, nil, domain.ValidationProblem(map[string]string{"challengeId": "Required"}))
+		return
+	}
+	v, err := h.s.Auth.SendMFACode(r.Context(), callerFrom(r.Context()), b.ChallengeID)
+	h.reply(w, r, http.StatusAccepted, v, err)
 }
 
 func (h *handlersImpl) signUp(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +188,9 @@ func (h *handlersImpl) signUp(w http.ResponseWriter, r *http.Request) {
 	}
 	if !b.TermsAccepted {
 		errs["termsAccepted"] = "Accept the terms to continue"
+	}
+	if len(b.InvitationToken) > 200 {
+		errs["invitationToken"] = "This invitation link is not valid"
 	}
 	if len(errs) > 0 {
 		if _, weak := errs["password"]; weak && len(errs) == 1 {
@@ -181,19 +238,57 @@ func (h *handlersImpl) passkeyOptions(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	h.reply(w, r, 0, nil, h.s.Auth.FirstPartyCredentials(r.Context()))
+	v, err := h.s.Auth.PasskeyOptions(r.Context(), callerFrom(r.Context()), r.UserAgent())
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) passkeyVerify(w http.ResponseWriter, r *http.Request) {
 	var b struct {
-		ChallengeID string `json:"challengeId"`
-		ID          string `json:"id"`
+		ChallengeID            string          `json:"challengeId"`
+		ID                     string          `json:"id"`
+		RawID                  string          `json:"rawId"`
+		Type                   string          `json:"type"`
+		Response               json.RawMessage `json:"response"`
+		AuthenticatorAttach    string          `json:"authenticatorAttachment,omitempty"`
+		ClientExtensionResults json.RawMessage `json:"clientExtensionResults,omitempty"`
 	}
 	if err := decode(r, &b, false); err != nil {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	h.reply(w, r, 0, nil, h.s.Auth.FirstPartyCredentials(r.Context()))
+	errs := map[string]string{}
+	if b.ChallengeID == "" {
+		errs["challengeId"] = "Required"
+	}
+	if b.ID == "" || b.RawID == "" || len(b.Response) == 0 {
+		errs["response"] = "Send the passkey assertion"
+	}
+	if b.Type != "public-key" {
+		errs["type"] = "Must be public-key"
+	}
+	if len(errs) > 0 {
+		h.reply(w, r, 0, nil, domain.ValidationProblem(errs))
+		return
+	}
+	ext := b.ClientExtensionResults
+	if len(ext) == 0 {
+		ext = json.RawMessage(`{}`)
+	}
+	credential, err := json.Marshal(map[string]any{"id": b.ID, "rawId": b.RawID, "type": b.Type, "response": b.Response,
+		"authenticatorAttachment": firstOf(b.AuthenticatorAttach, "platform"), "clientExtensionResults": ext})
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	res, err := h.s.Auth.PasskeyVerify(r.Context(), callerFrom(r.Context()), b.ChallengeID, credential, r.UserAgent())
+	h.firstPartyReply(w, r, res, err)
+}
+
+func firstOf(v, fallback string) string {
+	if v == "" {
+		return fallback
+	}
+	return v
 }
 
 func (h *handlersImpl) signOut(w http.ResponseWriter, r *http.Request) {
@@ -231,6 +326,23 @@ func (h *handlersImpl) updateAddress(w http.ResponseWriter, r *http.Request) {
 func (h *handlersImpl) deleteAddress(w http.ResponseWriter, r *http.Request) {
 	err := h.s.Account.DeleteAddress(r.Context(), callerFrom(r.Context()), r.PathValue("addressId"))
 	h.reply(w, r, http.StatusNoContent, nil, err)
+}
+
+func (h *handlersImpl) startPhoneVerification(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Account.StartPhoneVerification(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusAccepted, v, err)
+}
+
+func (h *handlersImpl) confirmPhoneVerification(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		Code string `json:"code"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Account.ConfirmPhoneVerification(r.Context(), callerFrom(r.Context()), b.Code)
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) defaultAddress(w http.ResponseWriter, r *http.Request) {

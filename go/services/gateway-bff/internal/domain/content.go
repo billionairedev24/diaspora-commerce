@@ -1,5 +1,7 @@
 package domain
 
+import "time"
+
 // Announcement is the bar above the header.
 type Announcement struct {
 	ID   string `json:"id"`
@@ -142,4 +144,33 @@ type MarketEligibility struct {
 	CountryStatus   string `json:"countryStatus"`
 	Reason          string `json:"reason"`
 	Message         string `json:"message"`
+}
+
+// Résumé upload limits (careers form): PDF only, at most 5 MB.
+const (
+	ResumeContentType = "application/pdf"
+	ResumeMaxBytes    = 5 << 20
+)
+
+// ResumeUpload is a signed direct upload for a résumé (PUT the file to Upload.URL with Upload.Headers).
+type ResumeUpload struct {
+	AssetID  string          `json:"assetId"`
+	Upload   ResumeUploadURL `json:"upload"`
+	MaxBytes int64           `json:"maxBytes"`
+}
+
+// ResumeUploadURL is where and how to send the file.
+type ResumeUploadURL struct {
+	Method    string            `json:"method"`
+	URL       string            `json:"url"`
+	Headers   map[string]string `json:"headers"`
+	ExpiresAt *time.Time        `json:"expiresAt"`
+}
+
+// ResumeAsset is a finalised résumé: pass AssetID as resumeAssetId when applying.
+type ResumeAsset struct {
+	AssetID     string `json:"assetId"`
+	ContentType string `json:"contentType"`
+	Bytes       int64  `json:"bytes"`
+	Status      string `json:"status"`
 }

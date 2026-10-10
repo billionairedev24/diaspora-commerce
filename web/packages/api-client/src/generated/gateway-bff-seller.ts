@@ -208,6 +208,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/ship-from-addresses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's ship-from addresses, default first (label form)
+         * @description seller `GET /v1/orgs/{orgId}/ship-from-addresses` for the active organisation (Orders view).
+         */
+        get: operations["listShipFromAddresses"];
+        put?: never;
+        /**
+         * Add a ship-from address (the first one becomes the default)
+         * @description seller `POST /v1/orgs/{orgId}/ship-from-addresses` (Orders edit; at most 20 per organisation).
+         */
+        post: operations["createShipFromAddress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/ship-from-addresses/{addressId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                addressId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change a ship-from address
+         * @description Optimistic — send the `version` you edited; 409 `CONFLICT` when someone changed it meanwhile.
+         */
+        put: operations["updateShipFromAddress"];
+        post?: never;
+        /** Delete a ship-from address; returns the rest (a new default is chosen when needed) */
+        delete: operations["deleteShipFromAddress"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/ship-from-addresses/{addressId}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make an address the default */
+        post: operations["defaultShipFromAddress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/listings": {
         parameters: {
             query?: never;
@@ -547,7 +611,7 @@ export interface paths {
         };
         /**
          * Members with their roles plus one capability card per role (what it can change, view, can't access)
-         * @description seller `GET /v1/orgs/{id}` (members) + identity module matrix for the portal (default matrix as fallback).
+         * @description identity `GET /v1/orgs/{orgId}/members` (names, emails, roles, join dates) plus, for members who can manage the team, pending invitations from `GET /v1/orgs/{orgId}/invitations` as INVITED rows; identity module matrix for the capability cards (default matrix as fallback).
          */
         get: operations["getTeam"];
         put?: never;
@@ -569,7 +633,7 @@ export interface paths {
         put?: never;
         /**
          * Invite a member by email with a role
-         * @description identity `POST /v1/orgs/{orgId}/invitations` (planned — identity has no invitation endpoint yet).
+         * @description identity `POST /v1/orgs/{orgId}/invitations`; identity emails a single-use link (7 days). Inviting the same email again replaces the open invitation. 409 ALREADY_MEMBER when the email belongs to a member; 403 OWNER_ONLY when a non-owner invites an owner; 422 INVALID_ROLE.
          */
         post: operations["inviteMember"];
         delete?: never;
@@ -588,10 +652,74 @@ export interface paths {
         get?: never;
         /**
          * Change a member's role
-         * @description identity `PUT /v1/orgs/{orgId}/members/{userId}`.
+         * @description identity `PUT /v1/orgs/{orgId}/members/{userId}`. 403 OWN_ROLE for your own role, OWNER_ONLY when a non-owner grants or changes the owner role; 422 LAST_OWNER when the last owner would be demoted, INVALID_ROLE.
          */
         put: operations["assignRole"];
         post?: never;
+        /**
+         * Remove a member from the organisation
+         * @description identity `DELETE /v1/orgs/{orgId}/members/{userId}`. 422 LAST_OWNER for the last owner; 403 OWNER_ONLY when a non-owner removes an owner.
+         */
+        delete: operations["removeMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/team/invitations/{invitationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a pending invitation
+         * @description identity `DELETE /v1/orgs/{orgId}/invitations/{invitationId}`; the link stops working.
+         */
+        delete: operations["revokeInvitation"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/invitations/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * What an invitation link is for (public; shown before signing in or up)
+         * @description identity `POST /v1/invitations/lookup`. The token travels in the body so it stays out of access logs.
+         */
+        post: operations["lookupInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept an invitation as the signed-in person
+         * @description identity `POST /v1/invitations/accept`, then makes the organisation the active one (best effort). 422 INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED or INVITATION_EMAIL_MISMATCH (signed in with another email). People without an account sign up with `invitationToken` instead (`POST /v1/auth/sign-up`).
+         */
+        post: operations["acceptInvitation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -827,7 +955,9 @@ export interface components {
             instance?: string;
             /**
              * @description Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, NOT_APPROVED,
-             *     NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR.
+             *     NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR; team: LAST_OWNER, INVALID_ROLE,
+             *     OWNER_ONLY, OWN_ROLE, ALREADY_MEMBER, INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED,
+             *     INVITATION_EMAIL_MISMATCH.
              */
             code?: string;
             errors?: {
@@ -1007,6 +1137,42 @@ export interface components {
             nextCursor: string | null;
             total: number;
         };
+        ShipFromAddress: {
+            id: string;
+            /** @example Houston warehouse */
+            label: string;
+            name: string;
+            company: string;
+            phone: string;
+            line1: string;
+            line2: string;
+            city: string;
+            state: string;
+            postalCode: string;
+            country: string;
+            isDefault: boolean;
+            /** Format: int64 */
+            version: number;
+        };
+        ShipFromInput: {
+            label?: string;
+            name: string;
+            company?: string;
+            phone?: string;
+            line1: string;
+            line2?: string;
+            city: string;
+            state: string;
+            postalCode: string;
+            /** @default US */
+            country: string;
+            makeDefault?: boolean;
+            /**
+             * Format: int64
+             * @description Version being edited (updates)
+             */
+            version?: number | null;
+        };
         PostalAddress: {
             name: string;
             phone?: string | null;
@@ -1103,7 +1269,7 @@ export interface components {
             order: components["schemas"]["SellerOrderDetail"];
         };
         /** @enum {string} */
-        ListingStatus: "IN_REVIEW" | "PENDING_CATEGORY_APPROVAL" | "LIVE" | "REJECTED" | "PAUSED";
+        ListingStatus: "IN_REVIEW" | "PENDING_CATEGORY_APPROVAL" | "LIVE" | "REJECTED" | "PAUSED" | "TAKEN_DOWN";
         ListingRow: {
             productId: string;
             atin: string | null;
@@ -1423,9 +1589,50 @@ export interface components {
             email: string | null;
             roleKey: string;
             roleLabel: string;
-            /** @enum {string} */
-            status: "ACTIVE" | "INVITED";
+            /**
+             * @description INVITED rows are pending invitations (userId `invite:<invitationId>`)
+             * @enum {string}
+             */
+            status: "ACTIVE" | "DISABLED" | "INVITED";
             isYou: boolean;
+            /**
+             * Format: uuid
+             * @description INVITED rows only (revoke with it)
+             */
+            invitationId?: string;
+            /** Format: date-time */
+            joinedAt?: string;
+            /**
+             * Format: date-time
+             * @description INVITED rows only
+             */
+            expiresAt?: string;
+        };
+        InvitationTokenRequest: {
+            token: string;
+        };
+        InvitationPreview: {
+            orgName: string;
+            /** @enum {string} */
+            orgKind: "SELLER" | "PROVIDER";
+            /** @description The invited address (sign in or sign up with it) */
+            email: string;
+            roleKey: string;
+            roleLabel: string;
+            /** @enum {string} */
+            status: "PENDING" | "ACCEPTED" | "REVOKED" | "EXPIRED";
+            /** Format: date-time */
+            expiresAt: string;
+        };
+        AcceptedInvitation: {
+            orgId: string;
+            orgName: string;
+            /** @enum {string} */
+            orgKind: "SELLER" | "PROVIDER";
+            roleKey: string;
+            roleLabel: string;
+            /** @description Was already a member; the role was left unchanged */
+            alreadyMember: boolean;
         };
         TeamView: {
             members: components["schemas"]["TeamMember"][];
@@ -2029,6 +2236,144 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    listShipFromAddresses: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Addresses */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ShipFromAddress"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createShipFromAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShipFromInput"];
+            };
+        };
+        responses: {
+            /** @description Added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipFromAddress"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateShipFromAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                addressId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShipFromInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipFromAddress"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+        };
+    };
+    deleteShipFromAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                addressId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remaining addresses */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ShipFromAddress"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    defaultShipFromAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                addressId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every address, default first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ShipFromAddress"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
     listListings: {
         parameters: {
             query?: {
@@ -2567,7 +2912,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Invited member */
+            /** @description Invited member (an INVITED row) */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -2610,6 +2955,118 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    removeMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Team */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    revokeInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Team */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamView"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    lookupInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Invitation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationPreview"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    acceptInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Joined */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptedInvitation"];
+                };
+            };
+            401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];

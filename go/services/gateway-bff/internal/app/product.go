@@ -9,16 +9,21 @@ import (
 	"net/mail"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// ProductService builds the product page: catalog public product + inventory availability per variant +
-// delivery promise (promise service when available, estimate otherwise) + low-stock flags.
+// ProductService builds the product page: catalog public product + inventory availability per variant + the buy box
+// and "Other sellers on AfroTransact" from the offers service (catalog's single seller when offers is unavailable) +
+// delivery promise (promise service when available, estimate otherwise) + low-stock flags. It also manages the
+// shopper's back-in-stock alerts (notifications).
 type ProductService interface {
 	Detail(ctx context.Context, c *domain.Caller, atin string) (domain.ProductDetail, error)
 	StockAlert(ctx context.Context, c *domain.Caller, atin, email string) error
+	StockAlerts(ctx context.Context, c *domain.Caller) ([]domain.StockAlertItem, error)
+	RemoveStockAlert(ctx context.Context, c *domain.Caller, atin string) error
 }
 
 type productServiceImpl struct {
@@ -26,6 +31,7 @@ type productServiceImpl struct {
 	inventory     port.InventoryClient
 	promise       port.PromiseClient
 	notifications port.NotificationsClient
+	offers        port.StorefrontOffersClient
 	location      LocationService
 	estimator     domain.Estimator
 	sellers       SellerDirectory
@@ -41,11 +47,13 @@ type ProductDeps struct {
 	Inventory     port.InventoryClient
 	Promise       port.PromiseClient
 	Notifications port.NotificationsClient
-	Location      LocationService
-	Estimator     domain.Estimator
-	Sellers       SellerDirectory
-	Clock         Clock
-	Log           *slog.Logger
+	// Offers is optional: without it the page shows the catalog's single seller.
+	Offers    port.StorefrontOffersClient
+	Location  LocationService
+	Estimator domain.Estimator
+	Sellers   SellerDirectory
+	Clock     Clock
+	Log       *slog.Logger
 }
 
 // NewProductService returns the ProductService.
@@ -54,7 +62,7 @@ func NewProductService(d ProductDeps) ProductService {
 		d.Log = slog.Default()
 	}
 	return &productServiceImpl{catalog: d.Catalog, inventory: d.Inventory, promise: d.Promise, notifications: d.Notifications,
-		location: d.Location, estimator: d.Estimator, sellers: d.Sellers, clock: d.Clock, log: d.Log}
+		offers: d.Offers, location: d.Location, estimator: d.Estimator, sellers: d.Sellers, clock: d.Clock, log: d.Log}
 }
 
 var atinRe = regexp.MustCompile(`^AT[0-9A-Z]{8}$`)
@@ -157,18 +165,36 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 	}
 	seller, fulfilment := s.sellers.Describe(p.OwnerKind, p.SellerOrgID)
 	now := s.clock.now()
-	days := 0
-	if zip := s.location.Current(ctx, c).ZIP; zip != "" {
-		if m, err := s.promise.Promises(ctx, zip, []port.PromiseItem{{ATIN: sel.ATIN, Fulfilment: fulfilment, SellerOrgID: p.SellerOrgID}}); err == nil {
-			days = m[sel.ATIN]
-		} else {
-			s.log.DebugContext(ctx, "promise unavailable; using the estimate", "error", err)
-		}
-	}
+	zip := s.location.Current(ctx, c).ZIP
 	qty := max(0, avail[sel.ATIN])
 	currency := firstNonEmpty(strings.ToUpper(sel.Currency), domain.Currency)
 	var buyBox *domain.Offer
-	if qty > 0 {
+	otherOffers := []domain.Offer{}
+	shipsFrom, soldBy := seller.Name, seller.Name
+	if fulfilment == domain.FulfilledByAfroTransact {
+		shipsFrom = "AfroTransact"
+	}
+	if bb, ok := s.offerBuyBox(ctx, sel.ATIN); ok {
+		// The offers service decides: winner (nil = currently unavailable) and the other listed sellers.
+		if bb.BuyBox != nil {
+			o := s.offerOf(*bb.BuyBox, s.promiseDays(ctx, zip, *bb.BuyBox), now)
+			buyBox = &o
+			shipsFrom = firstNonEmpty(bb.BuyBox.ShipsFrom, o.Seller.Name)
+			soldBy = firstNonEmpty(bb.BuyBox.SoldBy, o.Seller.Name)
+			seller, fulfilment = o.Seller, o.Fulfilment
+		}
+		for _, other := range bb.OtherOffers {
+			otherOffers = append(otherOffers, s.offerOf(other, other.DeliveryDays, now))
+		}
+	} else if qty > 0 {
+		days := 0
+		if zip != "" {
+			if m, err := s.promise.Promises(ctx, zip, []port.PromiseItem{{ATIN: sel.ATIN, Fulfilment: fulfilment, SellerOrgID: p.SellerOrgID}}); err == nil {
+				days = m[sel.ATIN]
+			} else {
+				s.log.DebugContext(ctx, "promise unavailable; using the estimate", "error", err)
+			}
+		}
 		buyBox = &domain.Offer{OfferID: sel.ATIN, Seller: seller, PriceMinor: sel.PriceMinor, ListPriceMinor: nil, Currency: currency,
 			Fulfilment: fulfilment, AvailableQty: qty, StockStatus: domain.StockStatusFor(qty), Delivery: s.estimator.Promise(fulfilment, days, now)}
 	}
@@ -189,10 +215,6 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 	unit := firstNonEmpty(attr(p.Attributes, "unit", "size", "netContent", "net_content", "packSize"), optionsLabel(sel.Options), "each")
 	department := departmentFor(ctx, s.catalog, p.CategoryID)
 	productATIN := strings.ToUpper(strings.TrimSpace(atin))
-	shipsFrom := seller.Name
-	if fulfilment == domain.FulfilledByAfroTransact {
-		shipsFrom = "AfroTransact"
-	}
 	return domain.ProductDetail{
 		Product: domain.ProductInfo{
 			ATIN: productATIN, Title: p.Title, Brand: attr(p.Attributes, "brand"),
@@ -201,12 +223,47 @@ func (s *productServiceImpl) Detail(ctx context.Context, c *domain.Caller, atin 
 			Rating: 0, ReviewCount: 0, Images: images, Variants: variants,
 		},
 		BuyBox:         buyBox,
-		OtherOffers:    []domain.Offer{},
+		OtherOffers:    otherOffers,
 		ShipsFrom:      shipsFrom,
-		SoldBy:         seller.Name,
+		SoldBy:         soldBy,
 		ReturnsPolicy:  returnsPolicy(fulfilment, department),
 		UnitPriceLabel: domain.Money(sel.PriceMinor) + " / " + unit,
 	}, nil
+}
+
+// offerBuyBox reads the variant's buy box from offers; ok=false when offers is not wired or cannot answer (the page
+// then falls back to the catalog's single seller).
+func (s *productServiceImpl) offerBuyBox(ctx context.Context, variantATIN string) (port.OfferBuyBox, bool) {
+	if s.offers == nil {
+		return port.OfferBuyBox{}, false
+	}
+	bb, err := s.offers.BuyBox(ctx, variantATIN)
+	if err != nil {
+		s.log.DebugContext(ctx, "offers unavailable; showing the catalog seller", "error", err)
+		return port.OfferBuyBox{}, false
+	}
+	return bb, true
+}
+
+// promiseDays asks promise for the winning offer's delivery days (0 = use the estimate).
+func (s *productServiceImpl) promiseDays(ctx context.Context, zip string, o port.PublicOffer) int {
+	if zip == "" {
+		return o.DeliveryDays
+	}
+	m, err := s.promise.Promises(ctx, zip, []port.PromiseItem{{ATIN: o.ATIN, Fulfilment: o.Fulfilment, SellerOrgID: o.Seller.ID}})
+	if err != nil {
+		s.log.DebugContext(ctx, "promise unavailable; using the offer's estimate", "error", err)
+		return o.DeliveryDays
+	}
+	if d := m[o.ATIN]; d > 0 {
+		return d
+	}
+	return o.DeliveryDays
+}
+
+// offerOf maps an offers-service offer onto the contract's Offer.
+func (s *productServiceImpl) offerOf(o port.PublicOffer, days int, now time.Time) domain.Offer {
+	return offerFromPublic(o, s.estimator.Promise(normFulfilment(o.Fulfilment), days, now))
 }
 
 func returnsPolicy(fulfilment, department string) string {
@@ -220,8 +277,11 @@ func returnsPolicy(fulfilment, department string) string {
 	}
 }
 
+// StockAlert arms "Email me when available" for the product's requested variant (or its first variant). The
+// notifications service keys alerts by the shopper's account, so guests must sign in first.
 func (s *productServiceImpl) StockAlert(ctx context.Context, c *domain.Caller, atin, email string) error {
-	if _, _, err := resolveProduct(ctx, s.catalog, atin); err != nil {
+	p, wanted, err := resolveProduct(ctx, s.catalog, atin)
+	if err != nil {
 		return err
 	}
 	email = strings.TrimSpace(email)
@@ -236,7 +296,49 @@ func (s *productServiceImpl) StockAlert(ctx context.Context, c *domain.Caller, a
 	if _, err := mail.ParseAddress(email); err != nil {
 		return domain.ValidationProblem(map[string]string{"email": "Enter a valid email address"})
 	}
-	if err := s.notifications.SubscribeStockAlert(ctx, strings.ToUpper(atin), email, c.BearerToken); err != nil {
+	if !c.Authenticated() {
+		return domain.NewProblem(http.StatusUnauthorized, domain.CodeUnauthenticated, "Sign in to get an alert",
+			"Sign in and we'll email you when it's back in stock.")
+	}
+	variant := wanted
+	if variant == "" && len(p.Variants) > 0 {
+		variant = p.Variants[0].ATIN
+	}
+	in := port.StockAlertInput{ATIN: variant, Email: email, ProductTitle: p.Title}
+	if err := s.notifications.SubscribeStockAlert(ctx, c.BearerToken, in); err != nil {
+		return mapErr("notifications", err)
+	}
+	return nil
+}
+
+func (s *productServiceImpl) StockAlerts(ctx context.Context, c *domain.Caller) ([]domain.StockAlertItem, error) {
+	if err := requireCustomer(c); err != nil {
+		return nil, err
+	}
+	list, err := s.notifications.StockAlerts(ctx, c.BearerToken)
+	if err != nil {
+		return nil, mapErr("notifications", err)
+	}
+	out := make([]domain.StockAlertItem, 0, len(list))
+	for _, a := range list {
+		status := "notified"
+		if a.Status == "active" {
+			status = "active"
+		}
+		out = append(out, domain.StockAlertItem{ATIN: a.ATIN, ProductTitle: a.ProductTitle, Status: status, CreatedAt: a.CreatedAt,
+			NotifiedAt: a.NotifiedAt})
+	}
+	return out, nil
+}
+
+func (s *productServiceImpl) RemoveStockAlert(ctx context.Context, c *domain.Caller, atin string) error {
+	if err := requireCustomer(c); err != nil {
+		return err
+	}
+	if err := s.notifications.RemoveStockAlert(ctx, c.BearerToken, strings.ToUpper(strings.TrimSpace(atin))); err != nil {
+		if errors.Is(err, port.ErrNotFound) {
+			return domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Alert not found", "You have no alert for that item.").WithCause(err)
+		}
 		return mapErr("notifications", err)
 	}
 	return nil

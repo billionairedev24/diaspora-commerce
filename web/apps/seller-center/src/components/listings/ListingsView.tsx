@@ -23,6 +23,7 @@ const FILTERS: { value: ListingStatus | ''; label: string }[] = [
   { value: 'IN_REVIEW', label: 'In review' },
   { value: 'PENDING_CATEGORY_APPROVAL', label: 'Waiting for category' },
   { value: 'PAUSED', label: 'Paused' },
+  { value: 'TAKEN_DOWN', label: 'Taken down' },
   { value: 'REJECTED', label: 'Rejected' }
 ];
 

@@ -15,9 +15,29 @@ public record CheckoutPlan(String currency, List<Package> packages) {
                           DeliveryPreferences preferences, int promiseDays, List<Line> lines) {
     }
 
-    /** One priced line (tax computed from the delivery address). */
+    /**
+     * One priced line (tax computed from the delivery address).
+     *
+     * @param offerId       offers-service offer (coupon line reference); null for catalog-only lines
+     * @param discountMinor coupon discount allocated to the line
+     */
     public record Line(String lineId, int lineNo, String variantAtin, String productAtin, String title,
                        String imageUrl, int quantity, long unitPriceMinor, long taxMinor, String category,
-                       boolean perishable, String taxJurisdiction, int promiseDays) {
+                       boolean perishable, String taxJurisdiction, int promiseDays, String offerId,
+                       long discountMinor) {
+
+        /** Unit price × quantity. */
+        public long itemsMinor() {
+            return Math.multiplyExact(unitPriceMinor, (long) quantity);
+        }
+
+        /** The line with a discount (capped at its items); tax is scaled to the discounted amount. */
+        public Line withDiscount(long discount) {
+            long items = itemsMinor();
+            long d = Math.clamp(discount, 0, items);
+            long tax = items == 0 ? taxMinor : Math.round((double) taxMinor * (items - d) / items);
+            return new Line(lineId, lineNo, variantAtin, productAtin, title, imageUrl, quantity, unitPriceMinor, tax,
+                    category, perishable, taxJurisdiction, promiseDays, offerId, d);
+        }
     }
 }

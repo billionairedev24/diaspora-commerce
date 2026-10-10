@@ -24,9 +24,12 @@ import com.afrotransact.orders.domain.OrdersStateConflict;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.ShippingPolicy;
 import com.afrotransact.orders.port.CartClient;
+import com.afrotransact.orders.port.CouponsClient;
 import com.afrotransact.orders.port.HandoverCodeVault;
 import com.afrotransact.orders.port.InventoryClient;
 import com.afrotransact.orders.port.MarketEligibility;
+import com.afrotransact.orders.port.OrderCouponRepository;
+import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.PromiseClient;
@@ -55,6 +58,9 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final InventoryClient inventory;
     private final PaymentsClient payments;
     private final CartClient cart;
+    private final CouponsClient coupons;
+    private final OrderCouponRepository orderCoupons;
+    private final OrderRepository orderRepository;
     private final OrderPlacementService placement;
     private final OrdersSettings settings;
     private final Clock clock;
@@ -62,6 +68,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     CheckoutActivitiesImpl(MarketEligibility markets, ProductFactsClient catalog, PromiseClient promises,
                            TaxCalculator tax, ShippingPolicy shipping, HandoverPolicy handover, HandoverCodeVault vault,
                            InventoryClient inventory, PaymentsClient payments, CartClient cart,
+                           CouponsClient coupons, OrderCouponRepository orderCoupons, OrderRepository orderRepository,
                            OrderPlacementService placement, OrdersSettings settings, Clock clock) {
         this.markets = markets;
         this.catalog = catalog;
@@ -73,6 +80,9 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.inventory = inventory;
         this.payments = payments;
         this.cart = cart;
+        this.coupons = coupons;
+        this.orderCoupons = orderCoupons;
+        this.orderRepository = orderRepository;
         this.placement = placement;
         this.settings = settings;
         this.clock = clock;
@@ -153,7 +163,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                 lines.add(new CheckoutPlan.Line(UUID.randomUUID().toString(), lineNo, i.variantAtin(),
                         i.productAtin(), i.title(), i.imageUrl(), i.quantity(), i.priceMinor(),
                         rate.taxOf(itemsMinor), f.map(ProductFactsClient.Facts::category).orElse(null),
-                        f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays));
+                        f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
+                        i.offerId(), 0));
             }
             packages.add(new CheckoutPlan.Package(e.getKey(), first.sellerOrgId(), first.sellerName(),
                     fulfilmentType(first), method, level, method == DeliveryMethod.PICKUP ? pickup.trim() : null,
@@ -219,7 +230,109 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             }
         }
         return new OrderDraft(in.orderId(), in.orderNumber(), in.customerId(), in.workflowId(), plan.currency(),
-                in.shipTo(), reserved, shipments, Instant.now(clock));
+                in.shipTo(), reserved, shipments, Instant.now(clock), null);
+    }
+
+    // ------------------------------------------------------------------ coupons (offers-service)
+
+    @Override
+    public void validateCoupon(CheckoutInput in, CheckoutPlan plan) {
+        guard(() -> {
+            long shippingEstimate = 0;
+            List<CouponsClient.Line> lines = new ArrayList<>();
+            for (CheckoutPlan.Package p : plan.packages()) {
+                long items = p.lines().stream().mapToLong(CheckoutPlan.Line::itemsMinor).sum();
+                shippingEstimate += shipping.fee(p.method(), p.serviceLevel(), items);
+                p.lines().stream().filter(l -> l.offerId() != null)
+                        .forEach(l -> lines.add(new CouponsClient.Line(l.offerId(), l.quantity())));
+            }
+            CouponsClient.Quote quote = coupons.validate(new CouponsClient.Request(in.couponCode(), in.customerId(),
+                    null, in.currency(), lines, shippingEstimate, firstOrder(in)));
+            if (!quote.applicable()) {
+                throw ApplicationFailure.newNonRetryableFailure(quote.message() != null ? quote.message()
+                        : "Coupon " + in.couponCode() + " can't be used on this order",
+                        CheckoutCodes.COUPON_NOT_APPLICABLE, quote.rejection() == null ? "" : quote.rejection());
+            }
+            return null;
+        });
+    }
+
+    @Override
+    public OrderDraft redeemCoupon(CheckoutInput in, OrderDraft draft) {
+        return guard(() -> {
+            CouponsClient.Redemption r;
+            try {
+                r = coupons.redeem(in.orderId(), couponRequest(in, draft));
+            } catch (UpstreamFailure f) {
+                if (f.status() == 422 || "offers.coupon-not-applicable".equals(f.code())) {
+                    throw ApplicationFailure.newNonRetryableFailure(f.getMessage(),
+                            CheckoutCodes.COUPON_NOT_APPLICABLE, f.code());
+                }
+                throw f;
+            }
+            return applyCoupon(draft, in.couponCode(), r);
+        });
+    }
+
+    @Override
+    public void releaseCoupon(CheckoutInput in, OrderDraft draft, String redemptionId) {
+        guard(() -> {
+            String id = redemptionId;
+            if (id == null) {
+                try {
+                    id = coupons.redeem(in.orderId(), couponRequest(in, draft)).id();
+                } catch (UpstreamFailure f) {
+                    if (f.retryable()) {
+                        throw f;
+                    }
+                    LOG.debug("No coupon redemption to release for order {} ({})", in.orderId(), f.code());
+                    return null;
+                }
+            }
+            try {
+                coupons.release(id);
+            } catch (UpstreamFailure f) {
+                if (f.status() != 404) {
+                    throw f;
+                }
+            }
+            orderCoupons.markReleased(in.orderId(), Instant.now(clock));
+            return null;
+        });
+    }
+
+    private CouponsClient.Request couponRequest(CheckoutInput in, OrderDraft draft) {
+        List<CouponsClient.Line> lines = draft.shipments().stream().flatMap(s -> s.lines().stream())
+                .filter(l -> l.offerId() != null).map(l -> new CouponsClient.Line(l.offerId(), l.quantity()))
+                .toList();
+        return new CouponsClient.Request(in.couponCode(), in.customerId(), in.orderId(), draft.currency(), lines,
+                draft.shippingMinor(), firstOrder(in));
+    }
+
+    /** True when the shopper has no earlier placed order (FIRST_ORDER coupons). */
+    private boolean firstOrder(CheckoutInput in) {
+        return orderRepository.byCustomer(in.customerId(), 0, 5).items().stream()
+                .noneMatch(o -> !o.id().equals(in.orderId()) && o.placedAt() != null);
+    }
+
+    /** Line discounts by offer id; the shipping discount comes off the shipments' shipping in order. */
+    static OrderDraft applyCoupon(OrderDraft draft, String code, CouponsClient.Redemption r) {
+        Map<String, Long> byOffer = new LinkedHashMap<>();
+        r.lines().forEach(l -> byOffer.merge(l.lineRef(), l.discountMinor(), Long::sum));
+        long shippingLeft = r.shippingDiscountMinor();
+        List<OrderDraft.DraftShipment> out = new ArrayList<>();
+        for (OrderDraft.DraftShipment s : draft.shipments()) {
+            List<CheckoutPlan.Line> lines = new ArrayList<>();
+            for (CheckoutPlan.Line l : s.lines()) {
+                Long d = l.offerId() == null ? null : byOffer.remove(l.offerId());
+                lines.add(d == null ? l : l.withDiscount(d));
+            }
+            long off = Math.min(shippingLeft, s.shippingMinor());
+            shippingLeft -= off;
+            out.add(s.with(lines, s.shippingMinor() - off));
+        }
+        return draft.withCoupon(out, new OrderDraft.CouponRef(code, r.id(), r.discountMinor(),
+                r.shippingDiscountMinor() - shippingLeft, r.funding(), r.fundedByOrg()));
     }
 
     // ------------------------------------------------------------------ payment + persistence
@@ -240,6 +353,12 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     public void persistPending(OrderDraft draft, PaymentRef payment) {
         guard(() -> {
             placement.persistPending(OrderDrafts.toOrder(draft, payment.paymentId()), payment.clientSecret());
+            OrderDraft.CouponRef c = draft.coupon();
+            if (c != null) {
+                orderCoupons.save(new OrderCouponRepository.OrderCoupon(draft.orderId(), c.code(), c.redemptionId(),
+                        c.discountMinor(), c.shippingDiscountMinor(), c.funding(), c.fundedByOrg(), "REDEEMED",
+                        Instant.now(clock), null));
+            }
             return null;
         });
     }

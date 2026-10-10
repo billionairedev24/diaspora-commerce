@@ -70,6 +70,7 @@ func (h *handlersImpl) view(w http.ResponseWriter, r *http.Request) {
 
 type itemBody struct {
 	VariantATIN string `json:"variantAtin"`
+	OfferID     string `json:"offerId"`
 	Quantity    int    `json:"quantity"`
 }
 
@@ -85,7 +86,12 @@ func (h *handlersImpl) add(w http.ResponseWriter, r *http.Request) {
 	if b.Quantity == 0 {
 		b.Quantity = 1
 	}
-	v, err := h.carts.Add(r.Context(), o, b.VariantATIN, b.Quantity)
+	if b.VariantATIN == "" && b.OfferID == "" {
+		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "cart.invalid",
+			Detail: "variantAtin or offerId is required", Fields: map[string]string{"variantAtin": "Required without offerId"}})
+		return
+	}
+	v, err := h.carts.Add(r.Context(), o, b.VariantATIN, b.OfferID, b.Quantity)
 	respond(w, r, v, err)
 }
 
@@ -179,6 +185,11 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 		problem.Write(w, r, &problem.Error{Status: http.StatusConflict, Code: "cart.insufficient-stock", Detail: err.Error()})
 	case errors.Is(err, app.ErrNotSellable):
 		problem.Write(w, r, &problem.Error{Status: http.StatusConflict, Code: "cart.not-sellable", Detail: err.Error()})
+	case errors.Is(err, app.ErrNotBuyable):
+		problem.Write(w, r, &problem.Error{Status: http.StatusConflict, Code: "cart.offer-not-buyable", Detail: err.Error()})
+	case errors.Is(err, app.ErrOfferMismatch):
+		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "cart.invalid", Detail: err.Error(),
+			Fields: map[string]string{"offerId": "Not an offer of this variant"}})
 	case errors.Is(err, domain.ErrInvalidQuantity), errors.Is(err, domain.ErrCartFull):
 		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "cart.invalid", Detail: err.Error()})
 	case errors.Is(err, domain.ErrUnknownLine):

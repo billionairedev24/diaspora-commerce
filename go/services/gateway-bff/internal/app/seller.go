@@ -45,6 +45,11 @@ type sellerCtx struct {
 
 func (s sellerCtx) kind() string { return s.access.Kind }
 
+// provider names the active organisation and the member for bookings' /v1/providers/{orgId}/… routes.
+func (s sellerCtx) provider() port.ProviderRef {
+	return port.ProviderRef{OrgID: s.org.ID, UserID: s.member.ID}
+}
+
 // orgResolver resolves the active organisation and the role's module access for every seller route.
 type orgResolver struct{ d SellerDeps }
 
@@ -325,7 +330,7 @@ func (s *sellerShellImpl) badges(ctx context.Context, c *domain.Caller, sc selle
 	}
 	if sc.kind() == domain.OrgKindProvider && domain.AtLeast(sc.access.Level("requests"), domain.LevelView) {
 		wg.Go(func() {
-			if list, err := s.r.d.Bookings.Requests(bctx, c.BearerToken); err == nil {
+			if list, err := s.r.d.Bookings.Requests(bctx, c.BearerToken, sc.provider()); err == nil {
 				set("requests", len(list))
 			}
 		})

@@ -234,12 +234,15 @@ func TestSignUpAndFirstPartyCredentials(t *testing.T) {
 	if c := problemCode(t, b.do("POST", "/v1/auth/sign-up", form)); c != "WEAK_PASSWORD" {
 		t.Fatalf("code = %s", c)
 	}
-	// Password, MFA and passkey steps are validated, then answered 503 (identity has no first-party API).
+	// Password, MFA and passkey steps are validated, then run on identity's first-party API (auth_firstparty_test.go).
 	mustStatus(t, b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "bad"}), 422)
 	r = b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "ada@example.com", "password": "x"})
-	mustStatus(t, r, 503)
+	mustStatus(t, r, 401)
+	if c := problemCode(t, r); c != "INVALID_CREDENTIALS" {
+		t.Fatalf("code = %s", c)
+	}
 	mustStatus(t, b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "c", "code": "12"}), 422)
-	mustStatus(t, b.do("POST", "/v1/auth/passkey/options", map[string]any{}), 503)
+	mustStatus(t, b.do("POST", "/v1/auth/passkey/options", map[string]any{}), 200)
 }
 
 func TestAccountAddresses(t *testing.T) {

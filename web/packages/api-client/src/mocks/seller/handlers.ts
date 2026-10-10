@@ -31,11 +31,14 @@ import {
   type SellerSession,
   SellerStatusActionSchema,
   ServiceInputSchema,
+  type ShipFromAddress,
   type ShipmentStatus,
   StockAdjustmentRequestSchema,
+  TEAM_ERROR_MESSAGES,
+  type TeamMember,
   UploadRequestSchema
 } from '../../schemas/seller';
-import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES } from './db';
+import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, SELLER_ORG } from './db';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
 
 const PROBLEM_BASE = 'https://errors.afrotransact.com/bff.';
@@ -322,9 +325,88 @@ const InviteBody = z.object({ email: z.email('Enter a valid email address'), rol
 const RoleBody = z.object({ roleKey: z.string().min(1) });
 const ActionBody = z.object({ action: BookingActionSchema, reason: z.string().max(500).optional(), proposedStartAt: z.string().optional() });
 
+const ShipFromBody = z.object({
+  label: z.string().trim().max(60).optional(),
+  name: z.string().trim().min(2, 'Enter the sender name'),
+  company: z.string().trim().max(120).optional(),
+  phone: z.string().trim().max(32).optional(),
+  line1: z.string().trim().min(3, 'Enter the street address'),
+  line2: z.string().trim().max(120).optional(),
+  city: z.string().trim().min(2, 'Enter the city'),
+  state: z.string().trim().regex(/^[A-Za-z]{2}$/, 'Use the 2-letter state code'),
+  postalCode: z.string().trim().regex(/^\d{5}(-\d{4})?$/, 'Enter a 5-digit ZIP code'),
+  country: z.string().optional(),
+  makeDefault: z.boolean().optional(),
+  version: z.number().int().nullable().optional()
+});
+
+const TokenBody = z.object({ token: z.string().trim().min(1, 'This invitation link is incomplete. Open it again from the email.').max(200) });
+/** Invitation tokens the mock knows (Seller Center accept page). */
+const MOCK_INVITES: Record<string, 'PENDING' | 'EXPIRED' | 'REVOKED'> = { 'demo-invite': 'PENDING', 'expired-invite': 'EXPIRED', 'revoked-invite': 'REVOKED' };
+const TEAM_TITLES: Record<string, string> = {
+  LAST_OWNER: 'Last owner', INVALID_ROLE: 'Invalid role', OWNER_ONLY: 'Owner only', OWN_ROLE: 'Your own role', ALREADY_MEMBER: 'Already a member',
+  INVITATION_EXPIRED: 'Invitation expired', INVITATION_USED: 'Invitation already used', INVITATION_REVOKED: 'Invitation withdrawn'
+};
+const teamProblem = (status: number, code: string) => new SellerProblem(status, code, TEAM_TITLES[code] ?? code, TEAM_ERROR_MESSAGES[code] ?? code);
+
 const W = '*/v1/seller';
 const query = (ctx: Ctx) => new URL(ctx.request.url).searchParams;
 const nextId = (db: MockSellerDb, prefix: string) => `${prefix}-${++db.seq}`;
+
+function shipFromList(ctx: Ctx): ShipFromAddress[] {
+  return (ctx.db.shipFrom[ctx.org.id] ??= []);
+}
+
+function saveShipFrom(ctx: Ctx, input: z.infer<typeof ShipFromBody>, existing?: ShipFromAddress): ShipFromAddress {
+  const list = shipFromList(ctx);
+  if (existing && input.version != null && input.version !== existing.version) throw conflict('Someone else changed this address. Reload and try again.');
+  if (!existing && list.length >= 20) throw conflict('You can save up to 20 ship-from addresses.');
+  const makeDefault = input.makeDefault === true || list.length === 0 || (existing?.isDefault ?? false);
+  if (makeDefault) list.forEach((a) => (a.isDefault = false));
+  const next: ShipFromAddress = {
+    id: existing?.id ?? nextId(ctx.db, 'sfa'),
+    label: input.label || input.city,
+    name: input.name,
+    company: input.company ?? '',
+    phone: input.phone ?? '',
+    line1: input.line1,
+    line2: input.line2 ?? '',
+    city: input.city,
+    state: input.state.toUpperCase(),
+    postalCode: input.postalCode,
+    country: 'US',
+    isDefault: makeDefault,
+    version: existing ? existing.version + 1 : 0
+  };
+  if (existing) list.splice(list.indexOf(existing), 1, next);
+  else list.push(next);
+  return next;
+}
+
+function findShipFrom(ctx: Ctx, id: string | undefined): ShipFromAddress {
+  const found = shipFromList(ctx).find((a) => a.id === id);
+  if (!found) throw notFound('No such ship-from address.');
+  return found;
+}
+
+function teamView(ctx: Ctx) {
+  const canManage = allows(ctx.org.kind, ctx.role, 'team', 'EDIT');
+  const members = (ctx.db.team[ctx.org.id] ?? []).filter((m) => canManage || m.status !== 'INVITED');
+  return { members, roles: roleCards(ctx.org.kind), yourRoleKey: ctx.role, canManage };
+}
+
+function checkRole(ctx: Ctx, roleKey: string) {
+  if (!roleCards(ctx.org.kind).some((r) => r.key === roleKey)) throw new SellerProblem(422, 'INVALID_ROLE', 'Invalid role', TEAM_ERROR_MESSAGES.INVALID_ROLE ?? '', { roleKey: 'Choose a role of this organisation' });
+  if (roleKey.endsWith('.owner') && !ctx.role.endsWith('.owner')) throw teamProblem(403, 'OWNER_ONLY');
+}
+
+function activeMember(ctx: Ctx, userId: string | undefined): TeamMember {
+  const m = (ctx.db.team[ctx.org.id] ?? []).find((x) => x.userId === userId && x.status !== 'INVITED');
+  if (!m) throw notFound();
+  return m;
+}
+
+const owners = (ctx: Ctx) => (ctx.db.team[ctx.org.id] ?? []).filter((m) => m.status !== 'INVITED' && m.roleKey.endsWith('.owner')).length;
 
 function publicPage(ctx: Ctx) {
   const page = ctx.db.pages[ctx.org.id];
@@ -688,12 +770,12 @@ export const sellerHandlers = [
     })
   ),
 
-  /* ── Team ── */
+  /* ── Team (identity member directory + invitations, S236) ── */
   http.get(
     `${W}/team`,
     route((ctx) => {
       require(ctx, 'team', 'VIEW');
-      return { members: ctx.db.team[ctx.org.id] ?? [], roles: roleCards(ctx.org.kind), yourRoleKey: ctx.role, canManage: allows(ctx.org.kind, ctx.role, 'team', 'EDIT') };
+      return teamView(ctx);
     })
   ),
   http.post(
@@ -701,27 +783,79 @@ export const sellerHandlers = [
     route(async (ctx) => {
       const b = await body(ctx.request, InviteBody);
       require(ctx, 'team', 'EDIT');
-      if (!roleCards(ctx.org.kind).some((r) => r.key === b.roleKey)) throw invalid({ roleKey: 'Choose a role of this organisation' });
+      checkRole(ctx, b.roleKey);
+      const email = b.email.trim().toLowerCase();
       const members = (ctx.db.team[ctx.org.id] ??= []);
-      if (members.some((m) => m.email === b.email.toLowerCase())) throw conflict('That person is already on the team.');
-      const m = { userId: `invite:${b.email.toLowerCase()}`, name: b.email.toLowerCase(), email: b.email.toLowerCase(), roleKey: b.roleKey, roleLabel: roleLabel(b.roleKey), status: 'INVITED' as const, isYou: false };
+      if (members.some((m) => m.email === email && m.status !== 'INVITED')) throw teamProblem(409, 'ALREADY_MEMBER');
+      const open = members.findIndex((m) => m.email === email && m.status === 'INVITED');
+      if (open >= 0) members.splice(open, 1);
+      const invitationId = crypto.randomUUID();
+      const m: TeamMember = { userId: `invite:${invitationId}`, name: email, email, roleKey: b.roleKey, roleLabel: roleLabel(b.roleKey), status: 'INVITED', isYou: false,
+        invitationId, expiresAt: new Date(ctx.now.getTime() + 7 * 86_400_000).toISOString() };
       members.push(m);
       return m;
     }, 201)
+  ),
+  http.delete(
+    `${W}/team/invitations/:invitationId`,
+    route((ctx, p) => {
+      require(ctx, 'team', 'EDIT');
+      const members = ctx.db.team[ctx.org.id] ?? [];
+      const i = members.findIndex((m) => m.invitationId === p.invitationId);
+      if (i < 0) throw notFound('We couldn’t find that invitation.');
+      members.splice(i, 1);
+      return teamView(ctx);
+    })
   ),
   http.put(
     `${W}/team/members/:userId`,
     route(async (ctx, p) => {
       const { roleKey } = await body(ctx.request, RoleBody);
       require(ctx, 'team', 'EDIT');
-      if (!roleCards(ctx.org.kind).some((r) => r.key === roleKey)) throw invalid({ roleKey: 'Choose a role of this organisation' });
-      if (roleKey.endsWith('.owner') && !ctx.role.endsWith('.owner')) throw forbidden('Only the owner can make someone an owner.');
-      const m = (ctx.db.team[ctx.org.id] ?? []).find((x) => x.userId === p.userId);
-      if (!m) throw notFound();
-      if (m.isYou) throw invalid({ roleKey: 'You can’t change your own role' });
+      checkRole(ctx, roleKey);
+      const m = activeMember(ctx, p.userId);
+      if (m.isYou) throw teamProblem(403, 'OWN_ROLE');
+      if (m.roleKey.endsWith('.owner') && !roleKey.endsWith('.owner') && owners(ctx) === 1) throw teamProblem(422, 'LAST_OWNER');
       m.roleKey = roleKey;
       m.roleLabel = roleLabel(roleKey);
-      return { members: ctx.db.team[ctx.org.id] ?? [], roles: roleCards(ctx.org.kind), yourRoleKey: ctx.role, canManage: true };
+      return teamView(ctx);
+    })
+  ),
+  http.delete(
+    `${W}/team/members/:userId`,
+    route((ctx, p) => {
+      require(ctx, 'team', 'EDIT');
+      const m = activeMember(ctx, p.userId);
+      if (m.roleKey.endsWith('.owner') && !ctx.role.endsWith('.owner')) throw teamProblem(403, 'OWNER_ONLY');
+      if (m.roleKey.endsWith('.owner') && owners(ctx) === 1) throw teamProblem(422, 'LAST_OWNER');
+      const members = ctx.db.team[ctx.org.id] ?? [];
+      members.splice(members.indexOf(m), 1);
+      return teamView(ctx);
+    })
+  ),
+  /* Accept page (public lookup; accept needs a session — the mock is always signed in). */
+  http.post(
+    `${W}/invitations/lookup`,
+    route(async (ctx) => {
+      const { token } = await body(ctx.request, TokenBody);
+      const invite = MOCK_INVITES[token];
+      if (!invite) throw notFound('This invitation link isn’t valid. Ask the organisation to send a new one.');
+      return { orgName: 'Ade’s Kitchen', orgKind: 'SELLER', email: ctx.db.user.email, roleKey: 'seller.catalog', roleLabel: roleLabel('seller.catalog'),
+        status: invite, expiresAt: new Date(ctx.now.getTime() + (invite === 'EXPIRED' ? -1 : 3) * 86_400_000).toISOString() };
+    })
+  ),
+  http.post(
+    `${W}/invitations/accept`,
+    route(async (ctx) => {
+      const { token } = await body(ctx.request, TokenBody);
+      const invite = MOCK_INVITES[token];
+      if (!invite) throw notFound('This invitation link isn’t valid.');
+      if (invite === 'EXPIRED') throw teamProblem(422, 'INVITATION_EXPIRED');
+      if (invite === 'REVOKED') throw teamProblem(422, 'INVITATION_REVOKED');
+      const org = ctx.db.orgs.find((o) => o.id === SELLER_ORG);
+      if (org) ctx.db.activeOrgId = org.id;
+      return { orgId: SELLER_ORG, orgName: 'Ade’s Kitchen', orgKind: 'SELLER', roleKey: org?.role ?? 'seller.catalog', roleLabel: roleLabel(org?.role ?? 'seller.catalog'),
+        alreadyMember: Boolean(org) };
     })
   ),
 
@@ -887,6 +1021,54 @@ export const sellerHandlers = [
       page.status = 'PUBLISHED';
       page.publishedAt = ctx.now.toISOString();
       return page;
+    })
+  ),
+  /* ── Ship-from addresses ── */
+  http.get(
+    `${W}/ship-from-addresses`,
+    route((ctx) => {
+      require(ctx, 'orders', 'VIEW', 'SELLER');
+      return { items: shipFromList(ctx) };
+    })
+  ),
+  http.post(
+    `${W}/ship-from-addresses`,
+    route(async (ctx) => {
+      require(ctx, 'orders', 'EDIT', 'SELLER');
+      return saveShipFrom(ctx, await body(ctx.request, ShipFromBody));
+    }, 201)
+  ),
+  http.post(
+    `${W}/ship-from-addresses/:id/default`,
+    route((ctx, p) => {
+      require(ctx, 'orders', 'EDIT', 'SELLER');
+      const target = findShipFrom(ctx, p.id);
+      shipFromList(ctx).forEach((a) => {
+        if (a.isDefault !== (a === target)) {
+          a.isDefault = a === target;
+          a.version += 1;
+        }
+      });
+      return { items: shipFromList(ctx) };
+    })
+  ),
+  http.put(
+    `${W}/ship-from-addresses/:id`,
+    route(async (ctx, p) => {
+      require(ctx, 'orders', 'EDIT', 'SELLER');
+      return saveShipFrom(ctx, await body(ctx.request, ShipFromBody), findShipFrom(ctx, p.id));
+    })
+  ),
+  http.delete(
+    `${W}/ship-from-addresses/:id`,
+    route((ctx, p) => {
+      require(ctx, 'orders', 'EDIT', 'SELLER');
+      const list = shipFromList(ctx);
+      const target = findShipFrom(ctx, p.id);
+      list.splice(list.indexOf(target), 1);
+      const first = list[0];
+      if (target.isDefault && first) first.isDefault = true;
+      return { items: list };
     })
   ),
   /* Anything else under /v1/seller is not part of the contract. */

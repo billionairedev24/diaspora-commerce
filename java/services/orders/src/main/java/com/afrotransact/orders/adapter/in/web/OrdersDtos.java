@@ -32,7 +32,9 @@ final class OrdersDtos {
             @Schema(description = "Cart lines to buy; omit to buy every available line") List<@Valid Line> lines,
             @Schema(description = "Saved Stripe payment method (confirmed client-side)") String paymentMethodId,
             @Schema(description = "apple_pay | google_pay | link") String wallet,
-            Boolean gift) {
+            Boolean gift,
+            @Schema(description = "Coupon code: validated and redeemed with offers-service, released when the order "
+                    + "fails or is cancelled") @Size(max = 20) String couponCode) {
 
         CheckoutCommand toCommand(String idempotencyKey, String bearer) {
             List<CheckoutInput.Selection> selections = deliverySelections == null ? List.of()
@@ -40,7 +42,7 @@ final class OrdersDtos {
             List<CheckoutCommand.SelectedLine> selected = lines == null ? List.of()
                     : lines.stream().map(l -> new CheckoutCommand.SelectedLine(l.variantAtin(),
                     l.quantity() == null ? 0 : l.quantity())).toList();
-            return new CheckoutCommand(idempotencyKey, bearer, addressId, selections, selected);
+            return new CheckoutCommand(idempotencyKey, bearer, addressId, selections, selected, couponCode);
         }
     }
 
@@ -99,10 +101,13 @@ final class OrdersDtos {
             @NotBlank String status,
             Instant occurredAt,
             @Valid Proof proof,
-            @Size(max = 500) String note) {
+            @Size(max = 500) String note,
+            @Schema(description = "fulfilment-service relays (delivery:relay): the driver the event is from")
+            @Size(max = 120) String driverId) {
 
         CourierEventCommand toCommand() {
-            return new CourierEventCommand(eventId, status, occurredAt, proof == null ? null : proof.toDomain(), note);
+            return new CourierEventCommand(eventId, status, occurredAt, proof == null ? null : proof.toDomain(), note,
+                    driverId);
         }
     }
 

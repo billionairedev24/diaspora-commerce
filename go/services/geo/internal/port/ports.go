@@ -28,3 +28,10 @@ type ZoneStore interface {
 	Containing(ctx context.Context, lat, lon float64, t domain.ZoneType) ([]domain.Zone, error)
 	Ping(ctx context.Context) error
 }
+
+// ReverseGeocoder turns coordinates into the nearest postal address (Google Geocoding, OSM Nominatim or fixtures).
+// It returns domain.ErrNoAddress when the provider answered but knows no address at that point.
+type ReverseGeocoder interface {
+	Name() string
+	Reverse(ctx context.Context, lat, lon float64) (domain.Address, error)
+}

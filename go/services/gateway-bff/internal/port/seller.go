@@ -36,12 +36,53 @@ type Member struct {
 	Landing     string      `json:"landing"`
 }
 
-// Invitation is a pending member invitation (planned identity endpoint).
+// Invitation is identity's OrgInvitation (also the body of POST /v1/orgs/{orgId}/invitations).
 type Invitation struct {
-	UserID  string `json:"userId"`
-	Email   string `json:"email"`
-	RoleKey string `json:"roleKey"`
-	Status  string `json:"status"`
+	ID        string    `json:"id"`
+	OrgID     string    `json:"orgId"`
+	OrgName   string    `json:"orgName"`
+	OrgKind   string    `json:"orgKind"`
+	Email     string    `json:"email"`
+	RoleKey   string    `json:"roleKey"`
+	RoleLabel string    `json:"roleLabel"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// OrgMember is one entry of identity's member directory (GET /v1/orgs/{orgId}/members).
+type OrgMember struct {
+	UserID    string    `json:"userId"`
+	Name      string    `json:"name"`
+	FirstName string    `json:"firstName"`
+	LastName  string    `json:"lastName"`
+	Email     string    `json:"email"`
+	RoleKey   string    `json:"roleKey"`
+	RoleLabel string    `json:"roleLabel"`
+	Status    string    `json:"status"`
+	JoinedAt  time.Time `json:"joinedAt"`
+}
+
+// InvitationPreview is identity's public POST /v1/invitations/lookup answer.
+type InvitationPreview struct {
+	OrgName   string    `json:"orgName"`
+	OrgKind   string    `json:"orgKind"`
+	Email     string    `json:"email"`
+	RoleKey   string    `json:"roleKey"`
+	RoleLabel string    `json:"roleLabel"`
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// AcceptedInvitation is identity's POST /v1/invitations/accept answer.
+type AcceptedInvitation struct {
+	InvitationID  string `json:"invitationId"`
+	OrgID         string `json:"orgId"`
+	OrgName       string `json:"orgName"`
+	OrgKind       string `json:"orgKind"`
+	RoleKey       string `json:"roleKey"`
+	UserID        string `json:"userId"`
+	AlreadyMember bool   `json:"alreadyMember"`
 }
 
 // OrgAccessClient reads and changes organisation membership at identity.
@@ -51,8 +92,14 @@ type OrgAccessClient interface {
 	// ModuleMatrix reads GET /v1/admin/module-access?portal= (needs access:read; sellers usually get 403).
 	ModuleMatrix(ctx context.Context, bearer, portal string) (domain.ModuleMatrix, error)
 	SetMemberRole(ctx context.Context, bearer, orgID, userID, roleKey string) error
-	// Invite is the planned POST /v1/orgs/{orgId}/invitations.
 	Invite(ctx context.Context, bearer, orgID, email, roleKey string) (Invitation, error)
+	Members(ctx context.Context, bearer, orgID string) ([]OrgMember, error)
+	Invitations(ctx context.Context, bearer, orgID string) ([]Invitation, error)
+	RevokeInvitation(ctx context.Context, bearer, orgID, invitationID string) error
+	RemoveMember(ctx context.Context, bearer, orgID, userID string) error
+	// LookupInvitation is public (no bearer); the token travels in the body.
+	LookupInvitation(ctx context.Context, token string) (InvitationPreview, error)
+	AcceptInvitation(ctx context.Context, bearer, token string) (AcceptedInvitation, error)
 }
 
 // ---------------------------------------------------------------- seller service
@@ -185,8 +232,52 @@ type SellerInvoice struct {
 	CreatedAt        time.Time  `json:"createdAt"`
 }
 
-// SellerServiceClient calls the seller service (organisations, onboarding, compliance, plans & billing).
+// ShipFromAddress is seller's ShipFromAddress.
+type ShipFromAddress struct {
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Name       string `json:"name"`
+	Company    string `json:"company"`
+	Phone      string `json:"phone"`
+	Line1      string `json:"line1"`
+	Line2      string `json:"line2"`
+	City       string `json:"city"`
+	State      string `json:"state"`
+	PostalCode string `json:"postalCode"`
+	Country    string `json:"country"`
+	IsDefault  bool   `json:"isDefault"`
+	Version    int64  `json:"version"`
+}
+
+// ShipFromInput is seller's ShipFromAddressRequest.
+type ShipFromInput struct {
+	Label       string `json:"label"`
+	Name        string `json:"name"`
+	Company     string `json:"company,omitempty"`
+	Phone       string `json:"phone,omitempty"`
+	Line1       string `json:"line1"`
+	Line2       string `json:"line2,omitempty"`
+	City        string `json:"city"`
+	State       string `json:"state"`
+	PostalCode  string `json:"postalCode"`
+	Country     string `json:"country,omitempty"`
+	MakeDefault bool   `json:"makeDefault"`
+	Version     *int64 `json:"version,omitempty"`
+}
+
+// ShipFromClient manages an organisation's ship-from addresses (seller /v1/orgs/{orgId}/ship-from-addresses).
+type ShipFromClient interface {
+	ShipFrom(ctx context.Context, bearer, orgID string) ([]ShipFromAddress, error)
+	CreateShipFrom(ctx context.Context, bearer, orgID string, in ShipFromInput) (ShipFromAddress, error)
+	UpdateShipFrom(ctx context.Context, bearer, orgID, id string, in ShipFromInput) (ShipFromAddress, error)
+	DefaultShipFrom(ctx context.Context, bearer, orgID, id string) ([]ShipFromAddress, error)
+	DeleteShipFrom(ctx context.Context, bearer, orgID, id string) ([]ShipFromAddress, error)
+}
+
+// SellerServiceClient calls the seller service (organisations, onboarding, compliance, plans & billing, ship-from
+// addresses).
 type SellerServiceClient interface {
+	ShipFromClient
 	Org(ctx context.Context, bearer, orgID string) (SellerOrg, error)
 	Application(ctx context.Context, bearer string) (SellerApplication, error)
 	AccountHealth(ctx context.Context, bearer, orgID string) (AccountHealth, error)
@@ -414,15 +505,22 @@ type ShipmentQueue struct {
 	Total      int64               `json:"total"`
 }
 
-// SalesAnalytics is the planned orders GET /v1/seller/analytics answer.
+// SalesAnalytics is orders' GET /v1/seller/analytics answer (token's organisation, business time zone).
 type SalesAnalytics struct {
 	Currency string `json:"currency"`
 	Days     []struct {
-		Date       string `json:"date"`
-		SalesMinor int64  `json:"salesMinor"`
-		Units      int    `json:"units"`
-		Orders     int    `json:"orders"`
+		Date           string  `json:"date"`
+		SalesMinor     int64   `json:"salesMinor"`
+		Units          int     `json:"units"`
+		Orders         int     `json:"orders"`
+		Checkouts      int     `json:"checkouts"`
+		ConversionRate float64 `json:"conversionRate"`
 	} `json:"days"`
+	Totals struct {
+		Orders         int     `json:"orders"`
+		Checkouts      int     `json:"checkouts"`
+		ConversionRate float64 `json:"conversionRate"`
+	} `json:"totals"`
 	TopProducts []struct {
 		Title        string `json:"title"`
 		RevenueMinor int64  `json:"revenueMinor"`
@@ -565,9 +663,9 @@ type StorefrontClient interface {
 	Publish(ctx context.Context, bearer string) error
 }
 
-// ---------------------------------------------------------------- bookings (planned)
+// ---------------------------------------------------------------- bookings (contracts/openapi/bookings.yaml)
 
-// BookingsEarnings is the planned GET /v1/providers/me/earnings answer.
+// BookingsEarnings is the provider's earnings mapped from bookings' GET /v1/providers/{orgId}/earnings.
 type BookingsEarnings struct {
 	Currency          string               `json:"currency"`
 	CommissionPercent float64              `json:"commissionPercent"`
@@ -575,7 +673,7 @@ type BookingsEarnings struct {
 	Rows              []domain.EarningsRow `json:"rows"`
 }
 
-// BookingsAnalytics is the planned GET /v1/providers/me/analytics answer.
+// BookingsAnalytics is the provider dashboard data the BFF derives from bookings (bookings in range + earnings).
 type BookingsAnalytics struct {
 	Days []struct {
 		Date         string `json:"date"`
@@ -597,25 +695,33 @@ type BookingsAnalytics struct {
 	} `json:"weeks"`
 }
 
-// BookingsCalendar is the planned GET /v1/providers/me/calendar answer.
+// BookingsCalendar is the calendar mapped from bookings' GET /v1/providers/{orgId}/calendar.
 type BookingsCalendar struct {
 	Timezone  string               `json:"timezone"`
 	OpenHours []domain.DayHours    `json:"openHours"`
 	Bookings  []domain.BookingCard `json:"bookings"`
 }
 
-// BookingsClient calls the bookings service (planned provider endpoints under /v1/providers/me).
+// ProviderRef names the provider organisation (the active org of the session token) and the signed-in member
+// (identity subject), whose team-member row holds the working hours shown on the Hours screen.
+type ProviderRef struct {
+	OrgID  string
+	UserID string
+}
+
+// BookingsClient calls the bookings service's Provider Hub routes (/v1/providers/{orgId}/…) and booking actions
+// (/v1/bookings/{id}/…), relaying the member's token. Bookings enforces the member's role server-side.
 type BookingsClient interface {
-	Calendar(ctx context.Context, bearer string, from, to time.Time) (BookingsCalendar, error)
-	Requests(ctx context.Context, bearer string) ([]domain.BookingCard, error)
+	Calendar(ctx context.Context, bearer string, p ProviderRef, from, to time.Time) (BookingsCalendar, error)
+	Requests(ctx context.Context, bearer string, p ProviderRef) ([]domain.BookingCard, error)
 	Act(ctx context.Context, bearer, idempotencyKey, bookingID, action, reason string, proposedStart *time.Time) (domain.BookingCard, error)
-	Availability(ctx context.Context, bearer string) (domain.Availability, error)
-	SaveAvailability(ctx context.Context, bearer string, a domain.Availability) (domain.Availability, error)
-	Services(ctx context.Context, bearer string) ([]domain.ServiceOffer, error)
-	CreateService(ctx context.Context, bearer string, in domain.ServiceInput) (domain.ServiceOffer, error)
-	UpdateService(ctx context.Context, bearer, id string, in domain.ServiceInput) (domain.ServiceOffer, error)
-	Policy(ctx context.Context, bearer string) (domain.PolicyInput, error)
-	SavePolicy(ctx context.Context, bearer string, p domain.PolicyInput) (domain.PolicyInput, error)
-	Earnings(ctx context.Context, bearer string, from, to time.Time) (BookingsEarnings, error)
-	Analytics(ctx context.Context, bearer string, from, to time.Time) (BookingsAnalytics, error)
+	Availability(ctx context.Context, bearer string, p ProviderRef) (domain.Availability, error)
+	SaveAvailability(ctx context.Context, bearer string, p ProviderRef, a domain.Availability) (domain.Availability, error)
+	Services(ctx context.Context, bearer string, p ProviderRef) ([]domain.ServiceOffer, error)
+	CreateService(ctx context.Context, bearer string, p ProviderRef, in domain.ServiceInput) (domain.ServiceOffer, error)
+	UpdateService(ctx context.Context, bearer string, p ProviderRef, id string, in domain.ServiceInput) (domain.ServiceOffer, error)
+	Policy(ctx context.Context, bearer string, p ProviderRef) (domain.PolicyInput, error)
+	SavePolicy(ctx context.Context, bearer string, p ProviderRef, in domain.PolicyInput) (domain.PolicyInput, error)
+	Earnings(ctx context.Context, bearer string, p ProviderRef, from, to time.Time) (BookingsEarnings, error)
+	Analytics(ctx context.Context, bearer string, p ProviderRef, from, to time.Time) (BookingsAnalytics, error)
 }

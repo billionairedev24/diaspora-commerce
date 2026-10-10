@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -251,6 +252,7 @@ type LabelPurchase struct {
 
 var listingLabels = map[string]string{
 	"IN_REVIEW": "In review", "PENDING_CATEGORY_APPROVAL": "Waiting for category approval", "LIVE": "Live", "REJECTED": "Rejected", "PAUSED": "Paused",
+	"TAKEN_DOWN": "Taken down",
 }
 
 // ListingStatusLabel names a listing status.
@@ -648,14 +650,40 @@ type ChangePlanResult struct {
 // ---------------------------------------------------------------- team
 
 // TeamMember is one member of the organisation.
+// Status is ACTIVE, DISABLED or INVITED; INVITED rows are pending invitations (InvitationID set, UserID
+// "invite:<id>").
 type TeamMember struct {
-	UserID    string  `json:"userId"`
-	Name      string  `json:"name"`
-	Email     *string `json:"email"`
-	RoleKey   string  `json:"roleKey"`
-	RoleLabel string  `json:"roleLabel"`
-	Status    string  `json:"status"`
-	IsYou     bool    `json:"isYou"`
+	UserID       string     `json:"userId"`
+	Name         string     `json:"name"`
+	Email        *string    `json:"email"`
+	RoleKey      string     `json:"roleKey"`
+	RoleLabel    string     `json:"roleLabel"`
+	Status       string     `json:"status"`
+	IsYou        bool       `json:"isYou"`
+	InvitationID *string    `json:"invitationId,omitempty"`
+	JoinedAt     *time.Time `json:"joinedAt,omitempty"`
+	ExpiresAt    *time.Time `json:"expiresAt,omitempty"`
+}
+
+// InvitationPreview is what an invitation link is for (accept page, before signing in).
+type InvitationPreview struct {
+	OrgName   string    `json:"orgName"`
+	OrgKind   string    `json:"orgKind"`
+	Email     string    `json:"email"`
+	RoleKey   string    `json:"roleKey"`
+	RoleLabel string    `json:"roleLabel"`
+	Status    string    `json:"status"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// AcceptedInvitation is the outcome of accepting an invitation.
+type AcceptedInvitation struct {
+	OrgID         string `json:"orgId"`
+	OrgName       string `json:"orgName"`
+	OrgKind       string `json:"orgKind"`
+	RoleKey       string `json:"roleKey"`
+	RoleLabel     string `json:"roleLabel"`
+	AlreadyMember bool   `json:"alreadyMember"`
 }
 
 // TeamView is GET /v1/seller/team.
@@ -674,4 +702,68 @@ func IsRoleOf(kind, key string) bool {
 		}
 	}
 	return false
+}
+
+var (
+	stateRe = regexp.MustCompile(`^[A-Za-z]{2}$`)
+	zipRe   = regexp.MustCompile(`^\d{5}(-\d{4})?$`)
+)
+
+// ShipFromAddress is a saved ship-from address of the seller organisation (label form, rates).
+type ShipFromAddress struct {
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Name       string `json:"name"`
+	Company    string `json:"company"`
+	Phone      string `json:"phone"`
+	Line1      string `json:"line1"`
+	Line2      string `json:"line2"`
+	City       string `json:"city"`
+	State      string `json:"state"`
+	PostalCode string `json:"postalCode"`
+	Country    string `json:"country"`
+	IsDefault  bool   `json:"isDefault"`
+	Version    int64  `json:"version"`
+}
+
+// ShipFromInput creates or changes a ship-from address.
+type ShipFromInput struct {
+	Label       string `json:"label"`
+	Name        string `json:"name"`
+	Company     string `json:"company"`
+	Phone       string `json:"phone"`
+	Line1       string `json:"line1"`
+	Line2       string `json:"line2"`
+	City        string `json:"city"`
+	State       string `json:"state"`
+	PostalCode  string `json:"postalCode"`
+	Country     string `json:"country"`
+	MakeDefault bool   `json:"makeDefault"`
+	Version     *int64 `json:"version"`
+}
+
+// Validate applies the seller service's format rules so the form gets field errors before a round trip.
+func (in ShipFromInput) Validate() map[string]string {
+	errs := map[string]string{}
+	req := func(field, v string, max int) {
+		if n := len([]rune(strings.TrimSpace(v))); n == 0 || n > max {
+			errs[field] = "Required"
+		}
+	}
+	req("name", in.Name, 120)
+	req("line1", in.Line1, 120)
+	req("city", in.City, 80)
+	country := strings.ToUpper(strings.TrimSpace(in.Country))
+	if country == "" || country == "US" {
+		if !stateRe.MatchString(strings.TrimSpace(in.State)) {
+			errs["state"] = "Two-letter state"
+		}
+		if !zipRe.MatchString(strings.TrimSpace(in.PostalCode)) {
+			errs["postalCode"] = "5-digit ZIP"
+		}
+	} else {
+		req("state", in.State, 40)
+		req("postalCode", in.PostalCode, 12)
+	}
+	return errs
 }

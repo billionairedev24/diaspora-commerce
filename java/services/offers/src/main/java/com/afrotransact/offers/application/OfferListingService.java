@@ -14,6 +14,13 @@ public interface OfferListingService {
     /** Buy boxes of many variant ATINs (search cards, variant pickers, carts). */
     List<BuyBoxView> buyBoxes(List<String> atins, String currency);
 
+    /**
+     * One card summary per product page (search cards): the best variant winner (lowest landed price), the reasons it
+     * won, offer count and lowest prices across every variant. {@code atin} of each view is the product ATIN and
+     * {@code otherOffers} is empty.
+     */
+    List<BuyBoxView> productSummaries(List<String> productAtins, String currency);
+
     /** Buy boxes of every variant of a product page that has offers. */
     List<BuyBoxView> productBuyBoxes(String productAtin, String currency);
 

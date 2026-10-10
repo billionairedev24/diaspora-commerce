@@ -3,6 +3,7 @@ port: 8080
 docsEnabled: true
 databaseUrl: ""
 providers: [google-places, osm-nominatim, fixture]
+reverseProviders: [google-geocoding, osm-nominatim, fixture]
 nominatim:
   url: https://nominatim.openstreetmap.org
   userAgent: AfroTransact/1.0 (platform@afrotransact.com)

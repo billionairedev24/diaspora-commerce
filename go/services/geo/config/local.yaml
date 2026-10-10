@@ -3,6 +3,7 @@ port: 8205
 docsEnabled: true
 databaseUrl: postgres://geo:geo@localhost:5432/geo
 providers: [fixture, osm-nominatim]
+reverseProviders: [fixture, osm-nominatim]
 nominatim:
   url: https://nominatim.openstreetmap.org
   userAgent: AfroTransact/1.0 (platform@afrotransact.com)

@@ -22,6 +22,7 @@ import com.afrotransact.offers.application.OfferView;
 import com.afrotransact.offers.application.SellerPerformanceCommand;
 import com.afrotransact.offers.application.SellerStandingService;
 import com.afrotransact.offers.application.StockSyncService;
+import com.afrotransact.offers.application.StockUpdate;
 import com.afrotransact.offers.application.UpdateOfferCommand;
 import com.afrotransact.offers.domain.Fulfilment;
 import com.afrotransact.offers.domain.Ineligibility;
@@ -177,7 +178,8 @@ class OfferBuyBoxFlowIT extends OffersIntegrationTest {
     @Test
     void publicEndpointsAndApiReferencePagesAreServed() throws Exception {
         String variant = atin();
-        StubCatalog.live(atin(), variant, null, LAGOS);
+        String product = atin();
+        StubCatalog.live(product, variant, null, LAGOS);
         TestActors.as(TestActors.seller(LAGOS));
         offers.create(sellerOffer(variant, "HTTP-1", 1299, 0));
         TestActors.reset();
@@ -188,6 +190,8 @@ class OfferBuyBoxFlowIT extends OffersIntegrationTest {
         assertThat(box.body()).contains("\"buyBox\"", "\"otherOffers\"", "\"landedPriceMinor\":1299",
                 "\"fulfilment\":\"SELLER\"", "BUY_BOX_WINNER");
         assertThat(get(http, "/v1/public/buy-boxes?atins=" + variant + "," + atin()).body()).contains("\"items\"");
+        assertThat(get(http, "/v1/public/buy-boxes?by=product&atins=" + product).body())
+                .contains("\"atin\":\"" + product + "\"", "\"offerCount\":1", "\"minPriceMinor\":1299");
         for (String path : List.of("/v3/api-docs", "/swagger-ui.html", "/docs", "/redoc")) {
             assertThat(get(http, path).statusCode()).as(path).isEqualTo(200);
         }
@@ -197,6 +201,48 @@ class OfferBuyBoxFlowIT extends OffersIntegrationTest {
     private HttpResponse<String> get(HttpClient http, String path) throws Exception {
         return http.send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).build(),
                 HttpResponse.BodyHandlers.ofString());
+    }
+
+    @Test
+    void sellerStockUpdatesOnlyTheOwnersSellerFulfilledSku() {
+        String product = atin();
+        String variant = atin();
+        StubCatalog.live(product, variant, null, LAGOS);
+
+        TestActors.as(TestActors.seller(LAGOS));
+        OfferView mine = offers.create(sellerOffer(variant, "STK-1", 999, 0));
+        StockUpdate update = offers.setSellerStock("stk-1", 0, "DAMAGED", null);
+        assertThat(update.sku()).isEqualTo("STK-1");
+        assertThat(update.offerIds()).containsExactly(mine.offer().id());
+        assertThat(offers.get(mine.offer().id()).availableQty()).isZero();
+        assertThat(listing.offers(variant, "USD").winner()).as("out of stock: off the buy box").isNull();
+        assertThat(offers.setSellerStock("STK-1", 7, "FOUND", null).quantity()).isEqualTo(7);
+        assertThat(offers.setSellerStock("STK-1", 7, "FOUND", null).quantity()).as("idempotent").isEqualTo(7);
+        assertThat(listing.offers(variant, "USD").winner().view().availableQty()).isEqualTo(7);
+        assertThatThrownBy(() -> offers.setSellerStock("STK-1", -1, "OTHER", null))
+                .isInstanceOf(OfferRuleViolation.class);
+
+        TestActors.as(TestActors.seller(MAMATEE));
+        assertThatThrownBy(() -> offers.setSellerStock("STK-1", 1, "OTHER", null))
+                .as("another organisation's SKU is invisible").isInstanceOf(NotFoundException.class);
+        assertThatThrownBy(() -> offers.setSellerStock("STK-1", 1, "OTHER", LAGOS))
+                .as("sellers cannot name another organisation").isInstanceOf(NotFoundException.class);
+
+        TestActors.as(TestActors.seller(RETAIL_ORG));
+        offers.create(new CreateOfferCommand(variant, null, null, "FBA-STK", null, OfferCondition.NEW, 999, null,
+                "USD", 0, Fulfilment.AFROTRANSACT, null, 1, null));
+        assertThatThrownBy(() -> offers.setSellerStock("FBA-STK", 3, "OTHER", null))
+                .isInstanceOf(ConflictException.class);
+        TestActors.reset();
+
+        List<BuyBoxView> cards = listing.productSummaries(List.of(product, atin()), "USD");
+        assertThat(cards).hasSize(2);
+        assertThat(cards.getFirst().atin()).isEqualTo(product);
+        assertThat(cards.getFirst().offerCount()).isEqualTo(1);
+        assertThat(cards.getFirst().minPriceMinor()).isEqualTo(999);
+        assertThat(cards.getFirst().winner().view().offer().id()).isEqualTo(mine.offer().id());
+        assertThat(cards.get(1).winner()).isNull();
+        assertThat(cards.get(1).offerCount()).isZero();
     }
 
     private static CreateOfferCommand sellerOffer(String atin, String sku, long price, long shipping) {

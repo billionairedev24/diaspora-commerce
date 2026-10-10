@@ -20,14 +20,15 @@ type Handlers interface {
 
 type handlersImpl struct {
 	addresses app.AddressService
+	reverse   app.ReverseService
 	zones     app.ZoneService
 }
 
 var _ Handlers = (*handlersImpl)(nil)
 
 // New returns the HTTP handlers.
-func New(addresses app.AddressService, zones app.ZoneService) Handlers {
-	return &handlersImpl{addresses: addresses, zones: zones}
+func New(addresses app.AddressService, reverse app.ReverseService, zones app.ZoneService) Handlers {
+	return &handlersImpl{addresses: addresses, reverse: reverse, zones: zones}
 }
 
 // ZonesWrite is the permission needed to create or change zones.
@@ -38,6 +39,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux, public, authenticated func(h
 	mux.Handle("GET /v1/addresses/resolve/{id}", public(http.HandlerFunc(h.resolve)))
 	mux.Handle("POST /v1/addresses/validate", public(http.HandlerFunc(h.validate)))
 	mux.Handle("GET /v1/zip/{zip}", public(http.HandlerFunc(h.zip)))
+	mux.Handle("GET /v1/reverse", public(http.HandlerFunc(h.reverseGeocode)))
 	mux.Handle("GET /v1/zones/covering", public(http.HandlerFunc(h.covering)))
 	mux.Handle("GET /v1/zones", authenticated(http.HandlerFunc(h.listZones)))
 	mux.Handle("POST /v1/zones", authenticated(auth.Require(ZonesWrite, h.saveZone)))
@@ -86,6 +88,28 @@ func (h *handlersImpl) zip(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
+// reverseGeocode answers GET /v1/reverse?lat=&lng= (lon is accepted as an alias of lng).
+func (h *handlersImpl) reverseGeocode(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	lng := q.Get("lng")
+	if lng == "" {
+		lng = q.Get("lon")
+	}
+	lat, err1 := strconv.ParseFloat(q.Get("lat"), 64)
+	lon, err2 := strconv.ParseFloat(lng, 64)
+	if err1 != nil || err2 != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.invalid-point", "lat and lng are required numbers"))
+		return
+	}
+	a, err := h.reverse.Reverse(r.Context(), lat, lon)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	writeJSON(w, http.StatusOK, a)
+}
+
 func (h *handlersImpl) covering(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	lat, err1 := strconv.ParseFloat(q.Get("lat"), 64)
@@ -128,6 +152,8 @@ func (h *handlersImpl) saveZone(w http.ResponseWriter, r *http.Request) {
 
 func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, domain.ErrInvalidPoint):
+		problem.Write(w, r, &problem.Error{Status: http.StatusBadRequest, Code: "geo.invalid-point", Detail: "lat must be within ±90 and lng within ±180"})
 	case errors.Is(err, domain.ErrInvalidAddress), errors.Is(err, domain.ErrInvalidZone):
 		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "geo.invalid", Detail: err.Error()})
 	case errors.Is(err, app.ErrNotFound):

@@ -24,6 +24,7 @@ type Services struct {
 	Cart     app.CartService
 	Account  app.AccountService
 	Checkout app.CheckoutService
+	Careers  app.CareersService
 	// Seller Center & Provider Hub (contracts/openapi/gateway-bff-seller.yaml); routes are registered when set.
 	SellerShell     app.SellerShellService
 	SellerDashboard app.SellerDashboardService
@@ -32,6 +33,7 @@ type Services struct {
 	SellerMoney     app.SellerMoneyService
 	SellerTeam      app.SellerTeamService
 	ProviderHub     app.ProviderHubService
+	SellerShipFrom  app.SellerShipFromService
 }
 
 // Handlers registers the BFF API.
@@ -86,6 +88,8 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/search/suggestions", h.suggest)
 	route("GET /v1/products/{atin}", h.product)
 	route("POST /v1/products/{atin}/stock-alerts", lookup(h.stockAlert))
+	route("GET /v1/account/stock-alerts", h.stockAlerts)
+	route("DELETE /v1/account/stock-alerts/{atin}", h.removeStockAlert)
 	// Cart
 	route("GET /v1/cart", h.getCart)
 	route("POST /v1/cart/items", h.addToCart)
@@ -103,6 +107,7 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /login/oauth2/code/afrotransact", auth(h.callback)) // redirect URI registered for gateway-bff at identity
 	route("POST /v1/auth/sign-in", auth(h.signIn))
 	route("POST /v1/auth/mfa/verify", auth(h.verifyMfa))
+	route("POST /v1/auth/mfa/sms", auth(h.sendMfaCode))
 	route("POST /v1/auth/sign-up", auth(h.signUp))
 	route("POST /v1/auth/email-verification/verify", auth(h.verifyEmail))
 	route("POST /v1/auth/email-verification/resend", auth(h.resendEmail))
@@ -115,6 +120,8 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("PATCH /v1/account/addresses/{addressId}", h.updateAddress)
 	route("DELETE /v1/account/addresses/{addressId}", h.deleteAddress)
 	route("POST /v1/account/addresses/{addressId}/default", h.defaultAddress)
+	route("POST /v1/account/phone/verification", auth(h.startPhoneVerification))
+	route("POST /v1/account/phone/verification/confirm", auth(h.confirmPhoneVerification))
 	route("GET /v1/account/payment-methods", h.paymentMethods)
 	route("POST /v1/account/payment-methods/setup-intents", h.setupIntent)
 	route("DELETE /v1/account/payment-methods/{paymentMethodId}", h.deletePaymentMethod)
@@ -128,6 +135,8 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	// Careers
 	route("GET /v1/careers/jobs", h.jobs)
 	route("POST /v1/careers/jobs/{jobId}/applications", lookup(h.applyToJob))
+	route("POST /v1/careers/uploads", lookup(h.careersUpload))
+	route("POST /v1/careers/uploads/{assetId}/complete", lookup(h.careersUploadComplete))
 	// Seller Center & Provider Hub
 	h.registerSeller(route)
 }
@@ -220,6 +229,25 @@ func (h *handlersImpl) newsletter(w http.ResponseWriter, r *http.Request) {
 func (h *handlersImpl) jobs(w http.ResponseWriter, r *http.Request) {
 	jobs, err := h.s.Site.Jobs(r.Context())
 	h.reply(w, r, http.StatusOK, map[string]any{"jobs": jobs}, err)
+}
+
+func (h *handlersImpl) careersUpload(w http.ResponseWriter, r *http.Request) {
+	var b struct {
+		FileName    string `json:"fileName"`
+		ContentType string `json:"contentType"`
+		Size        int64  `json:"size"`
+	}
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Careers.ResumeUpload(r.Context(), callerFrom(r.Context()), b.FileName, b.ContentType, b.Size)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) careersUploadComplete(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Careers.CompleteResume(r.Context(), callerFrom(r.Context()), r.PathValue("assetId"))
+	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) applyToJob(w http.ResponseWriter, r *http.Request) {
@@ -360,6 +388,16 @@ func (h *handlersImpl) suggest(w http.ResponseWriter, r *http.Request) {
 func (h *handlersImpl) product(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Products.Detail(r.Context(), callerFrom(r.Context()), r.PathValue("atin"))
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) stockAlerts(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Products.StockAlerts(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v}, err)
+}
+
+func (h *handlersImpl) removeStockAlert(w http.ResponseWriter, r *http.Request) {
+	err := h.s.Products.RemoveStockAlert(r.Context(), callerFrom(r.Context()), r.PathValue("atin"))
+	h.reply(w, r, http.StatusNoContent, nil, err)
 }
 
 func (h *handlersImpl) stockAlert(w http.ResponseWriter, r *http.Request) {

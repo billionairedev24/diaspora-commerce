@@ -94,6 +94,19 @@ func (i *identityImpl) SignUp(ctx context.Context, req port.IdentitySignUp) erro
 	return err
 }
 
+func (i *identityImpl) StartPhoneVerification(ctx context.Context, bearer string) (port.PhoneCodeSent, error) {
+	var out port.PhoneCodeSent
+	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/phone/verification", Bearer: bearer}, &out)
+	return out, err
+}
+
+func (i *identityImpl) ConfirmPhoneVerification(ctx context.Context, bearer, code string) (port.PhoneVerification, error) {
+	var out port.PhoneVerification
+	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/phone/verification/confirm", Bearer: bearer,
+		JSON: map[string]string{"code": code}}, &out)
+	return out, err
+}
+
 func (i *identityImpl) VerifyEmail(ctx context.Context, email, code string) error {
 	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/accounts/verification",
 		JSON: map[string]string{"email": email, "code": code}}, nil)

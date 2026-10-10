@@ -88,7 +88,8 @@ func run() error {
 	up := cfg.Upstreams
 	// One client (and circuit breaker) per upstream, shared by the storefront and seller routes.
 	catalogClient, inventoryClient, identityClient := client("catalog", up.Catalog), client("inventory", up.Inventory), client("identity", up.Identity)
-	paymentsClient, ordersClient := client("payments", up.Payments), client("orders", up.Orders)
+	paymentsClient, ordersClient, offersClient := client("payments", up.Payments), client("orders", up.Orders), client("offers", up.Offers)
+	storefrontOffers := upstreams.NewStorefrontOffers(offersClient, cache, cfg.Cache.CatalogTTL)
 	search := upstreams.NewSearch(client("search", up.Search))
 	catalog := upstreams.NewCatalog(catalogClient, cache, cfg.Cache.CatalogTTL, cfg.Cache.ReferenceTTL)
 	inventory := upstreams.NewInventory(inventoryClient)
@@ -97,6 +98,10 @@ func run() error {
 	identity := upstreams.NewIdentity(identityClient, cache, upstreams.IdentityOptions{
 		ClientID: cfg.OIDC.ClientID, ClientSecret: cfg.OIDC.ClientSecret, ProvidersTTL: cfg.Cache.DefaultTTL})
 	content := upstreams.NewContent(client("content", up.Content), cache, cfg.Cache.DefaultTTL)
+	clientCreds := upstreams.IdentityOptions{ClientID: cfg.OIDC.ClientID, ClientSecret: cfg.OIDC.ClientSecret}
+	firstParty := upstreams.NewFirstParty(identityClient, clientCreds)
+	serviceTokens := upstreams.NewServiceTokens(identityClient, clientCreds)
+	media := upstreams.NewMedia(client("media", up.Media))
 	payments := upstreams.NewPayments(paymentsClient)
 	promise := upstreams.NewPromise(client("promise", up.Promise))
 	orders := upstreams.NewOrders(ordersClient)
@@ -104,10 +109,10 @@ func run() error {
 	sellerDeps := app.SellerDeps{
 		Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", up.Seller)),
 		Catalog: upstreams.NewSellerCatalog(catalogClient, cache, cfg.Cache.ReferenceTTL),
-		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(client("offers", up.Offers)),
-		Media: upstreams.NewMedia(client("media", up.Media)), Orders: upstreams.NewSellerOrders(ordersClient),
+		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(offersClient),
+		Media: media, Orders: upstreams.NewSellerOrders(ordersClient),
 		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient),
-		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings)),
+		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
 		Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log,
 	}
 	verifier := upstreams.NewTokenVerifier(cfg.OIDC.Issuer, cfg.OIDC.Audience, cfg.OIDC.ClientID,
@@ -126,22 +131,23 @@ func run() error {
 		IdleTTL: cfg.Session.IdleTTL, VerifyBearer: cfg.OIDC.VerifyBearer, Log: log})
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: cfg.Commerce.DefaultZip,
 		DefaultCity: cfg.Commerce.DefaultCity, DefaultState: cfg.Commerce.DefaultState, Log: log})
-	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Selection: store,
+	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store,
 		Sessions: sessions, Estimator: estimator, Log: log})
 	services := httpapi.Services{
 		Sessions: sessions,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
 			IdentityPublicURL: cfg.OIDC.PublicURL, ClientID: cfg.OIDC.ClientID, RedirectURI: cfg.OIDC.RedirectURI,
-			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, BFFPath: cfg.Web.BFFPath, Log: log}),
+			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, BFFPath: cfg.Web.BFFPath, FirstParty: firstParty, Log: log}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
-			Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
+			Offers: storefrontOffers, Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
 		Location: location,
-		Search:   app.NewSearchService(search, location, estimator, cfg.Market, nil),
-		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Promise: promise,
+		Search:   app.NewSearchService(search, storefrontOffers, location, estimator, cfg.Market, nil),
+		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Promise: promise, Offers: storefrontOffers,
 			Notifications: notifications, Location: location, Estimator: estimator, Sellers: sellers, Log: log}),
 		Cart:     carts,
 		Account:  app.NewAccountService(identity, geo, payments, orders),
 		Checkout: app.NewCheckoutService(carts, identity, payments, orders),
+		Careers:  app.NewCareersService(media, serviceTokens),
 		// Seller Center & Provider Hub
 		SellerShell:     app.NewSellerShellService(sellerDeps),
 		SellerDashboard: app.NewSellerDashboardService(sellerDeps),
@@ -150,6 +156,7 @@ func run() error {
 		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
 		SellerTeam:      app.NewSellerTeamService(sellerDeps),
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
+		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
 	}
 
 	openapi, err := gatewaybff.Files.ReadFile("api/openapi.yaml")

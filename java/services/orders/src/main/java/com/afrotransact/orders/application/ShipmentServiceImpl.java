@@ -64,7 +64,7 @@ class ShipmentServiceImpl implements ShipmentService {
     @Override
     @Transactional
     public ShipmentActionResult courierEvent(String shipmentId, CourierEventCommand cmd) {
-        Actor driver = access.driver();
+        String courier = access.courier(cmd.driverId());
         if (cmd.eventId() == null || cmd.eventId().isBlank()) {
             throw new OrdersRuleViolation("orders.event-id-required", "Courier events need an event id");
         }
@@ -72,7 +72,7 @@ class ShipmentServiceImpl implements ShipmentService {
         String reason = cmd.proof() != null && cmd.proof().failureReason() != null ? cmd.proof().failureReason()
                 : cmd.note();
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId, target,
-                (o, s) -> new TransitionActor(ActorKind.COURIER, driver.subject(), null), reason,
+                (o, s) -> new TransitionActor(ActorKind.COURIER, courier, null), reason,
                 TransitionSource.DRIVER, "driver:" + cmd.eventId().trim(), cmd.occurredAt(), cmd.proof(),
                 s -> proofs.check(s, target, cmd.proof())));
         return result(outcome);
@@ -99,7 +99,7 @@ class ShipmentServiceImpl implements ShipmentService {
     @Override
     @Transactional(readOnly = true)
     public DeliveryBrief deliveryBrief(String shipmentId) {
-        access.driver();
+        access.briefReader();
         String orderId = orders.orderIdOfShipment(shipmentId).orElseThrow(() -> notFound(shipmentId));
         Order order = orders.findById(orderId).orElseThrow(() -> notFound(shipmentId));
         Shipment s = order.shipment(shipmentId);
@@ -125,7 +125,8 @@ class ShipmentServiceImpl implements ShipmentService {
     /** Drivers and services get no order view back; others see what they may see. */
     private Viewer viewerFor(Order order) {
         Actor actor = access.current();
-        if (actor.type() == PrincipalType.DRIVER && !OrdersAccess.superAdmin(actor)) {
+        if (actor.type() == PrincipalType.DRIVER && !OrdersAccess.superAdmin(actor)
+                || actor.type() == PrincipalType.SERVICE && !actor.can(OrdersPermissions.READ)) {
             return null;
         }
         return access.viewerOf(order);

@@ -135,6 +135,15 @@ class JdbcOfferRepository implements OfferRepository {
     }
 
     @Override
+    public List<Offer> findOpenByProductAtins(Collection<String> productAtins) {
+        if (productAtins.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.sql(SELECT + " where product_atin in (:p) and" + OPEN + "order by created_at, id")
+                .param("p", List.copyOf(productAtins)).query(this::map).list();
+    }
+
+    @Override
     public Optional<Offer> findOpen(String sellerOrgId, String atin, OfferCondition condition) {
         return jdbc.sql(SELECT + " where seller_org = :org and atin = :atin and item_condition = :c and" + OPEN)
                 .param("org", sellerOrgId).param("atin", atin).param("c", condition.name())
@@ -145,6 +154,12 @@ class JdbcOfferRepository implements OfferRepository {
     public boolean sellerSkuTaken(String sellerOrgId, String sellerSku) {
         return jdbc.sql("select count(*) from offer where seller_org = :org and seller_sku = :sku and" + OPEN)
                 .param("org", sellerOrgId).param("sku", sellerSku).query(Long.class).single() > 0;
+    }
+
+    @Override
+    public List<Offer> findOpenBySellerSku(String sellerOrgId, String sellerSku) {
+        return jdbc.sql(SELECT + " where seller_org = :org and seller_sku = :sku and" + OPEN)
+                .param("org", sellerOrgId).param("sku", sellerSku).query(this::map).list();
     }
 
     @Override

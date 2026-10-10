@@ -44,6 +44,9 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
                             .build())
                     .build());
 
+    /** Change id of the coupon steps: histories recorded before them replay without coupons. */
+    static final String COUPONS_CHANGE = "coupons-v1";
+
     private CheckoutProgress progress;
     private Boolean authorized;
     private String paymentFailure;
@@ -55,8 +58,16 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
         boolean paymentMayExist = false;
         String paymentId = null;
         boolean reserved = false;
+        boolean couponMayExist = false;
+        OrderDraft beforeCoupon = null;
+        String redemptionId = null;
+        boolean coupons = input.hasCoupon()
+                && Workflow.getVersion(COUPONS_CHANGE, Workflow.DEFAULT_VERSION, 1) >= 1;
         try {
             CheckoutPlan plan = steps.prepare(input);
+            if (coupons) {
+                steps.validateCoupon(input, plan);
+            }
 
             progress = progress.at(CheckoutProgress.Phase.RESERVING);
             OrderDraft draft;
@@ -68,6 +79,17 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
             }
             reserved = draft.reserved();
             reservationMayExist = reserved;
+            if (coupons) {
+                beforeCoupon = draft;
+                try {
+                    couponMayExist = true;
+                    draft = steps.redeemCoupon(input, draft);
+                    redemptionId = draft.coupon() == null ? null : draft.coupon().redemptionId();
+                } catch (ActivityFailure e) {
+                    couponMayExist = !CheckoutCodes.COUPON_NOT_APPLICABLE.equals(code(e));
+                    throw e;
+                }
+            }
 
             progress = progress.at(CheckoutProgress.Phase.AUTHORIZING);
             PaymentRef payment;
@@ -85,11 +107,15 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
             Duration timeout = Duration.ofSeconds(Math.max(1, input.paymentTimeoutSeconds()));
             boolean decided = Workflow.await(timeout, () -> authorized != null);
             if (!decided) {
-                return fail(input, reservationMayExist, paymentMayExist, paymentId, CheckoutCodes.PAYMENT_TIMEOUT,
+                Undo undo = new Undo(reservationMayExist, paymentMayExist, paymentId, couponMayExist,
+                        beforeCoupon, redemptionId);
+                return fail(input, undo, CheckoutCodes.PAYMENT_TIMEOUT,
                         "The payment was not completed within " + timeout.toMinutes() + " minutes", List.of());
             }
             if (!authorized) {
-                return fail(input, reservationMayExist, paymentMayExist, paymentId, CheckoutCodes.PAYMENT_FAILED,
+                Undo undo = new Undo(reservationMayExist, paymentMayExist, paymentId, couponMayExist,
+                        beforeCoupon, redemptionId);
+                return fail(input, undo, CheckoutCodes.PAYMENT_FAILED,
                         paymentFailure == null ? "The payment failed" : paymentFailure, List.of());
             }
 
@@ -104,18 +130,27 @@ class CheckoutWorkflowImpl implements CheckoutWorkflow {
             }
             return progress;
         } catch (ActivityFailure e) {
-            return fail(input, reservationMayExist, paymentMayExist, paymentId, code(e), message(e), details(e));
+            Undo undo = new Undo(reservationMayExist, paymentMayExist, paymentId, couponMayExist, beforeCoupon,
+                    redemptionId);
+            return fail(input, undo, code(e), message(e), details(e));
         }
     }
 
-    private CheckoutProgress fail(CheckoutInput input, boolean releaseStock, boolean cancelPayment, String paymentId,
-                                  String code, String message, List<String> details) {
+    /** What may need undoing when the saga fails. */
+    private record Undo(boolean releaseStock, boolean cancelPayment, String paymentId, boolean releaseCoupon,
+                        OrderDraft beforeCoupon, String redemptionId) {
+    }
+
+    private CheckoutProgress fail(CheckoutInput input, Undo undo, String code, String message, List<String> details) {
         LOG.info("Checkout {} failed with {}: {}", input.orderNumber(), code, message);
         String reason = "Checkout failed: " + code;
-        if (cancelPayment) {
-            runCompensation(() -> compensations.cancelPayment(input.orderId(), paymentId, reason));
+        if (undo.cancelPayment()) {
+            runCompensation(() -> compensations.cancelPayment(input.orderId(), undo.paymentId(), reason));
         }
-        if (releaseStock) {
+        if (undo.releaseCoupon() && undo.beforeCoupon() != null) {
+            runCompensation(() -> compensations.releaseCoupon(input, undo.beforeCoupon(), undo.redemptionId()));
+        }
+        if (undo.releaseStock()) {
             runCompensation(() -> compensations.releaseReservation(input.orderId(), reason));
         }
         String stored = details.isEmpty() ? message : message + " (" + String.join(", ", details) + ")";

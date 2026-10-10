@@ -97,14 +97,18 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	promise := upstreams.NewPromise(client("promise", pending))
 	orders := upstreams.NewOrders(client("orders", pending))
 	notifications := upstreams.NewNotifications(client("notifications", pending))
+	offersClient := client("offers", pending)
+	storefrontOffers := upstreams.NewStorefrontOffers(offersClient, cache, time.Minute)
 	verifier := upstreams.NewTokenVerifier(base, "", u.ClientID, &http.Client{Timeout: 2 * time.Second})
 	identityClient := client("identity", base)
+	clientCreds := upstreams.IdentityOptions{ClientID: u.ClientID, ClientSecret: u.Secret, Now: clock.Now}
+	media := upstreams.NewMedia(client("media", base))
 	sellerDeps := app.SellerDeps{Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)),
 		Catalog: upstreams.NewSellerCatalog(client("catalog", base), cache, 10*time.Minute), Stock: upstreams.NewStock(client("inventory", base)),
-		Offers: upstreams.NewOffers(client("offers", pending)), Media: upstreams.NewMedia(client("media", base)),
+		Offers: upstreams.NewOffers(offersClient), Media: media,
 		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),
 		Payouts: upstreams.NewPayouts(client("payments", base)), Storefront: upstreams.NewStorefront(client("storefront", base)),
-		Bookings: upstreams.NewBookings(client("bookings", pending)), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
+		Bookings: upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
 		Clock: clock.Now, Log: log}
 
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
@@ -112,22 +116,23 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	sessions := app.NewSessionService(store, identity, verifier, app.SessionOptions{SigningKey: "test-signing-key-0123456789abcdef0123",
 		VerifyBearer: true, Clock: clock.Now, Log: log})
 	location := app.NewLocationService(geo, content, sessions, app.LocationOptions{DefaultZIP: "77042", DefaultCity: "Houston", DefaultState: "TX", Log: log})
-	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Selection: store, Sessions: sessions,
+	carts := app.NewCartService(app.CartDeps{Cart: cart, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Selection: store, Sessions: sessions,
 		Estimator: estimator, Clock: clock.Now, Log: log})
 	services := httpapi.Services{
 		Sessions: sessions,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
 			IdentityPublicURL: base, ClientID: u.ClientID, RedirectURI: RedirectURI, WebOrigin: WebOrigin, BFFPath: "/api/bff",
-			Clock: clock.Now, Log: log}),
-		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Location: location,
+			FirstParty: upstreams.NewFirstParty(identityClient, clientCreds), Clock: clock.Now, Log: log}),
+		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Location: location,
 			Estimator: estimator, Sellers: sellers, Market: "us", Clock: clock.Now, Log: log}),
 		Location: location,
-		Search:   app.NewSearchService(search, location, estimator, "us", clock.Now),
-		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Promise: promise, Notifications: notifications,
+		Search:   app.NewSearchService(search, storefrontOffers, location, estimator, "us", clock.Now),
+		Products: app.NewProductService(app.ProductDeps{Catalog: catalog, Inventory: inventory, Promise: promise, Notifications: notifications, Offers: storefrontOffers,
 			Location: location, Estimator: estimator, Sellers: sellers, Clock: clock.Now, Log: log}),
 		Cart:     carts,
 		Account:  app.NewAccountService(identity, geo, payments, orders),
 		Checkout: app.NewCheckoutService(carts, identity, payments, orders),
+		Careers:  app.NewCareersService(media, upstreams.NewServiceTokens(identityClient, clientCreds)),
 
 		SellerShell:     app.NewSellerShellService(sellerDeps),
 		SellerDashboard: app.NewSellerDashboardService(sellerDeps),
@@ -136,6 +141,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
 		SellerTeam:      app.NewSellerTeamService(sellerDeps),
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
+		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
 	}
 	mux := http.NewServeMux()
 	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin}, CookieName: "at_session",

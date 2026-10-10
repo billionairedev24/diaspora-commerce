@@ -11,6 +11,16 @@ import (
 const (
 	CodeNotApproved    = "NOT_APPROVED"
 	CodeNoOrganisation = "NO_ORGANISATION"
+	// Team & roles (identity's identity.* codes, S236).
+	CodeLastOwner         = "LAST_OWNER"
+	CodeInvalidRole       = "INVALID_ROLE"
+	CodeOwnerOnly         = "OWNER_ONLY"
+	CodeOwnRole           = "OWN_ROLE"
+	CodeAlreadyMember     = "ALREADY_MEMBER"
+	CodeInvitationExpired = "INVITATION_EXPIRED"
+	CodeInvitationUsed    = "INVITATION_USED"
+	CodeInvitationRevoked = "INVITATION_REVOKED"
+	CodeInvitationEmail   = "INVITATION_EMAIL_MISMATCH"
 )
 
 // Organisation kinds and portals.

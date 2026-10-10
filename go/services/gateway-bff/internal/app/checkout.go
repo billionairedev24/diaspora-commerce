@@ -114,6 +114,9 @@ func (s *checkoutServiceImpl) PlaceOrder(ctx context.Context, c *domain.Caller, 
 	if req.PaymentMethodID == "" && req.Wallet == "" {
 		errs["paymentMethodId"] = "Choose a payment method"
 	}
+	if len(strings.TrimSpace(req.CouponCode)) > 20 {
+		errs["couponCode"] = "Coupon codes have at most 20 characters"
+	}
 	if len(errs) > 0 {
 		return port.PlaceOrderResult{}, domain.ValidationProblem(errs)
 	}
@@ -128,7 +131,7 @@ func (s *checkoutServiceImpl) PlaceOrder(ctx context.Context, c *domain.Caller, 
 	var lines []port.OrderLine
 	for _, p := range pkgs {
 		for _, l := range p.Lines {
-			lines = append(lines, port.OrderLine{VariantATIN: l.OfferID, Quantity: l.Quantity, PackageID: p.PackageID})
+			lines = append(lines, port.OrderLine{VariantATIN: l.LineID, Quantity: l.Quantity, PackageID: p.PackageID})
 		}
 	}
 	if len(lines) == 0 {
@@ -147,6 +150,9 @@ func orderErr(err error) error {
 		return mapErr("orders", err)
 	}
 	switch {
+	case p.Code == "orders.coupon-not-applicable":
+		return domain.FieldProblem(domain.CodeValidationFailed, "Coupon can't be used", "couponCode",
+			firstNonEmpty(p.Detail, "This coupon can't be used on this order.")).WithCause(err)
 	case p.Status == http.StatusPaymentRequired:
 		return domain.NewProblem(http.StatusPaymentRequired, domain.CodePaymentDeclined, "Payment declined", firstNonEmpty(p.Detail, "Your payment was declined.")).WithCause(err)
 	case p.Status == http.StatusConflict && strings.Contains(p.Code, "idempotency"):

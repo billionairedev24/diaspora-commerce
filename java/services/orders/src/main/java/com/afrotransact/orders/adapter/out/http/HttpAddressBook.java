@@ -39,9 +39,14 @@ class HttpAddressBook implements AddressBook {
                         a.path("phone").asString(null), a.path("line1").asString(null), a.path("line2").asString(null),
                         a.path("city").asString(null), a.path("state").asString(null),
                         a.path("postalCode").asString(null), a.path("country").asString("US"),
-                        a.path("instructions").asString(null)));
+                        a.path("instructions").asString(null), number(a, "latitude"), number(a, "longitude")));
             }
         }
         return Optional.empty();
+    }
+
+    private static Double number(JsonNode a, String field) {
+        JsonNode n = a.path(field);
+        return n.isNumber() ? n.asDouble() : null;
     }
 }

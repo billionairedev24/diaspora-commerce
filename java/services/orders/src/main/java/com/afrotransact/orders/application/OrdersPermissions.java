@@ -13,6 +13,10 @@ public final class OrdersPermissions {
     public static final String FULFILMENT = "fulfilment:operate";
     /** Driver app (AfroTransact Delivery couriers). */
     public static final String DELIVERY = "delivery:operate";
+    /** fulfilment-service relaying driver events on behalf of a driver (queued courier events). */
+    public static final String RELAY = "delivery:relay";
+    /** Dispatch (staff or fulfilment-service): read delivery briefs to plan routes. */
+    public static final String DISPATCH = "delivery:dispatch";
 
     private OrdersPermissions() {
     }

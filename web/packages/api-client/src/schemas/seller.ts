@@ -237,9 +237,33 @@ export function toSellerAddress(f: ShipFromForm): SellerAddress {
   return { name: f.name, phone: f.phone || null, line1: f.line1, line2: f.line2 || null, city: f.city, state: f.state, postalCode: f.postalCode, country: 'US' };
 }
 
+/** A saved ship-from address of the organisation (seller service; the label form preselects the default). */
+export const ShipFromAddressSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  name: z.string(),
+  company: z.string(),
+  phone: z.string(),
+  line1: z.string(),
+  line2: z.string(),
+  city: z.string(),
+  state: z.string(),
+  postalCode: z.string(),
+  country: z.string(),
+  isDefault: z.boolean(),
+  version: z.number().int()
+});
+export type ShipFromAddress = z.infer<typeof ShipFromAddressSchema>;
+export const ShipFromListSchema = z.object({ items: z.array(ShipFromAddressSchema) });
+export type ShipFromInput = ShipFromForm & { label?: string; company?: string; country?: string; makeDefault?: boolean; version?: number | null };
+
+export function shipFromToForm(a: ShipFromAddress): ShipFromForm {
+  return { name: a.name, phone: a.phone, line1: a.line1, line2: a.line2, city: a.city, state: a.state, postalCode: a.postalCode };
+}
+
 /* ── Listings, builder, stock ──────────────────────────── */
 
-export const ListingStatusSchema = z.enum(['IN_REVIEW', 'PENDING_CATEGORY_APPROVAL', 'LIVE', 'REJECTED', 'PAUSED']);
+export const ListingStatusSchema = z.enum(['IN_REVIEW', 'PENDING_CATEGORY_APPROVAL', 'LIVE', 'REJECTED', 'PAUSED', 'TAKEN_DOWN']);
 export type ListingStatus = z.infer<typeof ListingStatusSchema>;
 export const ListingRowSchema = z.object({
   productId: z.string(),
@@ -508,10 +532,48 @@ export const TeamMemberSchema = z.object({
   email: nullableString,
   roleKey: z.string(),
   roleLabel: z.string(),
-  status: z.enum(['ACTIVE', 'INVITED']),
-  isYou: z.boolean()
+  /** INVITED rows are pending invitations (userId `invite:<invitationId>`). */
+  status: z.enum(['ACTIVE', 'DISABLED', 'INVITED']),
+  isYou: z.boolean(),
+  invitationId: z.string().optional(),
+  joinedAt: z.string().optional(),
+  expiresAt: z.string().optional()
 });
 export type TeamMember = z.infer<typeof TeamMemberSchema>;
+
+export const InvitationStatusSchema = z.enum(['PENDING', 'ACCEPTED', 'REVOKED', 'EXPIRED']);
+export const InvitationPreviewSchema = z.object({
+  orgName: z.string(),
+  orgKind: z.enum(['SELLER', 'PROVIDER']),
+  email: z.string(),
+  roleKey: z.string(),
+  roleLabel: z.string(),
+  status: InvitationStatusSchema,
+  expiresAt: z.string()
+});
+export type InvitationPreview = z.infer<typeof InvitationPreviewSchema>;
+export const AcceptedInvitationSchema = z.object({
+  orgId: z.string(),
+  orgName: z.string(),
+  orgKind: z.enum(['SELLER', 'PROVIDER']),
+  roleKey: z.string(),
+  roleLabel: z.string(),
+  alreadyMember: z.boolean()
+});
+export type AcceptedInvitation = z.infer<typeof AcceptedInvitationSchema>;
+
+/** Plain-language messages for the BFF's team problem codes (S236). */
+export const TEAM_ERROR_MESSAGES: Record<string, string> = {
+  LAST_OWNER: 'The organisation needs at least one owner. Make someone else an owner first.',
+  INVALID_ROLE: 'Choose a role of this organisation.',
+  OWNER_ONLY: 'Only an owner can do that.',
+  OWN_ROLE: 'You can’t change or remove your own role. Ask another owner.',
+  ALREADY_MEMBER: 'That person is already a member of this organisation.',
+  INVITATION_EXPIRED: 'This invitation has expired. Ask the organisation for a new one.',
+  INVITATION_USED: 'This invitation has already been used.',
+  INVITATION_REVOKED: 'This invitation was withdrawn.',
+  INVITATION_EMAIL_MISMATCH: 'This invitation was sent to a different email address. Sign in with that address.'
+};
 export const TeamViewSchema = z.object({ members: z.array(TeamMemberSchema), roles: z.array(RoleCardSchema), yourRoleKey: z.string(), canManage: z.boolean() });
 export type TeamView = z.infer<typeof TeamViewSchema>;
 export const InviteFormSchema = z.object({ email: z.string().trim().pipe(z.email('Enter a valid email address')), roleKey: z.string().min(1, 'Choose a role') });

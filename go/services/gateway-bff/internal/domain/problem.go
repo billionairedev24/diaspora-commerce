@@ -43,6 +43,7 @@ const (
 	CodeUpstreamUnavailable = "UPSTREAM_UNAVAILABLE"
 	CodeUpstreamError       = "UPSTREAM_ERROR"
 	CodeInternal            = "INTERNAL"
+	CodePhoneMissing        = "PHONE_MISSING"
 )
 
 // Problem is an RFC 9457 problem the HTTP adapter renders as application/problem+json.

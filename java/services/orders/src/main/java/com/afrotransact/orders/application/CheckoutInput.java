@@ -22,10 +22,17 @@ import com.afrotransact.orders.port.CartClient;
  * @param selections            delivery choice per package
  * @param paymentTimeoutSeconds how long to wait for the authorisation (reservation TTL)
  * @param requestedAt           request time
+ * @param couponCode            coupon to validate and redeem (null: none)
  */
 public record CheckoutInput(String orderId, String orderNumber, String customerId, String idempotencyKey,
                             String workflowId, String currency, ShipTo shipTo, List<CartClient.Item> items,
-                            List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt) {
+                            List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt,
+                            String couponCode) {
+
+    /** True when the shopper entered a coupon. */
+    public boolean hasCoupon() {
+        return couponCode != null && !couponCode.isBlank();
+    }
 
     /**
      * Delivery choice for one cart package ({@code <sellerOrgId>:<fulfilment>}).

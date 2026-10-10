@@ -19,6 +19,7 @@ import {
   type PublicPage,
   type SellerOrderDetail,
   type ServiceOffer,
+  type ShipFromAddress,
   type ShipmentStatus,
   type Subscription,
   type TeamMember
@@ -55,6 +56,8 @@ export interface MockSellerDb {
   policy: Required<CancellationPolicyInput>;
   earnings: EarningsRow[];
   pages: Record<string, PublicPage>;
+  /** Saved ship-from addresses per organisation (seller service /v1/orgs/{orgId}/ship-from-addresses). */
+  shipFrom: Record<string, ShipFromAddress[]>;
   seq: number;
 }
 
@@ -147,7 +150,7 @@ function seedListings(now: Date) {
       stock: variants.reduce((a, v) => a + v.quantity, 0),
       fulfilment: i % 4 === 0 ? ('AFROTRANSACT' as const) : ('SELLER' as const),
       status,
-      statusLabel: { LIVE: 'Live', IN_REVIEW: 'In review', PAUSED: 'Paused', REJECTED: 'Rejected', PENDING_CATEGORY_APPROVAL: 'Waiting for category approval' }[status],
+      statusLabel: { LIVE: 'Live', IN_REVIEW: 'In review', PAUSED: 'Paused', TAKEN_DOWN: 'Taken down', REJECTED: 'Rejected', PENDING_CATEGORY_APPROVAL: 'Waiting for category approval' }[status],
       moderationNote: status === 'REJECTED' ? 'Add the full ingredient list and allergens (FALCPA).' : null,
       imageUrl: null,
       updatedAt: iso(new Date(now.getTime() - i * DAY)),
@@ -351,7 +354,9 @@ function freshDb(now: Date): MockSellerDb {
         { userId: 'user-titilayo', name: 'Titilayo Adebayo', email: 'titilayo@adeskitchen.com', roleKey: 'seller.owner', roleLabel: 'Owner', status: 'ACTIVE', isYou: true },
         { userId: 'user-kemi', name: 'Kemi Ade', email: 'kemi@adeskitchen.com', roleKey: 'seller.fulfilment', roleLabel: 'Fulfilment', status: 'ACTIVE', isYou: false },
         { userId: 'user-bayo', name: 'Bayo Ojo', email: 'bayo@adeskitchen.com', roleKey: 'seller.finance', roleLabel: 'Finance', status: 'ACTIVE', isYou: false },
-        { userId: 'user-ife', name: 'Ife Bello', email: 'ife@adeskitchen.com', roleKey: 'seller.catalog', roleLabel: 'Catalog manager', status: 'ACTIVE', isYou: false }
+        { userId: 'user-ife', name: 'Ife Bello', email: 'ife@adeskitchen.com', roleKey: 'seller.catalog', roleLabel: 'Catalog manager', status: 'ACTIVE', isYou: false },
+        { userId: 'invite:6d0f3c52-1b7e-4b8a-9a51-0c2f4e7d9b11', name: 'tunde@adeskitchen.com', email: 'tunde@adeskitchen.com', roleKey: 'seller.fulfilment',
+          roleLabel: 'Fulfilment', status: 'INVITED', isYou: false, invitationId: '6d0f3c52-1b7e-4b8a-9a51-0c2f4e7d9b11', expiresAt: iso(new Date(now.getTime() + 5 * DAY)) }
       ],
       [PROVIDER_ORG]: [
         { userId: 'user-titilayo', name: 'Titilayo Adebayo', email: 'titilayo@adeskitchen.com', roleKey: 'provider.owner', roleLabel: 'Owner', status: 'ACTIVE', isYou: true },
@@ -377,6 +382,10 @@ function freshDb(now: Date): MockSellerDb {
     services: PROVIDER_SERVICES.map((s) => ({ ...s, currency: 'USD', active: true, takeHome: takeHome(s.priceMinor) })),
     policy: { kind: 'MODERATE', freeHours: 48, partialRefund: true, partialFromHours: 24, partialPercent: 50, noShow: 'DEPOSIT', rescheduleHours: 48, maxReschedules: 2 },
     earnings: [],
+    shipFrom: {
+      [SELLER_ORG]: [{ id: 'sfa-1', label: 'Warehouse', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '9800 Bissonnet St', line2: 'Unit 4',
+        city: 'Houston', state: 'TX', postalCode: '77036', country: 'US', isDefault: true, version: 0 }]
+    },
     pages: {
       [SELLER_ORG]: { kind: 'SELLER', slug: 'ades-kitchen', name: 'Ade’s Kitchen', tagline: 'Home-style Nigerian pantry, shipped from Houston', status: 'PUBLISHED',
         publishedAt: iso(new Date(now.getTime() - 30 * DAY)), primaryColor: '#0A8264', accentColor: '#FFD400', layout: 'CLASSIC', header: 'BAND', buttonShape: 'ROUNDED',

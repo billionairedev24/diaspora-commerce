@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"net/http"
-	"net/mail"
 	"slices"
 	"strings"
 	"sync"
@@ -20,13 +19,6 @@ type SellerMoneyService interface {
 	ChangePlan(ctx context.Context, c *domain.Caller, planCode, cadence string) (domain.ChangePlanResult, error)
 	MakeDefaultPaymentMethod(ctx context.Context, c *domain.Caller, id string) ([]domain.BillingPaymentMethod, error)
 	RemovePaymentMethod(ctx context.Context, c *domain.Caller, id string) ([]domain.BillingPaymentMethod, error)
-}
-
-// SellerTeamService serves Team & roles: members, capability cards, invitations and role changes.
-type SellerTeamService interface {
-	Team(ctx context.Context, c *domain.Caller) (domain.TeamView, error)
-	Invite(ctx context.Context, c *domain.Caller, email, roleKey string) (domain.TeamMember, error)
-	AssignRole(ctx context.Context, c *domain.Caller, userID, roleKey string) (domain.TeamView, error)
 }
 
 type sellerMoneyImpl struct{ r *orgResolver }
@@ -261,93 +253,4 @@ func (s *sellerMoneyImpl) RemovePaymentMethod(ctx context.Context, c *domain.Cal
 	return s.paymentMethodChange(ctx, c, func(bearer, orgID string) ([]port.SellerPaymentMethod, error) {
 		return s.r.d.Sellers.RemovePaymentMethod(ctx, bearer, orgID, id)
 	})
-}
-
-// ---------------------------------------------------------------- team
-
-type sellerTeamImpl struct{ r *orgResolver }
-
-var _ SellerTeamService = (*sellerTeamImpl)(nil)
-
-// NewSellerTeamService returns the SellerTeamService.
-func NewSellerTeamService(d SellerDeps) SellerTeamService { return &sellerTeamImpl{r: newResolver(d)} }
-
-func (s *sellerTeamImpl) view(ctx context.Context, c *domain.Caller, sc sellerCtx) (domain.TeamView, error) {
-	org, err := s.r.d.Sellers.Org(ctx, c.BearerToken, sc.org.ID)
-	if err != nil {
-		return domain.TeamView{}, mapErr("seller", err)
-	}
-	out := domain.TeamView{Members: []domain.TeamMember{}, Roles: domain.RoleCards(sc.kind(), sc.access.Matrix), YourRoleKey: sc.org.Role,
-		CanManage: domain.AtLeast(sc.access.Level("team"), domain.LevelEdit)}
-	for _, m := range org.Members {
-		mem := domain.TeamMember{UserID: m.UserID, RoleKey: m.RoleKey, RoleLabel: domain.RoleLabel(m.RoleKey), Status: "ACTIVE", IsYou: m.UserID == sc.member.ID}
-		if mem.IsYou {
-			mem.Name = strings.TrimSpace(sc.member.FirstName + " " + sc.member.LastName)
-			mem.Email = strPtr(sc.member.Email)
-		} else {
-			// The seller service lists members by id only; identity has no member directory for org admins yet.
-			short := m.UserID
-			if len(short) > 8 {
-				short = short[:8]
-			}
-			mem.Name = "Team member · " + short
-		}
-		out.Members = append(out.Members, mem)
-	}
-	return out, nil
-}
-
-func (s *sellerTeamImpl) Team(ctx context.Context, c *domain.Caller) (domain.TeamView, error) {
-	sc, err := s.r.require(ctx, c, "", "team", domain.LevelView)
-	if err != nil {
-		return domain.TeamView{}, err
-	}
-	return s.view(ctx, c, sc)
-}
-
-func (s *sellerTeamImpl) checkRole(sc sellerCtx, roleKey string) error {
-	if !domain.IsRoleOf(sc.kind(), roleKey) {
-		return domain.ValidationProblem(map[string]string{"roleKey": "Choose a role of this organisation"})
-	}
-	if isOwner(roleKey) && !isOwner(sc.org.Role) {
-		return domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Owner only", "Only the owner can make someone an owner.")
-	}
-	return nil
-}
-
-func (s *sellerTeamImpl) Invite(ctx context.Context, c *domain.Caller, email, roleKey string) (domain.TeamMember, error) {
-	if _, err := mail.ParseAddress(strings.TrimSpace(email)); err != nil || !strings.Contains(email, "@") {
-		return domain.TeamMember{}, domain.ValidationProblem(map[string]string{"email": "Enter a valid email address"})
-	}
-	sc, err := s.r.require(ctx, c, "", "team", domain.LevelEdit)
-	if err != nil {
-		return domain.TeamMember{}, err
-	}
-	if err := s.checkRole(sc, roleKey); err != nil {
-		return domain.TeamMember{}, err
-	}
-	inv, err := s.r.d.Orgs.Invite(ctx, c.BearerToken, sc.org.ID, strings.ToLower(strings.TrimSpace(email)), roleKey)
-	if err != nil {
-		return domain.TeamMember{}, mapErr("identity", err)
-	}
-	addr := firstNonEmpty(inv.Email, strings.ToLower(strings.TrimSpace(email)))
-	return domain.TeamMember{UserID: firstNonEmpty(inv.UserID, "invite:"+addr), Name: addr, Email: &addr, RoleKey: roleKey,
-		RoleLabel: domain.RoleLabel(roleKey), Status: "INVITED"}, nil
-}
-
-func (s *sellerTeamImpl) AssignRole(ctx context.Context, c *domain.Caller, userID, roleKey string) (domain.TeamView, error) {
-	sc, err := s.r.require(ctx, c, "", "team", domain.LevelEdit)
-	if err != nil {
-		return domain.TeamView{}, err
-	}
-	if err := s.checkRole(sc, roleKey); err != nil {
-		return domain.TeamView{}, err
-	}
-	if userID == sc.member.ID {
-		return domain.TeamView{}, domain.ValidationProblem(map[string]string{"roleKey": "You can't change your own role"})
-	}
-	if err := s.r.d.Orgs.SetMemberRole(ctx, c.BearerToken, sc.org.ID, userID, roleKey); err != nil {
-		return domain.TeamView{}, mapErr("identity", err)
-	}
-	return s.view(ctx, c, sc)
 }

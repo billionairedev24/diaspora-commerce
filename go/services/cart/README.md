@@ -10,6 +10,10 @@ Shopping carts for the storefront and app (via the BFF). Go 1.27.1 · Valkey/Red
 - **Live view.** Each view re-reads live offers (catalog `/v1/public/variants/{atin}`, cached 30 s) and stock:
   `priceChanged` when the price moved since the line was added, `lowStock` at ≤ 5 ("Only N left"), `unavailable`
   (excluded from checkout) when the product is no longer live or the stock can't cover the quantity.
+- **Offers.** Lines carry the chosen `offerId` (`POST /v1/cart/items {atin, offerId?, quantity}`); every view and
+  add validates it against offers `GET /v1/public/offers/{id}` (cached 15 s, `OFFERS_URL`). An offer that is not
+  buyable or belongs to another ATIN returns `409 cart.offer-not-buyable`; the offer's price drives `priceChanged`.
+  Adding the same ATIN with a different offer replaces the offer and resets the added price.
 - **Save for later**, move back to cart.
 - **Guests and customers.** Guest carts live in Valkey with a sliding 30-day TTL, keyed by `X-Guest-Cart` (issued by
   the service). Customer carts are durable in Postgres. `POST /v1/cart/merge` folds the guest cart into the
@@ -23,7 +27,7 @@ Contract: [`contracts/openapi/cart.yaml`](../../../contracts/openapi/cart.yaml).
 
 ## Configuration
 
-`DB_URL`, `REDIS_URL`, `CATALOG_URL`, `INVENTORY_URL`, `RETAIL_ORG_ID`, `GUEST_TTL_DAYS`, `AUTH_ENABLED`,
+`DB_URL`, `REDIS_URL`, `CATALOG_URL`, `INVENTORY_URL`, `OFFERS_URL`, `RETAIL_ORG_ID`, `GUEST_TTL_DAYS`, `AUTH_ENABLED`,
 `AUTH_ISSUER_URI`, `DOCS_ENABLED`.
 
 ## Run and test

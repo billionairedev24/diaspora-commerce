@@ -7,32 +7,31 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.offers.port.CatalogClient;
+import com.afrotransact.offers.port.ServiceTokenProvider;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
-import org.springframework.web.context.request.RequestAttributes;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 /**
  * catalog-service (port 8101) over HTTP. Variant lookups use the public, cacheable
- * {@code GET /v1/public/variants/{atin}}; GTIN lookups call {@code GET /v1/identifiers/gtin/{code}} with the caller's
- * bearer token relayed, then read the product page to find the variant carrying that GTIN. 404 means "no such live
+ * {@code GET /v1/public/variants/{atin}}; GTIN lookups call {@code GET /v1/identifiers/gtin/{code}} with offers'
+ * own client-credentials token ({@code offers-service}, scope {@code catalog:read}; the seller's token is never
+ * relayed), then read the product page to find the variant carrying that GTIN. 404 means "no such live
  * variant"; other failures raise {@link CatalogUnavailableException} (HTTP 503).
  */
 @Component
 class HttpCatalogClient implements CatalogClient {
 
     private final RestClient client;
+    private final ServiceTokenProvider tokens;
 
     HttpCatalogClient(RestClient.Builder builder, @Value("${at.offers.catalog.base-url}") String baseUrl,
-                      @Value("${at.offers.catalog.timeout:3s}") Duration timeout) {
+                      @Value("${at.offers.catalog.timeout:3s}") Duration timeout, ServiceTokenProvider tokens) {
+        this.tokens = tokens;
         HttpClient http = HttpClient.newBuilder().connectTimeout(timeout).build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(http);
         factory.setReadTimeout(timeout);
@@ -69,7 +68,7 @@ class HttpCatalogClient implements CatalogClient {
     @Override
     public Optional<CatalogVariant> liveVariantByGtin(String gtin) {
         GtinCheckJson check = get(() -> client.get().uri("/v1/identifiers/gtin/{code}", gtin)
-                .headers(HttpCatalogClient::relayBearer)
+                .headers(h -> h.setBearerAuth(tokens.token()))
                 .retrieve().body(GtinCheckJson.class));
         if (check == null || !check.valid() || check.existingAtin() == null) {
             return Optional.empty();
@@ -107,17 +106,6 @@ class HttpCatalogClient implements CatalogClient {
             i++;
         }
         return digits.substring(i);
-    }
-
-    private static void relayBearer(HttpHeaders headers) {
-        RequestAttributes attrs = RequestContextHolder.getRequestAttributes();
-        if (attrs instanceof ServletRequestAttributes servlet) {
-            HttpServletRequest request = servlet.getRequest();
-            String auth = request.getHeader(HttpHeaders.AUTHORIZATION);
-            if (auth != null && !auth.isBlank()) {
-                headers.set(HttpHeaders.AUTHORIZATION, auth);
-            }
-        }
     }
 
     @FunctionalInterface

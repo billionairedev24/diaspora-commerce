@@ -14,6 +14,24 @@ public interface CheckoutActivities {
     /** Validates the cart snapshot and address (eligible market), snapshots prices and computes tax. */
     CheckoutPlan prepare(CheckoutInput input);
 
+    /**
+     * Prices the shopper's coupon with offers-service before anything is reserved (estimated shipping); a coupon
+     * that does not apply fails the checkout with {@link CheckoutCodes#COUPON_NOT_APPLICABLE}.
+     */
+    void validateCoupon(CheckoutInput input, CheckoutPlan plan);
+
+    /**
+     * Redeems the coupon (Idempotency-Key = order id) on the reserved draft and applies the per-line and shipping
+     * discounts. Returns the discounted draft carrying the redemption.
+     */
+    OrderDraft redeemCoupon(CheckoutInput input, OrderDraft draft);
+
+    /**
+     * Compensation: releases the order's coupon redemption. Without a known redemption id the redeem is replayed with
+     * the same key and body to find it (nothing to release when it was never redeemed).
+     */
+    void releaseCoupon(CheckoutInput input, OrderDraft draft, String redemptionId);
+
     /** Reserves AfroTransact-fulfilled lines (all or nothing) and splits packages into shipments per node. */
     OrderDraft reserve(CheckoutInput input, CheckoutPlan plan);
 

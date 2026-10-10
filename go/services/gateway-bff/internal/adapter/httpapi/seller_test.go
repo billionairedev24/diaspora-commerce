@@ -99,7 +99,7 @@ func TestSellerContractConformance(t *testing.T) {
 	guest.onResponse = check
 	mustStatus(t, guest.do("GET", "/v1/seller/session", nil), 401)
 
-	_, b := sellerSetup(t, testkit.Options{SellerPending: true})
+	bff, b := sellerSetup(t, testkit.Options{SellerPending: true})
 	b.onResponse = check
 	orderPath := "/v1/seller/orders/AT-2026-000123/shipments/sh-1"
 	from := map[string]any{"name": "Ade's Kitchen", "line1": "1 Bellaire Blvd", "city": "Houston", "state": "TX", "postalCode": "77036", "country": "US"}
@@ -171,12 +171,50 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("DELETE", "/v1/seller/billing/payment-methods/aaaaaaaa-0000-0000-0000-000000000001", nil), 200)
 	// Team.
 	mustStatus(t, b.do("GET", "/v1/seller/team", nil), 200)
-	mustStatus(t, b.do("POST", "/v1/seller/team/invitations", map[string]any{"email": "kemi@example.com", "roleKey": "seller.fulfilment"}), 503)
+	invited := b.do("POST", "/v1/seller/team/invitations", map[string]any{"email": "kemi@example.com", "roleKey": "seller.fulfilment"})
+	mustStatus(t, invited, 201)
+	mustStatus(t, b.do("POST", "/v1/seller/team/invitations", map[string]any{"email": testkit.AlreadyMemberEmail, "roleKey": "seller.fulfilment"}), 409)
 	mustStatus(t, b.do("POST", "/v1/seller/team/invitations", map[string]any{"email": "nope", "roleKey": "seller.fulfilment"}), 422)
-	mustStatus(t, b.do("PUT", "/v1/seller/team/members/user-2-abcdef", map[string]any{"roleKey": "seller.catalog"}), 200)
-	mustStatus(t, b.do("PUT", "/v1/seller/team/members/user-2-abcdef", map[string]any{"roleKey": "provider.manager"}), 422)
+	mustStatus(t, b.do("PUT", "/v1/seller/team/members/"+testkit.TeamMemberID, map[string]any{"roleKey": "seller.catalog"}), 200)
+	mustStatus(t, b.do("PUT", "/v1/seller/team/members/"+testkit.TeamMemberID, map[string]any{"roleKey": "provider.manager"}), 422)
+	mustStatus(t, b.do("DELETE", "/v1/seller/team/invitations/"+invited.json(t)["invitationId"].(string), nil), 200)
+	mustStatus(t, b.do("DELETE", "/v1/seller/team/invitations/00000000-0000-4000-8000-000000000000", nil), 404)
+	mustStatus(t, b.do("DELETE", "/v1/seller/team/members/"+testkit.TeamMemberID, nil), 200)
+	mustStatus(t, b.do("POST", "/v1/seller/invitations/lookup", map[string]any{"token": testkit.InviteTokenValid}), 200)
+	mustStatus(t, b.do("POST", "/v1/seller/invitations/lookup", map[string]any{"token": "nope"}), 404)
+	mustStatus(t, b.do("POST", "/v1/seller/invitations/lookup", map[string]any{"token": ""}), 422)
+	mustStatus(t, b.do("POST", "/v1/seller/invitations/accept", map[string]any{"token": testkit.InviteTokenExpired}), 422)
+	mustStatus(t, b.do("POST", "/v1/seller/invitations/accept", map[string]any{"token": testkit.InviteTokenValid}), 200)
 	// Storefront (seller).
 	mustStatus(t, b.do("GET", "/v1/seller/storefront", nil), 200)
+	// Ship-from addresses live in the seller service (no more browser storage).
+	if r := b.do("GET", "/v1/seller/ship-from-addresses", nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 0 {
+		t.Fatalf("ship-from list = %d %s", r.status, r.body)
+	}
+	home := map[string]any{"label": "Houston", "name": "Ade Okafor", "line1": "4521 Main St", "city": "Houston", "state": "tx", "postalCode": "77002"}
+	first := b.do("POST", "/v1/seller/ship-from-addresses", home)
+	mustStatus(t, first, 201)
+	if a := first.json(t); a["isDefault"] != true || a["state"] != "TX" || a["country"] != "US" {
+		t.Fatalf("ship-from = %v", a)
+	}
+	home["postalCode"] = "7700"
+	mustStatus(t, b.do("POST", "/v1/seller/ship-from-addresses", home), 422)
+	home["postalCode"], home["label"] = "77494", "Katy"
+	second := b.do("POST", "/v1/seller/ship-from-addresses", home).json(t)
+	secondID := second["id"].(string)
+	home["version"] = 7
+	mustStatus(t, b.do("PUT", "/v1/seller/ship-from-addresses/"+secondID, home), 409)
+	home["version"] = 0
+	mustStatus(t, b.do("PUT", "/v1/seller/ship-from-addresses/"+secondID, home), 200)
+	if r := b.do("POST", "/v1/seller/ship-from-addresses/"+secondID+"/default", nil); r.status != 200 ||
+		r.json(t)["items"].([]any)[0].(map[string]any)["id"] != secondID {
+		t.Fatalf("default = %d %s", r.status, r.body)
+	}
+	if r := b.do("DELETE", "/v1/seller/ship-from-addresses/"+secondID, nil); r.status != 200 || len(r.json(t)["items"].([]any)) != 1 {
+		t.Fatalf("delete = %d %s", r.status, r.body)
+	}
+	mustStatus(t, b.do("DELETE", "/v1/seller/ship-from-addresses/nope", nil), 404)
+
 	// Provider Hub needs a provider organisation.
 	mustStatus(t, b.do("GET", "/v1/seller/bookings/requests", nil), 403)
 	mustStatus(t, b.do("PUT", "/v1/seller/session/active-org", map[string]any{"orgId": "nope"}), 403)
@@ -215,6 +253,14 @@ func TestSellerContractConformance(t *testing.T) {
 		t.Fatalf("provider fees = %v", fees)
 	}
 	mustStatus(t, b.do("GET", "/v1/seller/provider/earnings?from=bad", nil), 422)
+	// Provider routes map onto bookings' /v1/providers/{orgId}/… with the active organisation.
+	for _, call := range []string{"GET /v1/providers/" + testkit.ProviderOrgID + "/calendar", "GET /v1/providers/" + testkit.ProviderOrgID + "/bookings",
+		"GET /v1/providers/" + testkit.ProviderOrgID + "/settings", "PUT /v1/providers/" + testkit.ProviderOrgID + "/team/m-1/hours",
+		"GET /v1/providers/" + testkit.ProviderOrgID + "/earnings", "POST /v1/bookings/24018/confirm"} {
+		if bff.Upstreams.CallCount(call) == 0 {
+			t.Errorf("bookings was not called with %s", call)
+		}
+	}
 	mustStatus(t, b.do("GET", "/v1/seller/storefront", nil), 200)
 	mustStatus(t, b.do("PUT", "/v1/seller/storefront", map[string]any{"tagline": "Neat, long-lasting braids", "layout": "GALLERY_FIRST",
 		"social": []map[string]any{{"network": "instagram", "url": "https://instagram.com/adeskitchen"}, {"network": "tiktok", "url": "https://tiktok.com/@ama"}}}), 200)
@@ -225,7 +271,7 @@ func TestSellerContractConformance(t *testing.T) {
 		"updateShipmentStatus", "quoteShippingRates", "buyShippingLabel", "listListings", "setListingActive", "submitProduct", "getCategoryTree",
 		"getProductType", "checkGtin", "listCategoryRequests", "requestCategory", "requestUpload", "completeUpload", "getInventory", "adjustStock",
 		"getPayouts", "requestPayout", "getBilling", "changePlan", "makeDefaultPaymentMethod", "removePaymentMethod", "getTeam", "inviteMember",
-		"assignRole", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
+		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
 		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings", "getPublicPage", "savePublicPage", "publishPublicPage"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)

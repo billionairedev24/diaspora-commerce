@@ -24,9 +24,10 @@ public interface CartClient {
      *
      * @param fulfilment AFROTRANSACT (FBA or 1P stock in our FCs) or SELLER
      * @param sellerKind PLATFORM (AfroTransact Retail) or SELLER
+     * @param offerId    offers-service offer of the line (null for catalog-only lines); coupons price by offer
      */
     record Item(String variantAtin, String productAtin, String title, String imageUrl, String sellerOrgId,
                 String sellerName, String sellerKind, String fulfilment, long priceMinor, String currency,
-                int quantity, boolean unavailable) {
+                int quantity, boolean unavailable, String offerId) {
     }
 }

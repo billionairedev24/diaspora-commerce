@@ -100,6 +100,12 @@ components:
               promisedBy: {type: [string, 'null'], format: date}
               handoverRequired: {type: boolean, description: The customer must give the driver their 4-digit code}
               totalMinor: {type: integer, format: int64}
+              nodeId: {type: [string, 'null'], description: Fulfilment node of AfroTransact-fulfilled shipments (inventory reservation)}
+              perishable: {type: boolean, description: Frozen or chilled food (no safe place; handover code)}
+              shipToLine1: {type: [string, 'null'], description: Ship-to street line (AfroTransact Delivery routing)}
+              shipToLine2: {type: [string, 'null']}
+              lat: {type: [number, 'null'], description: Ship-to latitude when the address book knows it}
+              lng: {type: [number, 'null'], description: Ship-to longitude when the address book knows it}
               lines:
                 type: array
                 items:

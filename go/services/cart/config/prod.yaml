@@ -6,6 +6,7 @@ redisUrl: ""
 guestTtlDays: 30
 catalogUrl: http://catalog
 inventoryUrl: http://inventory
+offersUrl: http://offers
 retailOrgId: org_afrotransact_retail
 sellerNames: {}
 auth:

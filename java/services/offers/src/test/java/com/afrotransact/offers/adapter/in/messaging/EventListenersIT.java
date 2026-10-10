@@ -81,6 +81,21 @@ class EventListenersIT extends OffersIntegrationTest {
         catalogListener.onMessage(record("at.product.events", "catalog.product.paused", UUID.randomUUID(),
                 payload.replace("IN_REVIEW", "PAUSED")));
         assertThat(listing.offers(red, "USD").winner()).isNull();
+
+        catalogListener.onMessage(record("at.product.events", "catalog.product.resumed", UUID.randomUUID(),
+                payload.replace("IN_REVIEW", "LIVE")));
+        assertThat(listing.offers(red, "USD").winner()).isNotNull();
+        UUID takedown = UUID.randomUUID();
+        String takenDown = payload.replace("IN_REVIEW", "TAKEN_DOWN");
+        catalogListener.onMessage(record("at.product.events", "catalog.product.taken_down", takedown, takenDown));
+        assertThat(listing.offers(red, "USD").winner()).as("taken down: cannot win").isNull();
+        assertThat(listing.offers(red, "USD").offerCount()).as("taken down: not listed publicly").isZero();
+        assertThat(listing.productSummaries(List.of(product), "USD").getFirst().offerCount()).isZero();
+        catalogListener.onMessage(record("at.product.events", "catalog.product.reinstated", UUID.randomUUID(),
+                payload.replace("IN_REVIEW", "LIVE")));
+        assertThat(listing.offers(red, "USD").winner().view().offer().priceMinor()).isEqualTo(6499);
+        catalogListener.onMessage(record("at.product.events", "catalog.product.taken_down", takedown, takenDown));
+        assertThat(listing.offers(red, "USD").winner()).as("a redelivered takedown is ignored (inbox)").isNotNull();
         catalogListener.onMessage(record("at.product.events", "catalog.product.created", UUID.randomUUID(),
                 "{not json"));
     }

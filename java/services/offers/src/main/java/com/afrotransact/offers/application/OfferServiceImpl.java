@@ -2,6 +2,7 @@ package com.afrotransact.offers.application;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -31,6 +32,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 class OfferServiceImpl implements OfferService {
+
+    static final int MAX_SELLER_QUANTITY = 99_999;
 
     private final OfferRepository offers;
     private final CatalogClient catalog;
@@ -136,6 +139,42 @@ class OfferServiceImpl implements OfferService {
     @Transactional
     public OfferView withdraw(UUID id) {
         return change(id, o -> o.withdraw(Instant.now(clock)), OffersEvents.OFFER_WITHDRAWN);
+    }
+
+    @Override
+    @Transactional
+    public StockUpdate setSellerStock(String sellerSku, int quantity, String reason, String sellerOrgId) {
+        Actor actor = permissions.require(OffersPermissions.WRITE);
+        String org = sellerOrg(actor, sellerOrgId);
+        permissions.requireForOrg(OffersPermissions.WRITE, org);
+        if (quantity < 0 || quantity > MAX_SELLER_QUANTITY) {
+            throw new OfferRuleViolation("The quantity is not valid",
+                    Map.of("quantity", "Between 0 and " + MAX_SELLER_QUANTITY));
+        }
+        String sku = sellerSku == null ? "" : sellerSku.trim().toUpperCase(Locale.ROOT);
+        List<Offer> owned = sku.isEmpty() ? List.of() : offers.findOpenBySellerSku(org, sku);
+        if (owned.isEmpty()) {
+            throw new NotFoundException("offers.sku-not-found", "None of your open offers uses SKU " + sku);
+        }
+        if (owned.stream().anyMatch(o -> o.fulfilment() != Fulfilment.SELLER)) {
+            throw new ConflictException("offers.stock-managed-by-inventory", "SKU " + sku
+                    + " is Fulfilled by AfroTransact; its stock comes from the fulfilment centre");
+        }
+        Instant now = Instant.now(clock);
+        List<UUID> ids = new ArrayList<>();
+        for (Offer o : owned) {
+            ids.add(o.id());
+            if (o.sellerQuantity() == quantity) {
+                continue;
+            }
+            Offer.Terms t = o.terms();
+            Offer updated = offers.update(o.revise(new Offer.Terms(t.condition(), t.priceMinor(), t.listPriceMinor(),
+                    t.shippingMinor(), t.fulfilment(), quantity, t.handlingDays(), t.shipFrom(), t.inventorySku()),
+                    now));
+            publish(OffersEvents.OFFER_UPDATED, updated);
+            buyBox.recompute(List.of(updated.atin()), OffersEvents.OFFER_UPDATED);
+        }
+        return new StockUpdate(sku, quantity, reason, ids);
     }
 
     @Override

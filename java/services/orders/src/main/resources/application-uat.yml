@@ -24,6 +24,7 @@ at:
       promise-url: ${PROMISE_URL:http://promise}
       content-url: ${CONTENT_URL:http://content}
       catalog-url: ${CATALOG_URL:http://catalog}
+      offers-url: ${OFFERS_URL:http://offers}
 management:
   tracing:
     sampling:

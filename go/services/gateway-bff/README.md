@@ -58,22 +58,24 @@ served at `/openapi.yaml`, `/docs`, `/redoc`) and
 | `GET /v1/site-config` | content `GET /v1/site-config` + identity `GET /v1/identity-providers` | live |
 | `GET /v1/home` | content `GET /v1/placements/resolve` + search `/v1/search` + catalog/inventory (SKU rails) | live (default rails without content) |
 | `POST /v1/newsletter/subscriptions` | content `POST /v1/newsletter/subscriptions` | live |
-| `GET/PUT /v1/delivery-location` | geo `GET /v1/zip/{zip}` + content `GET /v1/markets/eligibility`; lat/lon → geo `GET /v1/reverse` | ZIP live; **coordinates pending (geo reverse geocoding)** |
+| `GET/PUT /v1/delivery-location` | geo `GET /v1/zip/{zip}` + content `GET /v1/markets/eligibility`; lat/lng → geo `GET /v1/reverse?lat=&lng=` (Google → Nominatim) | live |
 | `GET /v1/geo/address-suggestions` | geo autocomplete + resolve | live |
-| `GET /v1/search`, `/v1/search/suggestions` | search `/v1/search`, `/v1/suggest` | live |
-| `GET /v1/products/{atin}` | catalog public product/variant + categories, inventory availability, promise `POST /v1/promises` | live (promise pending → estimate) |
-| `POST /v1/products/{atin}/stock-alerts` | catalog (exists check) + notifications `POST /v1/stock-alerts` | **pending (notifications route)** |
-| cart: `GET /v1/cart`, items add/patch/delete, selection, save-for-later, move-to-cart, saved delete | cart service (+ catalog for offer resolution/enrichment, inventory for stock problems, Valkey for selection) | live |
+| `GET /v1/search`, `/v1/search/suggestions` | search `/v1/search`, `/v1/suggest`; card offer count and min price from one offers `GET /v1/public/buy-boxes?by=product` batch (≤ 50 ATINs) | live (offers down → cards without offer facts) |
+| `GET /v1/products/{atin}` | catalog public product/variant + categories; buy box and "Other sellers" from offers `GET /v1/public/products/{atin}/buy-boxes` + `GET /v1/public/offers?productAtin=`; inventory availability, promise `POST /v1/promises` | live (promise pending → estimate; no offers → catalog price fallback) |
+| `POST /v1/products/{atin}/stock-alerts`, `GET /v1/account/stock-alerts`, `DELETE /v1/account/stock-alerts/{atin}` | catalog (exists check, `productTitle`) + notifications `POST/GET /v1/stock-alerts`, `DELETE /v1/stock-alerts/{atin}` (shopper token; guests get 401) | live |
+| cart: `GET /v1/cart`, items add/patch/delete, selection, save-for-later, move-to-cart, saved delete | cart service (lines carry `offerId`; cart validates buyable/price via offers) + offers buy box for the default offer, catalog for enrichment, inventory for stock problems, Valkey for selection | live (`409 cart.offer-not-buyable`) |
 | `GET /v1/me` | identity `GET /v1/me` (fallback: ID-token profile), counts from identity addresses + payments | live |
 | `GET /v1/auth/login`, `/v1/auth/oidc/{provider}/authorize`, `/v1/auth/oidc/callback`, `POST /v1/auth/sign-out` | identity `/oauth2/authorize`, `/oauth2/token`, `/oauth2/revoke`, JWKS; cart merge | live |
-| `POST /v1/auth/sign-up`, `/email-verification/verify`, `/email-verification/resend` | identity `POST /v1/accounts`, `/v1/accounts/verification`, `/resend` | live (verify → `redirectTo` hosted login) |
-| `POST /v1/auth/sign-in`, `/mfa/verify`, `/passkey/options`, `/passkey/verify` | identity has no first-party JSON API (hosted pages only) | **503 after validation; use hosted login** |
+| `POST /v1/auth/sign-up`, `/email-verification/verify`, `/email-verification/resend` | identity `POST /v1/accounts`, `/v1/accounts/verification`, `/resend` | live (verify → `redirectTo` hosted login; with `invitationToken` no code: straight to sign-in) |
+| `POST /v1/auth/sign-in`, `/mfa/sms`, `/mfa/verify`, `/passkey/options`, `/passkey/verify` | identity `/v1/auth/password`, `/v1/auth/mfa/sms`, `/mfa/verify`, `/v1/auth/passkey/options`, `/verify` with a client-credentials token (`auth:first-party`); the `login_ticket` is redeemed at `/oauth2/authorize` (PKCE S256, redirect not followed) then `/oauth2/token`. Trusted device: HttpOnly `at_trusted_device` cookie, 30 days. Lockout 429 relays `Retry-After` | live |
 | `GET/POST /v1/account/addresses`, `PATCH/DELETE …/{id}`, `POST …/{id}/default` | identity `/v1/me/addresses…` + geo `POST /v1/addresses/validate` | live |
+| `POST /v1/account/phone/verification`, `…/confirm` | identity `POST /v1/me/phone/verification`, `…/confirm` (`GET /v1/me` carries the masked phone and `phoneVerified`) | live |
 | `GET /v1/account/payment-methods`, `POST …/setup-intents`, `DELETE …/{id}` | payments `/v1/customers/me/payment-methods`, `/setup-intents` | **pending (payments)** |
 | `GET /v1/account/orders`, `POST …/shipments/{id}/cancel`, `GET/POST /v1/account/returns` | orders `/v1/orders?customer=me`, `/v1/orders/{n}/shipments/{s}/cancel`, `/v1/returns` | **pending (orders)** |
 | `GET /v1/checkout/summary` | cart (selected lines) + identity addresses + payments | **pending (payments)**; tax shown as "calculated when you place your order" |
-| `POST /v1/checkout/orders` | orders `POST /v1/orders` (Idempotency-Key relayed) | **pending (orders)** |
+| `POST /v1/checkout/orders` | orders `POST /v1/orders` (Idempotency-Key relayed; optional `couponCode`, validated/redeemed/released by the orders saga) | wired; orders serves the route (`orders.coupon-not-applicable` → 422 field error) |
 | `GET /v1/careers/jobs`, `POST /v1/careers/jobs/{id}/applications` | content careers (open roles only; `resumeAssetId` required, `CAR-######` receipts) | live |
+| `POST /v1/careers/uploads`, `POST /v1/careers/uploads/{assetId}/complete` | media `POST /v1/uploads`, `POST /v1/assets/{id}/complete` (PDF ≤ 5 MB; guests use the BFF's client-credentials token; purpose `kyc-document` until media adds a résumé purpose) | live |
 
 ## Seller Center & Provider Hub endpoints → upstreams
 
@@ -88,7 +90,7 @@ members without `access:read` get the seeded default matrix). Before approval on
 | `PUT /v1/seller/session/active-org` | identity `PUT /v1/me/active-org` | live |
 | `GET /v1/seller/onboarding` | seller `GET /v1/applications/me` | live |
 | `GET /v1/seller/compliance` | seller `GET /v1/orgs/{orgId}/account-health` | live |
-| `GET /v1/seller/dashboard` | seller: orders `GET /v1/seller/analytics` (planned) + inventory `GET /v1/positions` + payments `GET /v1/payouts/balance` + account-health; provider: bookings `GET /v1/providers/me/analytics` (planned) | partial: charts from planned upstreams report `available=false` |
+| `GET /v1/seller/dashboard` | seller: orders `GET /v1/seller/analytics` (sales, orders, checkouts and conversion by day) + inventory `GET /v1/positions` + payments `GET /v1/payouts/balance` + account-health; provider: derived from bookings `GET /v1/providers/{orgId}/bookings` + `/earnings` | live (a failing upstream reports `available=false` for its chart) |
 | `GET /v1/seller/orders`, `GET /v1/seller/orders/{orderNumber}` | orders `GET /v1/seller/shipments`, `GET /v1/orders/{number}` | **pending (orders)** → 503 |
 | `POST …/shipments/{shipmentId}/status` | orders `POST /v1/shipments/{id}/transitions` (only `confirmed`, `packed`, `ready`) | **pending (orders)** |
 | `POST …/shipments/{shipmentId}/rates` | orders (ship-to) + carrier-gateway `POST /v1/rates` | **pending (orders)**; carrier live |
@@ -99,20 +101,18 @@ members without `access:read` get the seeded default matrix). Before approval on
 | `GET/POST /v1/seller/category-requests` | catalog `GET /v1/category-requests/mine`, `POST /v1/category-requests` | live |
 | `POST /v1/seller/uploads`, `POST /v1/seller/uploads/{assetId}/complete` | media `POST /v1/uploads`, `POST /v1/assets/{id}/complete` | live |
 | `GET /v1/seller/inventory` | inventory `GET /v1/positions?ownerOrg=` | live |
-| `POST /v1/seller/inventory/adjustments` | offers `PUT /v1/offers/stock/{sellerSku}` | **pending (offers)** → 503 |
+| `POST /v1/seller/inventory/adjustments` | offers `PUT /v1/offers/stock/{sellerSku}` (ownership check; AfroTransact-fulfilled SKUs → 409) | live |
+| `GET/POST /v1/seller/ship-from-addresses`, `PUT/DELETE …/{id}`, `POST …/{id}/default` | seller `/v1/orgs/{orgId}/ship-from-addresses` | live |
 | `GET/POST /v1/seller/payouts` | payments `GET /v1/payouts/balance`, `GET /v1/payouts/requests?orgId=` (history; 403 → `historyAvailable=false`), `POST /v1/payouts/requests` | live |
 | `GET /v1/seller/billing`, `POST …/billing/plan`, `POST …/payment-methods/{id}/default`, `DELETE …/payment-methods/{id}` | seller `GET /v1/orgs/{orgId}/billing`, `/billing/invoices`, `GET /v1/plans?kind=`, `POST /billing/plan`, payment-method routes (owner only) | live |
-| `GET /v1/seller/team`, `PUT …/team/members/{userId}` | seller `GET /v1/orgs/{id}` (members) + module matrix (capability cards); identity `PUT /v1/orgs/{orgId}/members/{userId}` | live (member names: see gaps) |
-| `POST /v1/seller/team/invitations` | identity `POST /v1/orgs/{orgId}/invitations` (planned) | **pending (identity)** → 503 |
-| `GET /v1/seller/bookings/calendar`, `…/requests`, `POST …/bookings/{id}/actions` | bookings `GET /v1/providers/me/calendar`, `GET /v1/providers/me/bookings?status=`, `POST /v1/bookings/{id}/{confirm\|decline\|propose\|complete\|no-show\|cancel}` | **pending (bookings)** → 503 |
-| `GET/PUT /v1/seller/provider/hours`, `GET/POST/PATCH …/services`, `GET/PUT …/cancellation-policy`, `GET …/earnings` | bookings `/v1/providers/me/availability`, `/services`, `/cancellation-policy`, `/earnings` | **pending (bookings)** → 503 |
+| `GET /v1/seller/team`, `PUT/DELETE …/team/members/{userId}`, `POST …/team/invitations`, `DELETE …/team/invitations/{id}` | identity `GET /v1/orgs/{orgId}/members` + `GET …/invitations` (INVITED rows), `POST …/invitations`, `DELETE …/invitations/{id}`, `PUT/DELETE …/members/{userId}`; module matrix (capability cards). Identity codes map to `LAST_OWNER`, `INVALID_ROLE` (422), `OWNER_ONLY`, `OWN_ROLE` (403), `ALREADY_MEMBER` (409) | live |
+| `POST /v1/seller/invitations/lookup` (public), `POST /v1/seller/invitations/accept` | identity `POST /v1/invitations/lookup`, `POST /v1/invitations/accept` (then `PUT /v1/me/active-org`); `INVITATION_EXPIRED/USED/REVOKED/EMAIL_MISMATCH` (422) | live |
+| `GET /v1/seller/bookings/calendar`, `…/requests`, `POST …/bookings/{id}/actions` | bookings `GET /v1/providers/{orgId}/calendar`, `GET /v1/providers/{orgId}/bookings?status=`, `POST /v1/providers/{orgId}/bookings/{id}/{action}` (active org from the session; default Idempotency-Key) | live |
+| `GET/PUT /v1/seller/provider/hours`, `GET/POST/PATCH …/services`, `GET/PUT …/cancellation-policy`, `GET …/earnings` | bookings `/v1/providers/{orgId}/hours`, `/overrides`, `/services` (+ activate/deactivate), `/policy`, `/earnings`, `/settings`, `/team` | live |
 | `GET/PUT /v1/seller/storefront`, `POST /v1/seller/storefront/publish` | storefront `GET/PUT /v1/storefronts/me/draft`, `POST /v1/storefronts/me/publish` | live |
 
-Upstream gaps found while building the seller routes: identity has no member directory for organisation admins
-(the team list shows names only for the signed-in member), no invitation endpoint, and the module matrix needs
-`access:read`; the seller service stores no ship-from address (the label form asks for it); payments lists payout
-history only for `payouts:approve`; orders has no seller analytics endpoint; offers (seller stock) and bookings
-provider endpoints are not served yet.
+Upstream gaps found while building the seller routes: the module matrix needs `access:read`; payments lists payout history only for `payouts:approve`. Ship-from addresses, seller analytics, seller stock and
+the bookings provider routes are now served upstream.
 
 ## Configuration
 

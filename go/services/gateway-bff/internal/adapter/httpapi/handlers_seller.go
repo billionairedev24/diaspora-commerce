@@ -27,6 +27,11 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/status", h.shipmentStatus)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/rates", h.shippingRates)
 	route("POST /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/labels", h.buyLabel)
+	route("GET /v1/seller/ship-from-addresses", h.shipFromList)
+	route("POST /v1/seller/ship-from-addresses", h.shipFromCreate)
+	route("PUT /v1/seller/ship-from-addresses/{addressId}", h.shipFromUpdate)
+	route("POST /v1/seller/ship-from-addresses/{addressId}/default", h.shipFromDefault)
+	route("DELETE /v1/seller/ship-from-addresses/{addressId}", h.shipFromDelete)
 	// Listings, builder, stock
 	route("GET /v1/seller/listings", h.listings)
 	route("POST /v1/seller/listings/{productId}/status", h.listingStatus)
@@ -51,6 +56,10 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("GET /v1/seller/team", h.team)
 	route("POST /v1/seller/team/invitations", h.invite)
 	route("PUT /v1/seller/team/members/{userId}", h.assignRole)
+	route("DELETE /v1/seller/team/members/{userId}", h.removeMember)
+	route("DELETE /v1/seller/team/invitations/{invitationId}", h.revokeInvitation)
+	route("POST /v1/seller/invitations/lookup", h.lookupInvitation)
+	route("POST /v1/seller/invitations/accept", h.acceptInvitation)
 	// Provider Hub
 	route("GET /v1/seller/bookings/calendar", h.calendar)
 	route("GET /v1/seller/bookings/requests", h.bookingRequests)
@@ -372,6 +381,40 @@ func (h *handlersImpl) assignRole(w http.ResponseWriter, r *http.Request) {
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
+func (h *handlersImpl) removeMember(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerTeam.RemoveMember(r.Context(), callerFrom(r.Context()), r.PathValue("userId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) revokeInvitation(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerTeam.RevokeInvitation(r.Context(), callerFrom(r.Context()), r.PathValue("invitationId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+type invitationTokenBody struct {
+	Token string `json:"token"`
+}
+
+func (h *handlersImpl) lookupInvitation(w http.ResponseWriter, r *http.Request) {
+	var b invitationTokenBody
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerTeam.LookupInvitation(r.Context(), b.Token)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) acceptInvitation(w http.ResponseWriter, r *http.Request) {
+	var b invitationTokenBody
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerTeam.AcceptInvitation(r.Context(), callerFrom(r.Context()), b.Token)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
 // ---------------------------------------------------------------- provider hub
 
 func (h *handlersImpl) calendar(w http.ResponseWriter, r *http.Request) {
@@ -478,4 +521,41 @@ func (h *handlersImpl) savePublicPage(w http.ResponseWriter, r *http.Request) {
 func (h *handlersImpl) publishPublicPage(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.ProviderHub.PublishPublicPage(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- ship-from addresses
+
+func (h *handlersImpl) shipFromList(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShipFrom.List(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v}, err)
+}
+
+func (h *handlersImpl) shipFromCreate(w http.ResponseWriter, r *http.Request) {
+	var b domain.ShipFromInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerShipFrom.Create(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) shipFromUpdate(w http.ResponseWriter, r *http.Request) {
+	var b domain.ShipFromInput
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerShipFrom.Update(r.Context(), callerFrom(r.Context()), r.PathValue("addressId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) shipFromDefault(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShipFrom.MakeDefault(r.Context(), callerFrom(r.Context()), r.PathValue("addressId"))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v}, err)
+}
+
+func (h *handlersImpl) shipFromDelete(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShipFrom.Delete(r.Context(), callerFrom(r.Context()), r.PathValue("addressId"))
+	h.reply(w, r, http.StatusOK, map[string]any{"items": v}, err)
 }

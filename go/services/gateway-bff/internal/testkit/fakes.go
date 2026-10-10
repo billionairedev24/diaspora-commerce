@@ -64,8 +64,9 @@ var categories = []map[string]string{
 }
 
 type cartLine struct {
-	atin string
-	qty  int
+	atin  string
+	qty   int
+	offer string
 }
 
 type fakeCart struct {
@@ -79,6 +80,10 @@ type Options struct {
 	Content  bool
 	Payments bool
 	Promise  bool
+	// Offers serves the offers service's public reads (buy boxes, other sellers, offer lookup).
+	Offers bool
+	// Notifications serves back-in-stock alerts.
+	Notifications bool
 	// SellerPending serves the seller-side routes of services still being built (orders, bookings) so their
 	// mapping can be tested; without it they answer 404 like a service that does not exist yet.
 	SellerPending bool
@@ -108,9 +113,18 @@ type Upstreams struct {
 	// MemberOrgs are the organisations of every signed-in member; ActiveOrgID is identity's active org.
 	MemberOrgs  []MemberOrg
 	ActiveOrgID string
+	// ServiceTokenRequests records the scopes of client-credentials token requests.
+	ServiceTokenRequests []string
+	// LastClientIP is the clientIp identity's first-party API last received.
+	LastClientIP string
+	tickets      map[string]string
 	// AccessDeniedMatrix makes identity's module matrix answer 403 (like for org members without access:read).
 	AccessDeniedMatrix bool
 	seller             *sellerState
+	// PhoneVerified is identity's phoneVerified for every account; LastSignUp is the last POST /v1/accounts body.
+	PhoneVerified bool
+	LastSignUp    map[string]any
+	team          *teamState
 }
 
 type issuedCode struct {
@@ -126,10 +140,12 @@ func NewUpstreams(o Options) *Upstreams {
 	u := &Upstreams{ClientID: "gateway-bff", Secret: "test-secret", products: defaultProducts(), carts: map[string]*fakeCart{},
 		codes: map[string]issuedCode{}, refresh: map[string]string{}, addresses: map[string][]map[string]any{}, key: key,
 		AccessTTL: 5 * time.Minute, Calls: map[string]int{}, opts: o, MemberOrgs: DefaultMemberOrgs(), ActiveOrgID: SellerOrgID,
-		AccessDeniedMatrix: true, seller: newSellerState()}
+		AccessDeniedMatrix: true, seller: newSellerState(), tickets: map[string]string{},
+		team: &teamState{removed: map[string]bool{}}}
 	mux := http.NewServeMux()
 	u.routes(mux)
 	u.sellerRoutes(mux)
+	u.firstPartyRoutes(mux)
 	u.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		u.Calls[r.Method+" "+r.URL.Path]++
@@ -292,6 +308,17 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 			problem(w, 404, "geo.not-found", "No matching address", nil)
 		}
 	})
+	mux.HandleFunc("GET /v1/reverse", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("lng") == "" {
+			problem(w, 400, "geo.invalid-point", "lat and lng are required numbers", nil)
+			return
+		}
+		if strings.HasPrefix(r.URL.Query().Get("lat"), "0.") {
+			problem(w, 404, "geo.not-found", "No matching address", nil)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "postalCode": "77042", "country": "US", "lat": 29.7376, "lon": -95.5134})
+	})
 	mux.HandleFunc("GET /v1/addresses/autocomplete", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"suggestions": []map[string]any{
 			{"id": "o:1", "text": "9800 Westheimer Rd, Houston, TX", "mainText": "9800 Westheimer Rd", "secondaryText": "Houston, TX 77042", "provider": "osm-nominatim"}}})
@@ -321,6 +348,12 @@ func (u *Upstreams) routes(mux *http.ServeMux) {
 		mux.HandleFunc("POST /v1/customers/me/setup-intents", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, 201, map[string]any{"clientSecret": "seti_123_secret_abc", "publishableKey": "pk_test_123"})
 		})
+	}
+	if u.opts.Offers {
+		u.offersRoutes(mux)
+	}
+	if u.opts.Notifications {
+		u.notificationsRoutes(mux)
 	}
 	if u.opts.Promise {
 		mux.HandleFunc("POST /v1/promises", func(w http.ResponseWriter, r *http.Request) {
@@ -454,7 +487,7 @@ func (u *Upstreams) view(c *fakeCart) map[string]any {
 		if p.OwnerKind == "PLATFORM" {
 			ff = "AFROTRANSACT"
 		}
-		return map[string]any{"variantAtin": v.ATIN, "productAtin": p.ATIN, "title": p.Title, "options": v.Options,
+		return map[string]any{"offerId": l.offer, "variantAtin": v.ATIN, "productAtin": p.ATIN, "title": p.Title, "options": v.Options,
 			"imageUrl": "https://img.example/" + p.ATIN + ".jpg", "sellerOrgId": p.SellerOrgID, "sellerName": p.SellerName,
 			"sellerKind": p.OwnerKind, "fulfilment": ff, "priceMinor": v.PriceMinor, "currency": "USD", "quantity": l.qty,
 			"available": v.Stock, "lowStock": v.Stock > 0 && v.Stock <= 5, "unavailable": v.Stock <= 0 || l.qty > v.Stock,
@@ -503,9 +536,14 @@ func (u *Upstreams) cartRoutes(mux *http.ServeMux) {
 		c := u.cartOf(u.owner(w, r))
 		var b struct {
 			VariantATIN string `json:"variantAtin"`
+			OfferID     string `json:"offerId"`
 			Quantity    int    `json:"quantity"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&b)
+		if b.OfferID == OfferPausedID {
+			problem(w, 409, "cart.offer-not-buyable", "this offer cannot be bought right now", nil)
+			return
+		}
 		_, v, ok := u.variant(b.VariantATIN)
 		if !ok {
 			problem(w, 409, "cart.not-sellable", "product is not available for sale", nil)
@@ -522,6 +560,7 @@ func (u *Upstreams) cartRoutes(mux *http.ServeMux) {
 				return
 			}
 			c.lines[i].qty += b.Quantity
+			c.lines[i].offer = b.OfferID
 		} else {
 			if b.Quantity > limit {
 				u.stock409(w, limit)
@@ -530,7 +569,7 @@ func (u *Upstreams) cartRoutes(mux *http.ServeMux) {
 			if j := idx(c.saved, b.VariantATIN); j >= 0 {
 				c.saved = slices.Delete(c.saved, j, j+1)
 			}
-			c.lines = append(c.lines, cartLine{atin: b.VariantATIN, qty: b.Quantity})
+			c.lines = append(c.lines, cartLine{atin: b.VariantATIN, qty: b.Quantity, offer: b.OfferID})
 		}
 		writeJSON(w, 200, u.view(c))
 	})
@@ -686,6 +725,9 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 		}
 		_ = r.ParseForm()
 		switch r.PostForm.Get("grant_type") {
+		case "client_credentials":
+			u.ServiceTokenRequests = append(u.ServiceTokenRequests, r.PostForm.Get("scope"))
+			writeJSON(w, 200, map[string]any{"access_token": "svc-" + r.PostForm.Get("scope"), "token_type": "Bearer", "expires_in": 300})
 		case "authorization_code":
 			c, ok := u.codes[r.PostForm.Get("code")]
 			delete(u.codes, r.PostForm.Get("code"))
@@ -724,8 +766,11 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 		u.mu.Lock()
 		orgs, active := u.memberOrgsJSON(), u.ActiveOrgID
 		u.mu.Unlock()
+		u.mu.Lock()
+		verified := u.PhoneVerified
+		u.mu.Unlock()
 		writeJSON(w, 200, map[string]any{"id": sub, "firstName": "Adaeze", "lastName": "Nwosu", "email": "adaeze@example.com", "roles": []string{"account.customer"},
-			"landing": "shop", "orgId": active, "orgs": orgs})
+			"landing": "shop", "orgId": active, "orgs": orgs, "phone": "+17135550142", "phoneVerified": verified})
 	})
 	mux.HandleFunc("GET /v1/identity-providers", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{{"id": "google", "displayName": "Google", "authorizationPath": "/oauth2/authorization/google"}})
@@ -733,6 +778,9 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/accounts", func(w http.ResponseWriter, r *http.Request) {
 		var b map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		u.LastSignUp = b
+		u.mu.Unlock()
 		if b["email"] == "taken@example.com" {
 			problem(w, 422, "identity.email-taken", "Email already registered", map[string]any{"fieldErrors": map[string]string{"email": "taken"}})
 			return

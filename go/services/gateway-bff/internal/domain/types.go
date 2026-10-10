@@ -1,6 +1,9 @@
 package domain
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Fulfilment and seller kinds.
 const (
@@ -278,6 +281,21 @@ type MeUser struct {
 	Email     string   `json:"email"`
 	Initials  string   `json:"initials"`
 	Roles     []string `json:"roles"`
+	// Phone is masked (•••• 0142); PhoneVerified is nil when identity's profile was unavailable.
+	Phone         *string `json:"phone,omitempty"`
+	PhoneVerified *bool   `json:"phoneVerified,omitempty"`
+}
+
+// PhoneCodeSent says where the phone verification code went.
+type PhoneCodeSent struct {
+	SentTo    string    `json:"sentTo"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// PhoneVerification is the account phone's verification state.
+type PhoneVerification struct {
+	PhoneVerified bool       `json:"phoneVerified"`
+	VerifiedAt    *time.Time `json:"verifiedAt,omitempty"`
 }
 
 // MeCounts are the account menu badges.
@@ -427,6 +445,8 @@ type PlaceOrderRequest struct {
 	Wallet             string            `json:"wallet,omitempty"`
 	Gift               bool              `json:"gift,omitempty"`
 	DeliverySelections []json.RawMessage `json:"deliverySelections"`
+	// CouponCode is validated and redeemed by orders with offers-service (released if the order fails).
+	CouponCode string `json:"couponCode,omitempty"`
 }
 
 // OrderConfirmationShipment is one shipment of a placed order.
@@ -445,4 +465,29 @@ type OrderConfirmation struct {
 	TotalMinor          int64                       `json:"totalMinor"`
 	Currency            string                      `json:"currency"`
 	Shipments           []OrderConfirmationShipment `json:"shipments"`
+}
+
+// StockAlertItem is one of the shopper's back-in-stock alerts (GET /v1/account/stock-alerts).
+type StockAlertItem struct {
+	ATIN         string     `json:"atin"`
+	ProductTitle string     `json:"productTitle"`
+	Status       string     `json:"status"` // active | notified
+	CreatedAt    time.Time  `json:"createdAt"`
+	NotifiedAt   *time.Time `json:"notifiedAt"`
+}
+
+// PasskeyOptions is the contract's PasskeyOptions (WebAuthn request options, base64url fields).
+type PasskeyOptions struct {
+	ChallengeID      string              `json:"challengeId"`
+	Challenge        string              `json:"challenge"`
+	RPID             string              `json:"rpId"`
+	Timeout          int                 `json:"timeout"`
+	UserVerification string              `json:"userVerification"`
+	AllowCredentials []PasskeyCredential `json:"allowCredentials"`
+}
+
+// PasskeyCredential is an allowed credential.
+type PasskeyCredential struct {
+	ID   string `json:"id"`
+	Type string `json:"type"`
 }

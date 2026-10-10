@@ -1,6 +1,6 @@
 'use client';
 
-import { type Job, JobApplicationFormSchema, WORK_AUTHORIZATION } from '@afrotransact/api-client';
+import { type Job, JobApplicationFormSchema, RESUME_CONTENT_TYPE, RESUME_MAX_BYTES, uploadResume, WORK_AUTHORIZATION } from '@afrotransact/api-client';
 import { AirplaneTilt, Button, CaretDown, CaretUp, Checkbox, GraduationCap, Heartbeat, Select, ShoppingBag, Skeleton, TextField } from '@afrotransact/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -16,8 +16,30 @@ import styles from './Careers.module.css';
 type ApplyErrors = Partial<Record<'name' | 'email' | 'linkedin' | 'workAuthorization' | 'resumeFileName' | 'consent', string>>;
 
 function ApplyForm({ job }: { job: Job }) {
-  const [form, setForm] = useState({ name: '', email: '', linkedin: '', workAuthorization: '', resumeFileName: '', consent: false });
+  const [form, setForm] = useState({ name: '', email: '', linkedin: '', workAuthorization: '', resumeFileName: '', resumeAssetId: '', consent: false });
   const [errors, setErrors] = useState<ApplyErrors>({});
+  const [upload, setUpload] = useState<'idle' | 'uploading' | 'done'>('idle');
+  // The résumé goes straight to the media service (signed upload); the application carries its asset id.
+  const attach = async (f: File | undefined) => {
+    setForm((x) => ({ ...x, resumeFileName: '', resumeAssetId: '' }));
+    setUpload('idle');
+    if (!f) return;
+    const isPdf = f.type === RESUME_CONTENT_TYPE || /\.pdf$/i.test(f.name);
+    if (!isPdf || f.size > RESUME_MAX_BYTES) {
+      setErrors((x) => ({ ...x, resumeFileName: t('careers.tooBig') }));
+      return;
+    }
+    setErrors((x) => ({ ...x, resumeFileName: undefined }));
+    setUpload('uploading');
+    try {
+      const asset = await uploadResume(browserApi(), f);
+      setForm((x) => ({ ...x, resumeFileName: f.name, resumeAssetId: asset.assetId }));
+      setUpload('done');
+    } catch {
+      setUpload('idle');
+      setErrors((x) => ({ ...x, resumeFileName: t('careers.uploadFailed') }));
+    }
+  };
   const m = useMutation({ mutationFn: (body: Parameters<ReturnType<typeof browserApi>['applyToJob']>[1]) => browserApi().applyToJob(job.id, body) });
   const set = (k: keyof typeof form, v: string | boolean) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -29,7 +51,7 @@ function ApplyForm({ job }: { job: Job }) {
     if (!parsed.success) {
       const fe: ApplyErrors = {};
       parsed.error.issues.forEach((i) => {
-        const k = i.path[0] as keyof ApplyErrors;
+        const k = (i.path[0] === 'resumeAssetId' ? 'resumeFileName' : i.path[0]) as keyof ApplyErrors;
         fe[k] ??= i.message;
       });
       setErrors(fe);
@@ -71,21 +93,14 @@ function ApplyForm({ job }: { job: Job }) {
         accept="application/pdf,.pdf"
         aria-invalid={errors.resumeFileName ? true : undefined}
         aria-describedby={`${job.id}-resume-err`}
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f && f.size > 5 * 1024 * 1024) {
-            set('resumeFileName', '');
-            setErrors((x) => ({ ...x, resumeFileName: t('careers.tooBig') }));
-            return;
-          }
-          set('resumeFileName', f?.name ?? '');
-        }}
+        aria-busy={upload === 'uploading' ? true : undefined}
+        onChange={(e) => void attach(e.target.files?.[0])}
       />
-      <p id={`${job.id}-resume-err`} className={styles.err} aria-live="polite">
-        {errors.resumeFileName}
+      <p id={`${job.id}-resume-err`} className={errors.resumeFileName ? styles.err : styles.small} aria-live="polite">
+        {errors.resumeFileName ?? (upload === 'uploading' ? t('careers.uploading') : upload === 'done' ? t('careers.uploaded', { file: form.resumeFileName }) : '')}
       </p>
       <Checkbox id={`${job.id}-consent`} label={t('careers.consent')} checked={form.consent} onChange={(e) => set('consent', e.target.checked)} error={errors.consent} />
-      <Button type="submit" loading={m.isPending} style={{ alignSelf: 'flex-start' }}>
+      <Button type="submit" loading={m.isPending} disabled={upload === 'uploading'} style={{ alignSelf: 'flex-start' }}>
         {t('careers.submit')}
       </Button>
       {m.isError && (

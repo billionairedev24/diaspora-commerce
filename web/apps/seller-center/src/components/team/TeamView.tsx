@@ -1,6 +1,6 @@
 'use client';
 
-import { InviteFormSchema, type RoleCard, sellerKeys, sellerQueries, type TeamMember } from '@afrotransact/api-client';
+import { InviteFormSchema, isApiError, type RoleCard, sellerKeys, sellerQueries, TEAM_ERROR_MESSAGES, type TeamMember } from '@afrotransact/api-client';
 import { Button, cx, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { CheckCircle, Eye, Prohibit } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { sellerApi } from '@/lib/api';
+import { shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 
 /** One card per role: what it can change, only view, and can't access. The member's own role is highlighted. */
@@ -53,7 +54,16 @@ export function RoleCards({ roles, yours }: { roles: RoleCard[]; yours: string }
   );
 }
 
-/** Team & roles: members, invite, assign role, and capability cards. */
+/** Team problem codes (identity, mapped by the BFF) → plain-language message; anything else → the problem's detail. */
+export function teamError(e: unknown): string {
+  const code = isApiError(e) ? e.code : undefined;
+  return (code && TEAM_ERROR_MESSAGES[code]) ?? problemMessage(e);
+}
+
+type Pending = { kind: 'remove' | 'revoke'; member: TeamMember } | null;
+
+/** Team & roles: identity's member directory with pending invitations (INVITED rows), invite / revoke, role changes,
+    removal, and capability cards. */
 export function TeamView() {
   const api = sellerApi();
   const qc = useQueryClient();
@@ -63,6 +73,7 @@ export function TeamView() {
   const [invite, setInvite] = useState(false);
   const [form, setForm] = useState({ email: '', roleKey: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [pending, setPending] = useState<Pending>(null);
   const roleOptions = useMemo(() => (q.data?.roles ?? []).map((r) => ({ value: r.key, label: r.label })), [q.data]);
   const inviteM = useMutation({
     mutationFn: () => api.inviteMember(form.email.trim(), form.roleKey),
@@ -71,7 +82,10 @@ export function TeamView() {
       void qc.invalidateQueries({ queryKey: sellerKeys.team(orgId) });
       toast.show(`Invitation sent to ${m.email ?? m.name}`);
     },
-    onError: (e) => setErrors({ email: problemMessage(e) })
+    onError: (e) => {
+      const code = isApiError(e) ? e.code : undefined;
+      setErrors(code === 'INVALID_ROLE' || code === 'OWNER_ONLY' ? { roleKey: teamError(e) } : { email: teamError(e) });
+    }
   });
   const assign = useMutation({
     mutationFn: (v: { userId: string; roleKey: string }) => api.assignRole(v.userId, v.roleKey),
@@ -79,17 +93,29 @@ export function TeamView() {
       qc.setQueryData(sellerKeys.team(orgId), t);
       toast.show('Role updated');
     },
-    onError: (e) => toast.show(problemMessage(e), 'error')
+    onError: (e) => {
+      toast.show(teamError(e), 'error');
+      void qc.invalidateQueries({ queryKey: sellerKeys.team(orgId) });
+    }
+  });
+  const removeM = useMutation({
+    mutationFn: (p: NonNullable<Pending>) => (p.kind === 'revoke' ? api.revokeInvitation(p.member.invitationId ?? '') : api.removeMember(p.member.userId)),
+    onSuccess: (t, p) => {
+      qc.setQueryData(sellerKeys.team(orgId), t);
+      setPending(null);
+      toast.show(p.kind === 'revoke' ? `Invitation to ${p.member.email ?? p.member.name} withdrawn` : `${p.member.name} was removed`);
+    },
+    onError: (e) => toast.show(teamError(e), 'error')
   });
   const canManage = q.data?.canManage ?? false;
   const columns = useMemo<ColumnDef<TeamMember>[]>(
     () => [
-      { id: 'name', header: 'Name', size: 26, cell: ({ row }) => <strong className="font-semibold">{row.original.name}{row.original.isYou ? <span className="font-normal text-muted"> (you)</span> : null}</strong> },
-      { id: 'email', header: 'Email', size: 28, cell: ({ row }) => row.original.email ?? '—' },
+      { id: 'name', header: 'Name', size: 24, cell: ({ row }) => <strong className="font-semibold">{row.original.name}{row.original.isYou ? <span className="font-normal text-muted"> (you)</span> : null}</strong> },
+      { id: 'email', header: 'Email', size: 24, cell: ({ row }) => row.original.email ?? '—' },
       {
-        id: 'role', header: 'Role', size: 30,
+        id: 'role', header: 'Role', size: 22,
         cell: ({ row }) =>
-          canManage && !row.original.isYou ? (
+          canManage && !row.original.isYou && row.original.status !== 'INVITED' ? (
             <label className="flex flex-col text-xs">
               <span className="at-visually-hidden">Role of {row.original.name}</span>
               <select
@@ -105,7 +131,31 @@ export function TeamView() {
             row.original.roleLabel
           )
       },
-      { id: 'status', header: 'Status', size: 16, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill> }
+      {
+        id: 'status', header: 'Status', size: 16,
+        cell: ({ row }) => (
+          <span className="flex flex-col gap-0.5">
+            <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill>
+            {row.original.status === 'INVITED' && row.original.expiresAt ? <span className="text-xs text-muted">Expires {shortDate(row.original.expiresAt)}</span> : null}
+          </span>
+        )
+      },
+      {
+        id: 'actions', header: () => <span className="at-visually-hidden">Actions</span>, size: 14,
+        cell: ({ row }) => {
+          const m = row.original;
+          if (!canManage || m.isYou) return null;
+          return m.status === 'INVITED' ? (
+            <Button variant="neutral" size="sm" onClick={() => setPending({ kind: 'revoke', member: m })} aria-label={`Withdraw the invitation to ${m.email ?? m.name}`}>
+              Withdraw
+            </Button>
+          ) : (
+            <Button variant="neutral" size="sm" onClick={() => setPending({ kind: 'remove', member: m })} aria-label={`Remove ${m.name}`}>
+              Remove
+            </Button>
+          );
+        }
+      }
     ],
     [canManage, assign, roleOptions]
   );
@@ -134,6 +184,23 @@ export function TeamView() {
           <Select label="Role" options={roleOptions} value={form.roleKey} error={errors.roleKey} onChange={(e) => setForm({ ...form, roleKey: e.target.value })} />
           <Button type="submit" loading={inviteM.isPending}>Send invitation</Button>
         </form>
+      </Dialog>
+      <Dialog
+        open={pending !== null}
+        onOpenChange={(open) => (open ? undefined : setPending(null))}
+        title={pending?.kind === 'revoke' ? 'Withdraw this invitation?' : `Remove ${pending?.member.name ?? 'this member'}?`}
+        description={
+          pending?.kind === 'revoke'
+            ? `The link sent to ${pending.member.email ?? pending.member.name} stops working. You can invite them again later.`
+            : 'They lose access to this organisation straight away. Their past work stays in the records.'
+        }
+      >
+        <div className="flex justify-end gap-2">
+          <Button variant="neutral" onClick={() => setPending(null)}>Cancel</Button>
+          <Button variant="dark" loading={removeM.isPending} onClick={() => pending && removeM.mutate(pending)}>
+            {pending?.kind === 'revoke' ? 'Withdraw invitation' : 'Remove member'}
+          </Button>
+        </div>
       </Dialog>
     </ModulePage>
   );

@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderLine;
+import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.domain.StatusChange;
 
@@ -27,19 +28,27 @@ public final class OrdersEventPayloads {
                     o.totals().grandTotalMinor(), o.placedAt(), o.shipTo() == null ? null : o.shipTo().city(),
                     o.shipTo() == null ? null : o.shipTo().state(), o.shipTo() == null ? null : o.shipTo().postalCode(),
                     o.shipTo() == null ? null : o.shipTo().country(),
-                    o.shipments().stream().map(ShipmentSummary::of).toList());
+                    o.shipments().stream().map(s -> ShipmentSummary.of(s, o.shipTo())).toList());
         }
     }
 
-    /** One shipment of a placed order. */
+    /**
+     * One shipment of a placed order. {@code nodeId} is the fulfilment node of AfroTransact-fulfilled shipments;
+     * the ship-to street line and position let fulfilment route AfroTransact Delivery stops (lat/lng null when
+     * the address has no known position).
+     */
     public record ShipmentSummary(String shipmentId, String sellerOrgId, String sellerName, String fulfilmentType,
                                   String deliveryMethod, String serviceLevel, LocalDate promisedBy,
-                                  boolean handoverRequired, long totalMinor, List<LineSummary> lines) {
+                                  boolean handoverRequired, long totalMinor, List<LineSummary> lines, String nodeId,
+                                  boolean perishable, String shipToLine1, String shipToLine2, Double lat,
+                                  Double lng) {
 
-        static ShipmentSummary of(Shipment s) {
+        static ShipmentSummary of(Shipment s, ShipTo to) {
             return new ShipmentSummary(s.id(), s.sellerOrgId(), s.sellerName(), s.fulfilmentType().name(),
                     s.deliveryMethod().name(), s.serviceLevel(), s.promisedBy(), s.handoverRequired(),
-                    s.totalMinor(), s.lines().stream().map(LineSummary::of).toList());
+                    s.totalMinor(), s.lines().stream().map(LineSummary::of).toList(), s.nodeId(), s.perishable(),
+                    to == null ? null : to.line1(), to == null ? null : to.line2(), to == null ? null : to.lat(),
+                    to == null ? null : to.lng());
         }
     }
 

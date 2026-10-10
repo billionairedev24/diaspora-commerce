@@ -79,7 +79,8 @@ class CheckoutServiceImpl implements CheckoutService {
         if (cmd.addressId() == null || cmd.addressId().isBlank()) {
             throw new OrdersRuleViolation("orders.address-required", "Choose a delivery address");
         }
-        String fingerprint = Fingerprint.of(cmd.addressId().trim() + "|" + cmd.selections() + "|" + cmd.lines());
+        String fingerprint = Fingerprint.of(cmd.addressId().trim() + "|" + cmd.selections() + "|" + cmd.lines()
+                + (cmd.couponCode() == null ? "" : "|" + cmd.couponCode()));
         Claimed claimed = claim(customer.subject(), key, fingerprint);
         CheckoutRequest request = claimed.request();
         boolean start = claimed.fresh()
@@ -149,7 +150,7 @@ class CheckoutServiceImpl implements CheckoutService {
         String currency = snapshot.currency() == null || snapshot.currency().isBlank() ? "USD" : snapshot.currency();
         return new CheckoutInput(request.orderId(), request.orderNumber(), request.customerId(),
                 request.idempotencyKey(), request.workflowId(), currency, shipTo, select(snapshot, cmd.lines()),
-                cmd.selections(), settings.paymentTimeout().toSeconds(), Instant.now(clock));
+                cmd.selections(), settings.paymentTimeout().toSeconds(), Instant.now(clock), cmd.couponCode());
     }
 
     /** Every available line, or the requested subset (quantities never above what is in the cart). */
@@ -172,7 +173,7 @@ class CheckoutServiceImpl implements CheckoutService {
             }
             out.add(new CartClient.Item(item.variantAtin(), item.productAtin(), item.title(), item.imageUrl(),
                     item.sellerOrgId(), item.sellerName(), item.sellerKind(), item.fulfilment(), item.priceMinor(),
-                    item.currency(), qty, item.unavailable()));
+                    item.currency(), qty, item.unavailable(), item.offerId()));
         }
         return out;
     }

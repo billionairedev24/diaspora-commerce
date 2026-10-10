@@ -1,6 +1,6 @@
 // Package upstreams implements the upstream ports over HTTP with the resilient httpclient. One file per service;
-// paths follow contracts/openapi/<service>.yaml, or the planned paths for services still being built (content,
-// payments, promise, orders, notifications, geo reverse geocoding).
+// paths follow contracts/openapi/<service>.yaml, or the planned paths for services still being built (payments,
+// promise, orders customer routes).
 package upstreams
 
 import (

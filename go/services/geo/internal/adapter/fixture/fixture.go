@@ -6,6 +6,7 @@ package fixture
 import (
 	"context"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -17,10 +18,41 @@ type fixtureImpl struct {
 	streets []domain.Address
 }
 
-var _ port.Autocompleter = (*fixtureImpl)(nil)
+// Provider is the fixture list as both an autocompleter and a reverse geocoder.
+type Provider interface {
+	port.Autocompleter
+	port.ReverseGeocoder
+}
 
-// New returns the fixture autocompleter seeded with diaspora-area streets from the design.
-func New() port.Autocompleter { return &fixtureImpl{streets: seed} }
+var _ Provider = (*fixtureImpl)(nil)
+
+// New returns the fixture provider seeded with diaspora-area streets from the design.
+func New() Provider { return &fixtureImpl{streets: seed} }
+
+// reverseRadiusKm is how far the nearest fixture street may be from the point to count as its address.
+const reverseRadiusKm = 25
+
+// Reverse returns the nearest fixture street within 25 km (offline deliver-to by location).
+func (f *fixtureImpl) Reverse(_ context.Context, lat, lon float64) (domain.Address, error) {
+	best, bestKm := -1, math.MaxFloat64
+	for i, a := range f.streets {
+		if d := haversineKm(lat, lon, a.Lat, a.Lon); d < bestKm {
+			best, bestKm = i, d
+		}
+	}
+	if best < 0 || bestKm > reverseRadiusKm {
+		return domain.Address{}, domain.ErrNoAddress
+	}
+	return f.streets[best], nil
+}
+
+func haversineKm(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthKm = 6371.0
+	rad := math.Pi / 180
+	dLat, dLon := (lat2-lat1)*rad, (lon2-lon1)*rad
+	h := math.Sin(dLat/2)*math.Sin(dLat/2) + math.Cos(lat1*rad)*math.Cos(lat2*rad)*math.Sin(dLon/2)*math.Sin(dLon/2)
+	return 2 * earthKm * math.Asin(math.Sqrt(h))
+}
 
 func (f *fixtureImpl) Name() string { return "fixture" }
 

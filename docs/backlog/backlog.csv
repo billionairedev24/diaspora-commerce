@@ -148,7 +148,7 @@
 "S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation
 - Ranking boosts in-stock and Fulfilled-by-AfroTransact items
 - A relevance test set runs in CI","E04","","Medium","5","search","search","To Do"
-"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","In Progress"
+"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","Done"
 "S040","Story","Offers service: create offer on existing product","Sellers attach price, stock and condition to an existing ATIN instead of duplicating the page.","- Offer created from catalog.product.created for the creating seller
 - Other sellers can add an offer by ATIN or GTIN
 - Offer price, handling time and fulfilment type are stored","E05","","Highest","5","offers java","offers","Done"
@@ -585,9 +585,9 @@
 - SBOMs attached to every image","E33","","High","3","quality security","quality","In Progress"
 "S202","Story","Encrypt TOTP secrets and MFA material at rest","TOTP seeds are currently stored in plain text in the identity database; encrypt them with an envelope key from the cloud KMS / secret store.","- TOTP secrets are encrypted with AES-GCM using a key from the secret store
 - Key rotation re-encrypts existing secrets without downtime
-- A database dump alone cannot generate valid codes","E02","","Highest","3","identity security","identity","In Progress"
+- A database dump alone cannot generate valid codes","E02","","Highest","3","identity security","identity","Done"
 "S203","Story","Passkey ceremony end-to-end test with a virtual authenticator","Prove passkey registration and sign-in complete end to end.","- Playwright test registers a passkey with Chromium's virtual authenticator and signs in with it
-- Removing the passkey prevents sign-in with it","E02","","High","3","identity e2e","identity","In Progress"
+- Removing the passkey prevents sign-in with it","E02","","High","3","identity e2e","identity","Done"
 "S204","Story","Confirm carrier sandbox integrations (USPS, UPS, FedEx, DHL)","Adapters were built against published API shapes; run them against each carrier's sandbox with real credentials and confirm webhook formats.","- Rates, label, void and tracking succeed against each carrier sandbox
 - FedEx and DHL webhook signature formats confirmed and tests updated
 - Zone charts replace the seed transit table","E11","","High","5","carriers","carriers","To Do"
@@ -608,15 +608,15 @@
 "S209","Story","First-party sign-in API for storefront forms","Identity exposes a first-party password, MFA and passkey sign-in API for the BFF so the storefront can keep its own two-column sign-in forms instead of hosted login.","- BFF can sign in with password and returns MFA challenge when required
 - Passkey assertion flow works via BFF
 - Brute-force protection and lockout apply
-- BFF callback URI registered for gateway-bff client in dev, uat and prod","E02","","High","8","identity bff","identity","In Progress"
+- BFF callback URI registered for gateway-bff client in dev, uat and prod","E02","","High","8","identity bff","identity","Done"
 "S210","Story","Reverse geocoding for deliver-to by location","Geo adds GET /v1/reverse (lat/lng to ZIP and address) via Google Places or Nominatim so the deliver-to picker can use the device location.","- GET /v1/reverse returns ZIP, city, state and country
 - Provider fallback Google then Nominatim
-- BFF deliver-to by coordinates uses it","E22","","Medium","3","geo","geo","In Progress"
+- BFF deliver-to by coordinates uses it","E22","","Medium","3","geo","geo","Done"
 "S211","Story","Back-in-stock alerts","Notifications offers POST /v1/stock-alerts and sends an email/push when inventory publishes a restock for the variant.","- Shopper can subscribe to a variant alert once
 - Alert fires on restock event and is sent once
 - BFF stock-alert route works end to end","E19","","Medium","3","notifications","notifications","Done"
 "S212","Story","Careers form uploads resume via media","The storefront careers form uploads the resume to the media service and sends resumeAssetId to the BFF.","- Resume uploads via signed media URL with type and size limits
-- Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","In Progress"
+- Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","Done"
 "S213","Story","Durable seller directory for the indexer","Indexer loads seller display names on startup from a seller endpoint instead of relying only on events seen since start.","- Seller exposes a paged org directory endpoint for service clients
 - Indexer warms its directory on start and refreshes on events
 - Restart does not change indexed seller names","E04","","Medium","3","indexer seller","search","To Do"
@@ -645,12 +645,12 @@
 "S222","Story","Storefront and cart use offers service","BFF product detail, search cards and add-to-cart use offers (buy box, other sellers, offer lookup); cart validates offer buyable; orders validates and redeems coupons.","- Product page buy box and Other sellers come from offers
 - Search cards show offer count and min price
 - Cart rejects non-buyable offers
-- Checkout validates, redeems and releases coupons idempotently","E05","","Highest","5","bff offers cart orders","offers","In Progress"
+- Checkout validates, redeems and releases coupons idempotently","E05","","Highest","5","bff offers cart orders","offers","Done"
 "S223","Story","Seller performance feed for the buy box","A seller-health job computes late shipment, cancellation and defect rates from orders and fulfilment events and updates offers' seller performance.","- Metrics computed daily per seller from order events
 - Offers seller performance updated via API
 - Buy box weights reviewed with product owner","E05","","Medium","5","offers orders","offers","Done"
 "S224","Story","GTIN lookup readable by service tokens","Catalog makes /v1/identifiers/gtin/{code} callable by service clients (offers) without requiring the seller to hold catalog:write.","- Service token with catalog:read can look up GTINs
-- Offers GTIN lookup works for sellers without catalog:write","E03","","Medium","1","catalog offers","catalog","In Progress"
+- Offers GTIN lookup works for sellers without catalog:write","E03","","Medium","1","catalog offers","catalog","Done"
 "S225","Story","Send purchase orders to suppliers (PDF, email, EDI)","Render a PO PDF, email it to the supplier contact via notifications, and transmit EDI 850 where the supplier is EDI-enabled; store ASN documents in media.","- PO PDF rendered with lines, terms and totals
 - Approved PO is emailed to the supplier contact
 - EDI suppliers receive an 850
@@ -667,7 +667,7 @@
 - Reinstating does not release unrelated compliance payout holds
 - Suspension hides catalog, offers, bookings and search listings via events
 - Catalog emits catalog.product.flagged and supports takedown of a live listing with reason
-- trust-ops moderation queue handles flagged live listings","E18","","High","8","trust-ops seller catalog","trust","In Progress"
+- trust-ops moderation queue handles flagged live listings","E18","","High","8","trust-ops seller catalog","trust","Done"
 "S229","Story","Claims resolve payment and ownership automatically","Orders exposes a service lookup of an order with its payment id, line ids and customer id so trust-ops verifies ownership and refunds without staff supplying ids; fulfilment publishes events for seller health.","- trust-ops verifies the claimant owns the order
 - Refund lines are derived from the order automatically
 - Seller health uses fulfilment ship-by events for lateness","E18","","Medium","5","trust-ops orders fulfilment","trust","To Do"
@@ -679,7 +679,7 @@
 - Offers supports PUT stock for seller-fulfilled SKUs
 - Identity lists org members with names and supports invitations
 - Seller service stores ship-from addresses
-- Payout history visible to seller.owner and seller.finance","E24","","High","8","seller-center bff orders identity","seller-center","In Progress"
+- Payout history visible to seller.owner and seller.finance","E24","","High","8","seller-center bff orders identity","seller-center","Done"
 "S232","Story","Booking reviews moderation and no-deposit balance flow","Reviews get moderation, provider replies and a public list; services without a deposit can still charge the balance off-session; notifications map booking.balance_unpaid.","- Reviews pass moderation before public display
 - Providers can reply once
 - Public review list per provider and service
@@ -688,7 +688,7 @@
 "S233","Story","Orders accepts relayed courier events and richer shipment data","Orders accepts courier events relayed by fulfilment-service (scope delivery:relay, driverId as actor); orders.order.placed carries per-shipment nodeId, perishable flag and ship-to street and position; dispatch can read delivery briefs; inventory offers pick confirmation.","- Queued proofs of delivery are accepted from fulfilment-service while the driver is offline
 - order placed events include nodeId, perishable, street and lat/lng per shipment
 - Dispatch role can read delivery briefs
-- 150 m proof-of-delivery check applies to all stops","E12","","High","5","orders fulfilment identity","delivery","In Progress"
+- 150 m proof-of-delivery check applies to all stops","E12","","High","5","orders fulfilment identity","delivery","Done"
 "S234","Story","Phone number verification","Identity verifies phone numbers by SMS code independently of MFA so notifications can text verified numbers.","- User can verify a phone with a 6-digit SMS code
 - phoneVerified is true after verification
 - Changing the phone resets verification","E02","","Medium","2","identity notifications","identity","Done"

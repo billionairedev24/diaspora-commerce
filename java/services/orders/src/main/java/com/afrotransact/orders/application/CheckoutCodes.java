@@ -14,6 +14,7 @@ public final class CheckoutCodes {
     public static final String PAYMENT_TIMEOUT = "orders.payment-timeout";
     public static final String RESERVATION_EXPIRED = "orders.reservation-expired";
     public static final String UPSTREAM_REJECTED = "orders.upstream-rejected";
+    public static final String COUPON_NOT_APPLICABLE = "orders.coupon-not-applicable";
     public static final String UPSTREAM_UNAVAILABLE = "orders.upstream-unavailable";
 
     private CheckoutCodes() {

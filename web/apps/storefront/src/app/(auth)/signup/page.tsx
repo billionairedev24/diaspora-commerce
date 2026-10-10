@@ -12,7 +12,7 @@ export default async function SignUpPage({ searchParams }: Props) {
   const d = await authPageData(searchParams);
   return (
     <AuthShell mode="signup">
-      <SignUpForm providers={d.providers} returnTo={d.returnTo} demo={d.demo} smsProgram={d.smsProgram} links={d.links} />
+      <SignUpForm providers={d.providers} returnTo={d.returnTo} demo={d.demo} smsProgram={d.smsProgram} links={d.links} invitation={d.invitation} invitedEmail={d.invitedEmail} />
     </AuthShell>
   );
 }

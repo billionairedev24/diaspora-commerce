@@ -19,6 +19,7 @@ class FakeCheckoutActivities implements CheckoutActivities {
     volatile String failPrepareWith;
     volatile String failReserveWith;
     volatile boolean reserved = true;
+    volatile String failCouponWith;
 
     int count(String name) {
         return calls.getOrDefault(name, new AtomicInteger()).get();
@@ -37,7 +38,7 @@ class FakeCheckoutActivities implements CheckoutActivities {
         return new CheckoutPlan("USD", List.of(new CheckoutPlan.Package("org_x:AFROTRANSACT", "org_x", "Seller X",
                 FulfilmentType.FBA_AFROTRANSACT, DeliveryMethod.CARRIER, "standard", null,
                 DeliveryPreferences.defaults(), 3, List.of(new CheckoutPlan.Line("line-1", 1, "ATIN-1", "P-1", "Item",
-                null, 2, 1250, 206, "groceries", false, "US-TX", 3)))));
+                null, 2, 1250, 206, "groceries", false, "US-TX", 3, "offer-1", 0)))));
     }
 
     @Override
@@ -52,7 +53,27 @@ class FakeCheckoutActivities implements CheckoutActivities {
                 input.shipTo(), reserved, List.of(new OrderDraft.DraftShipment("ship-1", 1, p.sellerOrgId(),
                 p.sellerName(), p.fulfilmentType(), "HOU-FC", p.method(), p.serviceLevel(), null, p.preferences(),
                 false, false, null, null, 599, LocalDate.now(), LocalDate.now().plusDays(3), p.lines())),
-                Instant.now());
+                Instant.now(), null);
+    }
+
+    @Override
+    public void validateCoupon(CheckoutInput input, CheckoutPlan plan) {
+        record("validateCoupon");
+        if (failCouponWith != null) {
+            throw ApplicationFailure.newNonRetryableFailure("Coupon not applicable", failCouponWith, "EXPIRED");
+        }
+    }
+
+    @Override
+    public OrderDraft redeemCoupon(CheckoutInput input, OrderDraft draft) {
+        record("redeemCoupon");
+        return draft.withCoupon(draft.shipments(), new OrderDraft.CouponRef(input.couponCode(), "red-1", 250, 0,
+                "PLATFORM", null));
+    }
+
+    @Override
+    public void releaseCoupon(CheckoutInput input, OrderDraft draft, String redemptionId) {
+        record("releaseCoupon:" + redemptionId);
     }
 
     @Override

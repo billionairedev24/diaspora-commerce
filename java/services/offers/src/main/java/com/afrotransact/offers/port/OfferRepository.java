@@ -25,9 +25,15 @@ public interface OfferRepository {
     /** Open offers on every variant of a product page. */
     List<Offer> findOpenByProductAtin(String productAtin);
 
+    /** Open offers on every variant of these product pages. */
+    List<Offer> findOpenByProductAtins(Collection<String> productAtins);
+
     Optional<Offer> findOpen(String sellerOrgId, String atin, OfferCondition condition);
 
     boolean sellerSkuTaken(String sellerOrgId, String sellerSku);
+
+    /** Open offers of a seller carrying this seller SKU (any fulfilment). */
+    List<Offer> findOpenBySellerSku(String sellerOrgId, String sellerSku);
 
     /** Open Fulfilled-by-AfroTransact offers of a seller whose stock is the given inventory SKU. */
     List<Offer> findOpenByInventorySku(String sellerOrgId, String inventorySku);

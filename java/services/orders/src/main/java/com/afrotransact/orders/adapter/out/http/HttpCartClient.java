@@ -48,7 +48,8 @@ class HttpCartClient implements CartClient {
                         l.path("sellerKind").asString(null),
                         text(l, "fulfilment", pkg.path("fulfilment").asString("SELLER")),
                         l.path("priceMinor").asLong(), l.path("currency").asString(currency),
-                        l.path("quantity").asInt(), l.path("unavailable").asBoolean(false)));
+                        l.path("quantity").asInt(), l.path("unavailable").asBoolean(false),
+                        l.path("offerId").asString(null)));
             }
         }
         return new Snapshot(currency, view.path("checkoutable").asBoolean(false), view.path("version").asLong(0),

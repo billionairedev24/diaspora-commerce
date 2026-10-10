@@ -14,7 +14,8 @@ coupons & promotions. Spring Boot 4.1 · Java 25 · PostgreSQL `offers` · local
   - `SELLER`: "Ships from seller". Quantity is declared on the offer, and a ship-from location is required.
 - **Attaching to the catalog.** An offer is created on an existing live variant by ATIN or GTIN through the
   `CatalogClient` port, whose HTTP adapter calls catalog's `GET /v1/public/variants/{atin}`. GTIN lookups use
-  `GET /v1/identifiers/gtin/{code}` with the caller's token relayed, then the product page. The seller org always
+  `GET /v1/identifiers/gtin/{code}` with offers' own client-credentials token (client `offers-service`, scope
+  `catalog:read`), then the product page. The seller org always
   comes from the token's `org` claim, and `PermissionChecker.requireForOrg` guards every change. There is one open
   offer per seller, ATIN and condition, and seller SKUs are unique among open offers.
   `catalog.product.created` also creates the creating seller's offers. They stay off sale until
@@ -65,7 +66,8 @@ so on. Winner changes are stored in `buy_box_decision` with the trigger and the 
 | GET | `/v1/sellers/{orgId}/standing` | `offers:read` (own org; staff any) |
 | PUT | `/v1/sellers/{orgId}/performance` | `offers:write`, staff / service (seller-health job) |
 | GET | `/v1/public/atins/{atin}/offers?currency=` | public: `buyBox` + reasons + `otherOffers` sorted by landed price, with badges |
-| GET | `/v1/public/buy-boxes?atins=A,B&currency=` | public, up to 50 ATINs (search cards, carts) |
+| GET | `/v1/public/buy-boxes?atins=A,B&currency=&by=variant\|product` | public, up to 50 ATINs. `by=product` takes product ATINs (search hits) and returns per product the best variant winner, `offerCount` and lowest prices |
+| PUT | `/v1/offers/stock/{sellerSku}` | `offers:write`; the SKU must belong to an open seller-fulfilled offer of the caller's org (else 404 `offers.sku-not-found`); AfroTransact-fulfilled stock is owned by inventory (409 `offers.stock-managed-by-inventory`). Recomputes the buy box |
 | GET | `/v1/public/products/{productAtin}/buy-boxes` | public: every variant of a product page |
 | GET | `/v1/public/offers/{offerId}` | public: one offer plus `buyable`, for adding a non-buy-box offer to the cart |
 | GET | `/v1/public/coupons/clippable?atin=` | public: clip-to-apply coupons covering the ATIN |
@@ -109,7 +111,7 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 | Direction | Topic | Events |
 |---|---|---|
 | publishes (outbox) | `at.offers.events` | `offers.offer.created\|updated\|withdrawn` (key ATIN), `offers.buybox.changed` (key ATIN), `offers.coupon.created\|updated\|redeemed\|released` (key coupon id) |
-| consumes | `at.product.events` | `catalog.product.created\|approved\|rejected\|paused\|resumed` |
+| consumes | `at.product.events` | `catalog.product.created\|approved\|rejected\|paused\|resumed\|taken_down\|reinstated` (takedown hides every offer of the product until reinstated) |
 | consumes | `at.inventory.events` | `inventory.availability.changed` (projection per sku × node; older versions ignored) |
 | consumes | `at.seller-compliance.events` | `seller.listings.hidden\|restored` |
 | consumes | `at.seller-org.events` | `seller.org.approved\|updated` (display name) |
@@ -125,6 +127,7 @@ Consumers de-duplicate on `event-id` with the platform inbox. See
 | `KAFKA_BOOTSTRAP`, `KAFKA_GROUP` | Kafka outbox relay and consumers (group `offers-service`) |
 | `AUTH_ISSUER_URI` | identity service issuer (JWT validation) |
 | `CATALOG_URL`, `CATALOG_TIMEOUT` | catalog-service base URL (local `http://localhost:8101`, cluster `http://catalog:8080`) |
+| `OFFERS_CLIENT_ID`, `OFFERS_CLIENT_SECRET` | client credentials for catalog GTIN lookups (`offers-service`, scope `catalog:read`; `at.offers.oauth.*`) |
 | `RETAIL_ORG_ID` | organisation id of AfroTransact Retail (seller kind `PLATFORM`) |
 | `CONSUMERS_ENABLED` | turn the Kafka listeners off |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACE_SAMPLING` | tracing |

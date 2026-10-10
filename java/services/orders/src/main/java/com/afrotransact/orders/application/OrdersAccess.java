@@ -3,6 +3,7 @@ package com.afrotransact.orders.application;
 import com.afrotransact.orders.domain.ActorKind;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderStatus;
+import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.domain.TransitionActor;
 import com.afrotransact.platform.security.Actor;
@@ -45,6 +46,31 @@ class OrdersAccess {
             throw new ForbiddenActionException("orders.driver-only", "Courier events come from the driver app");
         }
         return actor;
+    }
+
+    /**
+     * The courier of a driver-app event: the driver themself (delivery:operate), or the driver named by
+     * fulfilment-service when it relays queued events (SERVICE principal with delivery:relay).
+     */
+    String courier(String relayedDriverId) {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(OrdersPermissions.RELAY)) {
+            if (relayedDriverId == null || relayedDriverId.isBlank()) {
+                throw new OrdersRuleViolation("orders.driver-id-required",
+                        "Relayed courier events must name the driver (driverId)");
+            }
+            return relayedDriverId.trim();
+        }
+        return driver().subject();
+    }
+
+    /** Delivery briefs: drivers (delivery:operate) and dispatch (delivery:dispatch). */
+    Actor briefReader() {
+        Actor actor = actors.current();
+        if (actor.can(OrdersPermissions.DISPATCH) || superAdmin(actor)) {
+            return actor;
+        }
+        return driver();
     }
 
     /** Staff (or a service) with orders:read. */

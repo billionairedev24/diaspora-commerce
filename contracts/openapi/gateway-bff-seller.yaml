@@ -235,6 +235,99 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/ship-from-addresses:
+    get:
+      tags: [Orders]
+      operationId: listShipFromAddresses
+      security: [{sessionCookie: []}]
+      summary: The organisation's ship-from addresses, default first (label form)
+      description: seller `GET /v1/orgs/{orgId}/ship-from-addresses` for the active organisation (Orders view).
+      responses:
+        '200':
+          description: Addresses
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/ShipFromAddress'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Orders]
+      operationId: createShipFromAddress
+      security: [{sessionCookie: []}]
+      summary: Add a ship-from address (the first one becomes the default)
+      description: seller `POST /v1/orgs/{orgId}/ship-from-addresses` (Orders edit; at most 20 per organisation).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ShipFromInput'}}}
+      responses:
+        '201': {description: Added, content: {application/json: {schema: {$ref: '#/components/schemas/ShipFromAddress'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/ship-from-addresses/{addressId}:
+    parameters:
+      - {name: addressId, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [Orders]
+      operationId: updateShipFromAddress
+      security: [{sessionCookie: []}]
+      summary: Change a ship-from address
+      description: Optimistic — send the `version` you edited; 409 `CONFLICT` when someone changed it meanwhile.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ShipFromInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/ShipFromAddress'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+    delete:
+      tags: [Orders]
+      operationId: deleteShipFromAddress
+      security: [{sessionCookie: []}]
+      summary: Delete a ship-from address; returns the rest (a new default is chosen when needed)
+      responses:
+        '200':
+          description: Remaining addresses
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/ShipFromAddress'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/seller/ship-from-addresses/{addressId}/default:
+    post:
+      tags: [Orders]
+      operationId: defaultShipFromAddress
+      security: [{sessionCookie: []}]
+      summary: Make an address the default
+      parameters:
+        - {name: addressId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Every address, default first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/ShipFromAddress'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── listings
   /v1/seller/listings:
     get:
@@ -531,7 +624,10 @@ paths:
       operationId: getTeam
       security: [{sessionCookie: []}]
       summary: Members with their roles plus one capability card per role (what it can change, view, can't access)
-      description: seller `GET /v1/orgs/{id}` (members) + identity module matrix for the portal (default matrix as fallback).
+      description: >-
+        identity `GET /v1/orgs/{orgId}/members` (names, emails, roles, join dates) plus, for members who can manage the
+        team, pending invitations from `GET /v1/orgs/{orgId}/invitations` as INVITED rows; identity module matrix for the
+        capability cards (default matrix as fallback).
       responses:
         '200': {description: Team, content: {application/json: {schema: {$ref: '#/components/schemas/TeamView'}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -544,12 +640,15 @@ paths:
       operationId: inviteMember
       security: [{sessionCookie: []}]
       summary: Invite a member by email with a role
-      description: identity `POST /v1/orgs/{orgId}/invitations` (planned — identity has no invitation endpoint yet).
+      description: >-
+        identity `POST /v1/orgs/{orgId}/invitations`; identity emails a single-use link (7 days). Inviting the same email
+        again replaces the open invitation. 409 ALREADY_MEMBER when the email belongs to a member; 403 OWNER_ONLY when a
+        non-owner invites an owner; 422 INVALID_ROLE.
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/InviteRequest'}}}
       responses:
-        '201': {description: Invited member, content: {application/json: {schema: {$ref: '#/components/schemas/TeamMember'}}}}
+        '201': {description: Invited member (an INVITED row), content: {application/json: {schema: {$ref: '#/components/schemas/TeamMember'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
@@ -562,7 +661,9 @@ paths:
       operationId: assignRole
       security: [{sessionCookie: []}]
       summary: Change a member's role
-      description: identity `PUT /v1/orgs/{orgId}/members/{userId}`.
+      description: >-
+        identity `PUT /v1/orgs/{orgId}/members/{userId}`. 403 OWN_ROLE for your own role, OWNER_ONLY when a non-owner
+        grants or changes the owner role; 422 LAST_OWNER when the last owner would be demoted, INVALID_ROLE.
       parameters: [{name: userId, in: path, required: true, schema: {type: string}}]
       requestBody:
         required: true
@@ -571,6 +672,74 @@ paths:
         '200': {description: Team, content: {application/json: {schema: {$ref: '#/components/schemas/TeamView'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Team]
+      operationId: removeMember
+      security: [{sessionCookie: []}]
+      summary: Remove a member from the organisation
+      description: >-
+        identity `DELETE /v1/orgs/{orgId}/members/{userId}`. 422 LAST_OWNER for the last owner; 403 OWNER_ONLY when a
+        non-owner removes an owner.
+      parameters: [{name: userId, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Team, content: {application/json: {schema: {$ref: '#/components/schemas/TeamView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/team/invitations/{invitationId}:
+    delete:
+      tags: [Team]
+      operationId: revokeInvitation
+      security: [{sessionCookie: []}]
+      summary: Revoke a pending invitation
+      description: identity `DELETE /v1/orgs/{orgId}/invitations/{invitationId}`; the link stops working.
+      parameters: [{name: invitationId, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Team, content: {application/json: {schema: {$ref: '#/components/schemas/TeamView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/invitations/lookup:
+    post:
+      tags: [Team]
+      operationId: lookupInvitation
+      security: [{}]
+      summary: What an invitation link is for (public; shown before signing in or up)
+      description: identity `POST /v1/invitations/lookup`. The token travels in the body so it stays out of access logs.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/InvitationTokenRequest'}}}
+      responses:
+        '200': {description: Invitation, content: {application/json: {schema: {$ref: '#/components/schemas/InvitationPreview'}}}}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/invitations/accept:
+    post:
+      tags: [Team]
+      operationId: acceptInvitation
+      security: [{sessionCookie: []}]
+      summary: Accept an invitation as the signed-in person
+      description: >-
+        identity `POST /v1/invitations/accept`, then makes the organisation the active one (best effort). 422
+        INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED or INVITATION_EMAIL_MISMATCH (signed in with another email).
+        People without an account sign up with `invitationToken` instead (`POST /v1/auth/sign-up`).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/InvitationTokenRequest'}}}
+      responses:
+        '200': {description: Joined, content: {application/json: {schema: {$ref: '#/components/schemas/AcceptedInvitation'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
@@ -832,7 +1001,9 @@ components:
           type: string
           description: |
             Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, NOT_APPROVED,
-            NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR.
+            NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR; team: LAST_OWNER, INVALID_ROLE,
+            OWNER_ONLY, OWN_ROLE, ALREADY_MEMBER, INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED,
+            INVITATION_EMAIL_MISMATCH.
         errors:
           type: object
           additionalProperties: {type: string}
@@ -1042,6 +1213,39 @@ components:
         items: {type: array, items: {$ref: '#/components/schemas/SellerOrderRow'}}
         nextCursor: {type: [string, 'null']}
         total: {type: integer}
+    ShipFromAddress:
+      type: object
+      required: [id, label, name, company, phone, line1, line2, city, state, postalCode, country, isDefault, version]
+      properties:
+        id: {type: string}
+        label: {type: string, example: Houston warehouse}
+        name: {type: string}
+        company: {type: string}
+        phone: {type: string}
+        line1: {type: string}
+        line2: {type: string}
+        city: {type: string}
+        state: {type: string}
+        postalCode: {type: string}
+        country: {type: string}
+        isDefault: {type: boolean}
+        version: {type: integer, format: int64}
+    ShipFromInput:
+      type: object
+      required: [name, line1, city, state, postalCode]
+      properties:
+        label: {type: string, maxLength: 60}
+        name: {type: string, maxLength: 120}
+        company: {type: string, maxLength: 120}
+        phone: {type: string, maxLength: 40}
+        line1: {type: string, maxLength: 120}
+        line2: {type: string, maxLength: 120}
+        city: {type: string, maxLength: 80}
+        state: {type: string, maxLength: 40}
+        postalCode: {type: string, maxLength: 12}
+        country: {type: string, default: US, pattern: '^[A-Z]{2}$'}
+        makeDefault: {type: boolean}
+        version: {type: [integer, 'null'], format: int64, description: Version being edited (updates)}
     PostalAddress:
       type: object
       required: [name, line1, city, state, postalCode, country]
@@ -1164,7 +1368,7 @@ components:
         documentUrl: {type: [string, 'null']}
         order: {$ref: '#/components/schemas/SellerOrderDetail'}
     # ── listings
-    ListingStatus: {type: string, enum: [IN_REVIEW, PENDING_CATEGORY_APPROVAL, LIVE, REJECTED, PAUSED]}
+    ListingStatus: {type: string, enum: [IN_REVIEW, PENDING_CATEGORY_APPROVAL, LIVE, REJECTED, PAUSED, TAKEN_DOWN]}
     ListingRow:
       type: object
       required: [productId, atin, title, sku, variantCount, priceMinor, currency, stock, fulfilment, status, statusLabel, moderationNote, imageUrl, updatedAt]
@@ -1537,8 +1741,37 @@ components:
         email: {type: [string, 'null']}
         roleKey: {type: string}
         roleLabel: {type: string}
-        status: {type: string, enum: [ACTIVE, INVITED]}
+        status: {type: string, enum: [ACTIVE, DISABLED, INVITED], description: INVITED rows are pending invitations (userId `invite:<invitationId>`)}
         isYou: {type: boolean}
+        invitationId: {type: string, format: uuid, description: INVITED rows only (revoke with it)}
+        joinedAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time, description: INVITED rows only}
+    InvitationTokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token: {type: string, minLength: 1, maxLength: 200}
+    InvitationPreview:
+      type: object
+      required: [orgName, orgKind, email, roleKey, roleLabel, status, expiresAt]
+      properties:
+        orgName: {type: string}
+        orgKind: {type: string, enum: [SELLER, PROVIDER]}
+        email: {type: string, description: The invited address (sign in or sign up with it)}
+        roleKey: {type: string}
+        roleLabel: {type: string}
+        status: {type: string, enum: [PENDING, ACCEPTED, REVOKED, EXPIRED]}
+        expiresAt: {type: string, format: date-time}
+    AcceptedInvitation:
+      type: object
+      required: [orgId, orgName, orgKind, roleKey, roleLabel, alreadyMember]
+      properties:
+        orgId: {type: string}
+        orgName: {type: string}
+        orgKind: {type: string, enum: [SELLER, PROVIDER]}
+        roleKey: {type: string}
+        roleLabel: {type: string}
+        alreadyMember: {type: boolean, description: Was already a member; the role was left unchanged}
     TeamView:
       type: object
       required: [members, roles, yourRoleKey, canManage]

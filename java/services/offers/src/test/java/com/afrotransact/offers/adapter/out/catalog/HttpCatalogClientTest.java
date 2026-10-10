@@ -48,7 +48,7 @@ class HttpCatalogClientTest {
         server.createContext("/", exchange -> respond(exchange, routes));
         server.start();
         client = new HttpCatalogClient(RestClient.builder(), "http://127.0.0.1:" + server.getAddress().getPort(),
-                Duration.ofSeconds(2));
+                Duration.ofSeconds(2), () -> "svc-offers-token");
     }
 
     @AfterEach
@@ -83,6 +83,11 @@ class HttpCatalogClientTest {
         String path = exchange.getRequestURI().getPath();
         String body = routes.get(path);
         int status = body != null ? 200 : path.contains("BOOM") ? 500 : 404;
+        if (path.startsWith("/v1/identifiers/") && !"Bearer svc-offers-token".equals(
+                exchange.getRequestHeaders().getFirst("Authorization"))) {
+            status = 401; // GTIN lookups must carry offers' own client-credentials token
+            body = null;
+        }
         byte[] bytes = (body == null ? "{}" : body).getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, bytes.length);

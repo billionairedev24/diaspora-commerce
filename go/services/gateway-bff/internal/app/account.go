@@ -25,6 +25,9 @@ type AccountService interface {
 	CancelShipment(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string) (domain.OrderSummary, error)
 	Returns(ctx context.Context, c *domain.Caller) (domain.Page[domain.ReturnSummary], error)
 	StartReturn(ctx context.Context, c *domain.Caller, r domain.StartReturn) (domain.ReturnSummary, error)
+	// StartPhoneVerification texts a 6-digit code to the account phone; ConfirmPhoneVerification checks it.
+	StartPhoneVerification(ctx context.Context, c *domain.Caller) (domain.PhoneCodeSent, error)
+	ConfirmPhoneVerification(ctx context.Context, c *domain.Caller, code string) (domain.PhoneVerification, error)
 }
 
 type accountServiceImpl struct {
@@ -306,4 +309,49 @@ func (s *accountServiceImpl) StartReturn(ctx context.Context, c *domain.Caller, 
 		return out, mapErr("orders", err)
 	}
 	return out, nil
+}
+
+// ---------------------------------------------------------------- phone verification (S234 / S236)
+
+var phoneCodeRe = regexp.MustCompile(`^\d{6}$`)
+
+func phoneErr(err error) error {
+	if p, ok := port.AsUpstreamProblem(err); ok {
+		switch p.Code {
+		case "identity.phone-missing":
+			return domain.FieldProblem(domain.CodePhoneMissing, "No phone number", "phone", "Add a mobile number to your profile first.").WithCause(err)
+		case "identity.phone-already-verified":
+			return domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Already verified", "Your phone number is already verified.").WithCause(err)
+		case "identity.phone-changed":
+			return domain.NewProblem(http.StatusGone, domain.CodeChallengeExpired, "Phone changed",
+				"Your phone number changed after the code was sent. Send a new code.").WithCause(err)
+		}
+	}
+	return mapIdentityErr(err)
+}
+
+func (s *accountServiceImpl) StartPhoneVerification(ctx context.Context, c *domain.Caller) (domain.PhoneCodeSent, error) {
+	if err := requireCustomer(c); err != nil {
+		return domain.PhoneCodeSent{}, err
+	}
+	sent, err := s.identity.StartPhoneVerification(ctx, c.BearerToken)
+	if err != nil {
+		return domain.PhoneCodeSent{}, phoneErr(err)
+	}
+	return domain.PhoneCodeSent(sent), nil
+}
+
+func (s *accountServiceImpl) ConfirmPhoneVerification(ctx context.Context, c *domain.Caller, code string) (domain.PhoneVerification, error) {
+	if err := requireCustomer(c); err != nil {
+		return domain.PhoneVerification{}, err
+	}
+	code = strings.TrimSpace(code)
+	if !phoneCodeRe.MatchString(code) {
+		return domain.PhoneVerification{}, domain.FieldProblem(domain.CodeValidationFailed, "Validation failed", "code", "Enter the 6-digit code")
+	}
+	v, err := s.identity.ConfirmPhoneVerification(ctx, c.BearerToken, code)
+	if err != nil {
+		return domain.PhoneVerification{}, phoneErr(err)
+	}
+	return domain.PhoneVerification{PhoneVerified: v.PhoneVerified, VerifiedAt: v.VerifiedAt}, nil
 }

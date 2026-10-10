@@ -67,6 +67,8 @@ func run() error {
 	}
 
 	httpClient := &http.Client{Timeout: 3 * time.Second}
+	osm := nominatim.New(cfg.Nominatim.URL, cfg.Nominatim.UserAgent, httpClient) // one rate limit + cache for both chains
+	fixtures := fixture.New()
 	providers := make([]port.Autocompleter, 0, len(cfg.Providers))
 	for _, name := range cfg.Providers {
 		switch name {
@@ -75,11 +77,26 @@ func run() error {
 				providers = append(providers, places.New(cfg.Google.APIKey, "", httpClient))
 			}
 		case "osm-nominatim":
-			providers = append(providers, nominatim.New(cfg.Nominatim.URL, cfg.Nominatim.UserAgent, httpClient))
+			providers = append(providers, osm)
 		case "fixture":
-			providers = append(providers, fixture.New())
+			providers = append(providers, fixtures)
 		default:
 			return fmt.Errorf("unknown address provider %q", name)
+		}
+	}
+	reversers := make([]port.ReverseGeocoder, 0, len(cfg.ReverseProviders))
+	for _, name := range cfg.ReverseProviders {
+		switch name {
+		case "google-geocoding":
+			if cfg.Google.APIKey != "" {
+				reversers = append(reversers, places.NewGeocoder(cfg.Google.APIKey, "", httpClient))
+			}
+		case "osm-nominatim":
+			reversers = append(reversers, osm)
+		case "fixture":
+			reversers = append(reversers, fixtures)
+		default:
+			return fmt.Errorf("unknown reverse geocoding provider %q", name)
 		}
 	}
 	var validator port.Validator
@@ -102,7 +119,8 @@ func run() error {
 		Name: "Geo API", Addr: ":" + strconv.Itoa(cfg.Port), OpenAPI: openapi, DocsOn: cfg.DocsEnabled,
 		Checks: []httpserver.ReadinessCheck{readiness{store: store}}, Logger: log,
 	})
-	httpapi.New(addresses, zones).Register(srv.Mux(), auth.Middleware(verifier, true), auth.Middleware(verifier, false))
+	reverse := app.NewReverseService(reversers, log)
+	httpapi.New(addresses, reverse, zones).Register(srv.Mux(), auth.Middleware(verifier, true), auth.Middleware(verifier, false))
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}

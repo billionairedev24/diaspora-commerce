@@ -138,8 +138,10 @@ type CartOwner struct {
 	GuestID     string
 }
 
-// UpstreamCartLine is a cart-service line.
+// UpstreamCartLine is a cart-service line. OfferID is the offers-service offer of the line (empty for lines added
+// before offers, which follow the catalog's single seller).
 type UpstreamCartLine struct {
+	OfferID        string            `json:"offerId"`
 	VariantATIN    string            `json:"variantAtin"`
 	ProductATIN    string            `json:"productAtin"`
 	Title          string            `json:"title"`
@@ -209,12 +211,14 @@ const (
 	CartLineNotFound      = "cart.line-not-found"
 	CartInvalid           = "cart.invalid"
 	CartConcurrentUpdate  = "cart.concurrent-update"
+	CartOfferNotBuyable   = "cart.offer-not-buyable"
 )
 
 // CartClient calls the cart service. 4xx answers are *UpstreamProblem with the cart codes above.
 type CartClient interface {
 	Get(ctx context.Context, o CartOwner) (UpstreamCart, error)
-	Add(ctx context.Context, o CartOwner, variantATIN string, qty int) (UpstreamCart, error)
+	// Add adds a variant; with offerID the cart service validates and prices that offers-service offer.
+	Add(ctx context.Context, o CartOwner, variantATIN, offerID string, qty int) (UpstreamCart, error)
 	SetQuantity(ctx context.Context, o CartOwner, variantATIN string, qty int) (UpstreamCart, error)
 	Remove(ctx context.Context, o CartOwner, variantATIN string) (UpstreamCart, error)
 	SaveForLater(ctx context.Context, o CartOwner, variantATIN string) (UpstreamCart, error)
@@ -253,7 +257,7 @@ type GeoValidation struct {
 	Messages    []string     `json:"messages"`
 }
 
-// GeoClient calls the geo service. Reverse geocoding (Reverse) is planned at GET /v1/reverse?lat=&lon=.
+// GeoClient calls the geo service. Reverse geocoding is GET /v1/reverse?lat=&lng= (Google, then Nominatim).
 type GeoClient interface {
 	Autocomplete(ctx context.Context, q, session, country string) ([]GeoSuggestion, error)
 	Resolve(ctx context.Context, id, session string) (GeoAddress, error)
@@ -271,6 +275,22 @@ type IdentityMe struct {
 	LastName  string   `json:"lastName"`
 	Email     string   `json:"email"`
 	Roles     []string `json:"roles"`
+	// Phone is E.164; PhoneVerified says whether the SMS check (S234) passed.
+	Phone         string `json:"phone"`
+	PhoneVerified bool   `json:"phoneVerified"`
+}
+
+// PhoneCodeSent is identity's POST /v1/me/phone/verification answer.
+type PhoneCodeSent struct {
+	SentTo    string    `json:"sentTo"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// PhoneVerification is identity's POST /v1/me/phone/verification/confirm answer.
+type PhoneVerification struct {
+	Phone         string     `json:"phone"`
+	PhoneVerified bool       `json:"phoneVerified"`
+	VerifiedAt    *time.Time `json:"verifiedAt"`
 }
 
 // IdentitySignUp is identity's POST /v1/accounts body.
@@ -284,6 +304,8 @@ type IdentitySignUp struct {
 	TermsAccepted   bool   `json:"termsAccepted"`
 	SMSConsent      bool   `json:"smsConsent"`
 	Intent          string `json:"intent"`
+	// InvitationToken (organisation invite link, same email) starts the account verified and joins the organisation.
+	InvitationToken string `json:"invitationToken,omitempty"`
 }
 
 // IdentityProvider is an enabled social sign-in provider.
@@ -330,6 +352,8 @@ type IdentityClient interface {
 	UpdateAddress(ctx context.Context, bearer, id string, a IdentityAddress) (IdentityAddress, error)
 	DeleteAddress(ctx context.Context, bearer, id string) error
 	DefaultAddress(ctx context.Context, bearer, id string) (IdentityAddress, error)
+	StartPhoneVerification(ctx context.Context, bearer string) (PhoneCodeSent, error)
+	ConfirmPhoneVerification(ctx context.Context, bearer, code string) (PhoneVerification, error)
 }
 
 // TokenVerifier verifies identity-issued JWTs (JWKS).
@@ -439,9 +463,86 @@ type OrdersClient interface {
 	StartReturn(ctx context.Context, bearer string, r domain.StartReturn) (domain.ReturnSummary, error)
 }
 
-// NotificationsClient subscribes shoppers to back-in-stock emails.
+// StockAlertInput arms a back-in-stock alert (notifications POST /v1/stock-alerts).
+type StockAlertInput struct {
+	ATIN         string `json:"atin"`
+	Email        string `json:"email,omitempty"`
+	Market       string `json:"market,omitempty"`
+	ProductTitle string `json:"productTitle,omitempty"`
+}
+
+// StockAlert is notifications' StockAlert.
+type StockAlert struct {
+	ATIN         string     `json:"atin"`
+	Email        string     `json:"email"`
+	ProductTitle string     `json:"productTitle"`
+	Status       string     `json:"status"` // active | notified
+	CreatedAt    time.Time  `json:"createdAt"`
+	NotifiedAt   *time.Time `json:"notifiedAt"`
+}
+
+// NotificationsClient manages the shopper's back-in-stock alerts with the shopper's own token (service tokens are
+// refused by notifications). Subscribing is 201 when armed and 200 when already active — both are success.
 type NotificationsClient interface {
-	SubscribeStockAlert(ctx context.Context, atin, email, bearer string) error
+	SubscribeStockAlert(ctx context.Context, bearer string, in StockAlertInput) error
+	StockAlerts(ctx context.Context, bearer string) ([]StockAlert, error)
+	RemoveStockAlert(ctx context.Context, bearer, atin string) error
+}
+
+// ---------------------------------------------------------------- offers (contracts/openapi/offers.yaml, public reads)
+
+// OfferSeller is offers' OfferSeller (city = ship-from city or "AfroTransact").
+type OfferSeller struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+	City string `json:"city"`
+}
+
+// PublicOffer is offers' PublicOffer (maps 1:1 to the BFF Offer; delivery comes from promise).
+type PublicOffer struct {
+	OfferID        string      `json:"offerId"`
+	ATIN           string      `json:"atin"`
+	ProductATIN    string      `json:"productAtin"`
+	Seller         OfferSeller `json:"seller"`
+	Condition      string      `json:"condition"`
+	PriceMinor     int64       `json:"priceMinor"`
+	ListPriceMinor *int64      `json:"listPriceMinor"`
+	ShippingMinor  int64       `json:"shippingMinor"`
+	Currency       string      `json:"currency"`
+	Fulfilment     string      `json:"fulfilment"`
+	AvailableQty   int         `json:"availableQty"`
+	StockStatus    string      `json:"stockStatus"`
+	DeliveryDays   int         `json:"deliveryDays"`
+	ShipsFrom      string      `json:"shipsFrom"`
+	SoldBy         string      `json:"soldBy"`
+	Badges         []string    `json:"badges"`
+}
+
+// OfferBuyBox is offers' BuyBox: the winner (nil = currently unavailable), the other listed offers by landed price,
+// the listed offer count and the lowest price. For product summaries ATIN is the product ATIN.
+type OfferBuyBox struct {
+	ATIN          string        `json:"atin"`
+	Currency      string        `json:"currency"`
+	BuyBox        *PublicOffer  `json:"buyBox"`
+	OtherOffers   []PublicOffer `json:"otherOffers"`
+	OfferCount    int           `json:"offerCount"`
+	MinPriceMinor *int64        `json:"minPriceMinor"`
+}
+
+// OfferDetail is offers' PublicOfferDetail: one offer and whether it can be bought now.
+type OfferDetail struct {
+	Offer       PublicOffer `json:"offer"`
+	Buyable     bool        `json:"buyable"`
+	NotEligible []string    `json:"notEligible"`
+}
+
+// StorefrontOffersClient reads the offers service's public endpoints: the buy box and "Other sellers" of a variant,
+// card summaries of product pages (batch) and one offer for add-to-cart. Unknown offers return ErrNotFound.
+type StorefrontOffersClient interface {
+	BuyBox(ctx context.Context, variantATIN string) (OfferBuyBox, error)
+	ProductSummaries(ctx context.Context, productATINs []string) (map[string]OfferBuyBox, error)
+	Offer(ctx context.Context, offerID string) (OfferDetail, error)
 }
 
 // ---------------------------------------------------------------- state and caches
@@ -469,6 +570,11 @@ type AuthRequest struct {
 type Challenge struct {
 	Email    string `json:"email"`
 	ReturnTo string `json:"returnTo"`
+	// Factor is the second factor a first-party MFA challenge verifies next (TOTP, SMS or RECOVERY_CODE); empty for
+	// sign-up email verification.
+	Factor string `json:"factor,omitempty"`
+	// Destination is the masked phone number SMS codes go to.
+	Destination string `json:"destination,omitempty"`
 }
 
 // EphemeralStore holds single-use OIDC states and sign-up challenges with a TTL.
