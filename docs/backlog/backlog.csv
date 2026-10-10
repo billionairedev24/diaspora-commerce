@@ -272,9 +272,9 @@
 - Push tracking mapped to shipment states","E11","","Medium","5","carriers go","carriers","Done"
 "S080","Story","Pickup points and seller pickup","Platform pickup points/lockers and seller-configured pickup with address and hours.","- Sellers set their pickup address and hours in Seller Center
 - Pickup ready notifications sent to customers","E11","","Medium","5","carriers delivery","carriers","Done"
-"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","In Progress"
+"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","Done"
 "S081","Story","Driver app sign-in with access check","Email + password + 6-digit code; only users with delivery:operate get in.","- Users without delivery:operate see 'No driver access' with who can grant it
-- Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","In Progress"
+- Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","Done"
 "S082","Story","Vehicle inspection","10 checks with critical items, odometer, fuel, cold-box temperature, 4 live photos and signature.","- Failing brakes, tyres or lights blocks the route and reports a defect to dispatch
 - Cold-box must read 33–40°F when perishables are on board
 - Photos come only from the live in-app camera","E12","","High","5","delivery mobile","delivery","Done"
@@ -285,7 +285,7 @@
 "S085","Story","Proof of delivery","Arrive, scan, choose handover method and take a live, GPS-stamped photo within 150 m.","- Handed to customer requires the 4-digit code
 - Someone else requires name, relationship and signature
 - Safe place blocked for perishables
-- Photo stamped with time, GPS and route id","E12","","Highest","8","delivery mobile","delivery","In Progress"
+- Photo stamped with time, GPS and route id","E12","","Highest","8","delivery mobile","delivery","Done"
 "S086","Story","Delivery problems and reattempts","Customer unavailable, access issues, damage, refusal, missing package, unsafe — with required evidence.","- Customer unavailable needs call, text and 5-minute wait before reattempt/pickup point/return
 - Reattempt stops must be resolved before shift end
 - Failed packages scanned back in at end of shift","E12","","High","8","delivery mobile","delivery","Done"
@@ -497,16 +497,16 @@
 "E26","Epic","Customer mobile app","Expo / React Native customer app: sign-in first, Face ID, shopping, tracking, returns, bookings and Lola.","","","Customer mobile app","High","","mobile","mobile","In Progress"
 "S163","Story","App shell with sign-in, Face ID and passcode","App opens on sign-in; Face ID and passcode set up after first sign-in; unlock on reopen.","- Five wrong passcodes force full sign-in
 - Sign out removes Face ID and passcode from the device
-- Logo on sign-in, sign-up, unlock, home and side panel","E26","","High","8","mobile","mobile","In Progress"
+- Logo on sign-in, sign-up, unlock, home and side panel","E26","","High","8","mobile","mobile","Done"
 "S164","Story","Fixed headers and tab bar (no page scrolling)","Only screen content scrolls; status area has its own solid strip.","- Inner pages pin title and back button
-- No horizontal scroll","E26","","High","2","mobile","mobile","In Progress"
+- No horizontal scroll","E26","","High","2","mobile","mobile","Done"
 "S165","Story","Shopping, cart and checkout with Stripe","Browse, search, PDP, cart grouped by shipper, checkout with Apple/Google Pay and Stripe payment sheet.","- Add payment method supports card (with ZIP) and US bank (ACH)
-- Orders over $100 ask for Face ID","E26","","High","8","mobile checkout","mobile","In Progress"
+- Orders over $100 ask for Face ID","E26","","High","8","mobile checkout","mobile","Done"
 "S166","Story","Orders, tracking and returns","Tracking with delivery code and driver, buy again, returns with QR code.","- Delivery code shown for hand-delivery and perishables
 - Return flow produces a QR code","E26","","High","5","mobile","mobile","In Progress"
-"S167","Story","Bookings in the app","Book, reschedule and cancel services synced with provider calendars.","- Exact refund shown before cancelling","E26","","Medium","5","mobile bookings","mobile","In Progress"
+"S167","Story","Bookings in the app","Book, reschedule and cancel services synced with provider calendars.","- Exact refund shown before cancelling","E26","","Medium","5","mobile bookings","mobile","Done"
 "S168","Story","Push notifications with deep links","FCM/APNs push for orders, deliveries and bookings.","- Tapping a notification opens the right screen
-- Preferences per category respected","E26","","Medium","5","mobile notifications","mobile","In Progress"
+- Preferences per category respected","E26","","Medium","5","mobile notifications","mobile","Done"
 "E27","Epic","API docs & developer portal","Contract-first APIs with Swagger UI, Scalar, Redoc, Docusaurus portal and AsyncAPI event catalog.","","","API docs & developer portal","High","","docs","docs","In Progress"
 "S169","Story","OpenAPI 3.1 contracts for every service","contracts/openapi/<service>.yaml as source of truth; CI fails on breaking changes.","- Each service has a contract file
 - openapi-diff gate blocks breaking changes without a version bump
@@ -706,3 +706,7 @@
 - Escalation events carry the parties' ids
 - Claim decision emails include the staff note
 - No duplicate claim notifications","E18","","Medium","3","trust-ops notifications","trust","Done"
+"S238","Story","Mobile apps against real backends","Close the gaps for running the apps against real services: BFF order placement accepts a new PaymentSheet method and always returns the client secret plus a Stripe customer key; BFF tracking, address create/default, Lola and bookings routes; perishable flag on cart lines; fulfilment delivery brief wired; development builds validated on devices.","- Customer app completes checkout with PaymentSheet against dev
+- Tracking and address management work against the BFF
+- Driver app shows delivery brief instructions
+- Both apps run as EAS development builds on iOS and Android","E26","","High","8","mobile bff","mobile","To Do"

@@ -19,7 +19,12 @@
     "docs:build": "pnpm --filter @afrotransact/docs-portal build",
     "contracts:lint": "tools/contracts/lint_contracts.sh",
     "contracts:clients": "tools/contracts/generate_clients.sh",
-    "contracts:clients:check": "tools/contracts/generate_clients.sh --check"
+    "contracts:clients:check": "tools/contracts/generate_clients.sh --check",
+    "e2e": "pnpm --filter @afrotransact/e2e test",
+    "e2e:a11y": "pnpm --filter @afrotransact/e2e test:a11y",
+    "mobile:customer": "pnpm --filter @afrotransact/customer-app start:mock",
+    "mobile:driver": "pnpm --filter @afrotransact/driver-app start:mock",
+    "mobile:check": "pnpm --filter './mobile/apps/*' --parallel run typecheck && pnpm --filter './mobile/apps/*' run lint && pnpm --filter './mobile/apps/*' run test"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
