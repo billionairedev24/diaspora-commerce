@@ -1,0 +1,40 @@
+---
+title: Architecture
+sidebar_label: Architecture
+sidebar_position: 1
+description: How the AfroTransact v2 platform fits together.
+---
+
+AfroTransact v2 is a multi-market marketplace for products and services: independent sellers and providers,
+a first-party retail business (AfroTransact Retail), seller and provider back offices, a staff console, a
+customer app and a driver app. The design source of truth is `design/` (the Claude Design handoff, including
+`AfroTransact Architecture.dc.html`).
+
+## Building blocks
+
+| Layer | What runs there |
+|---|---|
+| Edge | Cloudflare: DNS, WAF, rate limits, Turnstile, Workers for the Next.js apps, R2 for media |
+| Front ends | `web/apps/storefront`, `web/apps/seller-center`, `web/apps/staff-console` (Next.js 16), `mobile/apps/{customer,driver}` (Expo) |
+| BFF | [gateway-bff](../services/gateway-bff.md) (Go): screen-shaped APIs for web and mobile, token relay |
+| Domain services | Spring Boot 4.1 services (identity, catalog, offers, inventory, orders, payments, seller, retail, fulfilment, bookings, trust-ops, tax-returns, content) and Go services (search, indexer, cart, promise, geo, storefront, media, notifications, carrier-gateway) |
+| AI | [ai-gateway](../services/ai-gateway.md) (Lola, OpenRouter via Spring AI) and [mcp-server](../services/mcp-server.md) (MCP tools for agents) |
+| Data | PostgreSQL 17 (one database per service), Redis/Valkey 8, Elasticsearch 9, Temporal for the checkout saga |
+| Events | Kafka (KRaft); every producer writes a transactional outbox and consumers de-duplicate on `event-id` |
+
+The [service catalogue](../services/index.md) lists every service with its port, store and contract.
+
+## Principles
+
+- **Contract first.** Each service's OpenAPI 3.1 contract lives in `contracts/openapi/<service>.yaml` and the
+  event contracts in `contracts/asyncapi/` (one fragment per service, merged into `events.yaml`). See the
+  [API reference](../api/index.mdx) and the [event catalog](../events/index.mdx).
+- **Hexagonal services.** Domain, application (use-case interfaces + package-private implementations), ports and
+  adapters, enforced by ArchUnit (Java) and package layout (Go). See the
+  [engineering conventions](../engineering/guides/conventions.md).
+- **Database per service, events between services.** No service reads another's database; state changes are
+  published as domain events on `at.<aggregate>.events` topics keyed by aggregate id.
+- **Independently deployable.** Every service has its own Dockerfile, Helm chart, GitHub Actions workflow and
+  Argo CD Application per environment. The target cloud (AWS, GCP or Azure) is a deploy-time variable.
+- **Observable by default.** OpenTelemetry traces, Prometheus metrics, Loki logs, SLO-based alerts, each with a
+  [runbook](../runbooks/index.md).

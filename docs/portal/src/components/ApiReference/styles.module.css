@@ -1,0 +1,32 @@
+.wrapper { display: flex; flex-direction: column; gap: var(--at-space-3); }
+.header { display: flex; flex-direction: column; gap: var(--at-space-2); }
+.meta { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }
+.badge, .badgeMuted {
+  display: inline-flex; align-items: center; padding: 2px 10px; border-radius: var(--at-radius-pill);
+  font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold);
+}
+.badge { background: var(--at-color-badge-brand-bg); color: var(--at-color-badge-brand-text); }
+.badgeMuted { background: var(--at-color-surface-muted); color: var(--at-color-text-muted); }
+.summary { margin: 0; color: var(--at-color-text-muted); }
+.error { margin: 0; padding: var(--at-space-2) var(--at-space-3); border-radius: var(--at-radius-md); background: var(--at-color-danger-bg); color: var(--at-color-danger); }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--at-space-3); }
+.tabs { display: inline-flex; padding: 3px; gap: 2px; border-radius: var(--at-radius-pill); background: var(--at-color-surface-muted); }
+.tab {
+  border: 0; cursor: pointer; padding: 6px 16px; border-radius: var(--at-radius-pill); background: transparent;
+  color: var(--at-color-text-muted); font-weight: var(--at-weight-semibold); font-size: var(--at-text-sm);
+}
+.tab:hover { color: var(--at-color-text); }
+.tabActive { background: var(--at-color-surface); color: var(--at-color-text); box-shadow: var(--at-shadow-sm); }
+.actions { display: inline-flex; align-items: center; gap: var(--at-space-3); }
+.download {
+  display: inline-flex; align-items: center; padding: 6px 14px; border-radius: var(--at-radius-pill);
+  background: var(--at-color-action-primary); color: var(--at-color-action-primary-text); font-weight: var(--at-weight-semibold);
+  font-size: var(--at-text-sm);
+}
+.download:hover { background: var(--at-color-action-primary-hover); color: var(--at-color-action-primary-text); text-decoration: none; }
+.link { font-size: var(--at-text-sm); font-weight: var(--at-weight-semibold); }
+.frame, .placeholder {
+  width: 100%; height: calc(100vh - var(--ifm-navbar-height) - 3rem); min-height: 640px;
+  border: 1px solid var(--at-color-border); border-radius: var(--at-radius-lg); background: var(--at-color-canvas);
+}
+.placeholder { display: grid; place-items: center; color: var(--at-color-text-subtle); }

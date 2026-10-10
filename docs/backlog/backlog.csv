@@ -514,11 +514,11 @@
 "S170","Story","Swagger UI, Scalar and Redoc on every service","Interactive references in local/dev/uat; off in prod.","- /swagger-ui.html (Java), /docs (Scalar) and /redoc on every service
 - Disabled in prod configuration","E27","","Highest","2","docs","docs","To Do"
 "S171","Story","Docusaurus developer portal","developers.afrotransact.com with guides, webhooks, theme schema, ADRs and changelog.","- Portal builds statically and deploys to Cloudflare Pages
-- API reference pages render every contract with Redoc and Scalar","E27","","High","5","docs web","docs","To Do"
+- API reference pages render every contract with Redoc and Scalar","E27","","High","5","docs web","docs","Done"
 "S172","Story","AsyncAPI event catalog","contracts/asyncapi/events.yaml documents every topic and payload.","- Every published event type is documented
-- Catalog rendered in the portal","E27","","High","3","docs events","docs","To Do"
+- Catalog rendered in the portal","E27","","High","3","docs events","docs","Done"
 "S173","Story","Generated TypeScript clients and Zod schemas","Clients for web and mobile generated from contracts.","- Clients regenerate in CI when contracts change
-- Generated code is never edited by hand","E27","","High","5","docs web","docs","In Progress"
+- Generated code is never edited by hand","E27","","High","5","docs web","docs","Done"
 "E28","Epic","Observability & monitoring","OpenTelemetry everywhere, Prometheus/Grafana/Loki/Tempo, SLOs, alerting and on-call.","","","Observability & monitoring","High","","observability","observability","In Progress"
 "S174","Story","Local observability stack","OTel Collector, Prometheus, Grafana, Loki, Tempo and Alertmanager in docker compose.","- Grafana provisioned with datasources and service dashboards
 - Traces from Java and Go services visible in Tempo","E28","","High","3","observability infra","observability","Done"
@@ -660,3 +660,6 @@
 - Inventory reservation events include stockOwnerOrgId
 - Payments schedules supplier payment on retail.payment.released
 - Receipt date rules use the warehouse time zone","E10","","Medium","8","retail catalog inventory payments","retail","To Do"
+"S227","Story","Fix contract lint findings","Make every contract pass tools/contracts/lint_contracts.sh: tags, summaries and explicit security on all operations; fix YAML flow-mapping commas that truncate descriptions; align notifications topic names with producers.","- lint_contracts.sh passes for every contract
+- CI runs the lint on contract changes
+- No consumer subscribes to a topic without a producer","E27","","High","3","contracts docs","docs","To Do"

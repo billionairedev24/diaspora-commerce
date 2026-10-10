@@ -1,0 +1,62 @@
+---
+title: Getting started
+sidebar_label: Local stack
+sidebar_position: 1
+description: Run the AfroTransact stack locally.
+---
+
+AfroTransact v2 is a monorepo: Java (Spring Boot 4.1, Java 25) and Go (1.27.1) services, Next.js web apps, Expo
+mobile apps, contracts, infrastructure and this portal.
+
+## Prerequisites
+
+| Tool | Version |
+|---|---|
+| Java | 25 (Maven 3.9 via `./mvnw`) |
+| Go | 1.27.1 |
+| Node | 22 LTS with pnpm 10 (`corepack enable`) |
+| Docker | Compose v2, about 8 GB of memory for the full stack |
+
+## Run the stack
+
+```bash
+make up                # Postgres, Kafka, Elasticsearch, Redis, Temporal, observability (waits for health)
+make apps-up           # build and start the containerised services too (SERVICE=<name> for one)
+make java-verify       # all Java services: checkstyle + unit + Testcontainers integration tests
+make go-verify         # all Go services: vet + lint + tests
+make web-dev           # storefront on http://localhost:3000
+make down              # stop (keeps volumes) — `make reset` also deletes them
+```
+
+Every service has a fixed local port so the whole stack runs side by side, see [ports](./ports.md). The
+[make targets](./make-targets.md) page lists every target of the root `Makefile`.
+
+Each service also builds, tests and runs on its own:
+
+```bash
+cd java && ./mvnw -pl services/catalog -am verify
+cd go/services/search && go test ./...
+```
+
+## API docs on a running service
+
+Every service serves its own reference in `local`, `dev` and `uat` (disabled in `prod`):
+
+| Path | What |
+|---|---|
+| `/docs` | Scalar |
+| `/redoc` | Redoc |
+| `/swagger-ui.html` | Swagger UI (Java) |
+| `/v3/api-docs` (Java), `/openapi.yaml` (Go) | the OpenAPI document |
+
+The same contracts are rendered for every service in the [API reference](../api/index.mdx).
+
+## Run this portal
+
+```bash
+pnpm install
+pnpm --filter @afrotransact/docs-portal start   # http://localhost:3100, live reload
+pnpm --filter @afrotransact/docs-portal build   # static site in docs/portal/build
+```
+
+See `docs/portal/README.md` for how the generated pages work.

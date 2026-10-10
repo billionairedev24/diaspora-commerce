@@ -1,0 +1,98 @@
+/* AfroTransact brand on Infima: tokens from @afrotransact/tokens (self-hosted Figtree, white canvas,
+   no visible scrollbars). Only token variables here, no raw colours. */
+@import '@afrotransact/tokens/fonts.css';
+@import '@afrotransact/tokens/tokens.css';
+
+:root {
+  --ifm-font-family-base: var(--at-font-sans);
+  --ifm-heading-font-family: var(--at-font-sans);
+  --ifm-font-family-monospace: var(--at-font-mono);
+  --ifm-font-size-base: var(--at-text-base);
+  --ifm-line-height-base: var(--at-leading-relaxed);
+  --ifm-heading-font-weight: var(--at-weight-bold);
+  --ifm-background-color: var(--at-color-canvas);
+  --ifm-background-surface-color: var(--at-color-surface);
+  --ifm-font-color-base: var(--at-color-text);
+  --ifm-color-content-secondary: var(--at-color-text-muted);
+
+  --ifm-color-primary: var(--at-green-700);
+  --ifm-color-primary-dark: var(--at-green-800);
+  --ifm-color-primary-darker: var(--at-green-800);
+  --ifm-color-primary-darkest: var(--at-green-900);
+  --ifm-color-primary-light: var(--at-green-600);
+  --ifm-color-primary-lighter: var(--at-green-500);
+  --ifm-color-primary-lightest: var(--at-green-400);
+  --ifm-link-color: var(--at-color-link);
+  --ifm-link-hover-color: var(--at-color-link-hover);
+
+  --ifm-global-radius: var(--at-radius-md);
+  --ifm-code-border-radius: var(--at-radius-sm);
+  --ifm-code-font-size: 90%;
+  --ifm-code-background: var(--at-color-surface-muted);
+  --ifm-toc-border-color: var(--at-color-border);
+  --ifm-hr-background-color: var(--at-color-border);
+  --ifm-table-border-color: var(--at-color-border);
+  --ifm-table-stripe-background: transparent;
+  --ifm-table-head-background: var(--at-color-surface-muted);
+
+  --ifm-navbar-background-color: var(--at-color-header-bg);
+  --ifm-navbar-link-color: var(--at-color-header-text);
+  --ifm-navbar-link-hover-color: var(--at-color-action-primary);
+  --ifm-navbar-link-active-color: var(--at-color-action-primary);
+  --ifm-navbar-shadow: none;
+  --ifm-navbar-height: 3.75rem;
+
+  --ifm-menu-color: var(--at-color-text-muted);
+  --ifm-menu-color-active: var(--at-color-text);
+  --ifm-menu-color-background-active: var(--at-color-badge-ai-bg);
+  --ifm-menu-color-background-hover: var(--at-color-surface-hover);
+
+  --ifm-footer-background-color: var(--at-color-canvas);
+  --ifm-footer-color: var(--at-color-text-subtle);
+
+  --docusaurus-highlighted-code-line-bg: var(--at-gold-50);
+}
+
+html, body { background: var(--at-color-canvas); }
+
+/* Navbar: black header like the storefront, gold accent. */
+.navbar { border-bottom: 3px solid var(--at-color-action-primary); }
+.navbar__title { font-weight: var(--at-weight-black); letter-spacing: var(--at-tracking-tight); color: var(--at-color-header-text); }
+.navbar__logo { height: 2rem; }
+.navbar__toggle, .navbar-sidebar__close { color: var(--at-color-header-text); }
+.navbar-sidebar { background: var(--at-color-canvas); }
+.navbar-sidebar .navbar__link,
+.navbar-sidebar .menu__link { color: var(--at-color-text); }
+.navbar .navbar__link:hover { text-decoration: none; }
+
+/* Sidebar */
+.theme-doc-sidebar-container { border-right: 1px solid var(--at-color-border) !important; }
+.menu { font-size: var(--at-text-md); font-weight: var(--at-weight-medium); }
+.menu__link--active:not(.menu__link--sublist) { font-weight: var(--at-weight-bold); }
+.menu__list-item-collapsible:hover { background: var(--at-color-surface-hover); }
+
+/* Content */
+.markdown h1 { font-weight: var(--at-weight-black); letter-spacing: var(--at-tracking-tight); }
+.markdown h2 { margin-top: var(--at-space-8); }
+.markdown table { font-size: var(--at-text-md); }
+.markdown thead tr { border-bottom: 1px solid var(--at-color-border-strong); }
+.markdown th { text-align: left; }
+.markdown tbody tr:nth-child(2n) { background: transparent; }
+.markdown a { text-decoration: none; }
+.markdown a:hover { text-decoration: underline; }
+.markdown code { border: 0; }
+.breadcrumbs__item--active .breadcrumbs__link { background: var(--at-color-badge-ai-bg); color: var(--at-color-text); }
+.pagination-nav__link { border-color: var(--at-color-border); }
+.pagination-nav__link:hover { border-color: var(--at-color-action-primary); }
+
+/* Home hero */
+.at-hero {
+  padding: var(--at-space-8) var(--at-space-6); border-radius: var(--at-radius-lg);
+  background: var(--at-color-surface-brand); margin-bottom: var(--at-space-4);
+}
+.at-hero h1 { margin: 0 0 var(--at-space-2); font-size: var(--at-text-4xl); }
+.at-hero p { margin: 0; font-size: var(--at-text-lg); color: var(--at-color-text-muted); max-width: 60ch; }
+
+/* No visible scrollbars anywhere (tokens.css sets this globally; repeated for Infima's scroll containers). */
+.table-of-contents, .menu, .theme-doc-sidebar-menu, pre, .prism-code { scrollbar-width: none; }
+.table-of-contents::-webkit-scrollbar, .menu::-webkit-scrollbar, pre::-webkit-scrollbar, .prism-code::-webkit-scrollbar { display: none; }

@@ -1,0 +1,13 @@
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: var(--at-space-4); margin: var(--at-space-6) 0; }
+.card {
+  display: flex; flex-direction: column; gap: var(--at-space-2); padding: var(--at-space-5); border-radius: var(--at-radius-lg);
+  border: 1px solid var(--at-color-border); color: var(--at-color-text); background: var(--at-color-surface);
+  transition: border-color var(--at-duration) var(--at-ease), box-shadow var(--at-duration) var(--at-ease);
+}
+.card:hover { border-color: var(--at-color-action-primary); box-shadow: var(--at-shadow-md); color: var(--at-color-text); text-decoration: none; }
+.title { font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
+.body { color: var(--at-color-text-muted); font-size: var(--at-text-md); }
+.stat {
+  align-self: flex-start; margin-top: auto; padding: 2px 10px; border-radius: var(--at-radius-pill);
+  background: var(--at-color-badge-brand-bg); color: var(--at-color-badge-brand-text); font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold);
+}

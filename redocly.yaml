@@ -1,0 +1,33 @@
+# Redocly lint configuration for contracts/openapi/*.yaml.
+# Used by tools/contracts/lint_contracts.sh (offline, @redocly/openapi-core from docs/portal) and picked up by
+# `redocly lint` in .github/workflows/contracts.yml. Mirrors the CI Spectral gate (operationId + tags required).
+extends:
+  - recommended
+
+rules:
+  # Contract-first: every operation is addressable by generated clients and grouped in the references.
+  operation-operationId: error
+  operation-operationId-unique: error
+  operation-operationId-url-safe: error
+  rule/operation-tags:
+    subject:
+      type: Operation
+      property: tags
+    assertions:
+      defined: true
+      nonEmpty: true
+    severity: error
+    message: Every operation needs at least one tag (Spectral operation-tags).
+  operation-tag-defined: warn
+  operation-summary: error
+  operation-4xx-response: warn
+  path-parameters-defined: error
+  security-defined: error
+  no-unresolved-refs: error
+  no-unused-components: warn
+  # Internal platform APIs: no public licence block, and every contract lists its localhost server first
+  # (infra/local/PORTS.md), which no-server-example.com would flag.
+  info-license: off
+  info-license-url: off
+  no-server-example.com: off
+  no-empty-servers: warn

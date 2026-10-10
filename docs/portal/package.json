@@ -1,0 +1,52 @@
+{
+  "name": "@afrotransact/docs-portal",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AfroTransact developer portal (Docusaurus 3): guides, service pages, Redoc + Scalar API reference, AsyncAPI event catalog, MCP tools and backlog status.",
+  "scripts": {
+    "sync": "node scripts/sync-contracts.mjs",
+    "prestart": "node scripts/sync-contracts.mjs",
+    "start": "docusaurus start --port 3100",
+    "prebuild": "node scripts/sync-contracts.mjs",
+    "build": "docusaurus build",
+    "serve": "docusaurus serve --port 3100",
+    "clear": "docusaurus clear",
+    "typecheck": "node scripts/sync-contracts.mjs && tsc --noEmit",
+    "lint:contracts": "node scripts/lint-contracts.mjs"
+  },
+  "dependencies": {
+    "@afrotransact/tokens": "workspace:*",
+    "@docusaurus/core": "3.10.2",
+    "@docusaurus/preset-classic": "3.10.2",
+    "@mdx-js/react": "^3.1.0",
+    "clsx": "^2.1.1",
+    "prism-react-renderer": "^2.4.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@asyncapi/parser": "^3.6.3",
+    "@docusaurus/module-type-aliases": "3.10.2",
+    "@docusaurus/tsconfig": "3.10.2",
+    "@docusaurus/types": "3.10.2",
+    "@redocly/openapi-core": "^1.34.20",
+    "@types/react": "19.3.0",
+    "typescript": "5.9.3",
+    "yaml": "^2.9.1"
+  },
+  "browserslist": {
+    "production": [
+      ">0.5%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  }
+}

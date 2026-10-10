@@ -14,7 +14,12 @@
     "build": "pnpm -r build",
     "web:dev": "pnpm --filter storefront dev",
     "web:e2e": "pnpm --filter storefront e2e",
-    "generate:clients": "pnpm --filter @afrotransact/api-client generate"
+    "generate:clients": "pnpm --filter @afrotransact/api-client generate",
+    "docs:dev": "pnpm --filter @afrotransact/docs-portal start",
+    "docs:build": "pnpm --filter @afrotransact/docs-portal build",
+    "contracts:lint": "tools/contracts/lint_contracts.sh",
+    "contracts:clients": "tools/contracts/generate_clients.sh",
+    "contracts:clients:check": "tools/contracts/generate_clients.sh --check"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

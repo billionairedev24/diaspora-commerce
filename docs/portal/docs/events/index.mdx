@@ -1,0 +1,26 @@
+---
+title: Event catalog
+sidebar_label: Catalog
+sidebar_position: 1
+hide_table_of_contents: true
+description: Every Kafka topic and event type, with payload schemas, producers and consumers.
+---
+
+import { EventIndex, TopicList } from '@site/src/components/EventCatalog';
+
+Every domain event on the bus is documented in AsyncAPI 3: each service owns a fragment in
+`contracts/asyncapi/fragments/<service>.yaml` and `tools/contracts/merge_asyncapi.py` merges them into
+`contracts/asyncapi/events.yaml`. Topics are `at.<aggregate>.events`, keyed by aggregate id; headers carry
+`event-id`, `event-type` and `occurred-at`. Producers publish through a transactional outbox and consumers
+de-duplicate on `event-id`.
+
+Producers and consumers come from the `send` / `receive` operations of each fragment. An event type listed
+without a producer is consumed by a service whose producer has not published its fragment yet.
+
+## Topics
+
+<TopicList />
+
+## Event types
+
+<EventIndex />

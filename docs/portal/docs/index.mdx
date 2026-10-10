@@ -1,0 +1,22 @@
+---
+title: AfroTransact developer portal
+sidebar_label: Home
+sidebar_position: 1
+slug: /
+hide_table_of_contents: true
+hide_title: true
+description: Contracts, services, events, MCP tools and runbooks for the AfroTransact v2 marketplace.
+---
+
+import HomeCards from '@site/src/components/Home';
+
+<div className="at-hero">
+  <h1>AfroTransact developer portal</h1>
+  <p>Everything a developer needs for the AfroTransact v2 marketplace: the local stack, engineering rules, every service, every API contract (Redoc and Scalar), every event on the bus, the MCP tools for AI agents and the on-call runbooks.</p>
+</div>
+
+<HomeCards />
+
+The portal is generated from the monorepo on every build. Contracts come from `contracts/`, service pages from
+each service's `README.md`, guides from `docs/engineering/` and `CLAUDE.md`, runbooks from `docs/runbooks/` and
+the backlog from `docs/backlog/backlog.csv`, so there is nothing to keep in sync by hand.

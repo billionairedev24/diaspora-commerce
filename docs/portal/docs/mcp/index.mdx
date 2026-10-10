@@ -1,0 +1,24 @@
+---
+title: MCP server
+sidebar_label: Overview
+sidebar_position: 1
+description: Model Context Protocol tools for Lola and partner agents.
+---
+
+The [mcp-server](../services/mcp-server.md) service exposes AfroTransact to AI agents (Lola, Claude, ChatGPT,
+custom agents) over the **Model Context Protocol**: shopper, seller and staff toolsets on top of the platform's
+public APIs.
+
+| | |
+|---|---|
+| Endpoint | `POST /mcp`: Streamable HTTP, stateless, one JSON-RPC 2.0 message per request |
+| Auth | OAuth 2.1 bearer tokens from identity; RFC 9728 metadata at `/.well-known/oauth-protected-resource`, Authorization Code + PKCE for clients |
+| Scopes | `mcp:shopper`, `mcp:seller` (plus an organisation), `mcp:staff` (plus a staff principal), then each tool's own permission |
+| Tool catalogue | `GET /v1/tools` (`?mine=true` for the caller's tools), see [MCP tools](./tools.mdx) |
+| Audit | every call emits `mcp.tool.invoked` on [`at.mcp-tool.events`](../events/topics/at-mcp-tool-events.mdx) |
+| Local | `http://localhost:8114/mcp`, try it with `npx @modelcontextprotocol/inspector` |
+
+Every tool returns `{status, data, message}`, where status is `OK`, `PROPOSED` (shown to the user; only their
+confirmation performs it), `NOT_FOUND`, `FORBIDDEN`, `REJECTED` or `UNAVAILABLE`.
+
+The REST part of the service is in the [mcp-server API reference](../api/mcp-server.mdx).

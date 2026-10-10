@@ -1,0 +1,19 @@
+# Docusaurus output
+/build/
+/.docusaurus/
+/.cache-loader/
+node_modules/
+
+# Generated at prebuild by scripts/sync-contracts.mjs — never edit or commit these.
+/static/contracts/
+/static/fonts/
+/static/img/logo-mark.svg
+/src/generated/
+/docs/api/
+/docs/services/
+/docs/runbooks/
+/docs/engineering/guides/
+/docs/events/topics/
+/docs/architecture/adr/
+/docs/getting-started/ports.md
+/docs/getting-started/make-targets.md
