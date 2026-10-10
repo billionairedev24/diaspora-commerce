@@ -1,0 +1,95 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "filter": {
+        "diaspora_synonyms": {
+          "type": "synonym_graph",
+          "lenient": true,
+          "synonyms": [
+            "gari, garri, cassava flakes",
+            "egusi, melon seed, melon seeds",
+            "zobo, bissap, sobolo, hibiscus",
+            "jeera, cumin",
+            "ofada, ofada rice",
+            "fufu, foofoo, foufou",
+            "plantain, plantains, dodo, kelewele",
+            "shito, black pepper sauce",
+            "suya, yaji, suya spice",
+            "ankara, wax print, kitenge, chitenge",
+            "kente, kente cloth",
+            "aso oke, aso-oke, asooke",
+            "gele, headwrap, head wrap, head tie",
+            "agbada, kaftan, boubou",
+            "shea butter, ori",
+            "black soap, ose dudu, african black soap, alata samina",
+            "palm oil, red palm oil, zomi",
+            "stockfish, okporoko",
+            "crayfish, ground crayfish",
+            "berbere, berbere spice",
+            "injera, teff bread",
+            "ugali, sadza, nshima, pap",
+            "chin chin, chinchin",
+            "maggi, bouillon, stock cube"
+          ]
+        },
+        "en_stem": { "type": "stemmer", "language": "light_english" }
+      },
+      "analyzer": {
+        "product_index": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding", "en_stem"]
+        },
+        "product_search": {
+          "type": "custom",
+          "tokenizer": "standard",
+          "filter": ["lowercase", "asciifolding", "diaspora_synonyms", "en_stem"]
+        }
+      },
+      "normalizer": {
+        "lower": { "type": "custom", "filter": ["lowercase", "asciifolding"] }
+      }
+    }
+  },
+  "mappings": {
+    "dynamic": "strict",
+    "properties": {
+      "atin":          { "type": "keyword" },
+      "title": {
+        "type": "text",
+        "analyzer": "product_index",
+        "search_analyzer": "product_search",
+        "fields": {
+          "suggest": { "type": "search_as_you_type", "analyzer": "product_index" },
+          "raw":     { "type": "keyword", "normalizer": "lower" }
+        }
+      },
+      "brand":         { "type": "text", "analyzer": "product_index", "search_analyzer": "product_search",
+                         "fields": { "raw": { "type": "keyword", "normalizer": "lower" } } },
+      "description":   { "type": "text", "analyzer": "product_index", "search_analyzer": "product_search" },
+      "department":    { "type": "keyword" },
+      "category_path": { "type": "keyword",
+                         "fields": { "text": { "type": "text", "analyzer": "product_index", "search_analyzer": "product_search" } } },
+      "communities":   { "type": "keyword" },
+      "seller_id":     { "type": "keyword" },
+      "seller_name":   { "type": "keyword" },
+      "seller_kind":   { "type": "keyword" },
+      "fulfilment":    { "type": "keyword" },
+      "price_minor":   { "type": "long" },
+      "currency":      { "type": "keyword" },
+      "rating":        { "type": "float" },
+      "review_count":  { "type": "integer" },
+      "available_qty": { "type": "integer" },
+      "in_stock":      { "type": "boolean" },
+      "delivery_days": { "type": "integer" },
+      "ships_from":    { "type": "geo_point" },
+      "image_url":     { "type": "keyword", "index": false },
+      "offer_count":   { "type": "integer" },
+      "embedding":     { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" },
+      "version":       { "type": "long" },
+      "updated_at":    { "type": "date" }
+    }
+  }
+}

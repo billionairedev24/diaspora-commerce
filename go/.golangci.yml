@@ -1,0 +1,51 @@
+# Shared lint rules for every Go module. Run from a module dir: golangci-lint run --config ../../.golangci.yml
+version: "2"
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - dupword
+    - errorlint
+    - exhaustive
+    - gocritic
+    - gosec
+    - importas
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - unconvert
+    - unparam
+    - wrapcheck
+  settings:
+    revive:
+      rules:
+        - name: dot-imports         # no dot imports
+        - name: blank-imports       # blank imports only in main / tests
+        - name: exported
+        - name: unexported-return
+          disabled: true            # constructors return the exported interface; impls stay unexported
+    exhaustive:
+      default-signifies-exhaustive: true
+    wrapcheck:
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Join(
+        - .Wrap(
+        - (context.Context).Err()
+    gosec:
+      excludes:
+        - G104
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [wrapcheck, gosec, dupword]
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/billionairedev24/diaspora-commerce

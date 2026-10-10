@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: Search API
+  version: v1
+  description: |
+    Product search and typeahead for the storefront, mobile app and Lola (via MCP).
+    Every typed word must match; partial words, diaspora synonyms (gari/garri, zobo/bissap/hibiscus …)
+    and typos (one edit for 3–5 letters, two for 6+) are tolerated. Natural-language queries of three or more
+    words are blended with semantic (kNN) retrieval when the AI gateway is available.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+servers:
+  - url: http://localhost:8201
+    description: local
+  - url: https://api.dev.afrotransact.com/search
+    description: dev
+  - url: https://api.uat.afrotransact.com/search
+    description: uat
+  - url: https://api.afrotransact.com/search
+    description: prod
+tags:
+  - name: Search
+paths:
+  /v1/search:
+    get:
+      tags: [Search]
+      operationId: searchProducts
+      summary: Search products with filters and facets
+      security: [{}, {bearer: []}]
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 200}, description: Free text}
+        - {name: market, in: query, schema: {type: string, default: us}}
+        - {name: department, in: query, schema: {type: string}}
+        - {name: community, in: query, schema: {type: string}, description: Comma-separated communities (Nigerian, Ghanaian…)}
+        - {name: fulfilment, in: query, schema: {type: string, enum: [AFROTRANSACT, SELLER]}}
+        - {name: sellerKind, in: query, schema: {type: string, enum: [PLATFORM, SELLER]}}
+        - {name: minRating, in: query, schema: {type: number, minimum: 0, maximum: 5}}
+        - {name: minPrice, in: query, schema: {type: integer, format: int64, minimum: 0}, description: Minor units}
+        - {name: maxPrice, in: query, schema: {type: integer, format: int64, minimum: 0}, description: Minor units}
+        - {name: maxDays, in: query, schema: {type: integer, minimum: 1}, description: Delivery within N days}
+        - {name: inStock, in: query, schema: {type: boolean}}
+        - {name: lat, in: query, schema: {type: number}}
+        - {name: lon, in: query, schema: {type: number}}
+        - {name: withinMiles, in: query, schema: {type: integer, minimum: 1}}
+        - {name: sort, in: query, schema: {type: string, enum: [relevance, price_asc, price_desc, rating, newest]}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 60, default: 24}}
+      responses:
+        '200':
+          description: A page of results
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SearchPage'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+  /v1/suggest:
+    get:
+      tags: [Search]
+      operationId: suggest
+      summary: Typeahead phrases and up to five products
+      security: [{}, {bearer: []}]
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, maxLength: 100}}
+        - {name: market, in: query, schema: {type: string, default: us}}
+      responses:
+        '200':
+          description: Suggestions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Suggestions'}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+        code: {type: string}
+        errors: {type: object, additionalProperties: {type: string}}
+    Hit:
+      type: object
+      required: [atin, title, sellerKind, fulfilment, priceMinor, currency, inStock]
+      properties:
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        title: {type: string}
+        brand: {type: string}
+        categoryPath: {type: string}
+        sellerName: {type: string}
+        sellerKind: {type: string, enum: [PLATFORM, SELLER]}
+        fulfilment: {type: string, enum: [AFROTRANSACT, SELLER]}
+        priceMinor: {type: integer, format: int64}
+        currency: {type: string}
+        rating: {type: number}
+        reviewCount: {type: integer}
+        inStock: {type: boolean}
+        lowStock: {type: boolean, description: True when 1–5 units are left ("Only N left")}
+        availableQty: {type: integer}
+        deliveryDays: {type: integer}
+        imageUrl: {type: string}
+        offerCount: {type: integer}
+        score: {type: number}
+    FacetBucket:
+      type: object
+      properties:
+        value: {type: string}
+        count: {type: integer, format: int64}
+    SearchPage:
+      type: object
+      required: [hits, total, page, size, facets]
+      properties:
+        hits: {type: array, items: {$ref: '#/components/schemas/Hit'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+        facets:
+          type: object
+          additionalProperties: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
+        semantic: {type: boolean}
+        tookMs: {type: integer, format: int64}
+    Suggestion:
+      type: object
+      properties:
+        text: {type: string}
+        department: {type: string}
+    Suggestions:
+      type: object
+      properties:
+        phrases: {type: array, items: {$ref: '#/components/schemas/Suggestion'}}
+        products: {type: array, items: {$ref: '#/components/schemas/Hit'}}

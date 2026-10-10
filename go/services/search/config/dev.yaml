@@ -1,0 +1,14 @@
+# search · dev. Secrets (ES_PASSWORD / ES_API_KEY) come from env vars only.
+port: 8080
+docsEnabled: true
+markets: [us]
+elasticsearch:
+  urls: [http://elasticsearch:9200]
+auth:
+  enabled: true
+  issuer: https://auth.dev.afrotransact.com
+  audience: search
+aiGatewayUrl: http://ai-gateway:8080
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampleRatio: 1.0

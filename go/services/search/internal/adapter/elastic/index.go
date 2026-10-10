@@ -1,0 +1,177 @@
+// Package elastic implements port.Index on Elasticsearch 9.
+package elastic
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
+	"unicode"
+
+	"github.com/elastic/go-elasticsearch/v9"
+
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/searchindex"
+	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/port"
+)
+
+type indexImpl struct {
+	es *elasticsearch.Client
+}
+
+var _ port.Index = (*indexImpl)(nil)
+
+// NewIndex returns an Index that queries the products-<market> alias.
+func NewIndex(es *elasticsearch.Client) port.Index { return &indexImpl{es: es} }
+
+type source struct {
+	ATIN         string  `json:"atin"`
+	Title        string  `json:"title"`
+	Brand        string  `json:"brand"`
+	Department   string  `json:"department"`
+	CategoryPath string  `json:"category_path"`
+	SellerName   string  `json:"seller_name"`
+	SellerKind   string  `json:"seller_kind"`
+	Fulfilment   string  `json:"fulfilment"`
+	PriceMinor   int64   `json:"price_minor"`
+	Currency     string  `json:"currency"`
+	Rating       float64 `json:"rating"`
+	ReviewCount  int     `json:"review_count"`
+	InStock      bool    `json:"in_stock"`
+	AvailableQty int     `json:"available_qty"`
+	DeliveryDays int     `json:"delivery_days"`
+	ImageURL     string  `json:"image_url"`
+	OfferCount   int     `json:"offer_count"`
+}
+
+type bucket struct {
+	Key      any   `json:"key"`
+	DocCount int64 `json:"doc_count"`
+}
+
+type response struct {
+	Took int64 `json:"took"`
+	Hits struct {
+		Total struct {
+			Value int64 `json:"value"`
+		} `json:"total"`
+		Hits []struct {
+			Score  *float64 `json:"_score"`
+			Source source   `json:"_source"`
+		} `json:"hits"`
+	} `json:"hits"`
+	Aggregations map[string]struct {
+		Buckets []bucket `json:"buckets"`
+	} `json:"aggregations"`
+}
+
+func (i *indexImpl) Search(ctx context.Context, q domain.Query, vec []float32) (domain.Page, error) {
+	var res response
+	if err := i.do(ctx, searchindex.Alias(q.Market), buildSearch(q, vec), &res); err != nil {
+		return domain.Page{}, err
+	}
+	page := domain.Page{Total: res.Hits.Total.Value, Page: q.Page, Size: q.Size, TookMs: res.Took,
+		Hits: make([]domain.Hit, 0, len(res.Hits.Hits)), Facets: map[string][]domain.FacetBucket{}}
+	for _, h := range res.Hits.Hits {
+		hit := toHit(h.Source)
+		if h.Score != nil {
+			hit.Score = *h.Score
+		}
+		page.Hits = append(page.Hits, hit)
+	}
+	for name, agg := range res.Aggregations {
+		buckets := make([]domain.FacetBucket, 0, len(agg.Buckets))
+		for _, b := range agg.Buckets {
+			if b.DocCount > 0 {
+				buckets = append(buckets, domain.FacetBucket{Value: fmt.Sprint(b.Key), Count: b.DocCount})
+			}
+		}
+		page.Facets[name] = buckets
+	}
+	return page, nil
+}
+
+func (i *indexImpl) Suggest(ctx context.Context, market, prefix string, limit int) (domain.Suggestions, error) {
+	var res response
+	if err := i.do(ctx, searchindex.Alias(market), buildSuggest(prefix, limit), &res); err != nil {
+		return domain.Suggestions{}, err
+	}
+	out := domain.Suggestions{Phrases: []domain.Suggestion{}, Products: []domain.Hit{}}
+	seen := map[string]bool{}
+	words := len(strings.Fields(prefix))
+	for idx, h := range res.Hits.Hits {
+		if len(out.Products) < limit {
+			out.Products = append(out.Products, toHit(h.Source))
+		}
+		phrase := completePhrase(h.Source.Title, words+1)
+		if phrase == "" || seen[phrase] || len(out.Phrases) >= limit {
+			continue
+		}
+		seen[phrase] = true
+		s := domain.Suggestion{Text: phrase}
+		if idx == 0 {
+			s.Department = h.Source.Department
+		}
+		out.Phrases = append(out.Phrases, s)
+	}
+	return out, nil
+}
+
+func (i *indexImpl) Ping(ctx context.Context) error {
+	res, err := i.es.Ping(i.es.Ping.WithContext(ctx))
+	if err != nil {
+		return fmt.Errorf("elasticsearch ping: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.IsError() {
+		return fmt.Errorf("elasticsearch ping: %s", res.Status())
+	}
+	return nil
+}
+
+func (i *indexImpl) do(ctx context.Context, index string, body object, out *response) error {
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("encode query: %w", err)
+	}
+	res, err := i.es.Search(
+		i.es.Search.WithContext(ctx),
+		i.es.Search.WithIndex(index),
+		i.es.Search.WithBody(bytes.NewReader(buf)),
+	)
+	if err != nil {
+		return fmt.Errorf("elasticsearch search: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.IsError() {
+		msg, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return fmt.Errorf("elasticsearch search: %s: %s", res.Status(), msg)
+	}
+	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode search response: %w", err)
+	}
+	return nil
+}
+
+func toHit(s source) domain.Hit {
+	return domain.Hit{ATIN: s.ATIN, Title: s.Title, Brand: s.Brand, CategoryPath: s.CategoryPath,
+		SellerName: s.SellerName, SellerKind: s.SellerKind, Fulfilment: s.Fulfilment, PriceMinor: s.PriceMinor,
+		Currency: s.Currency, Rating: s.Rating, ReviewCount: s.ReviewCount, InStock: s.InStock,
+		AvailableQty: s.AvailableQty, DeliveryDays: s.DeliveryDays, ImageURL: s.ImageURL, OfferCount: s.OfferCount}
+}
+
+// completePhrase lowercases a title and keeps its first n words, e.g. "Jollof Seasoning Blend, 8 oz" → "jollof seasoning".
+func completePhrase(title string, n int) string {
+	fields := strings.FieldsFunc(strings.ToLower(title), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '\''
+	})
+	if len(fields) == 0 {
+		return ""
+	}
+	if n > len(fields) {
+		n = len(fields)
+	}
+	return strings.Join(fields[:n], " ")
+}

@@ -1,0 +1,14 @@
+# search · local. Secrets (ES_PASSWORD / ES_API_KEY) come from env vars only.
+port: 8201
+docsEnabled: true
+markets: [us]
+elasticsearch:
+  urls: [http://localhost:9200]
+auth:
+  enabled: false
+  issuer: http://localhost:8100
+  audience: search
+aiGatewayUrl: ""
+telemetry:
+  otlpEndpoint: localhost:4318
+  sampleRatio: 1.0
