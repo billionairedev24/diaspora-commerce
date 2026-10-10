@@ -341,7 +341,7 @@
 - Metered usage for FBA storage, ads and AI credits","E14","","High","8","billing stripe java","billing","In Progress"
 "S104","Story","Billing page with real card/bank presentation","Payment methods shown as brand cards with last 4 or bank with type and verification.","- Default method cannot be removed until another is default
 - Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","Done"
-"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","In Progress"
+"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","Done"
 "S105","Story","Provider availability and calendar","Weekly hours with breaks, blocked dates, minimum notice, buffers, daily limit and instant booking.","- Week and month calendar views with booking quick view
 - Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","Done"
 "S106","Story","Services & prices with provider take-home","Duration, price and deposit per service, showing what the provider receives after commission and fees.","- Take-home amount shown per service
@@ -408,7 +408,7 @@
 - Changes appear in shop, app and legal pages immediately","E20","","High","3","content legal","content","Done"
 "S130","Story","Feature flags (OpenFeature + Unleash)","Rollout percentages and kill switches.","- Flags evaluated server-side and in web/mobile
 - Kill switch takes effect within 30 seconds","E20","","Medium","3","content platform","content","Done"
-"E21","Epic","Lola AI (Spring AI + OpenRouter) & MCP server","Lola is an agent calling the same APIs as the apps, via Spring AI with OpenRouter; MCP tools for shoppers, sellers and staff.","","","Lola AI (Spring AI + OpenRouter) & MCP server","High","","ai","ai","In Progress"
+"E21","Epic","Lola AI (Spring AI + OpenRouter) & MCP server","Lola is an agent calling the same APIs as the apps, via Spring AI with OpenRouter; MCP tools for shoppers, sellers and staff.","","","Lola AI (Spring AI + OpenRouter) & MCP server","High","","ai","ai","Done"
 "S131","Story","AI gateway on Spring AI with OpenRouter","Spring AI ChatClient against OpenRouter's OpenAI-compatible API with model routing per task.","- Fast model for intent, strong model for planning, configurable per environment
 - Per-user and per-feature budgets enforced
 - Provider fallback on errors
@@ -600,7 +600,7 @@
 - Invoices show metered lines","E14","","Medium","5","billing stripe","billing","In Progress"
 "S207","Story","Global MCP rate limits and durable audit","Move per-pod MCP rate-limit buckets to Valkey and give mcp.tool.invoked a durable path (outbox or local spool) so audit events survive broker outages.","- Rate limits are enforced across all replicas using Valkey token buckets
 - Audit events are spooled and replayed when Kafka is unavailable
-- Load test shows limits hold with 3 replicas","E21","","Medium","5","mcp ai","ai","In Progress"
+- Load test shows limits hold with 3 replicas","E21","","Medium","5","mcp ai","ai","Done"
 "S208","Story","Gateway BFF (Go) with token relay and screen-shaped APIs","Go BFF serving contracts/openapi/gateway-bff.yaml: OIDC code+PKCE sessions in Valkey, token relay, guest cart merge, resilience per upstream.","- Every contract operation implemented and contract-tested
 - Sessions are encrypted in Valkey and refreshed before expiry
 - Unavailable upstreams return 503 bff.upstream-unavailable problems
@@ -626,7 +626,7 @@
 - identity market values match content market codes
 - Navigation in Seller Center shows both groups for BOTH orgs","E13","","Low","3","seller identity","onboarding","In Progress"
 "S216","Story","Page hide and restore for large seller catalogs","Catalog pages through an org's products on hide/restore instead of loading all of them in one transaction.","- Hide/restore processes products in pages of 500
-- Large catalog (50k) hide completes without timeouts","E03","","Low","2","catalog","catalog","In Progress"
+- Large catalog (50k) hide completes without timeouts","E03","","Low","2","catalog","catalog","Done"
 "S217","Story","Align notification rules with real producer events","Notifications' event rules and topics are speculative (at.seller.events, order.placed). Map the real event types and topics from contracts/asyncapi/events.yaml and resolve recipients (email/phone/push) from identity when payloads carry only user ids.","- Rules cover orders.order.placed, orders.order.cancelled (wasPlaced), orders.shipment.status_changed/delivered/cancelled, seller application and compliance events, bookings events and identity verification
 - Topics match the AsyncAPI channels
 - Recipient contact details are resolved from identity by user id with caching
@@ -654,7 +654,7 @@
 "S225","Story","Send purchase orders to suppliers (PDF, email, EDI)","Render a PO PDF, email it to the supplier contact via notifications, and transmit EDI 850 where the supplier is EDI-enabled; store ASN documents in media.","- PO PDF rendered with lines, terms and totals
 - Approved PO is emailed to the supplier contact
 - EDI suppliers receive an 850
-- ASN documents are stored as media assets","E10","","Medium","5","retail","retail","In Progress"
+- ASN documents are stored as media assets","E10","","Medium","5","retail","retail","Done"
 "S226","Story","Retail integration gaps with catalog, inventory and payments","Catalog service endpoint for any-status variants; inventory receipt line holdReason and expected-inbound notices; stock owner on reservation events; payments consumes retail.payment.released for supplier payments; warehouse-local dates.","- Retail links draft 1P products via GET /v1/variants/{atin} with catalog:read
 - Receipt lines carry holdReason so no separate quarantine call
 - Inventory reservation events include stockOwnerOrgId
@@ -684,7 +684,7 @@
 - Providers can reply once
 - Public review list per provider and service
 - No-deposit services charge balance via off-session flow
-- Customers are notified when the balance is unpaid","E15","","Medium","5","bookings notifications","bookings","In Progress"
+- Customers are notified when the balance is unpaid","E15","","Medium","5","bookings notifications","bookings","Done"
 "S233","Story","Orders accepts relayed courier events and richer shipment data","Orders accepts courier events relayed by fulfilment-service (scope delivery:relay, driverId as actor); orders.order.placed carries per-shipment nodeId, perishable flag and ship-to street and position; dispatch can read delivery briefs; inventory offers pick confirmation.","- Queued proofs of delivery are accepted from fulfilment-service while the driver is offline
 - order placed events include nodeId, perishable, street and lat/lng per shipment
 - Dispatch role can read delivery briefs
@@ -727,3 +727,8 @@
 "S242","Story","Streaming support in go/pkg/httpserver","Shared Go HTTP server supports flushing through its response recorder and per-route write timeouts for long-lived streams (SSE), removing BFF workarounds.","- Recorder implements http.Flusher
 - SSE routes are exempt from the 30s write timeout
 - BFF Lola relay uses the shared server without workarounds","E01","","Medium","2","go platform","foundation","In Progress"
+"S243","Story","Review moderation, PO emails and media purposes","trust-ops queues booking.review.submitted and approves/rejects via bookings; notifications consumes at.retail.events with a retail.purchase_order.sent template; media adds purchase-order and shipping-document purposes, accepts retail-service tokens and supports 14-day signed links.","- Reviews appear in the trust-ops moderation queue and decisions publish them
+- Suppliers receive PO emails with a working PDF link
+- Media issues long-lived links only for these purposes","E18","","Medium","5","trust-ops notifications media","trust","To Do"
+"S244","Story","Fix flaky BarcodeIT prefill cache test","catalog BarcodeIT.unknownGtinFallsBackToManualEntryAndTheMissIsCachedButErrorsAreNot fails intermittently.","- Test passes 20 consecutive runs
+- Root cause documented","E33","","Medium","1","catalog test","quality","To Do"

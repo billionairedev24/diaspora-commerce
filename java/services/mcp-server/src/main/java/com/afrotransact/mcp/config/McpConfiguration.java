@@ -4,6 +4,9 @@ import java.time.Clock;
 
 import com.afrotransact.mcp.adapter.in.mcp.GuardedMcpTransport;
 import com.afrotransact.mcp.adapter.in.mcp.McpCallerExtractor;
+import com.afrotransact.mcp.adapter.out.valkey.ValkeyAuditSpool;
+import com.afrotransact.mcp.adapter.out.valkey.ValkeyTokenBucketRateLimiter;
+import com.afrotransact.mcp.application.AuditSettings;
 import com.afrotransact.mcp.application.ToolGuardService;
 import com.afrotransact.mcp.domain.DefaultPiiMasker;
 import com.afrotransact.mcp.domain.DefaultShipmentStatusPolicy;
@@ -13,6 +16,7 @@ import com.afrotransact.mcp.domain.RateLimiter;
 import com.afrotransact.mcp.domain.ShipmentStatusPolicy;
 import com.afrotransact.mcp.domain.TokenBucketRateLimiter;
 import com.afrotransact.mcp.domain.ToolAccessPolicy;
+import com.afrotransact.mcp.port.AuditSpool;
 import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PlatformSecurityProperties;
 import io.modelcontextprotocol.json.jackson3.JacksonMcpJsonMapper;
@@ -26,6 +30,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -35,6 +41,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({McpProperties.class, McpServerStreamableHttpProperties.class})
+@EnableScheduling
 class McpConfiguration {
 
     @Bean
@@ -48,9 +55,30 @@ class McpConfiguration {
         return new DefaultToolAccessPolicy();
     }
 
+    /**
+     * Global token buckets in Valkey (shared by every replica). The per-pod in-memory bucket is the fallback while
+     * Valkey is unreachable in {@code open} failure mode, or the whole limiter when {@code store=memory}.
+     */
     @Bean
-    RateLimiter rateLimiter(McpProperties props, Clock clock) {
-        return new TokenBucketRateLimiter(props.rateLimit().capacity(), props.rateLimit().refillPerMinute(), clock);
+    RateLimiter rateLimiter(McpProperties props, Clock clock, StringRedisTemplate redis) {
+        McpProperties.RateLimit rl = props.rateLimit();
+        RateLimiter local = new TokenBucketRateLimiter(rl.capacity(), rl.refillPerMinute(), clock);
+        if (rl.store() == McpProperties.Store.MEMORY) {
+            return local;
+        }
+        return new ValkeyTokenBucketRateLimiter(redis, rl.keyPrefix(), rl.capacity(), rl.refillPerMinute(),
+                rl.failureMode(), local);
+    }
+
+    @Bean
+    AuditSpool auditSpool(StringRedisTemplate redis, JsonMapper json, McpProperties props) {
+        return new ValkeyAuditSpool(redis, json, props.audit().spoolStream(), props.audit().spoolMaxLength());
+    }
+
+    @Bean
+    AuditSettings auditSettings(McpProperties props) {
+        McpProperties.Audit a = props.audit();
+        return new AuditSettings(a.replayBatch(), a.publishTimeout(), a.replayLease());
     }
 
     @Bean

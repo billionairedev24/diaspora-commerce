@@ -24,12 +24,18 @@ tags:
 - name: Public bookings
   description: 'Anonymous shopper reads (web shop, customer app, Lola): find a service, pick a day and a time, read the summary.
     Availability is computed live, never cached.'
+- name: Review moderation
+  description: Trust and safety staff and the trust-ops service client (bookings:reviews:moderate, principal type STAFF or
+    SERVICE) approve or reject customer reviews before they are public. Decisions are idempotent, so a retried queue decision
+    is safe.
 - name: Bookings
   description: Booking flow for customers (CUSTOMER token) and providers (bookings:manage). Every write takes an Idempotency-Key
     and is safe to retry.
 - name: Provider Hub
   description: 'Setup, cancellation policy, services & prices, team, working hours, calendar, bookings and earnings of a provider
     organisation. Roles: Owner and Manager full; Practitioner own calendar and hours only; Finance view only (enforced server-side).'
+- name: Reviews
+  description: Approved reviews per provider and per service (public), the provider's own reviews and their single reply.
 paths:
   /v1/bookings:
     post:
@@ -465,7 +471,8 @@ paths:
       tags:
       - Bookings
       summary: 'Rate a completed booking (customer, once): 1–5 stars and an optional text'
-      description: Ratings are averaged per service in search. 409 bookings.not-reviewable before completion, 409 bookings.already-reviewed
+      description: The review is PENDING until trust and safety approves it (booking.review.submitted queues it); only approved
+        reviews are public and averaged in ratings. 409 bookings.not-reviewable before completion, 409 bookings.already-reviewed
         the second time.
       operationId: review
       parameters:
@@ -641,6 +648,81 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Earnings'
+  /v1/providers/{orgId}/reviews:
+    get:
+      tags:
+      - Reviews
+      summary: The provider's reviews in every state (bookings:read)
+      description: Pending and rejected reviews are visible to the provider but never public.
+      operationId: providerReviewList
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReviewPage'
+  /v1/providers/{orgId}/reviews/{bookingId}/reply:
+    post:
+      tags:
+      - Reviews
+      summary: 'Reply to a published review, once (Owner / Manager: bookings:manage)'
+      description: 409 bookings.review-not-published before approval, 409 bookings.already-replied the second time; booking.review.replied.
+      operationId: replyToReview
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: bookingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewReplyRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Review'
   /v1/providers/{orgId}/services:
     get:
       tags:
@@ -1091,6 +1173,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicProvider'
       security: []
+  /v1/public/providers/{orgId}/reviews:
+    get:
+      tags:
+      - Reviews
+      summary: Approved reviews of a provider, newest first, with its rating
+      operationId: publicProviderReviews
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicReviewPage'
+      security: []
   /v1/public/services/search:
     get:
       tags:
@@ -1201,6 +1317,41 @@ paths:
                 items:
                   $ref: '#/components/schemas/AvailableDay'
       security: []
+  /v1/public/services/{serviceId}/reviews:
+    get:
+      tags:
+      - Reviews
+      summary: Approved reviews of a service, newest first, with its rating
+      operationId: publicServiceReviews
+      parameters:
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicReviewPage'
+      security: []
   /v1/public/services/{serviceId}/slots:
     get:
       tags:
@@ -1280,6 +1431,118 @@ paths:
               schema:
                 $ref: '#/components/schemas/BookingSummary'
       security: []
+  /v1/reviews:
+    get:
+      tags:
+      - Review moderation
+      summary: Reviews by moderation state (default PENDING, oldest first)
+      operationId: reviewModerationQueue
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReviewPage'
+  /v1/reviews/{bookingId}:
+    get:
+      tags:
+      - Review moderation
+      summary: One review (the review id is the booking id)
+      operationId: reviewForModeration
+      parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Review'
+  /v1/reviews/{bookingId}/approve:
+    post:
+      tags:
+      - Review moderation
+      summary: Publish a review
+      description: It is listed publicly and counts in ratings; booking.review.approved. Also reinstates a rejected review.
+        Approving an approved review changes nothing.
+      operationId: approveReview
+      parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewApproveRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Review'
+  /v1/reviews/{bookingId}/reject:
+    post:
+      tags:
+      - Review moderation
+      summary: Remove a review
+      description: Never public (or taken down if it was); booking.review.rejected. 422 bookings.invalid-moderation without
+        a note for reasonCode OTHER.
+      operationId: rejectReview
+      parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRejectRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Review'
   /v1/services/search:
     get:
       tags:
@@ -1768,6 +2031,98 @@ components:
           minimum: 0
       required:
       - noShow
+    ReviewRejectRequest:
+      type: object
+      description: note is required for reasonCode OTHER
+      properties:
+        reasonCode:
+          type: string
+          enum:
+          - ABUSIVE
+          - PERSONAL_INFORMATION
+          - SPAM
+          - OFF_TOPIC
+          - CONFLICT_OF_INTEREST
+          - OTHER
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reasonCode
+    Review:
+      type: object
+      description: A review as its customer, the provider and moderators see it
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        serviceId:
+          type: string
+          format: uuid
+        serviceName:
+          type: string
+        orgId:
+          type: string
+        customerId:
+          type: string
+        reviewerName:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        text:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          description: PENDING (waiting for moderation), APPROVED (public) or REJECTED
+        moderation:
+          $ref: '#/components/schemas/ReviewModeration'
+          description: Last moderation decision; null while pending
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+          description: The provider's reply; null until they reply
+    ReviewModeration:
+      type: object
+      properties:
+        moderatedBy:
+          type: string
+        moderatedAt:
+          type: string
+          format: date-time
+        reasonCode:
+          type: string
+        note:
+          type: string
+    ReviewReply:
+      type: object
+      description: The provider's single public reply
+      properties:
+        text:
+          type: string
+        repliedAt:
+          type: string
+          format: date-time
+    ReviewApproveRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+    ReviewReplyRequest:
+      type: object
+      description: The provider replies once to a published review
+      properties:
+        text:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - text
     CreateBookingRequest:
       type: object
       description: Service → day → time → summary, then book
@@ -2020,25 +2375,6 @@ components:
           type: string
           maxLength: 2000
           minLength: 0
-    Review:
-      type: object
-      properties:
-        bookingId:
-          type: string
-          format: uuid
-        serviceId:
-          type: string
-          format: uuid
-        orgId:
-          type: string
-        rating:
-          type: integer
-          format: int32
-        text:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
     NewTimeRequest:
       type: object
       properties:
@@ -2149,6 +2485,22 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PublicServiceListing'
+    ReviewPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
     PublicPolicy:
       type: object
       properties:
@@ -2271,6 +2623,55 @@ components:
           items:
             type: string
             format: uuid
+    PublicReview:
+      type: object
+      description: An approved review as shoppers see it (no customer id)
+      properties:
+        reviewId:
+          type: string
+          format: uuid
+        serviceId:
+          type: string
+          format: uuid
+        serviceName:
+          type: string
+        reviewerName:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        text:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        reply:
+          $ref: '#/components/schemas/ReviewReply'
+    PublicReviewPage:
+      type: object
+      description: Approved reviews, newest first, with the rating they make up
+      properties:
+        rating:
+          type: number
+          format: double
+          description: Average of the approved reviews (one decimal); 0 without reviews
+        ratingCount:
+          type: integer
+          format: int32
+          description: Number of approved reviews
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicReview'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
     AvailableDay:
       type: object
       properties:

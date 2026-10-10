@@ -16,6 +16,13 @@ spring:
         max.block.ms: 2000
         delivery.timeout.ms: 30000
         request.timeout.ms: 10000
+  data:
+    redis:
+      # Valkey: global rate-limit buckets and the audit spool. Short timeouts so an outage degrades fast
+      # (rate limits fail open to per-pod buckets by default; audit falls back to the log line).
+      url: ${REDIS_URL:redis://localhost:6379}
+      timeout: ${REDIS_TIMEOUT:250ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
   mvc:
     problemdetails:
       enabled: true
@@ -103,6 +110,19 @@ at:
     rate-limit:
       capacity: ${MCP_RATE_CAPACITY:60}
       refill-per-minute: ${MCP_RATE_PER_MINUTE:60}
+      # valkey = one bucket per client+subject shared by all replicas; memory = per pod.
+      store: ${MCP_RATE_STORE:valkey}
+      # Valkey unreachable: open (default) = per-pod in-memory bucket; closed = refuse calls (-32029).
+      failure-mode: ${MCP_RATE_FAILURE_MODE:open}
+      key-prefix: "mcp:rl:"
+    audit:
+      # Kafka refused mcp.tool.invoked -> Valkey stream, replayed in order by one replica at a time.
+      spool-stream: "mcp:audit:spool"
+      spool-max-length: ${MCP_AUDIT_SPOOL_MAX:1000000}
+      replay-interval: ${MCP_AUDIT_REPLAY_INTERVAL:5s}
+      replay-batch: 200
+      publish-timeout: 10s
+      replay-lease: 60s
     downstream:
       timeout: ${DOWNSTREAM_TIMEOUT:5s}
       search-url: ${SEARCH_URL:http://localhost:8201}

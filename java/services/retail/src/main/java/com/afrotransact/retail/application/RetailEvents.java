@@ -18,6 +18,15 @@ public final class RetailEvents {
     public static final String PO_APPROVED = "retail.po.approved";
     public static final String PO_SENT_BACK = "retail.po.sent-back";
     public static final String PO_SENT = "retail.po.sent";
+    /** A sent PO reached the supplier on one channel (EMAIL requested from notifications, or EDI 850 transmitted). */
+    public static final String PO_DISPATCHED = "retail.po.dispatched";
+    /** A sent PO could not be delivered on one channel (attempts exhausted or a permanent problem). */
+    public static final String PO_DISPATCH_FAILED = "retail.po.dispatch-failed";
+    /**
+     * Generic notifications request (notifications-service's notification.requested): the PO email to the supplier
+     * contact with a signed link to the PDF in media.
+     */
+    public static final String NOTIFICATION_REQUESTED = "notification.requested";
     public static final String PO_CONFIRMED = "retail.po.confirmed";
     public static final String PO_CANCELLED = "retail.po.cancelled";
     public static final String PO_RECEIVED = "retail.po.received";

@@ -44,7 +44,10 @@ operations:
       records the organisation's suppression (org_listing_suppression), hides its products from the public catalog
       API and publishes catalog.product.hidden / restored for every product of the organisation. Older decisions
       never override newer ones (occurredAt). This covers Stripe compliance enforcement and Trust and Safety
-      suspension (reason SUSPENDED / REINSTATED) alike.
+      suspension (reason SUSPENDED / REINSTATED) alike. Large catalogs are republished in pages of 500 products, one
+      transaction per page (S216), so the product events of one decision are spread over several commits; a
+      redelivered or crashed run resumes after its last committed page and a newer decision supersedes a run in
+      progress, so each product gets at most one event per decision.
 components:
   messages:
     catalogProductCreated:

@@ -103,12 +103,33 @@ at:
     inventory:
       base-url: ${INVENTORY_BASE_URL:http://localhost:8103}
       timeout: ${INVENTORY_TIMEOUT:10s}
+    media:
+      # S225: PO PDFs (purpose purchase-order) and shipment / ASN documents are media assets.
+      base-url: ${MEDIA_BASE_URL:http://localhost:8207}
+      timeout: ${MEDIA_TIMEOUT:10s}
+    dispatch:
+      # Sending POs to suppliers: email with a signed PDF link (notifications) + EDI 850 for EDI suppliers.
+      interval: ${PO_DISPATCH_INTERVAL:30s}
+      max-attempts: ${PO_DISPATCH_MAX_ATTEMPTS:5}
+      link-ttl: ${PO_PDF_LINK_TTL:14d}
+      email-template: retail.purchase_order.sent
+      buyer-name: AfroTransact Retail
+      buyer-address: ${RETAIL_BUYER_ADDRESS:Houston, TX, USA}
+      sender-id: AFROTRANSACT
+    edi:
+      # Off by default: the SFTP and AS2 adapters are skeletons until a client library is wired.
+      enabled: ${EDI_ENABLED:false}
+      sftp-username: ${EDI_SFTP_USERNAME:}
+      sftp-private-key-path: ${EDI_SFTP_PRIVATE_KEY_PATH:}
+      sftp-known-hosts-path: ${EDI_SFTP_KNOWN_HOSTS_PATH:}
+      as2-from: ${EDI_AS2_FROM:}
+      as2-keystore-path: ${EDI_AS2_KEYSTORE_PATH:}
     auth:
-      # Client-credentials token for service-to-service calls (inventory). Blank secret = no token (local).
+      # Client-credentials token for service-to-service calls (inventory, media). Blank secret = no token (local).
       token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
       client-id: ${RETAIL_CLIENT_ID:retail-service}
       client-secret: ${RETAIL_CLIENT_SECRET:}
-      scopes: inventory:receive inventory:adjust
+      scopes: inventory:receive inventory:adjust media:write
     consumers:
       # Posts COGS journals from inventory.reservation.committed for 1P SKUs.
       enabled: ${RETAIL_CONSUMERS_ENABLED:true}

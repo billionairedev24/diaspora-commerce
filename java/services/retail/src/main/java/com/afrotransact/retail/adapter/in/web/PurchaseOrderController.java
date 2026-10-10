@@ -88,7 +88,10 @@ class PurchaseOrderController {
         return tagged(orders.sendBack(id, body.note(), Versions.expected(ifMatch)));
     }
 
-    @Operation(operationId = "sendPurchaseOrder", summary = "Send to the supplier: PO PDF + EDI 850 (retail:po:write)")
+    @Operation(operationId = "sendPurchaseOrder", summary = "Send to the supplier: PO PDF + EDI 850 (retail:po:write)",
+            description = "Queues the delivery to the supplier (S225): the PO PDF is stored in media and the supplier "
+                    + "contact is emailed a signed link through notifications; EDI-enabled suppliers also get the "
+                    + "X12 850 through the EDI transport. Track it with GET /{id}/dispatches.")
     @PostMapping("/{id}/send")
     ResponseEntity<PoResponse> send(@PathVariable UUID id,
                                     @RequestHeader(name = Versions.IF_MATCH, required = false) String ifMatch) {

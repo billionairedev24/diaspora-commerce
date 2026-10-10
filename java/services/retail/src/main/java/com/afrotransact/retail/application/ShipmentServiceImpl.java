@@ -3,6 +3,7 @@ package com.afrotransact.retail.application;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -27,9 +28,11 @@ import com.afrotransact.retail.domain.PoLine;
 import com.afrotransact.retail.domain.PurchaseOrder;
 import com.afrotransact.retail.domain.RetailItem;
 import com.afrotransact.retail.domain.RetailRuleViolation;
+import com.afrotransact.retail.domain.ShipmentDocument;
 import com.afrotransact.retail.domain.ShipmentStage;
 import com.afrotransact.retail.domain.Supplier;
 import com.afrotransact.retail.port.ItemRepository;
+import com.afrotransact.retail.port.MediaStore;
 import com.afrotransact.retail.port.Page;
 import com.afrotransact.retail.port.PurchaseOrderRepository;
 import com.afrotransact.retail.port.ReferenceIssuer;
@@ -50,6 +53,7 @@ class ShipmentServiceImpl implements ShipmentService {
     private final GlPostingRules gl;
     private final JournalPoster journal;
     private final PermissionChecker permissions;
+    private final MediaStore media;
     private final DomainEventPublisher events;
     private final RetailSettings settings;
     private final Clock clock;
@@ -57,7 +61,7 @@ class ShipmentServiceImpl implements ShipmentService {
     ShipmentServiceImpl(ShipmentRepository shipments, PurchaseOrderRepository orders, SupplierRepository suppliers,
                         ItemRepository items, ReferenceIssuer refs, LandedCostCalculator landedCost,
                         GlPostingRules gl, JournalPoster journal, PermissionChecker permissions,
-                        DomainEventPublisher events, RetailSettings settings, Clock clock) {
+                        DomainEventPublisher events, RetailSettings settings, MediaStore media, Clock clock) {
         this.shipments = shipments;
         this.orders = orders;
         this.suppliers = suppliers;
@@ -67,6 +71,7 @@ class ShipmentServiceImpl implements ShipmentService {
         this.gl = gl;
         this.journal = journal;
         this.permissions = permissions;
+        this.media = media;
         this.events = events;
         this.settings = settings;
         this.clock = clock;
@@ -111,13 +116,18 @@ class ShipmentServiceImpl implements ShipmentService {
 
     @Override
     @Transactional
-    public InboundShipment setDocument(UUID id, String name, DocumentStatus status, String reference, String note) {
+    public InboundShipment setDocument(UUID id, String name, DocumentStatus status, String reference, String note,
+                                       List<UUID> assetIds) {
         permissions.require(RetailPermissions.LOGISTICS);
         if (status == null) {
             throw new RetailRuleViolation("retail.document-invalid", "Document status is required");
         }
         InboundShipment s = find(id, null);
-        InboundShipment updated = shipments.update(s.setDocument(name, status, reference, note, Instant.now(clock)));
+        if (assetIds != null) {
+            requireMediaAssets(assetIds);
+        }
+        InboundShipment updated = shipments.update(s.setDocument(name, status, reference, note,
+                assetIds == null ? null : List.copyOf(new LinkedHashSet<>(assetIds)), Instant.now(clock)));
         publish(RetailEvents.SHIPMENT_UPDATED, updated);
         return updated;
     }
@@ -200,5 +210,21 @@ class ShipmentServiceImpl implements ShipmentService {
 
     private void publish(String type, InboundShipment s) {
         events.publish(type, RetailEvents.AGGREGATE, s.id().toString(), RetailEventPayloads.ShipmentEvent.of(s));
+    }
+
+    /** Every file must be a finalised media asset (not still uploading, not rejected). */
+    private void requireMediaAssets(List<UUID> assetIds) {
+        if (assetIds.size() > ShipmentDocument.MAX_ASSETS) {
+            throw new RetailRuleViolation("retail.document-invalid", "At most " + ShipmentDocument.MAX_ASSETS
+                    + " files per document");
+        }
+        for (UUID assetId : assetIds) {
+            MediaStore.MediaAsset asset = media.find(assetId).orElseThrow(() -> new RetailRuleViolation(
+                    "retail.document-asset-invalid", "Media asset " + assetId + " does not exist"));
+            if (!asset.usable()) {
+                throw new RetailRuleViolation("retail.document-asset-invalid", "Media asset " + assetId + " is "
+                        + asset.status() + "; finish the upload first");
+            }
+        }
     }
 }

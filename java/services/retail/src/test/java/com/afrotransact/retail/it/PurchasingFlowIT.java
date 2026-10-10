@@ -120,7 +120,7 @@ class PurchasingFlowIT extends RetailIntegrationTest {
         InboundShipment exportCleared = s;
         assertThatThrownBy(() -> shipments.advance(exportCleared.id(), null)).hasMessageContaining("missing");
         for (ShipmentDocument d : s.documents()) {
-            s = shipments.setDocument(s.id(), d.name(), DocumentStatus.OK, null, null);
+            s = shipments.setDocument(s.id(), d.name(), DocumentStatus.OK, null, null, null);
         }
         s = shipments.advance(s.id(), null);
         assertThat(s.stage()).isEqualTo(ShipmentStage.DEPARTED);

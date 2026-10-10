@@ -54,6 +54,7 @@ class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final FxRateProvider fxRates;
     private final ApprovalPolicy approvals;
     private final PurchaseOrderDocuments documents;
+    private final PoDispatchQueue dispatchQueue;
     private final PermissionChecker permissions;
     private final DomainEventPublisher events;
     private final RetailSettings settings;
@@ -62,8 +63,8 @@ class PurchaseOrderServiceImpl implements PurchaseOrderService {
     PurchaseOrderServiceImpl(PurchaseOrderRepository orders, SupplierRepository suppliers, ItemRepository items,
                              InvoiceRepository invoices, ReceiptRepository receipts, ReferenceIssuer refs,
                              FxRateProvider fxRates, ApprovalPolicy approvals, PurchaseOrderDocuments documents,
-                             PermissionChecker permissions, DomainEventPublisher events, RetailSettings settings,
-                             Clock clock) {
+                             PoDispatchQueue dispatchQueue, PermissionChecker permissions, DomainEventPublisher events,
+                             RetailSettings settings, Clock clock) {
         this.orders = orders;
         this.suppliers = suppliers;
         this.items = items;
@@ -73,6 +74,7 @@ class PurchaseOrderServiceImpl implements PurchaseOrderService {
         this.fxRates = fxRates;
         this.approvals = approvals;
         this.documents = documents;
+        this.dispatchQueue = dispatchQueue;
         this.permissions = permissions;
         this.events = events;
         this.settings = settings;
@@ -147,7 +149,11 @@ class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public PurchaseOrder send(UUID id, Long expectedVersion) {
         Actor actor = permissions.require(RetailPermissions.PO_WRITE);
         PurchaseOrder po = find(id, expectedVersion);
-        return save(RetailEvents.PO_SENT, po.send(actor.subject(), Instant.now(clock)), actor, null);
+        Instant now = Instant.now(clock);
+        PurchaseOrder sent = save(RetailEvents.PO_SENT, po.send(actor.subject(), now), actor, null);
+        // S225: email the PDF to the supplier contact and, for EDI suppliers, transmit the 850 (dispatch job).
+        dispatchQueue.enqueue(sent, supplier(sent.supplierId()), now);
+        return sent;
     }
 
     @Override

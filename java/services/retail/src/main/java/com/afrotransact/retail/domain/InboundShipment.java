@@ -92,12 +92,23 @@ public record InboundShipment(UUID id, String reference, UUID poId, String poNum
     }
 
     public InboundShipment setDocument(String name, DocumentStatus status, String ref, String docNote, Instant now) {
+        return setDocument(name, status, ref, docNote, null, now);
+    }
+
+    /**
+     * Sets a document's status and, when {@code assetIds} is not null, its files (media asset ids; empty clears
+     * them). With null the files already attached are kept.
+     */
+    public InboundShipment setDocument(String name, DocumentStatus status, String ref, String docNote,
+                                       List<UUID> assetIds, Instant now) {
         if (stage == ShipmentStage.RECEIVED) {
             throw new RetailStateConflict("retail.shipment-closed", "Shipment " + reference + " is already received");
         }
+        List<UUID> files = assetIds != null ? assetIds : documents.stream().filter(d -> d.name().equals(name))
+                .findFirst().map(ShipmentDocument::assetIds).orElse(List.of());
         List<ShipmentDocument> docs = new ArrayList<>(documents.stream().filter(d -> !d.name().equals(name)).toList());
         int index = indexOf(name);
-        ShipmentDocument updated = new ShipmentDocument(name, status, ref, docNote, now);
+        ShipmentDocument updated = new ShipmentDocument(name, status, ref, docNote, now, files);
         if (index < 0) {
             docs.add(updated);
         } else {

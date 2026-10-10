@@ -148,6 +148,14 @@ class FeesSearchReviewsIT extends BookingsIntegrationTest {
                 403, "bookings.customer-only");
 
         TestSupport.reset();
+        JsonNode pending = ok(send("GET", "/v1/public/services/search?q=" + tag(s.org()), null, null))
+                .path("services").get(0);
+        assertThat(pending.path("ratingCount").asInt()).as("pending reviews are not counted (S232)").isZero();
+
+        TestSupport.as(TestSupport.trustOps());
+        ok(send("POST", "/v1/reviews/" + first.path("id").asString() + "/approve", Map.of(), null));
+        ok(send("POST", "/v1/reviews/" + second.path("id").asString() + "/approve", Map.of(), null));
+        TestSupport.reset();
         JsonNode hit = ok(send("GET", "/v1/public/services/search?q=" + tag(s.org()), null, null))
                 .path("services").get(0);
         assertThat(hit.path("serviceId").asString()).isEqualTo(s.serviceId().toString());

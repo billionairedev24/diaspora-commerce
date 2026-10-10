@@ -101,8 +101,9 @@ class BookingController {
     }
 
     @Operation(summary = "Rate a completed booking (customer, once): 1–5 stars and an optional text",
-            description = "Ratings are averaged per service in search. 409 bookings.not-reviewable before "
-                    + "completion, 409 bookings.already-reviewed the second time.")
+            description = "The review is PENDING until trust and safety approves it (booking.review.submitted "
+                    + "queues it); only approved reviews are public and averaged in ratings. 409 "
+                    + "bookings.not-reviewable before completion, 409 bookings.already-reviewed the second time.")
     @PostMapping("/{id}/review")
     ResponseEntity<ReviewResponse> review(@PathVariable UUID id, @Valid @RequestBody ReviewRequest body) {
         return ResponseEntity.status(HttpStatus.CREATED)

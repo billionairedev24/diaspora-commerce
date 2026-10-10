@@ -30,6 +30,8 @@ tags:
   description: Returned units after inspection (inventory:adjust)
 - name: Lots
   description: Batches with expiry, FEFO order, quarantine, write-off, cycle counts, transfers
+- name: Storage
+  description: FBA storage volume for metered billing (S206)
 - name: Reservations
   description: 'Checkout holds: reserve → confirm → commit (ship) or release. Called by the orders service (SERVICE principal
     with inventory:reserve).'
@@ -821,8 +823,149 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ReturnResult'
+  /v1/skus/{sku}/dimensions:
+    get:
+      tags:
+      - Storage
+      summary: A SKU's unit dimensions (inventory:read)
+      operationId: dimensions
+      parameters:
+      - name: sku
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SkuDimensions'
+    put:
+      tags:
+      - Storage
+      summary: Set a SKU's unit dimensions (inventory:adjust or inventory:receive)
+      operationId: setDimensions
+      parameters:
+      - name: sku
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkuDimensionsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SkuDimensions'
+  /v1/storage/snapshots:
+    post:
+      tags:
+      - Storage
+      summary: Retake today's storage snapshot now (inventory:adjust)
+      description: The hourly job does this; the last snapshot of a UTC day stands. Idempotent.
+      operationId: snapshot
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StorageSnapshotResult'
+  /v1/storage/usage:
+    get:
+      tags:
+      - Storage
+      summary: Cubic-feet-days per owner organisation and UTC day (metered billing, S206)
+      description: SERVICE principals with inventory:storage.read (seller-service) and staff with inventory:read see every
+        owner (optionally ownerOrg); seller members only their own organisation. Inclusive range of at most 93 days; physical
+        stock in fulfilment centres only (on hand + damaged).
+      operationId: usage
+      parameters:
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: ownerOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StorageUsage'
 components:
   schemas:
+    SkuDimensionsRequest:
+      type: object
+      description: Outer dimensions of one sellable unit, in inches
+      properties:
+        lengthIn:
+          type: number
+          examples:
+          - 12
+        widthIn:
+          type: number
+          examples:
+          - 8
+        heightIn:
+          type: number
+          examples:
+          - 4.5
+      required:
+      - heightIn
+      - lengthIn
+      - widthIn
+    SkuDimensions:
+      type: object
+      properties:
+        sku:
+          type: string
+        lengthIn:
+          type: number
+        widthIn:
+          type: number
+        heightIn:
+          type: number
+        unitCubicFeet:
+          type: number
+          description: Volume of one unit in cubic feet
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    StorageSnapshotResult:
+      type: object
+      properties:
+        day:
+          type: string
+          format: date
+          description: UTC day the snapshot is for
+        rows:
+          type: integer
+          format: int32
+          description: Owner × node rows written
     ReturnRequest:
       type: object
       description: A returned item after inspection
@@ -1451,6 +1594,38 @@ components:
         version:
           type: integer
           format: int64
+    StorageDay:
+      type: object
+      description: Storage of one owner organisation on one UTC day (all fulfilment centres)
+      properties:
+        ownerOrg:
+          type: string
+        day:
+          type: string
+          format: date
+        units:
+          type: integer
+          format: int64
+        unmeasuredUnits:
+          type: integer
+          format: int64
+          description: Units billed at the default unit volume (SKU has no dimensions)
+        cubicFeet:
+          type: number
+          description: Cubic feet held that day = the day's cubic-feet-days
+    StorageUsage:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/StorageDay'
     PositionPage:
       type: object
       properties:

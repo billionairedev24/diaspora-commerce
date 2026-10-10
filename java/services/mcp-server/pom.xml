@@ -14,7 +14,7 @@
     <artifactId>mcp-server-service</artifactId>
     <name>AfroTransact :: mcp-server-service</name>
     <description>Spring AI MCP server: shopper, seller and staff toolsets over the platform's public APIs with OAuth 2.1
-        scopes, per-client rate limits and an audit event for every tool call. Stateless (no database).</description>
+        scopes, global (Valkey) per-client rate limits and a durable audit event for every tool call. Stateless (no database).</description>
 
     <properties>
         <wiremock.version>3.13.2</wiremock.version>
@@ -52,6 +52,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
+        <!-- Valkey: global token buckets (Lua) and the audit spool stream. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

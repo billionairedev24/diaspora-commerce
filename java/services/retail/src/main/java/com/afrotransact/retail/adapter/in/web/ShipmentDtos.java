@@ -75,7 +75,11 @@ final class ShipmentDtos {
 
     @Schema(name = "DocumentRequest", description = "MISSING blocks departure; HOLD blocks customs clearance")
     record DocumentRequest(@NotBlank @Size(max = 80) String name, @NotNull DocumentStatus status,
-                           @Size(max = 120) String reference, @Size(max = 500) String note) {
+                           @Size(max = 120) String reference, @Size(max = 500) String note,
+                           @Schema(description = "Files of the document as media asset ids (finalised uploads, e.g. "
+                                   + "the supplier's ASN / packing list). Omit to keep the files attached; [] removes "
+                                   + "them.")
+                           @Size(max = 10) List<UUID> assetIds) {
     }
 
     @Schema(name = "ChargesRequest")

@@ -19,6 +19,9 @@ channels:
       retailPoApproved: {$ref: '#/components/messages/retailPoApproved'}
       retailPoSentBack: {$ref: '#/components/messages/retailPoSentBack'}
       retailPoSent: {$ref: '#/components/messages/retailPoSent'}
+      retailPoDispatched: {$ref: '#/components/messages/retailPoDispatched'}
+      retailPoDispatchFailed: {$ref: '#/components/messages/retailPoDispatchFailed'}
+      retailNotificationRequested: {$ref: '#/components/messages/notificationsRequested'}
       retailPoConfirmed: {$ref: '#/components/messages/retailPoConfirmed'}
       retailPoCancelled: {$ref: '#/components/messages/retailPoCancelled'}
       retailPoReceived: {$ref: '#/components/messages/retailPoReceived'}
@@ -46,7 +49,11 @@ operations:
       retail-service publishes product-master, supplier, PO, shipment/ASN, goods-receipt, landed-cost, GL journal and
       three-way-match events. Finance consumes retail.gl.journal.posted; payments-service pays suppliers on
       retail.payment.released; the buyer's work queue listens to retail.match.exception (assignee = PO buyer);
-      catalog/inventory/search use the item and receipt events.
+      catalog/inventory/search use the item and receipt events. Sending a PO (S225) is delivered by a job:
+      notification.requested (templateKey retail.purchase_order.sent, channel email, recipient = the supplier
+      contact's address, data.documentUrl = signed media link to the PO PDF, data.attachments = media asset
+      reference) for notifications-service, and the X12 850 through the EDI transport for EDI-enabled suppliers;
+      each channel ends in retail.po.dispatched or retail.po.dispatch-failed (key = PO id).
   consumeRetailInventoryReservationEvents:
     action: receive
     channel: {$ref: '#/channels/inventoryReservationEvents'}
@@ -109,9 +116,23 @@ components:
       payload: {$ref: '#/components/schemas/RetailPoEvent'}
     retailPoSent:
       name: retail.po.sent
-      title: PO sent to the supplier (PDF + EDI 850)
+      title: PO sent to the supplier; its deliveries (email with the PDF link, EDI 850) are queued
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/RetailPoEvent'}
+    retailPoDispatched:
+      name: retail.po.dispatched
+      title: >-
+        A sent PO reached the supplier on one channel: EMAIL (PDF stored in media, notification.requested written) or
+        EDI (850 accepted by the transport)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/RetailPoDispatchEvent'}
+    retailPoDispatchFailed:
+      name: retail.po.dispatch-failed
+      title: >-
+        A sent PO could not be delivered on one channel (attempts exhausted, no contact email, EDI disabled); a buyer
+        can retry with POST /v1/purchase-orders/{id}/dispatches/retry
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/RetailPoDispatchEvent'}
     retailPoConfirmed:
       name: retail.po.confirmed
       headers: {$ref: '#/components/schemas/EventHeaders'}
@@ -395,3 +416,18 @@ components:
               invoiceNumber: {type: string}
               currency: {type: string}
               amountMinor: {type: integer, format: int64}
+    RetailPoDispatchEvent:
+      type: object
+      required: [dispatchId, poId, poNumber, channel, status, attempts]
+      properties:
+        dispatchId: {type: string, format: uuid}
+        poId: {type: string, format: uuid}
+        poNumber: {type: string}
+        channel: {type: string, enum: [EMAIL, EDI]}
+        status: {type: string, enum: [DONE, FAILED]}
+        attempts: {type: integer}
+        recipient: {type: [string, 'null'], description: Contact email (EMAIL) or ISA interchange id (EDI)}
+        assetId: {type: [string, 'null'], format: uuid, description: Media asset of the PO PDF (EMAIL)}
+        controlNumber: {type: [string, 'null'], description: ISA13 of the transmitted 850 (EDI)}
+        transmissionId: {type: [string, 'null'], description: Transport receipt (remote file or AS2 message id)}
+        error: {type: [string, 'null']}

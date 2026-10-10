@@ -1,11 +1,16 @@
 package com.afrotransact.mcp.port;
 
 import java.time.Instant;
+import java.util.concurrent.CompletionStage;
 
-/** Audit of every MCP tool call ({@code mcp.tool.invoked} on {@code at.mcp-tool.events}). */
+/** Broker side of the audit of every MCP tool call ({@code mcp.tool.invoked} on {@code at.mcp-tool.events}). */
 public interface AuditTrail {
 
-    void record(ToolInvoked event);
+    /**
+     * Publishes one event. The returned stage completes when the broker acknowledged it and completes exceptionally
+     * when it did not; the call itself may also throw when the broker cannot even be reached.
+     */
+    CompletionStage<Void> publish(ToolInvoked event);
 
     /**
      * One tool call. Arguments are never stored, only their hash.

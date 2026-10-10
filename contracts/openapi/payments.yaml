@@ -75,6 +75,33 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ConnectedAccountResponse'
+  /v1/customers/me/ephemeral-keys:
+    post:
+      tags:
+      - Saved payment methods
+      summary: 'PaymentSheet: ephemeral key for the shopper''s Stripe Customer (shopper token)'
+      description: Returns {customerId, ephemeralKeySecret, expiresAt} for the Stripe Customer linked to the signed-in shopper,
+        creating the customer on first use. gateway-bff's POST /v1/account/payment-sheet calls it with the shopper's token.
+        Optional Idempotency-Key.
+      operationId: ephemeralKey
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EphemeralKeyRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EphemeralKey'
   /v1/customers/me/payment-methods:
     get:
       tags:
@@ -356,6 +383,8 @@ paths:
       tags:
       - Payments
       summary: Get the payment of an order
+      description: Services with payments:service and staff with payments:read read any order's payment. Shoppers (CUSTOMER
+        tokens) read only their own orders' payments; another shopper's order is 403 payments.not-your-order (S241).
       operationId: byOrder
       parameters:
       - name: orderId
@@ -1822,6 +1851,29 @@ components:
           description: false = bank account pending verification
         isDefault:
           type: boolean
+    EphemeralKeyRequest:
+      type: object
+      properties:
+        stripeVersion:
+          type: string
+          description: Stripe API version of the mobile SDK; default 2025-08-27.basil
+          examples:
+          - 2025-08-27.basil
+    EphemeralKey:
+      type: object
+      description: PaymentSheet setup for the signed-in shopper (S241)
+      properties:
+        customerId:
+          type: string
+          description: The shopper's Stripe Customer
+          examples:
+          - cus_Q1w2e3r4
+        ephemeralKeySecret:
+          type: string
+          description: Ephemeral key secret for the PaymentSheet (never log it)
+        expiresAt:
+          type: string
+          format: date-time
     ProviderFeeResponse:
       type: object
       description: A fee a provider owes (late provider cancellation), collected by a Stripe account debit

@@ -28,11 +28,11 @@ class ToolGuardServiceImpl implements ToolGuardService {
 
     private final ToolAccessPolicy policy;
     private final RateLimiter limiter;
-    private final AuditTrail audit;
+    private final AuditRecorderService audit;
     private final McpMetrics metrics;
     private final Clock clock;
 
-    ToolGuardServiceImpl(ToolAccessPolicy policy, RateLimiter limiter, AuditTrail audit, McpMetrics metrics,
+    ToolGuardServiceImpl(ToolAccessPolicy policy, RateLimiter limiter, AuditRecorderService audit, McpMetrics metrics,
                          Clock clock) {
         this.policy = policy;
         this.limiter = limiter;

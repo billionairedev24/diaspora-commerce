@@ -68,10 +68,14 @@ class ShipmentController {
         return tagged(shipments.updateAsn(id, body.toInputs(), body.toCartons(), Versions.expected(ifMatch)));
     }
 
-    @Operation(operationId = "setShipmentDocument", summary = "Set a customs/shipping document status (retail:logistics)")
+    @Operation(operationId = "setShipmentDocument", summary = "Set a customs/shipping document status (retail:logistics)",
+            description = "Files are stored in media and referenced by asset id (assetIds); each must be a finalised "
+                    + "media asset (422 retail.document-asset-invalid otherwise, 503 retail.media-unavailable when "
+                    + "media cannot be reached).")
     @PostMapping("/{id}/documents")
     ResponseEntity<ShipmentResponse> document(@PathVariable UUID id, @Valid @RequestBody DocumentRequest body) {
-        return tagged(shipments.setDocument(id, body.name(), body.status(), body.reference(), body.note()));
+        return tagged(shipments.setDocument(id, body.name(), body.status(), body.reference(), body.note(),
+                body.assetIds()));
     }
 
     @Operation(operationId = "updateShipmentCharges", summary = "Replace landed-cost charges: freight, insurance, duty, brokerage, drayage, fees, receiving")

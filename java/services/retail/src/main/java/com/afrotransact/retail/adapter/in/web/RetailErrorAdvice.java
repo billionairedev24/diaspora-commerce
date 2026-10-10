@@ -6,6 +6,7 @@ import com.afrotransact.retail.domain.RetailRuleViolation;
 import com.afrotransact.retail.domain.RetailStateConflict;
 import com.afrotransact.retail.port.CatalogUnavailableException;
 import com.afrotransact.retail.port.InventoryUnavailableException;
+import com.afrotransact.retail.port.MediaUnavailableException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -45,6 +46,14 @@ class RetailErrorAdvice {
     ProblemDetail catalogDown(CatalogUnavailableException ex) {
         return problem(HttpStatus.SERVICE_UNAVAILABLE, "retail.catalog-unavailable", "Catalog unavailable",
                 ex.getMessage());
+    }
+
+    @ExceptionHandler(MediaUnavailableException.class)
+    ProblemDetail mediaDown(MediaUnavailableException ex) {
+        ProblemDetail pd = problem(HttpStatus.SERVICE_UNAVAILABLE, "retail.media-unavailable", "Media unavailable",
+                ex.getMessage());
+        pd.setProperty("retryable", true);
+        return pd;
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

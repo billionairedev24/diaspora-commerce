@@ -8,8 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Token bucket per key (client + subject): {@code capacity} tokens, refilled continuously at
- * {@code refillPerMinute}. Buckets live in memory, so the limit is per pod; the service is stateless and the gateway
- * applies the global edge limit.
+ * {@code refillPerMinute}. Buckets live in memory, so the limit is per pod: this is the fallback while Valkey (the
+ * global limiter) is unreachable in {@code open} failure mode, and the limiter used with {@code store=memory}.
  */
 public class TokenBucketRateLimiter implements RateLimiter {
 

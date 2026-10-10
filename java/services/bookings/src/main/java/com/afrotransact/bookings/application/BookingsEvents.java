@@ -24,6 +24,16 @@ public final class BookingsEvents {
      * authorised by completion): provider and customer need to settle it.
      */
     public static final String BALANCE_UNPAID = "booking.balance_unpaid";
+    /**
+     * A customer rated a completed booking; the review waits for moderation (key = booking id). trust-ops queues it.
+     */
+    public static final String REVIEW_SUBMITTED = "booking.review.submitted";
+    /** Moderation published the review (it now counts in ratings). */
+    public static final String REVIEW_APPROVED = "booking.review.approved";
+    /** Moderation removed the review (never public, or taken down after publication). */
+    public static final String REVIEW_REJECTED = "booking.review.rejected";
+    /** The provider replied (once) to a published review. */
+    public static final String REVIEW_REPLIED = "booking.review.replied";
     /** A service was created or changed (key = service id) — search indexing. */
     public static final String SERVICE_UPSERTED = "booking.service.upserted";
 

@@ -45,10 +45,12 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     "spring.kafka.bootstrap-servers=localhost:1",
     "at.retail.consumers.enabled=false",
     "at.retail.auth.client-secret=it-secret",
-    "at.retail.inventory.timeout=5s"
+    "at.retail.inventory.timeout=5s",
+    // S225: tests drive the dispatch job directly
+    "at.retail.dispatch.job-enabled=false"
 })
 @ActiveProfiles("local")
-@Import(TestActors.class)
+@Import({TestActors.class, FakeEdi.class})
 abstract class RetailIntegrationTest {
 
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
@@ -67,6 +69,7 @@ abstract class RetailIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("at.retail.catalog.base-url", DOWNSTREAM::baseUrl);
         registry.add("at.retail.inventory.base-url", DOWNSTREAM::baseUrl);
+        registry.add("at.retail.media.base-url", DOWNSTREAM::baseUrl);
         registry.add("at.retail.auth.token-uri", () -> DOWNSTREAM.baseUrl() + "/oauth2/token");
     }
 

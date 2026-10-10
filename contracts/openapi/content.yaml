@@ -305,6 +305,34 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AdServingResponse'
+  /v1/ads/spend:
+    get:
+      tags:
+      - Sponsored products
+      summary: Charged ads spend per organisation and UTC day (metered billing, S206)
+      description: Service scope ads:spend.read (seller-service) or staff with content:ads.view / content:ads.edit. Inclusive
+        range of at most 93 days; only days with spend are listed.
+      operationId: spend
+      parameters:
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdSpendReport'
   /v1/audit:
     get:
       tags:
@@ -3005,6 +3033,42 @@ components:
         detail:
           type: object
           additionalProperties: {}
+    AdOrgDaySpend:
+      type: object
+      description: Charged sponsored-products spend of one organisation on one UTC day
+      properties:
+        sellerOrgId:
+          type: string
+          examples:
+          - org_3k2j9x8q7w6e5r4t3y2u
+        day:
+          type: string
+          format: date
+          description: UTC day
+        currency:
+          type: string
+          examples:
+          - USD
+        clicks:
+          type: integer
+          format: int64
+        spendMinor:
+          type: integer
+          format: int64
+          description: Charged clicks in minor units
+    AdSpendReport:
+      type: object
+      properties:
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdOrgDaySpend'
     AdServingResponse:
       type: object
       properties:

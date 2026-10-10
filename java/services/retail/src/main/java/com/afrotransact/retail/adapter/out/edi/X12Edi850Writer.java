@@ -38,7 +38,7 @@ public class X12Edi850Writer implements PurchaseOrderDocuments {
     }
 
     @Override
-    public String edi850(PurchaseOrder po, Supplier supplier, Map<UUID, RetailItem> items) {
+    public String edi850(PurchaseOrder po, Supplier supplier, Map<UUID, RetailItem> items, String receiverId) {
         LocalDateTime now = LocalDateTime.now(clock.withZone(ZoneOffset.UTC));
         String control = String.format(Locale.ROOT, "%09d", Math.abs(po.number().hashCode()) % 1_000_000_000);
         List<String> st = new ArrayList<>();
@@ -66,8 +66,8 @@ public class X12Edi850Writer implements PurchaseOrderDocuments {
         st.add("SE*" + (st.size() + 1) + "*0001");
         StringBuilder out = new StringBuilder();
         out.append(String.format(Locale.ROOT, "ISA*00*          *00*          *ZZ*%-15s*ZZ*%-15s*%s*%s*U*00401*%s*0*P*>~",
-                senderId, supplier.code(), YYMMDD.format(now), HHMM.format(now), control));
-        out.append("GS*PO*").append(senderId).append('*').append(supplier.code()).append('*')
+                senderId, receiverId, YYMMDD.format(now), HHMM.format(now), control));
+        out.append("GS*PO*").append(senderId).append('*').append(receiverId).append('*')
                 .append(CCYYMMDD.format(now)).append('*').append(HHMM.format(now)).append("*1*X*004010~");
         st.forEach(s -> out.append(s).append('~'));
         out.append("GE*1*1~");

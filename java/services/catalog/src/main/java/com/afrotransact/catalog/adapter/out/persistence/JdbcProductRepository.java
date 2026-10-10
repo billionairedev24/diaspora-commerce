@@ -109,6 +109,17 @@ class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public List<Product> findByOwnerOrgAfter(String orgId, UUID afterId, int limit) {
+        String sql = SELECT + (afterId == null ? " where owner_org = :org" : " where owner_org = :org and id > :after")
+                + " order by id limit :limit";
+        JdbcClient.StatementSpec spec = jdbc.sql(sql).param("org", orgId).param("limit", limit);
+        if (afterId != null) {
+            spec = spec.param("after", afterId);
+        }
+        return withVariants(spec.query(this::mapProduct).list());
+    }
+
+    @Override
     public ProductPage search(ProductQuery q) {
         StringBuilder where = new StringBuilder(" where 1 = 1");
         Map<String, Object> params = new HashMap<>();

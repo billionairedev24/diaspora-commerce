@@ -21,3 +21,6 @@ extraEnv:
   # In-cluster service names; every service listens on 8080 in Kubernetes.
   CATALOG_BASE_URL: http://catalog:8080
   INVENTORY_BASE_URL: http://inventory:8080
+  # S225: PO PDFs and shipment documents live in media. EDI stays off until the SFTP / AS2 adapters are finished.
+  MEDIA_BASE_URL: http://media:8080
+  EDI_ENABLED: "false"

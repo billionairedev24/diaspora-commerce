@@ -38,6 +38,11 @@ class SellerListingsEventListenerTest {
                 public boolean hidden(String orgId) {
                     return false;
                 }
+
+                @Override
+                public int resumeStalled() {
+                    return 0;
+                }
             }, JsonMapper.builder().build());
 
     private static ConsumerRecord<String, String> rec(String type, String eventId, String json) {

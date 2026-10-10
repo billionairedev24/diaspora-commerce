@@ -84,6 +84,11 @@ at:
     relay-enabled: true
   catalog:
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # S216: seller.listings.hidden|restored republish an org's products in pages, one transaction per page.
+    listing-enforcement:
+      page-size: ${LISTING_ENFORCEMENT_PAGE_SIZE:500}
+      stall-after: 2m          # a running run with no page committed for this long is resumed by the job
+      resume-interval: 60s
     # S031 GTIN prefill: providers in lookup order, cached per GTIN in product_data_lookup.
     product-data:
       order: ${PRODUCT_DATA_ORDER:GS1,OPEN_FOOD_FACTS}

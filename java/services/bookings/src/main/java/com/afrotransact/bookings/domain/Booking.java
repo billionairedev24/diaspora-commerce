@@ -375,7 +375,11 @@ public final class Booking {
         status = by == Party.PROVIDER ? BookingStatus.CANCELLED_PROVIDER : BookingStatus.CANCELLED_CUSTOMER;
         log(now, by == Party.SYSTEM ? Party.SYSTEM : by, "Cancelled" + (reason == null ? "" : " · “" + reason + "”"));
         List<MoneyMove> moves = new ArrayList<>();
-        if (quote.releaseAuthorisation()) {
+        if (quote.releaseAuthorisation() && authorisationReleasedAhead()) {
+            // No-deposit booking whose hold was released ahead: cancel the off-session charge, if any.
+            releaseBalance(now, moves);
+            paymentState = PaymentState.RELEASED;
+        } else if (quote.releaseAuthorisation()) {
             if (paymentId != null) {
                 moves.add(MoneyMove.release());
                 releasedMinor += quote.releasedMinor();
@@ -458,14 +462,36 @@ public final class Booking {
      * Right after the deposit capture: when the appointment is beyond the card authorisation window, the balance
      * hold is released and the balance becomes due off-session (charged {@code chargeBefore} the appointment).
      *
+     * <p>Services without a deposit (S232) have nothing to capture at confirmation: once the booking is confirmed
+     * and the appointment is beyond the window, the whole authorisation is released (the PaymentIntent is cancelled;
+     * the card stays saved for off-session use) and the full price becomes the balance due off-session, exactly like
+     * the balance of a deposit booking.
+     *
      * @return the release instruction, or nothing when the authorisation still covers the appointment
      */
     public List<MoneyMove> releaseBalanceAhead(BalanceChargePolicy chargePolicy, Instant now) {
         long amount = service.balanceMinor();
         if (balance.state() != BalanceState.ON_AUTHORISATION || paymentId == null || amount <= 0
-                || depositCapturedMinor == 0 || balanceCapturedMinor > 0 || !status.isActive()
+                || balanceCapturedMinor > 0 || !status.isActive()
                 || status == BookingStatus.PENDING_PAYMENT || status == BookingStatus.REQUESTED
                 || !chargePolicy.beyondAuthorisation(startAt, now)) {
+            return List.of();
+        }
+        if (service.depositMinor() <= 0) {
+            if (paymentState != PaymentState.AUTHORIZED) {
+                return List.of();
+            }
+            releasedMinor += authorizedMinor;
+            paymentState = PaymentState.RELEASED;
+            balance = new BalanceCharge(BalanceState.DUE, null, 0, null, null, null);
+            updatedAt = now;
+            log(now, Party.SYSTEM, "No deposit and the appointment is more than "
+                    + chargePolicy.authorisationWindow().toDays() + " days away · " + money(authorizedMinor)
+                    + " hold released; the " + money(amount) + " is charged on the saved card "
+                    + chargePolicy.chargeBefore().toDays() + " days before", MoneyKind.RELEASE, authorizedMinor);
+            return List.of(MoneyMove.release());
+        }
+        if (depositCapturedMinor == 0) {
             return List.of();
         }
         releasedMinor += amount;
@@ -475,6 +501,15 @@ public final class Booking {
                 + " days away · " + money(amount) + " balance hold released; the balance is charged on the saved card "
                 + chargePolicy.chargeBefore().toDays() + " days before", MoneyKind.RELEASE_REMAINING, amount);
         return List.of(MoneyMove.releaseRemaining());
+    }
+
+    /**
+     * True once a no-deposit booking's original authorisation was released ahead of a far appointment: its money is
+     * then only the off-session balance charge.
+     */
+    public boolean authorisationReleasedAhead() {
+        return service.depositMinor() <= 0 && depositCapturedMinor == 0
+                && balance.state() != BalanceState.ON_AUTHORISATION;
     }
 
     /**
@@ -671,6 +706,15 @@ public final class Booking {
                     balance = balance.withState(BalanceState.RELEASED);
                     log(now, Party.SYSTEM, "Released the " + money(amount) + " balance hold on the card",
                             MoneyKind.RELEASE_REMAINING, amount);
+                } else if (depositCapturedMinor == 0 && balanceCapturedMinor == 0
+                        && paymentState == PaymentState.AUTHORIZED) {
+                    // No deposit, nothing captured (no-show without full price): cancel the whole hold.
+                    moves.add(MoneyMove.release());
+                    releasedMinor += authorizedMinor;
+                    paymentState = PaymentState.RELEASED;
+                    balance = balance.withState(BalanceState.RELEASED);
+                    log(now, Party.SYSTEM, "Released the " + money(authorizedMinor) + " hold on the card",
+                            MoneyKind.RELEASE, authorizedMinor);
                 }
             }
             case PROCESSING, ACTION_REQUIRED, AUTHORIZED -> {

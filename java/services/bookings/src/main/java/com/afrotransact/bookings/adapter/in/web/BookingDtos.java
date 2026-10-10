@@ -117,11 +117,34 @@ final class BookingDtos {
     record ReviewRequest(@Min(1) @Max(5) int rating, @Size(max = Review.MAX_TEXT) String text) {
     }
 
-    @Schema(name = "Review")
-    record ReviewResponse(UUID bookingId, UUID serviceId, String orgId, int rating, String text, Instant createdAt) {
+    @Schema(name = "Review", description = "A review as its customer, the provider and moderators see it")
+    record ReviewResponse(UUID bookingId, UUID serviceId, String serviceName, String orgId, String customerId,
+                          String reviewerName, int rating, String text, Instant createdAt,
+                          @Schema(description = "PENDING (waiting for moderation), APPROVED (public) or REJECTED")
+                          String status,
+                          @Schema(description = "Last moderation decision; null while pending")
+                          ModerationDto moderation,
+                          @Schema(description = "The provider's reply; null until they reply") ReplyDto reply) {
 
         static ReviewResponse of(Review r) {
-            return new ReviewResponse(r.bookingId(), r.serviceId(), r.orgId(), r.rating(), r.text(), r.createdAt());
+            Review.Moderation m = r.moderation();
+            return new ReviewResponse(r.bookingId(), r.serviceId(), r.serviceName(), r.orgId(), r.customerId(),
+                    r.reviewerName(), r.rating(), r.text(), r.createdAt(), r.status().name(),
+                    m == null ? null : new ModerationDto(m.by(), m.at(),
+                            m.reason() == null ? null : m.reason().name(), m.note()),
+                    ReplyDto.of(r.reply()));
+        }
+    }
+
+    @Schema(name = "ReviewModeration")
+    record ModerationDto(String moderatedBy, Instant moderatedAt, String reasonCode, String note) {
+    }
+
+    @Schema(name = "ReviewReply", description = "The provider's single public reply")
+    record ReplyDto(String text, Instant repliedAt) {
+
+        static ReplyDto of(Review.ProviderReply reply) {
+            return reply == null ? null : new ReplyDto(reply.text(), reply.at());
         }
     }
 

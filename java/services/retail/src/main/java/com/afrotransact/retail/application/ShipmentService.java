@@ -19,7 +19,13 @@ public interface ShipmentService {
     /** Replaces the ASN lines and cartons; locked after departure. */
     InboundShipment updateAsn(UUID id, List<AsnLineInput> lines, List<Carton> cartons, Long expectedVersion);
 
-    InboundShipment setDocument(UUID id, String name, DocumentStatus status, String reference, String note);
+    /**
+     * Sets a shipping / customs document's status and, when {@code assetIds} is not null, its files as media asset
+     * ids (S225: the supplier's ASN / packing list, bill of lading, certificates …). Each asset must exist in media
+     * and be finalised; null keeps the files already attached, an empty list removes them.
+     */
+    InboundShipment setDocument(UUID id, String name, DocumentStatus status, String reference, String note,
+                                List<UUID> assetIds);
 
     InboundShipment updateCharges(UUID id, List<LandedCharge> charges, Long expectedVersion);
 

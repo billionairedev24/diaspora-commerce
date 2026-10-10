@@ -1,6 +1,9 @@
 package com.afrotransact.catalog.config;
 
+import java.time.Duration;
+
 import com.afrotransact.catalog.application.LabelSettings;
+import com.afrotransact.catalog.application.ListingEnforcementSettings;
 import com.afrotransact.catalog.application.OwnerResolver;
 import com.afrotransact.catalog.application.ProductDataSettings;
 import com.afrotransact.catalog.application.RetailAwareOwnerResolver;
@@ -45,6 +48,13 @@ class CatalogConfiguration {
     @Bean
     LabelSettings labelSettings(@Value("${at.catalog.retail-org-id}") String retailOrgId) {
         return new LabelSettings(retailOrgId);
+    }
+
+    @Bean
+    ListingEnforcementSettings listingEnforcementSettings(
+            @Value("${at.catalog.listing-enforcement.page-size:500}") int pageSize,
+            @Value("${at.catalog.listing-enforcement.stall-after:2m}") Duration stallAfter) {
+        return new ListingEnforcementSettings(pageSize, stallAfter);
     }
 
     @Bean

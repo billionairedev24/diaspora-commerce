@@ -96,6 +96,20 @@ Consumed (group `catalog-service`, inbox-deduplicated): `seller.listings.hidden|
 `/v1/public/**` and publish `catalog.product.hidden|restored` for each of its products so search follows. This also
 covers Trust and Safety suspensions (reason `SUSPENDED` / `REINSTATED` from seller-service).
 
+**Paged hide / restore (S216).** The decision (inbox, suppression row, `listing_enforcement_run` row) commits in one
+short transaction; then the organisation's products are republished in pages of `at.catalog.listing-enforcement.page-size`
+(500), one transaction per page, walking a keyset cursor on `(owner_org, id)` (V6 adds that index and
+`product_variant (product_id)`, so each page is constant cost however big the catalog). Each page's outbox rows and
+the run's cursor commit together, so a page is never published twice. Runs are tracked per enforcement event
+(`listing_enforcement_run`: status `RUNNING|DONE|SUPERSEDED`, cursor, processed, pages): a redelivered event resumes
+its run after the last committed page, `ListingEnforcementResumeJob` (every 60 s) resumes runs with no page for 2 min
+(a pod died mid-run), and a newer decision for the same organisation supersedes a run still in progress (its own run
+republishes everything). `LargeCatalogEnforcementIT` runs 3,250 products (7 pages) plus crash/redelivery, stalled-job
+and supersede scenarios; it is not sized at the 50k of the acceptance criteria because pages are constant-size and
+independent of catalog size (50k = 100 identical pages), and seeding 50k products plus outbox rows would add minutes
+and hundreds of MB to every CI run. It logs the per-page time (≈ 340 ms per 500 products on a laptop container, so a
+50k hide takes ≈ 35 s in many short transactions instead of one long one).
+
 Listing reason codes (reports, flags, takedowns) match the trust-ops moderation codes: `PROHIBITED_ITEM`,
 `UNAPPROVED_HEALTH_CLAIM`, `RESTRICTED_INGREDIENT`, `COUNTERFEIT`, `IMAGE_POLICY`, `MISLEADING_CONTENT`, `LABELLING`,
 `SHIPPING_METHOD`, `DUPLICATE_LISTING`, `WRONG_CATEGORY`, `OTHER` (details / note required for `OTHER`).
@@ -117,6 +131,7 @@ Known gaps:
 | `KAFKA_BOOTSTRAP` | Kafka for the outbox relay |
 | `AUTH_ISSUER_URI` | identity service issuer (JWT validation) |
 | `RETAIL_ORG_ID` | organisation id of AfroTransact Retail |
+| `LISTING_ENFORCEMENT_PAGE_SIZE` | products per hide / restore page (500) |
 | `PRODUCT_DATA_ORDER`, `PRODUCT_DATA_CACHE_TTL`, `PRODUCT_DATA_MISS_TTL` | GTIN prefill provider order (`GS1,OPEN_FOOD_FACTS`) and cache (7d / 1d) |
 | `GS1_ENABLED`, `GS1_API_KEY` (secret), `GS1_BASE_URL`, `GS1_TIMEOUT` | Verified by GS1 (off by default; needs a key) |
 | `OFF_ENABLED`, `OFF_BASE_URL`, `OFF_USER_AGENT`, `OFF_TIMEOUT` | Open Food Facts (on by default, 3 s) |

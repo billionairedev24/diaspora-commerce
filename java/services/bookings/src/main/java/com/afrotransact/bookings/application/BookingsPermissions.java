@@ -16,6 +16,11 @@ public final class BookingsPermissions {
     public static final String AVAILABILITY_WRITE = "bookings:availability:write";
     /** Team members, roles and who performs which service (Owner, Manager). */
     public static final String TEAM_MANAGE = "bookings:team:manage";
+    /**
+     * Approve or reject customer reviews (S232): trust and safety staff and the trust-ops service client only
+     * (principal type STAFF or SERVICE); provider members are refused even if granted it.
+     */
+    public static final String REVIEWS_MODERATE = "bookings:reviews:moderate";
 
     /** Identity role keys used to scope practitioners to their own calendar. */
     public static final String ROLE_OWNER = "provider.owner";

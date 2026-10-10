@@ -23,6 +23,9 @@ tags:
 - name: Product master
   description: '1P items linked to catalog ATINs: GTIN, customs, pack sizes, supplier SKUs, cost, price and listing readiness
     (S068)'
+- name: Purchase order delivery
+  description: 'The PO PDF and the delivery of sent POs to suppliers: email with a signed link to the PDF (media + notifications)
+    and EDI 850 for EDI-enabled suppliers (S225).'
 - name: Goods receipts
   description: Count, validate and complete receipts; lots are posted to inventory with landed cost, discrepancies raise claims
     and the GL entry is produced (S072/S073)
@@ -663,6 +666,51 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/dispatches:
+    get:
+      tags:
+      - Purchase order delivery
+      summary: Deliveries of a sent PO (retail:read)
+      operationId: listPurchaseOrderDispatches
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PoDispatch'
+  /v1/purchase-orders/{id}/dispatches/retry:
+    post:
+      tags:
+      - Purchase order delivery
+      summary: Retry the PO's failed deliveries (retail:po:write)
+      description: After fixing the supplier contact or EDI settings; the email goes to the current contact.
+      operationId: retryPurchaseOrderDispatches
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PoDispatch'
   /v1/purchase-orders/{id}/edi850:
     get:
       tags:
@@ -714,11 +762,35 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/pdf:
+    get:
+      tags:
+      - Purchase order delivery
+      summary: 'The PO as PDF: lines, terms and totals (approved POs)'
+      operationId: getPurchaseOrderPdf
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: byte
   /v1/purchase-orders/{id}/send:
     post:
       tags:
       - Purchase orders
       summary: 'Send to the supplier: PO PDF + EDI 850 (retail:po:write)'
+      description: 'Queues the delivery to the supplier (S225): the PO PDF is stored in media and the supplier contact is
+        emailed a signed link through notifications; EDI-enabled suppliers also get the X12 850 through the EDI transport.
+        Track it with GET /{id}/dispatches.'
       operationId: sendPurchaseOrder
       parameters:
       - name: id
@@ -1225,6 +1297,8 @@ paths:
       tags:
       - Inbound shipments
       summary: Set a customs/shipping document status (retail:logistics)
+      description: Files are stored in media and referenced by asset id (assetIds); each must be a finalised media asset (422
+        retail.document-asset-invalid otherwise, 503 retail.media-unavailable when media cannot be reached).
       operationId: setShipmentDocument
       parameters:
       - name: id
@@ -1377,6 +1451,51 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Supplier'
+  /v1/suppliers/{id}/edi:
+    get:
+      tags:
+      - Suppliers
+      summary: A supplier's EDI settings (retail:read)
+      operationId: getSupplierEdi
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierEdi'
+    put:
+      tags:
+      - Suppliers
+      summary: Set a supplier's EDI settings (retail:suppliers:write)
+      operationId: setSupplierEdi
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierEdiRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierEdi'
   /v1/suppliers/{id}/status:
     post:
       tags:
@@ -1550,6 +1669,53 @@ components:
           type: number
         defectPercent:
           type: number
+    SupplierEdiRequest:
+      type: object
+      description: EDI trading-partner settings; enabled suppliers receive the X12 850 of every sent PO
+      properties:
+        enabled:
+          type: boolean
+        protocol:
+          type: string
+          enum:
+          - SFTP
+          - AS2
+        interchangeId:
+          type: string
+          description: Supplier's ISA receiver id
+          maxLength: 15
+          minLength: 0
+        endpoint:
+          type: string
+          description: sftp://host/dir (SFTP) or the partner's https:// AS2 URL
+          maxLength: 500
+          minLength: 0
+      required:
+      - endpoint
+      - interchangeId
+      - protocol
+    SupplierEdi:
+      type: object
+      properties:
+        supplierId:
+          type: string
+          format: uuid
+        enabled:
+          type: boolean
+        protocol:
+          type: string
+          enum:
+          - SFTP
+          - AS2
+        interchangeId:
+          type: string
+        endpoint:
+          type: string
+        updatedBy:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
     ChargesRequest:
       type: object
       properties:
@@ -1741,6 +1907,11 @@ components:
         updatedAt:
           type: string
           format: date-time
+        assetIds:
+          type: array
+          items:
+            type: string
+            format: uuid
     AsnLineRequest:
       type: object
       description: Units of a PO line with the supplier's batch (lot, made, expiry)
@@ -2516,6 +2687,15 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+        assetIds:
+          type: array
+          description: Files of the document as media asset ids (finalised uploads, e.g. the supplier's ASN / packing list).
+            Omit to keep the files attached; [] removes them.
+          items:
+            type: string
+            format: uuid
+          maxItems: 10
+          minItems: 0
       required:
       - name
       - status
@@ -2650,6 +2830,43 @@ components:
           type: string
           maxLength: 1000
           minLength: 0
+    PoDispatch:
+      type: object
+      description: Delivery of a sent PO on one channel
+      properties:
+        id:
+          type: string
+          format: uuid
+        channel:
+          type: string
+        status:
+          type: string
+          description: PENDING, DONE or FAILED
+        attempts:
+          type: integer
+          format: int32
+        nextAttemptAt:
+          type: string
+          format: date-time
+        lastError:
+          type: string
+        recipient:
+          type: string
+          description: Contact email (EMAIL) or ISA interchange id (EDI)
+        assetId:
+          type: string
+          format: uuid
+          description: Media asset of the PO PDF (EMAIL)
+        linkExpiresAt:
+          type: string
+          format: date-time
+        controlNumber:
+          type: string
+        transmissionId:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
     ListingRequest:
       type: object
       properties:

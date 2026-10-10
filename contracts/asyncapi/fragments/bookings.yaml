@@ -19,6 +19,10 @@ channels:
       bookingsNoShow: {$ref: '#/components/messages/bookingsNoShow'}
       bookingsBalanceUnpaid: {$ref: '#/components/messages/bookingsBalanceUnpaid'}
       bookingsServiceUpserted: {$ref: '#/components/messages/bookingsServiceUpserted'}
+      bookingsReviewSubmitted: {$ref: '#/components/messages/bookingsReviewSubmitted'}
+      bookingsReviewApproved: {$ref: '#/components/messages/bookingsReviewApproved'}
+      bookingsReviewRejected: {$ref: '#/components/messages/bookingsReviewRejected'}
+      bookingsReviewReplied: {$ref: '#/components/messages/bookingsReviewReplied'}
   bookingsPaymentEvents:
     address: at.payment.events
     description: >-
@@ -47,8 +51,11 @@ operations:
       bookings-service publishes via its transactional outbox. notifications sends booking.confirmed to the customer;
       search indexes booking.service.upserted. booking.balance_unpaid flags a long-dated booking whose balance could
       not be charged off-session on the saved card (declined after every attempt, or not authorised by completion)
-      so the provider and the customer can settle it; customers asked to authenticate an off-session charge are
-      reached through payments' payments.intent.action_required.
+      so the provider and the customer can settle it (also for services without a deposit, whose whole price is
+      charged off-session when the appointment is beyond the card authorisation window); customers asked to
+      authenticate an off-session charge are reached through payments' payments.intent.action_required.
+      booking.review.submitted queues a customer review for moderation (trust-ops); only approved reviews are public
+      (booking.review.approved / rejected record the decision, booking.review.replied the provider's single reply).
   consumeBookingsPaymentEvents:
     action: receive
     channel: {$ref: '#/channels/bookingsPaymentEvents'}
@@ -127,6 +134,28 @@ components:
         attempt, or not authorised by completion): the provider and the customer need to settle it
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsReviewSubmitted:
+      name: booking.review.submitted
+      title: >-
+        A customer rated a completed booking; the review is PENDING until moderation approves it (trust-ops queues it
+        and decides with POST /v1/reviews/{bookingId}/approve|reject, permission bookings:reviews:moderate)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsReviewEvent'}
+    bookingsReviewApproved:
+      name: booking.review.approved
+      title: Moderation published the review (listed publicly, counted in ratings); closes the moderation item
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsReviewEvent'}
+    bookingsReviewRejected:
+      name: booking.review.rejected
+      title: Moderation removed the review (never public, or taken down after publication); closes the moderation item
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsReviewEvent'}
+    bookingsReviewReplied:
+      name: booking.review.replied
+      title: The provider replied (once) to a published review; the reply is public at once
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsReviewEvent'}
     bookingsServiceUpserted:
       name: booking.service.upserted
       title: A provider's service was created or changed (key = service id)
@@ -202,3 +231,31 @@ components:
           type: array
           items: {type: string}
         active: {type: boolean}
+    BookingsReviewEvent:
+      type: object
+      description: Key = booking id (one review per booking, so the review id is the booking id).
+      required: [contentType, reviewId, bookingId, orgId, serviceId, customerId, reviewerName, rating, status, createdAt,
+                 approvePath, rejectPath]
+      properties:
+        contentType: {type: string, const: BOOKING_REVIEW, description: Routing hint for a generic moderation queue}
+        reviewId: {type: string, format: uuid, description: Same as bookingId}
+        bookingId: {type: string, format: uuid}
+        orgId: {type: string, description: Provider organisation}
+        serviceId: {type: string, format: uuid}
+        serviceName: {type: [string, 'null']}
+        customerId: {type: string, description: Author (token subject); never shown publicly}
+        reviewerName: {type: string, description: 'Public display name, e.g. "Adaeze N."'}
+        rating: {type: integer, minimum: 1, maximum: 5}
+        text: {type: [string, 'null'], maxLength: 2000}
+        status: {type: string, enum: [PENDING, APPROVED, REJECTED]}
+        createdAt: {type: string, format: date-time}
+        moderatedBy: {type: [string, 'null']}
+        moderatedAt: {type: [string, 'null'], format: date-time}
+        reasonCode:
+          type: [string, 'null']
+          enum: [ABUSIVE, PERSONAL_INFORMATION, SPAM, OFF_TOPIC, CONFLICT_OF_INTEREST, OTHER, null]
+        moderationNote: {type: [string, 'null']}
+        replyText: {type: [string, 'null'], maxLength: 1000}
+        repliedAt: {type: [string, 'null'], format: date-time}
+        approvePath: {type: string, examples: [/v1/reviews/0b7e…/approve]}
+        rejectPath: {type: string, description: 'POST body {reasonCode, note}; note required for OTHER'}

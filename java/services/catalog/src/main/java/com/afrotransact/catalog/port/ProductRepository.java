@@ -31,6 +31,13 @@ public interface ProductRepository {
     /** Every product of an organisation, any status (with variants). */
     List<Product> findByOwnerOrg(String orgId);
 
+    /**
+     * One keyset page of an organisation's products, any status (with variants), ordered by id.
+     *
+     * @param afterId exclusive lower bound (null for the first page)
+     */
+    List<Product> findByOwnerOrgAfter(String orgId, UUID afterId, int limit);
+
     ProductPage search(ProductQuery query);
 
     boolean sellerSkuTaken(String orgId, String sellerSku);

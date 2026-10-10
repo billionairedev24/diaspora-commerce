@@ -19,11 +19,14 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param catalog          catalog-service endpoint
  * @param inventory        inventory-service endpoint
  * @param auth             client-credentials settings of retail-service
+ * @param media            media-service endpoint (PO PDFs, shipment documents)
+ * @param dispatch         sending POs to suppliers
+ * @param edi              EDI transport (off by default)
  */
 @ConfigurationProperties(prefix = "at.retail")
 public record RetailProperties(String baseCurrency, String gs1CompanyPrefix, String retailOwnerOrg, Approval approval,
                                Receiving receiving, Match match, Map<String, BigDecimal> fxRates, Endpoint catalog,
-                               Endpoint inventory, Auth auth) {
+                               Endpoint inventory, Auth auth, Endpoint media, Dispatch dispatch, Edi edi) {
 
     public RetailProperties {
         baseCurrency = baseCurrency == null ? "USD" : baseCurrency;
@@ -36,6 +39,51 @@ public record RetailProperties(String baseCurrency, String gs1CompanyPrefix, Str
         catalog = catalog == null ? new Endpoint("http://localhost:8101", null) : catalog;
         inventory = inventory == null ? new Endpoint("http://localhost:8103", null) : inventory;
         auth = auth == null ? new Auth(null, null, null, null) : auth;
+        media = media == null ? new Endpoint("http://localhost:8207", null) : media;
+        dispatch = dispatch == null ? new Dispatch(null, null, null, null, null, null) : dispatch;
+        edi = edi == null ? new Edi(false, null, null, null, null, null, null) : edi;
+    }
+
+    /**
+     * Sending POs to suppliers (S225).
+     *
+     * @param maxAttempts   attempts per channel before a dispatch fails
+     * @param linkTtl       validity asked for the emailed PDF link
+     * @param emailTemplate notifications template key of the supplier email
+     * @param buyerName     buyer printed on the PDF
+     * @param buyerAddress  buyer address printed on the PDF
+     * @param senderId      our ISA sender id
+     */
+    public record Dispatch(Integer maxAttempts, Duration linkTtl, String emailTemplate, String buyerName,
+                           String buyerAddress, String senderId) {
+
+        public Dispatch {
+            maxAttempts = maxAttempts == null ? 5 : maxAttempts;
+            linkTtl = linkTtl == null ? Duration.ofDays(14) : linkTtl;
+            emailTemplate = emailTemplate == null ? "retail.purchase_order.sent" : emailTemplate;
+            buyerName = buyerName == null ? "AfroTransact Retail" : buyerName;
+            buyerAddress = buyerAddress == null ? "Houston, TX, USA" : buyerAddress;
+            senderId = senderId == null ? "AFROTRANSACT" : senderId;
+        }
+    }
+
+    /**
+     * EDI transport: off by default; SFTP and AS2 adapters are skeletons until a client library is wired.
+     *
+     * @param enabled           transmit 850s at all
+     * @param sftpUsername      SFTP login
+     * @param sftpPrivateKeyPath SFTP private key (mounted secret)
+     * @param sftpKnownHostsPath pinned host keys
+     * @param as2From           our AS2 id
+     * @param as2KeystorePath   signing / decryption keystore (mounted secret)
+     * @param timeout           transport timeout
+     */
+    public record Edi(boolean enabled, String sftpUsername, String sftpPrivateKeyPath, String sftpKnownHostsPath,
+                      String as2From, String as2KeystorePath, Duration timeout) {
+
+        public Edi {
+            timeout = timeout == null ? Duration.ofSeconds(30) : timeout;
+        }
     }
 
     /** POs above {@code financeThresholdMinor} (base currency minor units) need Finance approval. */

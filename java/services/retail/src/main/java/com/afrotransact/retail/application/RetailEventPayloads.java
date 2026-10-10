@@ -1,8 +1,10 @@
 package com.afrotransact.retail.application;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.retail.domain.Discrepancy;
@@ -10,6 +12,7 @@ import com.afrotransact.retail.domain.GoodsReceipt;
 import com.afrotransact.retail.domain.InboundShipment;
 import com.afrotransact.retail.domain.JournalEntry;
 import com.afrotransact.retail.domain.LandedCost;
+import com.afrotransact.retail.domain.PoDispatch;
 import com.afrotransact.retail.domain.PurchaseOrder;
 import com.afrotransact.retail.domain.RetailItem;
 import com.afrotransact.retail.domain.Supplier;
@@ -146,5 +149,34 @@ public final class RetailEventPayloads {
     /** PO closed after the three-way match: payments-service pays the supplier. */
     public record PaymentReleased(UUID poId, String poNumber, UUID supplierId, String supplierCode, String currency,
                                   long amountMinor, List<PayableInvoice> invoices) {
+    }
+
+    /** {@code retail.po.dispatched} / {@code retail.po.dispatch-failed}: one channel of a sent PO. */
+    public record PoDispatchEvent(UUID dispatchId, UUID poId, String poNumber, String channel, String status,
+                                  int attempts, String recipient, UUID assetId, String controlNumber,
+                                  String transmissionId, String error) {
+
+        static PoDispatchEvent of(PoDispatch d) {
+            return new PoDispatchEvent(d.id(), d.poId(), d.poNumber(), d.channel().name(), d.status().name(),
+                    d.attempts(), d.recipient(), d.assetId(), d.controlNumber(), d.transmissionId(), d.lastError());
+        }
+    }
+
+    /**
+     * notifications-service's generic {@code notification.requested}: explicit template, channels and recipient.
+     *
+     * @param data template fields; {@code attachments} references media assets (notifications does not attach files
+     *             yet, so the template links to {@code documentUrl} instead)
+     */
+    public record NotificationRequested(String templateKey, List<String> channels, Recipient recipient,
+                                        String locale, Map<String, Object> data) {
+    }
+
+    /** Who to notify (a supplier contact has no identity user: the address is given). */
+    public record Recipient(String email, String name) {
+    }
+
+    /** A file the notification refers to. */
+    public record Attachment(UUID assetId, String fileName, String contentType, String url, Instant expiresAt) {
     }
 }

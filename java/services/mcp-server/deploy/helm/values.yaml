@@ -30,6 +30,7 @@ monitoring:
   prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
 # Secret keys expected at afrotransact/<env>/mcp-server in the cloud secret store:
 #   - KAFKA_BOOTSTRAP
+#   - REDIS_URL        (Valkey: global rate-limit buckets + audit spool stream)
 secrets:
   enabled: true
   store: platform-secrets

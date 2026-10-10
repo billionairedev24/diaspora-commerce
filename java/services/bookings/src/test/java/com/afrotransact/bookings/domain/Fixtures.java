@@ -21,6 +21,25 @@ final class Fixtures {
                 List.of(new AddOn("hair", "Extra length", 2_000, 30)), Set.of(), true, NOW, NOW, 0);
     }
 
+    /** Same service without a deposit: the whole price is the balance. */
+    static ServiceOffering braidsNoDeposit() {
+        return new ServiceOffering(UUID.randomUUID(), "org_aminata", "Silk press", "No deposit", "hair & beauty", 90,
+                12_000, 0, "USD", Set.of(ServiceMode.IN_PERSON), List.of(), Set.of(), true, NOW, NOW, 0);
+    }
+
+    /** A confirmed booking of {@link #braidsNoDeposit()} starting at {@code start}, card authorised. */
+    static Booking confirmedNoDeposit(CancellationPolicy policy, Instant start) {
+        BookingRules rules = new BookingRules(720, 30, 30, 30, 3, false, false);
+        Booking b = Booking.hold(UUID.randomUUID(), "BK-24019", "org_aminata", UUID.randomUUID(), "cust-2",
+                new CustomerContact("Kwame Mensah", "kwame@example.com", "+17135550143"),
+                BookedService.of(braidsNoDeposit(), List.of(), ServiceMode.IN_PERSON, "Aminata's Braids", "Aminata"),
+                null, null, "web", start, rules, policy, NOW.plus(Duration.ofMinutes(15)), NOW);
+        b.attachPayment(UUID.randomUUID(), "pi_secret");
+        b.paymentAuthorized(NOW, Duration.ofHours(4));
+        b.confirm(NOW.plusSeconds(60));
+        return b;
+    }
+
     static Booking hold(CancellationPolicy policy, boolean instant) {
         return hold(policy, instant, START);
     }

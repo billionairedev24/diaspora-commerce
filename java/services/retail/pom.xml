@@ -17,9 +17,17 @@
 
     <properties>
         <wiremock.version>3.13.2</wiremock.version>
+        <!-- Same PDFBox as catalog (labels). -->
+        <pdfbox.version>3.0.8</pdfbox.version>
     </properties>
 
     <dependencies>
+        <!-- S225: purchase-order PDF sent to suppliers. -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
+        </dependency>
         <dependency>
             <groupId>com.afrotransact</groupId>
             <artifactId>platform-web</artifactId>

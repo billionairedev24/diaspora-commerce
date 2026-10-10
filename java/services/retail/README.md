@@ -25,8 +25,36 @@ product → PO → approval → shipment/ASN → transit & customs → receiving
   with a note. Approval needs `retail:po:approve`; above the threshold (default USD 10,000.00) also `retail:finance`.
   Every write takes `If-Match` with the version from the `ETag`; stale versions and concurrent writes fail with 409.
   `GET /v1/purchase-orders/{id}/edi850` renders the ANSI X12 850 sent to the supplier.
+- **Sending POs to suppliers (S225).** `POST /{id}/send` (approved POs) queues one delivery per channel in
+  `po_dispatch`, in the same transaction:
+  - **EMAIL** — the PO PDF (PDFBox 3.0.8, same as catalog: buyer / supplier / ship-to blocks, dates, Incoterm, payment
+    terms, FX, one row per line with our SKU, supplier SKU, GTIN, quantity, unit price and amount, subtotal, total and
+    base-currency equivalent, standard terms; `GET /{id}/pdf`) is uploaded to **media** (purpose `purchase-order`:
+    `POST /v1/uploads`, direct `PUT` to storage, `POST /v1/assets/{id}/complete`), a signed link is requested
+    (`GET /v1/assets/{id}?urlTtlSeconds=…`, 14 days asked) and `notification.requested` is written to the outbox for
+    notifications-service: template `retail.purchase_order.sent`, channel `email`, recipient = the supplier's
+    purchasing contact (first contact with an email whose role mentions sales / orders / purchasing, else the first
+    with an email), `data` with PO number, supplier, dates, terms, totals, `documentUrl` / `documentExpiresAt` and
+    `attachments: [{assetId, fileName, contentType, url, expiresAt}]` (an attachment *reference*: notifications does
+    not attach files today, so the email links to the PDF).
+  - **EDI** — only for suppliers with an enabled EDI profile (`GET/PUT /v1/suppliers/{id}/edi`: protocol `SFTP` or
+    `AS2`, ISA interchange id, endpoint): the existing X12 850, addressed to the partner's interchange id, goes
+    through the `EdiTransport` port. Adapters: `SftpEdiTransport` and `As2EdiTransport` are **skeletons** (settings
+    validated, remote path / AS2 headers built, then a non-retryable failure until an SFTP / AS2 library is wired),
+    and the whole transport is **off by default** (`EDI_ENABLED=false` → EDI dispatches fail with "EDI transport
+    disabled"); tests use a fake transport. The ISA13 control number and the transport receipt are kept.
+
+  `PoDispatchJob` (every 30 s, every replica; rows claimed with `FOR UPDATE SKIP LOCKED`) works them off. Media or
+  partner outages retry with backoff (1, 2, 4 … min, at most 1 h) up to 5 attempts; permanent problems (no contact
+  email, EDI disabled / not configured) fail at once. Each channel ends in `retail.po.dispatched` or
+  `retail.po.dispatch-failed`; `GET /{id}/dispatches` shows them and `POST /{id}/dispatches/retry` (`retail:po:write`)
+  re-queues failed ones (the email then goes to the supplier's current contact).
 - **Inbound shipments / ASN (S071).** Booking a shipment creates the ASN from the PO (or the given lines) and the
-  documents required for the mode (ocean, air, road) as `MISSING`. The supplier's packing list sets batch, made and
+  documents required for the mode (ocean, air, road) as `MISSING`. Document files (the supplier's ASN / packing list,
+  bill of lading, certificates) are **media asset ids** (S225): `POST /v1/shipments/{id}/documents {…, assetIds}`
+  checks each asset with media (`GET /v1/assets/{id}`: must exist and be finalised, else `422
+  retail.document-asset-invalid`; media down → `503 retail.media-unavailable`); omitting `assetIds` keeps the files,
+  `[]` removes them. The supplier's packing list sets batch, made and
   expiry dates per line plus GS1-128 cartons (SSCC); the ASN is editable until departure, then locked. The nine-step
   timeline blocks departure while documents are missing and customs clearance while a document is on hold.
   Departure posts **Dr 1310 In transit / Cr 2110 GR/IR** for the FOB value at the PO rate.
@@ -66,7 +94,9 @@ currency (USD).
 | POST/PUT | `/v1/suppliers`, `/v1/suppliers/{id}`, `/v1/suppliers/{id}/status` | `retail:suppliers:write` |
 | GET | `/v1/items`, `/v1/items/{id}` | `retail:read` |
 | POST/PUT | `/v1/items`, `/v1/items/{id}`, `/v1/items/{id}/atin`, `/v1/items/{id}/listing` | `retail:items:write` |
-| GET | `/v1/purchase-orders`, `/{id}`, `/{id}/edi850` | `retail:read` |
+| GET | `/v1/purchase-orders`, `/{id}`, `/{id}/edi850`, `/{id}/pdf`, `/{id}/dispatches` | `retail:read` |
+| POST | `/v1/purchase-orders/{id}/dispatches/retry` | `retail:po:write` |
+| GET · PUT | `/v1/suppliers/{id}/edi` | `retail:read` · `retail:suppliers:write` |
 | POST/PUT | `/v1/purchase-orders`, `/{id}/lines`, `/{id}/submit`, `/{id}/send`, `/{id}/confirm`, `/{id}/cancel` | `retail:po:write` |
 | POST | `/v1/purchase-orders/{id}/approve`, `/{id}/send-back` | `retail:po:approve` (+ `retail:finance` above the threshold) |
 | POST | `/v1/purchase-orders/{id}/close` | `retail:finance` |
@@ -99,6 +129,7 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 
 `retail.item.created|updated|listing-changed`, `retail.supplier.created|updated|status-changed`,
 `retail.po.created|updated|submitted|approved|sent-back|sent|confirmed|cancelled|received|closed`,
+`retail.po.dispatched|dispatch-failed`, `notification.requested` (supplier PO email, see *Sending POs*),
 `retail.shipment.booked|updated|stage-changed`, `retail.receipt.opened|posted|discrepancy-raised|claim-resolved`,
 `retail.landed-cost.allocated`, `retail.gl.journal.posted`,
 `retail.invoice.matched|held|approved|rejected`, `retail.match.exception`, `retail.payment.released`.
@@ -111,7 +142,10 @@ de-duplicated) for COGS. See [`contracts/asyncapi/fragments/retail.yaml`](../../
 |---|---|---|
 | `CatalogClient` | `HttpCatalogClient` | `GET {CATALOG_BASE_URL}/v1/public/variants/{atin}` (anonymous) |
 | `InventoryClient` | `HttpInventoryClient` | `POST {INVENTORY_BASE_URL}/v1/receipts` (Idempotency-Key), `POST /v1/lots/{id}/quarantine` |
-| `ServiceTokenProvider` | `ClientCredentialsTokenProvider` | `POST {AUTH_TOKEN_URI}` client credentials as `retail-service`, scopes `inventory:receive inventory:adjust` |
+| `MediaStore` | `HttpMediaStore` | `POST {MEDIA_BASE_URL}/v1/uploads`, `PUT` to the signed storage URL, `POST /v1/assets/{id}/complete`, `GET /v1/assets/{id}` |
+| `EdiTransport` | `RoutingEdiTransport` → `SftpEdiTransport` / `As2EdiTransport` (skeletons, off by default) | SFTP file drop / AS2 POST to the partner |
+| `PurchaseOrderPdfRenderer` | `PdfPurchaseOrderRenderer` | — (PDFBox) |
+| `ServiceTokenProvider` | `ClientCredentialsTokenProvider` | `POST {AUTH_TOKEN_URI}` client credentials as `retail-service`, scopes `inventory:receive inventory:adjust media:write` |
 
 Inventory 4xx answers reopen the receipt with the problem's field errors; 5xx, timeouts and auth failures leave it
 `POSTING` (HTTP 503) and the next `complete` retries with the same Idempotency-Key.
@@ -125,6 +159,9 @@ Inventory 4xx answers reopen the receipt with the problem's field errors; 5xx, t
 | `AUTH_ISSUER_URI` | identity service issuer (JWT validation) |
 | `AUTH_TOKEN_URI`, `RETAIL_CLIENT_ID`, `RETAIL_CLIENT_SECRET` | client-credentials token for inventory (blank secret = no token, local only) |
 | `CATALOG_BASE_URL`, `INVENTORY_BASE_URL`, `INVENTORY_TIMEOUT` | downstream services |
+| `MEDIA_BASE_URL`, `MEDIA_TIMEOUT` | media-service (PO PDFs, shipment documents) |
+| `PO_DISPATCH_INTERVAL`, `PO_DISPATCH_MAX_ATTEMPTS`, `PO_PDF_LINK_TTL`, `RETAIL_BUYER_ADDRESS` | PO delivery job (30s, 5, 14d) and PDF buyer block |
+| `EDI_ENABLED` (default false), `EDI_SFTP_USERNAME`, `EDI_SFTP_PRIVATE_KEY_PATH`, `EDI_SFTP_KNOWN_HOSTS_PATH`, `EDI_AS2_FROM`, `EDI_AS2_KEYSTORE_PATH` | EDI transport (adapters are skeletons) |
 | `PO_FINANCE_THRESHOLD_MINOR` | Finance approval threshold in base-currency minor units (default 1000000 = USD 10,000.00) |
 | `MATCH_PRICE_TOLERANCE_PERCENT` | three-way match tolerance (default 1.0) |
 | `GS1_COMPANY_PREFIX` | UPC company prefix for issued GTINs (default 86001) |
@@ -142,8 +179,22 @@ cd java && ./mvnw -B -f services/retail/pom.xml verify      # checkstyle, unit, 
 ./mvnw -f services/retail/pom.xml spring-boot:run           # http://localhost:8107/docs
 ```
 
-Unit tests cover the PO state machine, the cost allocator (including randomised invariants), landed cost, receipt
+Unit tests cover the PO PDF (text extracted with PDFBox: lines, terms, totals, paging, unencodable characters),
+the EDI transports (off by default, skeleton behaviour), dispatch retries and contact choice, the PO state machine, the cost allocator (including randomised invariants), landed cost, receipt
 validation, the three-way match and GL postings; the ITs run the whole workflow against PostgreSQL with catalog,
-inventory and identity stubbed by WireMock.
+inventory, media and identity stubbed by WireMock; `PoDispatchIT` covers email + EDI delivery, outages / retries /
+buyer retry, a supplier without contact email and shipment documents as media asset ids.
+
+## Needed from other services (S225)
+
+- **notifications**: consume `at.retail.events` (new topic for it) and map `notification.requested` there (already
+  generic); seed the `retail.purchase_order.sent` email template (`contactName`, `poNumber`, `supplierName`, `orderDate`,
+  `deliverBy`, `incoterm`, `paymentTerms`, `total`, `documentUrl`, `documentExpiresAt`); recipients are external
+  addresses (no identity user). Optional: real attachments from `data.attachments[].assetId`.
+- **media**: purposes `purchase-order` (PDF, private) and `shipping-document` (PDF / images, private, retail org);
+  accept the `retail-service` client token (scope `media:write`) and honour `urlTtlSeconds` up to a per-purpose cap
+  (≥ 14 days for `purchase-order`) returning `urlExpiresAt` — today signed URLs last 5 minutes, which is too short for
+  an email link.
+- **identity**: grant the `retail-service` client the `media:write` scope.
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

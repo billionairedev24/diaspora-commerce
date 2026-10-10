@@ -43,7 +43,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * End to end through the MCP endpoint with the official MCP Java client (Streamable HTTP): tool registration per scope,
- * a tool call against WireMock-backed platform APIs, permission filtering, rate limiting and the audit event on Kafka.
+ * a tool call against WireMock-backed platform APIs, permission filtering, global (Valkey) rate limiting and the audit
+ * event on Kafka.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.mcp.rate-limit.capacity=5",
@@ -54,16 +55,16 @@ import tools.jackson.databind.json.JsonMapper;
 class McpServerIT {
 
     static final WireMockServer WIREMOCK = new WireMockServer(WireMockConfiguration.options().dynamicPort());
-    static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:4.1.0");
+    static final KafkaContainer KAFKA = ItContainers.KAFKA;
 
     static {
         WIREMOCK.start();
-        KAFKA.start();
     }
 
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
+        registry.add("spring.data.redis.url", ItContainers::valkeyUrl);
         String base = "http://localhost:" + WIREMOCK.port();
         for (String svc : List.of("search", "catalog", "cart", "inventory", "geo", "promise", "orders", "seller",
                 "payments", "bookings")) {

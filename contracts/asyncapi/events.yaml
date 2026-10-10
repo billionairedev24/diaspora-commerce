@@ -39,6 +39,14 @@ channels:
         $ref: '#/components/messages/bookingsBalanceUnpaid'
       bookingsServiceUpserted:
         $ref: '#/components/messages/bookingsServiceUpserted'
+      bookingsReviewSubmitted:
+        $ref: '#/components/messages/bookingsReviewSubmitted'
+      bookingsReviewApproved:
+        $ref: '#/components/messages/bookingsReviewApproved'
+      bookingsReviewRejected:
+        $ref: '#/components/messages/bookingsReviewRejected'
+      bookingsReviewReplied:
+        $ref: '#/components/messages/bookingsReviewReplied'
   bookingsPaymentEvents:
     address: at.payment.events
     description: payments-service intent events bookings consumes (consumer group bookings-service, inbox consumer bookings.payment-events).
@@ -532,6 +540,12 @@ channels:
         $ref: '#/components/messages/retailPoSentBack'
       retailPoSent:
         $ref: '#/components/messages/retailPoSent'
+      retailPoDispatched:
+        $ref: '#/components/messages/retailPoDispatched'
+      retailPoDispatchFailed:
+        $ref: '#/components/messages/retailPoDispatchFailed'
+      retailNotificationRequested:
+        $ref: '#/components/messages/notificationsRequested'
       retailPoConfirmed:
         $ref: '#/components/messages/retailPoConfirmed'
       retailPoCancelled:
@@ -792,6 +806,35 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/BookingsBookingEvent'
+    bookingsReviewSubmitted:
+      name: booking.review.submitted
+      title: A customer rated a completed booking; the review is PENDING until moderation approves it (trust-ops queues it
+        and decides with POST /v1/reviews/{bookingId}/approve|reject, permission bookings:reviews:moderate)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/BookingsReviewEvent'
+    bookingsReviewApproved:
+      name: booking.review.approved
+      title: Moderation published the review (listed publicly, counted in ratings); closes the moderation item
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/BookingsReviewEvent'
+    bookingsReviewRejected:
+      name: booking.review.rejected
+      title: Moderation removed the review (never public, or taken down after publication); closes the moderation item
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/BookingsReviewEvent'
+    bookingsReviewReplied:
+      name: booking.review.replied
+      title: The provider replied (once) to a published review; the reply is public at once
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/BookingsReviewEvent'
     bookingsServiceUpserted:
       name: booking.service.upserted
       title: A provider's service was created or changed (key = service id)
@@ -1682,11 +1725,27 @@ components:
         $ref: '#/components/schemas/RetailPoEvent'
     retailPoSent:
       name: retail.po.sent
-      title: PO sent to the supplier (PDF + EDI 850)
+      title: PO sent to the supplier; its deliveries (email with the PDF link, EDI 850) are queued
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/RetailPoEvent'
+    retailPoDispatched:
+      name: retail.po.dispatched
+      title: 'A sent PO reached the supplier on one channel: EMAIL (PDF stored in media, notification.requested written) or
+        EDI (850 accepted by the transport)'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoDispatchEvent'
+    retailPoDispatchFailed:
+      name: retail.po.dispatch-failed
+      title: A sent PO could not be delivered on one channel (attempts exhausted, no contact email, EDI disabled); a buyer
+        can retry with POST /v1/purchase-orders/{id}/dispatches/retry
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoDispatchEvent'
     retailPoConfirmed:
       name: retail.po.confirmed
       headers:
@@ -2429,6 +2488,110 @@ components:
             type: string
         active:
           type: boolean
+    BookingsReviewEvent:
+      type: object
+      description: Key = booking id (one review per booking, so the review id is the booking id).
+      required:
+      - contentType
+      - reviewId
+      - bookingId
+      - orgId
+      - serviceId
+      - customerId
+      - reviewerName
+      - rating
+      - status
+      - createdAt
+      - approvePath
+      - rejectPath
+      properties:
+        contentType:
+          type: string
+          const: BOOKING_REVIEW
+          description: Routing hint for a generic moderation queue
+        reviewId:
+          type: string
+          format: uuid
+          description: Same as bookingId
+        bookingId:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+          description: Provider organisation
+        serviceId:
+          type: string
+          format: uuid
+        serviceName:
+          type:
+          - string
+          - 'null'
+        customerId:
+          type: string
+          description: Author (token subject); never shown publicly
+        reviewerName:
+          type: string
+          description: Public display name, e.g. "Adaeze N."
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        text:
+          type:
+          - string
+          - 'null'
+          maxLength: 2000
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - REJECTED
+        createdAt:
+          type: string
+          format: date-time
+        moderatedBy:
+          type:
+          - string
+          - 'null'
+        moderatedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        reasonCode:
+          type:
+          - string
+          - 'null'
+          enum:
+          - ABUSIVE
+          - PERSONAL_INFORMATION
+          - SPAM
+          - OFF_TOPIC
+          - CONFLICT_OF_INTEREST
+          - OTHER
+          - null
+        moderationNote:
+          type:
+          - string
+          - 'null'
+        replyText:
+          type:
+          - string
+          - 'null'
+          maxLength: 1000
+        repliedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        approvePath:
+          type: string
+          examples:
+          - /v1/reviews/0b7e…/approve
+        rejectPath:
+          type: string
+          description: POST body {reasonCode, note}; note required for OTHER
     CarrierShipmentState:
       type: string
       enum:
@@ -6117,6 +6280,61 @@ components:
               amountMinor:
                 type: integer
                 format: int64
+    RetailPoDispatchEvent:
+      type: object
+      required:
+      - dispatchId
+      - poId
+      - poNumber
+      - channel
+      - status
+      - attempts
+      properties:
+        dispatchId:
+          type: string
+          format: uuid
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        channel:
+          type: string
+          enum:
+          - EMAIL
+          - EDI
+        status:
+          type: string
+          enum:
+          - DONE
+          - FAILED
+        attempts:
+          type: integer
+        recipient:
+          type:
+          - string
+          - 'null'
+          description: Contact email (EMAIL) or ISA interchange id (EDI)
+        assetId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Media asset of the PO PDF (EMAIL)
+        controlNumber:
+          type:
+          - string
+          - 'null'
+          description: ISA13 of the transmitted 850 (EDI)
+        transmissionId:
+          type:
+          - string
+          - 'null'
+          description: Transport receipt (remote file or AS2 message id)
+        error:
+          type:
+          - string
+          - 'null'
     SearchQueryPerformed:
       type: object
       required:
@@ -7440,8 +7658,11 @@ operations:
     summary: bookings-service publishes via its transactional outbox. notifications sends booking.confirmed to the customer;
       search indexes booking.service.upserted. booking.balance_unpaid flags a long-dated booking whose balance could not be
       charged off-session on the saved card (declined after every attempt, or not authorised by completion) so the provider
-      and the customer can settle it; customers asked to authenticate an off-session charge are reached through payments'
-      payments.intent.action_required.
+      and the customer can settle it (also for services without a deposit, whose whole price is charged off-session when the
+      appointment is beyond the card authorisation window); customers asked to authenticate an off-session charge are reached
+      through payments' payments.intent.action_required. booking.review.submitted queues a customer review for moderation
+      (trust-ops); only approved reviews are public (booking.review.approved / rejected record the decision, booking.review.replied
+      the provider's single reply).
   consumeBookingsPaymentEvents:
     action: receive
     channel:
@@ -7486,7 +7707,9 @@ operations:
       records the organisation''s suppression (org_listing_suppression), hides its products from the public catalog API and
       publishes catalog.product.hidden / restored for every product of the organisation. Older decisions never override newer
       ones (occurredAt). This covers Stripe compliance enforcement and Trust and Safety suspension (reason SUSPENDED / REINSTATED)
-      alike.'
+      alike. Large catalogs are republished in pages of 500 products, one transaction per page (S216), so the product events
+      of one decision are spread over several commits; a redelivered or crashed run resumes after its last committed page
+      and a newer decision supersedes a run in progress, so each product gets at most one event per decision.'
   publishContentEvents:
     action: send
     channel:
@@ -7763,10 +7986,13 @@ operations:
     action: send
     channel:
       $ref: '#/channels/retailEvents'
-    summary: retail-service publishes product-master, supplier, PO, shipment/ASN, goods-receipt, landed-cost, GL journal and
-      three-way-match events. Finance consumes retail.gl.journal.posted; payments-service pays suppliers on retail.payment.released;
-      the buyer's work queue listens to retail.match.exception (assignee = PO buyer); catalog/inventory/search use the item
-      and receipt events.
+    summary: 'retail-service publishes product-master, supplier, PO, shipment/ASN, goods-receipt, landed-cost, GL journal
+      and three-way-match events. Finance consumes retail.gl.journal.posted; payments-service pays suppliers on retail.payment.released;
+      the buyer''s work queue listens to retail.match.exception (assignee = PO buyer); catalog/inventory/search use the item
+      and receipt events. Sending a PO (S225) is delivered by a job: notification.requested (templateKey retail.purchase_order.sent,
+      channel email, recipient = the supplier contact''s address, data.documentUrl = signed media link to the PO PDF, data.attachments
+      = media asset reference) for notifications-service, and the X12 850 through the EDI transport for EDI-enabled suppliers;
+      each channel ends in retail.po.dispatched or retail.po.dispatch-failed (key = PO id).'
   consumeRetailInventoryReservationEvents:
     action: receive
     channel:

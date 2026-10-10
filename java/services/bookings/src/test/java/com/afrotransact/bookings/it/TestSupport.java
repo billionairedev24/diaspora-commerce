@@ -51,6 +51,18 @@ class TestSupport {
                 Set.of("bookings:read"));
     }
 
+    /** Trust and safety staff with the review moderation permission. */
+    static Actor moderator() {
+        return new Actor("staff-ts-1", PrincipalType.STAFF, Optional.empty(), Set.of("platform.trust_safety"),
+                Set.of("bookings:reviews:moderate"));
+    }
+
+    /** The trust-ops service client deciding from its moderation queue. */
+    static Actor trustOps() {
+        return new Actor("trust-ops-service", PrincipalType.SERVICE, Optional.empty(), Set.of(),
+                Set.of("bookings:reviews:moderate"));
+    }
+
     static Actor customer(String subject) {
         return new Actor(subject, PrincipalType.CUSTOMER, Optional.empty(), Set.of(), Set.of());
     }

@@ -10,8 +10,10 @@ bookings S220; design source `design/AfroTransact Provider Hub.dc.html` and `des
 - **Provider setup** per organisation: business name, IANA time zone, currency, location and the booking rules from
   the Working hours screen: minimum notice, booking horizon, buffer, slot interval, daily limit per member, instant
   booking, auto-accepting reschedules.
-- **Reviews** (S221): the customer of a completed booking rates it once, 1–5 stars with an optional text; search shows
-  each service's average and count.
+- **Reviews** (S221, S232): the customer of a completed booking rates it once, 1–5 stars with an optional text. Reviews
+  are **moderated before they are public** (`PENDING → APPROVED | REJECTED`; see *Review moderation*), the provider
+  replies **once** to a published review, and approved reviews are listed per provider and per service. Search and the
+  public lists show averages and counts of approved reviews only.
 - **Team** (S110): members with role Owner, Manager, Practitioner or Finance, linked to their identity user id, each
   with their own **weekly hours** (several ranges a day = breaks) and **date overrides** (time off or special hours).
 - **Services & prices** (S106): duration, price, deposit, modes (`IN_PERSON`, `AT_HOME`, `VIRTUAL`), add-ons (price and
@@ -84,6 +86,31 @@ each booking is claimed with `SELECT … FOR UPDATE SKIP LOCKED` and re-checked 
 rolls the attempt back and the same key is replayed next round, payments refusing it (4xx, e.g. no saved card)
 counts as a declined attempt.
 
+### Services without a deposit (S232)
+
+A service with `depositMinor = 0` has only a `balance` line (the full price) on its PaymentIntent, still created with
+`saveForOffSession: true`, so the confirmed card is saved. Nothing is captured at confirmation, so for an appointment
+beyond `BOOKING_AUTH_WINDOW` the **whole authorisation is released** right after confirmation (`POST
+/v1/payments/{id}/cancel`, key `BK-…:cancel`; payment state `RELEASED`, balance `DUE`) and the full price is charged
+off-session on the saved card `BOOKING_BALANCE_CHARGE_BEFORE` the start, exactly like the balance of a deposit
+booking (payments allows off-session charges once the primary payment is final — CANCELED counts). Declines, SCA,
+capture on completion and `booking.balance_unpaid` work the same. Cancelling such a booking cancels the open
+off-session charge only (`BK-…:offsession:<n>:cancel`; the released intent is never cancelled twice); a near
+no-deposit no-show without full price now releases the hold instead of letting it lapse.
+
+### Review moderation (S232)
+
+| Step | What happens |
+|---|---|
+| Customer rates (`POST /v1/bookings/{id}/review`) | review `PENDING`; event `booking.review.submitted` (text, rating, reviewer display name, service, org, decision paths) for trust-ops' moderation queue |
+| Moderator decides (`POST /v1/reviews/{bookingId}/approve` `{note?}` or `/reject` `{reasonCode, note?}`) | `APPROVED` (public, counted in ratings) or `REJECTED`; `booking.review.approved\|rejected`. Idempotent; an approved review can still be taken down, a rejected one reinstated |
+| Provider replies (`POST /v1/providers/{orgId}/reviews/{bookingId}/reply`) | once, only on approved reviews, public at once; `booking.review.replied` |
+
+Moderators need `bookings:reviews:moderate` **and** principal type `STAFF` or `SERVICE` (provider members are
+refused even if granted it, `403 bookings.moderation-staff-only`). Reject reasons: `ABUSIVE`, `PERSONAL_INFORMATION`,
+`SPAM`, `OFF_TOPIC`, `CONFLICT_OF_INTEREST`, `OTHER` (note required). Reviews written before V4 were already public
+and were migrated as `APPROVED`. Public lists show the reviewer as first name + last initial, never the customer id.
+
 ### Fees
 
 Take-home and earnings use `GET /v1/fee-schedules/effective?category=services&orgId=<provider>` (commission with its
@@ -104,7 +131,11 @@ Reference pages: `/swagger-ui.html`, `/docs` (Scalar), `/redoc` (off in prod).
 | POST | `/v1/bookings` (Idempotency-Key) | customer |
 | GET | `/v1/bookings/mine` | customer |
 | GET | `/v1/bookings/{id}`, `/{id}/history`, `/{id}/cancellation-quote`, `/{id}/balance-payment` (client secret for the customer only) · POST `/{id}/payment/sync` | its customer or the provider (`bookings:read`) |
-| POST | `/v1/bookings/{id}/review` `{rating 1–5, text?}` (completed bookings, once) | its customer |
+| POST | `/v1/bookings/{id}/review` `{rating 1–5, text?}` (completed bookings, once; `PENDING` until moderated) | its customer |
+| GET | `/v1/public/providers/{orgId}/reviews?page=&size=`, `/v1/public/services/{id}/reviews?page=&size=` (approved only, with rating) | public |
+| GET | `/v1/reviews?status=PENDING&page=&size=` (oldest first), `/v1/reviews/{bookingId}` · POST `/{bookingId}/approve`, `/{bookingId}/reject` | staff / trust-ops (`bookings:reviews:moderate`, STAFF or SERVICE) |
+| GET | `/v1/providers/{orgId}/reviews?status=` (every state) | `bookings:read` |
+| POST | `/v1/providers/{orgId}/reviews/{bookingId}/reply` `{text}` (once, approved reviews) | `bookings:manage` (Owner / Manager) |
 | POST | `/v1/bookings/{id}/cancel`, `/new-time/accept`, `/new-time/decline` | customer or provider (`bookings:manage`) |
 | POST | `/v1/bookings/{id}/reschedule` | customer |
 | POST | `/v1/bookings/{id}/confirm`, `/decline`, `/propose-time`, `/complete`, `/no-show` | provider (`bookings:manage`) |
@@ -144,7 +175,8 @@ ZIP finds only virtual services. `422 bookings.invalid-zip`, `502 bookings.geo-u
 
 Published (outbox → `at.bookings.events`, key = booking id): `booking.requested`, `booking.confirmed`,
 `booking.declined`, `booking.expired`, `booking.cancelled`, `booking.reschedule_requested`, `booking.time_proposed`,
-`booking.rescheduled`, `booking.completed`, `booking.no_show`, `booking.balance_unpaid`; `booking.service.upserted`
+`booking.rescheduled`, `booking.completed`, `booking.no_show`, `booking.balance_unpaid`,
+`booking.review.submitted|approved|rejected|replied` (payload `BookingsReviewEvent`); `booking.service.upserted`
 (key = service id). Booking payloads carry notifications' `recipient` block and template fields (`booking.confirmed`
 is mailed by notifications) plus `balanceMinor`, `balanceState`, `balanceFailure`.
 
@@ -203,16 +235,18 @@ for payments-service (with identity's token endpoint) and geo-service; they cove
 requests for one slot (exactly one wins), the exclusion constraint itself, request / hold expiry, policy refunds,
 reschedules, price snapshots, role scoping, seller compliance hide/restore, release after the deposit capture
 (far bookings, cancellations, no-shows), off-session charges (authorised, SCA, declined ×3 → `booking.balance_unpaid`,
-four parallel job rounds → one charge), fees from payments and the fallback, ZIP search and reviews (listeners and
-jobs called directly; Kafka is not needed).
+four parallel job rounds → one charge), fees from payments and the fallback, ZIP search and reviews, review moderation / replies /
+public lists (`ReviewModerationIT`) and the no-deposit off-session flow (`NoDepositBalanceIT`: far release + charge
++ capture, declines → `booking.balance_unpaid`, cancellation, near bookings) (listeners and jobs called directly;
+Kafka is not needed).
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.
 
 ## Known gaps
 
-- Services without a deposit keep the whole price on the original authorisation (nothing is captured at confirmation,
-  so there is no partial capture to release after); far-off appointments of such services can still outlive the card
-  hold.
-- `booking.balance_unpaid` has no notifications rule or template yet; the customer is asked to authenticate through
-  payments' `payments.intent.action_required`.
-- Reviews have no moderation, provider reply or public list endpoint; ratings are averaged per service only.
+- trust-ops does not consume `booking.review.*` yet, so reviews wait in `GET /v1/reviews?status=PENDING` until staff
+  decide there. trust-ops needs: a listener on `at.bookings.events` for `booking.review.submitted` (new item type
+  `SERVICE_REVIEW`, SLA like listings) closing items on `booking.review.approved|rejected`; allow / remove calling
+  `POST /v1/reviews/{bookingId}/approve|reject` with its service token; and identity granting the `trust-ops`
+  client and trust & safety staff `bookings:reviews:moderate`.
+- Provider replies are not moderated (they are public at once and announced by `booking.review.replied`).

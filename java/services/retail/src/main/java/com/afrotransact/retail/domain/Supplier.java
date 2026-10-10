@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -68,6 +69,19 @@ public record Supplier(UUID id, String code, String name, String country, String
     public Supplier recordReceipt(boolean onTime, long units, long defective, Instant now) {
         return new Supplier(id, code, name, country, city, currency, paymentTerms, leadTimeDays, certifications,
                 contacts, status, statusReason, scorecard.record(onTime, units, defective), createdAt, now, version);
+    }
+
+    /**
+     * Who receives purchase orders by email (S225): the first contact with an email whose role mentions sales,
+     * orders or purchasing, else the first contact with an email.
+     */
+    public Optional<SupplierContact> purchaseOrderContact() {
+        List<SupplierContact> withEmail = contacts.stream()
+                .filter(c -> c.email() != null && !c.email().isBlank()).toList();
+        return withEmail.stream()
+                .filter(c -> c.role() != null && c.role().toLowerCase(Locale.ROOT).matches(".*(sales|order|purchas).*"))
+                .findFirst()
+                .or(() -> withEmail.stream().findFirst());
     }
 
     public void ensureCanReceivePurchaseOrders() {
