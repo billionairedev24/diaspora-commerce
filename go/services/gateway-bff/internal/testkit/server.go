@@ -143,6 +143,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
 	}
+	services.Shopper = shopperServices(u, client, identity, services, clock, log)
 	mux := http.NewServeMux()
 	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin}, CookieName: "at_session",
 		CookieSecure: true, MaxBodyBytes: 64 << 10, AuthPerMinute: cfg.AuthPerMinute, LookupPerMinute: 1000}, log).Register(mux)

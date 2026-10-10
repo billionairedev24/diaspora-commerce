@@ -181,6 +181,8 @@ type CartLine struct {
 	AvailableQty   int     `json:"availableQty"`
 	StockStatus    string  `json:"stockStatus"`
 	Selected       bool    `json:"selected"`
+	// Perishable (catalog product type or attribute): hand delivery with a code, no safe place.
+	Perishable bool `json:"perishable"`
 }
 
 // DeliveryOption is one way to ship a package.
@@ -190,6 +192,10 @@ type DeliveryOption struct {
 	ETA      string `json:"eta"`
 	FeeMinor int64  `json:"feeMinor"`
 	Free     bool   `json:"free"`
+	// Checkout only: the promise service's dates for this option (empty in the cart).
+	EarliestDate string `json:"earliestDate,omitempty"`
+	LatestDate   string `json:"latestDate,omitempty"`
+	CutoffLabel  string `json:"cutoffLabel,omitempty"`
 }
 
 // ShippingNudge is "Add $X for free shipping".
@@ -379,6 +385,13 @@ type OrderShipment struct {
 	Label      string `json:"label"`
 	Status     string `json:"status"`
 	Items      string `json:"items"`
+	// Optional facts from orders (Your orders cards): cancel button, tracking, handover code.
+	Cancellable    bool    `json:"cancellable,omitempty"`
+	Carrier        *string `json:"carrier,omitempty"`
+	TrackingNumber *string `json:"trackingNumber,omitempty"`
+	PromisedBy     *string `json:"promisedBy,omitempty"`
+	DeliveredAt    *string `json:"deliveredAt,omitempty"`
+	DeliveryCode   *string `json:"deliveryCode,omitempty"`
 }
 
 // OrderSummary is one order in Your orders.
@@ -399,13 +412,39 @@ type ReturnSummary struct {
 	Title       string `json:"title"`
 	Status      string `json:"status"`
 	RefundMinor int64  `json:"refundMinor"`
+	// Optional facts from tax-returns (drop-off label / QR, driver handover code, cancel button).
+	Number       string  `json:"number,omitempty"`
+	Method       string  `json:"method,omitempty"`
+	Reason       string  `json:"reason,omitempty"`
+	RefundState  string  `json:"refundState,omitempty"`
+	Currency     string  `json:"currency,omitempty"`
+	Cancellable  bool    `json:"cancellable,omitempty"`
+	CreatedAt    *string `json:"createdAt,omitempty"`
+	LabelURL     *string `json:"labelUrl,omitempty"`
+	QRPayload    *string `json:"qrPayload,omitempty"`
+	HandoverCode *string `json:"handoverCode,omitempty"`
+	DropOffBy    *string `json:"dropOffBy,omitempty"`
+	Carrier      *string `json:"carrier,omitempty"`
+	Tracking     *string `json:"trackingNumber,omitempty"`
 }
 
-// StartReturn starts a return.
+// StartReturn starts a return: one delivered shipment, a method and a reason per line. The legacy shape
+// (orderNumber + atin + reason, used by the customer app) returns one unit of that item with the first allowed method.
 type StartReturn struct {
-	OrderNumber string `json:"orderNumber"`
-	ATIN        string `json:"atin"`
-	Reason      string `json:"reason"`
+	OrderNumber string            `json:"orderNumber"`
+	ShipmentID  string            `json:"shipmentId"`
+	Method      string            `json:"method"`
+	Lines       []StartReturnLine `json:"lines"`
+	ATIN        string            `json:"atin"`
+	Reason      string            `json:"reason"`
+}
+
+// StartReturnLine is one returned order line.
+type StartReturnLine struct {
+	LineID   string `json:"lineId"`
+	Quantity int    `json:"quantity"`
+	Reason   string `json:"reason"`
+	Comment  string `json:"comment,omitempty"`
 }
 
 // PickupPoint is a pickup location offered for a package at checkout.
@@ -436,6 +475,8 @@ type CheckoutSummary struct {
 	TotalMinor     int64             `json:"totalMinor"`
 	Currency       string            `json:"currency"`
 	SellerCount    int               `json:"sellerCount"`
+	// PublishableKey is the Stripe key for Stripe.js (Payment Element, Express Checkout Element).
+	PublishableKey string `json:"publishableKey,omitempty"`
 }
 
 // PlaceOrderRequest is the checkout submission (forwarded to orders as-is plus the selected lines).

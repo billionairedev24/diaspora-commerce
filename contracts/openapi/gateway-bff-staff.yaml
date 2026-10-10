@@ -1,0 +1,948 @@
+openapi: 3.1.0
+info:
+  title: Gateway BFF API (Staff console)
+  version: v1
+  summary: Screen-shaped API for the AfroTransact staff console (web/apps/staff-console), the platform back office.
+  description: |
+    The same gateway BFF (Go, port 8200) that serves the storefront and the Seller Center also serves the platform back
+    office under `/v1/staff/...`. Browsers never talk to the domain services: the staff console's same-origin `/api/bff`
+    proxy forwards to the BFF, which relays the signed-in staff member's access token (token relay) to identity, seller,
+    catalog, orders, payments, inventory, retail, fulfilment, trust-ops, tax-returns, content, notifications and media.
+
+    **Staff only.** Every operation needs a signed-in STAFF principal: identity `GET /v1/me` → `principalType: STAFF`
+    (the `pt=STAFF` token claim). Customers and seller members get 403 `NOT_STAFF`; guests 401 `UNAUTHENTICATED`.
+
+    **RBAC.** Module access (VIEW, EDIT, APPROVE, FULL) comes from identity's module matrix for the `platform` portal
+    (`GET /v1/admin/module-access?portal=platform`), taking the highest level over the staff member's platform roles;
+    the BFF falls back to the seeded default matrix when identity cannot be read. `GET /v1/staff/session` returns the
+    sidebar already filtered. Every action additionally needs the permission the upstream enforces (for example
+    `disputes:manage` for claim decisions): the BFF reports `allowed: false` with a reason on each action of a detail
+    sheet, and refuses the call server-side with 403 `FORBIDDEN` before it reaches the upstream.
+
+    **Tables are server-driven.** `GET /v1/staff/resources/{resource}` returns the columns, the status facets, the
+    rows of one page and whether a record can be created; `GET /v1/staff/resources/{resource}/{id}` returns the
+    detail sheet (all fields grouped in sections, nested tables, activity, actions and the edit form). Upstreams that
+    page with cursors report `total: null` and a `nextCursor`.
+
+    **Exports.** `POST /v1/staff/exports` builds CSV or XLSX on the server by streaming pages from the upstream. Up to
+    5,000 rows are built while you wait (201, `READY`); larger exports run as a background job (202, `QUEUED`) to poll.
+    Download links are signed and expire 24 hours after the file is ready.
+
+    **Errors** are RFC 9457 `application/problem+json` with a stable `code`. Upstreams that are unreachable, or that do
+    not serve a route yet, answer 503 `UPSTREAM_UNAVAILABLE` (`type https://errors.afrotransact.com/bff.upstream-unavailable`)
+    with `Retry-After`.
+
+    **Money** is always an integer amount in minor units (`*Minor`, cents for USD) plus an ISO 4217 `currency`.
+
+    **CSRF.** Unsafe methods require an `Origin` header matching an allowed web origin (the staff console).
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+servers:
+  - url: http://localhost:8200
+    description: local
+  - url: https://api.dev.afrotransact.com/bff
+    description: dev
+  - url: https://api.uat.afrotransact.com/bff
+    description: uat
+  - url: https://api.afrotransact.com/bff
+    description: prod
+tags:
+  - name: Shell
+    description: Staff session and the RBAC-filtered sidebar
+  - name: Dashboard
+    description: Platform KPIs and charts from one dashboard feed
+  - name: Resources
+    description: Server-driven tables, detail sheets, create / edit forms and RBAC-gated actions
+  - name: Exports
+    description: Server-side CSV / XLSX exports with signed, expiring download links
+  - name: Support
+    description: Customer support console (Lola hand-offs, customer lookup, refunds, notifications, shipments)
+security:
+  - sessionCookie: []
+paths:
+  # ───────────────────────────────────────────────────────────── shell
+  /v1/staff/session:
+    get:
+      tags: [Shell]
+      operationId: getStaffSession
+      security: [{sessionCookie: []}]
+      summary: Signed-in staff member, roles, effective permissions and the RBAC-filtered sidebar
+      description: |
+        Composes identity `GET /v1/me` (profile, principal type, platform roles and effective permissions) and identity's
+        module matrix `GET /v1/admin/module-access?portal=platform` (cached; seeded defaults when it cannot be read).
+        Modules the staff member's roles cannot open are not returned. The dashboard is the landing page.
+      responses:
+        '200': {description: Session, content: {application/json: {schema: {$ref: '#/components/schemas/StaffSession'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── dashboard
+  /v1/staff/dashboard:
+    get:
+      tags: [Dashboard]
+      operationId: getStaffDashboard
+      security: [{sessionCookie: []}]
+      summary: Platform dashboard feed (KPIs and every chart)
+      description: |
+        One feed for every figure on the dashboard: sales and net sales by day and orders by department (orders
+        `GET /v1/admin/orders`, lines' category), applications by status (seller `GET /v1/applications`), payouts
+        (payments `GET /v1/payouts/requests`) versus claim refunds (trust-ops `GET /v1/claims?status=RESOLVED_REFUND`)
+        by week. Each chart reports `available: false` when its upstream cannot answer. Chart exports (PDF, Excel with a
+        native chart, CSV) are built from these rows. Needs VIEW on the dashboard module.
+      parameters:
+        - {name: rangeDays, in: query, schema: {type: integer, enum: [7, 30, 90], default: 30}}
+      responses:
+        '200': {description: Dashboard, content: {application/json: {schema: {$ref: '#/components/schemas/StaffDashboard'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+  # ───────────────────────────────────────────────────────────── resources
+  /v1/staff/resources/{resource}:
+    get:
+      tags: [Resources]
+      operationId: listStaffResource
+      security: [{sessionCookie: []}]
+      summary: One page of a server-driven table (columns, facets, rows)
+      description: |
+        Upstreams per resource — users: identity `GET /v1/admin/users`; roles: identity `GET /v1/admin/roles`;
+        applications: seller `GET /v1/applications`; orders: orders `GET /v1/admin/orders`; products: catalog
+        `GET /v1/products`; moderation: trust-ops `GET /v1/moderation/items`; claims: trust-ops `GET /v1/claims`;
+        returns: tax-returns `GET /v1/returns`; payouts: payments `GET /v1/payouts/requests`; inventory: inventory
+        `GET /v1/lots`; purchase-orders: retail `GET /v1/purchase-orders`; routes: fulfilment `GET /v1/dispatch/routes`;
+        support-cases: trust-ops `GET /v1/support-cases`; audit: trust-ops `GET /v1/audit/entries`; markets: content
+        `GET /v1/markets/draft/countries`; site-settings: content `GET /v1/site-config/settings`; legal-documents: content
+        `GET /v1/legal`; announcements and placements: content `GET /v1/placements`; identity-providers: identity
+        `GET /v1/admin/identity-providers`; fee-schedules: payments `GET /v1/fee-schedules`; tax-rates: tax-returns
+        `GET /v1/tax/rates`. Needs VIEW on the resource's module.
+      parameters:
+        - {$ref: '#/components/parameters/Resource'}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: Free-text search where the upstream supports it}
+        - {name: status, in: query, schema: {type: string, maxLength: 60}, description: One of the page's facet values}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+        - {name: cursor, in: query, schema: {type: string, maxLength: 200}, description: nextCursor of the previous page (cursor-paged upstreams)}
+      responses:
+        '200': {description: Table page, content: {application/json: {schema: {$ref: '#/components/schemas/ResourcePage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Resources]
+      operationId: createStaffRecord
+      security: [{sessionCookie: []}]
+      summary: Create a record from the table's create form (New)
+      description: |
+        users: identity `POST /v1/admin/users` (access:admin); announcements and placements: content `POST /v1/placements`
+        (content:placements.edit); fee-schedules: payments `POST /v1/fee-schedules` (payments:configure); tax-rates
+        (local rate): tax-returns `PUT /v1/tax/rates/local/{state}/{zipPrefix}` (tax:configure). Fields are validated
+        against the create form first (422 with per-field errors).
+      parameters: [{$ref: '#/components/parameters/Resource'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RecordValues'}}}
+      responses:
+        '201': {description: Created record, content: {application/json: {schema: {$ref: '#/components/schemas/RecordDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/resources/{resource}/{id}:
+    get:
+      tags: [Resources]
+      operationId: getStaffRecord
+      security: [{sessionCookie: []}]
+      summary: Detail sheet of one record (fields, nested tables, activity, RBAC-gated actions, edit form)
+      parameters: [{$ref: '#/components/parameters/Resource'}, {$ref: '#/components/parameters/RecordId'}]
+      responses:
+        '200': {description: Record, content: {application/json: {schema: {$ref: '#/components/schemas/RecordDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    patch:
+      tags: [Resources]
+      operationId: updateStaffRecord
+      security: [{sessionCookie: []}]
+      summary: Save the edit form of a record (Edit)
+      description: |
+        markets: content `PATCH /v1/markets/draft/countries/{code}` (content:markets.edit); site-settings: content
+        `PUT /v1/site-config` with the revision read last (content:site.edit); legal-documents: content
+        `PATCH /v1/legal/{type}/current` (content:legal.edit); announcements and placements: content `PUT /v1/placements/{id}`
+        with `expectedVersion` (content:placements.edit); tax-rates (state rule): tax-returns `PUT /v1/tax/rates/states/{state}`
+        (tax:configure). A stale `version` answers 409 `CONFLICT`.
+      parameters: [{$ref: '#/components/parameters/Resource'}, {$ref: '#/components/parameters/RecordId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RecordValues'}}}
+      responses:
+        '200': {description: Saved record, content: {application/json: {schema: {$ref: '#/components/schemas/RecordDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/resources/{resource}/{id}/actions/{action}:
+    post:
+      tags: [Resources]
+      operationId: runStaffAction
+      security: [{sessionCookie: []}]
+      summary: Run one action of a detail sheet (approve, hold, refund, cancel, …) and return the updated sheet
+      description: |
+        The action must be listed on the record's sheet with `allowed: true`; otherwise 403 `FORBIDDEN` (missing
+        permission or module level) or 409 `CONFLICT` (not possible in the record's current state). Examples: applications
+        `review-approve` / `review-flag` / `review-request-info` (seller `POST /v1/applications/{id}/review`,
+        applications:review) and `final-approve` / `send-back` / `reject` (seller `POST /v1/applications/{id}/decision`,
+        applications:approve, never by the step-one reviewer); claims `refund` / `deny` (trust-ops
+        `POST /v1/claims/{id}/decision`, disputes:manage, refunds capped by the role's refund limit); payouts `approve` /
+        `hold` / `release` (payments, payouts:approve); orders `shipment-status` (orders `POST /v1/shipments/{id}/transitions`).
+        `Idempotency-Key` is relayed to upstreams that accept one.
+      parameters:
+        - {$ref: '#/components/parameters/Resource'}
+        - {$ref: '#/components/parameters/RecordId'}
+        - {name: action, in: path, required: true, schema: {type: string, pattern: '^[a-z][a-z0-9-]{1,40}$'}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/RecordValues'}}}
+      responses:
+        '200': {description: Updated record, content: {application/json: {schema: {$ref: '#/components/schemas/RecordDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/resources/{resource}/{id}/notes:
+    post:
+      tags: [Resources]
+      operationId: addStaffNote
+      security: [{sessionCookie: []}]
+      summary: Add an internal note to a record
+      description: |
+        No upstream stores internal notes on records yet, so this answers 503 `UPSTREAM_UNAVAILABLE` until one does
+        (sheets report `notesEnabled: false` meanwhile).
+      parameters: [{$ref: '#/components/parameters/Resource'}, {$ref: '#/components/parameters/RecordId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/NoteRequest'}}}
+      responses:
+        '200': {description: Updated record, content: {application/json: {schema: {$ref: '#/components/schemas/RecordDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── exports
+  /v1/staff/exports:
+    get:
+      tags: [Exports]
+      operationId: listStaffExports
+      security: [{sessionCookie: []}]
+      summary: My export jobs, newest first (kept 24 hours after they finish)
+      responses:
+        '200': {description: Export jobs, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJobList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Exports]
+      operationId: createStaffExport
+      security: [{sessionCookie: []}]
+      summary: Export a whole table (all pages matching the filters) as CSV or XLSX
+      description: |
+        Streams every page of the resource's upstream list with the caller's token and writes the file on the server.
+        Up to 5,000 rows finish within the request (201 READY); larger exports are queued (202 QUEUED) and built in the
+        background — poll `GET /v1/staff/exports/{id}`. Capped at 200,000 rows. Needs VIEW on the resource's module.
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ExportRequest'}}}
+      responses:
+        '201': {description: Export ready, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJob'}}}}
+        '202': {description: Export queued, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJob'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/exports/{exportId}:
+    get:
+      tags: [Exports]
+      operationId: getStaffExport
+      security: [{sessionCookie: []}]
+      summary: Status of one export job (poll until READY or FAILED)
+      parameters: [{$ref: '#/components/parameters/ExportId'}]
+      responses:
+        '200': {description: Export job, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJob'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/staff/exports/{exportId}/download:
+    get:
+      tags: [Exports]
+      operationId: downloadStaffExport
+      security: [{sessionCookie: []}]
+      summary: Redirect to the signed download URL of a ready export
+      description: 302 to the signed URL (valid until `expiresAt`); 409 while the job is not ready, 410 once it expired.
+      parameters: [{$ref: '#/components/parameters/ExportId'}]
+      responses:
+        '302':
+          description: Signed download URL
+          headers:
+            Location: {description: Signed URL of the file, schema: {type: string}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+  /v1/staff/export-files/{exportId}:
+    get:
+      tags: [Exports]
+      operationId: getStaffExportFile
+      security: []
+      summary: The export file behind a signed link (no session needed; the signature and expiry are checked)
+      description: |
+        Served when exports are stored by the BFF itself (default). With media storage the signed URL points at the
+        object store instead. 403 for a bad signature, 410 after `expires`.
+      parameters:
+        - {$ref: '#/components/parameters/ExportId'}
+        - {name: expires, in: query, required: true, schema: {type: integer, format: int64}, description: Unix seconds}
+        - {name: sig, in: query, required: true, schema: {type: string, maxLength: 128}}
+      responses:
+        '200':
+          description: File
+          content:
+            text/csv: {schema: {type: string}}
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── support
+  /v1/staff/support/customers:
+    get:
+      tags: [Support]
+      operationId: searchSupportCustomers
+      security: [{sessionCookie: []}]
+      summary: Find a customer by name or email
+      description: identity `GET /v1/admin/users?q=` (users:read). Needs VIEW on the support module.
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 120}}
+      responses:
+        '200': {description: Matches, content: {application/json: {schema: {$ref: '#/components/schemas/CustomerSearch'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/support/customers/{customerId}:
+    get:
+      tags: [Support]
+      operationId: getSupportCustomer
+      security: [{sessionCookie: []}]
+      summary: Customer 360 — account, orders with shipments, bookings, claims, returns, notifications, cases and audit
+      description: |
+        identity `GET /v1/admin/users/{id}`; orders `GET /v1/admin/orders?customer=`; trust-ops `GET /v1/claims?orderId=`
+        and `GET /v1/support-cases`; tax-returns `GET /v1/returns?orderId=`; notifications `GET /v1/notifications?recipient=`;
+        trust-ops `GET /v1/audit/entries?entityId=`. Bookings have no staff lookup by customer yet (listed in
+        `unavailable`). Sections whose upstream fails are empty and named in `unavailable`; the rest still renders.
+      parameters: [{name: customerId, in: path, required: true, schema: {type: string, maxLength: 64}}]
+      responses:
+        '200': {description: Customer 360, content: {application/json: {schema: {$ref: '#/components/schemas/Customer360'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/support/refunds:
+    post:
+      tags: [Support]
+      operationId: supportRefund
+      security: [{sessionCookie: []}]
+      summary: Refund a customer within the role's refund limit (claim decision or a partial refund)
+      description: |
+        `via: CLAIM` decides the customer's open claim with a refund (trust-ops `POST /v1/claims/{id}/decision`,
+        disputes:manage). `via: ORDER` issues a partial refund without a return (tax-returns `POST /v1/refunds`,
+        refunds:issue), spread over the order's lines. Amounts above the role's limit answer 403 `REFUND_LIMIT`. Both
+        upstreams write the decision to the trust-ops audit log.
+      parameters: [{$ref: '#/components/parameters/IdempotencyKeyRequired'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SupportRefundRequest'}}}
+      responses:
+        '200': {description: Refund issued, content: {application/json: {schema: {$ref: '#/components/schemas/SupportActionResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/support/notifications/{notificationId}/resend:
+    post:
+      tags: [Support]
+      operationId: supportResendNotification
+      security: [{sessionCookie: []}]
+      summary: Resend a notification to the customer
+      description: |
+        Failed notifications are replayed (notifications `POST /v1/dead-letters/{id}/replay`); delivered ones are queued
+        again from the same template (notifications `POST /v1/notifications`, notifications:send). Needs EDIT on support.
+      parameters:
+        - {name: notificationId, in: path, required: true, schema: {type: string, maxLength: 64}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SupportResendRequest'}}}
+      responses:
+        '200': {description: Queued again, content: {application/json: {schema: {$ref: '#/components/schemas/SupportActionResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/support/shipments/{shipmentId}/cancel:
+    post:
+      tags: [Support]
+      operationId: supportCancelShipment
+      security: [{sessionCookie: []}]
+      summary: Cancel a customer's shipment (until it is packed)
+      description: orders `POST /v1/shipments/{id}/transitions` to `CANCELLED` with the reason (orders:manage or orders:update-status).
+      parameters:
+        - {name: shipmentId, in: path, required: true, schema: {type: string, maxLength: 64}}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SupportCancelRequest'}}}
+      responses:
+        '200': {description: Cancelled, content: {application/json: {schema: {$ref: '#/components/schemas/SupportActionResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: at_session
+      description: Opaque BFF session id (HttpOnly, Secure, SameSite=Lax). Tokens stay server-side.
+  parameters:
+    Resource:
+      name: resource
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/ResourceKey'}
+    RecordId: {name: id, in: path, required: true, schema: {type: string, maxLength: 120}}
+    ExportId: {name: exportId, in: path, required: true, schema: {type: string, maxLength: 64}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
+    IdempotencyKeyRequired: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}, description: Same key = same refund; never refunds twice.}
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    ValidationProblem:
+      description: Validation failed; `errors` maps request properties to messages
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+        code:
+          type: string
+          description: |
+            Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, NOT_STAFF, FORBIDDEN, NOT_FOUND, CONFLICT,
+            REFUND_LIMIT, EXPORT_NOT_READY, EXPORT_EXPIRED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR.
+        errors:
+          type: object
+          additionalProperties: {type: string}
+      additionalProperties: true
+    # ── shell
+    AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
+    StaffModuleKey:
+      type: string
+      description: Sidebar modules; keys follow identity's platform module matrix (support and exports are derived).
+      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev]
+    StaffUser:
+      type: object
+      required: [id, firstName, lastName, email, initials]
+      properties:
+        id: {type: string}
+        firstName: {type: string}
+        lastName: {type: string}
+        email: {type: string}
+        initials: {type: string}
+    StaffRole:
+      type: object
+      required: [key, label]
+      properties:
+        key: {type: string, description: 'Platform role, e.g. platform.customer_support'}
+        label: {type: string}
+    StaffNavModule:
+      type: object
+      required: [key, label, description, level, badge]
+      properties:
+        key: {$ref: '#/components/schemas/StaffModuleKey'}
+        label: {type: string}
+        description: {type: string}
+        level: {$ref: '#/components/schemas/AccessLevel'}
+        badge: {type: [integer, 'null']}
+    StaffNavGroup:
+      type: object
+      required: [key, label, modules]
+      properties:
+        key: {type: string, enum: [overview, commerce, partners, finance, growth, trust, settings]}
+        label: {type: string}
+        modules: {type: array, items: {$ref: '#/components/schemas/StaffNavModule'}}
+    StaffSession:
+      type: object
+      required: [user, roles, roleLabel, permissions, navGroups, landing, accessNote, refundLimitMinor]
+      properties:
+        user: {$ref: '#/components/schemas/StaffUser'}
+        roles: {type: array, items: {$ref: '#/components/schemas/StaffRole'}}
+        roleLabel: {type: string}
+        permissions: {type: array, items: {type: string}}
+        navGroups: {type: array, items: {$ref: '#/components/schemas/StaffNavGroup'}}
+        landing: {$ref: '#/components/schemas/StaffModuleKey'}
+        accessNote: {type: string}
+        refundLimitMinor:
+          type: [integer, 'null']
+          format: int64
+          description: Largest refund the roles allow (null = no limit, 0 = may not refund)
+    # ── dashboard
+    ChartTone: {type: string, enum: [ink, gold, green, blue, red, grey]}
+    ValueFormat: {type: string, enum: [money, count]}
+    ChartSeries:
+      type: object
+      required: [key, label, tone]
+      properties:
+        key: {type: string}
+        label: {type: string}
+        tone: {$ref: '#/components/schemas/ChartTone'}
+        format: {$ref: '#/components/schemas/ValueFormat'}
+    ChartRow:
+      type: object
+      required: [category, values]
+      properties:
+        category: {type: string}
+        values:
+          type: object
+          additionalProperties: {type: number}
+    ChartSpec:
+      type: object
+      required: [id, title, kind, categoryLabel, valueFormat, series, rows, available]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        kind: {type: string, enum: [trend, hbar, donut, stack]}
+        categoryLabel: {type: string}
+        valueFormat: {$ref: '#/components/schemas/ValueFormat'}
+        series: {type: array, items: {$ref: '#/components/schemas/ChartSeries'}}
+        rows: {type: array, items: {$ref: '#/components/schemas/ChartRow'}}
+        available: {type: boolean}
+    Kpi:
+      type: object
+      required: [label, value, detail, tone]
+      properties:
+        label: {type: string}
+        value: {type: string}
+        detail: {type: string}
+        tone: {type: string, enum: [positive, attention, neutral]}
+    StaffDashboard:
+      type: object
+      required: [rangeDays, generatedAt, kpis, charts]
+      properties:
+        rangeDays: {type: integer}
+        generatedAt: {type: string, format: date-time}
+        kpis: {type: array, items: {$ref: '#/components/schemas/Kpi'}}
+        charts: {type: array, items: {$ref: '#/components/schemas/ChartSpec'}}
+    # ── resources
+    ResourceKey:
+      type: string
+      enum: [users, roles, applications, orders, products, moderation, claims, returns, payouts, inventory, purchase-orders,
+        routes, support-cases, audit, markets, site-settings, legal-documents, announcements, placements, identity-providers,
+        fee-schedules, tax-rates]
+    Tone: {type: string, enum: [good, warn, bad, info, brand]}
+    CellValue:
+      type: [string, number, 'null']
+    ColumnKind: {type: string, enum: [text, strong, mono, money, number, date, datetime, status, percent]}
+    Column:
+      type: object
+      required: [key, label, kind, width]
+      properties:
+        key: {type: string}
+        label: {type: string}
+        kind: {$ref: '#/components/schemas/ColumnKind'}
+        width: {type: integer, minimum: 1, maximum: 100, description: Share of the table width in percent (tables never scroll sideways)}
+    Facet:
+      type: object
+      required: [value, label]
+      properties:
+        value: {type: string}
+        label: {type: string}
+    ResourceRow:
+      type: object
+      required: [id, cells, tone]
+      properties:
+        id: {type: string}
+        cells:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/CellValue'}
+        tone: {oneOf: [{$ref: '#/components/schemas/Tone'}, {type: 'null'}]}
+    FieldOption:
+      type: object
+      required: [value, label]
+      properties:
+        value: {type: string}
+        label: {type: string}
+    FieldValue:
+      oneOf:
+        - {type: string}
+        - {type: number}
+        - {type: boolean}
+        - {type: array, items: {type: string}}
+        - {type: 'null'}
+    FormField:
+      type: object
+      required: [key, label, type, required]
+      properties:
+        key: {type: string}
+        label: {type: string}
+        type: {type: string, enum: [text, textarea, number, money, select, multiselect, toggle, date, datetime, email, password]}
+        required: {type: boolean}
+        options: {type: array, items: {$ref: '#/components/schemas/FieldOption'}}
+        min: {type: number}
+        max: {type: number}
+        maxLength: {type: integer}
+        pattern: {type: string, description: ECMAScript regular expression the value must match}
+        help: {type: string}
+        placeholder: {type: string}
+        value: {$ref: '#/components/schemas/FieldValue'}
+    Form:
+      type: object
+      required: [title, submitLabel, fields]
+      properties:
+        title: {type: string}
+        submitLabel: {type: string}
+        fields: {type: array, items: {$ref: '#/components/schemas/FormField'}}
+    ResourcePage:
+      type: object
+      required: [resource, title, columns, rows, page, size, total, nextCursor, hasNext, facets, searchable, canCreate, createForm, exportable]
+      properties:
+        resource: {$ref: '#/components/schemas/ResourceKey'}
+        title: {type: string}
+        columns: {type: array, items: {$ref: '#/components/schemas/Column'}}
+        rows: {type: array, items: {$ref: '#/components/schemas/ResourceRow'}}
+        page: {type: integer}
+        size: {type: integer}
+        total: {type: [integer, 'null'], description: Rows matching the filters (null when the upstream pages with cursors)}
+        nextCursor: {type: [string, 'null']}
+        hasNext: {type: boolean}
+        facets: {type: array, items: {$ref: '#/components/schemas/Facet'}}
+        searchable: {type: boolean}
+        searchPlaceholder: {type: string}
+        canCreate: {type: boolean}
+        createForm: {oneOf: [{$ref: '#/components/schemas/Form'}, {type: 'null'}]}
+        exportable: {type: boolean}
+    DetailField:
+      type: object
+      required: [label, value, kind]
+      properties:
+        label: {type: string}
+        value: {type: string}
+        kind: {type: string, enum: [text, mono, money, date, datetime, status, link]}
+        href: {type: string}
+    DetailSection:
+      type: object
+      required: [title, fields]
+      properties:
+        title: {type: string}
+        fields: {type: array, items: {$ref: '#/components/schemas/DetailField'}}
+    DetailTable:
+      type: object
+      required: [title, columns, rows]
+      properties:
+        title: {type: string}
+        columns: {type: array, items: {$ref: '#/components/schemas/Column'}}
+        rows: {type: array, items: {$ref: '#/components/schemas/ResourceRow'}}
+    ActivityEntry:
+      type: object
+      required: [at, actor, text]
+      properties:
+        at: {type: string, format: date-time}
+        actor: {type: string}
+        text: {type: string}
+    Note:
+      type: object
+      required: [id, at, author, text]
+      properties:
+        id: {type: string}
+        at: {type: string, format: date-time}
+        author: {type: string}
+        text: {type: string}
+    RecordAction:
+      type: object
+      required: [key, label, tone, allowed, reason, permission, confirm, form]
+      properties:
+        key: {type: string}
+        label: {type: string}
+        tone: {type: string, enum: [primary, neutral, danger]}
+        allowed: {type: boolean}
+        reason: {type: [string, 'null'], description: 'Why the action is disabled: missing permission, wrong state or the step-one reviewer'}
+        permission: {type: string, description: Permission the upstream checks}
+        confirm: {type: [string, 'null'], description: Confirmation question for actions without a form}
+        form: {oneOf: [{$ref: '#/components/schemas/Form'}, {type: 'null'}]}
+    RecordLink:
+      type: object
+      required: [label, href]
+      properties:
+        label: {type: string}
+        href: {type: string, description: 'Console path, for example /support?customer=… or /orders?open=AT-…'}
+    RecordDetail:
+      type: object
+      required: [resource, id, title, subtitle, status, tone, sections, tables, activity, notes, notesEnabled, actions, editForm, links, version]
+      properties:
+        resource: {$ref: '#/components/schemas/ResourceKey'}
+        id: {type: string}
+        title: {type: string}
+        subtitle: {type: string}
+        status: {type: [string, 'null']}
+        tone: {oneOf: [{$ref: '#/components/schemas/Tone'}, {type: 'null'}]}
+        sections: {type: array, items: {$ref: '#/components/schemas/DetailSection'}}
+        tables: {type: array, items: {$ref: '#/components/schemas/DetailTable'}}
+        activity: {type: array, items: {$ref: '#/components/schemas/ActivityEntry'}}
+        notes: {type: array, items: {$ref: '#/components/schemas/Note'}}
+        notesEnabled: {type: boolean}
+        actions: {type: array, items: {$ref: '#/components/schemas/RecordAction'}}
+        editForm: {oneOf: [{$ref: '#/components/schemas/Form'}, {type: 'null'}]}
+        links: {type: array, items: {$ref: '#/components/schemas/RecordLink'}}
+        version: {type: [string, 'null'], description: Optimistic-locking version to send back with edits}
+    RecordValues:
+      type: object
+      properties:
+        values:
+          type: object
+          additionalProperties: {$ref: '#/components/schemas/FieldValue'}
+        version: {type: [string, 'null']}
+    NoteRequest:
+      type: object
+      required: [text]
+      properties:
+        text: {type: string, minLength: 1, maxLength: 2000}
+    # ── exports
+    ExportFormat: {type: string, enum: [csv, xlsx]}
+    ExportRequest:
+      type: object
+      required: [resource, format]
+      properties:
+        resource: {$ref: '#/components/schemas/ResourceKey'}
+        format: {$ref: '#/components/schemas/ExportFormat'}
+        q: {type: string, maxLength: 120}
+        status: {type: string, maxLength: 60}
+    ExportJob:
+      type: object
+      required: [id, resource, format, status, rows, async, fileName, createdAt, finishedAt, expiresAt, downloadUrl, error]
+      properties:
+        id: {type: string}
+        resource: {$ref: '#/components/schemas/ResourceKey'}
+        format: {$ref: '#/components/schemas/ExportFormat'}
+        status: {type: string, enum: [QUEUED, RUNNING, READY, FAILED, EXPIRED]}
+        rows: {type: integer, description: Rows written so far}
+        async: {type: boolean, description: 'Built in the background (more than 5,000 rows)'}
+        fileName: {type: string}
+        createdAt: {type: string, format: date-time}
+        finishedAt: {type: [string, 'null'], format: date-time}
+        expiresAt: {type: [string, 'null'], format: date-time, description: The download link stops working at this time (24 hours after READY)}
+        downloadUrl: {type: [string, 'null'], description: Console-relative download path (redirects to the signed URL)}
+        error: {type: [string, 'null']}
+    ExportJobList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ExportJob'}}
+    # ── support
+    CustomerHit:
+      type: object
+      required: [id, name, email, enabled, principalType]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        email: {type: string}
+        enabled: {type: boolean}
+        principalType: {type: string}
+    CustomerSearch:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/CustomerHit'}}
+    SupportShipment:
+      type: object
+      required: [id, label, status, sellerName, carrier, trackingNumber, cancellable, totalMinor]
+      properties:
+        id: {type: string}
+        label: {type: string}
+        status: {type: string}
+        sellerName: {type: string}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
+        cancellable: {type: boolean}
+        totalMinor: {type: integer, format: int64}
+    SupportOrder:
+      type: object
+      required: [id, orderNumber, status, placedAt, totalMinor, currency, shipments]
+      properties:
+        id: {type: string}
+        orderNumber: {type: string}
+        status: {type: string}
+        placedAt: {type: string, format: date-time}
+        totalMinor: {type: integer, format: int64}
+        currency: {type: string}
+        shipments: {type: array, items: {$ref: '#/components/schemas/SupportShipment'}}
+    SupportClaim:
+      type: object
+      required: [id, reference, type, status, orderNumber, amountMinor, refundMinor, open]
+      properties:
+        id: {type: string}
+        reference: {type: string}
+        type: {type: string}
+        status: {type: string}
+        orderNumber: {type: string}
+        amountMinor: {type: integer, format: int64}
+        refundMinor: {type: [integer, 'null'], format: int64}
+        open: {type: boolean}
+    SupportReturn:
+      type: object
+      required: [id, number, status, orderNumber, refundState, estimateMinor]
+      properties:
+        id: {type: string}
+        number: {type: string}
+        status: {type: string}
+        orderNumber: {type: string}
+        refundState: {type: [string, 'null']}
+        estimateMinor: {type: integer, format: int64}
+    SupportNotification:
+      type: object
+      required: [id, channel, templateKey, subject, status, address, createdAt]
+      properties:
+        id: {type: string}
+        channel: {type: string}
+        templateKey: {type: string}
+        subject: {type: [string, 'null']}
+        status: {type: string}
+        address: {type: string}
+        createdAt: {type: string, format: date-time}
+    SupportCaseSummary:
+      type: object
+      required: [id, reference, reason, summary, status, openedAt]
+      properties:
+        id: {type: string}
+        reference: {type: string}
+        reason: {type: string}
+        summary: {type: string}
+        status: {type: string}
+        openedAt: {type: string, format: date-time}
+    SupportBooking:
+      type: object
+      required: [id, service, status, startsAt]
+      properties:
+        id: {type: string}
+        service: {type: string}
+        status: {type: string}
+        startsAt: {type: string, format: date-time}
+    AuditLine:
+      type: object
+      required: [at, actor, action, summary]
+      properties:
+        at: {type: string, format: date-time}
+        actor: {type: string}
+        action: {type: string}
+        summary: {type: string}
+    SupportCustomer:
+      type: object
+      required: [id, name, email, enabled, emailVerified, roles]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        email: {type: string}
+        enabled: {type: boolean}
+        emailVerified: {type: boolean}
+        roles: {type: array, items: {type: string}}
+    SupportPermissions:
+      type: object
+      required: [refund, resend, cancelShipment]
+      properties:
+        refund: {type: boolean}
+        resend: {type: boolean}
+        cancelShipment: {type: boolean}
+    Customer360:
+      type: object
+      required: [customer, orders, bookings, claims, returns, notifications, cases, audit, refundLimitMinor, can, unavailable]
+      properties:
+        customer: {$ref: '#/components/schemas/SupportCustomer'}
+        orders: {type: array, items: {$ref: '#/components/schemas/SupportOrder'}}
+        bookings: {type: array, items: {$ref: '#/components/schemas/SupportBooking'}}
+        claims: {type: array, items: {$ref: '#/components/schemas/SupportClaim'}}
+        returns: {type: array, items: {$ref: '#/components/schemas/SupportReturn'}}
+        notifications: {type: array, items: {$ref: '#/components/schemas/SupportNotification'}}
+        cases: {type: array, items: {$ref: '#/components/schemas/SupportCaseSummary'}}
+        audit: {type: array, items: {$ref: '#/components/schemas/AuditLine'}}
+        refundLimitMinor: {type: [integer, 'null'], format: int64}
+        can: {$ref: '#/components/schemas/SupportPermissions'}
+        unavailable: {type: array, items: {type: string}, description: Upstreams that could not answer (their sections are empty)}
+    SupportRefundRequest:
+      type: object
+      required: [customerId, orderNumber, amountMinor, reason, via]
+      properties:
+        customerId: {type: string}
+        orderNumber: {type: string, minLength: 1}
+        amountMinor: {type: integer, format: int64, minimum: 1}
+        reason: {type: string, minLength: 3, maxLength: 500}
+        via: {type: string, enum: [CLAIM, ORDER]}
+        claimId: {type: string, description: Required with via CLAIM}
+        caseId: {type: string, description: Support case the refund resolves (optional)}
+    SupportResendRequest:
+      type: object
+      required: [customerId]
+      properties:
+        customerId: {type: string}
+        caseId: {type: string}
+    SupportCancelRequest:
+      type: object
+      required: [customerId, orderNumber, reason]
+      properties:
+        customerId: {type: string}
+        orderNumber: {type: string, minLength: 1}
+        reason: {type: string, minLength: 3, maxLength: 500}
+        caseId: {type: string}
+    SupportActionResult:
+      type: object
+      required: [ok, message, reference, audited]
+      properties:
+        ok: {type: boolean}
+        message: {type: string}
+        reference: {type: [string, 'null'], description: 'Refund, notification or shipment reference'}
+        audited: {type: boolean, description: The upstream records the action in the trust-ops audit log}

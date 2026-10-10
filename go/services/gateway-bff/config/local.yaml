@@ -8,6 +8,7 @@ web:
   origins:
     - http://localhost:3000
     - http://localhost:3001
+    - http://localhost:3002
   publicOrigin: http://localhost:3000
   bffPath: /api/bff
 session:
@@ -109,6 +110,31 @@ upstreams:
     timeout: 10s
     retries: 0
     breaker: {failures: 5, cooldown: 15s}
+  taxReturns:
+    url: http://localhost:8111
+    timeout: 5s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  aiGateway:
+    url: http://localhost:8113
+    timeout: 10s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  trustOps:
+    url: http://localhost:8110
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  retail:
+    url: http://localhost:8107
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  fulfilment:
+    url: http://localhost:8108
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
 rateLimit:
   authPerMinute: 60
   lookupPerMinute: 120
@@ -128,6 +154,11 @@ commerce:
   freeShippingThresholdMinor: 4900
   retailOrgId: org_afrotransact_retail
   sellerNames: {}
+stripe:
+  publishableKey: "" # STRIPE_PUBLISHABLE_KEY (pk_test_… / pk_live_…)
+staff:
+  exportStore: local
+  exportDir: "" # STAFF_EXPORT_DIR (default: the OS temp dir)
 telemetry:
   otlpEndpoint: localhost:4318
   sampleRatio: 1.0

@@ -660,7 +660,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Stripe SetupIntent client secret for the Payment Element (card, US bank account, Cash App Pay) */
+        /**
+         * Stripe SetupIntent client secret for the Payment Element (card, US bank account, Cash App Pay)
+         * @description payments `POST /v1/customers/me/setup-intents`; `types` defaults to card and US bank account (ACH).
+         */
         post: operations["createSetupIntent"];
         delete?: never;
         options?: never;
@@ -678,7 +681,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Detach a payment method from the Stripe customer */
+        /** Detach a payment method from the Stripe customer (409 for the default method — choose another first) */
         delete: operations["deletePaymentMethod"];
         options?: never;
         head?: never;
@@ -711,7 +714,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel a shipment that has not shipped yet (releases the payment authorisation for it) */
+        /**
+         * Cancel a shipment that has not shipped yet (releases the payment authorisation for it)
+         * @description orders `POST /v1/orders/{number}/shipments/{id}/cancel` — until the shipment is packed; later 409.
+         */
         post: operations["cancelShipment"];
         delete?: never;
         options?: never;
@@ -729,7 +735,7 @@ export interface paths {
         /** Returns of the signed-in customer */
         get: operations["listReturns"];
         put?: never;
-        /** Start a return for a delivered, returnable item */
+        /** Start a return for delivered items (tax-returns RMA with label / QR, handover code or refund without return) */
         post: operations["startReturn"];
         delete?: never;
         options?: never;
@@ -802,8 +808,694 @@ export interface paths {
          * @description Requires `Idempotency-Key`. Replaying the same key with the same body returns the original result (201);
          *     the same key with a different body fails with 409 `IDEMPOTENCY_CONFLICT`. The payment is authorised now
          *     and captured per shipment when it ships.
+         *
+         *     orders `POST /v1/checkout` creates the PaymentIntent and always returns its `paymentClientSecret`
+         *     (`status: awaiting_payment`): confirm it with Stripe.js / PaymentSheet (a saved method, a wallet or a new
+         *     method from PaymentSheet — `paymentMethodId` may be any Stripe PaymentMethod id), then call
+         *     `POST /v1/checkout/orders/{orderNumber}/confirm`. 202 means the saga is still preparing — poll
+         *     `GET /v1/checkout/orders/{orderNumber}`.
          */
         post: operations["placeOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/payment-methods/{paymentMethodId}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make a saved payment method the default (payments POST /v1/customers/me/payment-methods/{id}/default) */
+        post: operations["setDefaultPaymentMethod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/payment-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stripe customer id and ephemeral key so PaymentSheet (customer app) can list and reuse saved methods
+         * @description payments `POST /v1/customers/me/ephemeral-keys` (planned: payments does not issue ephemeral keys yet, so this answers 503 `UPSTREAM_UNAVAILABLE` until it does).
+         */
+        post: operations["createPaymentSheetKeys"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/orders/{orderNumber}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my orders with shipments, lines, tracking numbers, timelines and handover codes */
+        get: operations["getOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/orders/{orderNumber}/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Shipment tracking (orders timeline + carrier-gateway scans) — the customer app's tracking screen */
+        get: operations["trackOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/orders/{orderNumber}/returnable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What can be returned from a delivered order (tax-returns eligibility per shipment and line) */
+        get: operations["getReturnEligibility"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/returns/{rmaId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my returns with its lines and the refund estimate (tax-returns refund quote) */
+        get: operations["getReturn"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/returns/{rmaId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a return before drop-off or pickup */
+        post: operations["cancelReturn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Login & security — second factors, passkeys, signed-in sessions, push devices and linked accounts */
+        get: operations["getSecurity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change the password (identity PUT /v1/me/password; the current password is required when one is set) */
+        put: operations["changePassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/mfa/totp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start authenticator-app enrolment (render otpauthUri as a QR code) */
+        post: operations["startTotp"];
+        /** Turn off the authenticator app */
+        delete: operations["disableTotp"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/mfa/totp/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm the authenticator app with a code; returns recovery codes the first time */
+        post: operations["confirmTotp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/mfa/sms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Text a code to the account phone to turn on SMS sign-in codes */
+        post: operations["startSmsMfa"];
+        /** Turn off SMS sign-in codes */
+        delete: operations["disableSmsMfa"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/mfa/sms/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm SMS sign-in codes; returns recovery codes the first time */
+        post: operations["confirmSmsMfa"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/mfa/recovery-codes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** New recovery codes (the old ones stop working) */
+        post: operations["regenerateRecoveryCodes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/passkeys/{credentialId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove a passkey (409 for the last sign-in method) */
+        delete: operations["removePasskey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/sessions/{sessionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Sign out one device */
+        delete: operations["revokeSession"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/sessions/revoke-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sign out every other device */
+        post: operations["revokeOtherSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/devices/{deviceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Stop push notifications to a device */
+        delete: operations["removeDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/linked-accounts/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unlink a Google, Apple or Facebook sign-in (409 for the last sign-in method) */
+        delete: operations["unlinkAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/notification-preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Notification switches */
+        get: operations["getNotificationPreferences"];
+        /** Replace the notification switches */
+        put: operations["saveNotificationPreferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My service bookings (bookings GET /v1/bookings/mine) */
+        get: operations["listMyBookings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/bookings/{bookingId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One of my bookings */
+        get: operations["getMyBooking"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/bookings/{bookingId}/cancellation-quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Exactly what cancelling now refunds or keeps (shown before cancelling) */
+        get: operations["getBookingCancellationQuote"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/bookings/{bookingId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Cancel a booking; the refund follows the policy it was booked under */
+        post: operations["cancelMyBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/bookings/{bookingId}/reschedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ask for a new time (a start time from the slots endpoint) */
+        post: operations["rescheduleMyBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/bookings/{bookingId}/new-time/{decision}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept or decline the time the provider proposed */
+        post: operations["answerProposedTime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/bookings/{bookingId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rate a completed booking once (1–5 stars) */
+        post: operations["reviewMyBooking"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/bookings/{bookingId}/payment/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** I confirmed the deposit with Stripe.js / PaymentSheet — refresh the booking */
+        post: operations["syncBookingPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/checkout/orders/{orderNumber}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Checkout status of one of my orders (poll after 202 or while the payment is processing) */
+        get: operations["getCheckoutStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/checkout/orders/{orderNumber}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** I confirmed the payment with Stripe.js / PaymentSheet — continue the saga without waiting for the webhook */
+        post: operations["confirmCheckoutPayment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Services near a ZIP (bookings public search; the deliver-to ZIP when omitted) */
+        get: operations["searchServices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services/{serviceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A bookable service with add-ons, team and cancellation policy */
+        get: operations["getService"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services/{serviceId}/days": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Days with open slots (live from the provider's hours and bookings) */
+        get: operations["getServiceDays"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services/{serviceId}/slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open start times on a day */
+        get: operations["getServiceSlots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services/{serviceId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Deposit now, balance later and the cancellation policy for the chosen options */
+        get: operations["getBookingQuote"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/service-providers/{orgId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A provider's page — bookings profile and services plus the published design (layout, approved links)
+         * @description The storefront service serves published pages by slug only; pass `slug` when known, otherwise the BFF tries the organisation id and returns `design: null` when there is no published page.
+         */
+        get: operations["getProviderPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/services/bookings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Book a service; the deposit is held with Stripe (confirm `payment.clientSecret`, then sync the booking) */
+        post: operations["bookService"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/lola/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * One Lola turn as Server-Sent Events, relayed from ai-gateway as it streams
+         * @description Events in order: `tool_call` {id, tool, label, arguments}, `tool_result` {id, tool, kind, data},
+         *     `action_proposal` {proposal: {id, type: ADD_TO_CART|CHECKOUT|BOOK_SERVICE|START_RETURN, label, payload,
+         *     requiresConfirmation}}, `token` {text} (one per fragment), `handoff` {handoffId, reason, summary}, then `done`
+         *     {sessionId, message, products, proposals, suggestions, …}; a failure mid-stream sends `error` {code, detail}.
+         *     Proposals are never executed by Lola: the client confirms them through the normal BFF routes. The deliver-to
+         *     ZIP and Accept-Language are added when the request omits them. Requires a signed-in customer.
+         */
+        post: operations["chatWithLola"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/lola/sessions/{sessionId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stored (redacted) turns of one of my Lola conversations */
+        get: operations["getLolaHistory"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1128,6 +1820,8 @@ export interface components {
             availableQty: number;
             stockStatus: components["schemas"]["StockStatus"];
             selected: boolean;
+            /** @description Catalog product type or attribute perishable: hand delivery with a code, no safe place */
+            perishable?: boolean;
         };
         DeliveryOption: {
             /** @enum {string} */
@@ -1136,6 +1830,15 @@ export interface components {
             eta: string;
             feeMinor: number;
             free: boolean;
+            /**
+             * Format: date
+             * @description Checkout only — promise service date range
+             */
+            earliestDate?: string;
+            /** Format: date */
+            latestDate?: string;
+            /** @example Order within 3 h 12 min */
+            cutoffLabel?: string;
         };
         CartPackage: {
             /** @description {sellerId}:{fulfilment} */
@@ -1475,7 +2178,7 @@ export interface components {
         PaymentMethod: {
             id: string;
             /** @enum {string} */
-            type: "card" | "us_bank_account" | "cashapp";
+            type: "card" | "us_bank_account" | "cashapp" | "link";
             brand: string | null;
             last4: string | null;
             label: string;
@@ -1498,6 +2201,14 @@ export interface components {
                 label: string;
                 status: string;
                 items: string;
+                /** @description The customer can still cancel it (until packed) */
+                cancellable?: boolean;
+                carrier?: string | null;
+                trackingNumber?: string | null;
+                promisedBy?: string | null;
+                deliveredAt?: string | null;
+                /** @description One-time handover code (hand delivery or perishables) */
+                deliveryCode?: string | null;
             }[];
         };
         OrderPage: {
@@ -1508,8 +2219,27 @@ export interface components {
             rmaId: string;
             orderNumber: string;
             title: string;
+            /** @description requested, approved, auto_approved, label_issued, in_transit, received, inspected, refunded, rejected, cancelled */
             status: string;
+            /** @description Refund estimate (tax-returns), then the refunded amount */
             refundMinor: number;
+            /** @example RMA-0000ABCD */
+            number?: string;
+            method?: components["schemas"]["ReturnMethod"];
+            reason?: string;
+            refundState?: string;
+            currency?: string;
+            cancellable?: boolean;
+            createdAt?: string | null;
+            /** @description Drop-off return label */
+            labelUrl?: string | null;
+            /** @description Render as the drop-off QR code */
+            qrPayload?: string | null;
+            /** @description Driver pickup code (DRIVER_PICKUP) */
+            handoverCode?: string | null;
+            dropOffBy?: string | null;
+            carrier?: string | null;
+            trackingNumber?: string | null;
         };
         ReturnPage: {
             items: components["schemas"]["ReturnSummary"][];
@@ -1537,10 +2267,12 @@ export interface components {
             totalMinor: number;
             currency: string;
             sellerCount: number;
+            /** @description Stripe publishable key for Stripe.js (Payment / Express Checkout Elements) */
+            publishableKey?: string;
         };
         PlaceOrderRequest: {
             addressId: string;
-            /** @description Saved Stripe payment method; omit when paying with a wallet */
+            /** @description A Stripe PaymentMethod id — saved, or new from PaymentSheet / the Payment Element; omit when paying with a wallet */
             paymentMethodId?: string;
             /** @enum {string} */
             wallet?: "apple_pay" | "google_pay" | "link";
@@ -1564,9 +2296,12 @@ export interface components {
         };
         OrderConfirmation: {
             orderNumber: string;
-            /** @enum {string} */
-            status: "placed" | "requires_action";
-            /** @description Present when status is requires_action (3-D Secure) */
+            /**
+             * @description awaiting_payment: confirm paymentClientSecret with Stripe, then POST …/confirm; processing: poll
+             * @enum {string}
+             */
+            status: "placed" | "awaiting_payment" | "processing" | "requires_action";
+            /** @description The order's PaymentIntent client secret (always present once orders created it) */
             paymentClientSecret?: string | null;
             totalMinor: number;
             currency: string;
@@ -1613,6 +2348,444 @@ export interface components {
             /** @description Application reference issued by the content service */
             reference: string;
             jobId: string;
+        };
+        PaymentSheetKeys: {
+            customerId: string;
+            ephemeralKey: string;
+            publishableKey: string;
+        };
+        TimelineEvent: {
+            status: string;
+            label: string;
+            at: string;
+        };
+        OrderLineView: {
+            lineId: string;
+            atin: string;
+            title: string;
+            imageUrl: string | null;
+            quantity: number;
+            unitPriceMinor: number;
+            itemsMinor: number;
+        };
+        OrderDetail: {
+            orderNumber: string;
+            placedAt: string;
+            status: string;
+            currency: string;
+            itemsMinor: number;
+            shippingMinor: number;
+            taxMinor: number;
+            discountMinor: number;
+            totalMinor: number;
+            shipTo: string;
+            shippingAddress: {
+                name: string;
+                line1: string;
+                line2: string;
+                city: string;
+                state: string;
+                zip: string;
+            } | null;
+            shipments: {
+                shipmentId: string;
+                label: string;
+                /** @description placed, confirmed, packed, ready, picked_up, in_transit, out_for_delivery, delivered, delivery_failed, returned, cancelled */
+                status: string;
+                statusLabel: string;
+                items: string;
+                sellerName: string;
+                /** @enum {string} */
+                deliveryMethod: "carrier" | "express" | "afrotransact_delivery" | "pickup";
+                cancellable: boolean;
+                carrier: string | null;
+                trackingNumber: string | null;
+                promisedFrom: string | null;
+                promisedBy: string | null;
+                deliveredAt: string | null;
+                /** @description One-time handover code (hand delivery or perishables) */
+                deliveryCode: string | null;
+                lines: components["schemas"]["OrderLineView"][];
+                timeline: components["schemas"]["TimelineEvent"][];
+            }[];
+        };
+        OrderTracking: {
+            orderNumber: string;
+            placedAt: string;
+            totalMinor: number;
+            currency: string;
+            shipments: {
+                shipmentId: string;
+                label: string;
+                status: string;
+                eta: string | null;
+                /** @enum {string} */
+                method: "carrier" | "express" | "afrotransact_delivery" | "pickup";
+                /** @enum {string|null} */
+                handover: "hand" | "door" | "desk" | null;
+                perishable: boolean;
+                deliveryCode: string | null;
+                driver: {
+                    name: string;
+                    initials: string;
+                } | null;
+                carrier: string | null;
+                trackingNumber: string | null;
+                items: {
+                    atin: string;
+                    title: string;
+                    quantity: number;
+                    priceMinor: number;
+                    returnable: boolean;
+                }[];
+                timeline: components["schemas"]["TimelineEvent"][];
+            }[];
+        };
+        /**
+         * @description Seller fault (photos required for the first four): DAMAGED, DEFECTIVE, WRONG_ITEM, EXPIRED_OR_SPOILED, NOT_AS_DESCRIBED, MISSING_PARTS, ARRIVED_LATE. No fault: the rest.
+         * @enum {string}
+         */
+        ReturnReason: "DAMAGED" | "DEFECTIVE" | "WRONG_ITEM" | "NOT_AS_DESCRIBED" | "MISSING_PARTS" | "EXPIRED_OR_SPOILED" | "ARRIVED_LATE" | "NO_LONGER_NEEDED" | "ORDERED_BY_MISTAKE" | "BETTER_PRICE_AVAILABLE";
+        /** @enum {string} */
+        ReturnMethod: "DROP_OFF" | "DRIVER_PICKUP" | "NO_RETURN";
+        /**
+         * @description One delivered shipment, a method and a reason per line (`shipmentId`, `method`, `lines`). The customer app's
+         *     short form `{orderNumber, atin, reason}` returns one unit of that item with its first allowed method.
+         *     Send an `Idempotency-Key` header to make retries safe (one is derived otherwise).
+         */
+        StartReturnRequest: {
+            orderNumber: string;
+            shipmentId?: string;
+            method?: components["schemas"]["ReturnMethod"];
+            lines?: {
+                lineId: string;
+                quantity: number;
+                reason: components["schemas"]["ReturnReason"];
+                comment?: string;
+            }[];
+            atin?: components["schemas"]["Atin"];
+            reason?: components["schemas"]["ReturnReason"];
+        };
+        ReturnEligibility: {
+            orderNumber: string;
+            currency: string;
+            shipments: {
+                shipmentId: string;
+                sellerName: string;
+                deliveredAt: string | null;
+                lines: {
+                    lineId: string;
+                    atin: string;
+                    title: string;
+                    quantity: number;
+                    maxQuantity: number;
+                    unitPriceMinor: number;
+                    eligible: boolean;
+                    /** @description Food / perishables: report a problem (seller-fault reasons, refund without return) */
+                    reportProblemOnly: boolean;
+                    sellerFaultOnly: boolean;
+                    windowEndsAt: string | null;
+                    methods: components["schemas"]["ReturnMethod"][];
+                    ineligibleReason: string | null;
+                }[];
+            }[];
+        };
+        ReturnDetail: components["schemas"]["ReturnSummary"] & {
+            lines: {
+                lineId: string;
+                atin: string;
+                title: string;
+                quantity: number;
+                unitPriceMinor: number;
+                reason: string;
+                outcome: string | null;
+            }[];
+            quote: {
+                itemsMinor: number;
+                shippingMinor: number;
+                taxMinor: number;
+                restockingFeeMinor: number;
+                totalMinor: number;
+            } | null;
+        };
+        CodeInput: {
+            code: string;
+        };
+        TotpSetup: {
+            secret: string;
+            otpauthUri: string;
+        };
+        RecoveryCodes: {
+            /** @description Shown once; empty when existing codes were kept */
+            recoveryCodes: string[];
+        };
+        LinkedAccounts: {
+            accounts: {
+                provider: string;
+                email: string | null;
+                canUnlink: boolean;
+            }[];
+            hasPassword: boolean;
+        };
+        SecurityOverview: {
+            mfa: {
+                totp: boolean;
+                sms: boolean;
+                smsPhone: string | null;
+                recoveryCodesLeft: number;
+                required: boolean;
+                mayDisable: boolean;
+            };
+            passkeys: {
+                credentialId: string;
+                label: string;
+                createdAt: string | null;
+                lastUsedAt: string | null;
+            }[];
+            sessions: {
+                id: string;
+                clientName: string;
+                signedInAt: string | null;
+                lastActiveAt: string | null;
+                current: boolean;
+            }[];
+            devices: {
+                id: string;
+                platform: string;
+                deviceName: string;
+                lastSeenAt: string | null;
+            }[];
+            linkedAccounts: components["schemas"]["LinkedAccounts"];
+            /** @description identity's hosted passkey registration page (/webauthn/register) */
+            passkeyRegistrationUrl: string;
+        };
+        NotificationPreferences: {
+            email: boolean;
+            sms: boolean;
+            push: boolean;
+            marketingOptIn: boolean;
+        };
+        ServicePolicy: {
+            /**
+             * @example FLEXIBLE
+             * @example MODERATE
+             * @example STRICT
+             * @example CUSTOM
+             */
+            kind: string;
+            label: string;
+            text: string;
+        };
+        ServiceMember: {
+            id: string;
+            displayName: string;
+        };
+        /** @enum {string} */
+        ServiceMode: "IN_PERSON" | "AT_HOME" | "VIRTUAL";
+        ServiceSearch: {
+            zip: string;
+            city: string;
+            services: {
+                serviceId: string;
+                orgId: string;
+                name: string;
+                providerName: string;
+                description: string;
+                category: string;
+                durationMinutes: number;
+                priceFromMinor: number;
+                depositMinor: number;
+                currency: string;
+                modes: components["schemas"]["ServiceMode"][];
+                rating: number;
+                ratingCount: number;
+                nextAvailable: string | null;
+                location: string;
+            }[];
+        };
+        ServiceDetail: {
+            id: string;
+            orgId: string;
+            providerName: string;
+            name: string;
+            description: string;
+            category: string;
+            durationMinutes: number;
+            priceMinor: number;
+            depositMinor: number;
+            balanceMinor: number;
+            currency: string;
+            modes: components["schemas"]["ServiceMode"][];
+            addOns: {
+                id: string;
+                name: string;
+                priceMinor: number;
+                extraMinutes: number;
+            }[];
+            policy: components["schemas"]["ServicePolicy"];
+            instantBooking: boolean;
+            team: components["schemas"]["ServiceMember"][];
+        };
+        AvailableDay: {
+            /** Format: date */
+            date: string;
+            slots: number;
+        };
+        AvailableSlot: {
+            /** Format: date-time */
+            start: string;
+            /** Format: date-time */
+            end: string;
+            memberIds: string[];
+        };
+        BookingQuote: {
+            serviceId: string;
+            serviceName: string;
+            providerName: string;
+            durationMinutes: number;
+            priceMinor: number;
+            depositNowMinor: number;
+            balanceLaterMinor: number;
+            currency: string;
+            mode: string;
+            addOns: string[];
+            policy: string;
+            policyText: string;
+            instantBooking: boolean;
+            providerAnswersWithinMinutes: number | null;
+        };
+        ProviderPage: {
+            orgId: string;
+            displayName: string;
+            timeZone: string;
+            location: string;
+            policy: components["schemas"]["ServicePolicy"];
+            instantBooking: boolean;
+            team: components["schemas"]["ServiceMember"][];
+            services: components["schemas"]["ServiceDetail"][];
+            /** @description The provider's published page (storefront service); social links are approved ones only. */
+            design: {
+                slug: string;
+                tagline: string;
+                /** @enum {string} */
+                layout: "CLASSIC" | "GALLERY_FIRST" | "STORY";
+                /** @enum {string} */
+                header: "COVER" | "BAND";
+                /** @enum {string} */
+                buttonShape: "ROUNDED" | "SQUARE";
+                coverUrl: string | null;
+                /** @description Vetted theme CSS custom properties (--at-*) */
+                tokens: {
+                    [key: string]: string;
+                };
+                social: {
+                    network: string;
+                    url: string;
+                }[];
+                gallery: {
+                    url: string;
+                    caption: string;
+                }[];
+                featured: {
+                    id: string;
+                    headline: string;
+                    body: string;
+                    url: string | null;
+                    serviceId: string | null;
+                }[];
+            } | null;
+        };
+        CancellationQuote: {
+            refundSharePercent: number;
+            depositMinor: number;
+            refundMinor: number;
+            keptMinor: number;
+            /** @description The balance hold on the card is released */
+            releaseHold: boolean;
+            policy: string;
+            explanation: string;
+            currency: string;
+        };
+        CustomerBooking: {
+            id: string;
+            reference: string;
+            orgId: string;
+            /** @description PENDING_PAYMENT, REQUESTED, CONFIRMED, COMPLETED, NO_SHOW, DECLINED, EXPIRED, RESCHEDULE_REQUESTED, RESCHEDULE_PROPOSED, CANCELLED_CUSTOMER, CANCELLED_PROVIDER */
+            status: string;
+            statusLabel: string;
+            startAt: string;
+            endAt: string;
+            proposedStartAt: string | null;
+            location: string;
+            notes: string;
+            service: {
+                serviceId: string;
+                name: string;
+                durationMinutes: number;
+                priceMinor: number;
+                depositMinor: number;
+                balanceMinor: number;
+                currency: string;
+                mode: string;
+                providerName: string;
+                memberName: string;
+                addOns: string[];
+            };
+            policy: components["schemas"]["ServicePolicy"];
+            payment: {
+                state: string;
+                depositCapturedMinor: number;
+                refundedMinor: number;
+                balanceState: string;
+            };
+            canCancel: boolean;
+            canReschedule: boolean;
+            canReview: boolean;
+            awaitingPayment: boolean;
+        };
+        BookingRequest: {
+            serviceId: string;
+            /** @description Preferred team member; empty = anyone free */
+            memberId?: string;
+            /**
+             * Format: date-time
+             * @description A start time from the slots endpoint
+             */
+            startAt: string;
+            mode: components["schemas"]["ServiceMode"];
+            addOnIds?: string[];
+            /** @description Required for home visits */
+            location?: string;
+            notes?: string;
+        };
+        BookingCreated: {
+            booking: components["schemas"]["CustomerBooking"];
+            /** @description Present when a deposit must be confirmed with Stripe.js / PaymentSheet */
+            payment: {
+                clientSecret: string;
+                publishableKey: string;
+            } | null;
+        };
+        BookingReview: {
+            bookingId: string;
+            rating: number;
+            text: string;
+        };
+        LolaChatRequest: {
+            /** @description From a previous turn's done event; omit to start a conversation */
+            sessionId?: string;
+            message: string;
+            zip?: string;
+            language?: string;
+        };
+        LolaTurn: {
+            /**
+             * @example user
+             * @example assistant
+             */
+            role: string;
+            content: string;
+            at: string;
         };
     };
     responses: {
@@ -1711,6 +2884,10 @@ export interface components {
         Atin: components["schemas"]["Atin"];
         LineId: string;
         SavedId: string;
+        BookingId: string;
+        ServiceId: string;
+        /** @description Makes retries safe (the same key replays the same result); derived per customer and minute when omitted. */
+        OptionalIdempotencyKey: string;
         /** @description Relative storefront path to return to after sign-in (absolute URLs are rejected). */
         ReturnTo: string;
     };
@@ -2588,6 +3765,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     createSetupIntent: {
@@ -2597,7 +3775,13 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    types?: ("card" | "us_bank_account" | "cashapp" | "link")[];
+                };
+            };
+        };
         responses: {
             /** @description SetupIntent */
             201: {
@@ -2612,6 +3796,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     deletePaymentMethod: {
@@ -2634,6 +3820,8 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     listOrders: {
@@ -2658,6 +3846,8 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     cancelShipment: {
@@ -2670,7 +3860,13 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    reason?: string;
+                };
+            };
+        };
         responses: {
             /** @description Updated order */
             200: {
@@ -2705,23 +3901,22 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     startReturn: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Makes retries safe (the same key replays the same result); derived per customer and minute when omitted. */
+                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
+            };
             path?: never;
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": {
-                    orderNumber: string;
-                    atin: components["schemas"]["Atin"];
-                    /** @enum {string} */
-                    reason: "DAMAGED" | "WRONG_ITEM" | "NOT_AS_DESCRIBED" | "NO_LONGER_NEEDED";
-                };
+                "application/json": components["schemas"]["StartReturnRequest"];
             };
         };
         responses: {
@@ -2735,8 +3930,10 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     listStockAlerts: {
@@ -2806,6 +4003,7 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             409: components["responses"]["StockProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     placeOrder: {
@@ -2845,6 +4043,1117 @@ export interface operations {
             402: components["responses"]["Problem"];
             409: components["responses"]["StockProblem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setDefaultPaymentMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paymentMethodId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Now the default */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentMethod"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createPaymentSheetKeys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Keys */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaymentSheetKeys"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Order */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    trackOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tracking */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderTracking"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getReturnEligibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Eligibility */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnEligibility"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getReturn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rmaId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Return */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnDetail"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelReturn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rmaId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReturnSummary"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSecurity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Overview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityOverview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    currentPassword?: string;
+                    newPassword: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Changed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    startTotp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TotpSetup"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    disableTotp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Off */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmTotp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeInput"];
+            };
+        };
+        responses: {
+            /** @description On */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    startSmsMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Code sent */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: date-time */
+                        codeExpiresAt: string | null;
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    disableSmsMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Off */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmSmsMfa: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeInput"];
+            };
+        };
+        responses: {
+            /** @description On */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    regenerateRecoveryCodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Codes, shown once */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecoveryCodes"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    removePasskey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credentialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    revokeSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    revokeOtherSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description How many were signed out */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        revoked: number;
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    removeDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                deviceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    unlinkAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Linked accounts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkedAccounts"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Switches */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    saveNotificationPreferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationPreferences"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPreferences"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listMyBookings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bookings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["CustomerBooking"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getMyBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Booking */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerBooking"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getBookingCancellationQuote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quote */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancellationQuote"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    cancelMyBooking: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (the same key replays the same result); derived per customer and minute when omitted. */
+                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    reason?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Cancelled */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        booking: components["schemas"]["CustomerBooking"];
+                        applied: components["schemas"]["CancellationQuote"];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    rescheduleMyBooking: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (the same key replays the same result); derived per customer and minute when omitted. */
+                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: date-time */
+                    startAt: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerBooking"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    answerProposedTime: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (the same key replays the same result); derived per customer and minute when omitted. */
+                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
+            };
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+                decision: "accept" | "decline";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerBooking"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    reviewMyBooking: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    rating: number;
+                    text?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Thanks */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingReview"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    syncBookingPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bookingId: components["parameters"]["BookingId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Booking */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerBooking"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getCheckoutStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderConfirmation"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            402: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    confirmCheckoutPayment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderNumber: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderConfirmation"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            402: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchServices: {
+        parameters: {
+            query?: {
+                q?: string;
+                category?: string;
+                zip?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Services */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceSearch"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getService: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serviceId: components["parameters"]["ServiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Service */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceDetail"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getServiceDays: {
+        parameters: {
+            query?: {
+                from?: string;
+                days?: number;
+                memberId?: string;
+                /** @description Comma-separated add-on ids */
+                addOnIds?: string;
+            };
+            header?: never;
+            path: {
+                serviceId: components["parameters"]["ServiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Days */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        days: components["schemas"]["AvailableDay"][];
+                    };
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getServiceSlots: {
+        parameters: {
+            query: {
+                date: string;
+                memberId?: string;
+                /** @description Comma-separated add-on ids */
+                addOnIds?: string;
+            };
+            header?: never;
+            path: {
+                serviceId: components["parameters"]["ServiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Slots */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        slots: components["schemas"]["AvailableSlot"][];
+                    };
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getBookingQuote: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated add-on ids */
+                addOnIds?: string;
+                mode?: "IN_PERSON" | "AT_HOME" | "VIRTUAL";
+            };
+            header?: never;
+            path: {
+                serviceId: components["parameters"]["ServiceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quote */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingQuote"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getProviderPage: {
+        parameters: {
+            query?: {
+                slug?: string;
+            };
+            header?: never;
+            path: {
+                orgId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    bookService: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Makes retries safe (the same key replays the same result); derived per customer and minute when omitted. */
+                "Idempotency-Key"?: components["parameters"]["OptionalIdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BookingRequest"];
+            };
+        };
+        responses: {
+            /** @description Booked (awaiting the deposit) */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BookingCreated"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            402: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    chatWithLola: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LolaChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Event stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getLolaHistory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Turns */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["LolaTurn"][];
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     listJobs: {

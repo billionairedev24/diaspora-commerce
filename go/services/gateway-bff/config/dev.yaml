@@ -8,6 +8,7 @@ web:
   origins:
     - https://dev.afrotransact.com
     - https://seller.dev.afrotransact.com
+    - https://staff.dev.afrotransact.com
   publicOrigin: https://dev.afrotransact.com
   bffPath: /api/bff
 session:
@@ -109,6 +110,31 @@ upstreams:
     timeout: 10s
     retries: 0
     breaker: {failures: 5, cooldown: 15s}
+  taxReturns:
+    url: http://tax-returns
+    timeout: 5s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  aiGateway:
+    url: http://ai-gateway
+    timeout: 10s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  trustOps:
+    url: http://trust-ops
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  retail:
+    url: http://retail
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  fulfilment:
+    url: http://fulfilment
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
 rateLimit:
   authPerMinute: 20
   lookupPerMinute: 120
@@ -128,6 +154,11 @@ commerce:
   freeShippingThresholdMinor: 4900
   retailOrgId: org_afrotransact_retail
   sellerNames: {}
+stripe:
+  publishableKey: "" # STRIPE_PUBLISHABLE_KEY (pk_test_… / pk_live_…)
+staff:
+  exportStore: local
+  exportDir: "" # STAFF_EXPORT_DIR (default: the OS temp dir)
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampleRatio: 1.0

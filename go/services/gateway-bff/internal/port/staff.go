@@ -1,0 +1,83 @@
+package port
+
+import (
+	"context"
+	"io"
+	"net/url"
+	"time"
+
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
+)
+
+// Ports for the staff console routes (contracts/openapi/gateway-bff-staff.yaml). Every call relays the staff member's
+// access token; each upstream checks its own permission again (the BFF checks first to answer 403 early and to grey
+// out actions on the sheets).
+
+// StaffCall is one JSON call to an upstream on behalf of a staff member.
+type StaffCall struct {
+	Method string
+	Path   string
+	Query  url.Values
+	// Body is marshalled as JSON when not nil.
+	Body any
+	// IdempotencyKey is relayed as Idempotency-Key.
+	IdempotencyKey string
+	// IfMatch is relayed as If-Match (optimistic locking, e.g. retail purchase orders).
+	IfMatch string
+}
+
+// StaffUpstream is one domain service as the staff routes see it: authenticated JSON calls decoded into out
+// (a struct, a map or a slice; nil to discard). Errors follow the httpclient rules: domain.ErrUpstreamUnavailable for
+// unreachable services or routes they do not serve yet, *UpstreamProblem for other 4xx answers.
+type StaffUpstream interface {
+	Name() string
+	Call(ctx context.Context, bearer string, call StaffCall, out any) error
+}
+
+// StaffUpstreams are the services behind the staff console.
+type StaffUpstreams struct {
+	Identity      StaffUpstream
+	Seller        StaffUpstream
+	Orders        StaffUpstream
+	Catalog       StaffUpstream
+	TrustOps      StaffUpstream
+	TaxReturns    StaffUpstream
+	Payments      StaffUpstream
+	Inventory     StaffUpstream
+	Retail        StaffUpstream
+	Fulfilment    StaffUpstream
+	Content       StaffUpstream
+	Notifications StaffUpstream
+	Bookings      StaffUpstream
+}
+
+// ExportJobStore keeps export jobs (shared by every BFF replica; jobs live 24 hours after they finish).
+type ExportJobStore interface {
+	Save(ctx context.Context, job domain.StoredExportJob, ttl time.Duration) error
+	Get(ctx context.Context, id string) (domain.StoredExportJob, error)
+	// List returns the owner's jobs, newest first.
+	List(ctx context.Context, owner string) ([]domain.StoredExportJob, error)
+}
+
+// ExportFile is a finished export to store.
+type ExportFile struct {
+	JobID       string
+	FileName    string
+	ContentType string
+	Size        int64
+	Body        io.Reader
+}
+
+// ExportBlobStore stores finished export files and signs time-limited download URLs.
+type ExportBlobStore interface {
+	// Put stores the file and returns its reference.
+	Put(ctx context.Context, bearer string, f ExportFile) (string, error)
+	// SignedURL returns a URL that serves the file until expires.
+	SignedURL(ctx context.Context, bearer, ref, fileName string, expires time.Time) (string, error)
+}
+
+// LocalExportFiles is implemented by blob stores that serve files themselves (behind GET /v1/staff/export-files/{id}).
+type LocalExportFiles interface {
+	// Open checks the signature and expiry of a signed link and opens the file.
+	Open(ctx context.Context, id string, expires int64, sig string) (io.ReadCloser, string, error)
+}

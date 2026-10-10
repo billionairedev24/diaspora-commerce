@@ -37,6 +37,7 @@ import { type AddressSuggestions, AddressSuggestionsSchema, type DeliveryLocatio
 import { type SearchPage, SearchPageSchema, type SearchQuery, type Suggestions, SuggestionsSchema } from './schemas/search';
 import { NewsletterResponseSchema, type SiteConfig, SiteConfigSchema } from './schemas/site';
 import { toApiSearchParams } from './search-params';
+import { shopperMethods } from './shopper-client';
 
 const AuthVoid = z.undefined();
 
@@ -109,11 +110,14 @@ export function createApiClient(options: ApiClientOptions) {
     applyToJob: (jobId: string, form: JobApplicationForm): Promise<ApplicationReceipt> =>
       request(`/v1/careers/jobs/${encodeURIComponent(jobId)}/applications`, ApplicationReceiptSchema, { method: 'POST', body: form }),
 
-    /* Account (pages arrive in the next phase) */
+    /* Account lists */
     getAddresses: async (): Promise<Address[]> => (await request('/v1/account/addresses', pageOf(AddressSchema))).items,
     getPaymentMethods: async (): Promise<PaymentMethod[]> => (await request('/v1/account/payment-methods', pageOf(PaymentMethodSchema))).items,
     getOrders: async (): Promise<OrderSummary[]> => (await request('/v1/account/orders', pageOf(OrderSummarySchema))).items,
-    getReturns: async (): Promise<ReturnSummary[]> => (await request('/v1/account/returns', pageOf(ReturnSummarySchema))).items
+    getReturns: async (): Promise<ReturnSummary[]> => (await request('/v1/account/returns', pageOf(ReturnSummarySchema))).items,
+
+    /* Account details, checkout, services & bookings, Lola */
+    ...shopperMethods(request, options)
   };
 }
 

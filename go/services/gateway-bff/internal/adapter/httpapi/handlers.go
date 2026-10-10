@@ -34,6 +34,10 @@ type Services struct {
 	SellerTeam      app.SellerTeamService
 	ProviderHub     app.ProviderHubService
 	SellerShipFrom  app.SellerShipFromService
+	// Storefront account, checkout payment, services, Lola (handlers_shopper.go); routes are registered when set.
+	Shopper ShopperServices
+	// Staff console (handlers_staff.go, contracts/openapi/gateway-bff-staff.yaml); routes are registered when set.
+	Staff StaffServices
 }
 
 // Handlers registers the BFF API.
@@ -139,6 +143,10 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("POST /v1/careers/uploads/{assetId}/complete", lookup(h.careersUploadComplete))
 	// Seller Center & Provider Hub
 	h.registerSeller(route)
+	// Storefront account, checkout payment, services & bookings, Lola
+	h.registerShopper(route)
+	// Staff console
+	h.registerStaff(route)
 }
 
 // finish issues, rotates or clears the session cookie and echoes an issued guest cart id to app callers.

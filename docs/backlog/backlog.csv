@@ -479,21 +479,21 @@
 - Seller roles: owner, admin, catalog, fulfilment, finance, ads, support","E24","","Medium","3","seller-center web rbac","seller-center","Done"
 "S156","Story","Provider Hub: calendar, hours, services, policy, public page, earnings","Provider tools inside the portal without a second sidebar.","- Calendar shows quick views and day summaries
 - Earnings show commission, Stripe fees and late-cancel fees","E24","","High","8","seller-center web bookings","seller-center","Done"
-"E25","Epic","Staff console (platform back office)","All platform tools gated by RBAC: applications, sellers, moderation, orders, payouts, inventory, dispatch, config.","","","Staff console (platform back office)","High","","staff-console","staff-console","In Progress"
+"E25","Epic","Staff console (platform back office)","All platform tools gated by RBAC: applications, sellers, moderation, orders, payouts, inventory, dispatch, config.","","","Staff console (platform back office)","High","","staff-console","staff-console","Done"
 "S157","Story","Staff console shell with RBAC-filtered navigation","Grouped sidebar (Overview, Commerce, Partners, Finance, Growth, Trust & compliance, Settings) filtered by permissions.","- Menu items hidden when the role has no access
-- Dashboard opens by default","E25","","High","5","staff-console web","staff-console","In Progress"
+- Dashboard opens by default","E25","","High","5","staff-console web","staff-console","Done"
 "S158","Story","Detail sheets with RBAC actions on every table","Clicking a row opens a sheet with all fields, activity and notes; actions follow permissions.","- Edit/New with validation where records are editable
-- Actions hidden or disabled when not permitted (and enforced server-side)","E25","","High","5","staff-console web","staff-console","In Progress"
+- Actions hidden or disabled when not permitted (and enforced server-side)","E25","","High","5","staff-console web","staff-console","Done"
 "S159","Story","Platform configuration modules","Plans, coupons, pickup & delivery, markets, storefront settings, feature flags, fees, developers (API keys, webhooks, AI routing, identity providers).","- Each module gated by its own permission
 - Developers can create, revoke and rotate API keys
-- Identity provider toggles control which social logins appear","E25","","High","8","staff-console web","staff-console","In Progress"
+- Identity provider toggles control which social logins appear","E25","","High","8","staff-console web","staff-console","Done"
 "S160","Story","Platform dashboard charts","Sales and net revenue, orders by department, applications by status, payouts vs refunds.","- Charts export PDF, Excel and CSV
-- Figures come from one dashboard feed","E25","","Medium","5","staff-console web exports","staff-console","In Progress"
+- Figures come from one dashboard feed","E25","","Medium","5","staff-console web exports","staff-console","Done"
 "S161","Story","Server-side large exports","Background jobs build CSV/XLSX/PDF for thousands of rows and send a download link.","- Exports over 5k rows run asynchronously
 - Excel files contain native charts
-- Links expire after 24 hours","E25","","Medium","8","staff-console exports","staff-console","In Progress"
+- Links expire after 24 hours","E25","","Medium","8","staff-console exports","staff-console","Done"
 "S162","Story","Customer support console","Order, payment and delivery timeline with refunds within role limits; Zendesk/Freshdesk integration.","- Refund limits per role enforced
-- Ticket links back to the order","E25","","Medium","5","staff-console support","staff-console","In Progress"
+- Ticket links back to the order","E25","","Medium","5","staff-console support","staff-console","Done"
 "E26","Epic","Customer mobile app","Expo / React Native customer app: sign-in first, Face ID, shopping, tracking, returns, bookings and Lola.","","","Customer mobile app","High","","mobile","mobile","In Progress"
 "S163","Story","App shell with sign-in, Face ID and passcode","App opens on sign-in; Face ID and passcode set up after first sign-in; unlock on reopen.","- Five wrong passcodes force full sign-in
 - Sign out removes Face ID and passcode from the device
@@ -710,3 +710,9 @@
 - Tracking and address management work against the BFF
 - Driver app shows delivery brief instructions
 - Both apps run as EAS development builds on iOS and Android","E26","","High","8","mobile bff","mobile","To Do"
+"S239","Story","Staff console upstream gaps","Internal notes service on records; staff bookings lookup per customer; media accepts export files; trust-ops audit write endpoint for BFF-initiated staff actions; notifications:send for support roles; trust-ops case filter by customer; platform analytics feed; identity user lookup scoped to users:read; helpdesk integration; plans, coupons, pickup, feature flags and API keys configuration modules.","- Notes can be added on any record and are audited
+- Customer 360 shows bookings
+- Exports stored in media with signed URLs
+- Every staff action writes an audit entry
+- Dashboard uses an analytics feed instead of sampling
+- Remaining configuration modules available","E25","","Medium","13","staff-console bff","staff-console","To Do"

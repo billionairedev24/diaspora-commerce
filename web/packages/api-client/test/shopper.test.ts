@@ -1,0 +1,185 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
+
+import {
+  type Address,
+  ApiError,
+  type BookingCreated,
+  type CheckoutSummary,
+  createApiClient,
+  type CustomerBooking,
+  type LolaEvent,
+  type OrderConfirmation,
+  type OrderDetail,
+  type PaymentMethod,
+  type ProviderPage,
+  readSse,
+  type ReturnDetail,
+  type ReturnEligibility,
+  type ReturnSummary,
+  type SecurityOverview,
+  type ServiceDetail,
+  type ServiceSearch,
+  toLolaEvent
+} from '../src';
+import { type components } from '../src/generated/gateway-bff';
+import { resetDb } from '../src/mocks';
+import { mockServer } from '../src/mocks/node';
+
+type S = components['schemas'];
+
+function browserLikeClient() {
+  let cookie = '';
+  const opts = {
+    baseUrl: 'http://bff.test',
+    fetch: async (req: Request) => {
+      if (cookie) req.headers.set('cookie', cookie);
+      const res = await fetch(req);
+      const set = res.headers.get('set-cookie');
+      if (set) cookie = set.split(';')[0] ?? '';
+      return res;
+    }
+  };
+  return createApiClient(opts);
+}
+
+async function signedIn() {
+  const api = browserLikeClient();
+  const r = await api.signIn({ email: 'adaeze@example.com', password: 'shop2026' });
+  if (r.status !== 'mfa_required') throw new Error('expected MFA');
+  await api.verifyMfa({ challengeId: r.challengeId, code: '246810' });
+  return api;
+}
+
+beforeAll(() => mockServer.listen({ onUnhandledRequest: 'error' }));
+afterAll(() => mockServer.close());
+beforeEach(() => { resetDb(); });
+
+describe('shopper schemas stay aligned with the contract', () => {
+  it('runtime types are assignable to the generated contract types', () => {
+    expectTypeOf<Address>().toExtend<S['Address']>();
+    expectTypeOf<PaymentMethod>().toExtend<S['PaymentMethod']>();
+    expectTypeOf<OrderDetail>().toExtend<S['OrderDetail']>();
+    expectTypeOf<ReturnSummary>().toExtend<S['ReturnSummary']>();
+    expectTypeOf<ReturnDetail['quote']>().toExtend<S['ReturnDetail']['quote']>();
+    expectTypeOf<ReturnEligibility>().toExtend<S['ReturnEligibility']>();
+    expectTypeOf<SecurityOverview>().toExtend<S['SecurityOverview']>();
+    expectTypeOf<CheckoutSummary['packages'][number]['deliveryOptions'][number]>().toExtend<S['DeliveryOption']>();
+    expectTypeOf<OrderConfirmation['status']>().toExtend<S['OrderConfirmation']['status']>();
+    expectTypeOf<ServiceSearch>().toExtend<S['ServiceSearch']>();
+    expectTypeOf<ServiceDetail>().toExtend<S['ServiceDetail']>();
+    expectTypeOf<ProviderPage>().toExtend<S['ProviderPage']>();
+    expectTypeOf<CustomerBooking>().toExtend<S['CustomerBooking']>();
+    expectTypeOf<BookingCreated>().toExtend<S['BookingCreated']>();
+  });
+});
+
+describe('Lola SSE parsing', () => {
+  it('decodes events split across chunks, CRLF and multi-line data', async () => {
+    const enc = new TextEncoder();
+    const chunks = ['event: tok', 'en\r\ndata: {"text":"Hel', 'lo"}\r\n\r\n: keep-alive\n\nevent:done\ndata:{"sessionId":"lola_12345678",\ndata:"message":"Hello"}\n\n'];
+    const body = new ReadableStream<Uint8Array>({ start(c) { chunks.forEach((x) => c.enqueue(enc.encode(x))); c.close(); } });
+    const events: LolaEvent[] = [];
+    for await (const m of readSse(body)) {
+      const e = toLolaEvent(m);
+      if (e) events.push(e);
+    }
+    expect(events.map((e) => e.type)).toEqual(['token', 'done']);
+    expect(events[0]?.type === 'token' && events[0].data.text).toBe('Hello');
+    expect(events[1]?.type === 'done' && events[1].data.suggestions).toEqual([]);
+  });
+});
+
+describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
+  it('places an order with a saved card, confirms the payment and cancels a shipment', async () => {
+    const api = await signedIn();
+    await api.addToCart({ offerId: (await api.getProduct('AT000000P2')).buyBox?.offerId ?? '', quantity: 2 });
+    const sum = await api.getCheckoutSummary();
+    expect(sum.publishableKey).toBe('pk_test_mock');
+    const pkg = sum.packages[0];
+    expect(pkg?.deliveryOptions.map((o) => o.key)).toEqual(expect.arrayContaining(['carrier', 'afrotransact_delivery', 'pickup']));
+    expect(pkg?.pickupPoints?.[0]?.hours).toBeTruthy();
+    expect(pkg?.deliveryOptions[0]?.earliestDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const conf = await api.placeOrder(
+      { addressId: 'ad1', paymentMethodId: 'pm_visa4242', deliverySelections: [{ packageId: pkg?.packageId ?? '', option: 'afrotransact_delivery', preferences: { handover: 'hand' } }] },
+      'checkout-test-key-0001'
+    );
+    expect(conf.status).toBe('awaiting_payment');
+    expect(conf.paymentClientSecret).toContain('_secret_');
+    expect(conf.shipments[0]?.deliveryCode).toMatch(/^\d{4}$/);
+    const again = await api.placeOrder({ addressId: 'ad1', paymentMethodId: 'pm_visa4242', deliverySelections: [] }, 'checkout-test-key-0001');
+    expect(again.orderNumber).toBe(conf.orderNumber); // idempotent replay
+    const placed = await api.confirmCheckoutPayment(conf.orderNumber);
+    expect(placed.status).toBe('placed');
+    expect((await api.getCart()).itemCount).toBe(0);
+    const order = await api.getOrder(conf.orderNumber);
+    expect(order.shipments[0]?.cancellable).toBe(true);
+    const cancelled = await api.cancelShipment(conf.orderNumber, order.shipments[0]?.shipmentId ?? '');
+    expect(cancelled.status).toBe('cancelled');
+  });
+
+  it('starts a return with a reason and shows the refund; food can only be reported', async () => {
+    const api = await signedIn();
+    const e = await api.getReturnEligibility('AT-2026-104221');
+    const lines = e.shipments[0]?.lines ?? [];
+    const shea = lines.find((l) => !l.reportProblemOnly);
+    const rice = lines.find((l) => l.reportProblemOnly);
+    expect(rice?.methods).toEqual(['NO_RETURN']);
+    const err = await api
+      .startReturn({ orderNumber: 'AT-2026-104221', shipmentId: e.shipments[0]?.shipmentId ?? '', method: 'NO_RETURN', lines: [{ lineId: rice?.lineId ?? '', quantity: 1, reason: 'NO_LONGER_NEEDED' }] })
+      .catch((x: unknown) => x);
+    expect(err).toBeInstanceOf(ApiError);
+    const rma = await api.startReturn({ orderNumber: 'AT-2026-104221', shipmentId: e.shipments[0]?.shipmentId ?? '', method: 'DROP_OFF', lines: [{ lineId: shea?.lineId ?? '', quantity: 1, reason: 'DAMAGED' }] });
+    expect(rma.refundMinor).toBeGreaterThan(1600);
+    expect(rma.qrPayload).toContain('AFROTRANSACT-RETURN');
+    const detail = await api.getReturn(rma.rmaId);
+    expect(detail.quote?.totalMinor).toBe(rma.refundMinor);
+    expect((await api.cancelReturn(rma.rmaId)).status).toBe('cancelled');
+  });
+
+  it('books a service with a deposit, then cancels with the quoted refund', async () => {
+    const api = await signedIn();
+    const search = await api.searchServices({ q: 'braids', zip: '77042' });
+    const svc = search.services[0];
+    expect(svc?.providerName).toBe('Braids by Ama');
+    const days = await api.getServiceDays(svc?.serviceId ?? '', { days: 14 });
+    const day = days.find((d) => d.slots > 0);
+    const slots = await api.getServiceSlots(svc?.serviceId ?? '', { date: day?.date ?? '' });
+    const created = await api.bookService({ serviceId: svc?.serviceId ?? '', startAt: slots[0]?.start ?? '', mode: 'IN_PERSON' });
+    expect(created.payment?.clientSecret).toContain('_secret_');
+    expect(created.booking.awaitingPayment).toBe(true);
+    const synced = await api.syncBookingPayment(created.booking.id);
+    expect(synced.status).toBe('REQUESTED');
+    const quote = await api.getBookingCancellationQuote(created.booking.id);
+    const res = await api.cancelBooking(created.booking.id);
+    expect(res.applied.refundMinor).toBe(quote.refundMinor);
+    expect(res.booking.canCancel).toBe(false);
+    const page = await api.getProviderPage(svc?.orgId ?? '');
+    expect(page.design?.layout).toBe('GALLERY_FIRST');
+  });
+
+  it('streams a Lola turn with a confirmable add-to-cart proposal and suggestion chips', async () => {
+    const api = await signedIn();
+    const events: LolaEvent[] = [];
+    await api.chatWithLola({ message: 'jollof seasoning' }, (e) => events.push(e));
+    const types = events.map((e) => e.type);
+    expect(types[0]).toBe('tool_call');
+    expect(types).toContain('action_proposal');
+    expect(types.filter((t) => t === 'token').length).toBeGreaterThan(3);
+    const done = events.at(-1);
+    expect(done?.type).toBe('done');
+    if (done?.type === 'done') expect(done.data.suggestions.length).toBeGreaterThan(0);
+    const guest = browserLikeClient();
+    await expect(guest.chatWithLola({ message: 'hi' }, () => undefined)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('manages login & security', async () => {
+    const api = await signedIn();
+    const sec = await api.getSecurity();
+    expect(sec.mfa.totp).toBe(true);
+    await expect(api.changePassword({ currentPassword: 'nope', newPassword: 'A-much-longer-passw0rd' })).rejects.toMatchObject({ status: 422 });
+    await api.changePassword({ currentPassword: 'shop2026', newPassword: 'A-much-longer-passw0rd' });
+    expect((await api.revokeOtherSessions()).revoked).toBe(1);
+    const prefs = await api.saveNotificationPreferences({ email: true, sms: false, push: true, marketingOptIn: true });
+    expect(prefs.sms).toBe(false);
+  });
+});

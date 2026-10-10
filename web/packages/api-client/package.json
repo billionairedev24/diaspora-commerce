@@ -15,7 +15,11 @@
     "./mocks/seller": "./src/mocks/seller/index.ts",
     "./mocks/seller-runtime": "./src/mocks/seller-runtime.ts",
     "./mocks/seller-node": "./src/mocks/seller-node.ts",
-    "./generated/gateway-bff-seller": "./src/generated/gateway-bff-seller.ts"
+    "./generated/gateway-bff-seller": "./src/generated/gateway-bff-seller.ts",
+    "./mocks/staff": "./src/mocks/staff/index.ts",
+    "./mocks/staff-runtime": "./src/mocks/staff-runtime.ts",
+    "./mocks/staff-node": "./src/mocks/staff-node.ts",
+    "./generated/gateway-bff-staff": "./src/generated/gateway-bff-staff.ts"
   },
   "scripts": {
     "generate": "node scripts/generate.mjs",

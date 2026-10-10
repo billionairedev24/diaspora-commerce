@@ -1,0 +1,578 @@
+/* Resource definitions of the mock staff BFF: columns, facets, detail sections, RBAC-gated actions and forms — the
+   same shapes the Go BFF builds from the real upstreams (internal/app/staff_resources*.go). */
+import { type AccessLevel } from '../../schemas/seller';
+import {
+  type ActivityEntry,
+  type ColumnKind,
+  type DetailField,
+  type FieldValue,
+  type FormField,
+  type RecordLink,
+  type RecordTone,
+  type ResourceColumn,
+  type ResourceFacet,
+  type ResourceKey,
+  type StaffForm
+} from '../../schemas/staff';
+import { type MockRecord, type Scalar } from './db';
+
+export interface ActionCtx {
+  actor: string;
+  actorId: string;
+  now: Date;
+  refundLimit: number | null;
+}
+
+export interface MockAction {
+  key: string;
+  label: string;
+  tone: 'primary' | 'neutral' | 'danger';
+  permission: string;
+  level?: AccessLevel;
+  confirm?: string;
+  form?: (r: MockRecord) => StaffForm;
+  /** null when the action is possible in the record's state, otherwise the reason it is not. */
+  when: (r: MockRecord, ctx: ActionCtx) => string | null;
+  apply: (r: MockRecord, values: Record<string, FieldValue>, ctx: ActionCtx) => void;
+}
+
+export interface MockResource {
+  title: string;
+  columns: ResourceColumn[];
+  statusKey?: string;
+  facets: ResourceFacet[];
+  search?: string[];
+  searchPlaceholder?: string;
+  cursor?: boolean;
+  exportable: boolean;
+  titleOf: (r: MockRecord) => string;
+  subtitleOf: (r: MockRecord) => string;
+  sections?: [string, string[]][];
+  linesTitle?: string;
+  lineColumns?: ResourceColumn[];
+  links?: (r: MockRecord) => RecordLink[];
+  actions: MockAction[];
+  edit?: { permission: string; form: (r: MockRecord) => StaffForm; apply: (r: MockRecord, values: Record<string, FieldValue>) => void };
+  create?: { permission: string; form: StaffForm; build: (values: Record<string, FieldValue>, id: string, ctx: ActionCtx) => MockRecord };
+}
+
+const col = (key: string, label: string, kind: ColumnKind, width: number): ResourceColumn => ({ key, label, kind, width });
+const facets = (...values: string[]): ResourceFacet[] => values.map((v) => ({ value: v, label: humanize(v) }));
+const field = (key: string, label: string, type: FormField['type'], required: boolean, extra: Partial<FormField> = {}): FormField => ({ key, label, type, required, ...extra });
+const form = (title: string, submitLabel: string, fields: FormField[]): StaffForm => ({ title, submitLabel, fields });
+const options = (...values: string[]) => values.map((v) => ({ value: v, label: humanize(v) }));
+const str = (v: FieldValue | Scalar | undefined): string => (v === null || v === undefined ? '' : String(v));
+const num = (v: FieldValue | Scalar | undefined): number => (typeof v === 'number' ? v : Number(v ?? 0));
+const is = (r: MockRecord, ...statuses: string[]) => statuses.includes(str(r.fields.status));
+const stateReason = (r: MockRecord, ...ok: string[]) => (is(r, ...ok) ? null : `Not possible while ${humanize(str(r.fields.status)).toLowerCase()}.`);
+const log = (r: MockRecord, ctx: ActionCtx, text: string) => r.activity.unshift({ at: ctx.now.toISOString(), actor: ctx.actor, text } satisfies ActivityEntry);
+const setStatus = (status: string, text: string) => (r: MockRecord, _v: Record<string, FieldValue>, ctx: ActionCtx) => {
+  r.fields.status = status;
+  log(r, ctx, text);
+};
+
+export function humanize(s: string): string {
+  const spaced = s
+    .replace(/Minor$/, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .toLowerCase()
+    .trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+const TONES: Record<string, RecordTone> = {
+  PENDING_REVIEW: 'brand', FLAGGED: 'bad', AWAITING_FINAL_APPROVAL: 'warn', INFO_REQUESTED: 'warn', APPROVED: 'good', REJECTED: 'bad', LIVE: 'good',
+  IN_REVIEW: 'brand', PAUSED: 'info', TAKEN_DOWN: 'bad', PENDING: 'warn', ESCALATED: 'bad', CLOSED: 'info', UNDER_REVIEW: 'brand', AWAITING_SELLER: 'warn',
+  RESOLVED_REFUND: 'good', RESOLVED_DENIED: 'info', WITHDRAWN: 'info', REQUESTED: 'brand', ON_HOLD: 'bad', PAID: 'good', FAILED: 'bad', SELLABLE: 'good',
+  QUARANTINED: 'bad', DRAFT: 'info', PENDING_APPROVAL: 'warn', SENT: 'info', CONFIRMED: 'info', RECEIVED: 'good', CANCELLED: 'bad', PLANNED: 'info',
+  ASSIGNED: 'brand', IN_PROGRESS: 'brand', COMPLETED: 'good', OPEN: 'warn', RESOLVED: 'good', COMING_SOON: 'brand', SCHEDULED: 'brand', ENDED: 'info',
+  ENABLED: 'good', DISABLED: 'bad', ACTIVE: 'good', IN_TRANSIT: 'info', REFUNDED: 'good', DELIVERED: 'good', PLACED: 'brand', DELIVERY_FAILED: 'bad',
+  OUT_FOR_DELIVERY: 'info', PACKED: 'info', STATE: 'info', LOCAL: 'brand'
+};
+export const toneOf = (status: string | null): RecordTone | null => (status ? (TONES[status] ?? 'info') : null);
+
+export function detailKind(key: string, statusKey: string | undefined): DetailField['kind'] {
+  if (key === statusKey) return 'status';
+  if (/Minor$/.test(key)) return 'money';
+  if (/At$/.test(key) || key === 'effectiveFrom') return 'datetime';
+  if (/Date$/.test(key)) return 'date';
+  if (/^(id|atin|sku|hash|lotNo|reference|number)$/.test(key)) return 'mono';
+  return 'text';
+}
+
+const REASON_CODES = options('PROHIBITED_ITEM', 'UNAPPROVED_HEALTH_CLAIM', 'RESTRICTED_INGREDIENT', 'COUNTERFEIT', 'IMAGE_POLICY', 'MISLEADING_CONTENT', 'LABELLING', 'OTHER');
+const noteForm = (title: string, submit: string, required = true) => () => form(title, submit, [field('note', 'Note', 'textarea', required, { maxLength: 2000 })]);
+const reasonForm = (title: string, submit: string) => () => form(title, submit, [field('reason', 'Reason', 'textarea', true, { maxLength: 1000 })]);
+
+export const RESOURCES: Record<ResourceKey, MockResource> = {
+  users: {
+    title: 'People',
+    columns: [col('name', 'Name', 'strong', 24), col('email', 'Email', 'text', 30), col('principalType', 'Type', 'text', 12), col('roles', 'Roles', 'text', 22), col('status', 'Status', 'status', 12)],
+    statusKey: 'status',
+    facets: facets('ACTIVE', 'DISABLED'),
+    search: ['name', 'email'],
+    searchPlaceholder: 'Search by name or email',
+    exportable: true,
+    titleOf: (r) => str(r.fields.name),
+    subtitleOf: (r) => str(r.fields.email),
+    actions: [
+      {
+        key: 'assign-role', label: 'Assign role', tone: 'primary', permission: 'access:admin', when: () => null,
+        form: () => form('Assign a role', 'Assign', [field('roleKey', 'Role', 'select', true, { options: options('platform.customer_support', 'platform.finance', 'platform.trust_safety', 'platform.marketing', 'platform.auditor') }), field('reason', 'Reason', 'text', true, { maxLength: 300 })]),
+        apply: (r, v, ctx) => {
+          const roles = new Set(str(r.fields.roles).split(', ').filter(Boolean));
+          roles.add(str(v.roleKey));
+          r.fields.roles = [...roles].join(', ');
+          log(r, ctx, `Assigned ${str(v.roleKey)} — ${str(v.reason)}`);
+        }
+      },
+      { key: 'disable', label: 'Disable account', tone: 'danger', permission: 'access:admin', when: (r) => (r.fields.enabled ? null : 'Already disabled.'), form: reasonForm('Disable the account', 'Disable'), apply: (r, v, ctx) => { r.fields.enabled = false; r.fields.status = 'DISABLED'; log(r, ctx, `Disabled — ${str(v.reason)}`); } },
+      { key: 'enable', label: 'Enable account', tone: 'neutral', permission: 'access:admin', when: (r) => (r.fields.enabled ? 'Already enabled.' : null), confirm: 'Re-enable this account?', apply: (r, _v, ctx) => { r.fields.enabled = true; r.fields.status = 'ACTIVE'; log(r, ctx, 'Enabled'); } }
+    ],
+    create: {
+      permission: 'access:admin',
+      form: form('New staff account', 'Create account', [
+        field('firstName', 'First name', 'text', true, { maxLength: 80 }),
+        field('lastName', 'Last name', 'text', true, { maxLength: 80 }),
+        field('email', 'Work email', 'email', true, { pattern: '^[^@\\s]+@afrotransact\\.com$', help: 'Staff accounts use an @afrotransact.com address' }),
+        field('phone', 'Mobile', 'text', true, { pattern: '^\\+[1-9][0-9]{7,14}$', placeholder: '+18325550100' }),
+        field('password', 'Temporary password', 'password', true, { maxLength: 128 }),
+        field('roles', 'Roles', 'multiselect', true, { options: options('platform.customer_support', 'platform.finance', 'platform.trust_safety', 'platform.marketing', 'platform.auditor') })
+      ]),
+      build: (v, id, ctx) => ({
+        id,
+        fields: { name: `${str(v.firstName)} ${str(v.lastName)}`, email: str(v.email), principalType: 'STAFF', roles: (Array.isArray(v.roles) ? v.roles : []).join(', '), enabled: true, status: 'ACTIVE', emailVerified: false, driverAppAccess: false },
+        activity: [{ at: ctx.now.toISOString(), actor: ctx.actor, text: 'Staff account provisioned' }]
+      })
+    }
+  },
+  roles: {
+    title: 'Roles',
+    columns: [col('name', 'Role', 'strong', 26), col('key', 'Key', 'mono', 28), col('description', 'What it can do', 'text', 46)],
+    facets: [],
+    exportable: false,
+    titleOf: (r) => str(r.fields.name),
+    subtitleOf: (r) => str(r.fields.key),
+    actions: [
+      {
+        key: 'add-permission', label: 'Add permission', tone: 'neutral', permission: 'access:admin', when: () => null,
+        form: () => form('Add a permission to the role', 'Add', [field('permissionKey', 'Permission', 'text', true, { pattern: '^[a-z]+:[a-z.:-]+$' }), field('reason', 'Reason', 'text', true)]),
+        apply: (r, v, ctx) => log(r, ctx, `Added ${str(v.permissionKey)} — ${str(v.reason)}`)
+      }
+    ]
+  },
+  applications: {
+    title: 'Applications',
+    columns: [col('reference', 'Reference', 'mono', 13), col('displayName', 'Business', 'strong', 25), col('kind', 'Kind', 'text', 10), col('state', 'State', 'text', 8), col('planCode', 'Plan', 'text', 10), col('submittedAt', 'Submitted', 'date', 14), col('status', 'Status', 'status', 20)],
+    statusKey: 'status',
+    facets: facets('PENDING_REVIEW', 'FLAGGED', 'AWAITING_FINAL_APPROVAL', 'INFO_REQUESTED', 'APPROVED', 'REJECTED'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.displayName),
+    subtitleOf: (r) => `${str(r.fields.reference)} · ${humanize(str(r.fields.kind))}`,
+    sections: [
+      ['Business', ['displayName', 'legalName', 'kind', 'entityType', 'state', 'planCode', 'contactEmail']],
+      ['Review', ['status', 'reviewStep', 'reviewerId', 'failedChecks', 'taxIdMasked', 'submittedAt']]
+    ],
+    actions: [
+      { key: 'review-approve', label: 'Approve (step 1)', tone: 'primary', permission: 'applications:review', level: 'APPROVE', form: noteForm('Approve for final review', 'Approve', false), when: (r) => stateReason(r, 'PENDING_REVIEW', 'FLAGGED'), apply: (r, v, ctx) => { r.fields.status = 'AWAITING_FINAL_APPROVAL'; r.fields.reviewerId = ctx.actorId; r.fields.reviewStep = 2; log(r, ctx, `Step 1 approved${v.note ? ` — ${str(v.note)}` : ''}`); } },
+      { key: 'review-flag', label: 'Flag', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Flag the application', 'Flag', [field('failedChecks', 'Failed checks', 'multiselect', true, { options: options('TIN_MISMATCH', 'DOCUMENT_UNREADABLE', 'PROHIBITED_CATEGORY', 'ADDRESS_UNVERIFIED') }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING_REVIEW'), apply: (r, v, ctx) => { r.fields.status = 'FLAGGED'; r.fields.failedChecks = (Array.isArray(v.failedChecks) ? v.failedChecks : []).join(', '); log(r, ctx, 'Flagged'); } },
+      { key: 'review-request-info', label: 'Request info', tone: 'neutral', permission: 'applications:review', level: 'APPROVE', form: () => form('Ask the applicant for more', 'Send request', [field('requestedItems', 'What is missing', 'textarea', true, { help: 'One item per line' })]), when: (r) => stateReason(r, 'PENDING_REVIEW', 'FLAGGED'), apply: setStatus('INFO_REQUESTED', 'Requested more information') },
+      {
+        key: 'final-approve', label: 'Final approval', tone: 'primary', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Give final approval', 'Approve', false),
+        when: (r, ctx) => stateReason(r, 'AWAITING_FINAL_APPROVAL') ?? (r.fields.reviewerId === ctx.actorId ? 'You reviewed step 1 — a different approver must give final approval.' : null),
+        apply: setStatus('APPROVED', 'Final approval — organisation approved')
+      },
+      { key: 'send-back', label: 'Send back', tone: 'neutral', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Send back to the reviewer', 'Send back'), when: (r) => stateReason(r, 'AWAITING_FINAL_APPROVAL'), apply: setStatus('PENDING_REVIEW', 'Sent back to step 1') },
+      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'applications:approve', level: 'APPROVE', form: noteForm('Reject the application', 'Reject'), when: (r) => stateReason(r, 'AWAITING_FINAL_APPROVAL', 'FLAGGED'), apply: setStatus('REJECTED', 'Rejected') }
+    ]
+  },
+  orders: {
+    title: 'Orders',
+    columns: [col('orderNumber', 'Order', 'mono', 13), col('customer', 'Customer', 'strong', 18), col('seller', 'Seller', 'text', 18), col('totalMinor', 'Total', 'money', 11), col('placedAt', 'Placed', 'datetime', 16), col('shipmentStatus', 'Shipment', 'status', 14), col('status', 'Order', 'status', 10)],
+    statusKey: 'status',
+    facets: facets('OPEN', 'COMPLETED', 'CANCELLED'),
+    search: ['orderNumber'],
+    searchPlaceholder: 'Order number (AT-…)',
+    cursor: true,
+    exportable: true,
+    titleOf: (r) => `Order ${r.id}`,
+    subtitleOf: (r) => `${str(r.fields.customer)} · ${str(r.fields.shipTo)}`,
+    sections: [
+      ['Order', ['orderNumber', 'status', 'placedAt', 'customer', 'shipTo', 'department']],
+      ['Money', ['itemsMinor', 'shippingMinor', 'taxMinor', 'totalMinor', 'currency']]
+    ],
+    linesTitle: 'Shipments',
+    lineColumns: [col('label', 'Shipment', 'strong', 18), col('status', 'Status', 'status', 18), col('carrier', 'Carrier', 'text', 14), col('trackingNumber', 'Tracking', 'mono', 30), col('totalMinor', 'Total', 'money', 20)],
+    links: (r) => [{ label: 'Open in customer support', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
+    actions: [
+      {
+        key: 'shipment-status', label: 'Update shipment status', tone: 'primary', permission: 'orders:manage', when: (r) => stateReason(r, 'OPEN'),
+        form: (r) => form('Move a shipment to another status', 'Update', [
+          field('shipmentId', 'Shipment', 'select', true, { options: (r.lines ?? []).map((l) => ({ value: str(l.id), label: `${str(l.label)} · ${humanize(str(l.status))}` })) }),
+          field('to', 'New status', 'select', true, { options: options('OUT_FOR_DELIVERY', 'DELIVERED', 'DELIVERY_FAILED', 'RETURNED', 'CANCELLED') }),
+          field('reason', 'Reason', 'text', false, { maxLength: 500 })
+        ]),
+        apply: (r, v, ctx) => {
+          const line = (r.lines ?? []).find((l) => l.id === v.shipmentId);
+          if (line) line.status = str(v.to);
+          r.fields.shipmentStatus = str(v.to);
+          if (v.to === 'DELIVERED') r.fields.status = 'COMPLETED';
+          if (v.to === 'CANCELLED') r.fields.status = 'CANCELLED';
+          log(r, ctx, `Shipment moved to ${humanize(str(v.to)).toLowerCase()}`);
+        }
+      }
+    ]
+  },
+  products: {
+    title: 'Products',
+    columns: [col('atin', 'ATIN', 'mono', 15), col('title', 'Product', 'strong', 30), col('seller', 'Seller', 'text', 20), col('productType', 'Type', 'text', 15), col('status', 'Status', 'status', 20)],
+    statusKey: 'status',
+    facets: facets('IN_REVIEW', 'LIVE', 'PAUSED', 'REJECTED', 'TAKEN_DOWN'),
+    search: ['title', 'atin'],
+    searchPlaceholder: 'Title or ATIN',
+    exportable: true,
+    titleOf: (r) => str(r.fields.title),
+    subtitleOf: (r) => `${str(r.fields.atin)} · ${str(r.fields.seller)}`,
+    actions: [
+      { key: 'approve', label: 'Approve', tone: 'primary', permission: 'catalog:moderate', confirm: 'Approve this product and make it live?', when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('LIVE', 'Approved') },
+      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'catalog:moderate', form: noteForm('Reject the product', 'Reject'), when: (r) => stateReason(r, 'IN_REVIEW'), apply: (r, v, ctx) => { r.fields.status = 'REJECTED'; r.fields.moderationNote = str(v.note); log(r, ctx, 'Rejected'); } },
+      { key: 'takedown', label: 'Take down', tone: 'danger', permission: 'catalog:moderate', form: () => form('Take the listing down', 'Take down', [field('reasonCode', 'Reason', 'select', true, { options: REASON_CODES }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'LIVE', 'PAUSED'), apply: setStatus('TAKEN_DOWN', 'Taken down') },
+      { key: 'restore', label: 'Restore', tone: 'neutral', permission: 'catalog:moderate', form: noteForm('Restore the listing', 'Restore', false), when: (r) => stateReason(r, 'TAKEN_DOWN'), apply: setStatus('LIVE', 'Restored') }
+    ]
+  },
+  moderation: {
+    title: 'Moderation queue',
+    columns: [col('title', 'Listing', 'strong', 28), col('seller', 'Seller', 'text', 18), col('type', 'Type', 'text', 14), col('aiFlag', 'AI flag', 'text', 18), col('dueAt', 'Due', 'datetime', 12), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: facets('PENDING', 'ESCALATED', 'APPROVED', 'REJECTED'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.title),
+    subtitleOf: (r) => `${humanize(str(r.fields.type))} · ${str(r.fields.seller)}`,
+    actions: [
+      { key: 'assign', label: 'Assign to me', tone: 'neutral', permission: 'catalog:moderate', confirm: 'Take this item?', when: (r) => stateReason(r, 'PENDING', 'ESCALATED'), apply: (r, _v, ctx) => { r.fields.assignee = ctx.actor; log(r, ctx, 'Assigned to me'); } },
+      { key: 'approve', label: 'Allow', tone: 'primary', permission: 'catalog:moderate', level: 'APPROVE', form: noteForm('Allow the listing', 'Allow', false), when: (r) => stateReason(r, 'PENDING', 'ESCALATED'), apply: setStatus('APPROVED', 'Allowed') },
+      { key: 'reject', label: 'Remove', tone: 'danger', permission: 'catalog:moderate', level: 'APPROVE', form: () => form('Remove the listing', 'Remove', [field('reasonCode', 'Reason', 'select', true, { options: REASON_CODES }), field('note', 'Note', 'textarea', false)]), when: (r) => stateReason(r, 'PENDING', 'ESCALATED'), apply: setStatus('REJECTED', 'Removed') },
+      { key: 'escalate', label: 'Escalate', tone: 'neutral', permission: 'catalog:moderate', form: reasonForm('Escalate to senior review', 'Escalate'), when: (r) => stateReason(r, 'PENDING'), apply: setStatus('ESCALATED', 'Escalated') }
+    ]
+  },
+  claims: {
+    title: 'A-to-z claims',
+    columns: [col('reference', 'Claim', 'mono', 13), col('type', 'Type', 'text', 18), col('orderNumber', 'Order', 'mono', 13), col('seller', 'Seller', 'text', 18), col('amountMinor', 'Amount', 'money', 11), col('openedAt', 'Opened', 'date', 12), col('status', 'Status', 'status', 15)],
+    statusKey: 'status',
+    facets: facets('AWAITING_SELLER', 'UNDER_REVIEW', 'ESCALATED', 'RESOLVED_REFUND', 'RESOLVED_DENIED'),
+    exportable: true,
+    titleOf: (r) => `Claim ${str(r.fields.reference)}`,
+    subtitleOf: (r) => `${humanize(str(r.fields.type))} · order ${str(r.fields.orderNumber)}`,
+    links: (r) => [{ label: `Order ${str(r.fields.orderNumber)}`, href: `/orders?open=${encodeURIComponent(str(r.fields.orderNumber))}` }, { label: 'Customer 360', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
+    actions: [
+      {
+        key: 'refund', label: 'Refund', tone: 'primary', permission: 'disputes:manage', form: noteForm('Decide with a refund', 'Refund'),
+        when: (r, ctx) => stateReason(r, 'UNDER_REVIEW', 'ESCALATED', 'AWAITING_SELLER') ?? (ctx.refundLimit !== null && num(r.fields.amountMinor) > ctx.refundLimit ? `Above your refund limit ($${(ctx.refundLimit / 100).toFixed(2)}).` : null),
+        apply: (r, v, ctx) => { r.fields.status = 'RESOLVED_REFUND'; r.fields.refundMinor = num(r.fields.amountMinor); log(r, ctx, `Refunded — ${str(v.note)}`); }
+      },
+      { key: 'deny', label: 'Deny', tone: 'danger', permission: 'disputes:manage', form: noteForm('Deny the claim', 'Deny'), when: (r) => stateReason(r, 'UNDER_REVIEW', 'ESCALATED', 'AWAITING_SELLER'), apply: setStatus('RESOLVED_DENIED', 'Denied') },
+      { key: 'escalate', label: 'Escalate', tone: 'neutral', permission: 'disputes:manage', form: reasonForm('Escalate the claim', 'Escalate'), when: (r) => stateReason(r, 'UNDER_REVIEW', 'AWAITING_SELLER'), apply: setStatus('ESCALATED', 'Escalated') }
+    ]
+  },
+  returns: {
+    title: 'Returns',
+    columns: [col('number', 'RMA', 'mono', 18), col('orderNumber', 'Order', 'mono', 14), col('reason', 'Reason', 'text', 18), col('method', 'Method', 'text', 14), col('estimateMinor', 'Refund est.', 'money', 14), col('status', 'Status', 'status', 12), col('createdAt', 'Opened', 'date', 10)],
+    statusKey: 'status',
+    facets: facets('REQUESTED', 'APPROVED', 'IN_TRANSIT', 'RECEIVED', 'REFUNDED', 'REJECTED'),
+    cursor: true,
+    exportable: true,
+    titleOf: (r) => `Return ${str(r.fields.number)}`,
+    subtitleOf: (r) => `Order ${str(r.fields.orderNumber)}`,
+    links: (r) => [{ label: 'Customer 360', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}` }],
+    actions: [
+      { key: 'approve', label: 'Approve', tone: 'primary', permission: 'returns:manage', form: noteForm('Approve the return', 'Approve', false), when: (r) => stateReason(r, 'REQUESTED'), apply: setStatus('APPROVED', 'Approved') },
+      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'returns:manage', form: noteForm('Reject the return', 'Reject'), when: (r) => stateReason(r, 'REQUESTED'), apply: setStatus('REJECTED', 'Rejected') },
+      { key: 'receive', label: 'Mark received', tone: 'neutral', permission: 'returns:manage', confirm: 'Mark the parcel as received?', when: (r) => stateReason(r, 'APPROVED', 'IN_TRANSIT'), apply: setStatus('RECEIVED', 'Parcel received') }
+    ]
+  },
+  payouts: {
+    title: 'Payout requests',
+    columns: [col('id', 'Request', 'mono', 14), col('org', 'Organisation', 'strong', 26), col('amountMinor', 'Amount', 'money', 14), col('requestedAt', 'Requested', 'date', 14), col('holdReason', 'Hold reason', 'text', 18), col('status', 'Status', 'status', 14)],
+    statusKey: 'status',
+    facets: facets('REQUESTED', 'ON_HOLD', 'APPROVED', 'PAID', 'FAILED'),
+    cursor: true,
+    exportable: true,
+    titleOf: (r) => `Payout to ${str(r.fields.org)}`,
+    subtitleOf: (r) => r.id,
+    actions: [
+      { key: 'approve', label: 'Approve & pay', tone: 'primary', permission: 'payouts:approve', level: 'APPROVE', confirm: 'Create the Stripe payout now?', when: (r) => stateReason(r, 'REQUESTED'), apply: setStatus('APPROVED', 'Approved — Stripe payout created') },
+      { key: 'hold', label: 'Hold', tone: 'danger', permission: 'payouts:approve', level: 'APPROVE', form: reasonForm('Put the payout on hold', 'Hold'), when: (r) => stateReason(r, 'REQUESTED'), apply: (r, v, ctx) => { r.fields.status = 'ON_HOLD'; r.fields.holdReason = str(v.reason); log(r, ctx, `Held — ${str(v.reason)}`); } },
+      { key: 'release', label: 'Release', tone: 'neutral', permission: 'payouts:approve', level: 'APPROVE', confirm: 'Release the hold?', when: (r) => stateReason(r, 'ON_HOLD'), apply: (r, _v, ctx) => { r.fields.status = 'REQUESTED'; r.fields.holdReason = null; log(r, ctx, 'Released'); } }
+    ]
+  },
+  inventory: {
+    title: 'Lots',
+    columns: [col('sku', 'SKU', 'mono', 14), col('lotNo', 'Lot', 'mono', 16), col('node', 'Centre', 'text', 13), col('qtyOnHand', 'On hand', 'number', 10), col('qtyReserved', 'Reserved', 'number', 10), col('qtyAvailable', 'Available', 'number', 10), col('expDate', 'Expires', 'date', 13), col('status', 'Status', 'status', 14)],
+    statusKey: 'status',
+    facets: facets('SELLABLE', 'QUARANTINED', 'DAMAGED', 'EXPIRED'),
+    search: ['sku', 'lotNo'],
+    searchPlaceholder: 'SKU or lot number',
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.sku)} · ${str(r.fields.lotNo)}`,
+    subtitleOf: (r) => `${str(r.fields.node)} · bin ${str(r.fields.bin)}`,
+    actions: [
+      {
+        key: 'cycle-count', label: 'Cycle count', tone: 'primary', permission: 'inventory:adjust', when: () => null,
+        form: (r) => form('Post a counted quantity', 'Post count', [field('countedQty', 'Counted quantity', 'number', true, { min: 0, max: 100_000, value: num(r.fields.qtyOnHand) }), field('reason', 'Reason', 'text', true, { maxLength: 200 })]),
+        apply: (r, v, ctx) => { r.fields.qtyOnHand = num(v.countedQty); r.fields.qtyAvailable = num(v.countedQty) - num(r.fields.qtyReserved); log(r, ctx, `Counted ${num(v.countedQty)} — ${str(v.reason)}`); }
+      },
+      { key: 'quarantine', label: 'Quarantine', tone: 'danger', permission: 'inventory:adjust', form: reasonForm('Quarantine the lot', 'Quarantine'), when: (r) => stateReason(r, 'SELLABLE'), apply: setStatus('QUARANTINED', 'Quarantined') },
+      { key: 'release', label: 'Release to sale', tone: 'neutral', permission: 'inventory:adjust', form: reasonForm('Release after inspection', 'Release'), when: (r) => stateReason(r, 'QUARANTINED', 'DAMAGED'), apply: setStatus('SELLABLE', 'Released to sale') }
+    ]
+  },
+  'purchase-orders': {
+    title: 'Purchase orders',
+    columns: [col('number', 'PO', 'mono', 12), col('supplier', 'Supplier', 'strong', 24), col('destination', 'Ship to', 'text', 14), col('expectedDate', 'Expected', 'date', 13), col('totalMinor', 'Total', 'money', 14), col('status', 'Status', 'status', 23)],
+    statusKey: 'status',
+    facets: facets('DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'SENT', 'CONFIRMED', 'RECEIVED', 'CANCELLED'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.number)} · ${str(r.fields.supplier)}`,
+    subtitleOf: (r) => `${str(r.fields.incoterm)} → ${str(r.fields.destination)}`,
+    linesTitle: 'Lines',
+    lineColumns: [col('sku', 'SKU', 'mono', 20), col('title', 'Item', 'strong', 40), col('quantity', 'Qty', 'number', 15), col('unitCostMinor', 'Unit cost', 'money', 25)],
+    actions: [
+      { key: 'submit', label: 'Submit for approval', tone: 'primary', permission: 'retail:po:write', confirm: 'Submit this PO for approval?', when: (r) => stateReason(r, 'DRAFT'), apply: setStatus('PENDING_APPROVAL', 'Submitted for approval') },
+      { key: 'approve', label: 'Approve', tone: 'primary', permission: 'retail:po:approve', level: 'APPROVE', form: noteForm('Approve the PO', 'Approve', false), when: (r) => stateReason(r, 'PENDING_APPROVAL'), apply: setStatus('APPROVED', 'Approved') },
+      { key: 'send-back', label: 'Send back', tone: 'neutral', permission: 'retail:po:approve', level: 'APPROVE', form: noteForm('Send back to the buyer', 'Send back'), when: (r) => stateReason(r, 'PENDING_APPROVAL'), apply: setStatus('DRAFT', 'Sent back to the buyer') },
+      { key: 'cancel', label: 'Cancel PO', tone: 'danger', permission: 'retail:po:write', form: noteForm('Cancel the PO', 'Cancel PO'), when: (r) => stateReason(r, 'DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'SENT'), apply: setStatus('CANCELLED', 'Cancelled') }
+    ]
+  },
+  routes: {
+    title: 'Routes',
+    columns: [col('name', 'Route', 'mono', 16), col('zone', 'Zone', 'text', 14), col('window', 'Window', 'text', 12), col('driver', 'Driver', 'strong', 18), col('stops', 'Stops', 'number', 8), col('serviceDate', 'Date', 'date', 12), col('status', 'Status', 'status', 20)],
+    statusKey: 'status',
+    facets: facets('PLANNED', 'ASSIGNED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'),
+    cursor: true,
+    exportable: true,
+    titleOf: (r) => `Route ${str(r.fields.name)}`,
+    subtitleOf: (r) => `${str(r.fields.zone)} · ${str(r.fields.window)}`,
+    linesTitle: 'Stops',
+    lineColumns: [col('seq', '#', 'number', 8), col('address', 'Address', 'text', 52), col('packages', 'Packages', 'number', 15), col('status', 'Status', 'status', 25)],
+    actions: [
+      {
+        key: 'assign', label: 'Assign driver', tone: 'primary', permission: 'delivery:dispatch', when: (r) => stateReason(r, 'PLANNED', 'ASSIGNED'),
+        form: () => form('Assign a driver', 'Assign', [field('driverId', 'Driver', 'select', true, { options: [{ value: 'drv-1', label: 'Tunde Adeyemi' }, { value: 'drv-2', label: 'Chinedu Okafor' }] }), field('vehicleId', 'Vehicle', 'text', false, { maxLength: 40 })]),
+        apply: (r, v, ctx) => { r.fields.driver = v.driverId === 'drv-1' ? 'Tunde Adeyemi' : 'Chinedu Okafor'; r.fields.vehicle = str(v.vehicleId) || null; r.fields.status = 'ASSIGNED'; log(r, ctx, `Assigned ${str(r.fields.driver)}`); }
+      },
+      { key: 'cancel', label: 'Cancel route', tone: 'danger', permission: 'delivery:dispatch', form: reasonForm('Cancel the route', 'Cancel route'), when: (r) => stateReason(r, 'PLANNED', 'ASSIGNED'), apply: setStatus('CANCELLED', 'Cancelled — shipments back to the pool') }
+    ]
+  },
+  'support-cases': {
+    title: 'Support cases',
+    columns: [col('reference', 'Case', 'mono', 12), col('customer', 'Customer', 'strong', 18), col('reason', 'Reason', 'text', 22), col('assignee', 'Assignee', 'text', 16), col('openedAt', 'Opened', 'datetime', 16), col('status', 'Status', 'status', 16)],
+    statusKey: 'status',
+    facets: facets('OPEN', 'IN_PROGRESS', 'RESOLVED'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.reference)} · ${str(r.fields.reason)}`,
+    subtitleOf: (r) => str(r.fields.customer),
+    sections: [['Case', ['reference', 'source', 'status', 'assignee', 'slaState', 'openedAt']], ['Lola hand-off', ['customer', 'orderNumber', 'reason', 'summary']]],
+    links: (r) => [
+      { label: 'Open customer 360', href: `/support?customer=${encodeURIComponent(str(r.fields.customerId))}&case=${encodeURIComponent(r.id)}` },
+      ...(r.fields.orderNumber ? [{ label: `Order ${str(r.fields.orderNumber)}`, href: `/orders?open=${encodeURIComponent(str(r.fields.orderNumber))}` }] : [])
+    ],
+    actions: [
+      { key: 'assign', label: 'Assign to me', tone: 'neutral', permission: 'support:respond', confirm: 'Take this case?', when: (r) => stateReason(r, 'OPEN', 'IN_PROGRESS'), apply: (r, _v, ctx) => { r.fields.assignee = ctx.actor; r.fields.status = 'IN_PROGRESS'; log(r, ctx, 'Assigned'); } },
+      { key: 'resolve', label: 'Resolve', tone: 'primary', permission: 'support:respond', form: () => form('Resolve the case', 'Resolve', [field('resolution', 'Resolution', 'textarea', true, { maxLength: 2000 })]), when: (r) => stateReason(r, 'OPEN', 'IN_PROGRESS'), apply: setStatus('RESOLVED', 'Resolved') }
+    ]
+  },
+  audit: {
+    title: 'Audit log',
+    columns: [col('seq', '#', 'number', 8), col('occurredAt', 'When', 'datetime', 16), col('actor', 'Actor', 'strong', 16), col('action', 'Action', 'mono', 18), col('entityType', 'Entity', 'text', 12), col('summary', 'Summary', 'text', 30)],
+    facets: [],
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.action)} #${str(r.fields.seq)}`,
+    subtitleOf: (r) => `${str(r.fields.actor)} · ${str(r.fields.entityType)} ${str(r.fields.entityId)}`,
+    actions: []
+  },
+  markets: {
+    title: 'Countries',
+    columns: [col('code', 'Code', 'mono', 10), col('name', 'Country', 'strong', 30), col('liveRegions', 'Live states', 'number', 15), col('regionCount', 'States', 'number', 12), col('status', 'Status', 'status', 33)],
+    statusKey: 'status',
+    facets: facets('LIVE', 'COMING_SOON', 'PLANNED', 'PAUSED'),
+    exportable: false,
+    titleOf: (r) => str(r.fields.name),
+    subtitleOf: (r) => `${str(r.fields.liveRegions)} of ${str(r.fields.regionCount)} states live`,
+    actions: [{ key: 'publish', label: 'Publish markets', tone: 'primary', permission: 'content:markets.edit', form: noteForm('Publish the draft as a new version', 'Publish', false), when: () => null, apply: (r, _v, ctx) => log(r, ctx, 'Published a new markets version') }],
+    edit: {
+      permission: 'content:markets.edit',
+      form: (r) => form('Edit country', 'Save draft', [field('status', 'Status', 'select', true, { options: options('LIVE', 'PAUSED', 'COMING_SOON', 'PLANNED'), value: str(r.fields.status) }), field('launchNote', 'Launch note', 'text', false, { maxLength: 200, value: str(r.fields.launchNote) })]),
+      apply: (r, v) => { r.fields.status = str(v.status); r.fields.launchNote = str(v.launchNote) || null; }
+    }
+  },
+  'site-settings': {
+    title: 'Site settings',
+    columns: [col('supportPhoneDisplay', 'Support phone', 'text', 22), col('supportEmail', 'Support email', 'text', 28), col('smsProgramName', 'SMS program', 'text', 20), col('revision', 'Revision', 'number', 12), col('updatedAt', 'Updated', 'datetime', 18)],
+    facets: [],
+    exportable: false,
+    titleOf: () => 'Contacts & social links',
+    subtitleOf: (r) => `Revision ${str(r.fields.revision)}`,
+    sections: [['Contacts', ['supportPhone', 'supportPhoneDisplay', 'supportEmail', 'smsProgramName']], ['Social links', ['instagram', 'facebook', 'tiktok']], ['Revision', ['revision', 'updatedBy', 'updatedAt']]],
+    actions: [],
+    edit: {
+      permission: 'content:site.edit',
+      form: (r) => form('Edit contacts & social links', 'Publish', [
+        field('supportPhone', 'Support phone (E.164)', 'text', true, { pattern: '^\\+[1-9][0-9]{7,14}$', value: str(r.fields.supportPhone) }),
+        field('supportPhoneDisplay', 'Phone as shown', 'text', true, { maxLength: 30, value: str(r.fields.supportPhoneDisplay) }),
+        field('supportEmail', 'Support email', 'email', true, { value: str(r.fields.supportEmail) }),
+        field('smsProgramName', 'SMS program name', 'text', true, { maxLength: 60, value: str(r.fields.smsProgramName) }),
+        field('instagram', 'Instagram', 'text', false, { pattern: '^https://', value: str(r.fields.instagram) }),
+        field('facebook', 'Facebook', 'text', false, { pattern: '^https://', value: str(r.fields.facebook) }),
+        field('tiktok', 'TikTok', 'text', false, { pattern: '^https://', value: str(r.fields.tiktok) })
+      ]),
+      apply: (r, v) => {
+        Object.entries(v).forEach(([k, val]) => { r.fields[k] = typeof val === 'string' ? val : r.fields[k] ?? null; });
+        r.fields.revision = num(r.fields.revision) + 1;
+      }
+    }
+  },
+  'legal-documents': {
+    title: 'Legal documents',
+    columns: [col('title', 'Document', 'strong', 36), col('key', 'Key', 'mono', 20), col('version', 'Version', 'text', 14), col('effectiveDate', 'Effective', 'date', 30)],
+    facets: [],
+    exportable: false,
+    titleOf: (r) => str(r.fields.title),
+    subtitleOf: (r) => `Version ${str(r.fields.version)}`,
+    actions: [
+      {
+        key: 'raise-version', label: 'New version', tone: 'primary', permission: 'content:legal.edit', when: () => null,
+        form: () => form('Raise the version (the current one is archived)', 'Publish version', [field('version', 'Version', 'text', true, { pattern: '^[0-9]+\\.[0-9]+$', placeholder: '3.3' }), field('effectiveDate', 'Effective date', 'date', true), field('changeSummary', 'What changed', 'textarea', true, { maxLength: 1000 }), field('body', 'Document (Markdown)', 'textarea', true)]),
+        apply: (r, v, ctx) => { r.fields.version = str(v.version); r.fields.effectiveDate = str(v.effectiveDate); log(r, ctx, `Version ${str(v.version)} published — ${str(v.changeSummary)}`); }
+      }
+    ],
+    edit: {
+      permission: 'content:legal.edit',
+      form: (r) => form('Amend the current version', 'Save', [field('effectiveDate', 'Effective date', 'date', true, { value: str(r.fields.effectiveDate) }), field('draftBanner', 'Show the draft banner', 'toggle', false, { value: r.fields.draftBanner === true })]),
+      apply: (r, v) => { r.fields.effectiveDate = str(v.effectiveDate); r.fields.draftBanner = v.draftBanner === true; }
+    }
+  },
+  announcements: placementsDef('Announcements', true),
+  placements: placementsDef('Placements & ads', false),
+  'identity-providers': {
+    title: 'Identity providers',
+    columns: [col('displayName', 'Provider', 'strong', 30), col('configured', 'Configured', 'text', 20), col('updatedBy', 'Changed by', 'text', 25), col('status', 'Sign-in button', 'status', 25)],
+    statusKey: 'status',
+    facets: [],
+    exportable: false,
+    titleOf: (r) => str(r.fields.displayName),
+    subtitleOf: (r) => (r.fields.enabled ? 'Shown on sign-in and sign-up' : 'Hidden from sign-in and sign-up'),
+    actions: [
+      { key: 'enable', label: 'Show button', tone: 'primary', permission: 'access:admin', confirm: 'Show this social login on the storefront?', when: (r) => (r.fields.enabled ? 'Already shown.' : r.fields.configured ? null : 'Not configured at identity yet.'), apply: (r, _v, ctx) => { r.fields.enabled = true; r.fields.status = 'ENABLED'; log(r, ctx, 'Enabled'); } },
+      { key: 'disable', label: 'Hide button', tone: 'danger', permission: 'access:admin', confirm: 'Hide this social login? People who use it must sign in another way.', when: (r) => (r.fields.enabled ? null : 'Already hidden.'), apply: (r, _v, ctx) => { r.fields.enabled = false; r.fields.status = 'DISABLED'; log(r, ctx, 'Disabled'); } }
+    ]
+  },
+  'fee-schedules': {
+    title: 'Fee schedules',
+    columns: [col('version', 'Version', 'number', 10), col('effectiveFrom', 'Effective from', 'datetime', 20), col('defaultCommissionBps', 'Commission (bps)', 'number', 16), col('cardPctBps', 'Card % (bps)', 'number', 14), col('fbaPerUnitMinor', 'FBA / unit', 'money', 14), col('note', 'Note', 'text', 26)],
+    facets: [],
+    exportable: true,
+    titleOf: (r) => `Fee schedule v${str(r.fields.version)}`,
+    subtitleOf: (r) => str(r.fields.note),
+    actions: [],
+    create: {
+      permission: 'payments:configure',
+      form: form('New fee schedule version (applies to new orders)', 'Create version', [
+        field('effectiveFrom', 'Effective from', 'datetime', true),
+        field('defaultCommissionBps', 'Default commission (bps)', 'number', true, { min: 0, max: 5000 }),
+        field('cardPctBps', 'Card fee (bps)', 'number', true, { min: 0, max: 1000 }),
+        field('cardFixedMinor', 'Card fixed fee', 'money', true, { min: 0 }),
+        field('fbaPerUnitMinor', 'FBA fee per unit', 'money', true, { min: 0 }),
+        field('reverseCommissionOnRefund', 'Reverse commission on refunds', 'toggle', false, { value: true }),
+        field('note', 'Note', 'text', true, { maxLength: 200 })
+      ]),
+      build: (v, id, ctx) => ({
+        id,
+        fields: { version: 0, effectiveFrom: str(v.effectiveFrom), defaultCommissionBps: num(v.defaultCommissionBps), cardPctBps: num(v.cardPctBps), cardFixedMinor: num(v.cardFixedMinor), fbaPerUnitMinor: num(v.fbaPerUnitMinor), reverseCommissionOnRefund: v.reverseCommissionOnRefund === true, note: str(v.note), createdBy: ctx.actor },
+        activity: [{ at: ctx.now.toISOString(), actor: ctx.actor, text: 'Version created' }]
+      })
+    }
+  },
+  'tax-rates': {
+    title: 'Tax rates',
+    columns: [col('kind', 'Rule', 'status', 10), col('state', 'State', 'mono', 8), col('zipPrefix', 'ZIP prefix', 'mono', 12), col('name', 'Name', 'strong', 22), col('generalRate', 'General', 'percent', 12), col('groceryRate', 'Grocery', 'percent', 12), col('preparedFoodRate', 'Prepared food', 'percent', 14), col('version', 'Version', 'number', 10)],
+    statusKey: 'kind',
+    facets: facets('STATE', 'LOCAL'),
+    exportable: true,
+    titleOf: (r) => `${str(r.fields.name)} (${str(r.fields.state)}${r.fields.zipPrefix ? ` ${str(r.fields.zipPrefix)}` : ''})`,
+    subtitleOf: (r) => (r.fields.kind === 'STATE' ? 'State rule' : 'Local rate'),
+    actions: [],
+    edit: {
+      permission: 'tax:configure',
+      form: (r) =>
+        r.fields.kind === 'STATE'
+          ? form('Edit the state rule', 'Save rule', [
+            field('name', 'Name', 'text', true, { value: str(r.fields.name) }),
+            field('generalRate', 'General rate', 'number', true, { min: 0, max: 0.2, value: num(r.fields.generalRate), help: 'Decimal, e.g. 0.0625 for 6.25 %' }),
+            field('groceryRate', 'Grocery rate', 'number', true, { min: 0, max: 0.2, value: num(r.fields.groceryRate) }),
+            field('preparedFoodRate', 'Prepared food rate', 'number', true, { min: 0, max: 0.2, value: num(r.fields.preparedFoodRate) }),
+            field('shippingTaxable', 'Shipping is taxable', 'toggle', false, { value: r.fields.shippingTaxable === true }),
+            field('facilitator', 'Marketplace facilitator', 'toggle', false, { value: r.fields.facilitator === true })
+          ])
+          : form('Edit the local rate', 'Save rate', [field('name', 'Name', 'text', true, { value: str(r.fields.name) }), field('generalRate', 'Rate', 'number', true, { min: 0, max: 0.1, value: num(r.fields.generalRate) })]),
+      apply: (r, v) => {
+        Object.entries(v).forEach(([k, val]) => { if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') r.fields[k] = val; });
+        if (r.fields.version !== null) r.fields.version = num(r.fields.version) + 1;
+      }
+    },
+    create: {
+      permission: 'tax:configure',
+      form: form('New local rate', 'Add rate', [
+        field('state', 'State', 'text', true, { pattern: '^[A-Z]{2}$', placeholder: 'TX', help: 'Two-letter state code, e.g. TX' }),
+        field('zipPrefix', 'ZIP or prefix', 'text', true, { pattern: '^([0-9]{3}|[0-9]{5})$', placeholder: '770', help: 'A 3-digit prefix or a 5-digit ZIP' }),
+        field('name', 'Name', 'text', true, { maxLength: 80 }),
+        field('rate', 'Rate', 'number', true, { min: 0, max: 0.1, help: 'Decimal, e.g. 0.02 for 2 %' })
+      ]),
+      build: (v) => ({ id: `local:${str(v.state)}:${str(v.zipPrefix)}`, fields: { kind: 'LOCAL', state: str(v.state), zipPrefix: str(v.zipPrefix), name: str(v.name), generalRate: num(v.rate), groceryRate: null, preparedFoodRate: null, shippingTaxable: null, facilitator: null, version: null }, activity: [] })
+    }
+  }
+};
+
+function placementsDef(title: string, announcementsOnly: boolean): MockResource {
+  return {
+    title,
+    columns: [col('name', 'Name', 'strong', 28), col('slot', 'Slot', 'mono', 18), col('advertiser', 'Advertiser', 'text', 16), col('startsAt', 'Starts', 'date', 12), col('endsAt', 'Ends', 'date', 12), col('status', 'Status', 'status', 14)],
+    statusKey: 'status',
+    facets: facets('DRAFT', 'IN_REVIEW', 'SCHEDULED', 'LIVE', 'ENDED'),
+    exportable: true,
+    titleOf: (r) => str(r.fields.name),
+    subtitleOf: (r) => `${str(r.fields.slot)}${r.fields.paid ? ` · paid by ${str(r.fields.advertiser)}` : ''}`,
+    actions: [
+      { key: 'submit', label: 'Send for review', tone: 'primary', permission: 'content:placements.edit', confirm: 'Send this placement for review?', when: (r) => stateReason(r, 'DRAFT'), apply: setStatus('IN_REVIEW', 'Sent for review') },
+      { key: 'approve', label: 'Approve', tone: 'primary', permission: 'content:placements.approve', level: 'APPROVE', confirm: 'Approve and schedule?', when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('LIVE', 'Approved — live') },
+      { key: 'reject', label: 'Reject', tone: 'danger', permission: 'content:placements.approve', level: 'APPROVE', form: noteForm('Reject back to draft', 'Reject'), when: (r) => stateReason(r, 'IN_REVIEW'), apply: setStatus('DRAFT', 'Rejected back to draft') },
+      { key: 'end', label: 'End now', tone: 'danger', permission: 'content:placements.edit', confirm: 'End this placement now?', when: (r) => stateReason(r, 'SCHEDULED', 'LIVE'), apply: setStatus('ENDED', 'Ended') }
+    ],
+    edit: {
+      permission: 'content:placements.edit',
+      form: (r) => form('Edit draft', 'Save draft', [
+        field('name', 'Name', 'text', true, { maxLength: 120, value: str(r.fields.name) }),
+        field('text', announcementsOnly ? 'Announcement text' : 'Headline', 'text', true, { maxLength: 140, value: str(r.fields.text) }),
+        field('startsAt', 'Starts', 'datetime', true, { value: str(r.fields.startsAt) }),
+        field('endsAt', 'Ends', 'datetime', false, { value: str(r.fields.endsAt) })
+      ]),
+      apply: (r, v) => { r.fields.name = str(v.name); r.fields.text = str(v.text); r.fields.startsAt = str(v.startsAt); r.fields.endsAt = str(v.endsAt) || null; r.fields.version = num(r.fields.version) + 1; }
+    },
+    create: {
+      permission: 'content:placements.edit',
+      form: form(announcementsOnly ? 'New announcement' : 'New placement', 'Create draft', [
+        field('name', 'Name', 'text', true, { maxLength: 120 }),
+        ...(announcementsOnly ? [] : [field('slot', 'Slot', 'select', true, { options: options('hero_carousel', 'display_banner', 'home_tiles', 'home_product_row') })]),
+        field('text', announcementsOnly ? 'Announcement text' : 'Headline', 'text', true, { maxLength: 140 }),
+        field('href', 'Link', 'text', false, { pattern: '^/' }),
+        field('startsAt', 'Starts', 'datetime', true),
+        field('endsAt', 'Ends', 'datetime', false),
+        ...(announcementsOnly ? [] : [field('advertiser', 'Advertiser (paid)', 'text', false, { maxLength: 80 })])
+      ]),
+      build: (v, id, ctx) => ({
+        id,
+        fields: { name: str(v.name), slot: announcementsOnly ? 'announcement_bar' : str(v.slot), status: 'DRAFT', paid: !!v.advertiser, advertiser: str(v.advertiser) || null, text: str(v.text), priority: 10, startsAt: str(v.startsAt), endsAt: str(v.endsAt) || null, version: 1 },
+        activity: [{ at: ctx.now.toISOString(), actor: ctx.actor, text: 'Draft created' }]
+      })
+    }
+  };
+}

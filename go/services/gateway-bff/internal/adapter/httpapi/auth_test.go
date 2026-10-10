@@ -285,16 +285,15 @@ func TestAccountAddresses(t *testing.T) {
 	if me := b.do("GET", "/v1/me", nil).json(t); num(me["counts"].(map[string]any), "addresses") != 2 || num(me["counts"].(map[string]any), "paymentMethods") != 1 {
 		t.Fatalf("counts = %v", me["counts"])
 	}
+	// Saved methods come from payments' /v1/customers/me routes (testkit shopper fakes: a card and a bank account).
 	pms := b.do("GET", "/v1/account/payment-methods", nil).json(t)
-	if len(pms["items"].([]any)) != 1 {
+	if len(pms["items"].([]any)) != 2 {
 		t.Fatalf("payment methods = %v", pms)
 	}
 	mustStatus(t, b.do("POST", "/v1/account/payment-methods/setup-intents", nil), 201)
-	// Orders and returns: the orders service is not built yet.
+	// Orders (orders service) and returns (tax-returns) are served.
 	for _, p := range []string{"/v1/account/orders", "/v1/account/returns"} {
-		if c := problemCode(t, b.do("GET", p, nil)); c != "UPSTREAM_UNAVAILABLE" {
-			t.Fatalf("%s: code = %s", p, c)
-		}
+		mustStatus(t, b.do("GET", p, nil), 200)
 	}
 	// Checkout summary composes cart + addresses + payment methods.
 	mustStatus(t, b.do("POST", "/v1/cart/items", map[string]any{"offerId": "ATSHEAV001", "quantity": 2}), 200)
@@ -306,7 +305,10 @@ func TestAccountAddresses(t *testing.T) {
 	mustStatus(t, r, 422) // missing Idempotency-Key
 	b.headers["Idempotency-Key"] = "0123456789abcdef0123"
 	r = b.do("POST", "/v1/checkout/orders", map[string]any{"addressId": "a", "paymentMethodId": "pm_1", "deliverySelections": []any{map[string]any{"packageId": "org_kente:SELLER", "option": "carrier"}}})
-	mustStatus(t, r, 503)
+	mustStatus(t, r, 201) // orders' checkout saga (testkit shopper fakes) — the client secret always comes back
+	if r.json(t)["paymentClientSecret"] == nil {
+		t.Fatalf("placement = %s", r.body)
+	}
 }
 
 func TestRateLimitOnAuthEndpoints(t *testing.T) {

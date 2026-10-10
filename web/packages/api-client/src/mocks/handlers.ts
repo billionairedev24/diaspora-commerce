@@ -1,7 +1,7 @@
 /* MSW request handlers implementing contracts/openapi/gateway-bff.yaml against the prototype fixtures.
    Paths use a wildcard origin/prefix (any base URL ending in /v1/...), so the same handlers serve the
    browser (/api/bff/v1/…), server components (in-process) and Vitest (setupServer). */
-import { http, HttpResponse, type JsonBodyType } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
 
 import { CodeSchema, SignInRequestSchema, SignUpRequestSchema, VerifyCodeRequestSchema } from '../schemas/auth';
@@ -13,9 +13,10 @@ import { NewsletterRequestSchema } from '../schemas/site';
 import { fromApiSearchParams } from '../search-params';
 import { isPasswordAcceptable } from '../validation/password';
 import { suggestAddresses } from './addresses';
-import { getDb, getSession, type MockChallenge, type MockSession, nextId, userById } from './db';
+import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
+import { body, type Ctx, json, requireUser, route } from './http-kit';
 import {
   addToCart,
   buildCart,
@@ -31,66 +32,9 @@ import {
   suggest,
   updateLine
 } from './service';
+import { shopperHandlers } from './shopper';
+import { accountCounts } from './shopper-state';
 
-export const SESSION_COOKIE = 'at_session';
-const PROBLEM_BASE = 'https://errors.afrotransact.com/';
-
-interface Ctx { session: MockSession; isNew: boolean; request: Request; now: Date }
-
-function problem(status: number, code: string, title: string, detail: string, extra: Record<string, unknown> = {}): HttpResponse<JsonBodyType> {
-  return HttpResponse.json(
-    { type: PROBLEM_BASE + code.toLowerCase().replace(/_/g, '-'), title, status, detail, code, ...extra } as JsonBodyType,
-    { status, headers: { 'Content-Type': 'application/problem+json' } }
-  );
-}
-
-function readCookie(request: Request, name: string): string | null {
-  const raw = request.headers.get('cookie') ?? '';
-  for (const part of raw.split(';')) {
-    const [k, ...v] = part.trim().split('=');
-    if (k === name) return decodeURIComponent(v.join('='));
-  }
-  return null;
-}
-
-/** Wraps a resolver with session lookup (cookie at_session), problem mapping and Set-Cookie for new sessions. */
-function route(fn: (ctx: Ctx, params: Record<string, string>) => Promise<Response> | Response) {
-  return async ({ request, params }: { request: Request; params: Record<string, string | readonly string[] | undefined> }) => {
-    const existing = readCookie(request, SESSION_COOKIE);
-    const sid = existing ?? crypto.randomUUID();
-    const ctx: Ctx = { session: getSession(sid), isNew: !existing, request, now: new Date() };
-    const flat: Record<string, string> = {};
-    Object.entries(params).forEach(([k, v]) => { if (typeof v === 'string') flat[k] = v; });
-    let res: Response;
-    try {
-      res = await fn(ctx, flat);
-    } catch (e) {
-      if (e instanceof MockProblem) res = problem(e.status, e.code, e.title, e.message, e.extra);
-      else throw e;
-    }
-    if (ctx.isNew) res.headers.append('Set-Cookie', `${SESSION_COOKIE}=${encodeURIComponent(sid)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
-    return res;
-  };
-}
-
-async function body<S extends z.ZodType>(request: Request, schema: S): Promise<z.infer<S>> {
-  let json: unknown = {};
-  try {
-    const text = await request.text();
-    json = text ? JSON.parse(text) : {};
-  } catch {
-    throw new MockProblem(400, 'MALFORMED_JSON', 'Malformed request', 'The request body is not valid JSON.');
-  }
-  const parsed = schema.safeParse(json);
-  if (!parsed.success) {
-    const errors: Record<string, string> = {};
-    parsed.error.issues.forEach((i) => { errors[i.path.join('.') || '_'] = i.message; });
-    throw new MockProblem(422, 'VALIDATION_FAILED', 'Validation failed', 'One or more fields are invalid.', { errors });
-  }
-  return parsed.data;
-}
-
-const json = (data: unknown, status = 200) => HttpResponse.json(data as JsonBodyType, { status });
 const cartOf = (ctx: Ctx) => json(buildCart(ctx.session, ctx.now));
 
 function me(ctx: Ctx) {
@@ -100,7 +44,7 @@ function me(ctx: Ctx) {
     authenticated: true,
     user: { id: u.id, firstName: u.firstName, lastName: u.lastName, email: u.email, initials: (u.firstName[0] ?? '') + (u.lastName[0] ?? ''), roles: u.roles,
       ...(u.phone ? { phone: '•••• ' + u.phone.slice(-4) } : {}), phoneVerified: phoneVerified.has(u.id) },
-    counts: u.id === 'u_adaeze' ? { orders: 2, returns: 0, addresses: 2, paymentMethods: 3 } : { orders: 0, returns: 0, addresses: 0, paymentMethods: 0 }
+    counts: accountCounts(u.id)
   };
 }
 
@@ -122,16 +66,13 @@ function takeChallenge(id: string, kind: string) {
 /** Accounts whose phone passed the mock SMS check (code DEMO_CODE). */
 const phoneVerified = new Set<string>();
 
-function requireUser(ctx: Ctx) {
-  const u = userById(ctx.session.userId);
-  if (!u) throw new MockProblem(401, 'UNAUTHENTICATED', 'Sign in required', 'Sign in to continue.');
-  return u;
-}
 
 const prefixOf = (url: string) => {
   const u = new URL(url);
   return u.origin + u.pathname.slice(0, u.pathname.indexOf('/v1/'));
 };
+
+export { SESSION_COOKIE } from './http-kit';
 
 export const handlers = [
   /* Site & content */
@@ -338,31 +279,8 @@ export const handlers = [
     phoneVerified.add(u.id);
     return json({ phoneVerified: true, verifiedAt: new Date().toISOString() });
   })),
-  http.get('*/v1/account/addresses', route((ctx) => {
-    requireUser(ctx);
-    return json({ items: [
-      { id: 'ad1', name: 'Adaeze Nwosu', phone: '+17135550142', line1: '9800 Westheimer Rd', line2: '', city: 'Houston', state: 'TX', zip: '77042', isDefault: true, verified: true },
-      { id: 'ad2', name: 'Adaeze Nwosu (work)', phone: '+17185550199', line1: '1250 Grand Concourse', line2: 'Apt 4B', city: 'Bronx', state: 'NY', zip: '10456', isDefault: false, verified: true }
-    ], nextCursor: null });
-  })),
-  http.get('*/v1/account/payment-methods', route((ctx) => {
-    requireUser(ctx);
-    return json({ items: [
-      { id: 'pm1', type: 'card', brand: 'visa', last4: '4242', label: 'Visa ending in 4242', expires: '08/29', isDefault: true },
-      { id: 'pm2', type: 'card', brand: 'mastercard', last4: '4444', label: 'Mastercard ending in 4444', expires: '11/27', isDefault: false },
-      { id: 'pm3', type: 'cashapp', brand: null, last4: null, label: 'Cash App Pay', expires: null, isDefault: false }
-    ], nextCursor: null });
-  })),
-  http.get('*/v1/account/orders', route((ctx) => {
-    requireUser(ctx);
-    return json({ items: [
-      { orderNumber: '112-3349127-8841', placedAt: '2026-10-01', totalMinor: 6147, currency: 'USD', shipTo: '9800 Westheimer Rd, Houston', status: 'delivered', shipments: [{ shipmentId: 'sh1', label: 'Shipped by AfroTransact from Houston FC', status: 'Delivered Oct 3', items: 'Raw Unrefined Shea Butter × 1 · Ofada Rice × 1' }] },
-      { orderNumber: '112-2210853-1176', placedAt: '2026-09-18', totalMinor: 2803, currency: 'USD', shipTo: '9800 Westheimer Rd, Houston', status: 'delivered', shipments: [{ shipmentId: 'sh2', label: 'Shipped by Diaspora Books from Atlanta, GA', status: 'Delivered Sep 22', items: 'Pepper & Palm × 1' }] }
-    ], nextCursor: null });
-  })),
-  http.get('*/v1/account/returns', route((ctx) => {
-    requireUser(ctx);
-    return json({ items: [], nextCursor: null });
-  }))
+
+  /* Addresses, payments, orders, returns, security, checkout, services & bookings, Lola */
+  ...shopperHandlers
 ];
 

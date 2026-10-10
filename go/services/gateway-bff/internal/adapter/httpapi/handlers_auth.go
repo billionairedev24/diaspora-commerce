@@ -351,16 +351,38 @@ func (h *handlersImpl) defaultAddress(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handlersImpl) paymentMethods(w http.ResponseWriter, r *http.Request) {
+	if h.s.Shopper.enabled() {
+		v, err := h.s.Shopper.Wallet.List(r.Context(), callerFrom(r.Context()))
+		h.reply(w, r, http.StatusOK, v, err)
+		return
+	}
 	v, err := h.s.Account.PaymentMethods(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) setupIntent(w http.ResponseWriter, r *http.Request) {
+	if h.s.Shopper.enabled() {
+		var b struct {
+			Types []string `json:"types"`
+		}
+		if err := decode(r, &b, true); err != nil {
+			h.reply(w, r, 0, nil, err)
+			return
+		}
+		v, err := h.s.Shopper.Wallet.SetupIntent(r.Context(), callerFrom(r.Context()), b.Types)
+		h.reply(w, r, http.StatusCreated, v, err)
+		return
+	}
 	v, err := h.s.Account.SetupIntent(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusCreated, v, err)
 }
 
 func (h *handlersImpl) deletePaymentMethod(w http.ResponseWriter, r *http.Request) {
+	if h.s.Shopper.enabled() {
+		err := h.s.Shopper.Wallet.Remove(r.Context(), callerFrom(r.Context()), r.PathValue("paymentMethodId"))
+		h.reply(w, r, http.StatusNoContent, nil, err)
+		return
+	}
 	err := h.s.Account.DeletePaymentMethod(r.Context(), callerFrom(r.Context()), r.PathValue("paymentMethodId"))
 	h.reply(w, r, http.StatusNoContent, nil, err)
 }
@@ -375,16 +397,38 @@ func (h *handlersImpl) orders(w http.ResponseWriter, r *http.Request) {
 		}
 		limit = n
 	}
+	if h.s.Shopper.enabled() {
+		v, err := h.s.Shopper.Orders.List(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("cursor"), limit)
+		h.reply(w, r, http.StatusOK, v, err)
+		return
+	}
 	v, err := h.s.Account.Orders(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("cursor"), limit)
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) cancelShipment(w http.ResponseWriter, r *http.Request) {
+	if h.s.Shopper.enabled() {
+		var b struct {
+			Reason string `json:"reason"`
+		}
+		if err := decode(r, &b, true); err != nil {
+			h.reply(w, r, 0, nil, err)
+			return
+		}
+		v, err := h.s.Shopper.Orders.Cancel(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"), r.PathValue("shipmentId"), b.Reason)
+		h.reply(w, r, http.StatusOK, v, err)
+		return
+	}
 	v, err := h.s.Account.CancelShipment(r.Context(), callerFrom(r.Context()), r.PathValue("orderNumber"), r.PathValue("shipmentId"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 
 func (h *handlersImpl) returns(w http.ResponseWriter, r *http.Request) {
+	if h.s.Shopper.enabled() {
+		v, err := h.s.Shopper.Returns.List(r.Context(), callerFrom(r.Context()))
+		h.reply(w, r, http.StatusOK, v, err)
+		return
+	}
 	v, err := h.s.Account.Returns(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusOK, v, err)
 }
@@ -395,6 +439,11 @@ func (h *handlersImpl) startReturn(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
+	if h.s.Shopper.enabled() {
+		v, err := h.s.Shopper.Returns.Start(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"), b)
+		h.reply(w, r, http.StatusCreated, v, err)
+		return
+	}
 	v, err := h.s.Account.StartReturn(r.Context(), callerFrom(r.Context()), b)
 	h.reply(w, r, http.StatusCreated, v, err)
 }
@@ -402,6 +451,11 @@ func (h *handlersImpl) startReturn(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------- checkout
 
 func (h *handlersImpl) checkoutSummary(w http.ResponseWriter, r *http.Request) {
+	if h.s.Shopper.enabled() {
+		v, err := h.s.Shopper.Checkout.Summary(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("addressId"))
+		h.reply(w, r, http.StatusOK, v, err)
+		return
+	}
 	v, err := h.s.Checkout.Summary(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("addressId"))
 	h.reply(w, r, http.StatusOK, v, err)
 }
@@ -412,7 +466,11 @@ func (h *handlersImpl) placeOrder(w http.ResponseWriter, r *http.Request) {
 		h.reply(w, r, 0, nil, err)
 		return
 	}
-	res, err := h.s.Checkout.PlaceOrder(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"), b)
+	place := h.s.Checkout.PlaceOrder
+	if h.s.Shopper.enabled() {
+		place = h.s.Shopper.Checkout.Place
+	}
+	res, err := place(r.Context(), callerFrom(r.Context()), r.Header.Get("Idempotency-Key"), b)
 	status := http.StatusCreated
 	if res.Status == http.StatusAccepted {
 		status = http.StatusAccepted

@@ -1,0 +1,333 @@
+package app
+
+import (
+	"context"
+	"net/http"
+	"slices"
+	"strings"
+
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
+)
+
+type staffUp = port.StaffUpstream
+
+func upIdentity(sc staffCtx) staffUp   { return sc.up.Identity }
+func upSeller(sc staffCtx) staffUp     { return sc.up.Seller }
+func upOrders(sc staffCtx) staffUp     { return sc.up.Orders }
+func upCatalog(sc staffCtx) staffUp    { return sc.up.Catalog }
+func upTrustOps(sc staffCtx) staffUp   { return sc.up.TrustOps }
+func upTaxReturns(sc staffCtx) staffUp { return sc.up.TaxReturns }
+func upPayments(sc staffCtx) staffUp   { return sc.up.Payments }
+func upInventory(sc staffCtx) staffUp  { return sc.up.Inventory }
+func upRetail(sc staffCtx) staffUp     { return sc.up.Retail }
+func upFulfilment(sc staffCtx) staffUp { return sc.up.Fulfilment }
+func upContent(sc staffCtx) staffUp    { return sc.up.Content }
+
+// StaffRecordsService serves the server-driven tables and detail sheets (/v1/staff/resources/...).
+type StaffRecordsService interface {
+	List(ctx context.Context, c *domain.Caller, resource string, q staffQueryInput) (domain.ResourcePage, error)
+	Get(ctx context.Context, c *domain.Caller, resource, id string) (domain.RecordDetail, error)
+	Create(ctx context.Context, c *domain.Caller, resource string, values map[string]any, idem string) (domain.RecordDetail, error)
+	Update(ctx context.Context, c *domain.Caller, resource, id string, values map[string]any, version string) (domain.RecordDetail, error)
+	Act(ctx context.Context, c *domain.Caller, resource, id, action string, values map[string]any, idem string) (domain.RecordDetail, error)
+	AddNote(ctx context.Context, c *domain.Caller, resource, id, text string) (domain.RecordDetail, error)
+}
+
+// staffQueryInput is the table query as the HTTP adapter parsed it.
+type staffQueryInput = StaffQuery
+
+// StaffQuery is a table request (q, status facet, page or cursor, size).
+type StaffQuery struct {
+	Q, Status, Cursor string
+	Page, Size        int
+}
+
+type staffRecordsImpl struct {
+	r   *staffResolver
+	res map[string]*staffResource
+}
+
+var _ StaffRecordsService = (*staffRecordsImpl)(nil)
+
+// NewStaffRecordsService returns the tables and sheets use case.
+func NewStaffRecordsService(d StaffDeps) StaffRecordsService {
+	return &staffRecordsImpl{r: newStaffResolver(d), res: staffResources()}
+}
+
+func notFoundResource() *domain.Problem {
+	return domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such table.")
+}
+
+func (s *staffRecordsImpl) resource(name string) (*staffResource, error) {
+	r, ok := s.res[name]
+	if !ok {
+		return nil, notFoundResource()
+	}
+	return r, nil
+}
+
+func (s *staffRecordsImpl) open(ctx context.Context, c *domain.Caller, name, level string) (*staffResource, staffCtx, error) {
+	r, err := s.resource(name)
+	if err != nil {
+		return nil, staffCtx{}, err
+	}
+	sc, err := s.r.require(ctx, c, r.module, level)
+	return r, sc, err
+}
+
+func (s *staffRecordsImpl) List(ctx context.Context, c *domain.Caller, name string, in staffQueryInput) (domain.ResourcePage, error) {
+	r, sc, err := s.open(ctx, c, name, domain.LevelView)
+	if err != nil {
+		return domain.ResourcePage{}, err
+	}
+	q := staffQuery(in)
+	if q.Size <= 0 || q.Size > 100 {
+		q.Size = 25
+	}
+	if q.Status != "" && len(r.facets) > 0 && !slices.ContainsFunc(r.facets, func(f domain.Facet) bool { return f.Value == q.Status }) {
+		return domain.ResourcePage{}, domain.ValidationProblem(map[string]string{"status": "Choose one of the filters"})
+	}
+	list, err := r.list(ctx, sc, q)
+	if err != nil {
+		return domain.ResourcePage{}, err
+	}
+	return s.page(r, sc, q, list), nil
+}
+
+func (s *staffRecordsImpl) page(r *staffResource, sc staffCtx, q staffQuery, list staffList) domain.ResourcePage {
+	p := domain.ResourcePage{Resource: r.key, Title: r.title, Columns: r.columns, Rows: make([]domain.Row, 0, len(list.items)),
+		Page: q.Page, Size: q.Size, Total: list.total, NextCursor: list.next, Facets: r.facets, Searchable: r.searchPlaceholder != "",
+		SearchPlaceholder: r.searchPlaceholder, Exportable: r.exportable}
+	if p.Facets == nil {
+		p.Facets = []domain.Facet{}
+	}
+	for _, it := range list.items {
+		p.Rows = append(p.Rows, rowOf(r, it))
+	}
+	switch {
+	case list.next != nil:
+		p.HasNext = true
+	case list.total != nil:
+		p.HasNext = int64((q.Page+1)*q.Size) < *list.total
+	}
+	if r.create != nil && sc.access.Can(r.create.permission) && sc.access.Allows(r.module, domain.LevelEdit) {
+		p.CanCreate = true
+		f := r.create.form(context.Background(), sc)
+		p.CreateForm = &f
+	}
+	return p
+}
+
+func rowOf(r *staffResource, o jobj) domain.Row {
+	var cells map[string]any
+	if r.cells != nil {
+		cells = r.cells(o)
+	} else {
+		cells = map[string]any{}
+	}
+	for _, c := range r.columns {
+		if _, done := cells[c.Key]; !done {
+			cells[c.Key] = cellValue(at(o, c.Key))
+		}
+	}
+	return domain.Row{ID: r.id(o), Cells: cells, Tone: domain.StatusTone(r.statusOf(o))}
+}
+
+func (s *staffRecordsImpl) Get(ctx context.Context, c *domain.Caller, name, id string) (domain.RecordDetail, error) {
+	r, sc, err := s.open(ctx, c, name, domain.LevelView)
+	if err != nil {
+		return domain.RecordDetail{}, err
+	}
+	return s.sheet(ctx, r, sc, id)
+}
+
+func (s *staffRecordsImpl) sheet(ctx context.Context, r *staffResource, sc staffCtx, id string) (domain.RecordDetail, error) {
+	o, err := r.get(ctx, sc, id)
+	if err != nil {
+		return domain.RecordDetail{}, err
+	}
+	return s.detail(ctx, r, sc, o), nil
+}
+
+func (s *staffRecordsImpl) detail(ctx context.Context, r *staffResource, sc staffCtx, o jobj) domain.RecordDetail {
+	status := r.statusOf(o)
+	d := domain.RecordDetail{Resource: r.key, ID: r.id(o), Title: r.titleOf(o), Tone: domain.StatusTone(status),
+		Tables: []domain.DetailTable{}, Activity: []domain.ActivityEntry{}, Notes: []domain.Note{}, Actions: []domain.RecordAction{},
+		Links: []domain.RecordLink{}}
+	if r.subtitleOf != nil {
+		d.Subtitle = r.subtitleOf(o)
+	}
+	if status != "" {
+		d.Status = &status
+	}
+	if r.sections != nil {
+		d.Sections = r.sections(o)
+	} else {
+		d.Sections = autoSections(o, r.statusKey)
+	}
+	if r.tables != nil {
+		d.Tables = r.tables(o)
+	}
+	if r.activity != nil {
+		if a := r.activity(ctx, sc, o); a != nil {
+			d.Activity = a
+		}
+	}
+	if r.links != nil {
+		if l := r.links(o); l != nil {
+			d.Links = l
+		}
+	}
+	if r.version != nil {
+		if v := r.version(o); v != "" {
+			d.Version = &v
+		}
+	}
+	for _, a := range r.actions {
+		d.Actions = append(d.Actions, actionView(ctx, r, sc, a, o))
+	}
+	if r.edit != nil && sc.access.Can(r.edit.permission) && sc.access.Allows(r.module, domain.LevelEdit) {
+		f := r.edit.form(o)
+		d.EditForm = &f
+	}
+	return d
+}
+
+// actionReason says why the staff member may not run the action now ("" when they may).
+func actionReason(r *staffResource, sc staffCtx, a staffAction, o jobj) (reason string, permissionIssue bool) {
+	level := a.level
+	if level == "" {
+		level = domain.LevelEdit
+	}
+	if !sc.access.Can(a.permission) && !sc.access.CanAny(a.also...) {
+		return "Needs the " + a.permission + " permission.", true
+	}
+	if !sc.access.Allows(r.module, level) {
+		return "Needs " + strings.ToLower(level) + " access to this module.", true
+	}
+	if a.when != nil {
+		return a.when(sc, o), false
+	}
+	return "", false
+}
+
+func actionView(ctx context.Context, r *staffResource, sc staffCtx, a staffAction, o jobj) domain.RecordAction {
+	reason, _ := actionReason(r, sc, a, o)
+	v := domain.RecordAction{Key: a.key, Label: a.label, Tone: a.tone, Allowed: reason == "", Permission: a.permission}
+	if reason != "" {
+		v.Reason = &reason
+	}
+	if a.confirm != "" {
+		v.Confirm = ptr(a.confirm)
+	}
+	if a.form != nil {
+		v.Form = a.form(ctx, sc, o)
+	}
+	return v
+}
+
+func (s *staffRecordsImpl) Act(ctx context.Context, c *domain.Caller, name, id, action string, values map[string]any, idem string) (domain.RecordDetail, error) {
+	r, sc, err := s.open(ctx, c, name, domain.LevelView)
+	if err != nil {
+		return domain.RecordDetail{}, err
+	}
+	sc.idem = idem
+	idx := slices.IndexFunc(r.actions, func(a staffAction) bool { return a.key == action })
+	if idx < 0 {
+		return domain.RecordDetail{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such action.")
+	}
+	a := r.actions[idx]
+	o, err := r.get(ctx, sc, id)
+	if err != nil {
+		return domain.RecordDetail{}, err
+	}
+	if reason, perm := actionReason(r, sc, a, o); reason != "" {
+		if perm {
+			return domain.RecordDetail{}, domain.NewProblem(http.StatusForbidden, domain.CodeForbidden, "Forbidden", reason)
+		}
+		return domain.RecordDetail{}, domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Not possible now", reason)
+	}
+	if values == nil {
+		values = map[string]any{}
+	}
+	if a.form != nil {
+		if errs := domain.ValidateForm(*a.form(ctx, sc, o), values); len(errs) > 0 {
+			return domain.RecordDetail{}, domain.ValidationProblem(errs)
+		}
+	}
+	if err := a.run(ctx, sc, o, values); err != nil {
+		return domain.RecordDetail{}, err
+	}
+	return s.sheet(ctx, r, sc, id)
+}
+
+func (s *staffRecordsImpl) Create(ctx context.Context, c *domain.Caller, name string, values map[string]any, idem string) (domain.RecordDetail, error) {
+	r, sc, err := s.open(ctx, c, name, domain.LevelEdit)
+	if err != nil {
+		return domain.RecordDetail{}, err
+	}
+	sc.idem = idem
+	if r.create == nil {
+		return domain.RecordDetail{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "Records of this table can't be created here.")
+	}
+	if !sc.access.Can(r.create.permission) {
+		return domain.RecordDetail{}, needsPermission(r.create.permission)
+	}
+	if values == nil {
+		values = map[string]any{}
+	}
+	if errs := domain.ValidateForm(r.create.form(ctx, sc), values); len(errs) > 0 {
+		return domain.RecordDetail{}, domain.ValidationProblem(errs)
+	}
+	id, err := r.create.create(ctx, sc, values)
+	if err != nil {
+		return domain.RecordDetail{}, err
+	}
+	return s.sheet(ctx, r, sc, id)
+}
+
+func (s *staffRecordsImpl) Update(ctx context.Context, c *domain.Caller, name, id string, values map[string]any, version string) (domain.RecordDetail, error) {
+	r, sc, err := s.open(ctx, c, name, domain.LevelEdit)
+	if err != nil {
+		return domain.RecordDetail{}, err
+	}
+	if r.edit == nil {
+		return domain.RecordDetail{}, domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Not editable", "This record can't be edited.")
+	}
+	if !sc.access.Can(r.edit.permission) {
+		return domain.RecordDetail{}, needsPermission(r.edit.permission)
+	}
+	o, err := r.get(ctx, sc, id)
+	if err != nil {
+		return domain.RecordDetail{}, err
+	}
+	if version != "" && r.version != nil && r.version(o) != "" && r.version(o) != version {
+		return domain.RecordDetail{}, domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Changed meanwhile",
+			"Someone else changed this record. Reload and try again.")
+	}
+	if values == nil {
+		values = map[string]any{}
+	}
+	if errs := domain.ValidateForm(r.edit.form(o), values); len(errs) > 0 {
+		return domain.RecordDetail{}, domain.ValidationProblem(errs)
+	}
+	if version == "" && r.version != nil {
+		version = r.version(o)
+	}
+	if err := r.edit.save(ctx, sc, o, values, version); err != nil {
+		return domain.RecordDetail{}, err
+	}
+	return s.sheet(ctx, r, sc, id)
+}
+
+// AddNote: no upstream stores internal notes on records yet (listed as a gap), so this is 503 after the access checks.
+func (s *staffRecordsImpl) AddNote(ctx context.Context, c *domain.Caller, name, _, text string) (domain.RecordDetail, error) {
+	if _, _, err := s.open(ctx, c, name, domain.LevelEdit); err != nil {
+		return domain.RecordDetail{}, err
+	}
+	if t := strings.TrimSpace(text); t == "" || len([]rune(t)) > 2000 {
+		return domain.RecordDetail{}, domain.ValidationProblem(map[string]string{"text": "Write a note of up to 2,000 characters"})
+	}
+	return domain.RecordDetail{}, domain.UpstreamUnavailable("notes")
+}

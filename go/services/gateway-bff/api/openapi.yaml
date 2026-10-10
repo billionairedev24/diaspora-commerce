@@ -62,6 +62,10 @@ tags:
     description: Checkout summary and order placement
   - name: Careers
     description: Open roles and applications
+  - name: Services
+    description: Services marketplace (bookings) — search by ZIP, provider pages, booking with a deposit, my bookings
+  - name: Lola
+    description: Lola, the AI shopping assistant (ai-gateway SSE relayed)
 security:
   - {}
   - sessionCookie: []
@@ -730,12 +734,21 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/PaymentMethodPage'}
         '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/account/payment-methods/setup-intents:
     post:
       tags: [Account]
       operationId: createSetupIntent
       summary: Stripe SetupIntent client secret for the Payment Element (card, US bank account, Cash App Pay)
+      description: payments `POST /v1/customers/me/setup-intents`; `types` defaults to card and US bank account (ACH).
       security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                types: {type: array, items: {type: string, enum: [card, us_bank_account, cashapp, link]}}
       responses:
         '201':
           description: SetupIntent
@@ -748,11 +761,13 @@ paths:
                   clientSecret: {type: string}
                   publishableKey: {type: string}
         '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/account/payment-methods/{paymentMethodId}:
     delete:
       tags: [Account]
       operationId: deletePaymentMethod
-      summary: Detach a payment method from the Stripe customer
+      summary: Detach a payment method from the Stripe customer (409 for the default method — choose another first)
       security: [{sessionCookie: []}, {bearer: []}]
       parameters:
         - {name: paymentMethodId, in: path, required: true, schema: {type: string}}
@@ -760,6 +775,8 @@ paths:
         '204': {description: Detached}
         '401': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/account/orders:
     get:
       tags: [Account]
@@ -776,15 +793,25 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/OrderPage'}
         '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/account/orders/{orderNumber}/shipments/{shipmentId}/cancel:
     post:
       tags: [Account]
       operationId: cancelShipment
       summary: Cancel a shipment that has not shipped yet (releases the payment authorisation for it)
+      description: orders `POST /v1/orders/{number}/shipments/{id}/cancel` — until the shipment is packed; later 409.
       security: [{sessionCookie: []}, {bearer: []}]
       parameters:
         - {name: orderNumber, in: path, required: true, schema: {type: string}}
         - {name: shipmentId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: {type: string, maxLength: 500}
       responses:
         '200':
           description: Updated order
@@ -807,22 +834,19 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ReturnPage'}
         '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
     post:
       tags: [Account]
       operationId: startReturn
-      summary: Start a return for a delivered, returnable item
+      summary: Start a return for delivered items (tax-returns RMA with label / QR, handover code or refund without return)
       security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalIdempotencyKey'
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [orderNumber, atin, reason]
-              properties:
-                orderNumber: {type: string}
-                atin: {$ref: '#/components/schemas/Atin'}
-                reason: {type: string, enum: [DAMAGED, WRONG_ITEM, NOT_AS_DESCRIBED, NO_LONGER_NEEDED]}
+            schema: {$ref: '#/components/schemas/StartReturnRequest'}
       responses:
         '201':
           description: Return started
@@ -830,8 +854,10 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ReturnSummary'}
         '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/account/stock-alerts:
     get:
       tags: [Account]
@@ -877,6 +903,7 @@ paths:
               schema: {$ref: '#/components/schemas/CheckoutSummary'}
         '401': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/StockProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/checkout/orders:
     post:
       tags: [Checkout]
@@ -886,6 +913,12 @@ paths:
         Requires `Idempotency-Key`. Replaying the same key with the same body returns the original result (201);
         the same key with a different body fails with 409 `IDEMPOTENCY_CONFLICT`. The payment is authorised now
         and captured per shipment when it ships.
+
+        orders `POST /v1/checkout` creates the PaymentIntent and always returns its `paymentClientSecret`
+        (`status: awaiting_payment`): confirm it with Stripe.js / PaymentSheet (a saved method, a wallet or a new
+        method from PaymentSheet — `paymentMethodId` may be any Stripe PaymentMethod id), then call
+        `POST /v1/checkout/orders/{orderNumber}/confirm`. 202 means the saga is still preparing — poll
+        `GET /v1/checkout/orders/{orderNumber}`.
       security: [{sessionCookie: []}, {bearer: []}]
       parameters:
         - name: Idempotency-Key
@@ -912,6 +945,786 @@ paths:
         '402': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/StockProblem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/payment-methods/{paymentMethodId}/default:
+    post:
+      tags: [Account]
+      operationId: setDefaultPaymentMethod
+      summary: Make a saved payment method the default (payments POST /v1/customers/me/payment-methods/{id}/default)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: paymentMethodId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Now the default
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentMethod'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/payment-sheet:
+    post:
+      tags: [Account]
+      operationId: createPaymentSheetKeys
+      summary: Stripe customer id and ephemeral key so PaymentSheet (customer app) can list and reuse saved methods
+      description: >-
+        payments `POST /v1/customers/me/ephemeral-keys` (planned: payments does not issue ephemeral keys yet, so this
+        answers 503 `UPSTREAM_UNAVAILABLE` until it does).
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '201':
+          description: Keys
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PaymentSheetKeys'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/orders/{orderNumber}:
+    get:
+      tags: [Account]
+      operationId: getOrder
+      summary: One of my orders with shipments, lines, tracking numbers, timelines and handover codes
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Order
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderDetail'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/orders/{orderNumber}/tracking:
+    get:
+      tags: [Account]
+      operationId: trackOrder
+      summary: Shipment tracking (orders timeline + carrier-gateway scans) — the customer app's tracking screen
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Tracking
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderTracking'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/orders/{orderNumber}/returnable:
+    get:
+      tags: [Account]
+      operationId: getReturnEligibility
+      summary: What can be returned from a delivered order (tax-returns eligibility per shipment and line)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Eligibility
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReturnEligibility'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/returns/{rmaId}:
+    get:
+      tags: [Account]
+      operationId: getReturn
+      summary: One of my returns with its lines and the refund estimate (tax-returns refund quote)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: rmaId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Return
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReturnDetail'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/returns/{rmaId}/cancel:
+    post:
+      tags: [Account]
+      operationId: cancelReturn
+      summary: Cancel a return before drop-off or pickup
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: rmaId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReturnSummary'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/security:
+    get:
+      tags: [Account]
+      operationId: getSecurity
+      summary: Login & security — second factors, passkeys, signed-in sessions, push devices and linked accounts
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Overview
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityOverview'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/password:
+    put:
+      tags: [Account]
+      operationId: changePassword
+      summary: Change the password (identity PUT /v1/me/password; the current password is required when one is set)
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [newPassword]
+              properties:
+                currentPassword: {type: string, maxLength: 128}
+                newPassword: {type: string, minLength: 12, maxLength: 128}
+      responses:
+        '204': {description: Changed}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/mfa/totp:
+    post:
+      tags: [Account]
+      operationId: startTotp
+      summary: Start authenticator-app enrolment (render otpauthUri as a QR code)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Secret
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TotpSetup'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Account]
+      operationId: disableTotp
+      summary: Turn off the authenticator app
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '204': {description: Off}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/mfa/totp/confirm:
+    post:
+      tags: [Account]
+      operationId: confirmTotp
+      summary: Confirm the authenticator app with a code; returns recovery codes the first time
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CodeInput'}
+      responses:
+        '200':
+          description: On
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryCodes'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/mfa/sms:
+    post:
+      tags: [Account]
+      operationId: startSmsMfa
+      summary: Text a code to the account phone to turn on SMS sign-in codes
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '202':
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [codeExpiresAt]
+                properties:
+                  codeExpiresAt: {type: [string, 'null'], format: date-time}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+    delete:
+      tags: [Account]
+      operationId: disableSmsMfa
+      summary: Turn off SMS sign-in codes
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '204': {description: Off}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/mfa/sms/confirm:
+    post:
+      tags: [Account]
+      operationId: confirmSmsMfa
+      summary: Confirm SMS sign-in codes; returns recovery codes the first time
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CodeInput'}
+      responses:
+        '200':
+          description: On
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryCodes'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/mfa/recovery-codes:
+    post:
+      tags: [Account]
+      operationId: regenerateRecoveryCodes
+      summary: New recovery codes (the old ones stop working)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Codes, shown once
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecoveryCodes'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/passkeys/{credentialId}:
+    delete:
+      tags: [Account]
+      operationId: removePasskey
+      summary: Remove a passkey (409 for the last sign-in method)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: credentialId, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Removed}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/sessions/{sessionId}:
+    delete:
+      tags: [Account]
+      operationId: revokeSession
+      summary: Sign out one device
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: sessionId, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Signed out}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/sessions/revoke-others:
+    post:
+      tags: [Account]
+      operationId: revokeOtherSessions
+      summary: Sign out every other device
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: How many were signed out
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [revoked]
+                properties:
+                  revoked: {type: integer, minimum: 0}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/devices/{deviceId}:
+    delete:
+      tags: [Account]
+      operationId: removeDevice
+      summary: Stop push notifications to a device
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: deviceId, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Removed}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/linked-accounts/{provider}:
+    delete:
+      tags: [Account]
+      operationId: unlinkAccount
+      summary: Unlink a Google, Apple or Facebook sign-in (409 for the last sign-in method)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: provider, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Linked accounts
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LinkedAccounts'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/notification-preferences:
+    get:
+      tags: [Account]
+      operationId: getNotificationPreferences
+      summary: Notification switches
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Switches
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NotificationPreferences'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Account]
+      operationId: saveNotificationPreferences
+      summary: Replace the notification switches
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NotificationPreferences'}
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NotificationPreferences'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/bookings:
+    get:
+      tags: [Services]
+      operationId: listMyBookings
+      summary: My service bookings (bookings GET /v1/bookings/mine)
+      security: [{sessionCookie: []}, {bearer: []}]
+      responses:
+        '200':
+          description: Bookings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/CustomerBooking'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/bookings/{bookingId}:
+    get:
+      tags: [Services]
+      operationId: getMyBooking
+      summary: One of my bookings
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Booking
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CustomerBooking'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/bookings/{bookingId}/cancellation-quote:
+    get:
+      tags: [Services]
+      operationId: getBookingCancellationQuote
+      summary: Exactly what cancelling now refunds or keeps (shown before cancelling)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Quote
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CancellationQuote'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/bookings/{bookingId}/cancel:
+    post:
+      tags: [Services]
+      operationId: cancelMyBooking
+      summary: Cancel a booking; the refund follows the policy it was booked under
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/OptionalIdempotencyKey'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: {type: string, maxLength: 500}
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [booking, applied]
+                properties:
+                  booking: {$ref: '#/components/schemas/CustomerBooking'}
+                  applied: {$ref: '#/components/schemas/CancellationQuote'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/bookings/{bookingId}/reschedule:
+    post:
+      tags: [Services]
+      operationId: rescheduleMyBooking
+      summary: Ask for a new time (a start time from the slots endpoint)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/OptionalIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [startAt]
+              properties:
+                startAt: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CustomerBooking'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/bookings/{bookingId}/new-time/{decision}:
+    post:
+      tags: [Services]
+      operationId: answerProposedTime
+      summary: Accept or decline the time the provider proposed
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - {name: decision, in: path, required: true, schema: {type: string, enum: [accept, decline]}}
+        - $ref: '#/components/parameters/OptionalIdempotencyKey'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CustomerBooking'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/bookings/{bookingId}/review:
+    post:
+      tags: [Services]
+      operationId: reviewMyBooking
+      summary: Rate a completed booking once (1–5 stars)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rating]
+              properties:
+                rating: {type: integer, minimum: 1, maximum: 5}
+                text: {type: string, maxLength: 2000}
+      responses:
+        '201':
+          description: Thanks
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BookingReview'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/account/bookings/{bookingId}/payment/sync:
+    post:
+      tags: [Services]
+      operationId: syncBookingPayment
+      summary: I confirmed the deposit with Stripe.js / PaymentSheet — refresh the booking
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Booking
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CustomerBooking'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/checkout/orders/{orderNumber}:
+    get:
+      tags: [Checkout]
+      operationId: getCheckoutStatus
+      summary: Checkout status of one of my orders (poll after 202 or while the payment is processing)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderConfirmation'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '402': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/checkout/orders/{orderNumber}/confirm:
+    post:
+      tags: [Checkout]
+      operationId: confirmCheckoutPayment
+      summary: I confirmed the payment with Stripe.js / PaymentSheet — continue the saga without waiting for the webhook
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orderNumber, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OrderConfirmation'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '402': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/services/search:
+    get:
+      tags: [Services]
+      operationId: searchServices
+      summary: Services near a ZIP (bookings public search; the deliver-to ZIP when omitted)
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: category, in: query, schema: {type: string, maxLength: 60}}
+        - {name: zip, in: query, schema: {type: string, pattern: '^\d{5}$'}}
+      responses:
+        '200':
+          description: Services
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ServiceSearch'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/services/{serviceId}:
+    get:
+      tags: [Services]
+      operationId: getService
+      summary: A bookable service with add-ons, team and cancellation policy
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+      responses:
+        '200':
+          description: Service
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ServiceDetail'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/services/{serviceId}/days:
+    get:
+      tags: [Services]
+      operationId: getServiceDays
+      summary: Days with open slots (live from the provider's hours and bookings)
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - {name: from, in: query, schema: {type: string, format: date}}
+        - {name: days, in: query, schema: {type: integer, minimum: 1, maximum: 62}}
+        - {name: memberId, in: query, schema: {type: string}}
+        - {name: addOnIds, in: query, schema: {type: string}, description: Comma-separated add-on ids}
+      responses:
+        '200':
+          description: Days
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days]
+                properties:
+                  days: {type: array, items: {$ref: '#/components/schemas/AvailableDay'}}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/services/{serviceId}/slots:
+    get:
+      tags: [Services]
+      operationId: getServiceSlots
+      summary: Open start times on a day
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - {name: date, in: query, required: true, schema: {type: string, format: date}}
+        - {name: memberId, in: query, schema: {type: string}}
+        - {name: addOnIds, in: query, schema: {type: string}, description: Comma-separated add-on ids}
+      responses:
+        '200':
+          description: Slots
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [slots]
+                properties:
+                  slots: {type: array, items: {$ref: '#/components/schemas/AvailableSlot'}}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/services/{serviceId}/summary:
+    get:
+      tags: [Services]
+      operationId: getBookingQuote
+      summary: Deposit now, balance later and the cancellation policy for the chosen options
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+        - {name: addOnIds, in: query, schema: {type: string}, description: Comma-separated add-on ids}
+        - {name: mode, in: query, schema: {type: string, enum: [IN_PERSON, AT_HOME, VIRTUAL]}}
+      responses:
+        '200':
+          description: Quote
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BookingQuote'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/service-providers/{orgId}:
+    get:
+      tags: [Services]
+      operationId: getProviderPage
+      summary: A provider's page — bookings profile and services plus the published design (layout, approved links)
+      description: >-
+        The storefront service serves published pages by slug only; pass `slug` when known, otherwise the BFF tries
+        the organisation id and returns `design: null` when there is no published page.
+      parameters:
+        - {name: orgId, in: path, required: true, schema: {type: string}}
+        - {name: slug, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Provider
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderPage'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/services/bookings:
+    post:
+      tags: [Services]
+      operationId: bookService
+      summary: Book a service; the deposit is held with Stripe (confirm `payment.clientSecret`, then sync the booking)
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BookingRequest'}
+      responses:
+        '201':
+          description: Booked (awaiting the deposit)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BookingCreated'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '402': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/lola/chat:
+    post:
+      tags: [Lola]
+      operationId: chatWithLola
+      summary: One Lola turn as Server-Sent Events, relayed from ai-gateway as it streams
+      description: |
+        Events in order: `tool_call` {id, tool, label, arguments}, `tool_result` {id, tool, kind, data},
+        `action_proposal` {proposal: {id, type: ADD_TO_CART|CHECKOUT|BOOK_SERVICE|START_RETURN, label, payload,
+        requiresConfirmation}}, `token` {text} (one per fragment), `handoff` {handoffId, reason, summary}, then `done`
+        {sessionId, message, products, proposals, suggestions, …}; a failure mid-stream sends `error` {code, detail}.
+        Proposals are never executed by Lola: the client confirms them through the normal BFF routes. The deliver-to
+        ZIP and Accept-Language are added when the request omits them. Requires a signed-in customer.
+      security: [{sessionCookie: []}, {bearer: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LolaChatRequest'}
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema: {type: string}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/lola/sessions/{sessionId}/messages:
+    get:
+      tags: [Lola]
+      operationId: getLolaHistory
+      summary: Stored (redacted) turns of one of my Lola conversations
+      security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: sessionId, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Turns
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/LolaTurn'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/careers/jobs:
     get:
       tags: [Careers]
@@ -1022,6 +1835,21 @@ components:
       in: path
       required: true
       schema: {type: string}
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema: {type: string}
+    ServiceId:
+      name: serviceId
+      in: path
+      required: true
+      schema: {type: string}
+    OptionalIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      description: Makes retries safe (the same key replays the same result); derived per customer and minute when omitted.
+      schema: {type: string, minLength: 16, maxLength: 64}
     ReturnTo:
       name: returnTo
       in: query
@@ -1355,6 +2183,7 @@ components:
         availableQty: {type: integer, minimum: 0}
         stockStatus: {$ref: '#/components/schemas/StockStatus'}
         selected: {type: boolean}
+        perishable: {type: boolean, description: 'Catalog product type or attribute perishable: hand delivery with a code, no safe place'}
     DeliveryOption:
       type: object
       required: [key, label, eta, feeMinor, free]
@@ -1364,6 +2193,9 @@ components:
         eta: {type: string}
         feeMinor: {type: integer}
         free: {type: boolean}
+        earliestDate: {type: string, format: date, description: Checkout only — promise service date range}
+        latestDate: {type: string, format: date}
+        cutoffLabel: {type: string, examples: [Order within 3 h 12 min]}
     CartPackage:
       type: object
       required: [packageId, seller, fulfilment, heading, shipsFrom, delivery, deliveryOptions, lines, itemCount, subtotalMinor, freeShippingNudge]
@@ -1776,7 +2608,7 @@ components:
       required: [id, type, brand, last4, label, expires, isDefault]
       properties:
         id: {type: string}
-        type: {type: string, enum: [card, us_bank_account, cashapp]}
+        type: {type: string, enum: [card, us_bank_account, cashapp, link]}
         brand: {type: [string, 'null']}
         last4: {type: [string, 'null']}
         label: {type: string}
@@ -1808,6 +2640,12 @@ components:
               label: {type: string}
               status: {type: string}
               items: {type: string}
+              cancellable: {type: boolean, description: The customer can still cancel it (until packed)}
+              carrier: {type: [string, 'null']}
+              trackingNumber: {type: [string, 'null']}
+              promisedBy: {type: [string, 'null']}
+              deliveredAt: {type: [string, 'null']}
+              deliveryCode: {type: [string, 'null'], description: One-time handover code (hand delivery or perishables)}
     OrderPage:
       type: object
       required: [items, nextCursor]
@@ -1821,8 +2659,21 @@ components:
         rmaId: {type: string}
         orderNumber: {type: string}
         title: {type: string}
-        status: {type: string}
-        refundMinor: {type: integer}
+        status: {type: string, description: 'requested, approved, auto_approved, label_issued, in_transit, received, inspected, refunded, rejected, cancelled'}
+        refundMinor: {type: integer, description: 'Refund estimate (tax-returns), then the refunded amount'}
+        number: {type: string, examples: [RMA-0000ABCD]}
+        method: {$ref: '#/components/schemas/ReturnMethod'}
+        reason: {type: string}
+        refundState: {type: string}
+        currency: {type: string}
+        cancellable: {type: boolean}
+        createdAt: {type: [string, 'null']}
+        labelUrl: {type: [string, 'null'], description: Drop-off return label}
+        qrPayload: {type: [string, 'null'], description: Render as the drop-off QR code}
+        handoverCode: {type: [string, 'null'], description: Driver pickup code (DRIVER_PICKUP)}
+        dropOffBy: {type: [string, 'null']}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
     ReturnPage:
       type: object
       required: [items, nextCursor]
@@ -1861,12 +2712,13 @@ components:
         totalMinor: {type: integer}
         currency: {type: string}
         sellerCount: {type: integer}
+        publishableKey: {type: string, description: Stripe publishable key for Stripe.js (Payment / Express Checkout Elements)}
     PlaceOrderRequest:
       type: object
       required: [addressId, deliverySelections]
       properties:
         addressId: {type: string}
-        paymentMethodId: {type: string, description: Saved Stripe payment method; omit when paying with a wallet}
+        paymentMethodId: {type: string, description: 'A Stripe PaymentMethod id — saved, or new from PaymentSheet / the Payment Element; omit when paying with a wallet'}
         wallet: {type: string, enum: [apple_pay, google_pay, link]}
         gift: {type: boolean}
         couponCode:
@@ -1894,8 +2746,8 @@ components:
       required: [orderNumber, status, totalMinor, currency, shipments]
       properties:
         orderNumber: {type: string}
-        status: {type: string, enum: [placed, requires_action]}
-        paymentClientSecret: {type: [string, 'null'], description: Present when status is requires_action (3-D Secure)}
+        status: {type: string, enum: [placed, awaiting_payment, processing, requires_action], description: 'awaiting_payment: confirm paymentClientSecret with Stripe, then POST …/confirm; processing: poll'}
+        paymentClientSecret: {type: [string, 'null'], description: The order's PaymentIntent client secret (always present once orders created it)}
         totalMinor: {type: integer}
         currency: {type: string}
         shipments:
@@ -1943,3 +2795,546 @@ components:
       properties:
         reference: {type: string, pattern: '^CAR-\d{6}$', description: Application reference issued by the content service}
         jobId: {type: string}
+    PaymentSheetKeys:
+      type: object
+      required: [customerId, ephemeralKey, publishableKey]
+      properties:
+        customerId: {type: string}
+        ephemeralKey: {type: string}
+        publishableKey: {type: string}
+    TimelineEvent:
+      type: object
+      required: [status, label, at]
+      properties:
+        status: {type: string}
+        label: {type: string}
+        at: {type: string}
+    OrderLineView:
+      type: object
+      required: [lineId, atin, title, imageUrl, quantity, unitPriceMinor, itemsMinor]
+      properties:
+        lineId: {type: string}
+        atin: {type: string}
+        title: {type: string}
+        imageUrl: {type: [string, 'null']}
+        quantity: {type: integer}
+        unitPriceMinor: {type: integer}
+        itemsMinor: {type: integer}
+    OrderDetail:
+      type: object
+      required: [orderNumber, placedAt, status, currency, itemsMinor, shippingMinor, taxMinor, discountMinor, totalMinor, shipTo, shippingAddress, shipments]
+      properties:
+        orderNumber: {type: string}
+        placedAt: {type: string}
+        status: {type: string}
+        currency: {type: string}
+        itemsMinor: {type: integer}
+        shippingMinor: {type: integer}
+        taxMinor: {type: integer}
+        discountMinor: {type: integer}
+        totalMinor: {type: integer}
+        shipTo: {type: string}
+        shippingAddress:
+          type: [object, 'null']
+          required: [name, line1, line2, city, state, zip]
+          properties:
+            name: {type: string}
+            line1: {type: string}
+            line2: {type: string}
+            city: {type: string}
+            state: {type: string}
+            zip: {type: string}
+        shipments:
+          type: array
+          items:
+            type: object
+            required: [shipmentId, label, status, statusLabel, items, sellerName, deliveryMethod, cancellable, carrier, trackingNumber, promisedFrom, promisedBy, deliveredAt, deliveryCode, lines, timeline]
+            properties:
+              shipmentId: {type: string}
+              label: {type: string}
+              status: {type: string, description: 'placed, confirmed, packed, ready, picked_up, in_transit, out_for_delivery, delivered, delivery_failed, returned, cancelled'}
+              statusLabel: {type: string}
+              items: {type: string}
+              sellerName: {type: string}
+              deliveryMethod: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
+              cancellable: {type: boolean}
+              carrier: {type: [string, 'null']}
+              trackingNumber: {type: [string, 'null']}
+              promisedFrom: {type: [string, 'null']}
+              promisedBy: {type: [string, 'null']}
+              deliveredAt: {type: [string, 'null']}
+              deliveryCode: {type: [string, 'null'], description: One-time handover code (hand delivery or perishables)}
+              lines: {type: array, items: {$ref: '#/components/schemas/OrderLineView'}}
+              timeline: {type: array, items: {$ref: '#/components/schemas/TimelineEvent'}}
+    OrderTracking:
+      type: object
+      required: [orderNumber, placedAt, totalMinor, currency, shipments]
+      properties:
+        orderNumber: {type: string}
+        placedAt: {type: string}
+        totalMinor: {type: integer}
+        currency: {type: string}
+        shipments:
+          type: array
+          items:
+            type: object
+            required: [shipmentId, label, status, eta, method, handover, perishable, deliveryCode, driver, carrier, trackingNumber, items, timeline]
+            properties:
+              shipmentId: {type: string}
+              label: {type: string}
+              status: {type: string}
+              eta: {type: [string, 'null']}
+              method: {type: string, enum: [carrier, express, afrotransact_delivery, pickup]}
+              handover: {type: [string, 'null'], enum: [hand, door, desk, null]}
+              perishable: {type: boolean}
+              deliveryCode: {type: [string, 'null']}
+              driver:
+                type: [object, 'null']
+                required: [name, initials]
+                properties:
+                  name: {type: string}
+                  initials: {type: string}
+              carrier: {type: [string, 'null']}
+              trackingNumber: {type: [string, 'null']}
+              items:
+                type: array
+                items:
+                  type: object
+                  required: [atin, title, quantity, priceMinor, returnable]
+                  properties:
+                    atin: {type: string}
+                    title: {type: string}
+                    quantity: {type: integer}
+                    priceMinor: {type: integer}
+                    returnable: {type: boolean}
+              timeline: {type: array, items: {$ref: '#/components/schemas/TimelineEvent'}}
+    ReturnReason:
+      type: string
+      enum: [DAMAGED, DEFECTIVE, WRONG_ITEM, NOT_AS_DESCRIBED, MISSING_PARTS, EXPIRED_OR_SPOILED, ARRIVED_LATE, NO_LONGER_NEEDED, ORDERED_BY_MISTAKE, BETTER_PRICE_AVAILABLE]
+      description: 'Seller fault (photos required for the first four): DAMAGED, DEFECTIVE, WRONG_ITEM, EXPIRED_OR_SPOILED, NOT_AS_DESCRIBED, MISSING_PARTS, ARRIVED_LATE. No fault: the rest.'
+    ReturnMethod:
+      type: string
+      enum: [DROP_OFF, DRIVER_PICKUP, NO_RETURN]
+    StartReturnRequest:
+      type: object
+      description: |
+        One delivered shipment, a method and a reason per line (`shipmentId`, `method`, `lines`). The customer app's
+        short form `{orderNumber, atin, reason}` returns one unit of that item with its first allowed method.
+        Send an `Idempotency-Key` header to make retries safe (one is derived otherwise).
+      required: [orderNumber]
+      properties:
+        orderNumber: {type: string}
+        shipmentId: {type: string}
+        method: {$ref: '#/components/schemas/ReturnMethod'}
+        lines:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required: [lineId, quantity, reason]
+            properties:
+              lineId: {type: string}
+              quantity: {type: integer, minimum: 1}
+              reason: {$ref: '#/components/schemas/ReturnReason'}
+              comment: {type: string, maxLength: 500}
+        atin: {$ref: '#/components/schemas/Atin'}
+        reason: {$ref: '#/components/schemas/ReturnReason'}
+    ReturnEligibility:
+      type: object
+      required: [orderNumber, currency, shipments]
+      properties:
+        orderNumber: {type: string}
+        currency: {type: string}
+        shipments:
+          type: array
+          items:
+            type: object
+            required: [shipmentId, sellerName, deliveredAt, lines]
+            properties:
+              shipmentId: {type: string}
+              sellerName: {type: string}
+              deliveredAt: {type: [string, 'null']}
+              lines:
+                type: array
+                items:
+                  type: object
+                  required: [lineId, atin, title, quantity, maxQuantity, unitPriceMinor, eligible, reportProblemOnly, sellerFaultOnly, windowEndsAt, methods, ineligibleReason]
+                  properties:
+                    lineId: {type: string}
+                    atin: {type: string}
+                    title: {type: string}
+                    quantity: {type: integer}
+                    maxQuantity: {type: integer}
+                    unitPriceMinor: {type: integer}
+                    eligible: {type: boolean}
+                    reportProblemOnly: {type: boolean, description: 'Food / perishables: report a problem (seller-fault reasons, refund without return)'}
+                    sellerFaultOnly: {type: boolean}
+                    windowEndsAt: {type: [string, 'null']}
+                    methods: {type: array, items: {$ref: '#/components/schemas/ReturnMethod'}}
+                    ineligibleReason: {type: [string, 'null']}
+    ReturnDetail:
+      allOf:
+        - $ref: '#/components/schemas/ReturnSummary'
+        - type: object
+          required: [lines, quote]
+          properties:
+            lines:
+              type: array
+              items:
+                type: object
+                required: [lineId, atin, title, quantity, unitPriceMinor, reason, outcome]
+                properties:
+                  lineId: {type: string}
+                  atin: {type: string}
+                  title: {type: string}
+                  quantity: {type: integer}
+                  unitPriceMinor: {type: integer}
+                  reason: {type: string}
+                  outcome: {type: [string, 'null']}
+            quote:
+              type: [object, 'null']
+              required: [itemsMinor, shippingMinor, taxMinor, restockingFeeMinor, totalMinor]
+              properties:
+                itemsMinor: {type: integer}
+                shippingMinor: {type: integer}
+                taxMinor: {type: integer}
+                restockingFeeMinor: {type: integer}
+                totalMinor: {type: integer}
+    CodeInput:
+      type: object
+      required: [code]
+      properties:
+        code: {type: string, pattern: '^\d{6}$'}
+    TotpSetup:
+      type: object
+      required: [secret, otpauthUri]
+      properties:
+        secret: {type: string}
+        otpauthUri: {type: string}
+    RecoveryCodes:
+      type: object
+      required: [recoveryCodes]
+      properties:
+        recoveryCodes: {type: array, items: {type: string}, description: Shown once; empty when existing codes were kept}
+    LinkedAccounts:
+      type: object
+      required: [accounts, hasPassword]
+      properties:
+        accounts:
+          type: array
+          items:
+            type: object
+            required: [provider, email, canUnlink]
+            properties:
+              provider: {type: string}
+              email: {type: [string, 'null']}
+              canUnlink: {type: boolean}
+        hasPassword: {type: boolean}
+    SecurityOverview:
+      type: object
+      required: [mfa, passkeys, sessions, devices, linkedAccounts, passkeyRegistrationUrl]
+      properties:
+        mfa:
+          type: object
+          required: [totp, sms, smsPhone, recoveryCodesLeft, required, mayDisable]
+          properties:
+            totp: {type: boolean}
+            sms: {type: boolean}
+            smsPhone: {type: [string, 'null']}
+            recoveryCodesLeft: {type: integer}
+            required: {type: boolean}
+            mayDisable: {type: boolean}
+        passkeys:
+          type: array
+          items:
+            type: object
+            required: [credentialId, label, createdAt, lastUsedAt]
+            properties:
+              credentialId: {type: string}
+              label: {type: string}
+              createdAt: {type: [string, 'null']}
+              lastUsedAt: {type: [string, 'null']}
+        sessions:
+          type: array
+          items:
+            type: object
+            required: [id, clientName, signedInAt, lastActiveAt, current]
+            properties:
+              id: {type: string}
+              clientName: {type: string}
+              signedInAt: {type: [string, 'null']}
+              lastActiveAt: {type: [string, 'null']}
+              current: {type: boolean}
+        devices:
+          type: array
+          items:
+            type: object
+            required: [id, platform, deviceName, lastSeenAt]
+            properties:
+              id: {type: string}
+              platform: {type: string}
+              deviceName: {type: string}
+              lastSeenAt: {type: [string, 'null']}
+        linkedAccounts: {$ref: '#/components/schemas/LinkedAccounts'}
+        passkeyRegistrationUrl: {type: string, description: "identity's hosted passkey registration page (/webauthn/register)"}
+    NotificationPreferences:
+      type: object
+      required: [email, sms, push, marketingOptIn]
+      properties:
+        email: {type: boolean}
+        sms: {type: boolean}
+        push: {type: boolean}
+        marketingOptIn: {type: boolean}
+    ServicePolicy:
+      type: object
+      required: [kind, label, text]
+      properties:
+        kind: {type: string, examples: [FLEXIBLE, MODERATE, STRICT, CUSTOM]}
+        label: {type: string}
+        text: {type: string}
+    ServiceMember:
+      type: object
+      required: [id, displayName]
+      properties:
+        id: {type: string}
+        displayName: {type: string}
+    ServiceMode:
+      type: string
+      enum: [IN_PERSON, AT_HOME, VIRTUAL]
+    ServiceSearch:
+      type: object
+      required: [zip, city, services]
+      properties:
+        zip: {type: string}
+        city: {type: string}
+        services:
+          type: array
+          items:
+            type: object
+            required: [serviceId, orgId, name, providerName, description, category, durationMinutes, priceFromMinor, depositMinor, currency, modes, rating, ratingCount, nextAvailable, location]
+            properties:
+              serviceId: {type: string}
+              orgId: {type: string}
+              name: {type: string}
+              providerName: {type: string}
+              description: {type: string}
+              category: {type: string}
+              durationMinutes: {type: integer}
+              priceFromMinor: {type: integer}
+              depositMinor: {type: integer}
+              currency: {type: string}
+              modes: {type: array, items: {$ref: '#/components/schemas/ServiceMode'}}
+              rating: {type: number}
+              ratingCount: {type: integer}
+              nextAvailable: {type: [string, 'null']}
+              location: {type: string}
+    ServiceDetail:
+      type: object
+      required: [id, orgId, providerName, name, description, category, durationMinutes, priceMinor, depositMinor, balanceMinor, currency, modes, addOns, policy, instantBooking, team]
+      properties:
+        id: {type: string}
+        orgId: {type: string}
+        providerName: {type: string}
+        name: {type: string}
+        description: {type: string}
+        category: {type: string}
+        durationMinutes: {type: integer}
+        priceMinor: {type: integer}
+        depositMinor: {type: integer}
+        balanceMinor: {type: integer}
+        currency: {type: string}
+        modes: {type: array, items: {$ref: '#/components/schemas/ServiceMode'}}
+        addOns:
+          type: array
+          items:
+            type: object
+            required: [id, name, priceMinor, extraMinutes]
+            properties:
+              id: {type: string}
+              name: {type: string}
+              priceMinor: {type: integer}
+              extraMinutes: {type: integer}
+        policy: {$ref: '#/components/schemas/ServicePolicy'}
+        instantBooking: {type: boolean}
+        team: {type: array, items: {$ref: '#/components/schemas/ServiceMember'}}
+    AvailableDay:
+      type: object
+      required: [date, slots]
+      properties:
+        date: {type: string, format: date}
+        slots: {type: integer, minimum: 0}
+    AvailableSlot:
+      type: object
+      required: [start, end, memberIds]
+      properties:
+        start: {type: string, format: date-time}
+        end: {type: string, format: date-time}
+        memberIds: {type: array, items: {type: string}}
+    BookingQuote:
+      type: object
+      required: [serviceId, serviceName, providerName, durationMinutes, priceMinor, depositNowMinor, balanceLaterMinor, currency, mode, addOns, policy, policyText, instantBooking, providerAnswersWithinMinutes]
+      properties:
+        serviceId: {type: string}
+        serviceName: {type: string}
+        providerName: {type: string}
+        durationMinutes: {type: integer}
+        priceMinor: {type: integer}
+        depositNowMinor: {type: integer}
+        balanceLaterMinor: {type: integer}
+        currency: {type: string}
+        mode: {type: string}
+        addOns: {type: array, items: {type: string}}
+        policy: {type: string}
+        policyText: {type: string}
+        instantBooking: {type: boolean}
+        providerAnswersWithinMinutes: {type: [integer, 'null']}
+    ProviderPage:
+      type: object
+      required: [orgId, displayName, timeZone, location, policy, instantBooking, team, services, design]
+      properties:
+        orgId: {type: string}
+        displayName: {type: string}
+        timeZone: {type: string}
+        location: {type: string}
+        policy: {$ref: '#/components/schemas/ServicePolicy'}
+        instantBooking: {type: boolean}
+        team: {type: array, items: {$ref: '#/components/schemas/ServiceMember'}}
+        services: {type: array, items: {$ref: '#/components/schemas/ServiceDetail'}}
+        design:
+          type: [object, 'null']
+          description: The provider's published page (storefront service); social links are approved ones only.
+          required: [slug, tagline, layout, header, buttonShape, coverUrl, tokens, social, gallery, featured]
+          properties:
+            slug: {type: string}
+            tagline: {type: string}
+            layout: {type: string, enum: [CLASSIC, GALLERY_FIRST, STORY]}
+            header: {type: string, enum: [COVER, BAND]}
+            buttonShape: {type: string, enum: [ROUNDED, SQUARE]}
+            coverUrl: {type: [string, 'null']}
+            tokens: {type: object, additionalProperties: {type: string}, description: Vetted theme CSS custom properties (--at-*)}
+            social:
+              type: array
+              items:
+                type: object
+                required: [network, url]
+                properties:
+                  network: {type: string}
+                  url: {type: string}
+            gallery:
+              type: array
+              items:
+                type: object
+                required: [url, caption]
+                properties:
+                  url: {type: string}
+                  caption: {type: string}
+            featured:
+              type: array
+              items:
+                type: object
+                required: [id, headline, body, url, serviceId]
+                properties:
+                  id: {type: string}
+                  headline: {type: string}
+                  body: {type: string}
+                  url: {type: [string, 'null']}
+                  serviceId: {type: [string, 'null']}
+    CancellationQuote:
+      type: object
+      required: [refundSharePercent, depositMinor, refundMinor, keptMinor, releaseHold, policy, explanation, currency]
+      properties:
+        refundSharePercent: {type: integer}
+        depositMinor: {type: integer}
+        refundMinor: {type: integer}
+        keptMinor: {type: integer}
+        releaseHold: {type: boolean, description: The balance hold on the card is released}
+        policy: {type: string}
+        explanation: {type: string}
+        currency: {type: string}
+    CustomerBooking:
+      type: object
+      required: [id, reference, orgId, status, statusLabel, startAt, endAt, proposedStartAt, location, notes, service, policy, payment, canCancel, canReschedule, canReview, awaitingPayment]
+      properties:
+        id: {type: string}
+        reference: {type: string}
+        orgId: {type: string}
+        status: {type: string, description: 'PENDING_PAYMENT, REQUESTED, CONFIRMED, COMPLETED, NO_SHOW, DECLINED, EXPIRED, RESCHEDULE_REQUESTED, RESCHEDULE_PROPOSED, CANCELLED_CUSTOMER, CANCELLED_PROVIDER'}
+        statusLabel: {type: string}
+        startAt: {type: string}
+        endAt: {type: string}
+        proposedStartAt: {type: [string, 'null']}
+        location: {type: string}
+        notes: {type: string}
+        service:
+          type: object
+          required: [serviceId, name, durationMinutes, priceMinor, depositMinor, balanceMinor, currency, mode, providerName, memberName, addOns]
+          properties:
+            serviceId: {type: string}
+            name: {type: string}
+            durationMinutes: {type: integer}
+            priceMinor: {type: integer}
+            depositMinor: {type: integer}
+            balanceMinor: {type: integer}
+            currency: {type: string}
+            mode: {type: string}
+            providerName: {type: string}
+            memberName: {type: string}
+            addOns: {type: array, items: {type: string}}
+        policy: {$ref: '#/components/schemas/ServicePolicy'}
+        payment:
+          type: object
+          required: [state, depositCapturedMinor, refundedMinor, balanceState]
+          properties:
+            state: {type: string}
+            depositCapturedMinor: {type: integer}
+            refundedMinor: {type: integer}
+            balanceState: {type: string}
+        canCancel: {type: boolean}
+        canReschedule: {type: boolean}
+        canReview: {type: boolean}
+        awaitingPayment: {type: boolean}
+    BookingRequest:
+      type: object
+      required: [serviceId, startAt, mode]
+      properties:
+        serviceId: {type: string}
+        memberId: {type: string, description: Preferred team member; empty = anyone free}
+        startAt: {type: string, format: date-time, description: A start time from the slots endpoint}
+        mode: {$ref: '#/components/schemas/ServiceMode'}
+        addOnIds: {type: array, maxItems: 20, items: {type: string}}
+        location: {type: string, maxLength: 300, description: Required for home visits}
+        notes: {type: string, maxLength: 1000}
+    BookingCreated:
+      type: object
+      required: [booking, payment]
+      properties:
+        booking: {$ref: '#/components/schemas/CustomerBooking'}
+        payment:
+          type: [object, 'null']
+          description: Present when a deposit must be confirmed with Stripe.js / PaymentSheet
+          required: [clientSecret, publishableKey]
+          properties:
+            clientSecret: {type: string}
+            publishableKey: {type: string}
+    BookingReview:
+      type: object
+      required: [bookingId, rating, text]
+      properties:
+        bookingId: {type: string}
+        rating: {type: integer}
+        text: {type: string}
+    LolaChatRequest:
+      type: object
+      required: [message]
+      properties:
+        sessionId: {type: string, pattern: '^[A-Za-z0-9_-]{8,64}$', description: From a previous turn's done event; omit to start a conversation}
+        message: {type: string, minLength: 1, maxLength: 4000}
+        zip: {type: string, pattern: '^\d{5}$'}
+        language: {type: string, maxLength: 16}
+    LolaTurn:
+      type: object
+      required: [role, content, at]
+      properties:
+        role: {type: string, examples: [user, assistant]}
+        content: {type: string}
+        at: {type: string}

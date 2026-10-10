@@ -39,6 +39,13 @@ type Upstreams struct {
 	Storefront Upstream `yaml:"storefront"`
 	Media      Upstream `yaml:"media"`
 	Carrier    Upstream `yaml:"carrier"`
+	// Storefront account, returns and Lola upstreams (TAX_RETURNS_URL, AI_GATEWAY_URL).
+	TaxReturns Upstream `yaml:"taxReturns"`
+	AIGateway  Upstream `yaml:"aiGateway"`
+	// Staff console upstreams (TRUST_OPS_URL, RETAIL_URL, FULFILMENT_URL).
+	TrustOps   Upstream `yaml:"trustOps"`
+	Retail     Upstream `yaml:"retail"`
+	Fulfilment Upstream `yaml:"fulfilment"`
 }
 
 // Named returns the upstreams keyed by their metric/log name.
@@ -48,6 +55,8 @@ func (u *Upstreams) Named() map[string]*Upstream {
 		"identity": &u.Identity, "content": &u.Content, "payments": &u.Payments, "promise": &u.Promise,
 		"orders": &u.Orders, "notifications": &u.Notifications, "seller": &u.Seller, "offers": &u.Offers, "bookings": &u.Bookings,
 		"storefront": &u.Storefront, "media": &u.Media, "carrier": &u.Carrier,
+		"tax_returns": &u.TaxReturns, "ai_gateway": &u.AIGateway,
+		"trust_ops": &u.TrustOps, "retail": &u.Retail, "fulfilment": &u.Fulfilment,
 	}
 }
 
@@ -117,6 +126,18 @@ type Config struct {
 		RetailOrgID                string            `yaml:"retailOrgId" env:"RETAIL_ORG_ID"`
 		SellerNames                map[string]string `yaml:"sellerNames"`
 	} `yaml:"commerce"`
+
+	// Stripe is the public half of the Stripe account (Stripe.js / PaymentSheet); secrets stay in payments.
+	Stripe struct {
+		PublishableKey string `yaml:"publishableKey" env:"STRIPE_PUBLISHABLE_KEY"`
+	} `yaml:"stripe"`
+
+	// Staff console exports: "local" keeps files on the BFF's disk behind signed links (default); "media" stores them
+	// in media-service's object store once it accepts export files.
+	Staff struct {
+		ExportStore string `yaml:"exportStore" env:"STAFF_EXPORT_STORE"`
+		ExportDir   string `yaml:"exportDir" env:"STAFF_EXPORT_DIR"`
+	} `yaml:"staff"`
 
 	Telemetry struct {
 		OTLPEndpoint string  `yaml:"otlpEndpoint" env:"OTEL_EXPORTER_OTLP_ENDPOINT_HOST"`

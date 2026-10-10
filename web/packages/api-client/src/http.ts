@@ -34,7 +34,7 @@ export function joinUrl(base: string, path: string, query?: RequestOptions['quer
 }
 
 /** Absolute URL for Request construction (relative base URLs resolve against the page origin). */
-function absolute(url: string): string {
+export function absolute(url: string): string {
   if (/^https?:\/\//.test(url)) return url;
   const origin = typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost';
   return origin + url;

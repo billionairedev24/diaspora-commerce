@@ -20,7 +20,9 @@ export const CartLineSchema = z.object({
   maxQuantity: z.number().int().min(0),
   availableQty: z.number().int().min(0),
   stockStatus: StockStatusSchema,
-  selected: z.boolean()
+  selected: z.boolean(),
+  /** Perishable (catalog): AfroTransact Delivery and pickup need a handover code, no safe place. */
+  perishable: z.boolean().optional()
 });
 export type CartLine = z.infer<typeof CartLineSchema>;
 
@@ -29,7 +31,11 @@ export const DeliveryOptionSchema = z.object({
   label: z.string(),
   eta: z.string(),
   feeMinor: MinorSchema,
-  free: z.boolean()
+  free: z.boolean(),
+  /** Checkout only: promise dates for this option. */
+  earliestDate: z.string().optional(),
+  latestDate: z.string().optional(),
+  cutoffLabel: z.string().optional()
 });
 export type DeliveryOption = z.infer<typeof DeliveryOptionSchema>;
 

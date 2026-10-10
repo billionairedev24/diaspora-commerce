@@ -158,6 +158,14 @@ func run() error {
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
 	}
+	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
+	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
+		identityAPI: identity, serviceTokens: serviceTokens}, services, log)
+	// Staff console (cmd/gateway-bff/staff.go).
+	if services.Staff, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient, inventory: inventoryClient,
+		payments: paymentsClient, orders: ordersClient}, rdb, cache, log); err != nil {
+		return err
+	}
 
 	openapi, err := gatewaybff.Files.ReadFile("api/openapi.yaml")
 	if err != nil {
@@ -180,6 +188,9 @@ func run() error {
 		w.Header().Set("Content-Type", "application/yaml")
 		_, _ = w.Write(sellerSpec)
 	})
+	if err := serveStaffSpec(srv.Mux()); err != nil {
+		return err
+	}
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}
