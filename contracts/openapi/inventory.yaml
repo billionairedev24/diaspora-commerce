@@ -48,13 +48,12 @@ paths:
       parameters:
       - name: skus
         in: query
-        description: Comma-separated SKUs (max 100)
+        description: Comma-separated SKUs (max 100), e.g. AT-JOL-6,AT-BAS-10
         required: true
         schema:
           type: array
           items:
             type: string
-        example: AT-JOL-6,AT-BAS-10
       responses:
         '200':
           description: OK

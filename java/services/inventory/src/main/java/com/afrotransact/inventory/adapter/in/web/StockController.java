@@ -33,7 +33,7 @@ class StockController {
     @SecurityRequirements
     @GetMapping("/v1/availability")
     List<Availability> availability(
-            @Parameter(description = "Comma-separated SKUs (max 100)", example = "AT-JOL-6,AT-BAS-10")
+            @Parameter(description = "Comma-separated SKUs (max 100), e.g. AT-JOL-6,AT-BAS-10")
             @RequestParam List<String> skus) {
         return stock.availability(skus);
     }

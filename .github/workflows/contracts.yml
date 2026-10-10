@@ -32,10 +32,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+      - run: pip install pyyaml==6.0.2
       - run: pnpm install --frozen-lockfile
       - name: Lint contracts (root redocly.yaml)
-        # TODO(S227): some Go contracts still fail lint; drop continue-on-error once S227 lands.
-        continue-on-error: true
         run: bash tools/contracts/lint_contracts.sh
       - name: Generated clients are up to date
         run: bash tools/contracts/generate_clients.sh --check

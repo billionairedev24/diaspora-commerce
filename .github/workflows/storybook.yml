@@ -165,8 +165,15 @@ jobs:
       contents: read
       deployments: write
       pull-requests: write
+    env:
+      # Until the Cloudflare secrets are configured the deploy is skipped with a notice instead of failing.
+      HAS_CF: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
     steps:
+      - name: Cloudflare not configured
+        if: env.HAS_CF != 'true'
+        run: echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set; Storybook is not deployed."
       - uses: actions/download-artifact@v5
+        if: env.HAS_CF == 'true'
         with:
           name: storybook-static
           path: storybook-static
@@ -177,6 +184,7 @@ jobs:
         run: echo "name=$(tr -c 'A-Za-z0-9-' '-' <<<"$BRANCH" | sed -E 's/-+$//')" >> "$GITHUB_OUTPUT"
       - name: Deploy to Cloudflare Pages
         id: pages
+        if: env.HAS_CF == 'true'
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
