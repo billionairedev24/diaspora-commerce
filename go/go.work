@@ -4,6 +4,7 @@ toolchain go1.27.1
 
 use (
 	./pkg
+	./services/geo
 	./services/indexer
 	./services/search
 )

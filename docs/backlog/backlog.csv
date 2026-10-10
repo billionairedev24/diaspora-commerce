@@ -426,17 +426,17 @@
 - Hand-off to human support with context","E21","","High","5","ai web mobile","ai","To Do"
 "S136","Story","Seller and staff AI assistants","Listing writer/translator, tagline suggestions and trust-team triage summaries.","- AI drafts are editable and never auto-published
 - Triage summaries show sources","E21","","Medium","5","ai","ai","To Do"
-"E22","Epic","Geo & address autocomplete","Every address field uses autocomplete (Google Places when keyed, OpenStreetMap Nominatim otherwise) with validation.","","","Geo & address autocomplete","High","","geo","geo","To Do"
+"E22","Epic","Geo & address autocomplete","Every address field uses autocomplete (Google Places when keyed, OpenStreetMap Nominatim otherwise) with validation.","","","Geo & address autocomplete","High","","geo","geo","In Progress"
 "S137","Story","Geo service: autocomplete proxy","Google Places Autocomplete (New) with session tokens; OSM Nominatim fallback; keys never shipped to clients.","- Provider chosen by configuration; both implement the same interface
 - Session tokens used for Places cost control
-- Results restricted to supported markets","E22","","Highest","5","geo go","geo","To Do"
+- Results restricted to supported markets","E22","","Highest","5","geo go","geo","Done"
 "S138","Story","Address validation (Smarty / USPS CASS)","Standardise, flag missing apartment, undeliverable and residential vs commercial.","- Corrections suggested, never silently applied
-- Missing unit on multi-unit address produces a warning","E22","","High","5","geo go","geo","To Do"
+- Missing unit on multi-unit address produces a warning","E22","","High","5","geo go","geo","Done"
 "S139","Story","Address autocomplete everywhere","Checkout, account addresses, onboarding, warehouses, pickup points, deliver-to ZIP and category forms.","- Street suggestions from the first character
 - Picking a suggestion fills street, city, state, ZIP and coordinates
-- No plain-text address field remains in any app","E22","","High","5","geo web mobile","geo","To Do"
+- No plain-text address field remains in any app","E22","","High","5","geo web mobile","geo","In Progress"
 "S140","Story","Service areas and delivery zones (PostGIS)","Zones for AfroTransact Delivery, FC catchments and provider service areas.","- Point-in-zone checks for delivery eligibility
-- Provider distance search ('within 15 miles')","E22","","Medium","5","geo go","geo","To Do"
+- Provider distance search ('within 15 miles')","E22","","Medium","5","geo go","geo","Done"
 "E23","Epic","Storefront web (Next.js)","Customer web shop recreated from design/AfroTransact Shop.dc.html on Next.js 16, TanStack Query and design tokens.","","","Storefront web (Next.js)","High","","storefront-web","storefront-web","To Do"
 "S141","Story","Next.js storefront app with tokens and white canvas","App shell on Next.js 16 with @afrotransact/tokens, Figtree, white background and no visible scrollbars.","- All colours come from tokens; lint bans raw hex
 - No visible scrollbars anywhere; no horizontal page scroll

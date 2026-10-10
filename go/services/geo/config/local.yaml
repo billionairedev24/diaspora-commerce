@@ -1,0 +1,15 @@
+# geo · local. DB_URL, GOOGLE_PLACES_API_KEY, SMARTY_AUTH_ID/TOKEN come from the environment.
+port: 8205
+docsEnabled: true
+databaseUrl: postgres://geo:geo@localhost:5432/geo
+providers: [fixture, osm-nominatim]
+nominatim:
+  url: https://nominatim.openstreetmap.org
+  userAgent: AfroTransact/1.0 (platform@afrotransact.com)
+auth:
+  enabled: false
+  issuer: http://localhost:8100
+  audience: geo
+telemetry:
+  otlpEndpoint: localhost:4318
+  sampleRatio: 1.0

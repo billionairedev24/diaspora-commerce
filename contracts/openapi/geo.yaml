@@ -1,0 +1,155 @@
+openapi: 3.1.0
+info:
+  title: Geo API
+  version: v1
+  description: |
+    Address autocomplete for every address field (Google Places API (New) when a key is configured, OpenStreetMap
+    Nominatim otherwise, with automatic fallback), structured resolution, USPS-grade validation through Smarty
+    (missing unit, undeliverable, corrections suggested — never silently applied), ZIP lookup for the
+    deliver-to picker, and PostGIS delivery zones / FC catchments / provider service areas.
+    Provider keys never reach clients: browsers and apps call this API.
+servers:
+  - {url: 'http://localhost:8205', description: local}
+  - {url: 'https://api.dev.afrotransact.com/geo', description: dev}
+  - {url: 'https://api.uat.afrotransact.com/geo', description: uat}
+  - {url: 'https://api.afrotransact.com/geo', description: prod}
+tags:
+  - name: Addresses
+  - name: Zones
+paths:
+  /v1/addresses/autocomplete:
+    get:
+      tags: [Addresses]
+      operationId: autocompleteAddress
+      summary: Suggestions from the first character
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, maxLength: 120}}
+        - {name: session, in: query, schema: {type: string}, description: Places session token (one per address entry)}
+        - {name: country, in: query, schema: {type: string, default: US}}
+      responses:
+        '200':
+          description: Up to five suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions: {type: array, items: {$ref: '#/components/schemas/Suggestion'}}
+        '502': {$ref: '#/components/responses/Problem'}
+  /v1/addresses/resolve/{id}:
+    get:
+      tags: [Addresses]
+      operationId: resolveAddress
+      summary: Structured address and coordinates for a suggestion
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string}}
+        - {name: session, in: query, schema: {type: string}}
+      responses:
+        '200': {description: Address, content: {application/json: {schema: {$ref: '#/components/schemas/Address'}}}}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/addresses/validate:
+    post:
+      tags: [Addresses]
+      operationId: validateAddress
+      summary: Validate deliverability and get suggested corrections
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/Address'}}}
+      responses:
+        '200': {description: Result, content: {application/json: {schema: {$ref: '#/components/schemas/Validation'}}}}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/zip/{zip}:
+    get:
+      tags: [Addresses]
+      operationId: lookupZip
+      summary: City and state for a 5-digit ZIP (deliver-to picker)
+      parameters:
+        - {name: zip, in: path, required: true, schema: {type: string, pattern: '^\d{5}$'}}
+      responses:
+        '200': {description: Place, content: {application/json: {schema: {$ref: '#/components/schemas/Address'}}}}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/zones/covering:
+    get:
+      tags: [Zones]
+      operationId: zonesCovering
+      summary: Active zones containing a point (delivery eligibility, provider reach)
+      parameters:
+        - {name: lat, in: query, required: true, schema: {type: number}}
+        - {name: lon, in: query, required: true, schema: {type: number}}
+        - {name: type, in: query, schema: {$ref: '#/components/schemas/ZoneType'}}
+      responses:
+        '200':
+          description: Zones
+          content: {application/json: {schema: {type: object, properties: {zones: {type: array, items: {$ref: '#/components/schemas/Zone'}}}}}}
+  /v1/zones:
+    get:
+      tags: [Zones]
+      operationId: listZones
+      security: [{bearer: []}]
+      parameters:
+        - {name: type, in: query, schema: {$ref: '#/components/schemas/ZoneType'}}
+        - {name: ownerId, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: Zones
+          content: {application/json: {schema: {type: object, properties: {zones: {type: array, items: {$ref: '#/components/schemas/Zone'}}}}}}
+    post:
+      tags: [Zones]
+      operationId: saveZone
+      summary: Create or update a zone (geo:zones:write)
+      security: [{bearer: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/Zone'}}}
+      responses:
+        '201': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/Zone'}}}}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+  schemas:
+    Problem:
+      type: object
+      properties: {type: {type: string}, title: {type: string}, status: {type: integer}, detail: {type: string}, code: {type: string}}
+    Suggestion:
+      type: object
+      properties: {id: {type: string}, text: {type: string}, mainText: {type: string}, secondaryText: {type: string}, provider: {type: string}}
+    Address:
+      type: object
+      required: [line1, city, state, postalCode]
+      properties:
+        line1: {type: string}
+        line2: {type: string}
+        city: {type: string}
+        state: {type: string}
+        postalCode: {type: string}
+        country: {type: string, default: US}
+        lat: {type: number}
+        lon: {type: number}
+    Validation:
+      type: object
+      properties:
+        status: {type: string, enum: [VALID, CORRECTED, MISSING_UNIT, UNDELIVERABLE, UNVERIFIED]}
+        standardized: {$ref: '#/components/schemas/Address'}
+        suggestions: {type: array, items: {$ref: '#/components/schemas/Address'}}
+        residential: {type: boolean}
+        messages: {type: array, items: {type: string}}
+    ZoneType: {type: string, enum: [DELIVERY, FC_CATCHMENT, SERVICE_AREA]}
+    Zone:
+      type: object
+      required: [type, ownerId, name]
+      properties:
+        id: {type: string, format: uuid}
+        type: {$ref: '#/components/schemas/ZoneType'}
+        ownerId: {type: string}
+        name: {type: string}
+        geojson: {type: string, description: GeoJSON Polygon or MultiPolygon}
+        centerLat: {type: number}
+        centerLon: {type: number}
+        radiusMiles: {type: number, maximum: 200}
+        active: {type: boolean}

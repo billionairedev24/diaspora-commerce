@@ -1,0 +1,15 @@
+# geo · prod. DB_URL, GOOGLE_PLACES_API_KEY, SMARTY_AUTH_ID/TOKEN come from the environment.
+port: 8080
+docsEnabled: false
+databaseUrl: ""
+providers: [google-places, osm-nominatim]
+nominatim:
+  url: https://nominatim.openstreetmap.org
+  userAgent: AfroTransact/1.0 (platform@afrotransact.com)
+auth:
+  enabled: true
+  issuer: https://auth.afrotransact.com
+  audience: geo
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampleRatio: 0.1
