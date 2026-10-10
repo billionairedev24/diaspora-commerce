@@ -19,7 +19,9 @@ type Notifier interface {
 	// Submit renders and enqueues a request (synchronous API). Repeating an idempotency key returns the
 	// original notifications.
 	Submit(ctx context.Context, req domain.Request) ([]domain.Notification, error)
-	// SubmitForEvent enqueues requests derived from one event, de-duplicated by event id in the inbox.
+	// SubmitForEvent enqueues requests derived from one event, de-duplicated by event id in the inbox. Requests that
+	// cannot be delivered (no address, no template) are dropped; it fails with domain.ErrInvalidRequest only when
+	// none can be.
 	SubmitForEvent(ctx context.Context, consumer, eventID string, reqs []domain.Request) (bool, error)
 }
 
@@ -55,13 +57,22 @@ func (n *notifierImpl) Submit(ctx context.Context, req domain.Request) ([]domain
 
 func (n *notifierImpl) SubmitForEvent(ctx context.Context, consumer, eventID string, reqs []domain.Request) (bool, error) {
 	var rows []domain.Notification
+	var invalid []error
 	for _, r := range reqs {
 		r.EventID = eventID
 		built, err := n.build(ctx, r)
+		if errors.Is(err, domain.ErrInvalidRequest) {
+			// One undeliverable recipient (e.g. an org owner without contact details) must not drop the others.
+			invalid = append(invalid, err)
+			continue
+		}
 		if err != nil {
 			return false, err
 		}
 		rows = append(rows, built...)
+	}
+	if len(rows) == 0 && len(invalid) > 0 {
+		return false, errors.Join(invalid...)
 	}
 	first, err := n.store.EnqueueForEvent(ctx, consumer, eventID, rows)
 	if err != nil {

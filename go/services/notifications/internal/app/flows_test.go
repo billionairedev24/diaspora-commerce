@@ -44,8 +44,8 @@ func TestIngestMapsAndDeduplicates(t *testing.T) {
 	tpls.items = append(tpls.items, domain.Template{Key: "identity.verification", Locale: "en", Channel: domain.ChannelSMS,
 		Version: 1, Category: domain.CategorySecurity, BodyText: "code {{.code}}"})
 	n := app.NewNotifier(tpls, app.NewRenderer(), store, nil)
-	ing := app.NewIngest(n, nil, quietLog())
-	payload, _ := json.Marshal(map[string]any{"recipient": map[string]any{"phone": "+15550001111"}, "channel": "sms", "code": "123456"})
+	ing := app.NewIngest(n, app.IngestConfig{}, quietLog())
+	payload, _ := json.Marshal(map[string]any{"recipient": map[string]any{"phone": "+15550001111"}, "channel": "sms", "code": "123456", "userId": "user-9"})
 	ev := events.Envelope{ID: "evt-1", Type: "identity.verification.requested", AggregateID: "user-9", Payload: payload}
 	ctx := context.Background()
 	for range 2 {
@@ -64,10 +64,10 @@ func TestIngestMapsAndDeduplicates(t *testing.T) {
 	if err := ing.Handle(ctx, events.Envelope{ID: "evt-2", Type: "order.cancelled", Payload: payload}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ing.Handle(ctx, events.Envelope{ID: "evt-3", Type: "order.placed", Payload: []byte(`{"recipient":{}}`)}); err != nil {
+	if err := ing.Handle(ctx, events.Envelope{ID: "evt-3", Type: "orders.order.placed", Payload: []byte(`{"customerId":"c-1"}`)}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ing.Handle(ctx, events.Envelope{ID: "evt-4", Type: "order.placed", Payload: []byte(`not json`)}); err != nil {
+	if err := ing.Handle(ctx, events.Envelope{ID: "evt-4", Type: "orders.order.placed", Payload: []byte(`not json`)}); err != nil {
 		t.Fatal(err)
 	}
 	generic, _ := json.Marshal(map[string]any{"templateKey": "order.confirmed", "channels": []string{"email"},

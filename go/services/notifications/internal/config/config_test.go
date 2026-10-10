@@ -6,6 +6,7 @@ import (
 
 	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
 )
@@ -30,6 +31,17 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 			}
 			if len(c.Routing.Email["default"]) == 0 || len(c.Routing.SMS["default"]) == 0 || c.SMSCompliance.Help == "" {
 				t.Fatal("every env needs default email and SMS routes and HELP text")
+			}
+			if !c.Identity.Enabled || c.Identity.ClientID != "notifications-service" || c.Identity.BaseURL == "" ||
+				c.Identity.TokenURL == "" || c.Identity.CacheTTL <= 0 {
+				t.Fatalf("identity lookup config: %+v", c.Identity)
+			}
+			if c.Links.Storefront == "" || c.Links.SellerCenter == "" || c.Links.ProviderHub == "" {
+				t.Fatalf("links: %+v", c.Links)
+			}
+			topics, err := app.ResolveTopics(c.Kafka.Topics)
+			if err != nil || len(topics) != len(app.DefaultTopics) {
+				t.Fatalf("kafka.topics: %v %v", topics, err)
 			}
 			switch env {
 			case pkgconfig.EnvLocal:

@@ -105,3 +105,40 @@ type NotificationStore interface {
 type ContactResolver interface {
 	Resolve(ctx context.Context) (email, phone string, err error)
 }
+
+// Contact is what identity knows about how to reach a user. Empty fields are unknown.
+type Contact struct {
+	UserID     string             `json:"userId"`
+	FirstName  string             `json:"firstName,omitempty"`
+	Email      string             `json:"email,omitempty"`
+	Phone      string             `json:"phone,omitempty"`
+	PushTokens []domain.PushToken `json:"pushTokens,omitempty"`
+	Locale     string             `json:"locale,omitempty"`
+	TimeZone   string             `json:"timeZone,omitempty"`
+	Market     string             `json:"market,omitempty"`
+	// Disabled lists channels the user switched off in their account settings. Security messages ignore it;
+	// the per-category preferences stored in notifications still apply at dispatch.
+	Disabled []domain.Channel `json:"disabled,omitempty"`
+}
+
+// RecipientResolver looks up contact details by identity user id, and the owners of a seller/provider
+// organisation, for events whose payloads carry ids rather than addresses. Unknown users and organisations return
+// domain.ErrRecipientNotFound; any other error is transient (the event is redelivered).
+type RecipientResolver interface {
+	Contact(ctx context.Context, userID string) (Contact, error)
+	OrgOwners(ctx context.Context, orgID string) ([]string, error)
+}
+
+// StockAlertStore persists back-in-stock subscriptions.
+type StockAlertStore interface {
+	// Subscribe stores an active alert for (user, atin). It returns created=false when an active alert already
+	// exists (left unchanged); a previously notified alert is re-armed and counts as created.
+	Subscribe(ctx context.Context, a domain.StockAlert) (domain.StockAlert, bool, error)
+	// Unsubscribe deletes the user's alert for atin (domain.ErrNotFound when there is none).
+	Unsubscribe(ctx context.Context, userID, atin string) error
+	// ListByUser returns the user's alerts, newest first.
+	ListByUser(ctx context.Context, userID string) ([]domain.StockAlert, error)
+	// ClaimForRestock marks up to limit active alerts for atin as notified by eventID and returns them. Alerts
+	// already claimed by the same eventID are returned again, so a redelivered event can finish its work.
+	ClaimForRestock(ctx context.Context, atin, eventID string, limit int) ([]domain.StockAlert, error)
+}

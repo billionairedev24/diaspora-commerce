@@ -19,7 +19,28 @@ type Config struct {
 	Kafka struct {
 		Enabled bool     `yaml:"enabled" env:"KAFKA_ENABLED"`
 		Brokers []string `yaml:"brokers" env:"KAFKA_BROKERS"`
+		// Topics maps logical topic names (identity, orders, sellerApplications, sellerCompliance, payouts,
+		// bookings, content, inventory) to addresses; missing names default to the AsyncAPI channel addresses.
+		Topics map[string]string `yaml:"topics"`
 	} `yaml:"kafka"`
+	// Identity resolves recipients by user id / org id for events that carry no contact details.
+	Identity struct {
+		Enabled      bool          `yaml:"enabled" env:"IDENTITY_ENABLED"`
+		BaseURL      string        `yaml:"baseUrl" env:"IDENTITY_URL"`
+		TokenURL     string        `yaml:"tokenUrl" env:"AUTH_TOKEN_URI"`
+		ClientID     string        `yaml:"clientId" env:"IDENTITY_CLIENT_ID"`
+		ClientSecret string        `env:"NOTIFICATIONS_CLIENT_SECRET"`
+		Timeout      time.Duration `yaml:"timeout" env:"IDENTITY_TIMEOUT"`
+		CacheTTL     time.Duration `yaml:"cacheTtl" env:"IDENTITY_CACHE_TTL"`
+		NotFoundTTL  time.Duration `yaml:"notFoundTtl"`
+		CacheMax     int           `yaml:"cacheMaxEntries"`
+	} `yaml:"identity"`
+	// Links are the public base URLs templates link to.
+	Links struct {
+		Storefront   string `yaml:"storefront" env:"LINKS_STOREFRONT"`
+		SellerCenter string `yaml:"sellerCenter" env:"LINKS_SELLER_CENTER"`
+		ProviderHub  string `yaml:"providerHub" env:"LINKS_PROVIDER_HUB"`
+	} `yaml:"links"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
 		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URI"`

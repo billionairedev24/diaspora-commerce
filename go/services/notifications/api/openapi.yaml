@@ -36,13 +36,19 @@ security:
   - bearer: []
 tags:
   - name: Notifications
+    description: Send templated notifications and read the delivery log and dead letters.
   - name: Templates
+    description: Versioned templates per key, locale and channel; preview and test-send.
   - name: Preferences
+    description: Channel × category preferences, TCPA SMS consent, suppressions and one-click unsubscribe.
+  - name: Stock alerts
+    description: Back-in-stock alerts for shoppers (S211). The shopper's own bearer token identifies the subscriber.
   - name: Webhooks
     description: Provider callbacks, authenticated by signature (not bearer tokens).
 paths:
   /v1/notifications:
     post:
+      security: [{bearer: []}]
       tags: [Notifications]
       operationId: submitNotification
       summary: Queue a templated notification on one or more channels
@@ -83,15 +89,16 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
     get:
+      security: [{bearer: []}]
       tags: [Notifications]
       operationId: listNotifications
       summary: Notification log for the staff console
       description: Newest first. Shows channel, provider, status and template version. Requires `notifications:read`.
       parameters:
-        - {name: recipient, in: query, schema: {type: string}, description: Recipient id, email address or phone number}
+        - {name: recipient, in: query, schema: {type: string}, description: "Recipient id, email address or phone number"}
         - {name: channel, in: query, schema: {$ref: '#/components/schemas/Channel'}}
         - {name: status, in: query, schema: {$ref: '#/components/schemas/Status'}}
-        - {name: before, in: query, schema: {type: string, format: date-time}, description: Cursor — createdAt of the last row of the previous page}
+        - {name: before, in: query, schema: {type: string, format: date-time}, description: "Cursor — createdAt of the last row of the previous page"}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
       responses:
         '200':
@@ -106,6 +113,7 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
   /v1/notifications/{id}:
     get:
+      security: [{bearer: []}]
       tags: [Notifications]
       operationId: getNotification
       summary: One notification with its delivery status
@@ -121,6 +129,7 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
   /v1/dead-letters:
     get:
+      security: [{bearer: []}]
       tags: [Notifications]
       operationId: listDeadLetters
       summary: Notifications that failed permanently or exhausted their retries
@@ -136,8 +145,10 @@ paths:
                 type: object
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/DeadLetter'}}
+        '403': {$ref: '#/components/responses/Problem'}
   /v1/dead-letters/{id}/replay:
     post:
+      security: [{bearer: []}]
       tags: [Notifications]
       operationId: replayDeadLetter
       summary: Re-queue a dead-lettered notification (once)
@@ -153,6 +164,7 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
   /v1/templates:
     get:
+      security: [{bearer: []}]
       tags: [Templates]
       operationId: listTemplates
       summary: Latest version of every template, or every version of one key
@@ -168,7 +180,9 @@ paths:
                 type: object
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/Template'}}
+        '403': {$ref: '#/components/responses/Problem'}
     post:
+      security: [{bearer: []}]
       tags: [Templates]
       operationId: createTemplateVersion
       summary: Store a new version of a template
@@ -192,6 +206,7 @@ paths:
         '403': {$ref: '#/components/responses/Problem'}
   /v1/templates/{key}/preview:
     post:
+      security: [{bearer: []}]
       tags: [Templates]
       operationId: previewTemplate
       summary: Render a template version with sample data
@@ -214,6 +229,7 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
   /v1/templates/{key}/test-send:
     post:
+      security: [{bearer: []}]
       tags: [Templates]
       operationId: testSendTemplate
       summary: Send a rendered template to the caller's own email or phone
@@ -240,6 +256,7 @@ paths:
     parameters:
       - {name: recipientId, in: path, required: true, schema: {type: string}}
     get:
+      security: [{bearer: []}]
       tags: [Preferences]
       operationId: getPreferences
       summary: Effective channel × category preferences
@@ -254,6 +271,7 @@ paths:
               schema: {$ref: '#/components/schemas/Preferences'}
         '403': {$ref: '#/components/responses/Problem'}
     put:
+      security: [{bearer: []}]
       tags: [Preferences]
       operationId: setPreferences
       summary: Change preferences
@@ -274,8 +292,70 @@ paths:
               schema: {$ref: '#/components/schemas/Preferences'}
         '400': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+  /v1/stock-alerts:
+    post:
+      security: [{bearer: []}]
+      tags: [Stock alerts]
+      operationId: subscribeStockAlert
+      summary: Tell me when this variant is back in stock
+      description: |
+        Needs the shopper's own token (the BFF forwards it; service tokens get 403). One alert per shopper and variant
+        ATIN: repeating the call while the alert is active returns it unchanged with 200; after it has been sent,
+        calling again re-arms it (201). When inventory publishes `inventory.availability.changed` with
+        `available > 0` for the SKU (= variant ATIN), every active alert is sent once (email + push) and becomes
+        `notified`. `email` overrides the account email (e.g. typed on the product page); otherwise identity's is used.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/StockAlertInput'}
+      responses:
+        '201':
+          description: Alert armed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockAlert'}
+        '200':
+          description: Already subscribed (unchanged)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StockAlert'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+    get:
+      security: [{bearer: []}]
+      tags: [Stock alerts]
+      operationId: listStockAlerts
+      summary: My stock alerts (active and already sent), newest first
+      responses:
+        '200':
+          description: The caller's alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/StockAlert'}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/stock-alerts/{atin}:
+    parameters:
+      - {name: atin, in: path, required: true, schema: {$ref: '#/components/schemas/Atin'}}
+    delete:
+      security: [{bearer: []}]
+      tags: [Stock alerts]
+      operationId: unsubscribeStockAlert
+      summary: Remove my alert for a variant
+      responses:
+        '204': {description: "Removed"}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
   /v1/consents/sms:
     post:
+      security: [{bearer: []}]
       tags: [Preferences]
       operationId: recordSmsConsent
       summary: Record TCPA SMS consent (sign-up checkbox, settings)
@@ -294,12 +374,13 @@ paths:
         '400': {$ref: '#/components/responses/Problem'}
   /v1/consents/sms/{phone}:
     get:
+      security: [{bearer: []}]
       tags: [Preferences]
       operationId: getSmsConsent
       summary: Current SMS consent for a phone number
       description: Requires `notifications:read`.
       parameters:
-        - {name: phone, in: path, required: true, schema: {type: string}, description: E.164, URL-encoded}
+        - {name: phone, in: path, required: true, schema: {type: string}, description: "E.164, URL-encoded"}
       responses:
         '200':
           description: Consent record
@@ -309,6 +390,7 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
   /v1/suppressions:
     get:
+      security: [{bearer: []}]
       tags: [Preferences]
       operationId: listSuppressions
       summary: Suppression list (hard bounces and complaints)
@@ -325,8 +407,10 @@ paths:
                 type: object
                 properties:
                   items: {type: array, items: {$ref: '#/components/schemas/Suppression'}}
+        '403': {$ref: '#/components/responses/Problem'}
   /v1/suppressions/{address}:
     delete:
+      security: [{bearer: []}]
       tags: [Preferences]
       operationId: deleteSuppression
       summary: Remove an address from the suppression list
@@ -334,11 +418,11 @@ paths:
       parameters:
         - {name: address, in: path, required: true, schema: {type: string}}
       responses:
-        '204': {description: Removed}
+        '204': {description: "Removed"}
         '404': {$ref: '#/components/responses/Problem'}
   /v1/unsubscribe:
     parameters:
-      - {name: t, in: query, required: true, schema: {type: string}, description: Signed unsubscribe token from the List-Unsubscribe header}
+      - {name: t, in: query, required: true, schema: {type: string}, description: "Signed unsubscribe token from the List-Unsubscribe header"}
     get:
       tags: [Preferences]
       operationId: unsubscribePage
@@ -384,7 +468,7 @@ paths:
           application/json:
             schema: {type: object}
       responses:
-        '204': {description: Recorded}
+        '204': {description: "Recorded"}
         '401': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/webhooks/sendgrid:
@@ -402,7 +486,7 @@ paths:
           application/json:
             schema: {type: array, items: {type: object}}
       responses:
-        '204': {description: Recorded}
+        '204': {description: "Recorded"}
         '401': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/webhooks/twilio/status:
@@ -424,7 +508,7 @@ paths:
                 MessageStatus: {type: string, enum: [accepted, queued, sending, sent, delivered, undelivered, failed, read]}
                 ErrorCode: {type: string}
       responses:
-        '204': {description: Recorded}
+        '204': {description: "Recorded"}
         '401': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/webhooks/twilio/inbound:
@@ -508,22 +592,22 @@ components:
     Recipient:
       type: object
       properties:
-        id: {type: string, description: User id; preferences are keyed by it}
+        id: {type: string, description: "User id; preferences are keyed by it"}
         email: {type: string, format: email}
-        phone: {type: string, description: E.164}
+        phone: {type: string, description: "E.164"}
         pushTokens: {type: array, items: {$ref: '#/components/schemas/PushToken'}}
-        timeZone: {type: string, description: IANA zone for quiet hours, e.g. America/Chicago}
+        timeZone: {type: string, description: "IANA zone for quiet hours, e.g. America/Chicago"}
         locale: {type: string, examples: [en, fr-CA]}
     NotificationRequest:
       type: object
       required: [templateKey, channels, recipient]
       properties:
-        templateKey: {type: string, examples: [identity.verification, order.confirmed, shipment.out_for_delivery, payout.requirement_due, booking.confirmed]}
-        locale: {type: string, description: Falls back to the language, then en}
+        templateKey: {type: string, examples: [identity.verification, order.confirmed, shipment.out_for_delivery, seller.compliance.reminder, booking.confirmed, booking.reminder, stock.back_in_stock]}
+        locale: {type: string, description: "Falls back to the language, then en"}
         market: {type: string, default: us}
         channels: {type: array, minItems: 1, items: {$ref: '#/components/schemas/Channel'}}
         recipient: {$ref: '#/components/schemas/Recipient'}
-        data: {type: object, additionalProperties: true, description: Template fields}
+        data: {type: object, additionalProperties: true, description: "Template fields"}
     Notification:
       type: object
       properties:
@@ -537,7 +621,7 @@ components:
         category: {$ref: '#/components/schemas/Category'}
         market: {type: string}
         recipientId: {type: string}
-        address: {type: string, description: Email, E.164 phone, or fcm:/apns:-prefixed push token}
+        address: {type: string, description: "Email, E.164 phone, or fcm:/apns:-prefixed push token"}
         timeZone: {type: string}
         subject: {type: string}
         bodyText: {type: string}
@@ -568,7 +652,7 @@ components:
         locale: {type: string}
         channel: {$ref: '#/components/schemas/Channel'}
         category: {$ref: '#/components/schemas/Category'}
-        subject: {type: string, description: Email subject, push title or WhatsApp template name}
+        subject: {type: string, description: "Email subject, push title or WhatsApp template name"}
         bodyHtml: {type: string}
         bodyText: {type: string}
     Template:
@@ -585,7 +669,7 @@ components:
       properties:
         channel: {$ref: '#/components/schemas/Channel'}
         locale: {type: string, default: en}
-        version: {type: integer, description: 0 or omitted = latest}
+        version: {type: integer, description: "0 or omitted = latest"}
         market: {type: string}
         data: {type: object, additionalProperties: true}
     Rendered:
@@ -626,7 +710,7 @@ components:
         phone: {type: string}
         recipientId: {type: string}
         source: {type: string, examples: [web-signup, mobile-signup, settings]}
-        textVersion: {type: string, description: Version of the disclosure shown, e.g. sms-terms-2026-01}
+        textVersion: {type: string, description: "Version of the disclosure shown, e.g. sms-terms-2026-01"}
         consentedAt: {type: string, format: date-time}
     SmsConsent:
       allOf:
@@ -636,6 +720,33 @@ components:
             optedIn: {type: boolean}
             revokedAt: {type: string, format: date-time}
             revokedVia: {type: string, examples: [sms-STOP, sms-UNSUBSCRIBE]}
+    Atin:
+      type: string
+      pattern: '^AT[0-9A-Z]{8}$'
+      description: Variant ATIN (case-insensitive on input, stored upper-case).
+      examples: [ATGARI0001]
+    StockAlertInput:
+      type: object
+      required: [atin]
+      properties:
+        atin: {$ref: '#/components/schemas/Atin'}
+        email: {type: string, format: email, description: "Optional address override; defaults to the account email from identity"}
+        market: {type: string, default: us}
+        locale: {type: string, default: en}
+        productTitle: {type: string, maxLength: 300, description: "Shown in the alert; the BFF has it from catalog"}
+    StockAlert:
+      type: object
+      required: [id, atin, status, market, locale, createdAt]
+      properties:
+        id: {type: string, format: uuid}
+        atin: {$ref: '#/components/schemas/Atin'}
+        email: {type: string, format: email}
+        market: {type: string}
+        locale: {type: string}
+        productTitle: {type: string}
+        status: {type: string, enum: [active, notified]}
+        createdAt: {type: string, format: date-time}
+        notifiedAt: {type: string, format: date-time}
     Suppression:
       type: object
       properties:

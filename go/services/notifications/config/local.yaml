@@ -9,6 +9,31 @@ database:
 kafka:
   enabled: true
   brokers: [localhost:9092]
+  # Logical topic → address (defaults are the AsyncAPI channel addresses in contracts/asyncapi/events.yaml).
+  topics:
+    identity: at.identity.events
+    orders: at.order.events
+    sellerApplications: at.seller-application.events
+    sellerCompliance: at.seller-compliance.events
+    payouts: at.payout.events
+    bookings: at.bookings.events
+    content: at.content.events
+    inventory: at.inventory.events
+# Recipient lookup by user / org id (client-credentials client notifications-service, scope users:read; the secret
+# comes from NOTIFICATIONS_CLIENT_SECRET).
+identity:
+  enabled: true
+  baseUrl: http://localhost:8100
+  tokenUrl: http://localhost:8100/oauth2/token
+  clientId: notifications-service
+  timeout: 3s
+  cacheTtl: 5m
+  notFoundTtl: 30s
+  cacheMaxEntries: 10000
+links:
+  storefront: http://localhost:3000
+  sellerCenter: http://localhost:3001
+  providerHub: http://localhost:3001
 auth:
   enabled: false
   issuer: http://localhost:8100

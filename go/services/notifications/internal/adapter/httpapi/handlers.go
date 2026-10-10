@@ -34,6 +34,7 @@ type Deps struct {
 	Receipts     app.Receipts
 	Compliance   app.SmsCompliance
 	Unsubscriber app.Unsubscriber
+	StockAlerts  app.StockAlerts // nil disables /v1/stock-alerts
 	Twilio       webhooksig.Verifier
 	Resend       webhooksig.Verifier
 	SendGrid     webhooksig.Verifier
@@ -73,6 +74,11 @@ func (h *handlersImpl) Register(mux *http.ServeMux, authn func(http.Handler) htt
 	secured("DELETE /v1/suppressions/{address}", PermManage, h.unsuppress)
 	mux.Handle("GET /v1/preferences/{recipientId}", authn(http.HandlerFunc(h.getPreferences)))
 	mux.Handle("PUT /v1/preferences/{recipientId}", authn(http.HandlerFunc(h.setPreferences)))
+	if h.d.StockAlerts != nil {
+		mux.Handle("POST /v1/stock-alerts", authn(http.HandlerFunc(h.subscribeStockAlert)))
+		mux.Handle("GET /v1/stock-alerts", authn(http.HandlerFunc(h.listStockAlerts)))
+		mux.Handle("DELETE /v1/stock-alerts/{atin}", authn(http.HandlerFunc(h.unsubscribeStockAlert)))
+	}
 
 	mux.HandleFunc("POST /v1/webhooks/resend", h.resendWebhook)
 	mux.HandleFunc("POST /v1/webhooks/sendgrid", h.sendGridWebhook)

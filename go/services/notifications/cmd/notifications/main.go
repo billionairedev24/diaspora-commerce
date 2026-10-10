@@ -23,7 +23,9 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/contactcache"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/httpapi"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/identity"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/jwtcontact"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/postgres"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/webhooksig"
@@ -120,7 +122,14 @@ func run() error {
 	receipts := app.NewReceipts(store, consentStore, log)
 	compliance := app.NewSmsCompliance(consentStore, app.ComplianceTexts{Help: cfg.SMSCompliance.Help,
 		Stop: cfg.SMSCompliance.Stop, Start: cfg.SMSCompliance.Start, TextVersion: cfg.SMSCompliance.TextVersion})
-	ingest := app.NewIngest(notifier, app.DefaultEventRules, log)
+	topics, err := app.ResolveTopics(cfg.Kafka.Topics)
+	if err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+	resolver := recipientResolver(cfg, local, log)
+	links := app.Links{Storefront: cfg.Links.Storefront, SellerCenter: cfg.Links.SellerCenter, ProviderHub: cfg.Links.ProviderHub}
+	stockAlerts := app.NewStockAlerts(postgres.NewStockAlertStore(pool), notifier, resolver, links, log)
+	ingest := app.NewIngest(notifier, app.IngestConfig{Resolver: resolver, Links: links, StockAlerts: stockAlerts}, log)
 
 	twilioV, resendV, sendGridV, err := verifiers(cfg)
 	if err != nil {
@@ -147,7 +156,7 @@ func run() error {
 	authMW := auth.Middleware(verifier, false)
 	authn := func(h http.Handler) http.Handler { return authMW(contacts.Capture(h)) }
 	httpapi.New(httpapi.Deps{Notifier: notifier, Log: app.NewNotificationLog(store), Templates: templates,
-		Preferences: prefs, Receipts: receipts, Compliance: compliance, Unsubscriber: unsub,
+		Preferences: prefs, Receipts: receipts, Compliance: compliance, Unsubscriber: unsub, StockAlerts: stockAlerts,
 		Twilio: twilioV, Resend: resendV, SendGrid: sendGridV, Logger: log}).Register(srv.Mux(), authn)
 
 	// ---- background workers ----
@@ -156,7 +165,7 @@ func run() error {
 		wg.Go(func() { _ = dispatcher.Run(ctx) })
 	}
 	if cfg.Kafka.Enabled {
-		wg.Go(func() { consume(ctx, cfg.Kafka.Brokers, ingest, log) })
+		wg.Go(func() { consume(ctx, cfg.Kafka.Brokers, app.TopicAddresses(topics), ingest, log) })
 	}
 	err = srv.Run(ctx)
 	stop()
@@ -165,6 +174,36 @@ func run() error {
 		return fmt.Errorf("serve: %w", err)
 	}
 	return nil
+}
+
+// localClientSecret is identity's local default for the notifications-service client (application-local.yml).
+const localClientSecret = "local-notifications-service-secret" //nolint:gosec // local-only default, not a credential
+
+// recipientResolver builds the identity lookup (client credentials + TTL cache). Without it, events that carry only
+// user or org ids cannot be delivered, so a missing secret outside local is logged loudly rather than crashing the
+// service that also sends OTPs.
+func recipientResolver(cfg config.Config, local bool, log *slog.Logger) port.RecipientResolver {
+	if !cfg.Identity.Enabled {
+		log.Warn("identity lookups disabled: only events with addresses in their payload are delivered")
+		return nil
+	}
+	secret := cfg.Identity.ClientSecret
+	if secret == "" && local {
+		secret = localClientSecret
+	}
+	if secret == "" {
+		log.Error("NOTIFICATIONS_CLIENT_SECRET missing: identity lookups disabled; order, seller and payout events need them")
+		return nil
+	}
+	timeout := cfg.Identity.Timeout
+	if timeout <= 0 {
+		timeout = 3 * time.Second
+	}
+	inner := identity.New(identity.Config{BaseURL: cfg.Identity.BaseURL, TokenURL: cfg.Identity.TokenURL,
+		ClientID: cfg.Identity.ClientID, ClientSecret: secret, Scopes: []string{"users:read"}},
+		&http.Client{Timeout: timeout})
+	return contactcache.New(inner, contactcache.Options{TTL: cfg.Identity.CacheTTL, NotFoundTTL: cfg.Identity.NotFoundTTL,
+		MaxEntries: cfg.Identity.CacheMax})
 }
 
 func localOnly(local bool, v string) string {
@@ -204,10 +243,11 @@ func verifiers(cfg config.Config) (webhooksig.Verifier, webhooksig.Verifier, web
 
 // consume runs the Kafka consumer group. When a handler fails the consumer is closed and recreated so the group
 // resumes from the last committed offset and the failed event is redelivered.
-func consume(ctx context.Context, brokers []string, h events.Handler, log *slog.Logger) {
+func consume(ctx context.Context, brokers, topics []string, h events.Handler, log *slog.Logger) {
 	backoff := time.Second
+	log.InfoContext(ctx, "consuming", "group", app.ConsumerGroup, "topics", topics)
 	for ctx.Err() == nil {
-		c, err := events.NewKafkaConsumer(brokers, app.ConsumerGroup, app.Topics...)
+		c, err := events.NewKafkaConsumer(brokers, app.ConsumerGroup, topics...)
 		if err == nil {
 			err = c.Run(ctx, h)
 			c.Close()

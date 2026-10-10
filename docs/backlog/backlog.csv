@@ -380,7 +380,7 @@
 - Filter by actor, entity and date","E18","","High","3","trust java","trust","In Progress"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
 - Reinstatement restores them","E18","","Medium","5","trust","trust","In Progress"
-"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","In Progress"
+"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","Done"
 "S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
 - SMS adapters: Twilio, Vonage, AWS End User Messaging
 - Push: FCM and APNs; WhatsApp: Meta Cloud API
@@ -614,7 +614,7 @@
 - BFF deliver-to by coordinates uses it","E22","","Medium","3","geo","geo","To Do"
 "S211","Story","Back-in-stock alerts","Notifications offers POST /v1/stock-alerts and sends an email/push when inventory publishes a restock for the variant.","- Shopper can subscribe to a variant alert once
 - Alert fires on restock event and is sent once
-- BFF stock-alert route works end to end","E19","","Medium","3","notifications","notifications","In Progress"
+- BFF stock-alert route works end to end","E19","","Medium","3","notifications","notifications","Done"
 "S212","Story","Careers form uploads resume via media","The storefront careers form uploads the resume to the media service and sends resumeAssetId to the BFF.","- Resume uploads via signed media URL with type and size limits
 - Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","To Do"
 "S213","Story","Durable seller directory for the indexer","Indexer loads seller display names on startup from a seller endpoint instead of relying only on events seen since start.","- Seller exposes a paged org directory endpoint for service clients
@@ -630,7 +630,7 @@
 "S217","Story","Align notification rules with real producer events","Notifications' event rules and topics are speculative (at.seller.events, order.placed). Map the real event types and topics from contracts/asyncapi/events.yaml and resolve recipients (email/phone/push) from identity when payloads carry only user ids.","- Rules cover orders.order.placed, orders.order.cancelled (wasPlaced), orders.shipment.status_changed/delivered/cancelled, seller application and compliance events, bookings events and identity verification
 - Topics match the AsyncAPI channels
 - Recipient contact details are resolved from identity by user id with caching
-- Contract test fails if a mapped event type is missing from events.yaml","E19","","High","5","notifications events","notifications","In Progress"
+- Contract test fails if a mapped event type is missing from events.yaml","E19","","High","5","notifications events","notifications","Done"
 "S218","Story","Returns endpoints and per-shipment inventory release","Orders adds return requests per shipment and releases or commits inventory per shipment rather than per order; payments delivered/settlement per shipment.","- Customer can request a return per shipment within policy
 - Cancelling one of several AfroTransact shipments releases only its stock
 - Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","To Do"

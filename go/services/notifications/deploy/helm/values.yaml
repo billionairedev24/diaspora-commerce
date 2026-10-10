@@ -42,6 +42,7 @@ monitoring:
 #   - RESEND_WEBHOOK_SECRET
 #   - SENDGRID_WEBHOOK_PUBLIC_KEY
 #   - UNSUBSCRIBE_SIGNING_KEY
+#   - NOTIFICATIONS_CLIENT_SECRET   (identity client notifications-service, recipient lookups)
 secrets:
   enabled: true
   store: platform-secrets

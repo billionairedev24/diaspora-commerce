@@ -1,85 +1,141 @@
 # AsyncAPI 3.0 fragment for notifications-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
 # notifications-service only consumes events (consumer group "notifications", inbox de-duplication on event-id);
-# it publishes none. The channels below describe the payload contract it relies on; the producing services own
-# the full definition of their topics in their own fragments.
+# it publishes none. The channels below are the producers' topics (same addresses) with the messages notifications
+# maps to templates; the producing services own those messages in their fragments. Rules live in
+# go/services/notifications/internal/app/rules.go and a contract test checks every mapped type and topic against
+# this document. Payloads that carry only user / org ids are resolved through identity
+# (GET /v1/internal/users/{id}/contact, GET /v1/internal/orgs/{orgId}/owners; client notifications-service).
+# Any consumed topic may also carry notification.requested (explicit template + channels + recipient).
 channels:
   notificationsIdentityEvents:
     address: at.identity.events
-    description: Identity events that trigger notifications (key = user id).
+    description: identity → one-time codes (payload recipient, security) and the welcome email.
     messages:
-      notificationsIdentityVerificationRequested: {$ref: '#/components/messages/notificationsIdentityVerificationRequested'}
+      notificationsIdentityVerificationRequested: {$ref: '#/components/messages/identityVerificationRequested'}
+      notificationsIdentityUserRegistered: {$ref: '#/components/messages/identityUserRegistered'}
       notificationsRequestedIdentity: {$ref: '#/components/messages/notificationsRequested'}
-  notificationsOrdersEvents:
-    address: at.orders.events
-    description: Order and shipment events that trigger notifications (key = order id).
+  notificationsOrderEvents:
+    address: at.order.events
+    description: orders → customer order and shipment updates (customerId resolved through identity).
     messages:
-      notificationsOrderPlaced: {$ref: '#/components/messages/notificationsOrderPlaced'}
-      notificationsShipmentOutForDelivery: {$ref: '#/components/messages/notificationsShipmentOutForDelivery'}
+      notificationsOrderPlaced: {$ref: '#/components/messages/ordersOrderPlaced'}
+      notificationsOrderCancelled: {$ref: '#/components/messages/ordersOrderCancelled'}
+      notificationsShipmentStatusChanged: {$ref: '#/components/messages/ordersShipmentStatusChanged'}
+      notificationsShipmentDelivered: {$ref: '#/components/messages/ordersShipmentDelivered'}
+      notificationsShipmentCancelled: {$ref: '#/components/messages/ordersShipmentCancelled'}
       notificationsRequestedOrders: {$ref: '#/components/messages/notificationsRequested'}
-  notificationsSellerEvents:
-    address: at.seller.events
-    description: Seller compliance events that trigger reminders (key = seller org id).
+  notificationsSellerApplicationEvents:
+    address: at.seller-application.events
+    description: seller onboarding → the applicant (applicantUserId resolved through identity).
     messages:
-      notificationsSellerPayoutRequirementDue: {$ref: '#/components/messages/notificationsSellerPayoutRequirementDue'}
-      notificationsRequestedSeller: {$ref: '#/components/messages/notificationsRequested'}
+      notificationsSellerApplicationSubmitted: {$ref: '#/components/messages/sellerApplicationSubmitted'}
+      notificationsSellerApplicationInfoRequested: {$ref: '#/components/messages/sellerApplicationInfoRequested'}
+      notificationsSellerApplicationApproved: {$ref: '#/components/messages/sellerApplicationApproved'}
+      notificationsSellerApplicationRejected: {$ref: '#/components/messages/sellerApplicationRejected'}
+  notificationsSellerComplianceEvents:
+    address: at.seller-compliance.events
+    description: Stripe compliance and enforcement → every owner of the organisation (orgId → identity owners).
+    messages:
+      notificationsSellerComplianceChanged: {$ref: '#/components/messages/sellerComplianceChanged'}
+      notificationsSellerComplianceReminder: {$ref: '#/components/messages/sellerComplianceReminder'}
+      notificationsSellerPayoutsPaused: {$ref: '#/components/messages/sellerPayoutsPaused'}
+      notificationsSellerPayoutsResumed: {$ref: '#/components/messages/sellerPayoutsResumed'}
+      notificationsSellerListingsHidden: {$ref: '#/components/messages/sellerListingsHidden'}
+      notificationsSellerListingsRestored: {$ref: '#/components/messages/sellerListingsRestored'}
+  notificationsPayoutEvents:
+    address: at.payout.events
+    description: payments payouts → every owner of the organisation.
+    messages:
+      notificationsPayoutPaid: {$ref: '#/components/messages/paymentsPayoutPaid'}
+      notificationsPayoutFailed: {$ref: '#/components/messages/paymentsPayoutFailed'}
   notificationsBookingsEvents:
     address: at.bookings.events
-    description: Booking events that trigger confirmations (key = booking id).
+    description: bookings → the customer (payload recipient block; missing addresses filled from identity by recipient.id).
     messages:
-      notificationsBookingConfirmed: {$ref: '#/components/messages/notificationsBookingConfirmed'}
+      notificationsBookingConfirmed: {$ref: '#/components/messages/bookingsConfirmed'}
+      notificationsBookingCancelled: {$ref: '#/components/messages/bookingsCancelled'}
+      notificationsBookingDeclined: {$ref: '#/components/messages/bookingsDeclined'}
+      notificationsBookingRescheduled: {$ref: '#/components/messages/bookingsRescheduled'}
       notificationsRequestedBookings: {$ref: '#/components/messages/notificationsRequested'}
+  notificationsContentEvents:
+    address: at.content.events
+    description: content → careers acknowledgements and newsletter double opt-in (payload email).
+    messages:
+      notificationsCareerApplicationReceived: {$ref: '#/components/messages/contentCareerApplicationReceived'}
+      notificationsNewsletterConfirmationRequested: {$ref: '#/components/messages/contentNewsletterConfirmationRequested'}
+  notificationsInventoryEvents:
+    address: at.inventory.events
+    description: inventory availability → back-in-stock alerts (SKU = variant ATIN; available > 0 sends each active alert once).
+    messages:
+      notificationsInventoryAvailabilityChanged: {$ref: '#/components/messages/inventoryAvailabilityChanged'}
 operations:
   consumeNotificationsIdentityEvents:
     action: receive
     channel: {$ref: '#/channels/notificationsIdentityEvents'}
-    summary: identity.verification.requested → template identity.verification (email, or the payload's channel).
-  consumeNotificationsOrdersEvents:
+    summary: >-
+      identity.verification.requested → identity.verification (email, or the payload's channel; security, never
+      resolved through identity); identity.user.registered → account.welcome (email; not for STAFF).
+  consumeNotificationsOrderEvents:
     action: receive
-    channel: {$ref: '#/channels/notificationsOrdersEvents'}
-    summary: order.placed → order.confirmed (email, sms, push); shipment.out_for_delivery → shipment.out_for_delivery (sms, push, email).
-  consumeNotificationsSellerEvents:
+    channel: {$ref: '#/channels/notificationsOrderEvents'}
+    summary: >-
+      orders.order.placed → order.confirmed (email, sms, push); orders.order.cancelled with wasPlaced=true →
+      order.cancelled (email, push); orders.shipment.status_changed → shipment.shipped (picked_up, or in_transit
+      without a pickup scan; email, push), shipment.out_for_delivery (sms, push, email), shipment.ready_for_pickup
+      (ready + PICKUP; email, sms, push), shipment.delivery_failed (email, sms, push); orders.shipment.delivered →
+      shipment.delivered (email, push); orders.shipment.cancelled → shipment.cancelled (email, push).
+  consumeNotificationsSellerApplicationEvents:
     action: receive
-    channel: {$ref: '#/channels/notificationsSellerEvents'}
-    summary: seller.payout.requirement_due → payout.requirement_due (email, sms; reminder category, quiet hours apply).
+    channel: {$ref: '#/channels/notificationsSellerApplicationEvents'}
+    summary: >-
+      seller.application.submitted → seller.application.submitted (email); info_requested →
+      seller.application.info_requested (email, sms); approved → seller.application.approved (email, sms, push);
+      rejected → seller.application.rejected (email).
+  consumeNotificationsSellerComplianceEvents:
+    action: receive
+    channel: {$ref: '#/channels/notificationsSellerComplianceEvents'}
+    summary: >-
+      seller.compliance.reminder → seller.compliance.reminder and seller.compliance.changed (new items, or status
+      moved to RESTRICTED_SOON / RESTRICTED) → seller.compliance.action_needed, on the payload's channels (in_app →
+      push; reminder category: preferences and quiet hours apply); seller.payouts.paused / resumed and
+      seller.listings.hidden / restored → matching templates (email, plus sms when paused / hidden).
+  consumeNotificationsPayoutEvents:
+    action: receive
+    channel: {$ref: '#/channels/notificationsPayoutEvents'}
+    summary: payments.payout.paid → payout.paid (email, push); payments.payout.failed → payout.failed (email, sms).
   consumeNotificationsBookingsEvents:
     action: receive
     channel: {$ref: '#/channels/notificationsBookingsEvents'}
-    summary: booking.confirmed → booking.confirmed (email, sms, push).
+    summary: >-
+      booking.confirmed / cancelled / rescheduled → matching templates (email, sms, push); booking.declined →
+      booking.declined (email, push). booking.reminder has a template but no event yet: bookings can send it with
+      notification.requested (templateKey booking.reminder).
+  consumeNotificationsContentEvents:
+    action: receive
+    channel: {$ref: '#/channels/notificationsContentEvents'}
+    summary: >-
+      content.career-application.received → careers.application_received (email);
+      content.newsletter.confirmation_requested → newsletter.confirm (email).
+  consumeNotificationsInventoryEvents:
+    action: receive
+    channel: {$ref: '#/channels/notificationsInventoryEvents'}
+    summary: >-
+      inventory.availability.changed with available > 0 claims every active stock alert for the SKU (= variant
+      ATIN) and sends stock.back_in_stock (email, push) once; redeliveries re-claim the same alerts and the inbox
+      stops a second send.
 components:
   messages:
-    notificationsIdentityVerificationRequested:
-      name: identity.verification.requested
-      title: Email/phone verification code requested
-      headers: {$ref: '#/components/schemas/EventHeaders'}
-      payload: {$ref: '#/components/schemas/NotificationsVerificationPayload'}
-    notificationsOrderPlaced:
-      name: order.placed
-      title: Order placed (sends order.confirmed)
-      headers: {$ref: '#/components/schemas/EventHeaders'}
-      payload: {$ref: '#/components/schemas/NotificationsOrderPayload'}
-    notificationsShipmentOutForDelivery:
-      name: shipment.out_for_delivery
-      title: Shipment out for delivery, with the customer's handover code
-      headers: {$ref: '#/components/schemas/EventHeaders'}
-      payload: {$ref: '#/components/schemas/NotificationsShipmentPayload'}
-    notificationsSellerPayoutRequirementDue:
-      name: seller.payout.requirement_due
-      title: Stripe Connect compliance requirement due
-      headers: {$ref: '#/components/schemas/EventHeaders'}
-      payload: {$ref: '#/components/schemas/NotificationsPayoutRequirementPayload'}
-    notificationsBookingConfirmed:
-      name: booking.confirmed
-      headers: {$ref: '#/components/schemas/EventHeaders'}
-      payload: {$ref: '#/components/schemas/NotificationsBookingPayload'}
     notificationsRequested:
       name: notification.requested
-      title: Explicit templated notification request (any topic)
+      title: Explicit templated notification request (any consumed topic)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/NotificationsRequestedPayload'}
   schemas:
     NotificationsRecipient:
       type: object
-      description: Who to notify. Every field is optional; a channel is used only when its address is present. When id is missing the event key is used.
+      description: >-
+        Who to notify. Every field is optional; a channel is used only when its address is present. When id is set
+        and an address is missing, notifications fills it from identity.
       properties:
         id: {type: string}
         email: {type: string, format: email}
@@ -94,66 +150,6 @@ components:
               platform: {type: string, enum: [fcm, apns]}
         timeZone: {type: string, description: IANA zone for quiet hours}
         locale: {type: string}
-    NotificationsEnvelopeFields:
-      type: object
-      description: Common fields; every other top-level field becomes template data.
-      required: [recipient]
-      properties:
-        recipient: {$ref: '#/components/schemas/NotificationsRecipient'}
-        market: {type: string, default: us}
-        locale: {type: string}
-        channel: {type: string, enum: [email, sms, push, chat], description: Optional single-channel override}
-    NotificationsVerificationPayload:
-      allOf:
-        - $ref: '#/components/schemas/NotificationsEnvelopeFields'
-        - type: object
-          required: [code, expiresInMinutes]
-          properties:
-            code: {type: string, pattern: '^[0-9]{6}$'}
-            expiresInMinutes: {type: integer}
-    NotificationsOrderPayload:
-      allOf:
-        - $ref: '#/components/schemas/NotificationsEnvelopeFields'
-        - type: object
-          required: [firstName, orderNumber, total, estimatedDelivery, orderUrl]
-          properties:
-            firstName: {type: string}
-            orderNumber: {type: string}
-            total: {type: string, description: Formatted amount, e.g. "$42.00"}
-            estimatedDelivery: {type: string}
-            orderUrl: {type: string, format: uri}
-    NotificationsShipmentPayload:
-      allOf:
-        - $ref: '#/components/schemas/NotificationsEnvelopeFields'
-        - type: object
-          required: [orderNumber, eta, handoverCode]
-          properties:
-            orderNumber: {type: string}
-            eta: {type: string}
-            handoverCode: {type: string, pattern: '^[0-9]{4}$'}
-    NotificationsPayoutRequirementPayload:
-      allOf:
-        - $ref: '#/components/schemas/NotificationsEnvelopeFields'
-        - type: object
-          required: [businessName, requirement, dueDate, actionUrl]
-          properties:
-            businessName: {type: string}
-            requirement: {type: string}
-            dueDate: {type: string}
-            actionUrl: {type: string, format: uri}
-    NotificationsBookingPayload:
-      allOf:
-        - $ref: '#/components/schemas/NotificationsEnvelopeFields'
-        - type: object
-          required: [firstName, serviceName, providerName, startsAt, location, bookingReference, manageUrl]
-          properties:
-            firstName: {type: string}
-            serviceName: {type: string}
-            providerName: {type: string}
-            startsAt: {type: string}
-            location: {type: string}
-            bookingReference: {type: string}
-            manageUrl: {type: string, format: uri}
     NotificationsRequestedPayload:
       type: object
       required: [templateKey, channels, recipient]

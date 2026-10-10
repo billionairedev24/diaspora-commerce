@@ -154,7 +154,7 @@ func (e *env) drain(t *testing.T) {
 }
 
 func orderData() map[string]any {
-	return map[string]any{"firstName": "Ada", "orderNumber": "AT-1001", "total": "$42.00", "estimatedDelivery": "Tue 14 Oct", "orderUrl": "https://afrotransact.com/o/1"}
+	return map[string]any{"firstName": "Ada", "orderNumber": "AT-1001", "total": "$42.00", "itemCount": 2, "estimatedDelivery": "by Tue, Oct 14", "orderUrl": "https://afrotransact.com/o/1"}
 }
 
 func TestPostgresIntegration(t *testing.T) {
@@ -199,14 +199,14 @@ func TestPostgresIntegration(t *testing.T) {
 		if err != nil || len(a) != 1 || len(b) != 1 || a[0].ID != b[0].ID {
 			t.Fatalf("%v %v %v", a, b, err)
 		}
-		if a[0].Subject != "Order AT-1001 confirmed" || a[0].TemplateVersion != 1 {
+		if a[0].Subject != "Order AT-1001 is confirmed" || a[0].TemplateVersion != 2 { // 0003 supersedes the v1 seed
 			t.Fatalf("%+v", a[0])
 		}
 	})
 
 	t.Run("inbox de-duplicates redelivered events", func(t *testing.T) {
 		e := newEnv(t, pool)
-		ingest := app.NewIngest(e.notifier, nil, discard)
+		ingest := app.NewIngest(e.notifier, app.IngestConfig{}, discard)
 		payload, _ := json.Marshal(map[string]any{"recipient": map[string]any{"email": "otp@example.com"}, "code": "246810", "expiresInMinutes": 10})
 		ev := events.Envelope{ID: "evt-" + uuid.NewString(), Type: "identity.verification.requested", AggregateID: "user-otp", Payload: payload}
 		for range 3 {
@@ -522,4 +522,7 @@ func TestPostgresIntegration(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("every mapped producer event renders with the seeded templates", func(t *testing.T) { producerEvents(t, pool) })
+	t.Run("stock alerts: subscribe once, claim once per restock", func(t *testing.T) { stockAlerts(t, pool) })
 }
