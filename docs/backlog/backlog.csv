@@ -185,7 +185,7 @@
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
 - Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","Done"
-"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","Done"
+"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","In Progress"
 "S051","Story","Payments service with Stripe PaymentIntents","Create, confirm (3-D Secure), capture per shipment and refund through Stripe.","- Manual capture per shipment on carrier acceptance
 - 3-D Secure test card triggers authentication
 - Declined test card returns a clear error
@@ -272,28 +272,28 @@
 - Push tracking mapped to shipment states","E11","","Medium","5","carriers go","carriers","Done"
 "S080","Story","Pickup points and seller pickup","Platform pickup points/lockers and seller-configured pickup with address and hours.","- Sellers set their pickup address and hours in Seller Center
 - Pickup ready notifications sent to customers","E11","","Medium","5","carriers delivery","carriers","Done"
-"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","To Do"
+"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","In Progress"
 "S081","Story","Driver app sign-in with access check","Email + password + 6-digit code; only users with delivery:operate get in.","- Users without delivery:operate see 'No driver access' with who can grant it
 - Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","To Do"
 "S082","Story","Vehicle inspection","10 checks with critical items, odometer, fuel, cold-box temperature, 4 live photos and signature.","- Failing brakes, tyres or lights blocks the route and reports a defect to dispatch
 - Cold-box must read 33–40°F when perishables are on board
-- Photos come only from the live in-app camera","E12","","High","5","delivery mobile","delivery","To Do"
+- Photos come only from the live in-app camera","E12","","High","5","delivery mobile","delivery","In Progress"
 "S083","Story","Load-out scanning","Scan every package for the route out of the warehouse.","- Unknown or already-scanned labels are rejected
-- Manual label entry is available and flagged","E12","","High","3","delivery mobile","delivery","To Do"
+- Manual label entry is available and flagged","E12","","High","3","delivery mobile","delivery","In Progress"
 "S084","Story","Seller pickup stops","Scan packages at seller locations and record who handed them over; handle pickup problems.","- Not ready (wait/skip), closed, wrong count and damaged flows
-- Pickup confirmation needs all expected scans or a reason","E12","","High","5","delivery mobile","delivery","To Do"
+- Pickup confirmation needs all expected scans or a reason","E12","","High","5","delivery mobile","delivery","In Progress"
 "S085","Story","Proof of delivery","Arrive, scan, choose handover method and take a live, GPS-stamped photo within 150 m.","- Handed to customer requires the 4-digit code
 - Someone else requires name, relationship and signature
 - Safe place blocked for perishables
-- Photo stamped with time, GPS and route id","E12","","Highest","8","delivery mobile","delivery","To Do"
+- Photo stamped with time, GPS and route id","E12","","Highest","8","delivery mobile","delivery","In Progress"
 "S086","Story","Delivery problems and reattempts","Customer unavailable, access issues, damage, refusal, missing package, unsafe — with required evidence.","- Customer unavailable needs call, text and 5-minute wait before reattempt/pickup point/return
 - Reattempt stops must be resolved before shift end
-- Failed packages scanned back in at end of shift","E12","","High","8","delivery mobile","delivery","To Do"
+- Failed packages scanned back in at end of shift","E12","","High","8","delivery mobile","delivery","In Progress"
 "S087","Story","SOS and offline-first sync","SOS alerts with GPS; every action queued with idempotency keys and sent in order.","- Offline actions queue and sync in order when back online
 - Header shows Synced / Syncing / Offline
-- SOS alerts dispatch immediately","E12","","High","8","delivery mobile","delivery","To Do"
+- SOS alerts dispatch immediately","E12","","High","8","delivery mobile","delivery","In Progress"
 "S088","Story","Dispatch console","Plan routes per zone, assign drivers and reassign failed stops.","- Driver events stream into Delivery dispatch
-- Failed stops can be reassigned to another route","E12","","Medium","8","delivery staff-console","delivery","To Do"
+- Failed stops can be reassigned to another route","E12","","Medium","8","delivery staff-console","delivery","In Progress"
 "E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","In Progress"
 "S089","Story","Resumable application with autosave","Applicants can save, sign out and resume exactly where they left off.","- Draft autosaves after every change
 - Save & sign out returns to 'Welcome back' and resumes on sign-in
@@ -341,7 +341,7 @@
 - Metered usage for FBA storage, ads and AI credits","E14","","High","8","billing stripe java","billing","In Progress"
 "S104","Story","Billing page with real card/bank presentation","Payment methods shown as brand cards with last 4 or bank with type and verification.","- Default method cannot be removed until another is default
 - Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","Done"
-"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","Done"
+"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","In Progress"
 "S105","Story","Provider availability and calendar","Weekly hours with breaks, blocked dates, minimum notice, buffers, daily limit and instant booking.","- Week and month calendar views with booking quick view
 - Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","Done"
 "S106","Story","Services & prices with provider take-home","Duration, price and deposit per service, showing what the provider receives after commission and fees.","- Take-home amount shown per service
@@ -614,14 +614,14 @@
 - BFF deliver-to by coordinates uses it","E22","","Medium","3","geo","geo","To Do"
 "S211","Story","Back-in-stock alerts","Notifications offers POST /v1/stock-alerts and sends an email/push when inventory publishes a restock for the variant.","- Shopper can subscribe to a variant alert once
 - Alert fires on restock event and is sent once
-- BFF stock-alert route works end to end","E19","","Medium","3","notifications","notifications","To Do"
+- BFF stock-alert route works end to end","E19","","Medium","3","notifications","notifications","In Progress"
 "S212","Story","Careers form uploads resume via media","The storefront careers form uploads the resume to the media service and sends resumeAssetId to the BFF.","- Resume uploads via signed media URL with type and size limits
 - Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","To Do"
 "S213","Story","Durable seller directory for the indexer","Indexer loads seller display names on startup from a seller endpoint instead of relying only on events seen since start.","- Seller exposes a paged org directory endpoint for service clients
 - Indexer warms its directory on start and refreshes on events
 - Restart does not change indexed seller names","E04","","Medium","3","indexer seller","search","To Do"
 "S214","Story","Expose payout hold in payouts balance","Payments adds payoutsPaused (and reason) to the payouts balance response so Seller Center can show the hold before a request fails.","- Balance response includes payoutsPaused and reason
-- Seller Center shows a banner when paused","E14","","Medium","1","payments","billing","To Do"
+- Seller Center shows a banner when paused","E14","","Medium","1","payments","billing","In Progress"
 "S215","Story","Org kind 'both' and market alignment","Seller emits BOTH when an org sells products and services; identity's market is aligned with content's market codes.","- Seller org events can carry BOTH
 - identity market values match content market codes
 - Navigation in Seller Center shows both groups for BOTH orgs","E13","","Low","3","seller identity","onboarding","To Do"
@@ -630,7 +630,7 @@
 "S217","Story","Align notification rules with real producer events","Notifications' event rules and topics are speculative (at.seller.events, order.placed). Map the real event types and topics from contracts/asyncapi/events.yaml and resolve recipients (email/phone/push) from identity when payloads carry only user ids.","- Rules cover orders.order.placed, orders.order.cancelled (wasPlaced), orders.shipment.status_changed/delivered/cancelled, seller application and compliance events, bookings events and identity verification
 - Topics match the AsyncAPI channels
 - Recipient contact details are resolved from identity by user id with caching
-- Contract test fails if a mapped event type is missing from events.yaml","E19","","High","5","notifications events","notifications","To Do"
+- Contract test fails if a mapped event type is missing from events.yaml","E19","","High","5","notifications events","notifications","In Progress"
 "S218","Story","Returns endpoints and per-shipment inventory release","Orders adds return requests per shipment and releases or commits inventory per shipment rather than per order; payments delivered/settlement per shipment.","- Customer can request a return per shipment within policy
 - Cancelling one of several AfroTransact shipments releases only its stock
 - Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","To Do"
@@ -639,6 +639,6 @@
 "S220","Story","Payments support for long-dated bookings","Payments adds release of remaining authorisation after partial capture, off-session charges on saved cards for balances beyond the auth window, and debiting provider late-cancellation fees.","- Remaining authorisation can be released after a deposit capture
 - Balance can be charged off-session on a saved card with SCA fallback
 - Provider late-cancellation fee is debited from the provider balance
-- Bookings reads fees from the payments fee schedule instead of config","E07","","High","8","payments bookings","payments","To Do"
+- Bookings reads fees from the payments fee schedule instead of config","E07","","High","8","payments bookings","payments","In Progress"
 "S221","Story","Service search by ZIP and ratings","Bookings service search honours ZIP/service area (via geo zones) and returns real ratings from reviews.","- Search filters by provider service area for the ZIP
 - Ratings come from reviews instead of 0","E15","","Medium","3","bookings geo","bookings","To Do"
