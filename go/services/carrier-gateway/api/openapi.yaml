@@ -1,0 +1,489 @@
+openapi: 3.1.0
+info:
+  title: Carrier Gateway API
+  version: v1
+  description: |
+    Direct integrations with **USPS, UPS, FedEx and DHL Express** (no aggregator) behind one Carrier port:
+    rate shopping, labels, voids, tracking, carrier pickups and carrier-side address validation, plus customer
+    pickup locations (platform counters, lockers and seller pickup with address and hours).
+
+    * **Rates** fan out to every enabled carrier with an account for the origin (FC or seller) in parallel within a
+      1.5 s budget. Late or failing carriers are listed with `status: timeout | error` and `partial: true`.
+      Complete results are cached for 10 minutes per cart/shipment fingerprint.
+    * **Labels** need an `Idempotency-Key`; the same key and body return the same label, a different body is
+      rejected. Label documents (PDF/ZPL) live in object storage. Labels can be voided until the carrier accepts
+      the parcel.
+    * **Tracking** comes from UPS Track Alert, FedEx and DHL pushes (`/v1/webhooks/{carrier}`, verified by
+      credential or HMAC signature) and from polling USPS. Events are de-duplicated by carrier event id, ordered by
+      carrier timestamp and published as `carrier.tracking.updated` on `at.carrier-shipment.events`.
+
+    Money is in minor units (cents). Errors are RFC 9457 problem documents with codes `carrier-gateway.<problem>`.
+servers:
+  - {url: 'http://localhost:8209', description: local}
+  - {url: 'https://api.dev.afrotransact.com/carrier-gateway', description: dev}
+  - {url: 'https://api.uat.afrotransact.com/carrier-gateway', description: uat}
+  - {url: 'https://api.afrotransact.com/carrier-gateway', description: prod}
+security: [{bearer: []}]
+tags:
+  - {name: rates}
+  - {name: labels}
+  - {name: tracking}
+  - {name: pickups}
+  - {name: addresses}
+  - {name: webhooks}
+paths:
+  /v1/rates:
+    post:
+      tags: [rates]
+      operationId: shopRates
+      summary: Rate-shop all enabled carriers (permission shipping:rate)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shipment]
+              properties:
+                cartId: {type: string, description: Scopes the quote cache to one cart}
+                carriers: {type: array, items: {$ref: '#/components/schemas/Carrier'}, description: Optional filter}
+                shipment: {$ref: '#/components/schemas/Shipment'}
+      responses:
+        '200':
+          description: Quotes, cheapest first
+          content: {application/json: {schema: {$ref: '#/components/schemas/RateResult'}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/labels:
+    post:
+      tags: [labels]
+      operationId: buyLabel
+      summary: Buy a label (permission shipping:label)
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [carrier, service, shipment]
+              properties:
+                carrier: {$ref: '#/components/schemas/Carrier'}
+                service: {type: string, description: 'Carrier service code from a quote (USPS_GROUND_ADVANTAGE, 03, FEDEX_GROUND, P …)'}
+                shipment: {$ref: '#/components/schemas/Shipment'}
+      responses:
+        '201':
+          description: Label purchased (or the label previously bought with this key)
+          content: {application/json: {schema: {$ref: '#/components/schemas/Label'}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/labels/{id}:
+    get:
+      tags: [labels]
+      operationId: getLabel
+      summary: Read a label (permission shipping:label)
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses:
+        '200':
+          description: Label
+          content: {application/json: {schema: {$ref: '#/components/schemas/Label'}}}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/labels/{id}/document:
+    get:
+      tags: [labels]
+      operationId: getLabelDocument
+      summary: Download the label document (PDF or ZPL)
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses:
+        '200':
+          description: Label document
+          content:
+            application/pdf: {schema: {type: string, format: binary}}
+            application/x-zpl: {schema: {type: string}}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/labels/{id}/void:
+    post:
+      tags: [labels]
+      operationId: voidLabel
+      summary: Void a label before carrier acceptance (permission shipping:void)
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses:
+        '200':
+          description: Voided label
+          content: {application/json: {schema: {$ref: '#/components/schemas/Label'}}}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+  /v1/tracking/{carrier}/{trackingNumber}:
+    get:
+      tags: [tracking]
+      operationId: getTracking
+      summary: Tracking state and scan history (permission shipping:rate); untracked numbers are fetched live
+      parameters:
+        - {name: carrier, in: path, required: true, schema: {$ref: '#/components/schemas/Carrier'}}
+        - {name: trackingNumber, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Tracking
+          content: {application/json: {schema: {$ref: '#/components/schemas/Tracking'}}}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/tracking:
+    post:
+      tags: [tracking]
+      operationId: registerTracking
+      summary: Start tracking a number bought outside the gateway, e.g. a seller's own label (permission shipping:label)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [carrier, trackingNumber]
+              properties:
+                carrier: {$ref: '#/components/schemas/Carrier'}
+                trackingNumber: {type: string}
+                reference: {type: string, description: Order or package id echoed in events}
+      responses:
+        '201':
+          description: Tracking
+          content: {application/json: {schema: {$ref: '#/components/schemas/Tracking'}}}
+  /v1/pickups:
+    post:
+      tags: [pickups]
+      operationId: schedulePickup
+      summary: Schedule a carrier pickup at an FC or seller (permission shipping:label)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [carrier, originNode, address, date, readyTime, closeTime, packages, totalWeightLb]
+              properties:
+                carrier: {$ref: '#/components/schemas/Carrier'}
+                originNode: {type: string}
+                address: {$ref: '#/components/schemas/Address'}
+                date: {type: string, format: date}
+                readyTime: {type: string, pattern: '^\d{2}:\d{2}$'}
+                closeTime: {type: string, pattern: '^\d{2}:\d{2}$'}
+                packages: {type: integer, minimum: 1}
+                totalWeightLb: {type: number, exclusiveMinimum: 0}
+                location: {type: string}
+                service: {type: string}
+                international: {type: boolean}
+      responses:
+        '201':
+          description: Scheduled pickup
+          content: {application/json: {schema: {$ref: '#/components/schemas/Pickup'}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/addresses/validate:
+    post:
+      tags: [addresses]
+      operationId: validateAddress
+      summary: Carrier-side address validation (default USPS for US, DHL abroad; permission shipping:rate)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address]
+              properties:
+                carrier: {$ref: '#/components/schemas/Carrier'}
+                address: {$ref: '#/components/schemas/Address'}
+      responses:
+        '200':
+          description: Validation
+          content: {application/json: {schema: {$ref: '#/components/schemas/AddressValidation'}}}
+  /v1/pickup-locations:
+    get:
+      tags: [pickups]
+      operationId: listPickupLocations
+      summary: Active pickup locations (public)
+      security: [{}, {bearer: []}]
+      parameters:
+        - {name: ownerOrg, in: query, schema: {type: string}}
+        - {name: postalPrefix, in: query, schema: {type: string}, description: 'e.g. "770" or "77002"'}
+      responses:
+        '200':
+          description: Locations
+          content:
+            application/json:
+              schema: {type: object, properties: {items: {type: array, items: {$ref: '#/components/schemas/PickupLocation'}}}}
+    post:
+      tags: [pickups]
+      operationId: createPickupLocation
+      summary: Create a pickup location (sellers their own SELLER locations; staff with shipping:admin any)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PickupLocation'}}}
+      responses:
+        '201':
+          description: Created
+          content: {application/json: {schema: {$ref: '#/components/schemas/PickupLocation'}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/pickup-locations/{id}:
+    get:
+      tags: [pickups]
+      operationId: getPickupLocation
+      security: [{}, {bearer: []}]
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      responses:
+        '200':
+          description: Location
+          content: {application/json: {schema: {$ref: '#/components/schemas/PickupLocation'}}}
+        '404': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [pickups]
+      operationId: updatePickupLocation
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PickupLocation'}}}
+      responses:
+        '200':
+          description: Updated
+          content: {application/json: {schema: {$ref: '#/components/schemas/PickupLocation'}}}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/pickup-locations/{id}/ready:
+    post:
+      tags: [pickups]
+      operationId: markPickupReady
+      summary: Mark an order ready for pickup; publishes carrier.pickup.ready for customer notification
+      parameters: [{$ref: '#/components/parameters/Id'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [orderRef, customerRef]
+              properties:
+                orderRef: {type: string}
+                customerRef: {type: string}
+                pickupCode: {type: string}
+      responses:
+        '202': {description: Event enqueued}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/webhooks/{carrier}:
+    post:
+      tags: [webhooks]
+      operationId: carrierWebhook
+      summary: Tracking push from UPS (Track Alert), FedEx or DHL
+      description: |
+        No bearer token. UPS: `credential` header must equal UPS_WEBHOOK_CREDENTIAL (set on the Track Alert
+        subscription). FedEx: `fdx-signature` = base64 HMAC-SHA256(raw body, FEDEX_WEBHOOK_SECRET).
+        DHL: `X-DHL-Signature` = HMAC-SHA256(raw body, DHL_WEBHOOK_SECRET), base64 or hex.
+      security: [{}]
+      parameters:
+        - {name: carrier, in: path, required: true, schema: {type: string, enum: [ups, fedex, dhl]}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object}}}
+      responses:
+        '200':
+          description: Ingested
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted: {type: integer}
+                  duplicates: {type: integer}
+                  changed: {type: integer}
+        '401': {$ref: '#/components/responses/Problem'}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    Id: {name: id, in: path, required: true, schema: {type: string}}
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content: {application/problem+json: {schema: {$ref: '#/components/schemas/Problem'}}}
+  schemas:
+    Carrier: {type: string, enum: [usps, ups, fedex, dhl]}
+    ShipmentState:
+      type: string
+      enum: [label_created, picked_up, in_transit, out_for_delivery, delivered, delivery_failed, returned, exception]
+    Address:
+      type: object
+      required: [line1, city, postalCode, country]
+      properties:
+        name: {type: string}
+        company: {type: string}
+        phone: {type: string}
+        email: {type: string}
+        line1: {type: string}
+        line2: {type: string}
+        city: {type: string}
+        state: {type: string}
+        postalCode: {type: string}
+        country: {type: string, description: ISO 3166-1 alpha-2, default: US}
+        residential: {type: boolean}
+    Parcel:
+      type: object
+      required: [weightLb]
+      properties:
+        weightLb: {type: number, exclusiveMinimum: 0, maximum: 150}
+        lengthIn: {type: number}
+        widthIn: {type: number}
+        heightIn: {type: number}
+    Customs:
+      type: object
+      required: [currency, lines]
+      properties:
+        currency: {type: string}
+        incoterm: {type: string, enum: [DAP, DDP]}
+        exportReason: {type: string}
+        invoiceNumber: {type: string}
+        lines:
+          type: array
+          items:
+            type: object
+            required: [description, quantity, unitValueMinor, hsCode, originCountry]
+            properties:
+              description: {type: string}
+              quantity: {type: integer, minimum: 1}
+              unitValueMinor: {type: integer}
+              hsCode: {type: string, examples: ['2103.90']}
+              originCountry: {type: string}
+              weightLb: {type: number}
+    Shipment:
+      type: object
+      required: [originNode, from, to, parcels]
+      properties:
+        reference: {type: string}
+        originNode: {type: string, description: FC id or seller org id; selects carrier accounts and negotiated rates}
+        from: {$ref: '#/components/schemas/Address'}
+        to: {$ref: '#/components/schemas/Address'}
+        parcels: {type: array, minItems: 1, items: {$ref: '#/components/schemas/Parcel'}}
+        shipDate: {type: string, format: date}
+        customs: {$ref: '#/components/schemas/Customs'}
+    Quote:
+      type: object
+      properties:
+        carrier: {$ref: '#/components/schemas/Carrier'}
+        service: {type: string}
+        serviceName: {type: string}
+        amountMinor: {type: integer}
+        listAmountMinor: {type: integer}
+        currency: {type: string}
+        negotiated: {type: boolean}
+        transitDays: {type: integer}
+        estimatedDelivery: {type: string, format: date-time}
+    RateResult:
+      type: object
+      properties:
+        fingerprint: {type: string}
+        quotes: {type: array, items: {$ref: '#/components/schemas/Quote'}}
+        partial: {type: boolean}
+        cached: {type: boolean}
+        carriers:
+          type: array
+          items:
+            type: object
+            properties:
+              carrier: {$ref: '#/components/schemas/Carrier'}
+              status: {type: string, enum: [ok, timeout, error]}
+              error: {type: string}
+              quotes: {type: integer}
+    Label:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        reference: {type: string}
+        originNode: {type: string}
+        carrier: {$ref: '#/components/schemas/Carrier'}
+        service: {type: string}
+        trackingNumber: {type: string}
+        carrierShipmentId: {type: string}
+        costMinor: {type: integer}
+        currency: {type: string}
+        format: {type: string, enum: [PDF, ZPL]}
+        labelKey: {type: string}
+        status: {type: string, enum: [purchasing, purchased, voided]}
+        trackingState: {$ref: '#/components/schemas/ShipmentState'}
+        createdAt: {type: string, format: date-time}
+        voidedAt: {type: string, format: date-time}
+        documentUrl: {type: string, description: Short-lived signed URL (S3 stores only)}
+    TrackingEvent:
+      type: object
+      properties:
+        carrier: {$ref: '#/components/schemas/Carrier'}
+        trackingNumber: {type: string}
+        eventId: {type: string}
+        code: {type: string}
+        description: {type: string}
+        state: {$ref: '#/components/schemas/ShipmentState'}
+        occurredAt: {type: string, format: date-time}
+        location: {type: string}
+        sequence: {type: integer}
+    Tracking:
+      type: object
+      properties:
+        live: {type: boolean}
+        shipment:
+          type: object
+          properties:
+            carrier: {$ref: '#/components/schemas/Carrier'}
+            trackingNumber: {type: string}
+            labelId: {type: string}
+            reference: {type: string}
+            state: {$ref: '#/components/schemas/ShipmentState'}
+            lastEventAt: {type: string, format: date-time}
+            active: {type: boolean}
+        events: {type: array, items: {$ref: '#/components/schemas/TrackingEvent'}}
+    Pickup:
+      type: object
+      properties:
+        id: {type: string}
+        carrier: {$ref: '#/components/schemas/Carrier'}
+        confirmation: {type: string}
+        date: {type: string, format: date-time}
+        originNode: {type: string}
+        createdAt: {type: string, format: date-time}
+    AddressValidation:
+      type: object
+      properties:
+        carrier: {$ref: '#/components/schemas/Carrier'}
+        valid: {type: boolean}
+        residential: {type: boolean}
+        standardized: {$ref: '#/components/schemas/Address'}
+        messages: {type: array, items: {type: string}}
+    PickupLocation:
+      type: object
+      required: [kind, name, address, timezone, hours]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [PLATFORM_COUNTER, LOCKER, SELLER]}
+        ownerOrg: {type: string}
+        name: {type: string}
+        address: {$ref: '#/components/schemas/Address'}
+        timezone: {type: string, examples: [America/Chicago]}
+        hours:
+          type: array
+          items:
+            type: object
+            required: [weekday, open, close]
+            properties:
+              weekday: {type: integer, minimum: 0, maximum: 6, description: 0 = Sunday}
+              open: {type: string, examples: ['09:00']}
+              close: {type: string, examples: ['18:00']}
+        readyHours: {type: integer, description: Typical hours from order to ready-for-pickup}
+        active: {type: boolean}
+        updatedAt: {type: string, format: date-time}
+    Problem:
+      type: object
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+        code: {type: string}

@@ -1,0 +1,89 @@
+# promise · prod. REDIS_URL comes from the environment outside local.
+port: 8080
+docsEnabled: false
+redisUrl: ""
+snapshotTtl: 24h          # promise snapshots for checkout
+maxOffers: 100            # per batch (search result page)
+data:
+  regions: data/zip3_regions.csv
+  transit: data/fc_transit.csv
+# Carrier service levels: maxDays caps table transit; saturdayDelivery counts Saturdays as delivery days.
+serviceLevels:
+  GROUND: {maxDays: 0, saturdayDelivery: false}
+  TWO_DAY: {maxDays: 2, saturdayDelivery: false}
+  OVERNIGHT: {maxDays: 1, saturdayDelivery: true}
+seller:
+  cutoff: "12:00"         # default when a seller has not set one
+  maxHandlingDays: 30
+  pickupReadyHours: 2
+  pickupHours:
+    - {weekday: 1, open: "10:00", close: "18:00"}
+    - {weekday: 2, open: "10:00", close: "18:00"}
+    - {weekday: 3, open: "10:00", close: "18:00"}
+    - {weekday: 4, open: "10:00", close: "18:00"}
+    - {weekday: 5, open: "10:00", close: "18:00"}
+    - {weekday: 6, open: "10:00", close: "16:00"}
+fulfilmentCentres:
+  - id: fc_houston_tx
+    zip: "77061"
+    timezone: America/Chicago
+    cutoff: "14:00"
+    worksSaturday: false
+    pickup:
+      readyHours: 2
+      hours:
+        - {weekday: 1, open: "09:00", close: "19:00"}
+        - {weekday: 2, open: "09:00", close: "19:00"}
+        - {weekday: 3, open: "09:00", close: "19:00"}
+        - {weekday: 4, open: "09:00", close: "19:00"}
+        - {weekday: 5, open: "09:00", close: "19:00"}
+        - {weekday: 6, open: "10:00", close: "16:00"}
+    delivery:
+      sameDayCutoff: "11:00"
+      deliversSaturday: true
+      sameDayZip3: ["770", "772", "773", "774", "775"]
+      nextDayZip3: ["776", "777", "778", "779"]
+  - id: fc_edison_nj
+    zip: "08837"
+    timezone: America/New_York
+    cutoff: "15:00"
+    worksSaturday: false
+    pickup:
+      readyHours: 2
+      hours:
+        - {weekday: 1, open: "08:00", close: "20:00"}
+        - {weekday: 2, open: "08:00", close: "20:00"}
+        - {weekday: 3, open: "08:00", close: "20:00"}
+        - {weekday: 4, open: "08:00", close: "20:00"}
+        - {weekday: 5, open: "08:00", close: "20:00"}
+        - {weekday: 6, open: "10:00", close: "16:00"}
+    delivery:
+      sameDayCutoff: "11:00"
+      deliversSaturday: true
+      sameDayZip3: ["070", "071", "072", "073", "077", "088", "089"]
+      nextDayZip3: ["074", "075", "076", "078", "079", "080", "085", "086", "087", "100", "101", "102", "103", "104", "112", "113", "114"]
+  - id: fc_atlanta_ga
+    zip: "30336"
+    timezone: America/New_York
+    cutoff: "14:00"
+    worksSaturday: false
+    pickup:
+      readyHours: 2
+      hours:
+        - {weekday: 1, open: "09:00", close: "19:00"}
+        - {weekday: 2, open: "09:00", close: "19:00"}
+        - {weekday: 3, open: "09:00", close: "19:00"}
+        - {weekday: 4, open: "09:00", close: "19:00"}
+        - {weekday: 5, open: "09:00", close: "19:00"}
+    delivery:
+      sameDayCutoff: "11:00"
+      deliversSaturday: false
+      sameDayZip3: ["300", "301", "302", "303"]
+      nextDayZip3: ["304", "305", "306", "307", "308", "309", "310", "311", "312", "313"]
+auth:
+  enabled: true
+  issuer: https://auth.afrotransact.com
+  audience: promise
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampleRatio: 0.1

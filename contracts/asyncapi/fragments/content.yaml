@@ -1,0 +1,184 @@
+# AsyncAPI 3.0 fragment for content-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  contentEvents:
+    address: at.content.events
+    description: >-
+      Everything content-service publishes. Headers event-id, event-type, occurred-at; consumers filter on
+      event-type and de-duplicate on event-id. Keys keep per-entity order: market (or `*`) for placements,
+      "markets", "site-config", the legal document key, the flag key, the subscription id, the country for launch
+      lists and the CAR-###### reference for applications.
+    messages:
+      contentPlacementsPublished: {$ref: '#/components/messages/contentPlacementsPublished'}
+      contentMarketsPublished: {$ref: '#/components/messages/contentMarketsPublished'}
+      contentSiteConfigChanged: {$ref: '#/components/messages/contentSiteConfigChanged'}
+      contentLegalVersionPublished: {$ref: '#/components/messages/contentLegalVersionPublished'}
+      contentLegalVersionAmended: {$ref: '#/components/messages/contentLegalVersionAmended'}
+      contentFlagChanged: {$ref: '#/components/messages/contentFlagChanged'}
+      contentNewsletterConfirmationRequested: {$ref: '#/components/messages/contentNewsletterConfirmationRequested'}
+      contentNewsletterSubscribed: {$ref: '#/components/messages/contentNewsletterSubscribed'}
+      contentNewsletterUnsubscribed: {$ref: '#/components/messages/contentNewsletterUnsubscribed'}
+      contentLaunchListJoined: {$ref: '#/components/messages/contentLaunchListJoined'}
+      contentCareerApplicationReceived: {$ref: '#/components/messages/contentCareerApplicationReceived'}
+operations:
+  publishContentEvents:
+    action: send
+    channel: {$ref: '#/channels/contentEvents'}
+    summary: >-
+      content-service publishes via its transactional outbox. Consumers - edge worker and gateway-bff
+      (content.placements.published: purge the market bundle / cached home); gateway-bff, cart, orders and seller
+      onboarding (content.markets.published: refresh eligibility, block disabled states); gateway-bff and web/mobile
+      (content.site-config.changed, content.legal.*); notifications (newsletter confirmation and welcome emails,
+      launch-list emails for newly live countries, careers acknowledgements, 30-day notices of material legal
+      changes); identity (re-acceptance of raised Conditions of Use / Privacy versions); OFREP providers
+      (content.flag.changed, optional early refresh).
+components:
+  messages:
+    contentPlacementsPublished:
+      name: content.placements.published
+      title: Placements of a market changed (approved, live or ended) — purge the CDN bundle
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentPlacementsPublished'}
+    contentMarketsPublished:
+      name: content.markets.published
+      title: A new Markets & locations version is live
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentMarketsPublished'}
+    contentSiteConfigChanged:
+      name: content.site-config.changed
+      title: Site configuration saved as a new revision
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentSiteConfigChanged'}
+    contentLegalVersionPublished:
+      name: content.legal.version_published
+      title: A legal document's version was raised (previous version archived)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentLegalVersionChanged'}
+    contentLegalVersionAmended:
+      name: content.legal.version_amended
+      title: The current version was amended (counsel sign-off, effective date or translations)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentLegalVersionChanged'}
+    contentFlagChanged:
+      name: content.flag.changed
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentFlagChanged'}
+    contentNewsletterConfirmationRequested:
+      name: content.newsletter.confirmation_requested
+      title: Send the double opt-in email (consumed by notifications)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentNewsletterConfirmationRequested'}
+    contentNewsletterSubscribed:
+      name: content.newsletter.subscribed
+      title: Subscription confirmed
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentNewsletterStatusChanged'}
+    contentNewsletterUnsubscribed:
+      name: content.newsletter.unsubscribed
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentNewsletterStatusChanged'}
+    contentLaunchListJoined:
+      name: content.launch-list.joined
+      title: Someone joined a country's launch list
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentLaunchListJoined'}
+    contentCareerApplicationReceived:
+      name: content.career-application.received
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentCareerApplicationReceived'}
+  schemas:
+    ContentPlacementsPublished:
+      type: object
+      required: [placementId, slot, market, status, action, purgePaths, cacheTags, occurredAt]
+      properties:
+        placementId: {type: string, examples: [plc_3f9a1c0d2b7e4a11]}
+        slot: {type: string, enum: [announcement_bar, hero_carousel, home_tiles, home_product_row, display_banner, category_banner, checkout_cross_sell]}
+        market: {type: string, description: 'ISO country, or * for every market'}
+        status: {type: string, enum: [SCHEDULED, LIVE, ENDED]}
+        action: {type: string, enum: [SCHEDULED, LIVE, ENDED]}
+        purgePaths: {type: array, items: {type: string}, examples: [['/v1/placements/bundles/US']]}
+        cacheTags: {type: array, items: {type: string}, examples: [['placements:US', 'placements:slot:hero_carousel']]}
+        occurredAt: {type: string, format: date-time}
+    ContentMarketsPublished:
+      type: object
+      required: [version, publishedBy, changedCountries, newlyLive, disabledRegions, enabledRegions]
+      properties:
+        version: {type: integer}
+        publishedBy: {type: string}
+        note: {type: [string, 'null']}
+        changedCountries: {type: array, items: {type: string}}
+        newlyLive: {type: array, items: {type: string}, description: Countries now LIVE (email their launch lists)}
+        disabledRegions: {type: array, items: {type: string}, examples: [['US-GA']], description: Marketplace switched off — block delivery}
+        enabledRegions: {type: array, items: {type: string}}
+    ContentSiteConfigChanged:
+      type: object
+      required: [revision, changedSections, updatedBy]
+      properties:
+        revision: {type: integer}
+        changedSections:
+          type: array
+          items: {type: string, enum: [socials, contacts, appLinks, paymentMethods, smsProgramName, identityProviders, locales, market]}
+        updatedBy: {type: string}
+    ContentLegalVersionChanged:
+      type: object
+      required: [document, title, version, effectiveDate, draftBanner, href]
+      properties:
+        document: {type: string, enum: [conditions-of-use, privacy, cookies, privacy-choices, returns, seller-terms, prohibited-items, accessibility, sms-terms]}
+        title: {type: string}
+        version: {type: string, examples: ['3.3']}
+        previousVersion: {type: [string, 'null'], description: Archived version (raise only)}
+        effectiveDate: {type: string, format: date}
+        draftBanner: {type: boolean, description: '"Draft for legal counsel review" banner shown'}
+        href: {type: string, examples: [/legal/sms-terms]}
+    ContentFlagChanged:
+      type: object
+      required: [key, enabled, killSwitch, rolloutPercentage, version, updatedBy]
+      properties:
+        key: {type: string}
+        enabled: {type: boolean}
+        killSwitch: {type: boolean}
+        rolloutPercentage: {type: number, minimum: 0, maximum: 100}
+        version: {type: integer, format: int64}
+        updatedBy: {type: string}
+    ContentNewsletterConfirmationRequested:
+      type: object
+      required: [subscriptionId, email, locale, confirmUrl, unsubscribeUrl, expiresAt]
+      properties:
+        subscriptionId: {type: string, format: uuid}
+        email: {type: string, format: email}
+        locale: {type: string, enum: [en, fr, es, ar]}
+        confirmUrl: {type: string, format: uri, description: Signed link; expires at expiresAt}
+        unsubscribeUrl: {type: string, format: uri}
+        expiresAt: {type: string, format: date-time}
+    ContentNewsletterStatusChanged:
+      type: object
+      required: [subscriptionId, email, locale]
+      properties:
+        subscriptionId: {type: string, format: uuid}
+        email: {type: string, format: email}
+        locale: {type: string}
+        unsubscribeUrl: {type: [string, 'null'], format: uri, description: One-click unsubscribe (List-Unsubscribe header)}
+    ContentLaunchListJoined:
+      type: object
+      required: [entryId, email, country, countryName, audience, shoppingUpdates]
+      properties:
+        entryId: {type: string, format: uuid}
+        email: {type: string, format: email}
+        country: {type: string}
+        countryName: {type: string}
+        audience: {type: string, enum: [SELLER, PROVIDER, SHOPPER]}
+        shoppingUpdates: {type: boolean}
+        launchNote: {type: [string, 'null']}
+    ContentCareerApplicationReceived:
+      type: object
+      required: [reference, jobId, jobTitle, team, location, name, email, resumeAssetId, resumeFileName, submittedAt]
+      properties:
+        reference: {type: string, pattern: '^CAR-\d{6}$'}
+        jobId: {type: string}
+        jobTitle: {type: string}
+        team: {type: string}
+        location: {type: string}
+        name: {type: string}
+        email: {type: string, format: email}
+        resumeAssetId: {type: string, description: media-service asset id}
+        resumeFileName: {type: string}
+        submittedAt: {type: string, format: date-time}

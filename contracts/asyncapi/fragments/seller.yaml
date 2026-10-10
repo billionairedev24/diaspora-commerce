@@ -1,0 +1,230 @@
+# AsyncAPI 3.0 fragment for seller-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  sellerApplicationEvents:
+    address: at.seller-application.events
+    description: >-
+      Onboarding applications (key = application id). Headers event-id, event-type, occurred-at; consumers
+      de-duplicate on event-id. notifications-service emails / texts the applicant; trust-ops audits decisions.
+    messages:
+      sellerApplicationSubmitted: {$ref: '#/components/messages/sellerApplicationSubmitted'}
+      sellerApplicationFlagged: {$ref: '#/components/messages/sellerApplicationFlagged'}
+      sellerApplicationInfoRequested: {$ref: '#/components/messages/sellerApplicationInfoRequested'}
+      sellerApplicationApproved: {$ref: '#/components/messages/sellerApplicationApproved'}
+      sellerApplicationRejected: {$ref: '#/components/messages/sellerApplicationRejected'}
+  sellerOrgEvents:
+    address: at.seller-org.events
+    description: Seller and provider organisations (key = org id).
+    messages:
+      sellerOrgApproved: {$ref: '#/components/messages/sellerOrgApproved'}
+      sellerOrgUpdated: {$ref: '#/components/messages/sellerOrgUpdated'}
+  sellerComplianceEvents:
+    address: at.seller-compliance.events
+    description: >-
+      Stripe Connect compliance mirror and automatic enforcement (key = org id, so pause / resume and hide / restore
+      for one organisation stay in order).
+    messages:
+      sellerComplianceChanged: {$ref: '#/components/messages/sellerComplianceChanged'}
+      sellerComplianceReminder: {$ref: '#/components/messages/sellerComplianceReminder'}
+      sellerPayoutsPaused: {$ref: '#/components/messages/sellerPayoutsPaused'}
+      sellerPayoutsResumed: {$ref: '#/components/messages/sellerPayoutsResumed'}
+      sellerListingsHidden: {$ref: '#/components/messages/sellerListingsHidden'}
+      sellerListingsRestored: {$ref: '#/components/messages/sellerListingsRestored'}
+  sellerSubscriptionEvents:
+    address: at.seller-subscription.events
+    description: Plan subscriptions on Stripe Billing (key = org id).
+    messages:
+      sellerSubscriptionChanged: {$ref: '#/components/messages/sellerSubscriptionChanged'}
+operations:
+  publishSellerApplicationEvents:
+    action: send
+    channel: {$ref: '#/channels/sellerApplicationEvents'}
+    summary: >-
+      seller-service publishes application lifecycle events via its transactional outbox. notifications-service
+      tells the applicant (submitted, info requested with the requested items, approved, rejected); staff-console
+      badges count flagged applications.
+  publishSellerOrgEvents:
+    action: send
+    channel: {$ref: '#/channels/sellerOrgEvents'}
+    summary: >-
+      seller.org.approved: identity-service grants the owner's seller.owner / provider.owner role with the org claim
+      (unlocking Seller Center / Provider Hub). seller.org.updated: indexer and cart refresh the seller display name;
+      identity mirrors the organisation.
+  publishSellerComplianceEvents:
+    action: send
+    channel: {$ref: '#/channels/sellerComplianceEvents'}
+    summary: >-
+      seller.compliance.changed / reminder: notifications-service sends email + SMS + in-app banner (consent and quiet
+      hours respected). seller.payouts.paused / resumed: payments-service holds or releases payouts.
+      seller.listings.hidden / restored: catalog, offers, bookings and the indexer hide or show the org's listings
+      and services.
+  publishSellerSubscriptionEvents:
+    action: send
+    channel: {$ref: '#/channels/sellerSubscriptionEvents'}
+    summary: Plan changes, trials and dunning; identity / feature limits and finance consume them.
+components:
+  messages:
+    sellerApplicationSubmitted:
+      name: seller.application.submitted
+      title: Application submitted (or resubmitted after a request for info; see submissionCount)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerApplicationEvent'}
+    sellerApplicationFlagged:
+      name: seller.application.flagged
+      title: Reviewer flagged failed checks for the final approver
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerApplicationEvent'}
+    sellerApplicationInfoRequested:
+      name: seller.application.info_requested
+      title: Reviewer asked the applicant for documents or fields (requestedItems)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerApplicationEvent'}
+    sellerApplicationApproved:
+      name: seller.application.approved
+      title: Final approval by a second person
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerApplicationEvent'}
+    sellerApplicationRejected:
+      name: seller.application.rejected
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerApplicationEvent'}
+    sellerOrgApproved:
+      name: seller.org.approved
+      title: Organisation approved — unlock the back office for its owners
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerOrgEvent'}
+    sellerOrgUpdated:
+      name: seller.org.updated
+      title: Organisation name or status changed (display name for search and carts)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerOrgEvent'}
+    sellerComplianceChanged:
+      name: seller.compliance.changed
+      title: Stripe requirements or account health changed
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerComplianceChanged'}
+    sellerComplianceReminder:
+      name: seller.compliance.reminder
+      title: Reminder 7, 3 or 1 day(s) before current_deadline, or sent by staff (manual)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerComplianceReminder'}
+    sellerPayoutsPaused:
+      name: seller.payouts.paused
+      title: Hold payouts (past-due requirements, staff hold or disconnected account); funds keep accruing
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerEnforcement'}
+    sellerPayoutsResumed:
+      name: seller.payouts.resumed
+      title: Release held payouts (requirements cleared, or released by Trust & Safety)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerEnforcement'}
+    sellerListingsHidden:
+      name: seller.listings.hidden
+      title: Charges disabled — hide listings and bookings from the storefront
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerEnforcement'}
+    sellerListingsRestored:
+      name: seller.listings.restored
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerEnforcement'}
+    sellerSubscriptionChanged:
+      name: seller.subscription.changed
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SellerSubscriptionChanged'}
+  schemas:
+    SellerApplicationEvent:
+      type: object
+      required: [applicationId, reference, orgId, kind, applicantUserId, status, action, actorId, occurredAt]
+      properties:
+        applicationId: {type: string, examples: [app_3k2j…]}
+        reference: {type: string, examples: [APP-30201]}
+        orgId: {type: string, examples: [org_9x8…]}
+        kind: {type: string, enum: [SELLER, PROVIDER]}
+        applicantUserId: {type: string}
+        status: {type: string, enum: [PENDING_REVIEW, FLAGGED, AWAITING_FINAL_APPROVAL, INFO_REQUESTED, APPROVED, REJECTED]}
+        action: {type: string, enum: [SUBMITTED, RESUBMITTED, FLAG, REQUEST_INFO, FINAL_APPROVE, REJECT]}
+        actorId: {type: string}
+        reasonCode: {type: [string, 'null'], examples: [PERMIT_MISSING]}
+        note: {type: [string, 'null']}
+        failedChecks: {type: array, items: {type: string}}
+        requestedItems: {type: array, items: {type: string}}
+        reviewerId: {type: [string, 'null']}
+        finalApproverId: {type: [string, 'null']}
+        displayName: {type: [string, 'null']}
+        submissionCount: {type: integer}
+        occurredAt: {type: string, format: date-time}
+    SellerOrgEvent:
+      type: object
+      required: [orgId, kind, status, occurredAt]
+      properties:
+        orgId: {type: string}
+        kind: {type: string, enum: [SELLER, PROVIDER]}
+        legalName: {type: [string, 'null']}
+        displayName: {type: [string, 'null']}
+        country: {type: [string, 'null']}
+        status: {type: string, enum: [DRAFT, PENDING_REVIEW, FLAGGED, AWAITING_FINAL_APPROVAL, INFO_REQUESTED, APPROVED, REJECTED, SUSPENDED]}
+        ownerUserIds: {type: array, items: {type: string}}
+        occurredAt: {type: string, format: date-time}
+    SellerComplianceChanged:
+      type: object
+      required: [orgId, accountId, status, trigger, channels, occurredAt]
+      properties:
+        orgId: {type: string}
+        accountId: {type: string, examples: [acct_1Pm8…]}
+        status: {type: string, enum: [COMPLIANT, ACTION_NEEDED, RESTRICTED_SOON, RESTRICTED, VERIFYING]}
+        previousStatus: {type: [string, 'null']}
+        currentlyDue: {type: array, items: {type: string}}
+        pastDue: {type: array, items: {type: string}}
+        eventuallyDue: {type: array, items: {type: string}}
+        pendingVerification: {type: array, items: {type: string}}
+        newItems: {type: array, items: {type: string}, description: Requirements that just became due (notify)}
+        currentDeadline: {type: [string, 'null'], format: date-time}
+        disabledReason: {type: [string, 'null']}
+        chargesEnabled: {type: boolean}
+        payoutsEnabled: {type: boolean}
+        payoutsPaused: {type: boolean}
+        trigger: {type: string, examples: [account.updated, answer, payout.failed, external_account.errored, deauthorized]}
+        channels: {type: array, items: {type: string, enum: [email, sms, in_app]}}
+        occurredAt: {type: string, format: date-time}
+    SellerComplianceReminder:
+      type: object
+      required: [orgId, accountId, manual, openItems, channels, occurredAt]
+      properties:
+        orgId: {type: string}
+        accountId: {type: string}
+        thresholdDays: {type: [integer, 'null'], enum: [7, 3, 1, null]}
+        manual: {type: boolean}
+        actorId: {type: [string, 'null']}
+        openItems: {type: array, items: {type: string}}
+        currentDeadline: {type: [string, 'null'], format: date-time}
+        channels: {type: array, items: {type: string}}
+        occurredAt: {type: string, format: date-time}
+    SellerEnforcement:
+      type: object
+      required: [orgId, accountId, reason, occurredAt]
+      properties:
+        orgId: {type: string}
+        accountId: {type: string}
+        reason: {type: string, enum: [AUTO_PAST_DUE, MANUAL, DEAUTHORIZED, CHARGES_DISABLED, CLEARED]}
+        actorId: {type: [string, 'null'], description: Staff member for manual holds and releases}
+        note: {type: [string, 'null']}
+        pastDue: {type: array, items: {type: string}}
+        occurredAt: {type: string, format: date-time}
+    SellerSubscriptionChanged:
+      type: object
+      required: [orgId, change, planCode, status, occurredAt]
+      properties:
+        orgId: {type: string}
+        change: {type: string, enum: [ACTIVATED, UPGRADED, CHANGE_SCHEDULED, CHANGE_CANCELLED, CHANGE_APPLIED, CANCEL_SCHEDULED, RESUMED, STATUS_CHANGED, PAYMENT_FAILED, PAYMENT_SUCCEEDED]}
+        planCode: {type: string, examples: [seller_growth]}
+        cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+        status: {type: string, enum: [PENDING_ACTIVATION, TRIALING, ACTIVE, PAST_DUE, UNPAID, INCOMPLETE, PAUSED, CANCELED]}
+        previousPlanCode: {type: [string, 'null']}
+        previousCadence: {type: [string, 'null']}
+        pendingPlanCode: {type: [string, 'null']}
+        pendingCadence: {type: [string, 'null']}
+        pendingEffectiveAt: {type: [string, 'null'], format: date-time}
+        trialEndsAt: {type: [string, 'null'], format: date-time}
+        currentPeriodEnd: {type: [string, 'null'], format: date-time}
+        cancelAtPeriodEnd: {type: boolean}
+        dunning: {type: string, enum: [NONE, RETRYING, FINAL_ATTEMPT_FAILED]}
+        occurredAt: {type: string, format: date-time}

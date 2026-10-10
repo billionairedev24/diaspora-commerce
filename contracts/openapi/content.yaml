@@ -1,0 +1,2678 @@
+openapi: 3.1.0
+info:
+  title: Content API
+  description: Nothing promotional or legal is hard-coded. Placements (announcement bar, hero carousel, tiles, banners, product
+    rows, checkout cross-sell) with targeting and a review workflow; markets & locations with per-state capability switches
+    and an eligibility check; site configuration (social links, contacts, app links, locales); legal documents with versions;
+    cookie consent; feature flags with OpenFeature (OFREP) evaluation; newsletter double opt-in, launch lists and careers.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8112
+  description: local
+- url: https://api.dev.afrotransact.com/content
+  description: dev
+- url: https://api.uat.afrotransact.com/content
+  description: uat
+- url: https://api.afrotransact.com/content
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Feature flags
+  description: Rollout percentages, targeting and kill switches (back office)
+- name: Legal
+  description: 'Legal & privacy center: current documents, versions, counsel sign-off'
+- name: Markets
+  description: 'Published markets: eligibility for checkout and onboarding, country pickers, launch lists'
+- name: Careers
+  description: Open roles, applications and role management
+- name: Markets (back office)
+  description: Draft changes to countries and state capability switches, then Publish
+- name: Cookie consent
+  description: Consent banner configuration, cookie table and auditable consent records (GPC aware)
+- name: Newsletter
+  description: Double opt-in newsletter
+- name: OpenFeature (OFREP)
+  description: OpenFeature Remote Evaluation Protocol v1
+- name: Placements
+  description: Slots, placements and the review workflow (back office)
+- name: Feature flag evaluation
+  description: Server-side evaluation with stable bucketing
+- name: Audit
+  description: Who changed which content, when
+- name: Site config
+  description: Social links, contacts, app links, locales and legal versions — no deployments
+- name: Placement delivery
+  description: Public, cacheable placements for storefront, apps and the CDN
+paths:
+  /ofrep/v1/evaluate/flags:
+    post:
+      tags:
+      - OpenFeature (OFREP)
+      summary: Evaluate every flag (OFREP bulk; ETag / If-None-Match → 304)
+      operationId: evaluateAll
+      parameters:
+      - name: If-None-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfrepEvaluationRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OfrepBulkResponse'
+      security: []
+  /ofrep/v1/evaluate/flags/{key}:
+    post:
+      tags:
+      - OpenFeature (OFREP)
+      summary: Evaluate one flag (OFREP)
+      operationId: evaluate_1
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfrepEvaluationRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+      security: []
+  /v1/audit:
+    get:
+      tags:
+      - Audit
+      summary: Audit entries, newest first (content:audit.view)
+      operationId: find
+      parameters:
+      - name: entityType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: entityId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContentAuditEntry'
+  /v1/careers/admin/jobs:
+    get:
+      tags:
+      - Careers
+      summary: Every role including drafts and closed ones (content:careers.view)
+      operationId: allJobs
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Job'
+  /v1/careers/applications:
+    get:
+      tags:
+      - Careers
+      summary: Applications, newest first (content:careers.view)
+      operationId: applications
+      parameters:
+      - name: jobId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobApplicationRecord'
+  /v1/careers/jobs:
+    get:
+      tags:
+      - Careers
+      summary: Open roles, filterable by team and location
+      operationId: jobs
+      parameters:
+      - name: team
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: location
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Jobs'
+      security: []
+    post:
+      tags:
+      - Careers
+      summary: Create a role (content:careers.edit)
+      operationId: create_2
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Job'
+  /v1/careers/jobs/{id}:
+    get:
+      tags:
+      - Careers
+      summary: An open role
+      operationId: job
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Job'
+      security: []
+    put:
+      tags:
+      - Careers
+      summary: Change, open or close a role (content:careers.edit)
+      operationId: update_3
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Job'
+  /v1/careers/jobs/{id}/applications:
+    post:
+      tags:
+      - Careers
+      summary: Apply (résumé uploaded beforehand through media-service); returns a CAR-###### reference
+      operationId: apply
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobApplication'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApplicationReceipt'
+      security: []
+  /v1/consent/categories/{key}:
+    put:
+      tags:
+      - Cookie consent
+      summary: Create or change a cookie category (content:legal.edit)
+      operationId: saveCategory
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CookieCategoryRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CookieCategory'
+  /v1/consent/cookie-policy:
+    get:
+      tags:
+      - Cookie consent
+      summary: Categories and cookie table for the consent banner
+      operationId: policy
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CookiePolicy'
+      security: []
+  /v1/consent/cookies/{name}:
+    put:
+      tags:
+      - Cookie consent
+      summary: Create or change a cookie in the table (content:legal.edit)
+      operationId: saveCookie
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CookieRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CookieDefinition'
+    delete:
+      tags:
+      - Cookie consent
+      summary: Remove a cookie from the table (content:legal.edit)
+      operationId: deleteCookie
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
+  /v1/consent/records:
+    post:
+      tags:
+      - Cookie consent
+      summary: Store a consent decision (required categories forced on; GPC forces advertising off)
+      operationId: record
+      parameters:
+      - name: Sec-GPC
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ConsentRecord'
+      security: []
+  /v1/flags:
+    get:
+      tags:
+      - Feature flags
+      summary: List flags (content:flags.view)
+      operationId: list_1
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeatureFlag'
+    post:
+      tags:
+      - Feature flags
+      summary: Create a flag (content:flags.edit)
+      operationId: create_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFlagRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FeatureFlag'
+  /v1/flags/evaluate:
+    post:
+      tags:
+      - Feature flag evaluation
+      summary: 'Evaluate flags for a subject: map of flag → on/off'
+      operationId: evaluate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluateFlagsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EvaluateFlagsResponse'
+      security: []
+  /v1/flags/{key}:
+    get:
+      tags:
+      - Feature flags
+      summary: Get a flag (content:flags.view)
+      operationId: get_2
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FeatureFlag'
+    put:
+      tags:
+      - Feature flags
+      summary: Change a flag (content:flags.edit); takes effect everywhere within 30 s
+      operationId: update_2
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFlagRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FeatureFlag'
+  /v1/flags/{key}/kill-switch:
+    post:
+      tags:
+      - Feature flags
+      summary: Kill switch on/off (content:flags.edit); forces the flag off within 30 s
+      operationId: killSwitch
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KillSwitchRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FeatureFlag'
+  /v1/legal:
+    get:
+      tags:
+      - Legal
+      summary: Current version of every document
+      operationId: index
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalDocumentIndex'
+      security: []
+  /v1/legal/{type}:
+    get:
+      tags:
+      - Legal
+      summary: A document's current version, rendered (placeholders filled from the site config)
+      operationId: current
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+        example: sms-terms
+      - name: locale
+        in: query
+        required: false
+        schema:
+          type: string
+          default: en
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalPage'
+      security: []
+  /v1/legal/{type}/current:
+    patch:
+      tags:
+      - Legal
+      summary: 'Amend the current version: counsel sign-off, effective date, translations (content:legal.edit)'
+      operationId: amend
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AmendLegalVersionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalVersion'
+  /v1/legal/{type}/versions:
+    get:
+      tags:
+      - Legal
+      summary: All versions of a document, newest first (archived ones stay retrievable)
+      operationId: versions
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LegalVersionRef'
+      security: []
+    post:
+      tags:
+      - Legal
+      summary: Raise the version; the previous version is archived (content:legal.edit)
+      operationId: raise
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RaiseLegalVersionRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalVersion'
+  /v1/legal/{type}/versions/{version}:
+    get:
+      tags:
+      - Legal
+      summary: One version of a document (current or archived)
+      operationId: version
+      parameters:
+      - name: type
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: locale
+        in: query
+        required: false
+        schema:
+          type: string
+          default: en
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LegalPage'
+      security: []
+  /v1/markets/countries:
+    get:
+      tags:
+      - Markets
+      summary: Every country with its status (onboarding pickers)
+      operationId: countries_1
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountries'
+      security: []
+  /v1/markets/countries/{code}:
+    get:
+      tags:
+      - Markets
+      summary: A published country with its states and switches
+      operationId: country_1
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
+      security: []
+  /v1/markets/draft/changes:
+    get:
+      tags:
+      - Markets (back office)
+      summary: Unpublished changes (content:markets.view)
+      operationId: changes
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketChanges'
+  /v1/markets/draft/countries:
+    get:
+      tags:
+      - Markets (back office)
+      summary: Draft countries (content:markets.view)
+      operationId: countries
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MarketCountrySummary'
+  /v1/markets/draft/countries/{code}:
+    get:
+      tags:
+      - Markets (back office)
+      summary: Draft country with its states / provinces (content:markets.view)
+      operationId: country
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
+    patch:
+      tags:
+      - Markets (back office)
+      summary: Change a country's status or launch note (content:markets.edit)
+      operationId: updateCountry
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMarketCountryRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
+  /v1/markets/draft/countries/{code}/activate-all:
+    post:
+      tags:
+      - Markets (back office)
+      summary: Activate all capabilities in every state of a country (content:markets.edit)
+      operationId: activateAll
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
+  /v1/markets/draft/countries/{code}/deactivate-all:
+    post:
+      tags:
+      - Markets (back office)
+      summary: Deactivate all capabilities in every state of a country (content:markets.edit)
+      operationId: deactivateAll
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
+  /v1/markets/draft/countries/{code}/regions/{region}:
+    patch:
+      tags:
+      - Markets (back office)
+      summary: Change a state's capability switches (content:markets.edit)
+      operationId: setCapabilities
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: region
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CapabilityChangeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketCountry'
+  /v1/markets/eligibility:
+    get:
+      tags:
+      - Markets
+      summary: Can we sell / deliver / onboard here?
+      description: Checkout and the BFF block delivery when deliveryAllowed is false (state switched off); onboarding rejects
+        countries where onboardingAllowed is false and offers the launch list.
+      operationId: eligibility
+      parameters:
+      - name: country
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: zip
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Eligibility'
+      security: []
+  /v1/markets/launch-list:
+    post:
+      tags:
+      - Markets
+      summary: Join a country's launch list (countries that are not live)
+      operationId: join
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaunchListRequest'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LaunchListResponse'
+      security: []
+  /v1/markets/publications:
+    get:
+      tags:
+      - Markets (back office)
+      summary: Published versions (content:markets.view)
+      operationId: publications
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MarketPublication'
+    post:
+      tags:
+      - Markets (back office)
+      summary: Publish the draft as a new version (content:markets.edit)
+      operationId: publish
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishMarketsRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublishMarketsResponse'
+  /v1/newsletter/confirmations:
+    post:
+      tags:
+      - Newsletter
+      summary: Confirm with the signed token from the email
+      operationId: confirm
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewsletterTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NewsletterResponse'
+      security: []
+  /v1/newsletter/subscriptions:
+    post:
+      tags:
+      - Newsletter
+      summary: 'Subscribe: emails a confirmation link (content.newsletter.confirmation_requested)'
+      operationId: subscribe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewsletterRequest'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NewsletterResponse'
+      security: []
+  /v1/newsletter/unsubscriptions:
+    post:
+      tags:
+      - Newsletter
+      summary: Unsubscribe with the signed token from any newsletter email
+      operationId: unsubscribe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewsletterTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/NewsletterResponse'
+      security: []
+  /v1/placements:
+    get:
+      tags:
+      - Placements
+      summary: List placements (content:placements.view)
+      operationId: list
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - IN_REVIEW
+          - SCHEDULED
+          - LIVE
+          - ENDED
+      - name: slot
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Placement'
+    post:
+      tags:
+      - Placements
+      summary: Create a draft; the payload is validated against the slot schema (content:placements.edit)
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Placement'
+  /v1/placements/bundles/{market}:
+    get:
+      tags:
+      - Placement delivery
+      summary: Compiled per-market bundle for the CDN (short TTL, purged on publish)
+      operationId: bundle
+      parameters:
+      - name: market
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PlacementBundle'
+      security: []
+  /v1/placements/resolve:
+    get:
+      tags:
+      - Placement delivery
+      summary: Live placements for a context (ETag; 304 on If-None-Match)
+      description: Highest priority first, at most the slot's maxItems per slot. Pass `seen` (id:count,…) to apply frequency
+        caps server-side; such responses are private.
+      operationId: resolve
+      parameters:
+      - name: market
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: slot
+        in: query
+        required: false
+        schema:
+          type: string
+        example: hero_carousel
+      - name: zip
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: dma
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: device
+        in: query
+        description: DESKTOP, MOBILE, TABLET or APP
+        required: false
+        schema:
+          type: string
+      - name: returning
+        in: query
+        required: false
+        schema:
+          type: boolean
+      - name: communities
+        in: query
+        description: Comma-separated community keys
+        required: false
+        schema:
+          type: string
+      - name: category
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: seen
+        in: query
+        description: 'Impressions per placement: plc_a:2,plc_b:1'
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ResolvedPlacements'
+      security: []
+  /v1/placements/{id}:
+    get:
+      tags:
+      - Placements
+      summary: Get a placement (content:placements.view)
+      operationId: get_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Placement'
+    put:
+      tags:
+      - Placements
+      summary: Edit a draft (content:placements.edit); expectedVersion is required
+      operationId: update_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlacementRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Placement'
+  /v1/placements/{id}/approve:
+    post:
+      tags:
+      - Placements
+      summary: 'Approve: SCHEDULED, or LIVE when the window has started. Paid creatives need a different person than the author
+        (content:placements.approve)'
+      operationId: approve
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Placement'
+  /v1/placements/{id}/end:
+    post:
+      tags:
+      - Placements
+      summary: End a scheduled or live placement now (content:placements.edit or approve)
+      operationId: end
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Placement'
+  /v1/placements/{id}/reject:
+    post:
+      tags:
+      - Placements
+      summary: Reject back to draft with a note (content:placements.approve)
+      operationId: reject
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectPlacementRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Placement'
+  /v1/placements/{id}/submit:
+    post:
+      tags:
+      - Placements
+      summary: Send a draft for review (content:placements.edit)
+      operationId: submit
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Placement'
+  /v1/site-config:
+    get:
+      tags:
+      - Site config
+      summary: Public site configuration (ETag + revision; 304 on If-None-Match)
+      operationId: get
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SiteConfig'
+      security: []
+    put:
+      tags:
+      - Site config
+      summary: Save a new revision (content:site.edit). Invalid profile links block saving; a stale expectedRevision returns
+        409
+      operationId: update
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteConfigRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SiteConfigSettings'
+  /v1/site-config/revisions:
+    get:
+      tags:
+      - Site config
+      summary: Revision history (content:site.view)
+      operationId: revisions
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SiteConfigRevision'
+  /v1/site-config/settings:
+    get:
+      tags:
+      - Site config
+      summary: Full editable configuration (content:site.view)
+      operationId: settings
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SiteConfigSettings'
+  /v1/slots:
+    get:
+      tags:
+      - Placements
+      summary: Slot catalogue with payload schemas and size specs (content:placements.view)
+      operationId: slots
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Slot'
+components:
+  schemas:
+    SiteAddress:
+      type: object
+      properties:
+        name:
+          type: string
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        region:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+    SiteAppLinks:
+      type: object
+      properties:
+        ios:
+          type: string
+        android:
+          type: string
+    SiteContactsSettings:
+      type: object
+      properties:
+        supportPhone:
+          type: string
+          example: '+18335550199'
+        supportPhoneDisplay:
+          type: string
+          example: +1 (833) 555-0199
+        emails:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'Email per purpose: support, privacy, accessibility, legal, press, partners, careers'
+        address:
+          $ref: '#/components/schemas/SiteAddress'
+    SiteIdentityProvider:
+      type: object
+      description: Button order; whether a provider is enabled comes from identity-service
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        order:
+          type: integer
+          format: int32
+    SiteLocale:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        dir:
+          type: string
+          enum:
+          - ltr
+          - rtl
+    SiteMarket:
+      type: object
+      properties:
+        code:
+          type: string
+        currency:
+          type: string
+        country:
+          type: string
+    SiteSocialLink:
+      type: object
+      properties:
+        network:
+          type: string
+          example: instagram
+        url:
+          type: string
+        visible:
+          type: boolean
+        order:
+          type: integer
+          format: int32
+    UpdateSiteConfigRequest:
+      type: object
+      properties:
+        expectedRevision:
+          type: integer
+          format: int32
+          description: Revision the editor loaded
+        summary:
+          type: string
+        socials:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteSocialLink'
+        contacts:
+          $ref: '#/components/schemas/SiteContactsSettings'
+        appLinks:
+          $ref: '#/components/schemas/SiteAppLinks'
+        paymentMethods:
+          type: array
+          items:
+            type: string
+        smsProgramName:
+          type: string
+        identityProviders:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteIdentityProvider'
+        locales:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteLocale'
+        market:
+          $ref: '#/components/schemas/SiteMarket'
+      required:
+      - expectedRevision
+    SiteConfigSettings:
+      type: object
+      description: Full, editable site configuration (back office)
+      properties:
+        revision:
+          type: integer
+          format: int32
+        socials:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteSocialLink'
+        contacts:
+          $ref: '#/components/schemas/SiteContactsSettings'
+        appLinks:
+          $ref: '#/components/schemas/SiteAppLinks'
+        paymentMethods:
+          type: array
+          items:
+            type: string
+        smsProgramName:
+          type: string
+        identityProviders:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteIdentityProvider'
+        locales:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteLocale'
+        market:
+          $ref: '#/components/schemas/SiteMarket'
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+    FrequencyCap:
+      type: object
+      description: impressions 0 = uncapped
+      properties:
+        impressions:
+          type: integer
+          format: int32
+        windowHours:
+          type: integer
+          format: int32
+    PlacementRequest:
+      type: object
+      properties:
+        slot:
+          type: string
+          example: hero_carousel
+        name:
+          type: string
+          minLength: 1
+        payload:
+          type: object
+          description: Must satisfy the slot's payload schema
+        targeting:
+          $ref: '#/components/schemas/PlacementTargeting'
+        schedule:
+          $ref: '#/components/schemas/PlacementSchedule'
+        frequencyCap:
+          $ref: '#/components/schemas/FrequencyCap'
+        priority:
+          type: integer
+          format: int32
+        paid:
+          type: boolean
+        advertiser:
+          type: string
+        expectedVersion:
+          type: integer
+          format: int64
+          description: 'Required on update: the version that was loaded'
+      required:
+      - name
+      - payload
+      - schedule
+    PlacementSchedule:
+      type: object
+      properties:
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+      required:
+      - startsAt
+    PlacementTargeting:
+      type: object
+      description: Empty lists mean any
+      properties:
+        markets:
+          type: array
+          items:
+            type: string
+        communities:
+          type: array
+          items:
+            type: string
+        zipPrefixes:
+          type: array
+          items:
+            type: string
+        dmas:
+          type: array
+          items:
+            type: string
+        devices:
+          type: array
+          items:
+            type: string
+            enum:
+            - DESKTOP
+            - MOBILE
+            - TABLET
+            - APP
+        audience:
+          type: string
+          enum:
+          - ALL
+          - NEW
+          - RETURNING
+        categories:
+          type: array
+          items:
+            type: string
+    Placement:
+      type: object
+      properties:
+        id:
+          type: string
+        slot:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        payload:
+          type: object
+        targeting:
+          $ref: '#/components/schemas/PlacementTargeting'
+        schedule:
+          $ref: '#/components/schemas/PlacementSchedule'
+        frequencyCap:
+          $ref: '#/components/schemas/FrequencyCap'
+        priority:
+          type: integer
+          format: int32
+        paid:
+          type: boolean
+        advertiser:
+          type: string
+        label:
+          type: string
+        createdBy:
+          type: string
+        submittedBy:
+          type: string
+        approvedBy:
+          type: string
+        reviewNote:
+          type: string
+        version:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    FlagTargeting:
+      type: object
+      description: Empty lists mean any; allowList subjects always get the flag
+      properties:
+        markets:
+          type: array
+          items:
+            type: string
+        roles:
+          type: array
+          items:
+            type: string
+        allowList:
+          type: array
+          items:
+            type: string
+    UpdateFlagRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          minLength: 1
+        enabled:
+          type: boolean
+        rolloutPercentage:
+          type: number
+          format: double
+          maximum: 100
+          minimum: 0
+        killSwitch:
+          type: boolean
+        targeting:
+          $ref: '#/components/schemas/FlagTargeting'
+        expectedVersion:
+          type: integer
+          format: int64
+      required:
+      - description
+      - enabled
+      - expectedVersion
+      - rolloutPercentage
+    FeatureFlag:
+      type: object
+      properties:
+        key:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        rolloutPercentage:
+          type: number
+          format: double
+        killSwitch:
+          type: boolean
+        targeting:
+          $ref: '#/components/schemas/FlagTargeting'
+        version:
+          type: integer
+          format: int64
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+    CookieRequest:
+      type: object
+      properties:
+        provider:
+          type: string
+          minLength: 1
+        purpose:
+          type: string
+          minLength: 1
+        duration:
+          type: string
+          minLength: 1
+        category:
+          type: string
+          minLength: 1
+      required:
+      - category
+      - duration
+      - provider
+      - purpose
+    CookieDefinition:
+      type: object
+      properties:
+        name:
+          type: string
+        provider:
+          type: string
+        purpose:
+          type: string
+        duration:
+          type: string
+        category:
+          type: string
+    CookieCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          minLength: 1
+        required:
+          type: boolean
+        gpcOptOut:
+          type: boolean
+        order:
+          type: integer
+          format: int32
+      required:
+      - description
+      - name
+    CookieCategory:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        required:
+          type: boolean
+        gpcOptOut:
+          type: boolean
+        order:
+          type: integer
+          format: int32
+    JobRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          minLength: 1
+        team:
+          type: string
+          minLength: 1
+        location:
+          type: string
+          minLength: 1
+        type:
+          type: string
+          minLength: 1
+        pay:
+          type: string
+          minLength: 1
+        summary:
+          type: string
+          minLength: 1
+        responsibilities:
+          type: array
+          items:
+            type: string
+        requirements:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - OPEN
+          - CLOSED
+        sortOrder:
+          type: integer
+          format: int32
+      required:
+      - location
+      - pay
+      - status
+      - summary
+      - team
+      - title
+      - type
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        team:
+          type: string
+        location:
+          type: string
+        type:
+          type: string
+        pay:
+          type: string
+        summary:
+          type: string
+        responsibilities:
+          type: array
+          items:
+            type: string
+        requirements:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - OPEN
+          - CLOSED
+        postedAt:
+          type: string
+          format: date-time
+    RejectPlacementRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          minLength: 1
+      required:
+      - note
+    NewsletterTokenRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Signed token from the emailed link
+    NewsletterResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - pending_confirmation
+          - subscribed
+          - unsubscribed
+    NewsletterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        locale:
+          type: string
+          example: en
+        source:
+          type: string
+          example: footer
+    PublishMarketsRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+    MarketChanges:
+      type: object
+      properties:
+        pending:
+          type: boolean
+        changedCountries:
+          type: array
+          items:
+            type: string
+        newlyLive:
+          type: array
+          items:
+            type: string
+        disabledRegions:
+          type: array
+          items:
+            type: string
+        enabledRegions:
+          type: array
+          items:
+            type: string
+    PublishMarketsResponse:
+      type: object
+      properties:
+        version:
+          type: integer
+          format: int32
+        changes:
+          $ref: '#/components/schemas/MarketChanges'
+    LaunchListRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        country:
+          type: string
+        audience:
+          type: string
+          description: SELLER (default), PROVIDER or SHOPPER
+        shoppingUpdates:
+          type: boolean
+    LaunchListResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        country:
+          type: string
+        audience:
+          type: string
+    Capabilities:
+      type: object
+      properties:
+        marketplace:
+          type: boolean
+        services:
+          type: boolean
+        food:
+          type: boolean
+        pickup:
+          type: boolean
+        taxRegistration:
+          type: boolean
+    MarketCountry:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - LIVE
+          - PAUSED
+          - COMING_SOON
+          - PLANNED
+        launchNote:
+          type: string
+        currency:
+          type: string
+        onboarding:
+          type: boolean
+        launchListOpen:
+          type: boolean
+        liveRegions:
+          type: integer
+          format: int32
+        regions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketRegion'
+    MarketRegion:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        capabilities:
+          $ref: '#/components/schemas/Capabilities'
+    RaiseLegalVersionRequest:
+      type: object
+      properties:
+        version:
+          type: string
+          example: '3.3'
+          minLength: 1
+        effectiveDate:
+          type: string
+          format: date
+        draftBanner:
+          type: boolean
+          description: Show the counsel-review banner (default true)
+        bodies:
+          type: object
+          additionalProperties:
+            type: string
+          description: Markdown per locale; en is required
+          minProperties: 1
+        changeSummary:
+          type: string
+      required:
+      - bodies
+      - effectiveDate
+      - version
+    LegalVersion:
+      type: object
+      properties:
+        key:
+          type: string
+        version:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - CURRENT
+          - ARCHIVED
+        draftBanner:
+          type: boolean
+        locales:
+          type: array
+          items:
+            type: string
+        changeSummary:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    CreateFlagRequest:
+      type: object
+      properties:
+        key:
+          type: string
+          minLength: 1
+        description:
+          type: string
+          minLength: 1
+        enabled:
+          type: boolean
+        rolloutPercentage:
+          type: number
+          format: double
+          maximum: 100
+          minimum: 0
+        targeting:
+          $ref: '#/components/schemas/FlagTargeting'
+      required:
+      - description
+      - key
+    KillSwitchRequest:
+      type: object
+      properties:
+        'on':
+          type: boolean
+      required:
+      - 'on'
+    EvaluateFlagsRequest:
+      type: object
+      properties:
+        subject:
+          type: string
+          description: 'Targeting key: user id or anonymous device id'
+        context:
+          $ref: '#/components/schemas/FlagEvaluationContext'
+        flags:
+          type: array
+          description: 'Only these flags (default: all)'
+          items:
+            type: string
+    FlagEvaluationContext:
+      type: object
+      properties:
+        market:
+          type: string
+          example: US
+        roles:
+          type: array
+          description: Trusted only from service callers
+          items:
+            type: string
+    EvaluateFlagsResponse:
+      type: object
+      properties:
+        flags:
+          type: object
+          additionalProperties:
+            type: boolean
+        etag:
+          type: string
+    ConsentRequest:
+      type: object
+      properties:
+        subject:
+          type: string
+          description: Anonymous device id or user id
+        categories:
+          type: object
+          additionalProperties:
+            type: boolean
+          description: Choice per category key
+        gpc:
+          type: boolean
+          description: Global Privacy Control (also read from the Sec-GPC header)
+        source:
+          type: string
+          description: banner, preferences, privacy-choices, app or gpc
+    ConsentRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        categories:
+          type: object
+          additionalProperties:
+            type: boolean
+        gpc:
+          type: boolean
+        policyVersion:
+          type: string
+        recordedAt:
+          type: string
+          format: date-time
+    CreateJobRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          example: data-engineer-remote-us
+          minLength: 1
+        job:
+          $ref: '#/components/schemas/JobRequest'
+      required:
+      - id
+      - job
+    JobApplication:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        linkedin:
+          type: string
+          description: Empty or https://www.linkedin.com/in/…
+        workAuthorization:
+          type: string
+          enum:
+          - 'Yes'
+          - Yes, with sponsorship
+          - 'No'
+        resumeAssetId:
+          type: string
+          description: media-service asset id of the uploaded résumé
+        resumeFileName:
+          type: string
+          example: resume.pdf
+        coverNote:
+          type: string
+        consent:
+          type: boolean
+    ApplicationReceipt:
+      type: object
+      properties:
+        reference:
+          type: string
+          example: CAR-100001
+        jobId:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+    OfrepEvaluationRequest:
+      type: object
+      properties:
+        context:
+          type: object
+          additionalProperties: {}
+          description: 'Evaluation context: targetingKey, market, roles'
+    OfrepBulkResponse:
+      type: object
+      properties:
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/OfrepEvaluationSuccess'
+        metadata:
+          type: object
+          additionalProperties: {}
+    OfrepEvaluationSuccess:
+      type: object
+      properties:
+        key:
+          type: string
+        value: {}
+        reason:
+          type: string
+        variant:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: {}
+    UpdateMarketCountryRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - LIVE
+          - PAUSED
+          - COMING_SOON
+          - PLANNED
+        launchNote:
+          type: string
+          maxLength: 500
+          minLength: 0
+    CapabilityChangeRequest:
+      type: object
+      description: Only the switches present are changed. Marketplace off turns every other capability off; enabling another
+        capability needs the marketplace on.
+      properties:
+        marketplace:
+          type: boolean
+        services:
+          type: boolean
+        food:
+          type: boolean
+        pickup:
+          type: boolean
+        taxRegistration:
+          type: boolean
+    AmendLegalVersionRequest:
+      type: object
+      description: Counsel sign-off (draftBanner false), effective date or translations
+      properties:
+        draftBanner:
+          type: boolean
+        effectiveDate:
+          type: string
+          format: date
+        bodies:
+          type: object
+          additionalProperties:
+            type: string
+    Slot:
+      type: object
+      properties:
+        key:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        maxItems:
+          type: integer
+          format: int32
+        sizeSpec:
+          type: string
+        payloadSchema:
+          type: object
+          description: JSON Schema 2020-12
+    SiteConfig:
+      type: object
+      description: Public site configuration (visible socials only)
+      properties:
+        revision:
+          type: integer
+          format: int32
+        socials:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteSocial'
+        contacts:
+          $ref: '#/components/schemas/SiteContacts'
+        legal:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteLegalDocument'
+        identityProviders:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteIdentityProvider'
+        locales:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteLocale'
+        market:
+          $ref: '#/components/schemas/SiteMarket'
+        appLinks:
+          $ref: '#/components/schemas/SiteAppLinks'
+        paymentMethods:
+          type: array
+          items:
+            type: string
+        smsProgramName:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    SiteContacts:
+      type: object
+      properties:
+        phone:
+          type: string
+        phoneE164:
+          type: string
+        supportEmail:
+          type: string
+        privacyEmail:
+          type: string
+        accessibilityEmail:
+          type: string
+        legalEmail:
+          type: string
+        pressEmail:
+          type: string
+        partnersEmail:
+          type: string
+        careersEmail:
+          type: string
+        address:
+          type: string
+        postalAddress:
+          $ref: '#/components/schemas/SiteAddress'
+    SiteLegalDocument:
+      type: object
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        version:
+          type: string
+        effective:
+          type: string
+          format: date
+        href:
+          type: string
+        draft:
+          type: boolean
+    SiteSocial:
+      type: object
+      properties:
+        network:
+          type: string
+          example: instagram
+        url:
+          type: string
+        label:
+          type: string
+    SiteConfigRevision:
+      type: object
+      properties:
+        revision:
+          type: integer
+          format: int32
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        summary:
+          type: string
+    ResolvedPlacements:
+      type: object
+      properties:
+        market:
+          type: string
+        slot:
+          type: string
+        placements:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServedPlacement'
+    ServedPlacement:
+      type: object
+      description: A placement as delivered to storefront and apps
+      properties:
+        id:
+          type: string
+        slot:
+          type: string
+        priority:
+          type: integer
+          format: int32
+        label:
+          type: string
+        advertiser:
+          type: string
+        payload:
+          type: object
+        frequencyCap:
+          $ref: '#/components/schemas/FrequencyCap'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+    BundledPlacement:
+      type: object
+      description: Served placement plus targeting for edge-side filtering
+      properties:
+        id:
+          type: string
+        priority:
+          type: integer
+          format: int32
+        label:
+          type: string
+        advertiser:
+          type: string
+        payload:
+          type: object
+        frequencyCap:
+          $ref: '#/components/schemas/FrequencyCap'
+        targeting:
+          $ref: '#/components/schemas/PlacementTargeting'
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+    PlacementBundle:
+      type: object
+      description: Compiled per-market JSON pushed to the CDN; purged on publish
+      properties:
+        market:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        etag:
+          type: string
+        slots:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/BundledPlacement'
+    MarketPublication:
+      type: object
+      properties:
+        version:
+          type: integer
+          format: int32
+        publishedAt:
+          type: string
+          format: date-time
+        publishedBy:
+          type: string
+        note:
+          type: string
+    Eligibility:
+      type: object
+      properties:
+        country:
+          type: string
+        countryStatus:
+          type: string
+          enum:
+          - LIVE
+          - PAUSED
+          - COMING_SOON
+          - PLANNED
+        region:
+          type: string
+        onboardingAllowed:
+          type: boolean
+        deliveryAllowed:
+          type: boolean
+        capabilities:
+          $ref: '#/components/schemas/Capabilities'
+        reason:
+          type: string
+          example: region-disabled
+        message:
+          type: string
+        launchNote:
+          type: string
+        launchListOpen:
+          type: boolean
+        marketsVersion:
+          type: integer
+          format: int32
+    MarketCountrySummary:
+      type: object
+      description: 'For country pickers: every ISO country with its status'
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - LIVE
+          - PAUSED
+          - COMING_SOON
+          - PLANNED
+        launchNote:
+          type: string
+        onboarding:
+          type: boolean
+        launchListOpen:
+          type: boolean
+        regionCount:
+          type: integer
+          format: int32
+        liveRegions:
+          type: integer
+          format: int32
+    MarketCountries:
+      type: object
+      properties:
+        version:
+          type: integer
+          format: int32
+        countries:
+          type: array
+          items:
+            $ref: '#/components/schemas/MarketCountrySummary'
+    LegalDocumentIndex:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/LegalDocumentSummary'
+    LegalDocumentSummary:
+      type: object
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        version:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        href:
+          type: string
+        draftBanner:
+          type: boolean
+    LegalHeading:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+    LegalPage:
+      type: object
+      description: A rendered legal document. English is binding; other locales fall back to English with translationFallback
+        = true
+      properties:
+        key:
+          type: string
+        title:
+          type: string
+        version:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - CURRENT
+          - ARCHIVED
+        draftBanner:
+          type: boolean
+        locale:
+          type: string
+        binding:
+          type: boolean
+        translationFallback:
+          type: boolean
+        bindingLocale:
+          type: string
+        body:
+          type: string
+          description: Markdown
+        outline:
+          type: array
+          items:
+            $ref: '#/components/schemas/LegalHeading'
+        versions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LegalVersionRef'
+        href:
+          type: string
+        archivedAt:
+          type: string
+          format: date-time
+    LegalVersionRef:
+      type: object
+      properties:
+        version:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        status:
+          type: string
+          enum:
+          - CURRENT
+          - ARCHIVED
+        archivedAt:
+          type: string
+          format: date-time
+        changeSummary:
+          type: string
+    CookiePolicy:
+      type: object
+      properties:
+        noticeVersion:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        noticeHref:
+          type: string
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/CookieCategory'
+        cookies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CookieDefinition'
+    Jobs:
+      type: object
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
+        teams:
+          type: array
+          items:
+            type: string
+        locations:
+          type: array
+          items:
+            type: string
+    JobApplicationRecord:
+      type: object
+      properties:
+        reference:
+          type: string
+        jobId:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        linkedinUrl:
+          type: string
+        workAuthorization:
+          type: string
+        resumeAssetId:
+          type: string
+        resumeFileName:
+          type: string
+        coverNote:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+    ContentAuditEntry:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        actor:
+          type: string
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        detail:
+          type: object
+          additionalProperties: {}
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

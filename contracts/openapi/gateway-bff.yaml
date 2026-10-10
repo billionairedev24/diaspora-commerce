@@ -1411,7 +1411,7 @@ components:
         phone: {type: string, pattern: '^\+[1-9]\d{6,14}$', description: E.164 mobile number}
         password: {type: string, minLength: 12, description: 'Upper and lower case, a number, not containing the name or email'}
         termsAccepted: {type: boolean, const: true}
-        smsConsent: {type: boolean, description: Separate, optional SMS opt-in (AfroTransact Alerts)}
+        smsConsent: {type: boolean, description: 'Separate, optional SMS opt-in (AfroTransact Alerts)'}
         returnTo: {type: string}
     VerifyCodeRequest:
       type: object

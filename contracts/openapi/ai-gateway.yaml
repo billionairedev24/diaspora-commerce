@@ -1,0 +1,544 @@
+openapi: 3.1.0
+info:
+  title: AI Gateway API
+  description: 'Lola, the AfroTransact shopping agent (streaming chat with visible tool calls, grounded product cards and
+    action proposals that always need the shopper''s tap), plus AI utilities: embeddings for search, listing writer, translation,
+    storefront taglines and trust-team triage. Models are served through OpenRouter with per-task routing, fallbacks and per-user
+    / per-feature budgets.'
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8113
+  description: local
+- url: https://api.dev.afrotransact.com/ai-gateway
+  description: dev
+- url: https://api.uat.afrotransact.com/ai-gateway
+  description: uat
+- url: https://api.afrotransact.com/ai-gateway
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Lola
+  description: 'AI shopping agent: streaming chat with visible tool calls and action proposals'
+- name: AI utilities
+  description: Embeddings for search and drafting aids for sellers and staff
+paths:
+  /v1/ai/listing-writer:
+    post:
+      tags:
+      - AI utilities
+      summary: Draft a listing title, description and bullets (ai:use)
+      description: Returns a DRAFT for the seller to edit; nothing is saved or published.
+      operationId: listingWriter
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingWriterRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ListingDraft'
+  /v1/ai/tagline:
+    post:
+      tags:
+      - AI utilities
+      summary: Suggest storefront taglines (ai:use)
+      operationId: tagline
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaglineRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Taglines'
+  /v1/ai/translate:
+    post:
+      tags:
+      - AI utilities
+      summary: Translate text (ai:use)
+      description: Draft translation; never applied automatically.
+      operationId: translate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranslateRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Translation'
+  /v1/ai/triage:
+    post:
+      tags:
+      - AI utilities
+      summary: Trust-team triage summary with cited fields (ai:triage)
+      description: 'Advisory only: decision is always HUMAN_REVIEW_REQUIRED; flags without real citations are dropped.'
+      operationId: triage
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TriageRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Report'
+  /v1/embeddings:
+    post:
+      tags:
+      - AI utilities
+      summary: Embed text (ai:use)
+      description: 'Used by the search service for semantic retrieval: request `{"input","purpose"}`, response `{"embedding":[…]}`
+        (plus model and dimensions). Personal data is redacted before embedding.'
+      operationId: embed
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmbeddingRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EmbeddingResponse'
+  /v1/lola/chat:
+    post:
+      tags:
+      - Lola
+      summary: Chat with Lola (Server-Sent Events)
+      description: 'Streams one turn as SSE. Event names, in order: `tool_call` (what Lola is doing, e.g. "Searching for jollof
+        seasoning"), `tool_result` (product cards, offers, delivery promise, order status, services), `action_proposal` (add
+        to cart, checkout, book a service, start a return — the app performs it only after the shopper''s tap), `token` (answer
+        text, grounded sentence by sentence), `handoff` (passed to human support) and finally `done` (grounded message, cards,
+        proposals, suggestion chips). On failure an `error` event carries a problem code. Budget problems before the stream
+        starts are returned as RFC 9457 problems (429 `ai.budget-exceeded`).'
+      operationId: chat
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+        required: true
+      responses:
+        '200':
+          description: Event stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/EventView'
+  /v1/lola/chat/complete:
+    post:
+      tags:
+      - Lola
+      summary: Chat with Lola (single JSON response)
+      description: 'Same turn as the streaming endpoint, returned at once: every event in order plus `done`.'
+      operationId: complete
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatReply'
+  /v1/lola/sessions/{sessionId}/messages:
+    get:
+      tags:
+      - Lola
+      summary: Stored turns of one of my Lola conversations (redacted)
+      operationId: history
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TurnView'
+components:
+  schemas:
+    EventView:
+      type: object
+      description: One streamed event, as in the SSE stream (event name + JSON data)
+      properties:
+        type:
+          type: string
+          example: tool_call
+        data: {}
+    ChatRequest:
+      type: object
+      description: A shopper message to Lola
+      properties:
+        sessionId:
+          type: string
+          description: Conversation id returned by a previous turn; omit to start a new conversation
+          example: lola_3f2a9c0d1e7b4a51
+          pattern: '[A-Za-z0-9_-]{8,64}'
+        message:
+          type: string
+          description: What the shopper typed
+          example: Jollof for 20
+          maxLength: 4000
+          minLength: 0
+        zip:
+          type: string
+          description: Deliver-to ZIP from the header picker
+          example: '77002'
+          pattern: \d{5}
+        language:
+          type: string
+          description: Preferred reply language (BCP 47)
+          example: en
+          maxLength: 16
+          minLength: 0
+      required:
+      - message
+    ActionProposal:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+          - ADD_TO_CART
+          - CHECKOUT
+          - BOOK_SERVICE
+          - START_RETURN
+        label:
+          type: string
+        payload:
+          type: object
+          additionalProperties: {}
+        requiresConfirmation:
+          type: boolean
+    ChatReply:
+      type: object
+      description: 'Non-streaming Lola turn: every event in order, then the final turn summary'
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventView'
+        done:
+          $ref: '#/components/schemas/Done'
+    Done:
+      type: object
+      properties:
+        sessionId:
+          type: string
+        message:
+          type: string
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductCard'
+        proposals:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActionProposal'
+        suggestions:
+          type: array
+          items:
+            type: string
+        dropped:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+        models:
+          type: array
+          items:
+            type: string
+        promptTokens:
+          type: integer
+          format: int64
+        completionTokens:
+          type: integer
+          format: int64
+    ProductCard:
+      type: object
+      properties:
+        atin:
+          type: string
+        title:
+          type: string
+        brand:
+          type: string
+        sellerName:
+          type: string
+        priceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        inStock:
+          type: boolean
+        availableQty:
+          type: integer
+          format: int32
+        lowStock:
+          type: boolean
+        deliveryDays:
+          type: integer
+          format: int32
+        rating:
+          type: number
+          format: double
+        imageUrl:
+          type: string
+    EmbeddingRequest:
+      type: object
+      description: Embedding request (the Go search service sends exactly {input, purpose})
+      properties:
+        input:
+          type: string
+          description: Text to embed
+          example: spicy pepper soup for a cold night
+          maxLength: 16000
+          minLength: 0
+        purpose:
+          type: string
+          description: search-query, search-document, listing or similarity
+          example: search-query
+      required:
+      - input
+    EmbeddingResponse:
+      type: object
+      description: Embedding vector
+      properties:
+        embedding:
+          type: array
+          description: The vector
+          items:
+            type: number
+            format: float
+        model:
+          type: string
+          example: openai/text-embedding-3-small
+        dimensions:
+          type: integer
+          format: int32
+          example: 1536
+    TriageRequest:
+      type: object
+      description: Trust-team triage input; field values as the reviewer sees them (masked where required)
+      properties:
+        subjectType:
+          type: string
+          example: APPLICATION
+          minLength: 1
+        subjectId:
+          type: string
+          minLength: 1
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          minProperties: 1
+      required:
+      - fields
+      - subjectId
+      - subjectType
+    Citation:
+      type: object
+      properties:
+        field:
+          type: string
+        excerpt:
+          type: string
+    Flag:
+      type: object
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        citedFields:
+          type: array
+          items:
+            type: string
+    Report:
+      type: object
+      properties:
+        subjectType:
+          type: string
+        subjectId:
+          type: string
+        summary:
+          type: string
+        riskLevel:
+          type: string
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/Flag'
+        citations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Citation'
+        droppedFlags:
+          type: integer
+          format: int32
+        decision:
+          type: string
+        model:
+          type: string
+    TranslateRequest:
+      type: object
+      description: Translation input
+      properties:
+        text:
+          type: string
+          maxLength: 16000
+          minLength: 0
+        targetLanguage:
+          type: string
+          example: fr
+          minLength: 1
+        sourceLanguage:
+          type: string
+          example: en
+        context:
+          type: string
+          example: product description
+      required:
+      - targetLanguage
+      - text
+    Translation:
+      type: object
+      properties:
+        translation:
+          type: string
+        targetLanguage:
+          type: string
+        model:
+          type: string
+    TaglineRequest:
+      type: object
+      description: Storefront tagline input
+      properties:
+        storeName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        description:
+          type: string
+          maxLength: 2000
+          minLength: 0
+        categories:
+          type: array
+          items:
+            type: string
+        tone:
+          type: string
+          example: joyful
+        count:
+          type: integer
+          format: int32
+          example: 3
+      required:
+      - storeName
+    Taglines:
+      type: object
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: string
+        model:
+          type: string
+    ListingWriterRequest:
+      type: object
+      description: Listing writer input; the result is a draft and is never published automatically
+      properties:
+        productType:
+          type: string
+          example: SPICE_BLEND
+        title:
+          type: string
+          example: Jollof seasoning 100g
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+          description: Product attributes
+        language:
+          type: string
+          example: en
+        tone:
+          type: string
+          example: warm
+    ListingDraft:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        bullets:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        autoPublished:
+          type: boolean
+        model:
+          type: string
+    TurnView:
+      type: object
+      description: A stored (redacted) conversation turn
+      properties:
+        role:
+          type: string
+        content:
+          type: string
+        products:
+          type: array
+          items: {}
+        at:
+          type: string
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,0 +1,117 @@
+# carrier-gateway · uat. Secrets come only from the environment: DB_URL, REDIS_URL, USPS_CLIENT_ID/SECRET,
+# USPS_PAYMENT_TOKEN, UPS_CLIENT_ID/SECRET, UPS_ACCOUNT, UPS_WEBHOOK_CREDENTIAL, FEDEX_CLIENT_ID/SECRET, FEDEX_ACCOUNT,
+# FEDEX_WEBHOOK_SECRET, DHL_USERNAME/PASSWORD, DHL_ACCOUNT, DHL_WEBHOOK_SECRET, S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY.
+# A carrier that is enabled but has no credentials is skipped at start-up with a warning.
+port: 8080
+docsEnabled: true
+databaseUrl: ""
+redisUrl: ""
+publicBaseUrl: https://api.uat.afrotransact.com/carrier-gateway
+kafka:
+  enabled: true
+  brokers: [kafka.kafka:9092]
+rates:
+  budget: 1500ms        # overall fan-out budget; late carriers are reported as timeout (partial result)
+  quoteTtl: 10m         # complete results are cached per cart/shipment fingerprint
+outbox:
+  interval: 1s
+  batch: 100
+polling:
+  enabled: true
+  carriers: [usps]      # carriers without push tracking
+  tick: 1m
+  interval: 2h          # per tracking number while active
+  maxBackoff: 12h       # after repeated failures
+  lease: 10m
+  batch: 50
+labelStore:
+  kind: s3             # fs (local) | s3 (S3, R2, GCS interop, MinIO)
+  dir: ./var/labels
+  s3:
+    endpoint: ""
+    region: us-east-1
+    bucket: afrotransact-labels-uat
+    pathStyle: false
+carrierHttp:
+  timeout: 10s
+  maxRetries: 2
+usps:
+  enabled: true
+  baseUrl: https://apis-tem.usps.com
+  mailClasses: [USPS_GROUND_ADVANTAGE, PRIORITY_MAIL, PRIORITY_MAIL_EXPRESS]
+  priceType: COMMERCIAL
+  imageType: PDF
+  paths:
+    token: /oauth2/v3/token
+    prices: /prices/v3/base-rates/search
+    label: /labels/v3/label
+    void: /labels/v3/label/{trackingNumber}
+    track: /tracking/v3/tracking/{trackingNumber}
+    address: /addresses/v3/address
+    pickup: /pickup/v3/carrier-pickup
+ups:
+  enabled: true
+  baseUrl: https://wwwcie.ups.com
+  paths:
+    token: /security/v1/oauth/token
+    rate: /api/rating/v2409/Shop
+    ship: /api/shipments/v2409/ship
+    void: /api/shipments/v2409/void/cancel/{shipmentId}
+    track: /api/track/v1/details/{trackingNumber}
+    subscribe: /api/track/v1/subscription/standard/package
+    pickup: /api/shipments/v2409/pickup/oncall
+    address: /api/addressvalidation/v2/3
+fedex:
+  enabled: true
+  baseUrl: https://apis-sandbox.fedex.com
+  imageType: PDF
+  signatureHeader: fdx-signature
+  paths:
+    token: /oauth/token
+    rate: /rate/v1/rates/quotes
+    ship: /ship/v1/shipments
+    cancel: /ship/v1/shipments/cancel
+    track: /track/v1/trackingnumbers
+    pickup: /pickup/v1/pickups
+    address: /address/v1/addresses/resolve
+dhl:
+  enabled: true
+  baseUrl: https://express.api.dhl.com/mydhlapi/test
+  labelFormat: pdf
+  signatureHeader: X-DHL-Signature
+  paths:
+    rates: /rates
+    shipments: /shipments
+    track: /shipments/{trackingNumber}/tracking
+    pickups: /pickups
+    address: /address-validate
+# Carrier accounts and negotiated rates per fulfilment centre / seller. Empty numbers use the platform account
+# from the environment (UPS_ACCOUNT, FEDEX_ACCOUNT, DHL_ACCOUNT); adjustmentPct is applied to carrier prices.
+accounts:
+  defaults:
+    - {carrier: usps, negotiated: false}
+    - {carrier: ups, negotiated: true}
+    - {carrier: fedex, negotiated: true}
+    - {carrier: dhl, negotiated: true}
+  nodes:
+    fc_houston_tx:
+      - {carrier: usps, negotiated: false}
+      - {carrier: ups, negotiated: true}
+      - {carrier: fedex, negotiated: true}
+      - {carrier: dhl, negotiated: true}
+    fc_edison_nj:
+      - {carrier: usps, negotiated: false}
+      - {carrier: ups, negotiated: true}
+      - {carrier: fedex, negotiated: true}
+      - {carrier: dhl, negotiated: true}
+    fc_atlanta_ga:
+      - {carrier: usps, negotiated: false}
+      - {carrier: ups, negotiated: true}
+      - {carrier: fedex, negotiated: true}
+auth:
+  enabled: true
+  issuer: https://auth.uat.afrotransact.com
+  audience: carrier-gateway
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampleRatio: 0.5

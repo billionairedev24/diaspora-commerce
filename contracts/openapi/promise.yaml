@@ -1,0 +1,171 @@
+openapi: 3.1.0
+info:
+  title: Promise API
+  version: v1
+  description: |
+    Delivery promises per destination ZIP ("Tomorrow, Oct 10", "Wed, Oct 15 – Fri, Oct 17") for search cards, the
+    PDP, the cart and checkout. A batch promises many offers to one ZIP.
+
+    * **Carrier** — from an FC (time zone + order cutoff) or a seller (handling days, ship-from ZIP, cutoff), plus
+      carrier ground transit from the ZIP3 zone table for launch FCs (Houston TX, Edison NJ, Atlanta GA) or the ZIP3
+      centroid distance. Service levels GROUND, TWO_DAY, OVERNIGHT; Saturday delivery is configurable per level.
+    * **AfroTransact Delivery** — same day inside an FC's same-day zone before its same-day cutoff, otherwise next
+      delivery day inside the zone; unavailable outside it.
+    * **Pickup** — ready time from the location's preparation time aligned to its opening hours.
+
+    Dates skip weekends and US federal holidays (observed rules). Each available promise has an `id`; its snapshot is
+    kept for 24 hours so checkout can store the exact promise on the order (`GET /v1/promises/{id}`). Offers that
+    cannot be promised come back with `available: false` and a `reason`.
+servers:
+  - {url: 'http://localhost:8204', description: local}
+  - {url: 'https://api.dev.afrotransact.com/promise', description: dev}
+  - {url: 'https://api.uat.afrotransact.com/promise', description: uat}
+  - {url: 'https://api.afrotransact.com/promise', description: prod}
+security: [{}, {bearer: []}]
+paths:
+  /v1/promises:
+    post:
+      operationId: promiseOffers
+      summary: Promise many offers to one destination ZIP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BatchRequest'}
+            example:
+              destinationZip: '77002'
+              offers:
+                - offerId: off_1
+                  origin: {type: FC, id: fc_houston_tx}
+                  method: {type: CARRIER, serviceLevel: GROUND}
+                - offerId: off_2
+                  origin: {type: SELLER, id: org_mama_put, shipFromZip: '30310', handlingDays: 2}
+                  method: {type: CARRIER, serviceLevel: GROUND}
+                - offerId: off_3
+                  origin: {type: FC, id: fc_houston_tx}
+                  method: {type: AFROTRANSACT_DELIVERY}
+                - offerId: off_4
+                  origin: {type: FC, id: fc_houston_tx}
+                  method: {type: PICKUP}
+      responses:
+        '200':
+          description: One promise per offer, in request order
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BatchResponse'}
+        '400': {$ref: '#/components/responses/Problem'}
+  /v1/promises/{id}:
+    get:
+      operationId: getPromise
+      summary: Promise snapshot (kept 24 hours)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^prm_[a-z2-7]{24}$'}}
+      responses:
+        '200':
+          description: Snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Promise'}
+        '404': {$ref: '#/components/responses/Problem'}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            properties:
+              type: {type: string}
+              title: {type: string}
+              status: {type: integer}
+              detail: {type: string}
+              code: {type: string, enum: [promise.invalid-json, promise.invalid-request, promise.not-found, promise.unavailable]}
+  schemas:
+    OpeningHours:
+      type: object
+      required: [weekday, open, close]
+      properties:
+        weekday: {type: integer, minimum: 0, maximum: 6, description: 0 = Sunday}
+        open: {type: string, pattern: '^\d{2}:\d{2}$'}
+        close: {type: string, pattern: '^\d{2}:\d{2}$'}
+    Origin:
+      type: object
+      required: [type, id]
+      properties:
+        type: {type: string, enum: [FC, SELLER]}
+        id: {type: string, description: FC id (fc_houston_tx, fc_edison_nj, fc_atlanta_ga) or seller org id}
+        shipFromZip: {type: string, description: Required for SELLER}
+        handlingDays: {type: integer, minimum: 0, maximum: 30, description: SELLER business days to prepare the parcel}
+        cutoff: {type: string, pattern: '^\d{2}:\d{2}$', description: SELLER order cutoff (default 12:00 local)}
+        timezone: {type: string, description: SELLER time zone (default from ship-from ZIP)}
+        worksSaturday: {type: boolean}
+    Method:
+      type: object
+      required: [type]
+      properties:
+        type: {type: string, enum: [CARRIER, AFROTRANSACT_DELIVERY, PICKUP]}
+        serviceLevel: {type: string, enum: [GROUND, TWO_DAY, OVERNIGHT], description: Required for CARRIER}
+        pickup:
+          type: object
+          description: Pickup location details (FC counters use FC configuration)
+          properties:
+            locationId: {type: string}
+            readyHours: {type: integer, minimum: 0}
+            timezone: {type: string}
+            hours: {type: array, items: {$ref: '#/components/schemas/OpeningHours'}}
+    BatchRequest:
+      type: object
+      required: [destinationZip, offers]
+      properties:
+        destinationZip: {type: string, pattern: '^\d{5}(-\d{4})?$'}
+        offers:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            required: [offerId, origin, method]
+            properties:
+              offerId: {type: string}
+              origin: {$ref: '#/components/schemas/Origin'}
+              method: {$ref: '#/components/schemas/Method'}
+    Promise:
+      type: object
+      properties:
+        id: {type: string, description: Present when available; snapshot kept 24 h}
+        offerId: {type: string}
+        origin:
+          type: object
+          properties:
+            kind: {type: string, enum: [FC, SELLER]}
+            id: {type: string}
+        method: {type: string, enum: [CARRIER, AFROTRANSACT_DELIVERY, PICKUP]}
+        serviceLevel: {type: string}
+        destinationZip: {type: string}
+        available: {type: boolean}
+        reason: {type: string}
+        shipDate: {type: string, format: date}
+        earliestDate: {type: string, format: date}
+        latestDate: {type: string, format: date}
+        cutoffAt: {type: string, format: date-time, description: Order by this instant to keep the promise}
+        cutoffLabel: {type: string, examples: [Order within 3 h 12 min]}
+        readyAt: {type: string, format: date-time, description: Pickup ready time}
+        label: {type: string, examples: ['Tomorrow, Oct 10', 'Wed, Oct 15 – Fri, Oct 17', 'Ready for pickup today at 4:00 PM']}
+        transit:
+          type: object
+          properties:
+            minDays: {type: integer}
+            maxDays: {type: integer}
+            source: {type: string, enum: [table, distance]}
+        computedAt: {type: string, format: date-time}
+        expiresAt: {type: string, format: date-time}
+        validUntil: {type: string, format: date-time}
+    BatchResponse:
+      type: object
+      properties:
+        destinationZip: {type: string}
+        generatedAt: {type: string, format: date-time}
+        promises: {type: array, items: {$ref: '#/components/schemas/Promise'}}

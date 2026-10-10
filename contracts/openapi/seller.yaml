@@ -1,0 +1,1970 @@
+openapi: 3.1.0
+info:
+  title: Seller API
+  description: 'Seller and service-provider organisations: resumable onboarding applications (entity-aware business details,
+    beneficial owners, Stripe Connect embedded verification, payouts, plan, permits and licences), the two-step staff review,
+    Stripe Connect compliance sync (Account health, reminders, payout holds) and plans & billing on Stripe Billing.'
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8106
+  description: local
+- url: https://api.dev.afrotransact.com/seller
+  description: dev
+- url: https://api.uat.afrotransact.com/seller
+  description: uat
+- url: https://api.afrotransact.com/seller
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Stripe compliance
+  description: Account health for sellers (owner / finance) and the staff compliance console (compliance:remind, compliance:hold).
+    Stripe is the source of truth; answers are forwarded to Stripe and verified there.
+- name: Onboarding
+  description: 'The applicant''s resumable application: start (prefilled from the signed-in account), autosave each step,
+    Stripe verification, submit. No back-office access until final approval.'
+- name: Application review
+  description: 'Two-step staff review. Step 1 (applications:review): approve → AWAITING_FINAL_APPROVAL, flag → FLAGGED, request
+    info → INFO_REQUESTED. Step 2 (applications:approve, a different person): final approve → APPROVED (seller.org.approved),
+    send back → PENDING_REVIEW, reject.'
+- name: Plans & billing
+  description: Plan catalogue (public) and each organisation's Stripe Billing subscription. Owner and finance can view; only
+    the owner changes billing.
+- name: Organisations
+  description: Seller and provider organisations
+- name: Stripe webhooks
+  description: Signature-verified (Stripe-Signature) and de-duplicated by event id
+paths:
+  /v1/applications:
+    get:
+      tags:
+      - Application review
+      summary: 'Review queue (default: pending review, flagged and awaiting final approval)'
+      operationId: reviewQueue
+      parameters:
+      - name: status
+        in: query
+        description: Comma-separated statuses
+        required: false
+        schema:
+          type: string
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ApplicationQueue'
+  /v1/applications/me:
+    get:
+      tags:
+      - Onboarding
+      summary: My draft with its current step and progress (resume after Save & sign out)
+      operationId: myApplication
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Application'
+    post:
+      tags:
+      - Onboarding
+      summary: Start or resume my application
+      description: Creates a DRAFT organisation (caller = owner) and application; name, email and phone are prefilled from
+        the token's identity claims and listed in prefilledFields. Returns 200 with the existing draft when one exists (resume).
+      operationId: startApplication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartApplicationRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Application'
+        '200':
+          description: Existing application resumed
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Application'
+  /v1/applications/me/steps/{step}:
+    put:
+      tags:
+      - Onboarding
+      summary: Autosave one step
+      description: 'Steps: business, business-details, owners, payouts, plan, catalog-compliance, review. The body is the
+        step''s data; only the fields present are validated (submit validates everything). stripe-verification is completed
+        in Stripe''s embedded component.'
+      operationId: saveStep
+      parameters:
+      - name: step
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+              - $ref: '#/components/schemas/BusinessStep'
+              - $ref: '#/components/schemas/BusinessDetailsStep'
+              - $ref: '#/components/schemas/OwnersStep'
+              - $ref: '#/components/schemas/PayoutsStep'
+              - $ref: '#/components/schemas/PlanStep'
+              - $ref: '#/components/schemas/CatalogComplianceStep'
+        required: true
+      responses:
+        '422':
+          description: seller.invalid-application (fieldErrors), seller.country-not-live or seller.step-not-applicable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /v1/applications/me/stripe/account-session:
+    post:
+      tags:
+      - Onboarding
+      summary: Account Session for Stripe's embedded onboarding / account-management components
+      description: Creates the platform-controlled connected account on first use (no Stripe dashboard, manual payouts). Returns
+        client_secret for Connect.js.
+      operationId: createAccountSession
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccountSession'
+  /v1/applications/me/stripe/refresh:
+    post:
+      tags:
+      - Onboarding
+      summary: Refresh Stripe verification results (identity, IRS name/TIN match, requirements)
+      operationId: refreshStripeVerification
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Application'
+  /v1/applications/me/submit:
+    post:
+      tags:
+      - Onboarding
+      summary: Submit (or resubmit after a request for info)
+      description: Validates every step; 422 seller.application-incomplete lists every failing field.
+      operationId: submitApplication
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Application'
+  /v1/applications/{id}:
+    get:
+      tags:
+      - Application review
+      summary: Full application dossier
+      description: SSN/EIN shown as last 4 and dates of birth as year only, unless the reviewer has applications:pii (the
+        view is logged).
+      operationId: applicationDetail
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Application'
+  /v1/applications/{id}/decision:
+    post:
+      tags:
+      - Application review
+      summary: 'Step 2 — final decision: FINAL_APPROVE, SEND_BACK or REJECT (not by the reviewer)'
+      operationId: finalDecision
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecision'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Application'
+  /v1/applications/{id}/documents/{assetId}:
+    get:
+      tags:
+      - Application review
+      summary: Open an uploaded document (logged in the access log)
+      operationId: viewDocument
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: assetId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+  /v1/applications/{id}/review:
+    post:
+      tags:
+      - Application review
+      summary: 'Step 1 — reviewer decision: APPROVE, FLAG (failedChecks) or REQUEST_INFO (requestedItems)'
+      operationId: reviewApplication
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewDecision'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Application'
+  /v1/compliance/accounts:
+    get:
+      tags:
+      - Stripe compliance
+      summary: 'Staff: connected accounts (filter by status or open items)'
+      operationId: complianceAccounts
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: openOnly
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountHealth'
+  /v1/compliance/accounts/{accountId}:
+    get:
+      tags:
+      - Stripe compliance
+      summary: 'Staff: one account with requirements, Stripe updates and messages sent'
+      operationId: complianceAccount
+      parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccountHealth'
+  /v1/compliance/accounts/{accountId}/payouts/pause:
+    post:
+      tags:
+      - Stripe compliance
+      summary: 'Staff: pause payouts — compliance:remind or compliance:hold'
+      operationId: pausePayouts
+      parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceNote'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccountHealth'
+  /v1/compliance/accounts/{accountId}/payouts/resume:
+    post:
+      tags:
+      - Stripe compliance
+      summary: 'Staff: release a payout hold — compliance:hold'
+      operationId: resumePayouts
+      parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ComplianceNote'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccountHealth'
+  /v1/compliance/accounts/{accountId}/reminders:
+    post:
+      tags:
+      - Stripe compliance
+      summary: 'Staff: send a reminder now (email + SMS + in-app) — compliance:remind'
+      operationId: remindNow
+      parameters:
+      - name: accountId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccountHealth'
+  /v1/launch-list:
+    post:
+      tags:
+      - Onboarding
+      summary: Join the launch list of a country that is not live (public)
+      operationId: joinLaunchList
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LaunchListRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LaunchListResponse'
+  /v1/markets:
+    get:
+      tags:
+      - Onboarding
+      summary: Countries open to sellers (public)
+      operationId: liveMarkets
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MarketsResponse'
+  /v1/orgs/{id}:
+    get:
+      tags:
+      - Organisations
+      summary: Organisation with members (members and reviewers)
+      operationId: getOrg
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Organisation'
+    patch:
+      tags:
+      - Organisations
+      summary: Rename the store (owner); publishes seller.org.updated
+      operationId: renameOrg
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameOrgRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Organisation'
+  /v1/orgs/{id}/public:
+    get:
+      tags:
+      - Organisations
+      summary: Public profile (display name, kind, status) for indexer, cart and storefront — no auth
+      operationId: orgPublicProfile
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgPublicView'
+  /v1/orgs/{orgId}/account-health:
+    get:
+      tags:
+      - Stripe compliance
+      summary: 'Account health: what Stripe needs, with a typed form per requirement'
+      operationId: accountHealth
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccountHealth'
+  /v1/orgs/{orgId}/account-health/requirements/{requirement}:
+    post:
+      tags:
+      - Stripe compliance
+      summary: Answer a requirement (owner / finance)
+      description: Values follow the requirement's form. Documents are media asset ids (uploaded to Stripe Files with purpose
+        account_requirement); SSNs and bank accounts are Stripe.js tokens. The requirement then shows as pending verification
+        until Stripe confirms.
+      operationId: answerRequirement
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: requirement
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RequirementAnswer'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccountHealth'
+  /v1/orgs/{orgId}/billing:
+    get:
+      tags:
+      - Plans & billing
+      summary: 'Billing page: plan, next charge or trial end, pending change, payment methods'
+      operationId: billingOverview
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Billing'
+  /v1/orgs/{orgId}/billing/cancel:
+    post:
+      tags:
+      - Plans & billing
+      summary: Cancel at period end (owner)
+      operationId: cancelSubscription
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Billing'
+  /v1/orgs/{orgId}/billing/invoices:
+    get:
+      tags:
+      - Plans & billing
+      summary: Invoices with hosted page and PDF links
+      operationId: listInvoices
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invoice'
+  /v1/orgs/{orgId}/billing/payment-methods:
+    get:
+      tags:
+      - Plans & billing
+      summary: Payment methods
+      operationId: listPaymentMethods
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentMethod'
+    post:
+      tags:
+      - Plans & billing
+      summary: Add a card or bank account (owner)
+      operationId: addPaymentMethod
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPaymentMethodRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentMethod'
+  /v1/orgs/{orgId}/billing/payment-methods/{id}:
+    delete:
+      tags:
+      - Plans & billing
+      summary: Remove a payment method (owner); 409 for the default method
+      operationId: removePaymentMethod
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentMethod'
+  /v1/orgs/{orgId}/billing/payment-methods/{id}/default:
+    post:
+      tags:
+      - Plans & billing
+      summary: Make a payment method the default (owner)
+      operationId: makeDefaultPaymentMethod
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentMethod'
+  /v1/orgs/{orgId}/billing/plan:
+    post:
+      tags:
+      - Plans & billing
+      summary: Change plan or cadence (owner)
+      description: Upgrades on the same cadence prorate immediately; downgrades and cadence changes are recorded as a pending
+        change applied at the next renewal.
+      operationId: changePlan
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePlanRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ChangePlanResponse'
+  /v1/orgs/{orgId}/billing/resume:
+    post:
+      tags:
+      - Plans & billing
+      summary: Resume a subscription set to cancel (owner)
+      operationId: resumeSubscription
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Billing'
+  /v1/plans:
+    get:
+      tags:
+      - Plans & billing
+      summary: Plans with monthly, quarterly (5% off) and annual (2 months free) prices (public)
+      operationId: listPlans
+      parameters:
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Plan'
+  /v1/review-reason-codes:
+    get:
+      tags:
+      - Application review
+      summary: Review reason codes
+      operationId: listReasonCodes
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReasonCode'
+  /v1/webhooks/stripe-billing:
+    post:
+      tags:
+      - Stripe webhooks
+      summary: 'Billing events: invoice.paid, invoice.payment_failed, customer.subscription.updated/deleted'
+      operationId: stripeBillingWebhook
+      parameters:
+      - name: Stripe-Signature
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: string
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/WebhookResult'
+  /v1/webhooks/stripe-connect:
+    post:
+      tags:
+      - Stripe webhooks
+      summary: 'Connect events: account.updated, capability.updated, person.created/updated, account.external_account.updated,
+        payout.failed, account.application.deauthorized'
+      operationId: stripeConnectWebhook
+      parameters:
+      - name: Stripe-Signature
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: string
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/WebhookResult'
+components:
+  schemas:
+    BusinessStep:
+      type: object
+      description: Step 'business'. Non-live countries return 422 seller.country-not-live.
+      properties:
+        offering:
+          type: string
+          enum:
+          - PRODUCTS
+          - SERVICES
+          - BOTH
+        entityType:
+          type: string
+          enum:
+          - sole_proprietor
+          - single_member_llc
+          - multi_member_llc
+          - corporation
+          - partnership
+          - nonprofit
+        country:
+          type: string
+          example: US
+        storeName:
+          type: string
+        contactEmail:
+          type: string
+        phone:
+          type: string
+          description: National or international; stored as E.164
+        website:
+          type: string
+    Address:
+      type: object
+      properties:
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+    BusinessDetailsStep:
+      type: object
+      description: Step 'business-details'; required fields depend on the entity type. taxId (SSN/ITIN or EIN, with or without
+        dashes) is encrypted; omit it to keep the stored one.
+      properties:
+        legalFirstName:
+          type: string
+        legalLastName:
+          type: string
+        legalName:
+          type: string
+        dba:
+          type: string
+        taxId:
+          type: string
+        dateOfBirth:
+          type: string
+          format: date
+        stateOfFormation:
+          type: string
+        dateOfFormation:
+          type: string
+          format: date
+        address:
+          $ref: '#/components/schemas/Address'
+        formationDocumentAssetId:
+          type: string
+        irsDeterminationLetterAssetId:
+          type: string
+    Owner:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        title:
+          type: string
+        email:
+          type: string
+        ownershipPercent:
+          type: number
+        significantControl:
+          type: boolean
+        dateOfBirth:
+          type: string
+          format: date
+    OwnersStep:
+      type: object
+      description: Step 'owners' (not for sole proprietors)
+      properties:
+        owners:
+          type: array
+          items:
+            $ref: '#/components/schemas/Owner'
+    PayoutsStep:
+      type: object
+      description: Step 'payouts'. Only last 4 digits are stored; the bank account itself goes to Stripe as externalAccountToken
+        (btok_…, Stripe.js).
+      properties:
+        accountHolderName:
+          type: string
+        accountType:
+          type: string
+          enum:
+          - checking
+          - savings
+        bankName:
+          type: string
+        routingNumber:
+          type: string
+        accountNumber:
+          type: string
+        accountNumberConfirmation:
+          type: string
+        externalAccountToken:
+          type: string
+    PlanStep:
+      type: object
+      description: Step 'plan'. Cards are tokenised client-side (pm_…); only brand, last 4 and expiry are stored. US_BANK_ACCOUNT
+        charges the payout bank by ACH.
+      properties:
+        planCode:
+          type: string
+        cadence:
+          type: string
+          enum:
+          - MONTHLY
+          - QUARTERLY
+          - ANNUAL
+        paymentMethodKind:
+          type: string
+          enum:
+          - CARD
+          - US_BANK_ACCOUNT
+        stripePaymentMethodId:
+          type: string
+        cardBrand:
+          type: string
+        cardLast4:
+          type: string
+        cardExpMonth:
+          type: integer
+          format: int32
+        cardExpYear:
+          type: integer
+          format: int32
+    CatalogComplianceStep:
+      type: object
+      description: Step 'catalog-compliance'
+      properties:
+        categories:
+          type: array
+          items:
+            type: string
+        foodPermit:
+          $ref: '#/components/schemas/FoodPermit'
+        beautyLabellingConfirmed:
+          type: boolean
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceLicence'
+        insuranceDocumentAssetId:
+          type: string
+        agreementsAccepted:
+          type: boolean
+        w9Certified:
+          type: boolean
+        w9SignerName:
+          type: string
+    FoodPermit:
+      type: object
+      properties:
+        permitNumber:
+          type: string
+        issuingAuthority:
+          type: string
+        expiresOn:
+          type: string
+          format: date
+        documentAssetId:
+          type: string
+    ServiceLicence:
+      type: object
+      description: A service offered; regulated services need licence number, issuing state, expiry (expired licences are
+        rejected) and the licence document
+      properties:
+        serviceName:
+          type: string
+        regulated:
+          type: boolean
+        licenceNumber:
+          type: string
+        issuingState:
+          type: string
+        expiresOn:
+          type: string
+          format: date
+        documentAssetId:
+          type: string
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+        properties:
+          type: object
+          additionalProperties: {}
+    WebhookResult:
+      type: object
+      properties:
+        eventId:
+          type: string
+        type:
+          type: string
+        duplicate:
+          type: boolean
+        outcome:
+          type: string
+    Billing:
+      type: object
+      properties:
+        orgId:
+          type: string
+        planCode:
+          type: string
+        planName:
+          type: string
+        cadence:
+          type: string
+        status:
+          type: string
+        price:
+          $ref: '#/components/schemas/PlanPrice'
+        trialEndsAt:
+          type: string
+          format: date-time
+        currentPeriodEnd:
+          type: string
+          format: date-time
+        nextChargeAt:
+          type: string
+          format: date-time
+        nextChargeCents:
+          type: integer
+          format: int64
+        nextChargeLabel:
+          type: string
+        cancelAtPeriodEnd:
+          type: boolean
+        pendingChange:
+          $ref: '#/components/schemas/PendingPlanChange'
+        dunning:
+          type: string
+        failedPaymentAttempts:
+          type: integer
+          format: int32
+        paymentMethods:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentMethod'
+    FirstCharge:
+      type: object
+      properties:
+        chargeOn:
+          type: string
+          format: date
+        amountCents:
+          type: integer
+          format: int64
+        sentence:
+          type: string
+    PaymentMethod:
+      type: object
+      description: Card (brand, last 4, expiry) or bank (name, type, last 4)
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        brand:
+          type: string
+        last4:
+          type: string
+        expMonth:
+          type: integer
+          format: int32
+        expYear:
+          type: integer
+          format: int32
+        bankName:
+          type: string
+        accountType:
+          type: string
+        verified:
+          type: boolean
+        receivesPayouts:
+          type: boolean
+        isDefault:
+          type: boolean
+        label:
+          type: string
+    PendingPlanChange:
+      type: object
+      description: Downgrade or cadence change applied at renewal
+      properties:
+        planCode:
+          type: string
+        planName:
+          type: string
+        cadence:
+          type: string
+        effectiveAt:
+          type: string
+          format: date-time
+    PlanPrice:
+      type: object
+      description: Price of a plan for one cadence; amounts in cents (USD)
+      properties:
+        cadence:
+          type: string
+        months:
+          type: integer
+          format: int32
+        totalCents:
+          type: integer
+          format: int64
+        perMonthCents:
+          type: integer
+          format: int64
+        savingCents:
+          type: integer
+          format: int64
+        perMonthLabel:
+          type: string
+        billedLabel:
+          type: string
+        savingLabel:
+          type: string
+        firstCharge:
+          $ref: '#/components/schemas/FirstCharge'
+    ChangePlanRequest:
+      type: object
+      properties:
+        planCode:
+          type: string
+          minLength: 1
+        cadence:
+          type: string
+          enum:
+          - MONTHLY
+          - QUARTERLY
+          - ANNUAL
+      required:
+      - planCode
+    ChangePlanResponse:
+      type: object
+      description: 'applied: IMMEDIATE_UPGRADE (prorated now), AT_RENEWAL (downgrade or cadence change) or NO_CHANGE'
+      properties:
+        applied:
+          type: string
+        billing:
+          $ref: '#/components/schemas/Billing'
+    AddPaymentMethodRequest:
+      type: object
+      description: Tokenised client-side by Stripe.js (card) or Financial Connections (bank); only display fields are stored
+      properties:
+        stripePaymentMethodId:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          enum:
+          - CARD
+          - US_BANK_ACCOUNT
+          minLength: 1
+        brand:
+          type: string
+        last4:
+          type: string
+        expMonth:
+          type: integer
+          format: int32
+        expYear:
+          type: integer
+          format: int32
+        bankName:
+          type: string
+        accountType:
+          type: string
+        makeDefault:
+          type: boolean
+      required:
+      - kind
+      - stripePaymentMethodId
+    RequirementAnswer:
+      type: object
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+      - values
+    AccountHealth:
+      type: object
+      properties:
+        accountId:
+          type: string
+        orgId:
+          type: string
+        orgName:
+          type: string
+        status:
+          type: string
+        chargesEnabled:
+          type: boolean
+        payoutsEnabled:
+          type: boolean
+        payoutsPaused:
+          type: boolean
+        holdReason:
+          type: string
+        listingsHidden:
+          type: boolean
+        deauthorized:
+          type: boolean
+        openItems:
+          type: integer
+          format: int32
+        currentDeadline:
+          type: string
+          format: date-time
+        disabledReason:
+          type: string
+        remindersSent:
+          type: integer
+          format: int32
+        lastReminderAt:
+          type: string
+          format: date-time
+        capabilities:
+          type: object
+          additionalProperties:
+            type: string
+        requirements:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequirementItem'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComplianceHistory'
+    ComplianceHistory:
+      type: object
+      properties:
+        source:
+          type: string
+        eventId:
+          type: string
+        eventType:
+          type: string
+        status:
+          type: string
+        summary:
+          type: string
+        actorId:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    FormField:
+      type: object
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+        required:
+          type: boolean
+        options:
+          type: array
+          items:
+            type: string
+        pattern:
+          type: string
+    RequirementError:
+      type: object
+      properties:
+        requirement:
+          type: string
+        code:
+          type: string
+        reason:
+          type: string
+    RequirementForm:
+      type: object
+      properties:
+        requirement:
+          type: string
+        kind:
+          type: string
+          enum:
+          - TAX_ID
+          - ID_NUMBER
+          - VERIFICATION_DOCUMENT
+          - OWNERSHIP_DECLARATION
+          - REPRESENTATIVE_DOB
+          - REPRESENTATIVE_TITLE
+          - TOS_ACCEPTANCE
+          - BANK_ACCOUNT
+          - BUSINESS_URL
+          - UNSUPPORTED
+        label:
+          type: string
+        subject:
+          type: string
+        why:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/FormField'
+    RequirementItem:
+      type: object
+      properties:
+        requirement:
+          type: string
+        bucket:
+          type: string
+        form:
+          $ref: '#/components/schemas/RequirementForm'
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequirementError'
+    LaunchListRequest:
+      type: object
+      properties:
+        country:
+          type: string
+          maxLength: 2
+          minLength: 2
+        email:
+          type: string
+          format: email
+          minLength: 1
+        shoppingUpdates:
+          type: boolean
+      required:
+      - country
+      - email
+    LaunchListResponse:
+      type: object
+      properties:
+        country:
+          type: string
+        added:
+          type: boolean
+        message:
+          type: string
+    ComplianceNote:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+    ReviewDecision:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - APPROVE
+          - FLAG
+          - REQUEST_INFO
+          - FINAL_APPROVE
+          - SEND_BACK
+          - REJECT
+          minLength: 1
+        reasonCode:
+          type: string
+          minLength: 1
+        note:
+          type: string
+          maxLength: 2000
+          minLength: 0
+        failedChecks:
+          type: array
+          items:
+            type: string
+        requestedItems:
+          type: array
+          items:
+            type: string
+      required:
+      - action
+      - reasonCode
+    Application:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        orgId:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+        currentStep:
+          type: string
+        steps:
+          type: array
+          items:
+            type: string
+        completedSteps:
+          type: array
+          items:
+            type: string
+        prefilledFields:
+          type: array
+          items:
+            type: string
+        business:
+          $ref: '#/components/schemas/BusinessSection'
+        businessDetails:
+          $ref: '#/components/schemas/BusinessDetails'
+        owners:
+          type: array
+          items:
+            $ref: '#/components/schemas/OwnerView'
+        stripe:
+          $ref: '#/components/schemas/StripeVerification'
+        payouts:
+          $ref: '#/components/schemas/PayoutSection'
+        plan:
+          $ref: '#/components/schemas/PlanSelection'
+        compliance:
+          $ref: '#/components/schemas/ComplianceSection'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentRef'
+        requestedItems:
+          type: array
+          items:
+            type: string
+        failedChecks:
+          type: array
+          items:
+            type: string
+        reviewerId:
+          type: string
+        finalApproverId:
+          type: string
+        reasonCode:
+          type: string
+        submissionCount:
+          type: integer
+          format: int32
+        submittedAt:
+          type: string
+          format: date-time
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEntry'
+        accessLog:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentAccess'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    BusinessDetails:
+      type: object
+      description: Tax ID is masked (last 4) unless the reviewer has applications:pii; dates of birth are year-only for masked
+        views.
+      properties:
+        legalFirstName:
+          type: string
+        legalLastName:
+          type: string
+        legalName:
+          type: string
+        dba:
+          type: string
+        taxIdType:
+          type: string
+        taxIdMasked:
+          type: string
+        taxId:
+          type: string
+        dateOfBirth:
+          type: string
+        birthYear:
+          type: integer
+          format: int32
+        stateOfFormation:
+          type: string
+        dateOfFormation:
+          type: string
+          format: date
+        address:
+          $ref: '#/components/schemas/Address'
+        formationDocumentAssetId:
+          type: string
+        irsDeterminationLetterAssetId:
+          type: string
+    BusinessSection:
+      type: object
+      properties:
+        offering:
+          type: string
+          enum:
+          - PRODUCTS
+          - SERVICES
+          - BOTH
+        entityType:
+          type: string
+          enum:
+          - SOLE_PROPRIETOR
+          - SINGLE_MEMBER_LLC
+          - MULTI_MEMBER_LLC
+          - CORPORATION
+          - PARTNERSHIP
+          - NONPROFIT
+        country:
+          type: string
+        storeName:
+          type: string
+        contactEmail:
+          type: string
+        phone:
+          type: string
+        website:
+          type: string
+    ComplianceSection:
+      type: object
+      properties:
+        categories:
+          type: array
+          items:
+            type: string
+        foodPermit:
+          $ref: '#/components/schemas/FoodPermit'
+        beautyLabellingConfirmed:
+          type: boolean
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceLicence'
+        insuranceDocumentAssetId:
+          type: string
+        agreementsAccepted:
+          type: boolean
+        w9Certified:
+          type: boolean
+        w9SignerName:
+          type: string
+    DocumentAccess:
+      type: object
+      properties:
+        assetId:
+          type: string
+        kind:
+          type: string
+        viewerId:
+          type: string
+        accessedAt:
+          type: string
+          format: date-time
+    DocumentRef:
+      type: object
+      properties:
+        assetId:
+          type: string
+        kind:
+          type: string
+        label:
+          type: string
+    OwnerView:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        title:
+          type: string
+        email:
+          type: string
+        ownershipPercent:
+          type: number
+        significantControl:
+          type: boolean
+        dateOfBirth:
+          type: string
+        birthYear:
+          type: integer
+          format: int32
+    PayoutSection:
+      type: object
+      properties:
+        accountHolderName:
+          type: string
+        accountType:
+          type: string
+        bankName:
+          type: string
+        routingLast4:
+          type: string
+        accountLast4:
+          type: string
+        externalAccountLinked:
+          type: boolean
+    PlanSelection:
+      type: object
+      properties:
+        planCode:
+          type: string
+        planName:
+          type: string
+        cadence:
+          type: string
+        paymentMethodKind:
+          type: string
+        cardBrand:
+          type: string
+        cardLast4:
+          type: string
+        cardExpMonth:
+          type: integer
+          format: int32
+        cardExpYear:
+          type: integer
+          format: int32
+        firstCharge:
+          $ref: '#/components/schemas/FirstCharge'
+    StripeVerification:
+      type: object
+      properties:
+        accountId:
+          type: string
+        detailsSubmitted:
+          type: boolean
+        chargesEnabled:
+          type: boolean
+        payoutsEnabled:
+          type: boolean
+        identityStatus:
+          type: string
+        taxIdStatus:
+          type: string
+        currentlyDue:
+          type: array
+          items:
+            type: string
+        disabledReason:
+          type: string
+        refreshedAt:
+          type: string
+          format: date-time
+    TimelineEntry:
+      type: object
+      properties:
+        action:
+          type: string
+        fromStatus:
+          type: string
+        toStatus:
+          type: string
+        actorId:
+          type: string
+        reasonCode:
+          type: string
+        note:
+          type: string
+        items:
+          type: array
+          items:
+            type: string
+        occurredAt:
+          type: string
+          format: date-time
+    StartApplicationRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+          minLength: 1
+      required:
+      - kind
+    AccountSession:
+      type: object
+      description: client_secret for Stripe's embedded Connect components
+      properties:
+        accountId:
+          type: string
+        clientSecret:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    RenameOrgRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+      required:
+      - displayName
+    OrgMember:
+      type: object
+      properties:
+        userId:
+          type: string
+        roleKey:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    Organisation:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        legalName:
+          type: string
+        displayName:
+          type: string
+        country:
+          type: string
+        status:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgMember'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ReasonCode:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+        appliesTo:
+          type: string
+    Plan:
+      type: object
+      properties:
+        code:
+          type: string
+        kind:
+          type: string
+        name:
+          type: string
+        tagline:
+          type: string
+        monthlyCents:
+          type: integer
+          format: int64
+        trialDays:
+          type: integer
+          format: int32
+        features:
+          type: array
+          items:
+            type: string
+        prices:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanPrice'
+    Invoice:
+      type: object
+      properties:
+        id:
+          type: string
+        number:
+          type: string
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time
+        amountDueCents:
+          type: integer
+          format: int64
+        amountPaidCents:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        status:
+          type: string
+        billingReason:
+          type: string
+        hostedInvoiceUrl:
+          type: string
+        invoicePdf:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    OrgPublicView:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        displayName:
+          type: string
+        status:
+          type: string
+    MarketsResponse:
+      type: object
+      properties:
+        liveCountries:
+          type: array
+          items:
+            type: string
+    ApplicationQueue:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplicationSummary'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    ApplicationSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        reference:
+          type: string
+        orgId:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+        displayName:
+          type: string
+        legalName:
+          type: string
+        state:
+          type: string
+        planCode:
+          type: string
+        reviewStep:
+          type: integer
+          format: int32
+        reviewerId:
+          type: string
+        failedChecks:
+          type: array
+          items:
+            type: string
+        submittedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    DocumentView:
+      type: object
+      properties:
+        assetId:
+          type: string
+        kind:
+          type: string
+        label:
+          type: string
+        url:
+          type: string
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -182,7 +182,7 @@
 - Pickup locations show address, hours and ready time
 - Delivery instructions and preference captured; handover code required for perishables or hand delivery","E06","","High","8","checkout web delivery","checkout","To Do"
 "S049","Story","Delivery promise service","Delivery dates per ZIP from FC cutoffs, carrier SLAs and seller handling time.","- Promise shown on cards, PDP, cart and checkout
-- The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","To Do"
+- The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
 - Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","To Do"
 "E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","Done"
@@ -259,19 +259,19 @@
 - COGS posted at lot landed cost on shipment","E10","","Medium","5","retail java finance","retail","To Do"
 "S074","Story","Three-way match and supplier payment","PO price × received qty vs supplier invoice (±1%) before payment; FX gain/loss posted.","- Variances route to the buyer
 - Closing the PO releases payment","E10","","Medium","5","retail java finance","retail","To Do"
-"E11","Epic","Carriers & shipping (USPS, UPS, FedEx, DHL)","Direct carrier integrations behind one Carrier port — no aggregator.","","","Carriers & shipping (USPS, UPS, FedEx, DHL)","High","","carriers","carriers","To Do"
+"E11","Epic","Carriers & shipping (USPS, UPS, FedEx, DHL)","Direct carrier integrations behind one Carrier port — no aggregator.","","","Carriers & shipping (USPS, UPS, FedEx, DHL)","High","","carriers","carriers","Done"
 "S075","Story","Carrier port and gateway service","rate(), buy_label(), void(), track(), schedule_pickup(), validate_address() behind one interface.","- Each carrier is its own adapter implementing the same Go interface
-- Rate shopping fans out in parallel with a 1.5 s budget and caches per cart","E11","","High","5","carriers go","carriers","To Do"
+- Rate shopping fans out in parallel with a 1.5 s budget and caches per cart","E11","","High","5","carriers go","carriers","Done"
 "S076","Story","USPS adapter (Labels API, tracking polling)","USPS rates, labels and polled tracking.","- Labels stored as PDF/ZPL in object storage
-- Tracking polled on schedule and mapped to shipment states","E11","","High","5","carriers go","carriers","To Do"
+- Tracking polled on schedule and mapped to shipment states","E11","","High","5","carriers go","carriers","Done"
 "S077","Story","UPS adapter (OAuth, Track Alert webhooks)","UPS rates, labels and push tracking.","- OAuth token cached and refreshed
-- Track Alert events verified, de-duplicated and ordered","E11","","High","5","carriers go","carriers","To Do"
+- Track Alert events verified, de-duplicated and ordered","E11","","High","5","carriers go","carriers","Done"
 "S078","Story","FedEx adapter (OAuth, webhooks)","FedEx rates, labels and push tracking.","- Webhook signatures verified
-- Negotiated rates per FC account","E11","","High","5","carriers go","carriers","To Do"
+- Negotiated rates per FC account","E11","","High","5","carriers go","carriers","Done"
 "S079","Story","DHL Express adapter (MyDHL API)","DHL Express rates, labels and push tracking for international shipping.","- Customs data passed for international parcels
-- Push tracking mapped to shipment states","E11","","Medium","5","carriers go","carriers","To Do"
+- Push tracking mapped to shipment states","E11","","Medium","5","carriers go","carriers","Done"
 "S080","Story","Pickup points and seller pickup","Platform pickup points/lockers and seller-configured pickup with address and hours.","- Sellers set their pickup address and hours in Seller Center
-- Pickup ready notifications sent to customers","E11","","Medium","5","carriers delivery","carriers","To Do"
+- Pickup ready notifications sent to customers","E11","","Medium","5","carriers delivery","carriers","Done"
 "E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","To Do"
 "S081","Story","Driver app sign-in with access check","Email + password + 6-digit code; only users with delivery:operate get in.","- Users without delivery:operate see 'No driver access' with who can grant it
 - Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","To Do"
@@ -588,3 +588,6 @@
 - A database dump alone cannot generate valid codes","E02","","Highest","3","identity security","identity","To Do"
 "S203","Story","Passkey ceremony end-to-end test with a virtual authenticator","Prove passkey registration and sign-in complete end to end.","- Playwright test registers a passkey with Chromium's virtual authenticator and signs in with it
 - Removing the passkey prevents sign-in with it","E02","","High","3","identity e2e","identity","To Do"
+"S204","Story","Confirm carrier sandbox integrations (USPS, UPS, FedEx, DHL)","Adapters were built against published API shapes; run them against each carrier's sandbox with real credentials and confirm webhook formats.","- Rates, label, void and tracking succeed against each carrier sandbox
+- FedEx and DHL webhook signature formats confirmed and tests updated
+- Zone charts replace the seed transit table","E11","","High","5","carriers","carriers","To Do"

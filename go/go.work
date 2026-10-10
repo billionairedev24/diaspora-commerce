@@ -4,11 +4,13 @@ toolchain go1.27.1
 
 use (
 	./pkg
+	./services/carrier-gateway
 	./services/cart
 	./services/geo
 	./services/indexer
 	./services/media
 	./services/notifications
+	./services/promise
 	./services/search
 	./services/storefront
 )

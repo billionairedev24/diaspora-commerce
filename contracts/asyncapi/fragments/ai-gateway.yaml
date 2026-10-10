@@ -1,0 +1,38 @@
+# AsyncAPI 3.0 fragment for ai-gateway-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  aiHandoffEvents:
+    address: at.ai-handoff.events
+    description: >-
+      Lola hand-offs to human support (key = hand-off id). Headers event-id, event-type, occurred-at. Published when
+      the shopper asks for a person, a safety rule fires, or the model calls handoff_to_support. Summaries are
+      redacted (emails, phones, cards, SSNs and addresses replaced by placeholders such as [EMAIL_1]).
+    messages:
+      aiHandoffRequested: {$ref: '#/components/messages/aiHandoffRequested'}
+operations:
+  publishAiHandoffEvents:
+    action: send
+    channel: {$ref: '#/channels/aiHandoffEvents'}
+    summary: >-
+      ai-gateway-service publishes hand-off requests via its transactional outbox. The support console (trust-ops)
+      opens a ticket with the summary and joins the Lola session.
+components:
+  messages:
+    aiHandoffRequested:
+      name: ai.handoff.requested
+      title: Lola handed a conversation to human support
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/AiHandoffRequested'}
+  schemas:
+    AiHandoffRequested:
+      type: object
+      required: [handoffId, sessionId, subject, reason, summary, requestedAt]
+      properties:
+        handoffId: {type: string, format: uuid}
+        sessionId: {type: string, description: Lola conversation id}
+        subject: {type: string, description: Shopper user id (token subject)}
+        reason:
+          type: string
+          description: >-
+            Why: human_requested, unsafe (safety rule) or the model's reason (for example payment-issue).
+        summary: {type: string, description: Redacted summary for the support agent (max 1,000 characters)}
+        requestedAt: {type: string, format: date-time}
