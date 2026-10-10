@@ -242,23 +242,23 @@
 - Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","In Progress"
 "E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","In Progress"
 "S068","Story","Product master for platform products","Category managers create 1P products with supplier, HTS code, duty, shelf life, storage, reorder point and price.","- SKU and GTIN (AfroTransact GS1 prefix, check digit) assigned automatically
-- Listing starts as Draft","E10","","High","3","retail java","retail","In Progress"
+- Listing starts as Draft","E10","","High","3","retail java","retail","Done"
 "S069","Story","Suppliers","Supplier records with lead time, on-time %, defect %, certifications and status.","- Supplier scorecards update from receipts
-- Inactive suppliers cannot receive new POs","E10","","Medium","3","retail java","retail","In Progress"
+- Inactive suppliers cannot receive new POs","E10","","Medium","3","retail java","retail","Done"
 "S070","Story","Purchase orders with approval and FX","Draft → Pending approval → Approved → Sent → Confirmed → Received → Closed; FX captured at PO date.","- Orders over $10k need Finance approval
 - PO PDF + EDI 850 sent to supplier
 - Cancel allowed until a shipment is booked","E10","","High","8","retail java","retail","In Progress"
 "S071","Story","Inbound shipments, ASN and documents","Shipments with lot/made/expiry from supplier packing list; required customs documents per mode.","- ASN lines editable until departure, then locked
 - Departure blocked while documents are missing
-- Customs clearance blocked by holds","E10","","High","8","retail java","retail","In Progress"
+- Customs clearance blocked by holds","E10","","High","8","retail java","retail","Done"
 "S072","Story","Goods receipt and validation","Receivers scan GS1-128 case labels, count good/damaged, split batches, put away and record QA.","- Lot 4–20 alphanumerics, unique per SKU; made ≤ today; expiry > made and not passed
 - Remaining life ≥ max(90 days, 50% shelf life) or quarantined
-- Shortages raise a claim; >2% over is blocked","E10","","High","8","retail java inventory","retail","In Progress"
+- Shortages raise a claim; >2% over is blocked","E10","","High","8","retail java inventory","retail","Done"
 "S073","Story","Landed cost and GL postings","Landed cost per unit (FOB + freight, insurance, fees, duty) and journal entries per step.","- Dr 1310 In transit / Cr 2110 GR/IR at title transfer
 - Completing GRN posts Dr 1300/1320 and Cr 1310/2120
-- COGS posted at lot landed cost on shipment","E10","","Medium","5","retail java finance","retail","In Progress"
+- COGS posted at lot landed cost on shipment","E10","","Medium","5","retail java finance","retail","Done"
 "S074","Story","Three-way match and supplier payment","PO price × received qty vs supplier invoice (±1%) before payment; FX gain/loss posted.","- Variances route to the buyer
-- Closing the PO releases payment","E10","","Medium","5","retail java finance","retail","In Progress"
+- Closing the PO releases payment","E10","","Medium","5","retail java finance","retail","Done"
 "E11","Epic","Carriers & shipping (USPS, UPS, FedEx, DHL)","Direct carrier integrations behind one Carrier port — no aggregator.","","","Carriers & shipping (USPS, UPS, FedEx, DHL)","High","","carriers","carriers","In Progress"
 "S075","Story","Carrier port and gateway service","rate(), buy_label(), void(), track(), schedule_pickup(), validate_address() behind one interface.","- Each carrier is its own adapter implementing the same Go interface
 - Rate shopping fans out in parallel with a 1.5 s budget and caches per cart","E11","","High","5","carriers go","carriers","Done"
@@ -651,3 +651,12 @@
 - Buy box weights reviewed with product owner","E05","","Medium","5","offers orders","offers","In Progress"
 "S224","Story","GTIN lookup readable by service tokens","Catalog makes /v1/identifiers/gtin/{code} callable by service clients (offers) without requiring the seller to hold catalog:write.","- Service token with catalog:read can look up GTINs
 - Offers GTIN lookup works for sellers without catalog:write","E03","","Medium","1","catalog offers","catalog","To Do"
+"S225","Story","Send purchase orders to suppliers (PDF, email, EDI)","Render a PO PDF, email it to the supplier contact via notifications, and transmit EDI 850 where the supplier is EDI-enabled; store ASN documents in media.","- PO PDF rendered with lines, terms and totals
+- Approved PO is emailed to the supplier contact
+- EDI suppliers receive an 850
+- ASN documents are stored as media assets","E10","","Medium","5","retail","retail","To Do"
+"S226","Story","Retail integration gaps with catalog, inventory and payments","Catalog service endpoint for any-status variants; inventory receipt line holdReason and expected-inbound notices; stock owner on reservation events; payments consumes retail.payment.released for supplier payments; warehouse-local dates.","- Retail links draft 1P products via GET /v1/variants/{atin} with catalog:read
+- Receipt lines carry holdReason so no separate quarantine call
+- Inventory reservation events include stockOwnerOrgId
+- Payments schedules supplier payment on retail.payment.released
+- Receipt date rules use the warehouse time zone","E10","","Medium","8","retail catalog inventory payments","retail","To Do"

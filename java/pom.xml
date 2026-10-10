@@ -27,6 +27,7 @@
         <module>services/offers</module>
         <module>services/orders</module>
         <module>services/payments</module>
+        <module>services/retail</module>
         <module>services/seller</module>
     </modules>
 </project>

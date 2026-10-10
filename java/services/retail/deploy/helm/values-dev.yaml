@@ -1,0 +1,24 @@
+env: dev
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 2
+  cpu: 70
+rollout:
+  enabled: false
+resources:
+  requests: {cpu: 100m, memory: 512Mi}
+  limits: {memory: 1Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+tolerations:
+  - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
+  # Client-credentials token of retail-service (secret RETAIL_CLIENT_SECRET) for inventory calls.
+  AUTH_TOKEN_URI: https://auth.dev.afrotransact.com/oauth2/token
+  # In-cluster service names; every service listens on 8080 in Kubernetes.
+  CATALOG_BASE_URL: http://catalog:8080
+  INVENTORY_BASE_URL: http://inventory:8080

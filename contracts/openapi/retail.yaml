@@ -1,0 +1,3011 @@
+openapi: 3.1.0
+info:
+  title: Retail API
+  description: 'AfroTransact Retail (1P) purchasing: product master linked to catalog ATINs, suppliers, purchase orders with
+    approval thresholds and FX, inbound shipments and ASNs, goods receipt into inventory lots, landed cost, GL journal entries
+    and the PO · receipt · supplier-invoice three-way match.'
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8107
+  description: local
+- url: https://api.dev.afrotransact.com/retail
+  description: dev
+- url: https://api.uat.afrotransact.com/retail
+  description: uat
+- url: https://api.afrotransact.com/retail
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Product master
+  description: '1P items linked to catalog ATINs: GTIN, customs, pack sizes, supplier SKUs, cost, price and listing readiness
+    (S068)'
+- name: Goods receipts
+  description: Count, validate and complete receipts; lots are posted to inventory with landed cost, discrepancies raise claims
+    and the GL entry is produced (S072/S073)
+- name: Purchase orders
+  description: Draft → Pending approval → Approved → Sent → Confirmed → (Partially) received → Closed, or Cancelled until
+    a shipment is booked; FX captured at the PO date (S070). Writes accept If-Match with the version from the ETag.
+- name: Supplier invoices
+  description: 'Three-way match: PO price × received quantity vs supplier invoice (±1%) → MATCHED, EXCEPTION (routed to the
+    buyer) or ON_HOLD (S074). retail:finance'
+- name: GL journal
+  description: Journal entries produced by departures, receipts, invoice matches and COGS (also published as retail.gl.journal.posted)
+- name: Suppliers
+  description: Supplier records, lifecycle and receipt-driven scorecards (S069)
+- name: Inbound shipments
+  description: 'Shipments and ASNs against POs: packing-list batches and cartons, customs documents, nine-step timeline, landed-cost
+    charges (S071)'
+paths:
+  /v1/gl/accounts:
+    get:
+      tags:
+      - GL journal
+      summary: Chart of accounts used by retail postings (retail:read)
+      operationId: listGlAccounts
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/GlAccount'
+  /v1/gl/journal:
+    get:
+      tags:
+      - GL journal
+      summary: Journal entries, newest first (retail:finance)
+      operationId: listJournalEntries
+      parameters:
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - SHIPMENT_DEPARTED
+          - GOODS_RECEIPT
+          - INVOICE_MATCH
+          - COGS
+      - name: sourceRef
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseJournalEntry'
+  /v1/gl/journal/{id}:
+    get:
+      tags:
+      - GL journal
+      summary: One journal entry (retail:finance)
+      operationId: getJournalEntry
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/JournalEntry'
+  /v1/invoices:
+    get:
+      tags:
+      - Supplier invoices
+      summary: List invoices, e.g. ?status=EXCEPTION for the buyer's variance queue
+      operationId: listInvoices
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - MATCHED
+          - EXCEPTION
+          - ON_HOLD
+          - APPROVED
+          - REJECTED
+          - PAYMENT_RELEASED
+      - name: poId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseSupplierInvoice'
+    post:
+      tags:
+      - Supplier invoices
+      summary: Register and match a supplier invoice; matched invoices post Dr 2110 · Cr 2100 (+PPV/FX)
+      operationId: registerInvoice
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInvoiceRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierInvoice'
+  /v1/invoices/{id}:
+    get:
+      tags:
+      - Supplier invoices
+      summary: An invoice with its match result
+      operationId: getInvoice
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierInvoice'
+  /v1/invoices/{id}/approve:
+    post:
+      tags:
+      - Supplier invoices
+      summary: Accept an exception with a note; the invoice becomes payable
+      operationId: approveInvoiceException
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierInvoice'
+  /v1/invoices/{id}/reject:
+    post:
+      tags:
+      - Supplier invoices
+      summary: Reject (dispute) an exception or held invoice with a note
+      operationId: rejectInvoice
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierInvoice'
+  /v1/invoices/{id}/rematch:
+    post:
+      tags:
+      - Supplier invoices
+      summary: Re-run the match (after receipts or claim settlement)
+      operationId: rematchInvoice
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierInvoice'
+  /v1/items:
+    get:
+      tags:
+      - Product master
+      summary: Search items by name, SKU, GTIN or ATIN (retail:read)
+      operationId: listItems
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: supplierId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: listing
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - LIVE
+          - PAUSED
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseItem'
+    post:
+      tags:
+      - Product master
+      summary: Create a 1P item (retail:items:write); SKU and GTIN are issued, listing starts as DRAFT
+      operationId: createItem
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Item'
+  /v1/items/{id}:
+    get:
+      tags:
+      - Product master
+      summary: An item (retail:read)
+      operationId: getItem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Item'
+    put:
+      tags:
+      - Product master
+      summary: Update commercial and logistics data (retail:items:write; If-Match)
+      operationId: updateItem
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ItemRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Item'
+  /v1/items/{id}/atin:
+    put:
+      tags:
+      - Product master
+      summary: Link the catalog variant ATIN (validated against catalog's public API; must be a live platform listing)
+      operationId: linkItemAtin
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkAtinRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Item'
+  /v1/items/{id}/listing:
+    post:
+      tags:
+      - Product master
+      summary: 'Change listing readiness: DRAFT → LIVE ↔ PAUSED (LIVE needs an ATIN and a price)'
+      operationId: changeItemListing
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ListingRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Item'
+  /v1/purchase-orders:
+    get:
+      tags:
+      - Purchase orders
+      summary: List POs (retail:read)
+      operationId: listPurchaseOrders
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - PENDING_APPROVAL
+          - APPROVED
+          - SENT
+          - CONFIRMED
+          - PARTIALLY_RECEIVED
+          - RECEIVED
+          - CLOSED
+          - CANCELLED
+      - name: supplierId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponsePurchaseOrder'
+    post:
+      tags:
+      - Purchase orders
+      summary: Raise a draft PO (retail:po:write); supplier must be APPROVED or ON_WATCH
+      operationId: createPurchaseOrder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePurchaseOrderRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}:
+    get:
+      tags:
+      - Purchase orders
+      summary: A PO with lines, received/invoiced quantities and history (retail:read)
+      operationId: getPurchaseOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/approve:
+    post:
+      tags:
+      - Purchase orders
+      summary: Approve (retail:po:approve; above the Finance threshold also retail:finance)
+      operationId: approvePurchaseOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/cancel:
+    post:
+      tags:
+      - Purchase orders
+      summary: Cancel with a reason (retail:po:write); only until a shipment is booked
+      operationId: cancelPurchaseOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/close:
+    post:
+      tags:
+      - Purchase orders
+      summary: Close a received, fully matched PO and release supplier payment (retail:finance)
+      operationId: closePurchaseOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/confirm:
+    post:
+      tags:
+      - Purchase orders
+      summary: Record the supplier's confirmation (retail:po:write)
+      operationId: confirmPurchaseOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/edi850:
+    get:
+      tags:
+      - Purchase orders
+      summary: The ANSI X12 850 sent to the supplier (approved POs)
+      operationId: getPurchaseOrderEdi850
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            text/plain:
+              schema:
+                type: string
+  /v1/purchase-orders/{id}/lines:
+    put:
+      tags:
+      - Purchase orders
+      summary: Replace the lines of a draft PO (retail:po:write)
+      operationId: replacePurchaseOrderLines
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PoLinesRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/send:
+    post:
+      tags:
+      - Purchase orders
+      summary: 'Send to the supplier: PO PDF + EDI 850 (retail:po:write)'
+      operationId: sendPurchaseOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/send-back:
+    post:
+      tags:
+      - Purchase orders
+      summary: Send back to the buyer with a note (retail:po:approve)
+      operationId: sendBackPurchaseOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NoteRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/purchase-orders/{id}/submit:
+    post:
+      tags:
+      - Purchase orders
+      summary: Submit for approval (retail:po:write)
+      operationId: submitPurchaseOrder
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PurchaseOrder'
+  /v1/receipts:
+    get:
+      tags:
+      - Goods receipts
+      summary: List receipts (retail:read)
+      operationId: listReceipts
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - OPEN
+          - POSTING
+          - COMPLETED
+      - name: poId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseGoodsReceipt'
+    post:
+      tags:
+      - Goods receipts
+      summary: Open a receipt at the dock (retail:receive); ASN lines are pre-filled
+      operationId: openReceipt
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenReceiptRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GoodsReceipt'
+  /v1/receipts/{id}:
+    get:
+      tags:
+      - Goods receipts
+      summary: A receipt (retail:read)
+      operationId: getReceipt
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GoodsReceipt'
+  /v1/receipts/{id}/approve-over-receipt:
+    post:
+      tags:
+      - Goods receipts
+      summary: Allow more than the 2% over-receipt tolerance (retail:po:approve)
+      operationId: approveOverReceipt
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GoodsReceipt'
+  /v1/receipts/{id}/charges:
+    put:
+      tags:
+      - Goods receipts
+      summary: Landed-cost charges of a receipt without a shipment (retail:finance)
+      operationId: updateReceiptCharges
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChargesRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GoodsReceipt'
+  /v1/receipts/{id}/claims/{claimRef}/resolve:
+    post:
+      tags:
+      - Goods receipts
+      summary: Settle a shortage or damage claim (retail:po:write); open claims hold supplier payment
+      operationId: resolveReceiptClaim
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: claimRef
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimResolutionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GoodsReceipt'
+  /v1/receipts/{id}/complete:
+    post:
+      tags:
+      - Goods receipts
+      summary: Complete the receipt (retail:receive)
+      description: Validates, allocates landed cost, posts lots to inventory (Idempotency-Key retail-<id>), raises discrepancies
+        and claims, updates the PO, shipment and supplier scorecard and posts Dr 1300/1320 · Cr 1310(2110)/2120. Safe to retry;
+        503 leaves the receipt POSTING.
+      operationId: completeReceipt
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GoodsReceipt'
+  /v1/receipts/{id}/lines:
+    put:
+      tags:
+      - Goods receipts
+      summary: 'Record counted batches: lot, made/expiry, good/damaged, bin, QA (retail:receive)'
+      operationId: countReceiptLines
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CountRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GoodsReceipt'
+  /v1/receipts/{id}/validate:
+    post:
+      tags:
+      - Goods receipts
+      summary: 'Validate without completing: errors, warnings, variances (retail:receive)'
+      operationId: validateReceipt
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReceiptValidation'
+  /v1/shipments:
+    get:
+      tags:
+      - Inbound shipments
+      summary: List shipments (retail:read)
+      operationId: listShipments
+      parameters:
+      - name: stage
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - BOOKED
+          - CARGO_READY
+          - PICKED_UP
+          - EXPORT_CLEARED
+          - DEPARTED
+          - ARRIVED_PORT
+          - CUSTOMS_CLEARED
+          - DELIVERED_TO_FC
+          - RECEIVED
+      - name: poId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseInboundShipment'
+    post:
+      tags:
+      - Inbound shipments
+      summary: Book a shipment for a sent/confirmed PO (retail:logistics); creates the ASN
+      operationId: bookShipment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookShipmentRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/shipments/{id}:
+    get:
+      tags:
+      - Inbound shipments
+      summary: A shipment with ASN, documents and milestones (retail:read)
+      operationId: getShipment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/shipments/{id}/advance:
+    post:
+      tags:
+      - Inbound shipments
+      summary: Advance to the next milestone (retail:logistics)
+      description: Departure is blocked while documents are MISSING and posts Dr 1310 / Cr 2110; customs clearance is blocked
+        by holds. The last step is reached by completing the goods receipt.
+      operationId: advanceShipment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/shipments/{id}/asn:
+    put:
+      tags:
+      - Inbound shipments
+      summary: Replace ASN lines and cartons (retail:logistics); locked after departure
+      operationId: updateShipmentAsn
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AsnRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/shipments/{id}/charges:
+    put:
+      tags:
+      - Inbound shipments
+      summary: 'Replace landed-cost charges: freight, insurance, duty, brokerage, drayage, fees, receiving'
+      operationId: updateShipmentCharges
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChargesRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/shipments/{id}/documents:
+    post:
+      tags:
+      - Inbound shipments
+      summary: Set a customs/shipping document status (retail:logistics)
+      operationId: setShipmentDocument
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/shipments/{id}/landed-cost:
+    get:
+      tags:
+      - Inbound shipments
+      summary: Estimated landed cost of the ASN per line and per unit (retail:read)
+      operationId: getShipmentLandedCost
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LandedCost'
+  /v1/suppliers:
+    get:
+      tags:
+      - Suppliers
+      summary: List suppliers (retail:read)
+      operationId: listSuppliers
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - ONBOARDING
+          - APPROVED
+          - ON_WATCH
+          - INACTIVE
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseSupplier'
+    post:
+      tags:
+      - Suppliers
+      summary: Create a supplier (retail:suppliers:write); starts in ONBOARDING
+      operationId: createSupplier
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Supplier'
+  /v1/suppliers/{id}:
+    get:
+      tags:
+      - Suppliers
+      summary: A supplier with its scorecard (retail:read)
+      operationId: getSupplier
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Supplier'
+    put:
+      tags:
+      - Suppliers
+      summary: Update supplier master data (retail:suppliers:write; If-Match)
+      operationId: updateSupplier
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Supplier'
+  /v1/suppliers/{id}/status:
+    post:
+      tags:
+      - Suppliers
+      summary: 'Change supplier status: ONBOARDING → APPROVED ↔ ON_WATCH → INACTIVE → APPROVED'
+      description: Inactive and onboarding suppliers cannot receive new POs. ON_WATCH and INACTIVE need a reason.
+      operationId: changeSupplierStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierStatusRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Supplier'
+components:
+  schemas:
+    SupplierContact:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        role:
+          type: string
+          maxLength: 60
+          minLength: 0
+        email:
+          type: string
+          maxLength: 200
+          minLength: 0
+        phone:
+          type: string
+          maxLength: 40
+          minLength: 0
+      required:
+      - name
+    SupplierRequest:
+      type: object
+      description: Supplier master data; code is fixed after creation
+      properties:
+        code:
+          type: string
+          example: SUP-ACC
+          pattern: SUP-[A-Z0-9]{2,12}
+        name:
+          type: string
+          maxLength: 200
+          minLength: 0
+        country:
+          type: string
+          minLength: 1
+          pattern: '[A-Za-z]{2}'
+        city:
+          type: string
+          maxLength: 200
+          minLength: 0
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+        paymentTerms:
+          type: string
+          example: Net 30 · 30% deposit
+          maxLength: 200
+          minLength: 0
+        leadTimeDays:
+          type: integer
+          format: int32
+          maximum: 365
+          minimum: 0
+        certifications:
+          type: array
+          items:
+            type: string
+            maxLength: 120
+            minLength: 0
+          maxItems: 30
+          minItems: 0
+        contacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupplierContact'
+          maxItems: 20
+          minItems: 0
+      required:
+      - country
+      - currency
+      - name
+    Supplier:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+        country:
+          type: string
+        city:
+          type: string
+        currency:
+          type: string
+        paymentTerms:
+          type: string
+        leadTimeDays:
+          type: integer
+          format: int32
+        certifications:
+          type: array
+          items:
+            type: string
+        contacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupplierContact'
+        status:
+          type: string
+        statusReason:
+          type: string
+        scorecard:
+          $ref: '#/components/schemas/SupplierScorecard'
+        canReceivePurchaseOrders:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    SupplierScorecard:
+      type: object
+      description: Updated by every completed goods receipt
+      properties:
+        receipts:
+          type: integer
+          format: int32
+        onTimeReceipts:
+          type: integer
+          format: int32
+        unitsReceived:
+          type: integer
+          format: int64
+        unitsDefective:
+          type: integer
+          format: int64
+        onTimePercent:
+          type: number
+        defectPercent:
+          type: number
+    ChargesRequest:
+      type: object
+      properties:
+        charges:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandedCharge'
+          maxItems: 20
+          minItems: 0
+    LandedCharge:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - FREIGHT
+          - INSURANCE
+          - DUTY
+          - BROKERAGE
+          - DRAYAGE
+          - FEES
+          - RECEIVING
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+        basis:
+          type: string
+          enum:
+          - VALUE
+          - WEIGHT
+          - QUANTITY
+        reference:
+          type: string
+          maxLength: 120
+          minLength: 0
+      required:
+      - currency
+      - type
+    AsnLine:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+        poLineNo:
+          type: integer
+          format: int32
+        itemId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        lotNo:
+          type: string
+        mfgDate:
+          type: string
+          format: date
+        expDate:
+          type: string
+          format: date
+    Carton:
+      type: object
+      properties:
+        sscc:
+          type: string
+        asnLineNo:
+          type: integer
+          format: int32
+        qty:
+          type: integer
+          format: int32
+    InboundShipment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        supplierId:
+          type: string
+          format: uuid
+        mode:
+          type: string
+        carrier:
+          type: string
+        trackingRef:
+          type: string
+        billOfLading:
+          type: string
+        originPort:
+          type: string
+        destinationPort:
+          type: string
+        destinationNodeId:
+          type: string
+        etd:
+          type: string
+          format: date
+        eta:
+          type: string
+          format: date
+        stage:
+          type: string
+        stageLabel:
+          type: string
+        asnLocked:
+          type: boolean
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AsnLine'
+        cartons:
+          type: array
+          items:
+            $ref: '#/components/schemas/Carton'
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentDocument'
+        charges:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandedCharge'
+        milestones:
+          type: array
+          items:
+            $ref: '#/components/schemas/Milestone'
+        note:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    Milestone:
+      type: object
+      properties:
+        stage:
+          type: string
+          enum:
+          - BOOKED
+          - CARGO_READY
+          - PICKED_UP
+          - EXPORT_CLEARED
+          - DEPARTED
+          - ARRIVED_PORT
+          - CUSTOMS_CLEARED
+          - DELIVERED_TO_FC
+          - RECEIVED
+        at:
+          type: string
+          format: date-time
+        by:
+          type: string
+    ShipmentDocument:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - MISSING
+          - PENDING
+          - OK
+          - HOLD
+        reference:
+          type: string
+        note:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    AsnLineRequest:
+      type: object
+      description: Units of a PO line with the supplier's batch (lot, made, expiry)
+      properties:
+        poLineNo:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        qty:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        lotNo:
+          type: string
+          maxLength: 20
+          minLength: 0
+        mfgDate:
+          type: string
+          format: date
+        expDate:
+          type: string
+          format: date
+    AsnRequest:
+      type: object
+      description: Supplier packing list; editable until departure
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AsnLineRequest'
+          maxItems: 200
+          minItems: 0
+        cartons:
+          type: array
+          items:
+            $ref: '#/components/schemas/CartonDto'
+          maxItems: 5000
+          minItems: 0
+      required:
+      - lines
+    CartonDto:
+      type: object
+      description: 'GS1-128 case: SSCC (18 digits, check digit) and units of one ASN line'
+      properties:
+        sscc:
+          type: string
+          maxLength: 18
+          minLength: 18
+        asnLineNo:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        qty:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+      required:
+      - sscc
+    CountRequest:
+      type: object
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReceiptLineRequest'
+          maxItems: 500
+          minItems: 0
+      required:
+      - lines
+    ReceiptLineRequest:
+      type: object
+      description: A counted batch; a new lineNo with an existing poLineNo splits a mixed batch
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        poLineNo:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        lotNo:
+          type: string
+          maxLength: 20
+          minLength: 0
+        mfgDate:
+          type: string
+          format: date
+        expDate:
+          type: string
+          format: date
+        qtyGood:
+          type: integer
+          format: int32
+          minimum: 0
+        qtyDamaged:
+          type: integer
+          format: int32
+          minimum: 0
+        bin:
+          type: string
+          maxLength: 12
+          minLength: 0
+        qa:
+          type: string
+          enum:
+          - PENDING
+          - PASS
+          - FAIL
+        scanned:
+          type: boolean
+          description: Case label scanned (GS1-128) rather than keyed
+    ChargeShare:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - FREIGHT
+          - INSURANCE
+          - DUTY
+          - BROKERAGE
+          - DRAYAGE
+          - FEES
+          - RECEIVING
+        basis:
+          type: string
+          enum:
+          - VALUE
+          - WEIGHT
+          - QUANTITY
+        amountMinor:
+          type: integer
+          format: int64
+    Discrepancy:
+      type: object
+      properties:
+        claimRef:
+          type: string
+        type:
+          type: string
+          enum:
+          - SHORT
+          - OVER
+          - DAMAGED
+        poLineNo:
+          type: integer
+          format: int32
+        sku:
+          type: string
+        expectedQty:
+          type: integer
+          format: int32
+        receivedQty:
+          type: integer
+          format: int32
+        qty:
+          type: integer
+          format: int32
+        claimAgainst:
+          type: string
+        status:
+          type: string
+          enum:
+          - OPEN
+          - RESOLVED
+          - NOT_REQUIRED
+        note:
+          type: string
+    GoodsReceipt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        shipmentRef:
+          type: string
+        nodeId:
+          type: string
+        dock:
+          type: string
+        status:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReceiptLine'
+        charges:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandedCharge'
+        overApprovedBy:
+          type: string
+        discrepancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Discrepancy'
+        landedCost:
+          $ref: '#/components/schemas/LandedCost'
+        postedLots:
+          type: array
+          items:
+            $ref: '#/components/schemas/PostedLot'
+        journalEntryId:
+          type: string
+          format: uuid
+        openedBy:
+          type: string
+        openedAt:
+          type: string
+          format: date-time
+        completedBy:
+          type: string
+        completedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    LandedCost:
+      type: object
+      properties:
+        currency:
+          type: string
+        fobMinor:
+          type: integer
+          format: int64
+        dutyMinor:
+          type: integer
+          format: int64
+        chargesMinor:
+          type: integer
+          format: int64
+        totalMinor:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandedCostLine'
+    LandedCostLine:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+        sku:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        fobValueMinor:
+          type: integer
+          format: int64
+        dutyMinor:
+          type: integer
+          format: int64
+        charges:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChargeShare'
+        totalMinor:
+          type: integer
+          format: int64
+        unitCostMinor:
+          type: integer
+          format: int64
+    PostedLot:
+      type: object
+      properties:
+        lotId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        lotNo:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        status:
+          type: string
+        unitLandedCostMinor:
+          type: integer
+          format: int64
+    ReceiptLine:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+        poLineNo:
+          type: integer
+          format: int32
+        asnLineNo:
+          type: integer
+          format: int32
+        itemId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        expectedQty:
+          type: integer
+          format: int32
+        asnLotNo:
+          type: string
+        lotNo:
+          type: string
+        mfgDate:
+          type: string
+          format: date
+        expDate:
+          type: string
+          format: date
+        qtyGood:
+          type: integer
+          format: int32
+        qtyDamaged:
+          type: integer
+          format: int32
+        bin:
+          type: string
+        qa:
+          type: string
+          enum:
+          - PENDING
+          - PASS
+          - FAIL
+        scanned:
+          type: boolean
+        split:
+          type: boolean
+    PoLineRequest:
+      type: object
+      description: Unit cost in the supplier's currency (minor units); omitted = the supplier's agreed cost on the item
+      properties:
+        itemId:
+          type: string
+          format: uuid
+        qty:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        unitCostMinor:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+      required:
+      - itemId
+    PoLinesRequest:
+      type: object
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PoLineRequest'
+          maxItems: 200
+          minItems: 0
+      required:
+      - lines
+    PoHistoryEntry:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        status:
+          type: string
+        by:
+          type: string
+        note:
+          type: string
+    PoLine:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+        itemId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        description:
+          type: string
+        supplierSku:
+          type: string
+        qtyOrdered:
+          type: integer
+          format: int32
+        unitCostMinor:
+          type: integer
+          format: int64
+        amountMinor:
+          type: integer
+          format: int64
+        qtyReceived:
+          type: integer
+          format: int32
+        qtyDamaged:
+          type: integer
+          format: int32
+        qtyInvoiced:
+          type: integer
+          format: int32
+        openQty:
+          type: integer
+          format: int32
+    PurchaseOrder:
+      type: object
+      description: Amounts in PO (supplier) currency minor units; totalBaseMinor at the captured FX rate
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        supplierId:
+          type: string
+          format: uuid
+        supplierCode:
+          type: string
+        currency:
+          type: string
+        fxRate:
+          type: number
+        baseCurrency:
+          type: string
+        fxDate:
+          type: string
+          format: date
+        destinationNodeId:
+          type: string
+        incoterm:
+          type: string
+        orderDate:
+          type: string
+          format: date
+        expectedDate:
+          type: string
+          format: date
+        status:
+          type: string
+        approvalTier:
+          type: string
+        shipmentBooked:
+          type: boolean
+        totalMinor:
+          type: integer
+          format: int64
+        totalBaseMinor:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PoLine'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/PoHistoryEntry'
+        createdBy:
+          type: string
+        approvedBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    ItemRequest:
+      type: object
+      description: Product master; SKU and GTIN are issued automatically, listing starts as DRAFT. atin is optional on create
+        and ignored on update (use PUT /atin).
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 3
+        category:
+          type: string
+          maxLength: 120
+          minLength: 0
+        atin:
+          type: string
+          pattern: AT[0-9A-Z]{8}
+        primarySupplierId:
+          type: string
+          format: uuid
+        supplierItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupplierItem'
+          maxItems: 20
+          minItems: 0
+        originCountry:
+          type: string
+          pattern: '[A-Z]{2}'
+        hsCode:
+          type: string
+          example: 0910.91.0000
+          minLength: 1
+        dutyRatePercent:
+          type: number
+          maximum: 100
+          minimum: 0
+        shelfLifeDays:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        storage:
+          type: string
+          enum:
+          - AMBIENT
+          - CHILLED
+          - FROZEN
+          - HAZMAT
+        reorderPoint:
+          type: integer
+          format: int32
+          minimum: 0
+        packSize:
+          type: string
+          example: 6 oz jar
+          maxLength: 60
+          minLength: 0
+        innerPack:
+          type: integer
+          format: int32
+          description: Units per inner pack (default 1)
+          exclusiveMinimum: 0
+        casePack:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        unitWeightGrams:
+          type: integer
+          format: int32
+          description: Unit gross weight for weight-based freight allocation
+          minimum: 0
+        standardCostMinor:
+          type: integer
+          format: int64
+          description: Standard landed cost per unit, base currency minor units
+          minimum: 0
+        priceMinor:
+          type: integer
+          format: int64
+          description: Selling price, base currency minor units
+          minimum: 0
+      required:
+      - hsCode
+      - name
+      - primarySupplierId
+      - storage
+      - supplierItems
+    SupplierItem:
+      type: object
+      description: How one supplier sells the item (cost in the supplier's currency)
+      properties:
+        supplierId:
+          type: string
+          format: uuid
+        supplierSku:
+          type: string
+          maxLength: 60
+          minLength: 0
+        casePack:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        minOrderQty:
+          type: integer
+          format: int32
+          minimum: 0
+        unitCostMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+      required:
+      - currency
+      - supplierId
+      - supplierSku
+    Item:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        gtin:
+          type: string
+        gtin14:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        atin:
+          type: string
+        primarySupplierId:
+          type: string
+          format: uuid
+        supplierItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupplierItem'
+        originCountry:
+          type: string
+        hsCode:
+          type: string
+        dutyRatePercent:
+          type: number
+        shelfLifeDays:
+          type: integer
+          format: int32
+        storage:
+          type: string
+        reorderPoint:
+          type: integer
+          format: int32
+        packSize:
+          type: string
+        innerPack:
+          type: integer
+          format: int32
+        casePack:
+          type: integer
+          format: int32
+        unitWeightGrams:
+          type: integer
+          format: int32
+        standardCostMinor:
+          type: integer
+          format: int64
+        priceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        listingStatus:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    LinkAtinRequest:
+      type: object
+      properties:
+        atin:
+          type: string
+          minLength: 1
+          pattern: AT[0-9A-Z]{8}
+      required:
+      - atin
+    SupplierStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - ONBOARDING
+          - APPROVED
+          - ON_WATCH
+          - INACTIVE
+        reason:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - status
+    BookShipmentRequest:
+      type: object
+      description: Without lines the ASN ships every open PO quantity
+      properties:
+        poId:
+          type: string
+          format: uuid
+        mode:
+          type: string
+          enum:
+          - OCEAN_FCL
+          - OCEAN_LCL
+          - AIR
+          - ROAD
+        carrier:
+          type: string
+          maxLength: 120
+          minLength: 0
+        trackingRef:
+          type: string
+          example: MSCU 482913 7
+          maxLength: 120
+          minLength: 0
+        billOfLading:
+          type: string
+          maxLength: 120
+          minLength: 0
+        originPort:
+          type: string
+          maxLength: 200
+          minLength: 0
+        destinationPort:
+          type: string
+          maxLength: 200
+          minLength: 0
+        etd:
+          type: string
+          format: date
+        eta:
+          type: string
+          format: date
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AsnLineRequest'
+          maxItems: 200
+          minItems: 0
+        charges:
+          type: array
+          items:
+            $ref: '#/components/schemas/LandedCharge'
+          maxItems: 20
+          minItems: 0
+      required:
+      - mode
+      - poId
+    DocumentRequest:
+      type: object
+      description: MISSING blocks departure; HOLD blocks customs clearance
+      properties:
+        name:
+          type: string
+          maxLength: 80
+          minLength: 0
+        status:
+          type: string
+          enum:
+          - MISSING
+          - PENDING
+          - OK
+          - HOLD
+        reference:
+          type: string
+          maxLength: 120
+          minLength: 0
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - name
+      - status
+    OpenReceiptRequest:
+      type: object
+      description: Receive against a shipment's ASN or directly against a PO
+      properties:
+        shipmentId:
+          type: string
+          format: uuid
+        poId:
+          type: string
+          format: uuid
+        dock:
+          type: string
+          maxLength: 40
+          minLength: 0
+    LineCheck:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+        disposition:
+          type: string
+          enum:
+          - SELLABLE
+          - QUARANTINE
+        remainingDays:
+          type: integer
+          format: int32
+    LineVariance:
+      type: object
+      properties:
+        poLineNo:
+          type: integer
+          format: int32
+        sku:
+          type: string
+        expected:
+          type: integer
+          format: int32
+        received:
+          type: integer
+          format: int32
+        damaged:
+          type: integer
+          format: int32
+        overBlocked:
+          type: boolean
+    ReceiptValidation:
+      type: object
+      description: Errors block completion; warnings explain quarantines and claims; variances compare received vs expected
+        per PO line
+      properties:
+        ok:
+          type: boolean
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineCheck'
+        variances:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineVariance'
+        receiptErrors:
+          type: array
+          items:
+            type: string
+        fieldErrors:
+          type: object
+          additionalProperties:
+            type: string
+    ClaimResolutionRequest:
+      type: object
+      properties:
+        resolution:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - resolution
+    CreatePurchaseOrderRequest:
+      type: object
+      properties:
+        supplierId:
+          type: string
+          format: uuid
+        destinationNodeId:
+          type: string
+          example: HOU-FC
+          minLength: 1
+        incoterm:
+          type: string
+          example: FOB Tema
+          maxLength: 80
+          minLength: 0
+        orderDate:
+          type: string
+          format: date
+        expectedDate:
+          type: string
+          format: date
+        fxRate:
+          type: number
+          description: Supplier-currency units per 1 base unit at the PO date, e.g. 15.42 GHS per USD; omitted = configured
+            rate of the day
+          exclusiveMinimum: 0
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/PoLineRequest'
+          maxItems: 200
+          minItems: 0
+      required:
+      - destinationNodeId
+      - incoterm
+      - lines
+      - supplierId
+    NoteRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+    ListingRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - LIVE
+          - PAUSED
+      required:
+      - status
+    InvoiceLineRequest:
+      type: object
+      description: Quantity and unit price (invoice currency minor units)
+      properties:
+        poLineNo:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        qty:
+          type: integer
+          format: int32
+          exclusiveMinimum: 0
+        unitPriceMinor:
+          type: integer
+          format: int64
+          minimum: 0
+    RegisterInvoiceRequest:
+      type: object
+      properties:
+        poId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+          maxLength: 60
+          minLength: 0
+        invoiceDate:
+          type: string
+          format: date
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+        fxRate:
+          type: number
+          description: Rate at the invoice date (currency units per base unit)
+          exclusiveMinimum: 0
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceLineRequest'
+          maxItems: 200
+          minItems: 0
+      required:
+      - invoiceDate
+      - invoiceNumber
+      - lines
+      - poId
+    InvoiceLine:
+      type: object
+      properties:
+        poLineNo:
+          type: integer
+          format: int32
+        qty:
+          type: integer
+          format: int32
+        unitPriceMinor:
+          type: integer
+          format: int64
+    MatchLine:
+      type: object
+      properties:
+        poLineNo:
+          type: integer
+          format: int32
+        sku:
+          type: string
+        orderedQty:
+          type: integer
+          format: int32
+        receivedQty:
+          type: integer
+          format: int32
+        previouslyInvoicedQty:
+          type: integer
+          format: int32
+        invoicedQty:
+          type: integer
+          format: int32
+        poUnitPriceMinor:
+          type: integer
+          format: int64
+        invoiceUnitPriceMinor:
+          type: integer
+          format: int64
+        expectedAmountMinor:
+          type: integer
+          format: int64
+        invoicedAmountMinor:
+          type: integer
+          format: int64
+        priceVariancePercent:
+          type: number
+        status:
+          type: string
+          enum:
+          - MATCH
+          - PRICE_VARIANCE
+          - AMOUNT_VARIANCE
+          - QTY_OVER_ORDERED
+          - QTY_OVER_RECEIVED
+          - AWAITING_RECEIPT
+          - NOT_ON_PO
+    MatchResult:
+      type: object
+      properties:
+        outcome:
+          type: string
+          enum:
+          - MATCH
+          - EXCEPTION
+          - HOLD
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchLine'
+        expectedTotalMinor:
+          type: integer
+          format: int64
+        invoicedTotalMinor:
+          type: integer
+          format: int64
+        totalVariancePercent:
+          type: number
+        reasons:
+          type: array
+          items:
+            type: string
+    SupplierInvoice:
+      type: object
+      description: status MATCHED | EXCEPTION (routed to the buyer) | ON_HOLD | APPROVED | REJECTED | PAYMENT_RELEASED
+      properties:
+        id:
+          type: string
+          format: uuid
+        supplierId:
+          type: string
+          format: uuid
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        invoiceNumber:
+          type: string
+        invoiceDate:
+          type: string
+          format: date
+        currency:
+          type: string
+        fxRate:
+          type: number
+        totalMinor:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvoiceLine'
+        status:
+          type: string
+        match:
+          $ref: '#/components/schemas/MatchResult'
+        resolutionNote:
+          type: string
+        resolvedBy:
+          type: string
+        journalEntryId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    PageResponseSupplier:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Supplier'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    PageResponseInboundShipment:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundShipment'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    PageResponseGoodsReceipt:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoodsReceipt'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    PageResponsePurchaseOrder:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PurchaseOrder'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    PageResponseItem:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Item'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    PageResponseSupplierInvoice:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupplierInvoice'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    JournalEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        entryDate:
+          type: string
+          format: date
+        source:
+          type: string
+        sourceRef:
+          type: string
+        memo:
+          type: string
+        currency:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalLine'
+        postedBy:
+          type: string
+        postedAt:
+          type: string
+          format: date-time
+    JournalLine:
+      type: object
+      properties:
+        account:
+          type: string
+        accountName:
+          type: string
+        debitMinor:
+          type: integer
+          format: int64
+        creditMinor:
+          type: integer
+          format: int64
+    PageResponseJournalEntry:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalEntry'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    GlAccount:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

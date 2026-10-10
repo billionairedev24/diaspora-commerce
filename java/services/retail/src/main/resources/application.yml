@@ -1,0 +1,114 @@
+spring:
+  application:
+    name: retail-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/retail}
+    username: ${DB_USER:retail}
+    password: ${DB_PASSWORD:retail}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: retail-service
+      auto-offset-reset: earliest
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+
+server:
+  port: ${PORT:8107}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: retail-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  api-docs:
+    title: Retail API
+    description: >-
+      AfroTransact Retail (1P) purchasing: product master linked to catalog ATINs, suppliers, purchase orders with
+      approval thresholds and FX, inbound shipments and ASNs, goods receipt into inventory lots, landed cost, GL
+      journal entries and the PO · receipt · supplier-invoice three-way match.
+    version: v1
+  events:
+    relay-enabled: true
+  retail:
+    # Landed cost, GL and approval thresholds are kept in this currency; POs carry the supplier currency + FX rate.
+    base-currency: USD
+    # UPC company prefix of AfroTransact Retail (GTIN-12 = prefix + 6-digit item reference + check digit).
+    gs1-company-prefix: ${GS1_COMPANY_PREFIX:86001}
+    approval:
+      # POs above this value (base currency minor units) also need Finance sign-off (retail:finance).
+      finance-threshold-minor: ${PO_FINANCE_THRESHOLD_MINOR:1000000}
+    receiving:
+      # More than this percentage over the expected quantity is blocked until purchasing approves.
+      over-tolerance-percent: 2.0
+      # Remaining life below max(min-days, min-fraction × shelf life) goes to quarantine.
+      min-remaining-days: 90
+      min-remaining-fraction: 0.5
+    match:
+      # Supplier invoice price vs PO price tolerance for the three-way match.
+      price-tolerance-percent: ${MATCH_PRICE_TOLERANCE_PERCENT:1.0}
+    # Supplier-currency units per 1 unit of base currency, used when a PO does not carry its own rate.
+    fx-rates:
+      GHS: 15.42
+      NGN: 1528
+      XOF: 566
+      INR: 88.2
+      EUR: 0.86
+      GBP: 0.75
+    catalog:
+      base-url: ${CATALOG_BASE_URL:http://localhost:8101}
+    inventory:
+      base-url: ${INVENTORY_BASE_URL:http://localhost:8103}
+      timeout: ${INVENTORY_TIMEOUT:10s}
+    auth:
+      # Client-credentials token for service-to-service calls (inventory). Blank secret = no token (local).
+      token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
+      client-id: ${RETAIL_CLIENT_ID:retail-service}
+      client-secret: ${RETAIL_CLIENT_SECRET:}
+      scopes: inventory:receive inventory:adjust
+    consumers:
+      # Posts COGS journals from inventory.reservation.committed for 1P SKUs.
+      enabled: ${RETAIL_CONSUMERS_ENABLED:true}

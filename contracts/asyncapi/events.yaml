@@ -303,6 +303,74 @@ channels:
         $ref: '#/components/messages/paymentsPayoutPaid'
       paymentsPayoutFailed:
         $ref: '#/components/messages/paymentsPayoutFailed'
+  retailEvents:
+    address: at.retail.events
+    description: 'AfroTransact Retail (1P) purchasing events from retail-service (key = aggregate id: item, supplier, PO,
+      shipment, receipt, invoice or journal entry id). Headers event-id, event-type, occurred-at. Published through the transactional
+      outbox; consumers de-duplicate on event-id.'
+    messages:
+      retailItemCreated:
+        $ref: '#/components/messages/retailItemCreated'
+      retailItemUpdated:
+        $ref: '#/components/messages/retailItemUpdated'
+      retailItemListingChanged:
+        $ref: '#/components/messages/retailItemListingChanged'
+      retailSupplierCreated:
+        $ref: '#/components/messages/retailSupplierCreated'
+      retailSupplierUpdated:
+        $ref: '#/components/messages/retailSupplierUpdated'
+      retailSupplierStatusChanged:
+        $ref: '#/components/messages/retailSupplierStatusChanged'
+      retailPoCreated:
+        $ref: '#/components/messages/retailPoCreated'
+      retailPoUpdated:
+        $ref: '#/components/messages/retailPoUpdated'
+      retailPoSubmitted:
+        $ref: '#/components/messages/retailPoSubmitted'
+      retailPoApproved:
+        $ref: '#/components/messages/retailPoApproved'
+      retailPoSentBack:
+        $ref: '#/components/messages/retailPoSentBack'
+      retailPoSent:
+        $ref: '#/components/messages/retailPoSent'
+      retailPoConfirmed:
+        $ref: '#/components/messages/retailPoConfirmed'
+      retailPoCancelled:
+        $ref: '#/components/messages/retailPoCancelled'
+      retailPoReceived:
+        $ref: '#/components/messages/retailPoReceived'
+      retailPoClosed:
+        $ref: '#/components/messages/retailPoClosed'
+      retailShipmentBooked:
+        $ref: '#/components/messages/retailShipmentBooked'
+      retailShipmentUpdated:
+        $ref: '#/components/messages/retailShipmentUpdated'
+      retailShipmentStageChanged:
+        $ref: '#/components/messages/retailShipmentStageChanged'
+      retailReceiptOpened:
+        $ref: '#/components/messages/retailReceiptOpened'
+      retailReceiptPosted:
+        $ref: '#/components/messages/retailReceiptPosted'
+      retailReceiptDiscrepancyRaised:
+        $ref: '#/components/messages/retailReceiptDiscrepancyRaised'
+      retailReceiptClaimResolved:
+        $ref: '#/components/messages/retailReceiptClaimResolved'
+      retailLandedCostAllocated:
+        $ref: '#/components/messages/retailLandedCostAllocated'
+      retailGlJournalPosted:
+        $ref: '#/components/messages/retailGlJournalPosted'
+      retailInvoiceMatched:
+        $ref: '#/components/messages/retailInvoiceMatched'
+      retailMatchException:
+        $ref: '#/components/messages/retailMatchException'
+      retailInvoiceHeld:
+        $ref: '#/components/messages/retailInvoiceHeld'
+      retailInvoiceApproved:
+        $ref: '#/components/messages/retailInvoiceApproved'
+      retailInvoiceRejected:
+        $ref: '#/components/messages/retailInvoiceRejected'
+      retailPaymentReleased:
+        $ref: '#/components/messages/retailPaymentReleased'
   sellerApplicationEvents:
     address: at.seller-application.events
     description: Onboarding applications (key = application id). Headers event-id, event-type, occurred-at; consumers de-duplicate
@@ -960,6 +1028,247 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/PaymentsPayout'
+    retailItemCreated:
+      name: retail.item.created
+      title: 1P item added to the product master (SKU and GTIN issued, listing DRAFT)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailItemEvent'
+    retailItemUpdated:
+      name: retail.item.updated
+      title: Item master data or catalog ATIN link changed
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailItemEvent'
+    retailItemListingChanged:
+      name: retail.item.listing-changed
+      title: Listing readiness changed (DRAFT → LIVE ↔ PAUSED)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailItemEvent'
+    retailSupplierCreated:
+      name: retail.supplier.created
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailSupplierEvent'
+    retailSupplierUpdated:
+      name: retail.supplier.updated
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailSupplierEvent'
+    retailSupplierStatusChanged:
+      name: retail.supplier.status-changed
+      title: Supplier approved, put on watch, deactivated or reactivated
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailSupplierEvent'
+    retailPoCreated:
+      name: retail.po.created
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailPoUpdated:
+      name: retail.po.updated
+      title: Draft lines edited or a shipment booked against the PO
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailPoSubmitted:
+      name: retail.po.submitted
+      title: Submitted for approval (approvalTier FINANCE above the threshold)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailPoApproved:
+      name: retail.po.approved
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailPoSentBack:
+      name: retail.po.sent-back
+      title: Approver returned the PO to the buyer (note explains why)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailPoSent:
+      name: retail.po.sent
+      title: PO sent to the supplier (PDF + EDI 850)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailPoConfirmed:
+      name: retail.po.confirmed
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailPoCancelled:
+      name: retail.po.cancelled
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailPoReceived:
+      name: retail.po.received
+      title: Goods received against the PO (status PARTIALLY_RECEIVED or RECEIVED)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailPoClosed:
+      name: retail.po.closed
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPoEvent'
+    retailShipmentBooked:
+      name: retail.shipment.booked
+      title: Inbound shipment and ASN created for a PO
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailShipmentEvent'
+    retailShipmentUpdated:
+      name: retail.shipment.updated
+      title: ASN lines/cartons, documents (including customs holds) or charges changed
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailShipmentEvent'
+    retailShipmentStageChanged:
+      name: retail.shipment.stage-changed
+      title: Shipment reached the next milestone of the nine-step timeline
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailShipmentEvent'
+    retailReceiptOpened:
+      name: retail.receipt.opened
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        type: object
+        required:
+        - receiptId
+        - number
+        - poNumber
+        - nodeId
+        properties:
+          receiptId:
+            type: string
+            format: uuid
+          number:
+            type: string
+            examples:
+            - GRN-2610-0042
+          poNumber:
+            type: string
+          nodeId:
+            type: string
+    retailReceiptPosted:
+      name: retail.receipt.posted
+      title: Goods receipt completed; its lots are in inventory at landed cost
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailReceiptPosted'
+    retailReceiptDiscrepancyRaised:
+      name: retail.receipt.discrepancy-raised
+      title: Shortage (supplier claim), damage (carrier claim) or accepted over-receipt
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailDiscrepancyEvent'
+    retailReceiptClaimResolved:
+      name: retail.receipt.claim-resolved
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        type: object
+        required:
+        - receiptId
+        - number
+        - claimRef
+        - resolution
+        properties:
+          receiptId:
+            type: string
+            format: uuid
+          number:
+            type: string
+          claimRef:
+            type: string
+          resolution:
+            type: string
+          actor:
+            type: string
+    retailLandedCostAllocated:
+      name: retail.landed-cost.allocated
+      title: FOB, duty and charges allocated across a receipt's lines (base currency minor units)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailLandedCostAllocated'
+    retailGlJournalPosted:
+      name: retail.gl.journal.posted
+      title: Balanced journal entry (departure 1310/2110, receipt 1300/1320/1310|2110/2120, invoice 2110/5010/7100/2100, COGS
+        5000/1300)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailJournalPosted'
+    retailInvoiceMatched:
+      name: retail.invoice.matched
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailInvoiceEvent'
+    retailMatchException:
+      name: retail.match.exception
+      title: Three-way match variance outside tolerance; routed to the buyer (assignee)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailInvoiceEvent'
+    retailInvoiceHeld:
+      name: retail.invoice.held
+      title: Invoice held for payment (goods not yet received or open receiving claims)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailInvoiceEvent'
+    retailInvoiceApproved:
+      name: retail.invoice.approved
+      title: Finance accepted a match exception
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailInvoiceEvent'
+    retailInvoiceRejected:
+      name: retail.invoice.rejected
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailInvoiceEvent'
+    retailPaymentReleased:
+      name: retail.payment.released
+      title: PO closed after the three-way match; pay the supplier these invoices
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/RetailPaymentReleased'
     sellerApplicationSubmitted:
       name: seller.application.submitted
       title: Application submitted (or resubmitted after a request for info; see submissionCount)
@@ -3466,6 +3775,535 @@ components:
         requestedAt:
           type: string
           format: date-time
+    RetailItemEvent:
+      type: object
+      required:
+      - itemId
+      - sku
+      - gtin
+      - name
+      - listingStatus
+      - priceMinor
+      - currency
+      properties:
+        itemId:
+          type: string
+          format: uuid
+        sku:
+          type: string
+          examples:
+          - AT-JOL-200061
+        gtin:
+          type: string
+          description: GTIN-12 from the AfroTransact GS1 prefix
+        atin:
+          type:
+          - string
+          - 'null'
+          description: Linked catalog variant ATIN
+        name:
+          type: string
+        listingStatus:
+          type: string
+          enum:
+          - DRAFT
+          - LIVE
+          - PAUSED
+        priceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    RetailSupplierEvent:
+      type: object
+      required:
+      - supplierId
+      - code
+      - name
+      - status
+      properties:
+        supplierId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          examples:
+          - SUP-ACC
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+          - ONBOARDING
+          - APPROVED
+          - ON_WATCH
+          - INACTIVE
+        reason:
+          type:
+          - string
+          - 'null'
+    RetailPoEvent:
+      type: object
+      required:
+      - poId
+      - number
+      - supplierId
+      - status
+      - currency
+      - totalMinor
+      - baseCurrency
+      - totalBaseMinor
+      - fxRate
+      properties:
+        poId:
+          type: string
+          format: uuid
+        number:
+          type: string
+          examples:
+          - PO-1P-323
+        supplierId:
+          type: string
+          format: uuid
+        supplierCode:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - PENDING_APPROVAL
+          - APPROVED
+          - SENT
+          - CONFIRMED
+          - PARTIALLY_RECEIVED
+          - RECEIVED
+          - CLOSED
+          - CANCELLED
+        currency:
+          type: string
+          description: Supplier currency of the PO
+        totalMinor:
+          type: integer
+          format: int64
+        baseCurrency:
+          type: string
+        totalBaseMinor:
+          type: integer
+          format: int64
+          description: Total at the FX rate captured at the PO date
+        fxRate:
+          type: number
+          description: Supplier-currency units per one base unit
+        approvalTier:
+          type: string
+          enum:
+          - STANDARD
+          - FINANCE
+        destinationNodeId:
+          type: string
+        actor:
+          type: string
+        note:
+          type:
+          - string
+          - 'null'
+    RetailShipmentEvent:
+      type: object
+      required:
+      - shipmentId
+      - reference
+      - poId
+      - stage
+      - mode
+      - nodeId
+      - units
+      properties:
+        shipmentId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+          examples:
+          - SHP-2610-GH01
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        stage:
+          type: string
+          enum:
+          - BOOKED
+          - CARGO_READY
+          - PICKED_UP
+          - EXPORT_CLEARED
+          - DEPARTED
+          - ARRIVED_PORT
+          - CUSTOMS_CLEARED
+          - DELIVERED_TO_FC
+          - RECEIVED
+        mode:
+          type: string
+          enum:
+          - OCEAN_FCL
+          - OCEAN_LCL
+          - AIR
+          - ROAD
+        eta:
+          type:
+          - string
+          - 'null'
+          format: date
+        nodeId:
+          type: string
+        units:
+          type: integer
+          description: Units on the ASN
+        note:
+          type:
+          - string
+          - 'null'
+    RetailReceiptPosted:
+      type: object
+      required:
+      - receiptId
+      - number
+      - poId
+      - nodeId
+      - currency
+      - landedTotalMinor
+      - lots
+      properties:
+        receiptId:
+          type: string
+          format: uuid
+        number:
+          type: string
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        shipmentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        nodeId:
+          type: string
+        currency:
+          type: string
+        landedTotalMinor:
+          type: integer
+          format: int64
+        discrepancies:
+          type: integer
+        lots:
+          type: array
+          items:
+            type: object
+            properties:
+              sku:
+                type: string
+              lotNo:
+                type: string
+              qty:
+                type: integer
+              status:
+                type: string
+                enum:
+                - SELLABLE
+                - QUARANTINE
+                - DAMAGED
+              unitLandedCostMinor:
+                type: integer
+                format: int64
+    RetailDiscrepancyEvent:
+      type: object
+      required:
+      - receiptId
+      - receiptNumber
+      - poId
+      - claimRef
+      - type
+      - sku
+      - qty
+      - claimStatus
+      properties:
+        receiptId:
+          type: string
+          format: uuid
+        receiptNumber:
+          type: string
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        claimRef:
+          type: string
+          examples:
+          - CLM-GRN-2610-0042-1
+        type:
+          type: string
+          enum:
+          - SHORT
+          - OVER
+          - DAMAGED
+        sku:
+          type: string
+        expectedQty:
+          type: integer
+        receivedQty:
+          type: integer
+        qty:
+          type: integer
+        claimAgainst:
+          type:
+          - string
+          - 'null'
+          enum:
+          - SUPPLIER
+          - CARRIER
+          - null
+        claimStatus:
+          type: string
+          enum:
+          - OPEN
+          - RESOLVED
+          - NOT_REQUIRED
+        note:
+          type:
+          - string
+          - 'null'
+    RetailLandedCostAllocated:
+      type: object
+      required:
+      - receiptId
+      - receiptNumber
+      - currency
+      - fobMinor
+      - dutyMinor
+      - chargesMinor
+      - totalMinor
+      - lines
+      properties:
+        receiptId:
+          type: string
+          format: uuid
+        receiptNumber:
+          type: string
+        shipmentRef:
+          type:
+          - string
+          - 'null'
+        currency:
+          type: string
+        fobMinor:
+          type: integer
+          format: int64
+        dutyMinor:
+          type: integer
+          format: int64
+        chargesMinor:
+          type: integer
+          format: int64
+        totalMinor:
+          type: integer
+          format: int64
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              sku:
+                type: string
+              qty:
+                type: integer
+              fobMinor:
+                type: integer
+                format: int64
+              dutyMinor:
+                type: integer
+                format: int64
+              chargesMinor:
+                type: integer
+                format: int64
+              totalMinor:
+                type: integer
+                format: int64
+              unitCostMinor:
+                type: integer
+                format: int64
+    RetailJournalPosted:
+      type: object
+      required:
+      - entryId
+      - number
+      - entryDate
+      - source
+      - sourceRef
+      - currency
+      - amountMinor
+      - lines
+      properties:
+        entryId:
+          type: string
+          format: uuid
+        number:
+          type: string
+          examples:
+          - JE-24118
+        entryDate:
+          type: string
+          format: date
+        source:
+          type: string
+          enum:
+          - SHIPMENT_DEPARTED
+          - GOODS_RECEIPT
+          - INVOICE_MATCH
+          - COGS
+        sourceRef:
+          type: string
+          description: Shipment reference
+          GRN number: null
+          invoice number or order id: null
+        memo:
+          type:
+          - string
+          - 'null'
+        currency:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+          description: Total debits (= total credits)
+        lines:
+          type: array
+          items:
+            type: object
+            required:
+            - account
+            - debitMinor
+            - creditMinor
+            properties:
+              account:
+                type: string
+                enum:
+                - '1300'
+                - '1310'
+                - '1320'
+                - '2100'
+                - '2110'
+                - '2120'
+                - '5000'
+                - '5010'
+                - '5090'
+                - '7100'
+              accountName:
+                type: string
+              debitMinor:
+                type: integer
+                format: int64
+              creditMinor:
+                type: integer
+                format: int64
+    RetailInvoiceEvent:
+      type: object
+      required:
+      - invoiceId
+      - invoiceNumber
+      - poId
+      - supplierId
+      - status
+      - outcome
+      - currency
+      - totalMinor
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        supplierId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - MATCHED
+          - EXCEPTION
+          - ON_HOLD
+          - APPROVED
+          - REJECTED
+          - PAYMENT_RELEASED
+        outcome:
+          type: string
+          enum:
+          - MATCH
+          - EXCEPTION
+          - HOLD
+        currency:
+          type: string
+        totalMinor:
+          type: integer
+          format: int64
+        reasons:
+          type: array
+          items:
+            type: string
+        assignee:
+          type:
+          - string
+          - 'null'
+          description: Buyer who raised the PO (variance work queue)
+    RetailPaymentReleased:
+      type: object
+      required:
+      - poId
+      - poNumber
+      - supplierId
+      - currency
+      - amountMinor
+      - invoices
+      properties:
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        supplierId:
+          type: string
+          format: uuid
+        supplierCode:
+          type: string
+        currency:
+          type: string
+          description: Supplier currency
+        amountMinor:
+          type: integer
+          format: int64
+        invoices:
+          type: array
+          items:
+            type: object
+            properties:
+              invoiceId:
+                type: string
+                format: uuid
+              invoiceNumber:
+                type: string
+              currency:
+                type: string
+              amountMinor:
+                type: integer
+                format: int64
     SellerApplicationEvent:
       type: object
       required:
@@ -4066,6 +4904,21 @@ operations:
     channel:
       $ref: '#/channels/paymentsPayoutEvents'
     summary: Seller / provider payouts for the portals, notifications and Finance.
+  publishRetailEvents:
+    action: send
+    channel:
+      $ref: '#/channels/retailEvents'
+    summary: retail-service publishes product-master, supplier, PO, shipment/ASN, goods-receipt, landed-cost, GL journal and
+      three-way-match events. Finance consumes retail.gl.journal.posted; payments-service pays suppliers on retail.payment.released;
+      the buyer's work queue listens to retail.match.exception (assignee = PO buyer); catalog/inventory/search use the item
+      and receipt events.
+  consumeRetailInventoryReservationEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/inventoryReservationEvents'
+    summary: 'retail-service (consumer group retail-service, inbox-deduplicated) handles inventory.reservation.committed:
+      shipped units of 1P SKUs are costed at their lots'' landed cost and posted as COGS (Dr 5000 / Cr 1300, retail.gl.journal.posted
+      with source COGS). Other reservation events are ignored.'
   publishSellerApplicationEvents:
     action: send
     channel:
