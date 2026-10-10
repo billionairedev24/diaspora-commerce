@@ -185,7 +185,7 @@
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
 - Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","Done"
-"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","Done"
+"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","In Progress"
 "S051","Story","Payments service with Stripe PaymentIntents","Create, confirm (3-D Secure), capture per shipment and refund through Stripe.","- Manual capture per shipment on carrier acceptance
 - 3-D Secure test card triggers authentication
 - Declined test card returns a clear error
@@ -529,7 +529,7 @@
 "S177","Story","Elasticsearch & Kibana monitoring","Cluster health, index lag and slow queries dashboards.","- Indexer lag alert when > 60 s
 - Slow query log enabled in dev/uat","E28","","Medium","3","observability search","observability","Done"
 "S178","Story","Front-end and mobile error tracking","Sentry for web and mobile with release tagging and source maps.","- Errors grouped by release
-- PII scrubbing enabled","E28","","Medium","2","observability web mobile","observability","To Do"
+- PII scrubbing enabled","E28","","Medium","2","observability web mobile","observability","In Progress"
 "E29","Epic","Infrastructure & multi-cloud","Terraform/OpenTofu modules for AWS, GCP and Azure behind identical interfaces; Cloudflare in front.","","","Infrastructure & multi-cloud","High","","infra","infra","In Progress"
 "S179","Story","Local development stack (docker compose)","Postgres+PostGIS (one DB per service), Kafka, Elasticsearch, Kibana, Redis, Temporal, MinIO, Mailpit, OpenFGA.","- make up starts the full stack
 - Every service database and user is created automatically","E29","","Highest","3","infra local","infra","Done"
@@ -564,9 +564,9 @@
 - Consent stored and auditable","E31","","High","3","legal web","legal","In Progress"
 "S193","Story","Internationalisation","English, French, Spanish and Arabic (RTL) across web and mobile.","- All UI strings externalised
 - Arabic flips to RTL
-- Dates and currency localised","E31","","Medium","8","legal i18n","legal","To Do"
+- Dates and currency localised","E31","","Medium","8","legal i18n","legal","In Progress"
 "S194","Story","Accessibility WCAG 2.2 AA","Skip links, focus management, live regions, 44px targets and reduced motion.","- axe checks pass in CI with no serious violations
-- Every form lists errors and links to fields","E31","","High","5","legal a11y","legal","To Do"
+- Every form lists errors and links to fields","E31","","High","5","legal a11y","legal","In Progress"
 "E32","Epic","Dashboards, charts & exports","Charts for platform, sellers and providers with PDF, CSV and Excel exports.","","","Dashboards, charts & exports","High","","exports","exports","To Do"
 "S195","Story","Dashboard data feeds per portal","One dashboard endpoint per portal returning chart series.","- Feeds are cached for 60 seconds
 - Respect the caller's org and permissions","E32","","Medium","5","exports","exports","To Do"
@@ -723,7 +723,7 @@
 - 'plantian chips' finds plantain chips","E04","","Medium","8","search ads bff seller-center staff-console","search","Done"
 "S241","Story","Payment ownership checks and PaymentSheet customer key","Payments checks the caller owns the order on GET /v1/payments?orderId= and issues Stripe customer ephemeral keys for mobile PaymentSheet.","- Non-owners get 403 on order payment reads
 - Ephemeral key endpoint returns customer id and key for the signed-in shopper
-- BFF payment-sheet route works","E07","","Highest","3","payments security mobile","payments","To Do"
+- BFF payment-sheet route works","E07","","Highest","3","payments security mobile","payments","In Progress"
 "S242","Story","Streaming support in go/pkg/httpserver","Shared Go HTTP server supports flushing through its response recorder and per-route write timeouts for long-lived streams (SSE), removing BFF workarounds.","- Recorder implements http.Flusher
 - SSE routes are exempt from the 30s write timeout
-- BFF Lola relay uses the shared server without workarounds","E01","","Medium","2","go platform","foundation","To Do"
+- BFF Lola relay uses the shared server without workarounds","E01","","Medium","2","go platform","foundation","In Progress"
