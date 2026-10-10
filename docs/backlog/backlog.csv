@@ -1,0 +1,585 @@
+"Issue Id","Issue Type","Summary","Description","Acceptance Criteria","Parent Id","Epic Name","Priority","Story Points","Labels","Component","Status"
+"E01","Epic","Platform foundation & engineering standards","Monorepo, toolchains, shared libraries and enforced code rules (interfaces + impls, no wildcard/inline imports, hexagonal layering).","","","Platform foundation & engineering standards","High","","foundation","foundation","In Progress"
+"S001","Story","Monorepo layout and conventions","Create the monorepo (contracts, java, go, web, mobile, docs, infra, design) with CLAUDE.md conventions and the service catalogue.","- Repository has contracts/, java/, go/, web/, mobile/, docs/, infra/, design/ directories
+- CLAUDE.md documents toolchain versions, layering and import rules
+- infra/local/PORTS.md lists every service, runtime, port and data store
+- Design handoff (prototypes + chat transcripts) is stored under design/","E01","","Highest","3","foundation","foundation","Done"
+"S002","Story","Maven reactor and platform parent POM","Spring Boot 4.1.x / Java 25 parent with dependency management, compiler, enforcer, Failsafe, JaCoCo and Jib.","- ./mvnw verify builds every Java module from java/
+- Java 25 and Maven 3.9 are enforced
+- Integration tests (*IT) run in the verify phase via Failsafe
+- Spring Boot version is a single property that can be bumped to 4.1.4","E01","","Highest","3","foundation java","foundation","Done"
+"S003","Story","Checkstyle gate: no wildcard or inline imports","Checkstyle rules that fail the build on star imports, inline fully-qualified names, field injection, Lombok and System.out.","- A file with import java.util.* fails the build
+- A file using java.util.List inline in code fails the build
+- @Autowired on a field fails the build
+- Rules run in the validate phase for main and test sources","E01","","Highest","2","foundation java quality","foundation","Done"
+"S004","Story","ArchUnit hexagonal rules shared library","Reusable ArchUnit rules: layer direction, framework-free domain, package-private Impl classes, use cases as interfaces.","- platform-test exposes HexagonalArchitectureRules.verify(classes, basePackage)
+- Every Java service has an ArchitectureTest that calls it
+- A domain class importing Spring fails the test
+- A public *Impl class in application fails the test","E01","","High","3","foundation java quality","foundation","Done"
+"S005","Story","platform-web library (API docs pages, problem details, correlation ids)","Shared web conventions for every Spring service.","- Every service serves Swagger UI, /docs (Scalar) and /redoc (Redoc) from its /v3/api-docs
+- Domain exceptions map to RFC 9457 problem+json with a stable code
+- X-Correlation-Id is accepted, generated if missing, returned and put in the MDC
+- Reference pages can be disabled per environment (off in prod)","E01","","Highest","3","foundation java docs","foundation","Done"
+"S006","Story","platform-events library (transactional outbox and inbox)","Outbox written in the business transaction, Kafka relay keyed by aggregate id, inbox de-duplication.","- DomainEventPublisher.publish requires an active transaction
+- Outbox rows are relayed to at.<aggregate>.events with event-id, event-type and occurred-at headers
+- Relay uses SELECT … FOR UPDATE SKIP LOCKED so several pods can run it
+- InboxDeduplicator returns false for a redelivered event id","E01","","Highest","5","foundation java events","foundation","Done"
+"S007","Story","platform-security library (resource server, actor, permissions)","JWT resource-server defaults, Actor resolution from identity claims and fine-grained permission checks.","- Docs, health and metrics endpoints are public; everything else needs a valid JWT
+- Actor exposes subject, principal type, org id, roles and permissions
+- PermissionChecker.require throws a 403 problem when the permission is missing
+- Local profile can disable auth and run as a local super admin","E01","","Highest","5","foundation java security","foundation","Done"
+"S008","Story","Go workspace and shared pkg module","go.work with a shared module: config loader, slog logging, HTTP runtime, problems, auth, telemetry, Kafka ports.","- Each Go service is its own module and builds with GOWORK=off
+- Config loads config/<APP_ENV>.yaml then env overrides; unknown env fails fast
+- HTTP runtime serves /healthz, /readyz, /metrics, /openapi.yaml, /docs, /redoc
+- Graceful shutdown on SIGTERM within 20s","E01","","Highest","5","foundation go","foundation","Done"
+"S009","Story","golangci-lint gate for Go","Shared golangci-lint v2 config enforcing no dot/blank imports, wrapped errors and goimports grouping.","- golangci-lint run reports 0 issues on every module
+- Dot imports and blank imports outside main fail lint
+- Unwrapped errors from interfaces and external packages fail lint","E01","","High","2","foundation go quality","foundation","Done"
+"S010","Story","Container images for Java and Go services","Distroless Go images and layered Spring Boot images, non-root, with Jib as CI alternative.","- Go images are built FROM distroless/static:nonroot and are under 60 MB
+- Java images use layered jars on eclipse-temurin:25-jre and run as uid 1000
+- Images default to APP_ENV/SPRING_PROFILES_ACTIVE=prod and port 8080","E01","","High","3","foundation docker","foundation","In Progress"
+"S011","Story","Backlog CSV with Jira import format","Maintain this backlog as a Jira-importable CSV and mark stories Done as they are completed.","- docs/backlog/backlog.csv imports into Jira with epics, parent links, priority, points, labels and status
+- tools/backlog/mark.py sets a story status by issue id
+- Every completed story is marked Done in the same commit as the work","E01","","High","2","foundation process","foundation","Done"
+"E02","Epic","Identity, accounts & access control","Spring Authorization Server (OAuth 2.1 / OIDC): one account for customers, sellers, providers, staff and drivers; roles decided server-side; social login, MFA, passkeys and RBAC.","","","Identity, accounts & access control","High","","identity","identity","To Do"
+"S012","Story","Spring Authorization Server with OIDC discovery and JWKS","Identity service issues access/ID/refresh tokens for web, mobile and services.","- /.well-known/openid-configuration and /oauth2/jwks are served
+- Authorization Code + PKCE works for the storefront and mobile clients
+- Client Credentials works for service-to-service calls
+- Access tokens live 5 minutes and carry pt, org, roles and perms claims","E02","","Highest","8","identity java","identity","To Do"
+"S013","Story","Unified sign-up for customers, sellers and providers","Same form for every account: first name, last name, email, mobile with country code, password, confirm, terms; role decided server-side.","- First/last name accept letters, spaces, hyphens, apostrophes and accents
+- Phone is validated per country and stored in E.164
+- Password needs 12+ chars, upper, lower, digit and must not contain the name or email
+- Seller/provider entry points add the role server-side; the form never asks for a role
+- Duplicate email returns a clear error","E02","","Highest","5","identity java","identity","To Do"
+"S014","Story","Email verification with 6-digit code","Accounts created with email/password verify their email before continuing.","- A 6-digit code is emailed and expires after 10 minutes
+- Resend is rate limited to 1 per 30 seconds and 5 per hour
+- 'Use a different email' restarts sign-up
+- Social sign-ups skip the code because the provider verified the email","E02","","High","3","identity java notifications","identity","To Do"
+"S015","Story","Social login via OIDC (Google first, Apple and Facebook configurable)","Federated login through the providers' real OAuth flows; providers appear only when enabled by the platform.","- Google sign-in uses the provider's consent page, never a form we fill
+- Accounts are created from verified claims (name, email)
+- Only providers enabled in Developers › Identity providers appear in the UI
+- Official brand logos are used on buttons","E02","","High","5","identity java","identity","To Do"
+"S016","Story","Passkeys (WebAuthn) and biometrics","Passkey registration and sign-in; 'Sign in with a passkey' only on the sign-in screen.","- Users can register, list and remove passkeys in Login & security
+- Passkey sign-in works on Chrome, Safari and Firefox
+- Create-account screen does not offer passkey sign-in
+- Mobile app supports Face ID / fingerprint through platform passkeys","E02","","High","8","identity java security","identity","To Do"
+"S017","Story","Multi-factor authentication (TOTP, SMS, passkey)","Second factor at sign-in with trusted-browser option; mandatory phishing-resistant MFA for staff.","- TOTP enrolment shows QR + recovery codes
+- SMS codes respect consent and quiet hours do not apply to OTP
+- 'Trust this browser' skips MFA for 30 days
+- Staff accounts cannot disable MFA","E02","","High","8","identity security","identity","To Do"
+"S018","Story","Role-based redirect after login","Users land where their role belongs: shop, Seller Center, Provider Hub, staff console or driver app.","- Customers stay in the shop
+- Approved sellers/providers land on their dashboard; pending ones on onboarding
+- @afrotransact.com staff land in the staff console
+- A customer who starts selling gets the seller role on the same account, no second sign-up","E02","","High","3","identity","identity","To Do"
+"S019","Story","Permission model: permissions, roles, direct grants","Permissions are abilities, roles bundle them, users can hold several roles plus direct grants.","- Effective permissions = union of role permissions and direct grants
+- Driver app requires delivery:operate; admins can be granted it directly
+- Removing a permission revokes it on the next token refresh (≤5 min)
+- Every change is written to the audit log","E02","","Highest","5","identity rbac","identity","To Do"
+"S020","Story","Access control administration (module matrix, capabilities, people, change log)","Developers and Super Admins manage access in the staff console; Product Owner and Auditor can view.","- Module access matrix cycles none → view → edit → approve → full
+- Capabilities tab maps roles to permissions
+- People tab toggles roles, direct grants and enable/disable
+- Change log lists who changed what and when","E02","","High","8","identity rbac staff-console","identity","To Do"
+"S021","Story","Login & security page (password, linked accounts, passkeys, sessions, recovery codes)","Self-service security settings for every account.","- Change password requires the current password
+- Link/unlink Google, Apple, Facebook (cannot unlink the last sign-in method)
+- Active sessions listed with 'sign out other devices'
+- Recovery codes can be regenerated","E02","","Medium","5","identity","identity","To Do"
+"S022","Story","Fine-grained authorisation with OpenFGA","Relationship checks seller_org → store → listing so members only touch their org's data.","- OpenFGA model covers org membership, store ownership and listing ownership
+- Catalog/orders services check org relationships for non-staff actors
+- A catalog member cannot access payouts","E02","","Medium","5","identity rbac","identity","To Do"
+"E03","Epic","Catalog & product builder","One product page per item (ATIN/GTIN), category-specific schemas, variants and category requests.","","","Catalog & product builder","High","","catalog","catalog","In Progress"
+"S023","Story","Catalog service skeleton with hexagonal layout and docs","Spring Boot catalog service with Flyway, outbox, security and API reference pages.","- Service starts on 8101 with local profile against docker compose Postgres
+- Swagger UI, /docs and /redoc render the API
+- ArchitectureTest passes
+- Health, readiness and Prometheus endpoints respond","E03","","Highest","3","catalog java","catalog","Done"
+"S024","Story","Category tree and product-type schemas seeded from design","Department › category › product type tree with required details, variation themes and identifier rule per type.","- Seven departments from the design are seeded (Fashion, Groceries, Beauty, Books, Home & Art, Health, Event & party)
+- Each product type defines attributes (with options), variation themes and GTIN/ISBN rule
+- GET /v1/categories and /v1/product-types are public
+- Seed is generated by tools/seed/catalog_taxonomy.py","E03","","Highest","5","catalog java","catalog","Done"
+"S025","Story","Create product with server-side validation","Product builder submission: category, images, details, variations, SKUs, barcodes and prices validated on the server.","- Owner (seller org or AfroTransact Retail) is derived from the token; there is no 'sold by' field
+- Title 10–200 chars; every required attribute filled with an allowed value
+- 1–10 JPG/PNG/WebP images ≤ 8 MB; main image ≥ 1000×1000 px
+- Variant SKUs unique per org; prices > 0; GTIN check digit valid or exemption; ISBN-13 required for books
+- All failing fields are returned at once as fieldErrors","E03","","Highest","8","catalog java","catalog","Done"
+"S026","Story","ATIN issuance for products and variants","AfroTransact identifiers (ASIN equivalent) issued from a database sequence.","- ATINs match AT + 8 base-36 characters
+- Each product and each variant gets its own ATIN
+- ATINs are unique across pods and not sequentially guessable","E03","","High","2","catalog java","catalog","Done"
+"S027","Story","GTIN check and shared product pages","Validate barcodes while typing and steer sellers to an existing page instead of duplicating.","- GET /v1/identifiers/gtin/{code} returns valid flag, suggested correction and existing ATIN
+- Creating a product whose GTIN already exists returns 409 with the existing ATIN
+- GTIN-8/12/13/14 supported; ISBN-13 enforced for books","E03","","High","3","catalog java","catalog","Done"
+"S028","Story","Category requests and building products against them","Sellers request a missing category and can build products immediately; they publish after approval.","- Request needs parent path, name, example product and details (3+ chars each) and gets a REQ-###### reference
+- Products built against a request are PENDING_CATEGORY_APPROVAL
+- Approval creates the product-type leaf and moves waiting products to IN_REVIEW
+- Rejection rejects waiting products with the note","E03","","High","5","catalog java","catalog","Done"
+"S029","Story","Listing moderation (approve, reject, pause, resume)","Staff with catalog:moderate review submitted products; owners pause/resume live listings.","- Only IN_REVIEW products can be approved
+- Reject requires a note
+- Owners can pause and resume only their own live products
+- Each transition publishes a catalog.product.* event via the outbox","E03","","High","3","catalog java","catalog","Done"
+"S030","Story","Image upload via UploadThing with moderation checks","Signed uploads, size/dimension checks and background moderation (no watermarks, white background for main).","- media service issues UploadThing presigned uploads
+- Uploaded image metadata (url, width, height, bytes, type) is returned to the builder
+- Images failing moderation are flagged on the product","E03","","High","5","catalog go media","catalog","To Do"
+"S031","Story","Barcode lookup prefill (GS1 / Open Food Facts)","When a seller types a GTIN, prefill name, images and description from product-data providers.","- Lookup tries GS1 US Data Hub then Open Food Facts for groceries
+- Prefilled fields are editable and marked as imported
+- No match falls back to manual entry","E03","","Low","5","catalog","catalog","To Do"
+"S032","Story","Barcode label generation (GS1-128, Code 128, EAN-13, ZPL)","Generate retail, case, pallet, shelf and AfroTransact unit labels.","- Unit labels for platform stock without vendor GTIN use the ATF prefix
+- Case labels encode AI 01/10/11/17
+- Labels render as PDF and ZPL for printers","E03","","Medium","5","catalog inventory","catalog","To Do"
+"E04","Epic","Search & discovery","Elasticsearch read model with typo tolerance, diaspora synonyms, facets, geo and semantic retrieval.","","","Search & discovery","High","","search","search","In Progress"
+"S033","Story","Product index mapping with diaspora synonyms","products-<market>-v<N> behind an alias with analyzers, synonyms, search-as-you-type and dense_vector.","- Index is created with the shared mapping and aliased to products-<market>
+- Synonyms cover gari/garri, zobo/bissap/hibiscus, egusi/melon seed and more
+- Mapping version bump allows zero-downtime reindex","E04","","Highest","3","search go","search","Done"
+"S034","Story","Search API with filters, facets and sorts","GET /v1/search used by the results page, apps and Lola.","- Every typed word must match; partial words match
+- Typos tolerated: one edit for 3–5 letters, two for 6+
+- Filters: department, community, fulfilment, seller kind, rating, price, delivery days, in stock, distance
+- Facets returned for department, community, fulfilment, seller kind, rating, price and delivery
+- Sorts: relevance, price asc/desc, rating, newest","E04","","Highest","8","search go","search","Done"
+"S035","Story","Typeahead suggestions","GET /v1/suggest returns completed phrases (first scoped to a department) and up to five products.","- Suggestions appear from the first character
+- First phrase includes its department, e.g. 'jollof seasoning in Groceries'
+- Products show price, stock and how they ship
+- Responses are cacheable for 30 seconds","E04","","Highest","5","search go","search","Done"
+"S036","Story","Semantic (hybrid) retrieval via AI gateway embeddings","Natural-language queries blend kNN with lexical relevance and degrade gracefully.","- Queries of 3+ words request an embedding with a 150 ms budget
+- If the embedder fails or times out, lexical results are returned
+- Response reports whether semantic retrieval was used","E04","","High","5","search go ai","search","In Progress"
+"S037","Story","Indexer: Kafka → Elasticsearch projection","Indexer consumes catalog, offers and inventory events and upserts product documents idempotently by version.","- catalog.product.approved creates/updates a document
+- inventory.availability.changed updates available_qty and in_stock
+- Out-of-order events with an older version are ignored
+- Bulk indexing with retries and a dead-letter topic","E04","","Highest","8","search go events","search","To Do"
+"S038","Story","Low-stock signals on cards","Product cards and search hits show 'Only N left' at 5 units or fewer.","- lowStock is true when 1–5 units are available
+- Out-of-stock items show 'Currently unavailable'","E04","","Medium","1","search","search","In Progress"
+"S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation
+- Ranking boosts in-stock and Fulfilled-by-AfroTransact items
+- A relevance test set runs in CI","E04","","Medium","5","search","search","To Do"
+"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","To Do"
+"S040","Story","Offers service: create offer on existing product","Sellers attach price, stock and condition to an existing ATIN instead of duplicating the page.","- Offer created from catalog.product.created for the creating seller
+- Other sellers can add an offer by ATIN or GTIN
+- Offer price, handling time and fulfilment type are stored","E05","","Highest","5","offers java","offers","To Do"
+"S041","Story","Buy box selection","Pick the winning offer by landed price, delivery promise, seller health and stock; 1P competes under the same rules.","- Winner recomputed on price/stock/health change
+- Ineligible offers (no stock, restricted seller) never win
+- Selection rules are audited and documented","E05","","High","5","offers java","offers","To Do"
+"S042","Story","Coupons & promotions","Platform- or seller-funded coupons with scope, minimum spend, limits and dates.","- Coupon types: percent, fixed, free shipping
+- Usage limits per coupon and per customer are enforced
+- Funding source (AfroTransact or seller) is recorded for settlement","E05","","Medium","5","offers java","offers","To Do"
+"S043","Story","Other sellers on product page","Product page lists other offers for the same item with price, delivery and seller rating.","- All eligible offers listed with landed price
+- Customers can add a non-buy-box offer to cart","E05","","Medium","3","offers","offers","To Do"
+"E06","Epic","Cart & checkout","Amazon-style cart split per seller, stock-capped quantities, and a clean three-step checkout saga.","","","Cart & checkout","High","","checkout","checkout","To Do"
+"S044","Story","Cart service (Redis + Postgres)","Carts with price snapshots, save for later and merge on login.","- Quantities can never exceed sellable stock
+- Lines that lose stock are flagged and excluded from checkout
+- Guest cart merges into the account cart on sign-in
+- Save for later moves lines out of the active cart","E06","","Highest","5","checkout go","checkout","To Do"
+"S045","Story","Add-to-cart stepper and stock caps","'Add to cart' becomes a − / + stepper; out-of-stock shows 'Currently unavailable' with back-in-stock alert.","- Stepper never exceeds available stock
+- Out-of-stock items cannot be added
+- 'Email me when available' subscribes the user","E06","","High","3","checkout web","checkout","To Do"
+"S046","Story","Checkout saga (Temporal) with compensations","Validate cart → reserve inventory → PaymentIntent (manual capture) → order + shipments → confirm.","- Each step has a compensation (release reservation, cancel intent, void order)
+- Idempotency-Key on placeOrder returns the same order on retry
+- A failed payment releases reservations within 1 minute
+- Cart is cleared after a successful order","E06","","Highest","13","checkout java temporal","checkout","To Do"
+"S047","Story","Three-step checkout UI (address, payment, items & delivery)","Each step folds to a summary with Change; order summary stays on the right.","- Saved addresses and payment methods load by default
+- Add address opens a dialog with address autocomplete
+- Add payment method supports card and US bank (ACH) via Stripe Elements
+- Apple Pay, Google Pay and Link quick-pay buttons
+- No 'use my current location' in checkout","E06","","Highest","8","checkout web","checkout","To Do"
+"S048","Story","Delivery choices per package","Carrier shipping, AfroTransact Delivery or pickup chosen per package with dates.","- Carrier options come from carrier-gateway rate shopping
+- AfroTransact Delivery offered only in served zones from nearby origins
+- Pickup locations show address, hours and ready time
+- Delivery instructions and preference captured; handover code required for perishables or hand delivery","E06","","High","8","checkout web delivery","checkout","To Do"
+"S049","Story","Delivery promise service","Delivery dates per ZIP from FC cutoffs, carrier SLAs and seller handling time.","- Promise shown on cards, PDP, cart and checkout
+- The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","To Do"
+"S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
+- Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","To Do"
+"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","To Do"
+"S051","Story","Payments service with Stripe PaymentIntents","Create, confirm (3-D Secure), capture per shipment and refund through Stripe.","- Manual capture per shipment on carrier acceptance
+- 3-D Secure test card triggers authentication
+- Declined test card returns a clear error
+- Stripe calls reuse the order idempotency key","E07","","Highest","8","payments java stripe","payments","To Do"
+"S052","Story","Stripe webhook inbox","Signed, de-duplicated, ordered handling of Stripe events.","- Signature verified with the endpoint secret
+- Duplicate event ids are ignored
+- Unknown events are stored and acknowledged","E07","","Highest","3","payments java stripe","payments","To Do"
+"S053","Story","Double-entry ledger","Immutable journal for charges, commission, seller payables, fees, tax, refunds and chargebacks.","- Every journal balances (debits = credits)
+- Ledger runs at SERIALIZABLE isolation
+- Daily reconciliation against Stripe balance transactions alerts on drift","E07","","Highest","8","payments java","payments","To Do"
+"S054","Story","Payment split per order","Per-recipient breakdown: items, shipping, tax, commission, FBA fees and pro-rata Stripe fee.","- Stripe fee shared pro rata; leftover cents go to AfroTransact
+- AfroTransact Retail pays no commission
+- Staff can view the split on any order","E07","","High","5","payments java","payments","To Do"
+"S055","Story","Configurable commission and fees","Commission % per category with seller overrides, card fee and FBA fee, versioned with effective dates.","- Only Super Admin and Finance can edit
+- Changes apply to new orders only
+- Worked two-seller example shown in the UI","E07","","High","5","payments java staff-console","payments","To Do"
+"S056","Story","Payouts on request with settlement hold","Earnings held 7 days after delivery/completion; sellers request payouts; finance approves.","- Balance shows available, on hold (per order with release date) and requested
+- Minimum $25, one request per day, owner/finance roles only
+- Connected accounts use manual payout schedule
+- Finance can approve, hold or release payout requests","E07","","High","8","payments java stripe","payments","To Do"
+"S057","Story","Refund and chargeback reversals","Partial refunds reverse matching transfer and commission; chargebacks debit the responsible seller.","- Partial refund per line updates the ledger
+- Chargeback debits the seller's balance and notifies them","E07","","High","5","payments java","payments","To Do"
+"E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","To Do"
+"S058","Story","Order and sub-order model","One order, one shipment per seller/fulfilment node, each cancellable separately.","- Order totals equal the sum of shipments plus tax
+- Each shipment can be cancelled before it is packed","E08","","Highest","5","orders java","orders","To Do"
+"S059","Story","Shipment state machine with actor rules","placed → confirmed → packed → ready → picked_up → in_transit → out_for_delivery → delivered (+ failed, returned, cancelled).","- Seller-fulfilled: only the seller confirms, packs and marks ready
+- Carriers (webhooks) and AfroTransact Delivery move transit steps
+- Platform admins may confirm delivery, record failure, process returns or cancel — never 'packed'
+- Fulfilled by AfroTransact: admins and fulfilment ops own every step
+- Rules enforced in the service, not the UI","E08","","Highest","8","orders java","orders","To Do"
+"S060","Story","Your Orders page with creative side panel","Order history with per-shipment tracking, buy again and a useful right-hand panel.","- Each shipment shows status timeline and tracking
+- Right panel shows recommendations / delivery map / help instead of blank space","E08","","Medium","5","orders web","orders","To Do"
+"S061","Story","Driver events update order status live","Driver pickup/delivery scans move shipment statuses in the back office immediately.","- 'Picked up' and 'Delivered' scans update the shipment within 5 seconds
+- Staff console reflects updates without refresh (SSE)","E08","","High","5","orders delivery","orders","To Do"
+"E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","To Do"
+"S062","Story","Inventory positions and append-only ledger","inventory_position(sku, node, on_hand, reserved, inbound, damaged, version) + ledger.","- available = on_hand − reserved is published via events, never computed in clients
+- Every movement writes a ledger row with actor and reason
+- Nightly job reconciles ledger sums to positions and alerts on drift","E09","","Highest","8","inventory java","inventory","To Do"
+"S063","Story","Concurrent reservations without overselling","Reserve all lines in one transaction with row locks in key order; idempotent per order.","- SELECT … FOR UPDATE in key order prevents deadlocks
+- All lines reserve or none do
+- Retrying with the same order id never double-reserves
+- Flash-sale test: N+25 concurrent checkouts for N units ⇒ exactly N succeed","E09","","Highest","8","inventory java concurrency","inventory","To Do"
+"S064","Story","Reservation lifecycle","RESERVE (TTL 15 min) → SHIP → RETURN_RESTOCK / RETURN_DAMAGED; adjustments with reasons.","- Expired reservations release automatically
+- Adjustments can never go below what is reserved
+- Returns put stock back or into damaged after inspection","E09","","High","5","inventory java","inventory","To Do"
+"S065","Story","Lots with expiry and FEFO allocation","Lots per SKU × FC × bin with made/expiry dates; earliest expiry picked first.","- Lot unique per (sku, lot_no, fc)
+- Picks allocate FEFO
+- Expired lots are blocked from sale nightly
+- Lots ≤ 30/60 days are flagged for markdown","E09","","High","5","inventory java","inventory","To Do"
+"S066","Story","Inventory hub in the staff console","Overview, stock & lots, inbound, POs, suppliers, warehouses, labels, accounting and movements tabs gated by RBAC.","- Visible only to roles with inventory access
+- Lots can be quarantined, released or written off with reasons
+- Movement history traceable per lot for recalls","E09","","High","8","inventory staff-console","inventory","To Do"
+"S067","Story","Seller FBA inventory","Sellers send stock into AfroTransact FCs with seller-specific unit labels.","- Inbound shipment plan with carton labels
+- Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","To Do"
+"E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","To Do"
+"S068","Story","Product master for platform products","Category managers create 1P products with supplier, HTS code, duty, shelf life, storage, reorder point and price.","- SKU and GTIN (AfroTransact GS1 prefix, check digit) assigned automatically
+- Listing starts as Draft","E10","","High","3","retail java","retail","To Do"
+"S069","Story","Suppliers","Supplier records with lead time, on-time %, defect %, certifications and status.","- Supplier scorecards update from receipts
+- Inactive suppliers cannot receive new POs","E10","","Medium","3","retail java","retail","To Do"
+"S070","Story","Purchase orders with approval and FX","Draft → Pending approval → Approved → Sent → Confirmed → Received → Closed; FX captured at PO date.","- Orders over $10k need Finance approval
+- PO PDF + EDI 850 sent to supplier
+- Cancel allowed until a shipment is booked","E10","","High","8","retail java","retail","To Do"
+"S071","Story","Inbound shipments, ASN and documents","Shipments with lot/made/expiry from supplier packing list; required customs documents per mode.","- ASN lines editable until departure, then locked
+- Departure blocked while documents are missing
+- Customs clearance blocked by holds","E10","","High","8","retail java","retail","To Do"
+"S072","Story","Goods receipt and validation","Receivers scan GS1-128 case labels, count good/damaged, split batches, put away and record QA.","- Lot 4–20 alphanumerics, unique per SKU; made ≤ today; expiry > made and not passed
+- Remaining life ≥ max(90 days, 50% shelf life) or quarantined
+- Shortages raise a claim; >2% over is blocked","E10","","High","8","retail java inventory","retail","To Do"
+"S073","Story","Landed cost and GL postings","Landed cost per unit (FOB + freight, insurance, fees, duty) and journal entries per step.","- Dr 1310 In transit / Cr 2110 GR/IR at title transfer
+- Completing GRN posts Dr 1300/1320 and Cr 1310/2120
+- COGS posted at lot landed cost on shipment","E10","","Medium","5","retail java finance","retail","To Do"
+"S074","Story","Three-way match and supplier payment","PO price × received qty vs supplier invoice (±1%) before payment; FX gain/loss posted.","- Variances route to the buyer
+- Closing the PO releases payment","E10","","Medium","5","retail java finance","retail","To Do"
+"E11","Epic","Carriers & shipping (USPS, UPS, FedEx, DHL)","Direct carrier integrations behind one Carrier port — no aggregator.","","","Carriers & shipping (USPS, UPS, FedEx, DHL)","High","","carriers","carriers","To Do"
+"S075","Story","Carrier port and gateway service","rate(), buy_label(), void(), track(), schedule_pickup(), validate_address() behind one interface.","- Each carrier is its own adapter implementing the same Go interface
+- Rate shopping fans out in parallel with a 1.5 s budget and caches per cart","E11","","High","5","carriers go","carriers","To Do"
+"S076","Story","USPS adapter (Labels API, tracking polling)","USPS rates, labels and polled tracking.","- Labels stored as PDF/ZPL in object storage
+- Tracking polled on schedule and mapped to shipment states","E11","","High","5","carriers go","carriers","To Do"
+"S077","Story","UPS adapter (OAuth, Track Alert webhooks)","UPS rates, labels and push tracking.","- OAuth token cached and refreshed
+- Track Alert events verified, de-duplicated and ordered","E11","","High","5","carriers go","carriers","To Do"
+"S078","Story","FedEx adapter (OAuth, webhooks)","FedEx rates, labels and push tracking.","- Webhook signatures verified
+- Negotiated rates per FC account","E11","","High","5","carriers go","carriers","To Do"
+"S079","Story","DHL Express adapter (MyDHL API)","DHL Express rates, labels and push tracking for international shipping.","- Customs data passed for international parcels
+- Push tracking mapped to shipment states","E11","","Medium","5","carriers go","carriers","To Do"
+"S080","Story","Pickup points and seller pickup","Platform pickup points/lockers and seller-configured pickup with address and hours.","- Sellers set their pickup address and hours in Seller Center
+- Pickup ready notifications sent to customers","E11","","Medium","5","carriers delivery","carriers","To Do"
+"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","To Do"
+"S081","Story","Driver app sign-in with access check","Email + password + 6-digit code; only users with delivery:operate get in.","- Users without delivery:operate see 'No driver access' with who can grant it
+- Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","To Do"
+"S082","Story","Vehicle inspection","10 checks with critical items, odometer, fuel, cold-box temperature, 4 live photos and signature.","- Failing brakes, tyres or lights blocks the route and reports a defect to dispatch
+- Cold-box must read 33–40°F when perishables are on board
+- Photos come only from the live in-app camera","E12","","High","5","delivery mobile","delivery","To Do"
+"S083","Story","Load-out scanning","Scan every package for the route out of the warehouse.","- Unknown or already-scanned labels are rejected
+- Manual label entry is available and flagged","E12","","High","3","delivery mobile","delivery","To Do"
+"S084","Story","Seller pickup stops","Scan packages at seller locations and record who handed them over; handle pickup problems.","- Not ready (wait/skip), closed, wrong count and damaged flows
+- Pickup confirmation needs all expected scans or a reason","E12","","High","5","delivery mobile","delivery","To Do"
+"S085","Story","Proof of delivery","Arrive, scan, choose handover method and take a live, GPS-stamped photo within 150 m.","- Handed to customer requires the 4-digit code
+- Someone else requires name, relationship and signature
+- Safe place blocked for perishables
+- Photo stamped with time, GPS and route id","E12","","Highest","8","delivery mobile","delivery","To Do"
+"S086","Story","Delivery problems and reattempts","Customer unavailable, access issues, damage, refusal, missing package, unsafe — with required evidence.","- Customer unavailable needs call, text and 5-minute wait before reattempt/pickup point/return
+- Reattempt stops must be resolved before shift end
+- Failed packages scanned back in at end of shift","E12","","High","8","delivery mobile","delivery","To Do"
+"S087","Story","SOS and offline-first sync","SOS alerts with GPS; every action queued with idempotency keys and sent in order.","- Offline actions queue and sync in order when back online
+- Header shows Synced / Syncing / Offline
+- SOS alerts dispatch immediately","E12","","High","8","delivery mobile","delivery","To Do"
+"S088","Story","Dispatch console","Plan routes per zone, assign drivers and reassign failed stops.","- Driver events stream into Delivery dispatch
+- Failed stops can be reassigned to another route","E12","","Medium","8","delivery staff-console","delivery","To Do"
+"E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","To Do"
+"S089","Story","Resumable application with autosave","Applicants can save, sign out and resume exactly where they left off.","- Draft autosaves after every change
+- Save & sign out returns to 'Welcome back' and resumes on sign-in
+- No sidebar or back-office navigation while applying","E13","","Highest","5","onboarding java web","onboarding","To Do"
+"S090","Story","Country and phone with launch-list for unsupported countries","All countries with flags; non-live countries disable the rest of the step and offer a launch list.","- Only the country picker and 'Notify me at launch' work in a non-live country
+- Phone uses a flag/country-code picker, formats as you type and validates mobile numbers (libphonenumber)
+- No RFC text shown under the phone field","E13","","High","5","onboarding web","onboarding","To Do"
+"S091","Story","Entity-aware business details","Fields change with business type (sole prop, LLCs, corporation, partnership, nonprofit).","- Sole proprietors: name, SSN/ITIN, DOB (18+), address
+- Companies: legal name, EIN, state and date of formation, address, formation document
+- Nonprofits: IRS determination letter
+- SSN/EIN dashes are added automatically","E13","","Highest","8","onboarding web java","onboarding","To Do"
+"S092","Story","Beneficial owners","Owners with ≥ 25%, significant control rules and multi-member requirements.","- Ownership cannot exceed 100%
+- At least one person with significant control
+- Multi-member LLCs and partnerships need two or more people","E13","","High","5","onboarding","onboarding","To Do"
+"S093","Story","Stripe Connect embedded onboarding","Identity, tax-ID match and KYC run inside Stripe's embedded components; no separate verification links.","- Account Session + account-onboarding component embedded
+- We store only verification results, never ID images or full tax numbers
+- Status rows show identity, IRS name/TIN match and sanctions screening","E13","","Highest","8","onboarding stripe","onboarding","To Do"
+"S094","Story","Payout bank account","Routing number validated; account number entered twice.","- Invalid routing numbers rejected
+- Mismatched account numbers rejected","E13","","High","2","onboarding","onboarding","To Do"
+"S095","Story","Plan selection with billing frequency","Plans with monthly, quarterly (5% off) and annual (2 months free) billing, trials and payment method.","- Plan cards show per-month price, charged amount, cadence, saving and trial
+- Billing via payout bank (ACH) or card
+- First charge sentence shown, e.g. 'Free for 30 days. First charge of $139.65 on Nov 9'","E13","","High","5","onboarding billing","onboarding","To Do"
+"S096","Story","Catalog, permits and licences","Food permits, beauty labelling, service licences/insurance, agreements and W-9 certification.","- Expired licences rejected
+- Each regulated service needs a licence document
+- Agreements and W-9 certification required","E13","","High","5","onboarding","onboarding","To Do"
+"S097","Story","Two-step review (reviewer then final approver)","Reviewer approves, flags or requests info; a different approver gives final approval.","- Reviewer cannot give final approval on the same application
+- Flagged applications list the failing checks
+- Only final approval unlocks Seller Center / Provider Hub
+- Application review sheet shows every field, documents (view is logged), checks, risk and timeline","E13","","Highest","8","onboarding staff-console java","onboarding","To Do"
+"S098","Story","Existing customers start selling without a second account","Signed-in customers get the seller/provider role added and onboarding prefilled.","- Role change is audited as pending approval
+- Name, email, phone and address prefilled with a 'check these' banner","E13","","High","3","onboarding identity","onboarding","To Do"
+"E14","Epic","Stripe compliance sync, plans & billing","Mirror Stripe requirements, notify sellers, collect answers in our UI; subscriptions via Stripe Billing.","","","Stripe compliance sync, plans & billing","High","","billing","billing","To Do"
+"S099","Story","Compliance sync from Stripe webhooks","account.updated, capability.updated, person.* and payout events mirrored with history.","- Requirements (currently/eventually/past due, pending verification, errors, deadline) stored per account
+- Events applied in order of requirements version","E14","","High","5","billing stripe java","billing","To Do"
+"S100","Story","Compliance notifications and enforcement","Email + SMS + in-app on new requirements, reminders 7/3/1 days before deadline; payouts paused when past due.","- Reminders respect consent and quiet hours
+- past_due pauses payouts automatically and resumes when cleared
+- Charges disabled hides listings and bookings","E14","","High","5","billing notifications","billing","To Do"
+"S101","Story","Account health page (collect requirements in our UI)","A form per Stripe requirement; values tokenised with Stripe.js, documents via Stripe Files.","- Owner/finance roles can answer; others cannot see the page
+- Status moves to verifying until Stripe confirms
+- Banner on every page while something is outstanding","E14","","High","8","billing seller-center","billing","To Do"
+"S102","Story","Staff Stripe compliance console","Accounts with open items; send reminders, pause/resume payouts by role.","- Trust & Safety can pause and release payouts
+- Ops and Finance can remind and pause","E14","","Medium","5","billing staff-console","billing","To Do"
+"S103","Story","Plans & subscriptions via Stripe Billing","Seller Essentials/Growth/Pro and Provider Solo/Studio/Business with trials, proration and dunning.","- Upgrades prorate immediately; downgrades and frequency changes apply at renewal
+- Invoices listed with PDF download
+- Metered usage for FBA storage, ads and AI credits","E14","","High","8","billing stripe java","billing","To Do"
+"S104","Story","Billing page with real card/bank presentation","Payment methods shown as brand cards with last 4 or bank with type and verification.","- Default method cannot be removed until another is default
+- Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","To Do"
+"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","To Do"
+"S105","Story","Provider availability and calendar","Weekly hours with breaks, blocked dates, minimum notice, buffers, daily limit and instant booking.","- Week and month calendar views with booking quick view
+- Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","To Do"
+"S106","Story","Services & prices with provider take-home","Duration, price and deposit per service, showing what the provider receives after commission and fees.","- Take-home amount shown per service
+- Price changes don't affect existing bookings","E15","","High","3","bookings java","bookings","To Do"
+"S107","Story","Booking flow: service → day → time → summary","Deposit held on request, charged on confirmation, balance charged on completion.","- Only available slots are offered
+- Summary shows deposit now, balance later and the provider's policy","E15","","High","8","bookings web mobile","bookings","To Do"
+"S108","Story","Requests: confirm, decline, propose new time","Providers act on requests; unanswered requests expire after 4 hours.","- Customers can accept or decline a proposed time
+- Expired requests release the deposit hold","E15","","High","5","bookings java","bookings","To Do"
+"S109","Story","Cancellation policies and refunds","Flexible, Moderate, Strict or Custom; each booking keeps the policy it was made under.","- Customers see the exact refund before cancelling
+- Late provider cancellation costs $15 and a strike
+- Commission taken only on what the customer paid","E15","","High","5","bookings java payments","bookings","To Do"
+"S110","Story","Provider team roles","Owner, Manager, Practitioner, Finance with what each can and can't do.","- Practitioners edit only their own calendar and hours
+- View-only roles cannot change data (enforced server-side)","E15","","Medium","3","bookings rbac","bookings","To Do"
+"E16","Epic","Storefront builder & provider public pages","Sellers and providers design their own pages within contrast-vetted themes.","","","Storefront builder & provider public pages","High","","storefront","storefront","To Do"
+"S111","Story","Seller storefront builder","Store name, tagline (AI suggestion), accent colour and section order with live preview.","- Sections can be toggled and reordered
+- Checkout, prices and header stay platform-styled","E16","","Medium","5","storefront go web","storefront","To Do"
+"S112","Story","Theme contrast vetting (WCAG 2.2 AA)","Seller colours generate OKLCH ramps; publishing blocked if button labels would be unreadable.","- Contrast computed server-side as well as in the UI
+- Too-light colours are auto-fixed with a suggestion","E16","","Medium","3","storefront","storefront","To Do"
+"S113","Story","Provider public page design","Layouts, accent, cover, gallery (plan-limited), featured work and social links pending approval.","- Gallery size limited by plan (6/12/24)
+- Social links validated per network and shown only after approval
+- Featured posts can link to a bookable service","E16","","Medium","5","storefront bookings","storefront","To Do"
+"E17","Epic","Returns, refunds & tax","RMAs, refunds orchestration and marketplace-facilitator sales tax.","","","Returns, refunds & tax","High","","returns","returns","To Do"
+"S114","Story","Start a return on delivered items","Pick items, reason and method; get return number, drop-off instructions and refund amount.","- Food items show 'report a problem' instead of return
+- Return can be cancelled before drop-off
+- Mobile app shows a QR code for drop-off","E17","","High","5","returns java","returns","To Do"
+"S115","Story","Refund orchestration","Inspection outcome triggers refund and inventory restock or damaged.","- Refund reverses the seller transfer portion and commission
+- Restock posts RETURN_RESTOCK; damaged posts RETURN_DAMAGED","E17","","High","5","returns java","returns","To Do"
+"S116","Story","Marketplace-facilitator sales tax","Tax per line by delivery address (Stripe Tax or Avalara) attributed to each seller.","- Tax is computed at checkout and stored per line
+- Monthly seller statements show tax collected on their behalf","E17","","High","5","tax java","returns","To Do"
+"E18","Epic","Trust & safety, moderation, disputes & audit","Oversight tools for staff: listing moderation, disputes, A-to-z claims and immutable audit.","","","Trust & safety, moderation, disputes & audit","High","","trust","trust","To Do"
+"S117","Story","Listing moderation queue","AI-flagged listings with allow/remove decisions.","- Queue shows AI flags with reasons
+- Decisions are audited","E18","","High","5","trust java","trust","To Do"
+"S118","Story","Disputes and A-to-z claims","Customers open claims; staff decide with refund or deny.","- Claims have SLAs and escalation
+- Decision notifies both parties","E18","","Medium","5","trust java","trust","To Do"
+"S119","Story","Immutable audit log","Every privileged action recorded and streamed to Kafka.","- Audit records cannot be edited or deleted
+- Filter by actor, entity and date","E18","","High","3","trust java","trust","To Do"
+"S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
+- Reinstatement restores them","E18","","Medium","5","trust","trust","To Do"
+"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","To Do"
+"S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
+- SMS adapters: Twilio, Vonage, AWS End User Messaging
+- Push: FCM and APNs; WhatsApp: Meta Cloud API
+- Each adapter is an implementation of the port with its own tests","E19","","Highest","8","notifications go","notifications","To Do"
+"S122","Story","Routing, failover and circuit breakers","Per market/channel priority lists with automatic failover on timeout or 5xx.","- A failing provider opens its breaker and the next provider is used
+- All providers failing re-queues with backoff and DLQ","E19","","High","5","notifications go","notifications","To Do"
+"S123","Story","Consent, STOP/HELP and quiet hours","TCPA consent, 10DLC, STOP/HELP keywords, quiet hours by recipient time zone, one-click unsubscribe.","- STOP, END, CANCEL, UNSUBSCRIBE, QUIT opt out; START rejoins
+- Marketing never sent without consent; OTP always sends
+- RFC 8058 List-Unsubscribe headers on marketing email","E19","","High","5","notifications legal","notifications","To Do"
+"S124","Story","Templates and preview","Versioned templates (React Email/MJML, ICU MessageFormat) with locales, preview and test-send.","- Editing needs Marketing or Ops edit rights
+- Test-send goes only to the editor","E19","","Medium","5","notifications staff-console","notifications","To Do"
+"S125","Story","Delivery receipts and notification log","Provider webhooks update status; staff can see every message sent.","- Bounces and complaints add to suppression list
+- Log shows channel, provider, status and template version","E19","","Medium","3","notifications","notifications","To Do"
+"E20","Epic","Content, ads, announcements, markets & site config","Nothing promotional or legal is hard-coded: placements, campaigns, markets and site settings are data.","","","Content, ads, announcements, markets & site config","High","","content","content","To Do"
+"S126","Story","Placements: announcement bar, hero, banners","Slots with schemas and targeting edited in the back office and cached at the edge.","- Draft → review → scheduled → live → ended workflow
+- Publishing purges the CDN cache
+- Storefront renders placements server-side","E20","","High","5","content java","content","To Do"
+"S127","Story","Sponsored products","Seller campaigns with budgets and CPC bids blended with organic results, always labelled Sponsored.","- Second-price auction with relevance floor
+- Impressions, clicks and attributed sales reported","E20","","Low","8","content ads","content","To Do"
+"S128","Story","Markets & locations","Activate or deactivate AfroTransact per country and state, with per-capability switches.","- Country status: Live, Paused, Coming soon, Planned
+- Per state: marketplace, services, food, pickup, tax registration
+- Turning off marketplace in a state turns off everything there","E20","","High","5","content markets","content","To Do"
+"S129","Story","Site content & legal config","Social links, support phone, contact emails, address and policy versions editable without deployment.","- Invalid profile links block saving
+- Raising a policy version archives the old one
+- Changes appear in shop, app and legal pages immediately","E20","","High","3","content legal","content","To Do"
+"S130","Story","Feature flags (OpenFeature + Unleash)","Rollout percentages and kill switches.","- Flags evaluated server-side and in web/mobile
+- Kill switch takes effect within 30 seconds","E20","","Medium","3","content platform","content","To Do"
+"E21","Epic","Lola AI (Spring AI + OpenRouter) & MCP server","Lola is an agent calling the same APIs as the apps, via Spring AI with OpenRouter; MCP tools for shoppers, sellers and staff.","","","Lola AI (Spring AI + OpenRouter) & MCP server","High","","ai","ai","To Do"
+"S131","Story","AI gateway on Spring AI with OpenRouter","Spring AI ChatClient against OpenRouter's OpenAI-compatible API with model routing per task.","- Fast model for intent, strong model for planning, configurable per environment
+- Per-user and per-feature budgets enforced
+- Provider fallback on errors
+- Embeddings endpoint used by search","E21","","Highest","8","ai java spring-ai","ai","To Do"
+"S132","Story","Lola tools and grounding","Tools: search_products, compare_offers, add_to_cart, build_cart_from_recipe, check_delivery, track_order, start_return, find_service, book_service.","- Lola shows only products and prices returned by tools
+- Spending money (checkout/booking) always needs the user's tap
+- Actions are visible in the chat as they happen","E21","","Highest","8","ai java spring-ai","ai","To Do"
+"S133","Story","Guardrails: PII redaction, prompt-injection filtering","Redact PII before prompts; filter injections from seller content; no medical/legal advice.","- Emails, phones, card numbers redacted before model calls
+- Seller content is quoted and filtered for instructions","E21","","High","5","ai security","ai","To Do"
+"S134","Story","MCP server on Spring AI MCP","Shopper, seller and staff toolsets over public APIs with OAuth scopes, rate limits and audit.","- Streamable HTTP transport with OAuth 2.1 bearer tokens
+- Tools are filtered by the caller's scopes
+- Every tool call is audited","E21","","High","8","ai java mcp","ai","To Do"
+"S135","Story","Lola chat UI on web and mobile","Real chat with typing indicator, product cards, add-all-to-cart and suggestion chips.","- Opening greeting persists after first message
+- Messages stream token by token
+- Hand-off to human support with context","E21","","High","5","ai web mobile","ai","To Do"
+"S136","Story","Seller and staff AI assistants","Listing writer/translator, tagline suggestions and trust-team triage summaries.","- AI drafts are editable and never auto-published
+- Triage summaries show sources","E21","","Medium","5","ai","ai","To Do"
+"E22","Epic","Geo & address autocomplete","Every address field uses autocomplete (Google Places when keyed, OpenStreetMap Nominatim otherwise) with validation.","","","Geo & address autocomplete","High","","geo","geo","To Do"
+"S137","Story","Geo service: autocomplete proxy","Google Places Autocomplete (New) with session tokens; OSM Nominatim fallback; keys never shipped to clients.","- Provider chosen by configuration; both implement the same interface
+- Session tokens used for Places cost control
+- Results restricted to supported markets","E22","","Highest","5","geo go","geo","To Do"
+"S138","Story","Address validation (Smarty / USPS CASS)","Standardise, flag missing apartment, undeliverable and residential vs commercial.","- Corrections suggested, never silently applied
+- Missing unit on multi-unit address produces a warning","E22","","High","5","geo go","geo","To Do"
+"S139","Story","Address autocomplete everywhere","Checkout, account addresses, onboarding, warehouses, pickup points, deliver-to ZIP and category forms.","- Street suggestions from the first character
+- Picking a suggestion fills street, city, state, ZIP and coordinates
+- No plain-text address field remains in any app","E22","","High","5","geo web mobile","geo","To Do"
+"S140","Story","Service areas and delivery zones (PostGIS)","Zones for AfroTransact Delivery, FC catchments and provider service areas.","- Point-in-zone checks for delivery eligibility
+- Provider distance search ('within 15 miles')","E22","","Medium","5","geo go","geo","To Do"
+"E23","Epic","Storefront web (Next.js)","Customer web shop recreated from design/AfroTransact Shop.dc.html on Next.js 16, TanStack Query and design tokens.","","","Storefront web (Next.js)","High","","storefront-web","storefront-web","To Do"
+"S141","Story","Next.js storefront app with tokens and white canvas","App shell on Next.js 16 with @afrotransact/tokens, Figtree, white background and no visible scrollbars.","- All colours come from tokens; lint bans raw hex
+- No visible scrollbars anywhere; no horizontal page scroll
+- Builds for Cloudflare Workers via OpenNext","E23","","Highest","5","storefront-web web","storefront-web","To Do"
+"S142","Story","Header: deliver-to, search with typeahead, avatar menu, cart badge","Black header, deliver-to picker, yellow search button, avatar dropdown, cart count badge.","- Guest avatar shows 'Welcome, Guest' with Sign in / Create account
+- Signed-in menu: account, orders, returns, addresses, payments, Ask Lola, Sell, Offer your services, sign out
+- Header stays one row down to 900px","E23","","Highest","5","storefront-web web","storefront-web","To Do"
+"S143","Story","Home page with dynamic placements","Hero, tiles and product rows driven by content placements.","- Announcement bar and banners come from content-service
+- Rows render server-side for SEO","E23","","High","5","storefront-web web content","storefront-web","To Do"
+"S144","Story","Search results page with filters","Results with delivery speed, fulfilment, seller, rating, community and price filters and URL-synced state.","- Filters and sort serialise to the URL
+- Facet counts come from the search API
+- Infinite scroll or pagination with keepPreviousData","E23","","Highest","5","storefront-web web search","storefront-web","To Do"
+"S145","Story","Product detail page with buy box","Images, details, variant pickers, buy box, other sellers and fulfilment badges.","- 'Fulfilled by AfroTransact' vs 'Ships from seller' badge
+- Low stock 'Only N left — order soon' at ≤5
+- Rating stars use brand yellow","E23","","Highest","8","storefront-web web","storefront-web","To Do"
+"S146","Story","Cart page split per seller","Packages per seller with save for later and stock-capped steppers.","- Each package shows its seller and delivery options
+- Save for later and move back to cart","E23","","Highest","5","storefront-web web","storefront-web","To Do"
+"S147","Story","Sign-in and create account (two-column with advertorial)","Two-column card with brand panel; social buttons at the bottom with official logos; no navbar.","- No header, department bar or footer on auth pages
+- Passkey only on sign-in
+- Create account uses the unified form","E23","","High","5","storefront-web web identity","storefront-web","To Do"
+"S148","Story","Account pages: addresses, payments, orders, returns, login & security","Self-service account management.","- Addresses add/edit/remove/default with autocomplete
+- Payments add card or bank, remove, default
+- Returns flow with reason and refund amount","E23","","High","8","storefront-web web","storefront-web","To Do"
+"S149","Story","Footer with configurable social links, about and careers","Beautiful footer with social icons from config, link columns, newsletter, app badges and language picker.","- Social links and phone come from site config (no deploy to change)
+- About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","To Do"
+"S150","Story","Services browsing and provider pages","Find a provider, see their designed page and book.","- Provider page renders the provider's chosen layout and approved links
+- Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","To Do"
+"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","To Do"
+"S151","Story","Seller Center app shell with grouped, fixed sidebar","Fixed sidebar grouped into collapsible sections; collapsed by default except the active group.","- Sidebar doesn't scroll with the page
+- Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","To Do"
+"S152","Story","Orders management with labels and status updates","TanStack server-driven table; open rows in a sheet; buy labels; update allowed statuses.","- Sellers can confirm, pack and mark ready only
+- Tables never scroll horizontally; columns fixed width with wrapping","E24","","High","8","seller-center web","seller-center","To Do"
+"S153","Story","Listings and product builder (4 steps)","Guided product builder: category → images → details → variations with live shopper preview.","- Each step validates before Continue
+- Category request switches the form to the requested category
+- Submit for review or save pending category approval","E24","","High","8","seller-center web catalog","seller-center","To Do"
+"S154","Story","Dashboards with charts and exports","Recharts dashboards; export PDF, CSV and Excel (with native charts).","- Seller: sales and units, top products, orders by fulfilment, stock by warehouse
+- Provider: bookings and deposits, bookings by service, status donut, earnings
+- Each chart exports PDF, Excel (.xlsx with chart) and CSV","E24","","High","8","seller-center web exports","seller-center","To Do"
+"S155","Story","Team & roles with capability cards","Invite members; cards list what each role can change, view or can't access.","- Your own role is highlighted
+- Seller roles: owner, admin, catalog, fulfilment, finance, ads, support","E24","","Medium","3","seller-center web rbac","seller-center","To Do"
+"S156","Story","Provider Hub: calendar, hours, services, policy, public page, earnings","Provider tools inside the portal without a second sidebar.","- Calendar shows quick views and day summaries
+- Earnings show commission, Stripe fees and late-cancel fees","E24","","High","8","seller-center web bookings","seller-center","To Do"
+"E25","Epic","Staff console (platform back office)","All platform tools gated by RBAC: applications, sellers, moderation, orders, payouts, inventory, dispatch, config.","","","Staff console (platform back office)","High","","staff-console","staff-console","To Do"
+"S157","Story","Staff console shell with RBAC-filtered navigation","Grouped sidebar (Overview, Commerce, Partners, Finance, Growth, Trust & compliance, Settings) filtered by permissions.","- Menu items hidden when the role has no access
+- Dashboard opens by default","E25","","High","5","staff-console web","staff-console","To Do"
+"S158","Story","Detail sheets with RBAC actions on every table","Clicking a row opens a sheet with all fields, activity and notes; actions follow permissions.","- Edit/New with validation where records are editable
+- Actions hidden or disabled when not permitted (and enforced server-side)","E25","","High","5","staff-console web","staff-console","To Do"
+"S159","Story","Platform configuration modules","Plans, coupons, pickup & delivery, markets, storefront settings, feature flags, fees, developers (API keys, webhooks, AI routing, identity providers).","- Each module gated by its own permission
+- Developers can create, revoke and rotate API keys
+- Identity provider toggles control which social logins appear","E25","","High","8","staff-console web","staff-console","To Do"
+"S160","Story","Platform dashboard charts","Sales and net revenue, orders by department, applications by status, payouts vs refunds.","- Charts export PDF, Excel and CSV
+- Figures come from one dashboard feed","E25","","Medium","5","staff-console web exports","staff-console","To Do"
+"S161","Story","Server-side large exports","Background jobs build CSV/XLSX/PDF for thousands of rows and send a download link.","- Exports over 5k rows run asynchronously
+- Excel files contain native charts
+- Links expire after 24 hours","E25","","Medium","8","staff-console exports","staff-console","To Do"
+"S162","Story","Customer support console","Order, payment and delivery timeline with refunds within role limits; Zendesk/Freshdesk integration.","- Refund limits per role enforced
+- Ticket links back to the order","E25","","Medium","5","staff-console support","staff-console","To Do"
+"E26","Epic","Customer mobile app","Expo / React Native customer app: sign-in first, Face ID, shopping, tracking, returns, bookings and Lola.","","","Customer mobile app","High","","mobile","mobile","To Do"
+"S163","Story","App shell with sign-in, Face ID and passcode","App opens on sign-in; Face ID and passcode set up after first sign-in; unlock on reopen.","- Five wrong passcodes force full sign-in
+- Sign out removes Face ID and passcode from the device
+- Logo on sign-in, sign-up, unlock, home and side panel","E26","","High","8","mobile","mobile","To Do"
+"S164","Story","Fixed headers and tab bar (no page scrolling)","Only screen content scrolls; status area has its own solid strip.","- Inner pages pin title and back button
+- No horizontal scroll","E26","","High","2","mobile","mobile","To Do"
+"S165","Story","Shopping, cart and checkout with Stripe","Browse, search, PDP, cart grouped by shipper, checkout with Apple/Google Pay and Stripe payment sheet.","- Add payment method supports card (with ZIP) and US bank (ACH)
+- Orders over $100 ask for Face ID","E26","","High","8","mobile checkout","mobile","To Do"
+"S166","Story","Orders, tracking and returns","Tracking with delivery code and driver, buy again, returns with QR code.","- Delivery code shown for hand-delivery and perishables
+- Return flow produces a QR code","E26","","High","5","mobile","mobile","To Do"
+"S167","Story","Bookings in the app","Book, reschedule and cancel services synced with provider calendars.","- Exact refund shown before cancelling","E26","","Medium","5","mobile bookings","mobile","To Do"
+"S168","Story","Push notifications with deep links","FCM/APNs push for orders, deliveries and bookings.","- Tapping a notification opens the right screen
+- Preferences per category respected","E26","","Medium","5","mobile notifications","mobile","To Do"
+"E27","Epic","API docs & developer portal","Contract-first APIs with Swagger UI, Scalar, Redoc, Docusaurus portal and AsyncAPI event catalog.","","","API docs & developer portal","High","","docs","docs","To Do"
+"S169","Story","OpenAPI 3.1 contracts for every service","contracts/openapi/<service>.yaml as source of truth; CI fails on breaking changes.","- Each service has a contract file
+- openapi-diff gate blocks breaking changes without a version bump
+- Java implementations verified against contracts","E27","","Highest","5","docs contracts","docs","To Do"
+"S170","Story","Swagger UI, Scalar and Redoc on every service","Interactive references in local/dev/uat; off in prod.","- /swagger-ui.html (Java), /docs (Scalar) and /redoc on every service
+- Disabled in prod configuration","E27","","Highest","2","docs","docs","To Do"
+"S171","Story","Docusaurus developer portal","developers.afrotransact.com with guides, webhooks, theme schema, ADRs and changelog.","- Portal builds statically and deploys to Cloudflare Pages
+- API reference pages render every contract with Redoc and Scalar","E27","","High","5","docs web","docs","To Do"
+"S172","Story","AsyncAPI event catalog","contracts/asyncapi/events.yaml documents every topic and payload.","- Every published event type is documented
+- Catalog rendered in the portal","E27","","High","3","docs events","docs","To Do"
+"S173","Story","Generated TypeScript clients and Zod schemas","Clients for web and mobile generated from contracts.","- Clients regenerate in CI when contracts change
+- Generated code is never edited by hand","E27","","High","5","docs web","docs","To Do"
+"E28","Epic","Observability & monitoring","OpenTelemetry everywhere, Prometheus/Grafana/Loki/Tempo, SLOs, alerting and on-call.","","","Observability & monitoring","High","","observability","observability","To Do"
+"S174","Story","Local observability stack","OTel Collector, Prometheus, Grafana, Loki, Tempo and Alertmanager in docker compose.","- Grafana provisioned with datasources and service dashboards
+- Traces from Java and Go services visible in Tempo","E28","","High","3","observability infra","observability","To Do"
+"S175","Story","Kubernetes monitoring stack","kube-prometheus-stack, Loki, Tempo and OTel Collector via Helm/Argo CD per environment.","- ServiceMonitors scrape every service
+- Logs shipped with service, env and correlation id labels","E28","","High","5","observability infra","observability","To Do"
+"S176","Story","SLOs and burn-rate alerts","Checkout success ≥ 99.9%, search p95 < 150 ms, webhook lag < 60 s, payout on time ≥ 99.5%.","- Multi-window burn-rate alerts route to PagerDuty/Opsgenie
+- Runbook linked from every alert","E28","","High","5","observability","observability","To Do"
+"S177","Story","Elasticsearch & Kibana monitoring","Cluster health, index lag and slow queries dashboards.","- Indexer lag alert when > 60 s
+- Slow query log enabled in dev/uat","E28","","Medium","3","observability search","observability","To Do"
+"S178","Story","Front-end and mobile error tracking","Sentry for web and mobile with release tagging and source maps.","- Errors grouped by release
+- PII scrubbing enabled","E28","","Medium","2","observability web mobile","observability","To Do"
+"E29","Epic","Infrastructure & multi-cloud","Terraform/OpenTofu modules for AWS, GCP and Azure behind identical interfaces; Cloudflare in front.","","","Infrastructure & multi-cloud","High","","infra","infra","To Do"
+"S179","Story","Local development stack (docker compose)","Postgres+PostGIS (one DB per service), Kafka, Elasticsearch, Kibana, Redis, Temporal, MinIO, Mailpit, OpenFGA.","- make up starts the full stack
+- Every service database and user is created automatically","E29","","Highest","3","infra local","infra","To Do"
+"S180","Story","Terraform modules per cloud with a shared interface","Cluster, Postgres, cache, bucket, secrets and network modules for aws, gcp and azure with identical inputs/outputs.","- envs/<env> choose the provider with a single variable
+- OPA/Conftest blocks public buckets, missing encryption and untagged resources","E29","","High","13","infra terraform","infra","To Do"
+"S181","Story","Cloudflare edge as code","DNS, WAF rules, rate limits, Turnstile and Workers routes in Terraform.","- WAF managed rules on all hostnames
+- Authenticated Origin Pulls to the cluster ingress","E29","","High","5","infra cloudflare","infra","To Do"
+"S182","Story","Cost optimisation baseline","Arm nodes, spot pools, scale-to-zero previews, ILM tiers and tail sampling.","- Preview namespaces scale to zero when idle
+- Elasticsearch ILM hot-warm-frozen policies defined","E29","","Medium","5","infra finops","infra","To Do"
+"S183","Story","Secrets via External Secrets Operator","AWS Secrets Manager, GCP Secret Manager or Azure Key Vault behind ESO.","- No secret values in git
+- Same ExternalSecret manifests work on all three clouds","E29","","High","3","infra security","infra","To Do"
+"E30","Epic","CI/CD, environments & Kubernetes deployment","Each service built, tested, signed and deployed independently to local/dev/uat/prod on the chosen cloud.","","","CI/CD, environments & Kubernetes deployment","High","","cicd","cicd","To Do"
+"S184","Story","Helm library chart and per-service charts","Shared at-service library chart; every service has its own chart and values per environment.","- helm template works for every service and environment
+- Charts include Deployment, Service, HPA, PDB, ServiceMonitor, NetworkPolicy and ExternalSecret","E30","","Highest","5","cicd k8s","cicd","To Do"
+"S185","Story","Per-service GitHub Actions workflows","Path-filtered workflows calling reusable Java/Go pipelines.","- A change to one service builds and tests only that service
+- Pipeline: lint, arch tests, unit, integration, OpenAPI diff, security scans, image, SBOM, cosign","E30","","Highest","5","cicd github-actions","cicd","To Do"
+"S186","Story","Deploy workflow with cloud target (aws | gcp | azure)","OIDC federation to the chosen cloud; images mirrored to its registry.","- No long-lived cloud keys in GitHub
+- Target cloud is a single input/variable","E30","","High","5","cicd github-actions","cicd","To Do"
+"S187","Story","Argo CD apps per service and environment","ApplicationSet generates one app per service per environment; Argo Rollouts canary in uat/prod.","- Canary 10% → 50% → 100% with Prometheus analysis
+- Automatic rollback on SLO breach; prod promotion needs approval","E30","","High","8","cicd k8s","cicd","To Do"
+"S188","Story","Environment configuration: local, dev, uat, prod","Profile/config per environment for every service and app.","- Spring profiles application-<env>.yml and Go config/<env>.yaml
+- Docs pages on in local/dev/uat, off in prod
+- Trace sampling 100% dev, 50% uat, 10% prod","E30","","Highest","3","cicd config","cicd","To Do"
+"S189","Story","Web deploys to Cloudflare Workers with PR previews","OpenNext builds for storefront, Seller Center and staff console; Vercel fallback.","- Each PR gets a preview URL
+- Same build output deploys to Vercel if needed","E30","","High","5","cicd web cloudflare","cicd","To Do"
+"S190","Story","Mobile builds with EAS","Expo EAS builds and store submissions per environment.","- Dev, preview and production channels
+- OTA updates for JS-only changes","E30","","Medium","3","cicd mobile","cicd","To Do"
+"E31","Epic","Legal, privacy, i18n & accessibility","Policy pages, cookie consent, SMS terms, translations and WCAG 2.2 AA.","","","Legal, privacy, i18n & accessibility","High","","legal","legal","To Do"
+"S191","Story","Legal center pages","Conditions of Use, Privacy, Cookie Notice, Privacy Choices, Returns, Seller & Provider Terms, Prohibited Items, Accessibility, SMS & Notification Terms.","- Each page shows version, effective date and previous versions
+- Draft-for-counsel banner until legal approves","E31","","High","5","legal web","legal","To Do"
+"S192","Story","Cookie consent with GPC","Per-category switches, equal-weight Accept/Reject, Global Privacy Control respected.","- GPC signal locks advertising cookies off
+- Consent stored and auditable","E31","","High","3","legal web","legal","To Do"
+"S193","Story","Internationalisation","English, French, Spanish and Arabic (RTL) across web and mobile.","- All UI strings externalised
+- Arabic flips to RTL
+- Dates and currency localised","E31","","Medium","8","legal i18n","legal","To Do"
+"S194","Story","Accessibility WCAG 2.2 AA","Skip links, focus management, live regions, 44px targets and reduced motion.","- axe checks pass in CI with no serious violations
+- Every form lists errors and links to fields","E31","","High","5","legal a11y","legal","To Do"
+"E32","Epic","Dashboards, charts & exports","Charts for platform, sellers and providers with PDF, CSV and Excel exports.","","","Dashboards, charts & exports","High","","exports","exports","To Do"
+"S195","Story","Dashboard data feeds per portal","One dashboard endpoint per portal returning chart series.","- Feeds are cached for 60 seconds
+- Respect the caller's org and permissions","E32","","Medium","5","exports","exports","To Do"
+"S196","Story","Export service (PDF, CSV, XLSX with native charts)","Server-side generation for tables and dashboards.","- XLSX includes native Excel charts linked to data
+- PDF includes chart image, legend and data table","E32","","Medium","8","exports","exports","To Do"
+"E33","Epic","Testing & quality","Test pyramid, E2E on web and mobile, Storybook, load and security testing as merge gates.","","","Testing & quality","High","","quality","quality","To Do"
+"S197","Story","Unit, contract and integration test standards","JUnit/Go test/Vitest, Pact, Testcontainers; 80% coverage gate on domain modules.","- Every service has unit, ArchUnit/lint and Testcontainers integration tests
+- Coverage reported in CI","E33","","High","3","quality","quality","To Do"
+"S198","Story","Playwright E2E journeys","Sign-up, search → checkout (3DS, decline), multi-seller split, returns, onboarding, listing moderation, inventory, RBAC denials.","- Runs against per-PR previews on Chromium, WebKit and Firefox
+- Flaky tests quarantined with an owner","E33","","High","8","quality e2e","quality","To Do"
+"S199","Story","Storybook for UI packages and apps","Stories for every component state including RTL and mobile; a11y and visual tests.","- Interaction tests run in CI
+- Visual diffs require review","E33","","High","5","quality web","quality","To Do"
+"S200","Story","Load tests (k6) for search and checkout","Flash-sale profile proves no overselling and latency budgets.","- Search p95 < 150 ms at target load
+- Exactly N of N+25 concurrent orders succeed for N units","E33","","High","5","quality performance","quality","To Do"
+"S201","Story","Security scanning","CodeQL, Trivy, gitleaks, OWASP dependency check and ZAP baseline on previews.","- Critical findings fail the build
+- SBOMs attached to every image","E33","","High","3","quality security","quality","To Do"
