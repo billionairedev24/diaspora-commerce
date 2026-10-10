@@ -1,0 +1,18 @@
+# osv-scanner configuration (https://google.github.io/osv-scanner/) — dependency vulnerabilities from the lockfiles
+# (pnpm-lock.yaml, go.mod/go.sum per module, Maven pom.xml) against OSV.dev, which aggregates GitHub advisories,
+# the Go vuln DB, PyPA, RustSec and NVD. Used with `--config tools/security/osv-scanner.toml`.
+#
+#   osv-scanner scan source --config tools/security/osv-scanner.toml -r \
+#     --lockfile pnpm-lock.yaml --lockfile go/pkg/go.mod --lockfile go/services/search/go.mod ... .
+#   (see docs/engineering/security-scanning.md for the full CI command)
+#
+# Accepted findings: one [[IgnoredVulns]] block per advisory, with an expiry and a reason (who accepted it and why it
+# is not exploitable here). Expired entries stop suppressing on the next run.
+#
+# [[IgnoredVulns]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# ignoreUntil = 2026-12-31
+# reason = "Build-time only (docs portal Docusaurus toolchain); never shipped. Owner: docs."
+
+# Package-level overrides (build/dev-only toolchains that never reach a runtime image) use [[PackageOverrides]]
+# with ecosystem/name, `vulnerability.ignore = true`, `effectiveUntil` and `reason`. None are accepted today.

@@ -1,0 +1,376 @@
+# Semgrep rules for AfroTransact (Java/Spring, Go, TypeScript/React).
+#
+#   tools/security/run_semgrep.sh                         # local: this file only, offline
+#   semgrep scan --config tools/security/semgrep.yml --config p/java --config p/golang --config p/typescript \
+#     --config p/react --config p/secrets --error --sarif -o semgrep.sarif   # CI: ours + registry packs
+#
+# Severity: ERROR fails CI; WARNING is reported (SARIF → code scanning) but does not fail the job.
+# Suppress a reviewed false positive on the line with `// nosemgrep: <rule-id>` and a reason.
+rules:
+  # ───────────────────────────────────────────────── Java / Spring ─────────────────────────────────────────────────
+  - id: at.java.no-field-injection
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Field injection (@Autowired/@Inject/@Value on a field) is banned: use constructor injection so dependencies
+      are explicit, final and testable (CLAUDE.md "Constructor injection only").
+    pattern-either:
+      - pattern: |
+          @org.springframework.beans.factory.annotation.Autowired
+          $TYPE $FIELD;
+      - pattern: |
+          @jakarta.inject.Inject
+          $TYPE $FIELD;
+      - pattern: |
+          @org.springframework.beans.factory.annotation.Autowired
+          $TYPE $FIELD = $INIT;
+    metadata: {category: maintainability, cwe: "CWE-1061"}
+
+  - id: at.java.no-system-out
+    languages: [java]
+    severity: ERROR
+    message: >-
+      Do not write to System.out/System.err or printStackTrace(): use SLF4J (structured JSON logs carry the trace
+      id and are redacted). In tests, assert instead of printing.
+    pattern-either:
+      - pattern: System.out.$METHOD(...)
+      - pattern: System.err.$METHOD(...)
+      - pattern: $E.printStackTrace()
+    metadata: {category: best-practice}
+
+  # Raw SQL built from strings. Two rules: a taint rule (ERROR) when a method's String parameter flows into the SQL
+  # text, and a syntactic rule (WARNING) for any non-constant concatenation, so reviewers see dynamic WHERE/ORDER BY
+  # builders even when today's fragments are constants.
+  - id: at.java.sql-injection
+    mode: taint
+    languages: [java]
+    severity: ERROR
+    message: >-
+      A String parameter reaches the SQL text passed to the database. Bind it (JdbcClient .param(...), :named or ?
+      placeholders); for identifiers (ORDER BY column, sequence name) map from an enum/allowlist instead.
+    options:
+      # Values that go through a method call (e.g. a WHERE builder that binds them) are not treated as SQL text;
+      # concatenation and formatting still propagate, and any tainted sub-expression of the SQL argument reports.
+      taint_assume_safe_functions: true
+    pattern-sources:
+      # Parameters of non-private methods (entry points of the adapter). Private helpers that take SQL fragments
+      # (lock clauses, ORDER BY) are covered through their callers and by at.java.sql-string-concatenation.
+      - patterns:
+          - pattern-inside: |
+              $RET $METHOD(..., String $P, ...) { ... }
+          - pattern-not-inside: |
+              private $RET $METHOD(...) { ... }
+          - pattern: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $C.sql($Q)
+              - pattern: (org.springframework.jdbc.core.JdbcTemplate $C).$M($Q, ...)
+              - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate $C).$M($Q, ...)
+              - pattern: (jakarta.persistence.EntityManager $C).$M($Q, ...)
+              - pattern: (java.sql.Statement $C).$M($Q, ...)
+              - pattern: (java.sql.Connection $C).$M($Q, ...)
+          - focus-metavariable: $Q
+          # A parameter that IS the whole statement belongs to a generic helper; its callers are checked instead.
+          - pattern-not-inside: |
+              $RET $METHOD(..., String $Q, ...) { ... }
+      # Formatting is a call (assumed safe above), so format arguments are sinks of their own.
+      - patterns:
+          - pattern-either:
+              - pattern: $C.sql(String.format(..., $A, ...))
+              - pattern: $C.sql($FMT.formatted(..., $A, ...))
+              - pattern: (org.springframework.jdbc.core.JdbcTemplate $C).$M(String.format(..., $A, ...), ...)
+              - pattern: (jakarta.persistence.EntityManager $C).$M(String.format(..., $A, ...), ...)
+          - focus-metavariable: $A
+    metadata: {category: security, cwe: "CWE-89: SQL Injection", owasp: "A03:2021 - Injection"}
+
+  - id: at.java.sql-string-concatenation
+    languages: [java]
+    severity: WARNING
+    message: >-
+      SQL text is concatenated/formatted at runtime. Keep every fragment a constant, bind all values, and pick
+      identifiers from an allowlist; prefer a fixed statement per query shape where practical.
+    patterns:
+      - pattern-either:
+          - pattern: $C.sql($Q)
+          - pattern: (org.springframework.jdbc.core.JdbcTemplate $C).$M($Q, ...)
+          - pattern: (org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate $C).$M($Q, ...)
+          - pattern: (jakarta.persistence.EntityManager $C).$M($Q, ...)
+          - pattern: (java.sql.Statement $C).$M($Q, ...)
+          - pattern: (java.sql.Connection $C).$M($Q, ...)
+      - metavariable-regex:
+          metavariable: $Q
+          regex: (?is).*?\b(select|insert|update|delete|merge|with|where|from|order\s+by|values|set)\b
+      # Some operand is neither a string literal nor an UPPER_CASE constant (static final column lists are fine),
+      # or the text is produced by String.format/formatted.
+      - metavariable-regex:
+          metavariable: $Q
+          regex: (?s)(.*?\+\s*(?!"|[A-Z][A-Z0-9_]*\b)[\w(])|(\s*(?!"|[A-Z][A-Z0-9_]*\b)[\w(][\w.()]*\s*\+)|(.*?String\.format\()|(.*?\.formatted\()
+    metadata: {category: security, cwe: "CWE-89: SQL Injection", owasp: "A03:2021 - Injection"}
+
+  - id: at.java.unsafe-jackson-default-typing
+    languages: [java]
+    severity: ERROR
+    message: Polymorphic default typing enables deserialization gadgets; use explicit @JsonTypeInfo with an allowlist.
+    pattern-either:
+      - pattern: (com.fasterxml.jackson.databind.ObjectMapper $M).enableDefaultTyping(...)
+      - pattern: (com.fasterxml.jackson.databind.ObjectMapper $M).activateDefaultTyping(...)
+    metadata: {category: security, cwe: "CWE-502: Deserialization of Untrusted Data"}
+
+  - id: at.java.cors-wildcard-with-credentials
+    languages: [java]
+    severity: ERROR
+    message: CORS allows any origin together with credentials; list the storefront/back-office origins explicitly.
+    pattern-either:
+      - pattern: (org.springframework.web.cors.CorsConfiguration $C).addAllowedOriginPattern("*")
+      - pattern: (org.springframework.web.cors.CorsConfiguration $C).addAllowedOrigin("*")
+      - pattern: '@CrossOrigin(origins = "*", ...)'
+      - pattern: '@CrossOrigin("*")'
+    metadata: {category: security, cwe: "CWE-942"}
+
+  - id: at.java.weak-hash
+    languages: [java]
+    severity: WARNING
+    message: MD5/SHA-1 are not acceptable for security purposes (passwords, signatures, tokens); use SHA-256+ or HMAC.
+    pattern-either:
+      - pattern: java.security.MessageDigest.getInstance("MD5")
+      - pattern: java.security.MessageDigest.getInstance("SHA-1")
+      - pattern: java.security.MessageDigest.getInstance("SHA1")
+    metadata: {category: security, cwe: "CWE-328"}
+
+  - id: at.java.insecure-random-for-secrets
+    languages: [java]
+    severity: WARNING
+    message: java.util.Random is predictable; use SecureRandom for tokens, codes and ids.
+    patterns:
+      - pattern: new java.util.Random(...)
+      - pattern-inside: |
+          $RET $METHOD(...) { ... }
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: (?i).*(token|secret|code|otp|password|nonce|key).*
+    metadata: {category: security, cwe: "CWE-330"}
+
+  - id: at.java.command-injection
+    languages: [java]
+    severity: ERROR
+    message: A shell command is built from a variable; pass arguments as a list without a shell.
+    pattern-either:
+      - pattern: Runtime.getRuntime().exec("..." + $X)
+      - pattern: new ProcessBuilder("sh", "-c", $X, ...)
+      - pattern: new ProcessBuilder("bash", "-c", $X, ...)
+    metadata: {category: security, cwe: "CWE-78"}
+
+  # ────────────────────────────────────────────────────── Go ──────────────────────────────────────────────────────
+  - id: at.go.insecure-skip-verify
+    languages: [go]
+    severity: ERROR
+    message: >-
+      TLS certificate verification is disabled. Trust the right CA (RootCAs) instead — this setting makes every
+      upstream call MITM-able and must never reach dev/uat/prod.
+    pattern-either:
+      - pattern: |
+          tls.Config{..., InsecureSkipVerify: true, ...}
+      - pattern: $C.InsecureSkipVerify = true
+    metadata: {category: security, cwe: "CWE-295: Improper Certificate Validation"}
+
+  - id: at.go.sql-injection
+    mode: taint
+    languages: [go]
+    severity: ERROR
+    message: >-
+      A string parameter reaches the SQL text passed to the database. Use placeholders ($1, $2 …) and arguments;
+      map identifiers (ORDER BY column) from a fixed table.
+    options:
+      taint_assume_safe_functions: true
+    pattern-sources:
+      # String parameters of exported functions/methods; unexported helpers taking SQL text are checked via callers.
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  func $F(..., $P string, ...) $R { ... }
+              - pattern-inside: |
+                  func ($RCV $T) $F(..., $P string, ...) $R { ... }
+              - pattern-inside: |
+                  func $F(..., $P string, ...) { ... }
+              - pattern-inside: |
+                  func ($RCV $T) $F(..., $P string, ...) { ... }
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^[A-Z]
+          - pattern: $P
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.$M($CTX, $Q, ...)
+              - pattern: $DB.$M($Q, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(Query|QueryRow|QueryContext|QueryRowContext|Exec|ExecContext|Prepare|PrepareContext)$
+          - focus-metavariable: $Q
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.$M($CTX, fmt.Sprintf(..., $A, ...), ...)
+              - pattern: $DB.$M(fmt.Sprintf(..., $A, ...), ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(Query|QueryRow|QueryContext|QueryRowContext|Exec|ExecContext|Prepare|PrepareContext)$
+          - focus-metavariable: $A
+    metadata: {category: security, cwe: "CWE-89: SQL Injection", owasp: "A03:2021 - Injection"}
+
+  - id: at.go.sql-string-building
+    languages: [go]
+    severity: WARNING
+    message: >-
+      SQL text is built with fmt.Sprintf/concatenation at runtime and passed to $DB.$M. Keep fragments constant
+      (const column lists are fine), use placeholders ($1, $2 …) for values and a fixed map for identifiers.
+    patterns:
+      - pattern-either:
+          - pattern: $DB.$M($CTX, $Q, ...)
+          - pattern: $DB.$M($Q, ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(Query|QueryRow|QueryContext|QueryRowContext|Exec|ExecContext|Prepare|PrepareContext)$
+      # Not a (constant-propagated) string constant …
+      - pattern-not: $DB.$M($CTX, "...", ...)
+      - pattern-not: $DB.$M("...", ...)
+      # … but SQL text that is concatenated or formatted.
+      - metavariable-regex:
+          metavariable: $Q
+          regex: (?s)(.*?[`"]\s*\+)|(.*?\+\s*[`"])|(\s*fmt\.Sprintf\()
+      - metavariable-regex:
+          metavariable: $Q
+          regex: (?is).*?\b(select|insert|update|delete|where|from|order\s+by|values|set)\b
+    metadata: {category: security, cwe: "CWE-89: SQL Injection", owasp: "A03:2021 - Injection"}
+
+  - id: at.go.http-server-without-timeouts
+    languages: [go]
+    severity: WARNING
+    message: http.ListenAndServe/http.Server without ReadHeaderTimeout is open to Slowloris; use go/pkg/httpserver.
+    pattern-either:
+      - pattern: http.ListenAndServe(...)
+      - pattern: http.ListenAndServeTLS(...)
+      - patterns:
+          - pattern: http.Server{...}
+          - pattern-not: 'http.Server{..., ReadHeaderTimeout: $T, ...}'
+    metadata: {category: security, cwe: "CWE-400"}
+
+  - id: at.go.command-injection
+    languages: [go]
+    severity: ERROR
+    message: exec.Command runs a shell with a dynamic string; pass the program and arguments separately.
+    pattern-either:
+      - pattern: exec.Command("sh", "-c", $X, ...)
+      - pattern: exec.Command("bash", "-c", $X, ...)
+      - pattern: exec.CommandContext($CTX, "sh", "-c", $X, ...)
+    metadata: {category: security, cwe: "CWE-78"}
+
+  - id: at.go.weak-crypto
+    languages: [go]
+    severity: WARNING
+    message: MD5/SHA-1/DES/RC4 are not acceptable for security purposes; use SHA-256+, HMAC or AES-GCM.
+    pattern-either:
+      - pattern: md5.New()
+      - pattern: md5.Sum(...)
+      - pattern: sha1.New()
+      - pattern: sha1.Sum(...)
+      - pattern: des.NewCipher(...)
+      - pattern: rc4.NewCipher(...)
+    metadata: {category: security, cwe: "CWE-327"}
+
+  - id: at.go.math-rand-for-secrets
+    languages: [go]
+    severity: WARNING
+    message: math/rand is predictable; use crypto/rand for tokens, codes and ids.
+    patterns:
+      - pattern-either:
+          - pattern: rand.Int(...)
+          - pattern: rand.Intn(...)
+          - pattern: rand.Int63(...)
+          - pattern: rand.Read(...)
+          - pattern: rand.IntN(...)
+      - pattern-inside: |
+          import "math/rand"
+          ...
+      - pattern-inside: |
+          func $F(...) { ... }
+      - metavariable-regex:
+          metavariable: $F
+          regex: (?i).*(token|secret|code|otp|password|nonce|key|session).*
+    metadata: {category: security, cwe: "CWE-330"}
+
+  - id: at.go.unescaped-template-html
+    languages: [go]
+    severity: WARNING
+    message: template.HTML/JS/URL disables html/template escaping; only wrap constants or sanitized values.
+    patterns:
+      - pattern-either:
+          - pattern: template.HTML($X)
+          - pattern: template.JS($X)
+          - pattern: template.URL($X)
+      - pattern-not: template.HTML("...")
+    metadata: {category: security, cwe: "CWE-79"}
+
+  # ─────────────────────────────────────────────── TypeScript / React ─────────────────────────────────────────────
+  - id: at.ts.dangerously-set-inner-html-unsanitized
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: >-
+      dangerouslySetInnerHTML without a sanitizer. Pass the HTML through DOMPurify.sanitize(...) (or sanitizeHtml)
+      or render text/React nodes instead. JSON-LD must escape "<" (JSON.stringify(x).replace(/</g, '\\u003c')).
+    patterns:
+      - pattern: '<$EL dangerouslySetInnerHTML={{__html: $HTML}} />'
+      - pattern-not: '<$EL dangerouslySetInnerHTML={{__html: DOMPurify.sanitize(...)}} />'
+      - pattern-not: '<$EL dangerouslySetInnerHTML={{__html: $P.sanitize(...)}} />'
+      - pattern-not: '<$EL dangerouslySetInnerHTML={{__html: sanitize(...)}} />'
+      - pattern-not: '<$EL dangerouslySetInnerHTML={{__html: sanitizeHtml(...)}} />'
+      - pattern-not: '<$EL dangerouslySetInnerHTML={{__html: JSON.stringify(...).replace(/</g, $R)}} />'
+      - pattern-not: '<$EL dangerouslySetInnerHTML={{__html: "..."}} />'
+    metadata: {category: security, cwe: "CWE-79: Cross-site Scripting", owasp: "A03:2021 - Injection"}
+
+  - id: at.ts.dom-xss-sinks
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: Writing HTML into the DOM directly bypasses React escaping; render nodes or sanitize with DOMPurify.
+    patterns:
+      - pattern-either:
+          - pattern: $E.innerHTML = $X
+          - pattern: $E.outerHTML = $X
+          - pattern: document.write(...)
+          - pattern: $E.insertAdjacentHTML($POS, $X)
+      - pattern-not: $E.innerHTML = ""
+      - pattern-not: $E.innerHTML = "..."
+    metadata: {category: security, cwe: "CWE-79"}
+
+  - id: at.ts.eval
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: eval/new Function execute strings as code; never needed in our apps.
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: setTimeout("...", ...)
+    metadata: {category: security, cwe: "CWE-95"}
+
+  - id: at.ts.token-in-web-storage
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      Tokens in localStorage/sessionStorage are readable by any injected script. The BFF keeps tokens server-side
+      behind the HttpOnly at_session cookie; mobile uses SecureStore.
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem($K, ...)
+          - pattern: sessionStorage.setItem($K, ...)
+          - pattern: window.localStorage.setItem($K, ...)
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i).*(token|jwt|secret|session|auth).*
+    metadata: {category: security, cwe: "CWE-922"}
+
+  - id: at.ts.postmessage-wildcard-origin
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: postMessage with targetOrigin "*" leaks data to any embedding origin; pass the exact origin.
+    pattern: $W.postMessage($MSG, "*")
+    metadata: {category: security, cwe: "CWE-345"}

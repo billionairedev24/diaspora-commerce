@@ -574,13 +574,13 @@
 - PDF includes chart image, legend and data table","E32","","Medium","8","exports","exports","To Do"
 "E33","Epic","Testing & quality","Test pyramid, E2E on web and mobile, Storybook, load and security testing as merge gates.","","","Testing & quality","High","","quality","quality","In Progress"
 "S197","Story","Unit, contract and integration test standards","JUnit/Go test/Vitest, Pact, Testcontainers; 80% coverage gate on domain modules.","- Every service has unit, ArchUnit/lint and Testcontainers integration tests
-- Coverage reported in CI","E33","","High","3","quality","quality","In Progress"
+- Coverage reported in CI","E33","","High","3","quality","quality","Done"
 "S198","Story","Playwright E2E journeys","Sign-up, search → checkout (3DS, decline), multi-seller split, returns, onboarding, listing moderation, inventory, RBAC denials.","- Runs against per-PR previews on Chromium, WebKit and Firefox
-- Flaky tests quarantined with an owner","E33","","High","8","quality e2e","quality","In Progress"
+- Flaky tests quarantined with an owner","E33","","High","8","quality e2e","quality","Done"
 "S199","Story","Storybook for UI packages and apps","Stories for every component state including RTL and mobile; a11y and visual tests.","- Interaction tests run in CI
 - Visual diffs require review","E33","","High","5","quality web","quality","In Progress"
 "S200","Story","Load tests (k6) for search and checkout","Flash-sale profile proves no overselling and latency budgets.","- Search p95 < 150 ms at target load
-- Exactly N of N+25 concurrent orders succeed for N units","E33","","High","5","quality performance","quality","In Progress"
+- Exactly N of N+25 concurrent orders succeed for N units","E33","","High","5","quality performance","quality","Done"
 "S201","Story","Security scanning","CodeQL, Trivy, gitleaks, OWASP dependency check and ZAP baseline on previews.","- Critical findings fail the build
 - SBOMs attached to every image","E33","","High","3","quality security","quality","In Progress"
 "S202","Story","Encrypt TOTP secrets and MFA material at rest","TOTP seeds are currently stored in plain text in the identity database; encrypt them with an envelope key from the cloud KMS / secret store.","- TOTP secrets are encrypted with AES-GCM using a key from the secret store
@@ -737,3 +737,9 @@
 - Staff can re-run metering for a period
 - Mobile PaymentSheet lists saved cards
 - Stripe prices metered_fba_storage, metered_ads_spend, metered_ai_credits exist in every environment","E24","","High","5","seller-center staff-console bff payments","seller-center","To Do"
+"S246","Story","Remediate security scan findings","Fix findings from the first scan: Go toolchain 1.27.2 and golang.org/x/net v0.60.0 in every module; Jackson 3.1.7 override; lz4-java 1.11.4; pnpm overrides for tinypool, glob, serialize-javascript; moby/go-archive bump; Dockerfile WORKDIR instead of RUN cd; no 'latest' image tags in Helm; Azure storage network default deny and logging.","- govulncheck reports no called vulnerabilities
+- Trivy filesystem and IaC scans have no CRITICAL or HIGH findings
+- Helm templates never render image tag latest","E33","","Highest","5","security","quality","To Do"
+"S247","Story","Storybook interaction tests and visual diffs in CI; fix known a11y issues","Add Storybook interaction tests and visual regression in CI, and fix the a11y issues recorded in tests/e2e/support/a11y-known-issues.ts (image alt, contrast, carousel dot size, calendar grid semantics).","- Storybook test-runner runs in CI
+- Visual diffs reviewed on PRs
+- a11y-known-issues list is empty","E33","","Medium","5","storybook a11y","quality","To Do"

@@ -1,0 +1,18 @@
+# Accepted Trivy findings (referenced from /trivy.yaml `ignorefile`). Every entry needs a reason, an owner and an
+# expiry date (`expired_at`); an expired entry stops suppressing, so the finding resurfaces and is re-reviewed.
+# Format: https://trivy.dev/latest/docs/configuration/filtering/#trivyignoreyaml
+#
+# vulnerabilities:
+#   - id: CVE-2026-12345
+#     paths: ["java/services/catalog/pom.xml"]
+#     statement: "Not reachable: we never call the vulnerable parser. Owner: catalog team."
+#     expired_at: 2026-12-31
+# misconfigurations:
+#   - id: AVD-KSV-0014
+#     paths: ["infra/helm/library/at-service/templates/deployment.yaml"]
+#     statement: "…"
+#     expired_at: 2026-12-31
+
+vulnerabilities: []
+misconfigurations: []
+secrets: []

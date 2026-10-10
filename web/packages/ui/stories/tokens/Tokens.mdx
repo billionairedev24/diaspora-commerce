@@ -1,0 +1,44 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+import { ColorScales, SemanticColors, Shape, Spacing, Typography } from './TokenTables';
+
+<Meta title="Foundations/Design tokens" />
+
+# Design tokens
+
+Every colour, size and effect in AfroTransact UIs comes from `@afrotransact/tokens` — CSS custom properties named
+`--at-*` declared in `web/packages/tokens/src/tokens.css`, plus a generated typed map (`cssVariables`,
+`resolvedVariables`, `tokens`) for TypeScript and React Native. The tables on this page are rendered from that
+generated map, so they always match the shipped CSS.
+
+**Rules**
+
+- Components use **semantic roles** (`--at-color-*`) rather than raw scales, so themes and contrast fixes happen in one place.
+- No raw hex colours in components — ESLint (`at/no-raw-hex`) and Stylelint (`color-no-hex`) fail the build.
+- In TypeScript, reference a token with `cssVar('--at-color-link')` (typed: unknown names do not compile).
+- Seller storefront themes override only the `--store-*` aliases, which default to the semantic roles.
+- After editing `tokens.css`, run `pnpm --filter @afrotransact/tokens generate` to refresh the typed map.
+
+## Semantic colours
+
+<SemanticColors />
+
+## Colour scales
+
+<ColorScales />
+
+## Typography
+
+Figtree is the only UI font (`@afrotransact/tokens/fonts.css`).
+
+<Typography />
+
+## Spacing and sizes
+
+Controls are 40px (32px small, 48px large); touch targets are at least 44px.
+
+<Spacing />
+
+## Radius, elevation, layers and motion
+
+<Shape />

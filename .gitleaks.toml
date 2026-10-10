@@ -1,0 +1,83 @@
+# gitleaks configuration (https://github.com/gitleaks/gitleaks) — secret scanning for commits and the working tree.
+#
+#   gitleaks git . --config .gitleaks.toml --redact                 # history (CI: security.yml, full depth)
+#   gitleaks git . --config .gitleaks.toml --redact --log-opts="origin/main..HEAD"   # PR commits (CI: per-service)
+#   gitleaks dir . --config .gitleaks.toml --redact                 # working tree, no git (local pre-push)
+#
+# Built-in rules stay on (useDefault). The allowlists below only cover values that are documented local-only or
+# test fixtures and can never authenticate anywhere real. Every entry says why. Prefer `gitleaks:allow` on the
+# line for a one-off; never allowlist a value that works outside a laptop or a test container.
+title = "AfroTransact gitleaks config"
+
+[extend]
+useDefault = true
+
+# Our own rules ------------------------------------------------------------------------------------------------------
+
+[[rules]]
+id = "afrotransact-stripe-live-key"
+description = "Stripe live secret or restricted key (sk_live_/rk_live_) — test keys are allowed in tests only"
+regex = '''\b((?:sk|rk)_live_[0-9a-zA-Z]{16,})\b'''
+keywords = ["sk_live_", "rk_live_"]
+
+[[rules]]
+id = "afrotransact-openrouter-key"
+description = "OpenRouter API key (AI gateway)"
+regex = '''\b(sk-or-v1-[0-9a-f]{64})\b'''
+keywords = ["sk-or-v1-"]
+
+[[rules]]
+id = "afrotransact-jdbc-password-in-url"
+description = "Password embedded in a JDBC/Postgres URL that points at a non-local host"
+regex = '''(?i)(?:jdbc:)?postgres(?:ql)?://[^:\s/@]+:([^@\s'"]{6,})@([a-z0-9.-]+)'''
+secretGroup = 1
+keywords = ["postgres"]
+  [[rules.allowlists]]
+  description = "local stack / test containers / in-cluster dev defaults"
+  regexTarget = "match"
+  regexes = ['''@(localhost|127\.0\.0\.1|postgres|postgres\.data|host\.docker\.internal)$''']
+
+# Allowlists ---------------------------------------------------------------------------------------------------------
+
+[[allowlists]]
+description = "Generated, vendored and build output; read-only design prototypes"
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)\.pnpm-store/''',
+  '''(^|/)\.next[^/]*/''',
+  '''(^|/)\.open-next/''',
+  '''(^|/)\.wrangler/''',
+  '''(^|/)target/''',
+  '''(^|/)dist/''',
+  '''(^|/)storybook-static/''',
+  '''(^|/)(test-results|playwright-report|reports)/''',
+  '''(^|/)\.git/''',
+  '''^design/''',                          # Claude Design handoff (static prototypes, no credentials)
+  '''pnpm-lock\.yaml$''',
+  '''go\.sum$''',
+]
+
+[[allowlists]]
+description = "Local-only defaults (docker compose, application-local.yml) — documented in service READMEs"
+regexes = [
+  '''local-[a-z0-9-]+-secret''',           # e.g. local-bff-secret, local-orders-service-secret (OAuth client secrets for :81xx)
+  '''^local(-only)?$''',
+  '''LocalAdmin2026!''',                   # identity bootstrap admin, local profile only (BOOTSTRAP_ADMIN_PASSWORD overrides)
+]
+
+[[allowlists]]
+description = "Test fixtures: obviously fake keys used by unit/integration tests"
+condition = "AND"
+paths = [
+  '''(_test\.go|/src/test/|/testkit/|/test/|\.test\.tsx?|\.spec\.tsx?|/e2e/|/mocks/|/fixtures?/)''',
+]
+regexes = [
+  '''^sk_test_[a-z_]+$''',                 # Stripe-shaped placeholder, not a real test-mode key
+  '''0123456789abcdef''',                  # hex counting sequences used as signing keys in tests
+  '''^integration-test-''',
+  '''^Plantain-Jollof-2026$''',            # test customer password
+]
+
+[[allowlists]]
+description = "Fake ClusterSecretStore for clusters without a cloud secret manager (kind/CI); values are local defaults"
+paths = ['''^infra/k8s/platform/secret-stores/none/''']

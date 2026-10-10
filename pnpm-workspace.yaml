@@ -3,6 +3,7 @@ packages:
   - web/packages/*
   - mobile/apps/*
   - docs/portal
+  - tests/e2e
 
 # Packages allowed to run install scripts (pnpm 10 blocks them by default).
 onlyBuiltDependencies:

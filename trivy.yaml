@@ -1,0 +1,59 @@
+# Trivy configuration (https://trivy.dev) — vulnerabilities, secrets and IaC misconfiguration for the repository
+# (filesystem), container images and Kubernetes/Helm/Terraform. Used by every Trivy run via `--config trivy.yaml`
+# (trivy-action: `trivy-config: trivy.yaml`). Command lines and CI placement: docs/engineering/security-scanning.md.
+#
+#   trivy fs --config trivy.yaml .                                   # repo: deps (pom/go.sum/pnpm-lock), secrets, IaC
+#   trivy fs --config trivy.yaml --severity CRITICAL --exit-code 1 . # the blocking gate
+#   trivy config --config trivy.yaml infra/                          # IaC only (Terraform, Helm, k8s, Dockerfiles)
+#   trivy image --config trivy.yaml ghcr.io/billionairedev24/diaspora-commerce/search:<sha>
+#
+# Policy: CRITICAL fails the build everywhere; HIGH fails per-service PR scans; MEDIUM is reported (SARIF).
+# Unfixed vulnerabilities are ignored (nothing to upgrade to); accepted risks go in tools/security/trivyignore.yaml
+# with an expiry date and a reason.
+
+severity: [CRITICAL, HIGH, MEDIUM]
+exit-code: 0                    # gates override with --exit-code 1 and a narrower --severity
+format: table
+timeout: 15m
+ignorefile: tools/security/trivyignore.yaml
+
+scan:
+  scanners: [vuln, secret, misconfig]
+  skip-dirs:
+    - "**/node_modules"
+    - "**/.next"
+    - "**/.next-e2e"
+    - "**/.open-next"
+    - "**/target"
+    - "**/dist"
+    - "**/storybook-static"
+    - "**/test-results"
+    - design                    # Claude Design prototypes (static HTML, not shipped)
+    - tools/security/semgrep-tests   # deliberately vulnerable rule fixtures
+  skip-files:
+    - "**/*.min.js"
+
+pkg:
+  types: [os, library]
+  include-dev-deps: false       # dev-only npm deps (Storybook, Playwright, linters) never ship
+
+vulnerability:
+  ignore-unfixed: true
+
+secret:
+  # Secrets are primarily gitleaks' job (.gitleaks.toml); Trivy's secret scanner covers images and is kept as a
+  # second net. Same local-only allowlist as gitleaks.
+  config: tools/security/trivy-secret.yaml
+
+misconfiguration:
+  scanners: [dockerfile, kubernetes, helm, terraform, cloudformation, azure-arm]
+  terraform:
+    exclude-downloaded-modules: true
+  helm:
+    # Render charts the way Argo CD does for prod (library chart deps must be built: helm dependency build).
+    values:
+      - infra/argocd/envs/prod/platform-values.yaml
+
+image:
+  # Scan only what is in the image (Jib/distroless base + app); the OS layer comes from the pinned base image.
+  removed-pkgs: false

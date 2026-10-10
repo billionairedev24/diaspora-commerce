@@ -1,0 +1,22 @@
+{
+  "name": "@afrotransact/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-app Playwright journeys (storefront + Seller Center / Provider Hub) against the in-process MSW mock BFF, with axe a11y smoke checks.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:a11y": "playwright test --grep @a11y",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report reports/html",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf reports test-results"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.56.1",
+    "@types/node": "^22.19.0",
+    "typescript": "5.9.3"
+  }
+}
