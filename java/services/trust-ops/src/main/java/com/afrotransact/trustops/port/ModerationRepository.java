@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.trustops.domain.ModerationItem;
+import com.afrotransact.trustops.domain.ModerationItemType;
 import com.afrotransact.trustops.domain.ModerationStatus;
 
 /** Moderation queue items. */
@@ -25,8 +26,10 @@ public interface ModerationRepository {
      *
      * @param status   null = open items (PENDING and ESCALATED)
      * @param assignee null = anyone
+     * @param type     null = new and live listings
      */
-    Page<ModerationItem> search(ModerationStatus status, String assignee, int page, int size);
+    Page<ModerationItem> search(ModerationStatus status, String assignee, ModerationItemType type, int page,
+                                int size);
 
     /** PENDING items whose SLA is breached at {@code now}. */
     List<ModerationItem> findBreachedPending(Instant now, int limit);

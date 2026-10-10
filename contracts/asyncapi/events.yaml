@@ -1850,7 +1850,7 @@ components:
         $ref: '#/components/schemas/TaxLedgerEntry'
     trustOpsModerationQueued:
       name: trustops.moderation.queued
-      title: A listing entered the moderation queue
+      title: A new submission or a reported / flagged live listing entered the moderation queue (itemType)
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1864,7 +1864,8 @@ components:
         $ref: '#/components/schemas/TrustOpsModerationEvent'
     trustOpsModerationDecided:
       name: trustops.moderation.decided
-      title: A listing was approved or rejected through trust-ops (or closed because catalog decided it)
+      title: A listing was decided through trust-ops (new listing approved / rejected, live listing kept / taken down) or
+        closed because catalog decided it
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1902,14 +1903,17 @@ components:
         $ref: '#/components/schemas/TrustOpsClaimEvent'
     trustOpsSellerSuspended:
       name: trustops.seller.suspended
-      title: 'Staff suspended a seller. Payouts are held (seller-service) and the seller is restricted in the buy box (offers).
-        Listings are NOT hidden yet (no catalog / seller endpoint): catalog should consume this event.'
+      title: 'Staff suspended a seller. seller-service holds its suspension hold (POST /v1/orgs/{orgId}/suspend: payouts paused,
+        listings hidden through seller.listings.hidden in catalog, offers, bookings and search) and the seller is restricted
+        in the buy box (offers).'
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/TrustOpsSellerEnforcement'
     trustOpsSellerReinstated:
       name: trustops.seller.reinstated
+      title: 'Staff reinstated a seller: the suspension hold and the buy-box restriction are lifted. Unrelated Stripe compliance
+        payout holds stay in seller-service.'
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -6200,6 +6204,30 @@ components:
           - string
           - 'null'
           description: AI triage risk level when a hint was attached
+        itemType:
+          type: string
+          enum:
+          - NEW_LISTING
+          - LIVE_LISTING
+          description: NEW_LISTING = submission (APPROVED / REJECTED in catalog); LIVE_LISTING = reported or flagged live
+            listing (APPROVED = kept live, REJECTED = taken down in catalog)
+        reportSource:
+          type:
+          - string
+          - 'null'
+          enum:
+          - CUSTOMER_REPORT
+          - STAFF
+          - AUTOMATED
+          - null
+        reportReason:
+          type:
+          - string
+          - 'null'
+          description: Reason code of the first report or flag (live listings)
+        reports:
+          type: integer
+          description: Reports and flags counted on the item (0 for new listings)
         decidedBy:
           type:
           - string
@@ -6327,11 +6355,13 @@ components:
           - 'null'
         payoutsHeld:
           type: boolean
+          description: seller-service's suspension hold is in place (payouts paused by it). A Stripe compliance hold may keep
+            payouts paused after reinstatement; it is not reflected here.
         buyBoxRestricted:
           type: boolean
         listingsHidden:
           type: boolean
-          description: Always false until catalog can hide a seller's listings on request
+          description: seller-service's suspension hold is in place (listings hidden by seller.listings.hidden)
         changedAt:
           type: string
           format: date-time
@@ -6840,8 +6870,11 @@ operations:
     channel:
       $ref: '#/channels/catalogProductEvents'
     summary: 'Consumer group trust-ops-service-moderation (inbox consumer trust-ops:catalog-products): catalog.product.created
-      with status IN_REVIEW is queued for moderation (AI triage hint attached when ai-gateway answers; fail-open); catalog.product.approved
-      / rejected close an item decided directly in catalog.'
+      with status IN_REVIEW is queued for moderation as a NEW_LISTING item (AI triage hint attached when ai-gateway answers;
+      fail-open); catalog.product.flagged (a shopper report, staff flag or automated flag on a live listing) is queued as
+      a LIVE_LISTING item, or counted on the product''s open item (a HIGH-risk automated flag raises its priority). Removing
+      a LIVE_LISTING item takes the listing down in catalog (POST /v1/products/{id}/takedown); allowing it keeps the listing
+      live. catalog.product.approved / rejected / taken_down close an item decided directly in catalog.'
   consumeTrustOpsOrderEvents:
     action: receive
     channel:

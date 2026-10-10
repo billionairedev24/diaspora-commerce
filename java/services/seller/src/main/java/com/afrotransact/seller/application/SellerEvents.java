@@ -27,6 +27,11 @@ public final class SellerEvents {
     public static final String LISTINGS_RESTORED = "seller.listings.restored";
     public static final String SUBSCRIPTION_CHANGED = "seller.subscription.changed";
 
+    /** EnforcementPayload reason while a Trust &amp; Safety suspension holds payouts and hides listings. */
+    public static final String REASON_SUSPENDED = "SUSPENDED";
+    /** EnforcementPayload reason when a reinstatement releases payouts / listings (no compliance hold remains). */
+    public static final String REASON_REINSTATED = "REINSTATED";
+
     private SellerEvents() {
     }
 }

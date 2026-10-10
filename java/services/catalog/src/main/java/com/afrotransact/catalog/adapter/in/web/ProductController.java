@@ -4,9 +4,14 @@ import java.net.URI;
 import java.util.UUID;
 
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.CreateProductRequest;
+import com.afrotransact.catalog.adapter.in.web.ProductDtos.FlagRequest;
+import com.afrotransact.catalog.adapter.in.web.ProductDtos.FlagResponse;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.NoteRequest;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.ProductPageResponse;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.ProductResponse;
+import com.afrotransact.catalog.adapter.in.web.ProductDtos.RestoreRequest;
+import com.afrotransact.catalog.adapter.in.web.ProductDtos.TakedownRequest;
+import com.afrotransact.catalog.application.ListingModerationService;
 import com.afrotransact.catalog.application.PageView;
 import com.afrotransact.catalog.application.ProductService;
 import com.afrotransact.catalog.domain.Product;
@@ -14,6 +19,7 @@ import com.afrotransact.catalog.domain.ProductStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,9 +35,11 @@ import org.springframework.web.bind.annotation.RestController;
 class ProductController {
 
     private final ProductService products;
+    private final ListingModerationService listings;
 
-    ProductController(ProductService products) {
+    ProductController(ProductService products, ListingModerationService listings) {
         this.products = products;
+        this.listings = listings;
     }
 
     @Operation(summary = "Create a product and submit it for review",
@@ -88,5 +96,30 @@ class ProductController {
     @PostMapping("/{id}/resume")
     ProductResponse resume(@PathVariable UUID id) {
         return ProductResponse.of(products.resume(id));
+    }
+
+    @Operation(summary = "Flag a live listing for review (catalog:moderate)",
+            description = "Staff flags are source STAFF; service clients (principal type SERVICE) are AUTOMATED. "
+                    + "Publishes catalog.product.flagged; trust-ops queues it as a live-listing moderation item.")
+    @PostMapping("/{id}/flags")
+    ResponseEntity<FlagResponse> flag(@PathVariable UUID id, @Valid @RequestBody FlagRequest body) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(FlagResponse.of(listings.flag(id, body.reasonCode(), body.details(),
+                body.riskLevel()), true));
+    }
+
+    @Operation(summary = "Take a live or paused listing down with a reason (catalog:moderate)",
+            description = "Status becomes TAKEN_DOWN: hidden from public reads and the owner cannot resume it. "
+                    + "Publishes catalog.product.taken_down. Idempotent.")
+    @PostMapping("/{id}/takedown")
+    ProductResponse takeDown(@PathVariable UUID id, @Valid @RequestBody TakedownRequest body) {
+        return ProductResponse.of(listings.takeDown(id, body.reasonCode(), body.note()));
+    }
+
+    @Operation(summary = "Reverse a takedown (catalog:moderate)",
+            description = "Returns the listing to its status before the takedown (LIVE or PAUSED) and publishes "
+                    + "catalog.product.reinstated. Idempotent.")
+    @PostMapping("/{id}/restore")
+    ProductResponse restore(@PathVariable UUID id, @Valid @RequestBody(required = false) RestoreRequest body) {
+        return ProductResponse.of(listings.restore(id, body == null ? null : body.note()));
     }
 }

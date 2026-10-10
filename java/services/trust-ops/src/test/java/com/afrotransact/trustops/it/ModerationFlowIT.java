@@ -12,6 +12,9 @@ import com.afrotransact.platform.web.error.ForbiddenActionException;
 import com.afrotransact.trustops.application.ModerationItemView;
 import com.afrotransact.trustops.application.ModerationService;
 import com.afrotransact.trustops.application.SlaMaintenanceService;
+import com.afrotransact.trustops.domain.ListingFlagSource;
+import com.afrotransact.trustops.domain.ListingReport;
+import com.afrotransact.trustops.domain.ModerationItemType;
 import com.afrotransact.trustops.domain.ModerationPriority;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.domain.ModerationStatus;
@@ -59,7 +62,7 @@ class ModerationFlowIT extends TrustOpsIntegrationTest {
 
         TestSupport.as(TestSupport.trustSafety("sara"));
         assertThat(moderation.assign(queued.item().id(), null).item().assignee()).isEqualTo("sara");
-        assertThat(moderation.queue(null, null, true, 0, 50).items())
+        assertThat(moderation.queue(null, null, true, null, 0, 50).items())
                 .anySatisfy(v -> assertThat(v.item().id()).isEqualTo(queued.item().id()));
 
         ModerationItemView rejected = moderation.reject(queued.item().id(),
@@ -157,7 +160,7 @@ class ModerationFlowIT extends TrustOpsIntegrationTest {
 
         TestSupport.as(TestSupport.marketing());
         problem(send("GET", "/v1/moderation/items", null), 403, "auth.missing-permission");
-        assertThatThrownBy(() -> moderation.queue(null, null, false, 0, 10))
+        assertThatThrownBy(() -> moderation.queue(null, null, false, null, 0, 10))
                 .isInstanceOf(ForbiddenActionException.class);
     }
 
@@ -167,5 +170,79 @@ class ModerationFlowIT extends TrustOpsIntegrationTest {
         JsonNode p = ok(send("POST", "/v1/moderation/items/" + queued.item().id() + "/reject",
                 Map.of("note", "x")), 400);
         assertThat(p.path("errors").toString()).contains("reasonCode");
+    }
+
+    @Test
+    void flaggedLiveListingsAreCountedKeptOrTakenDownInCatalog() {
+        ProductSubmission listing = new ProductSubmission(UUID.randomUUID(), "AT00LIVE01", orgId(), "SELLER",
+                "Shea butter that heals eczema", "skincare");
+        ListingReport report = new ListingReport(UUID.randomUUID(), ListingFlagSource.CUSTOMER_REPORT,
+                ModerationReasonCode.UNAPPROVED_HEALTH_CLAIM, "Claims to heal eczema", "cust-1", null, 1);
+        ModerationItemView queued = moderation.enqueueLiveListing(UUID.randomUUID(), listing, report).orElseThrow();
+        assertThat(queued.item().type()).isEqualTo(ModerationItemType.LIVE_LISTING);
+        assertThat(queued.item().report().reports()).isEqualTo(1);
+        UPSTREAM.verify(WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/ai/triage"))
+                .withRequestBody(WireMock.matchingJsonPath("$.fields.reportReason",
+                        WireMock.equalTo("UNAPPROVED_HEALTH_CLAIM"))));
+
+        // A second report on the same listing is counted on the open item, not queued again.
+        ModerationItemView counted = moderation.enqueueLiveListing(UUID.randomUUID(), listing, new ListingReport(
+                UUID.randomUUID(), ListingFlagSource.AUTOMATED, ModerationReasonCode.UNAPPROVED_HEALTH_CLAIM, null,
+                "ai-gateway", "HIGH", 1)).orElseThrow();
+        assertThat(counted.item().id()).isEqualTo(queued.item().id());
+        assertThat(counted.item().report().reports()).isEqualTo(2);
+        assertThat(counted.item().report().source()).isEqualTo(ListingFlagSource.CUSTOMER_REPORT);
+
+        TestSupport.as(TestSupport.trustSafety("sara"));
+        assertThat(moderation.queue(null, null, false, ModerationItemType.LIVE_LISTING, 0, 200).items())
+                .allSatisfy(v -> assertThat(v.item().type()).isEqualTo(ModerationItemType.LIVE_LISTING))
+                .anySatisfy(v -> assertThat(v.item().id()).isEqualTo(queued.item().id()));
+        assertThat(moderation.queue(null, null, false, ModerationItemType.NEW_LISTING, 0, 200).items())
+                .noneSatisfy(v -> assertThat(v.item().id()).isEqualTo(queued.item().id()));
+
+        ModerationItemView removed = moderation.reject(queued.item().id(), ModerationReasonCode.UNAPPROVED_HEALTH_CLAIM,
+                "Medical claims on a cosmetic");
+        assertThat(removed.item().status()).isEqualTo(ModerationStatus.REJECTED);
+        UPSTREAM.verify(WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/products/" + listing.productId()
+                        + "/takedown"))
+                .withHeader("Authorization", WireMock.equalTo("Bearer tok-trust-ops"))
+                .withRequestBody(WireMock.matchingJsonPath("$.reasonCode", WireMock.equalTo("UNAPPROVED_HEALTH_CLAIM")))
+                .withRequestBody(WireMock.matchingJsonPath("$.note", WireMock.equalTo("Medical claims on a cosmetic"))));
+        UPSTREAM.verify(0, WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/products/" + listing.productId()
+                + "/reject")));
+        assertThat(jdbc.sql("select count(*) from audit_entry where action = 'trustops.listing.taken_down' "
+                + "and entity_id = :id").param("id", listing.productId().toString()).query(Long.class).single())
+                .isEqualTo(1);
+
+        // Allowing a flagged live listing keeps it live without touching catalog.
+        ProductSubmission other = new ProductSubmission(UUID.randomUUID(), "AT00LIVE02", orgId(), "SELLER",
+                "Ankara tote bag", "bags");
+        ModerationItemView second = moderation.enqueueLiveListing(UUID.randomUUID(), other, new ListingReport(
+                UUID.randomUUID(), ListingFlagSource.STAFF, ModerationReasonCode.IMAGE_POLICY, null, "staff-1", null,
+                1)).orElseThrow();
+        ModerationItemView kept = moderation.approve(second.item().id(), "Photos are the seller's own");
+        assertThat(kept.item().status()).isEqualTo(ModerationStatus.APPROVED);
+        UPSTREAM.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/products/" + other.productId()
+                + "/.*")));
+    }
+
+    @Test
+    void takedownRefusedByCatalogKeepsTheLiveItemOpen() {
+        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/products/[^/]+/takedown"))
+                .willReturn(WireMock.aResponse().withStatus(409).withHeader("Content-Type", "application/json")
+                        .withBody("{\"code\":\"catalog.invalid-transition\"}")));
+        ProductSubmission listing = new ProductSubmission(UUID.randomUUID(), "AT00LIVE03", orgId(), "SELLER",
+                "Kente stole", "fashion");
+        ModerationItemView queued = moderation.enqueueLiveListing(UUID.randomUUID(), listing, new ListingReport(
+                UUID.randomUUID(), ListingFlagSource.CUSTOMER_REPORT, ModerationReasonCode.COUNTERFEIT, null, "c",
+                null, 1)).orElseThrow();
+        TestSupport.as(TestSupport.trustSafety("sara"));
+        assertThatThrownBy(() -> moderation.reject(queued.item().id(), ModerationReasonCode.COUNTERFEIT, null))
+                .isInstanceOf(ConflictException.class);
+        assertThat(moderation.get(queued.item().id()).item().open()).isTrue();
+
+        // Staff took it down directly in catalog: catalog.product.taken_down closes the item.
+        moderation.closeFromCatalog(UUID.randomUUID(), listing.productId(), "TAKEN_DOWN");
+        assertThat(moderation.get(queued.item().id()).item().status()).isEqualTo(ModerationStatus.CLOSED);
     }
 }

@@ -20,6 +20,7 @@ Architecture: §7 (Sellers, payments and subscriptions) and §17d (Stripe Connec
 | `plan`, `plan_price` | seeded catalogue (Seller Essentials / Growth / Pro, Provider Solo / Studio / Business) and the Stripe Price `lookup_key` per cadence (`seller_growth_quarterly`) |
 | `connect_account` | Stripe requirements (`currently_due`, `eventually_due`, `past_due`, `pending_verification`, `errors`, `current_deadline`, `disabled_reason`), `charges_enabled`, `payouts_enabled`, capabilities, persons, derived status, `requirements_version`, payout hold, listings hidden |
 | `connect_account_history` | full change history (Stripe events, seller answers, staff actions) with the snapshot |
+| `org_suspension` | Trust and Safety suspension holds (V3): reason code, note, actor, previous org status, reinstated at / by / note; at most one active per organisation |
 | `compliance_reminder` | reminders sent; unique per (account, deadline, threshold) so the job is idempotent |
 | `stripe_webhook_event` | webhook inbox (Stripe event id) with outcome |
 | `subscription`, `payment_method`, `invoice` | plan subscription (status, trial, period, pending change, dunning), cards / bank accounts (brand or bank, last 4, expiry, default), invoices from webhooks |
@@ -85,12 +86,32 @@ Status: past due or disabled → `RESTRICTED`; currently due with ≤ 3 days to 
 
 | Endpoint | Who |
 |---|---|
-| `GET /v1/orgs/{orgId}/account-health` | org owner / finance: status, flags, each requirement with a typed form (tax ID, ID number token, verification document, ownership declaration, representative DOB / title, ToS acceptance, bank account token, business URL) |
+| `GET /v1/orgs/{orgId}/account-health` | org owner / finance; staff and service tokens (principal type `SERVICE`) with `compliance:remind`, `compliance:hold` or `sellers:enforce`: status, flags, each requirement with a typed form (tax ID, ID number token, verification document, ownership declaration, representative DOB / title, ToS acceptance, bank account token, business URL) |
 | `POST /v1/orgs/{orgId}/account-health/requirements/{requirement} {values}` | org owner / finance: validated, documents fetched from media-service (`GET /v1/assets/{id}` → signed URL) and uploaded to Stripe Files (`account_requirement`, on the connected account), then Accounts / Persons update; the item moves to pending verification |
 | `GET /v1/compliance/accounts?status=&openOnly=` · `GET /v1/compliance/accounts/{id}` | `compliance:remind` or `compliance:hold` |
 | `POST /v1/compliance/accounts/{id}/reminders` | `compliance:remind` |
 | `POST /v1/compliance/accounts/{id}/payouts/pause` | `compliance:remind` or `compliance:hold` |
 | `POST /v1/compliance/accounts/{id}/payouts/resume` | `compliance:hold` |
+
+## Suspension (S228)
+
+Trust and Safety suspension is an enforcement hold of its own, kept apart from the Stripe compliance holds on the
+connected account. Callers: staff or the `trust-ops-service` client (principal type `SERVICE`) with
+`sellers:enforce`.
+
+| Endpoint | Effect |
+|---|---|
+| `POST /v1/orgs/{orgId}/suspend {reasonCode, note}` | Approved organisations only (`409 seller.org-not-approved`); `reasonCode` is `POOR_PERFORMANCE · PROHIBITED_ITEMS · COUNTERFEIT · FRAUD_RISK · POLICY_VIOLATION · COMPLIANCE · OTHER` (note required for `OTHER`). Adds the suspension hold, sets the organisation `SUSPENDED` and publishes `seller.listings.hidden` + `seller.payouts.paused` (reason `SUSPENDED`, note `[CODE] note`) and `seller.org.updated` (status `SUSPENDED`). Idempotent |
+| `POST /v1/orgs/{orgId}/reinstate {note}` | Removes only the suspension hold and restores the previous status (`seller.org.updated`). `seller.payouts.resumed` / `seller.listings.restored` (reason `REINSTATED`) are published only when the connected account has no compliance payout hold / hidden listings of its own. Idempotent |
+| `GET /v1/orgs/{orgId}/enforcement` | `sellers:enforce`, `compliance:hold` or `compliance:remind`: the suspension, the compliance holds, the effective `payoutsPaused` / `listingsHidden`, and the suspension history |
+
+While an organisation is suspended, compliance releases are held back: a Stripe snapshot that clears past-due items or
+re-enables charges, or a staff payout release, updates the account but publishes no `seller.payouts.resumed` /
+`seller.listings.restored`; reinstatement publishes them once no hold remains. Both calls lock the organisation and
+its connected account, so they serialise with webhooks. Suspend and reinstate also write `TRUST_SAFETY` entries to
+the account's compliance history. Consumers keep their existing latest-wins handling: payments (payout hold),
+catalog (hides products, republishes `catalog.product.hidden|restored`, which the indexer follows), offers, bookings,
+notifications and identity (organisation status).
 
 ## Plans & billing (S103–S104)
 
@@ -117,8 +138,8 @@ subscription; failures are retried by a job). Billing page (owner / finance read
 | Topic (key) | Types | Consumers |
 |---|---|---|
 | `at.seller-application.events` (application id) | `seller.application.submitted / flagged / info_requested / approved / rejected` | notifications, staff console, trust-ops |
-| `at.seller-org.events` (org id) | `seller.org.approved`, `seller.org.updated` | identity (unlock back office, mirror org), indexer and cart (display name) |
-| `at.seller-compliance.events` (org id) | `seller.compliance.changed`, `seller.compliance.reminder`, `seller.payouts.paused / resumed`, `seller.listings.hidden / restored` | notifications (email + SMS + in-app), payments (payout holds), catalog / offers / bookings / indexer (visibility) |
+| `at.seller-org.events` (org id) | `seller.org.approved`, `seller.org.updated` (also on suspend / reinstate) | identity (unlock back office, mirror org and status), indexer and cart (display name) |
+| `at.seller-compliance.events` (org id) | `seller.compliance.changed`, `seller.compliance.reminder`, `seller.payouts.paused / resumed`, `seller.listings.hidden / restored` (reasons `AUTO_PAST_DUE · MANUAL · DEAUTHORIZED · CHARGES_DISABLED · CLEARED · SUSPENDED · REINSTATED`; `accountId` is null for an organisation without a connected account) | notifications (email + SMS + in-app), payments (payout holds), catalog / offers / bookings / indexer (visibility), trust-ops (audit) |
 | `at.seller-subscription.events` (org id) | `seller.subscription.changed` | identity (plan limits), finance |
 
 ## Jobs (idempotent, safe on several replicas)

@@ -2,6 +2,9 @@ package com.afrotransact.catalog.application;
 
 import com.afrotransact.catalog.domain.Gtin;
 import com.afrotransact.catalog.port.ProductRepository;
+import com.afrotransact.platform.security.Actor;
+import com.afrotransact.platform.security.ActorResolver;
+import com.afrotransact.platform.web.error.ForbiddenActionException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -9,14 +12,21 @@ import org.springframework.transaction.annotation.Transactional;
 class IdentifierServiceImpl implements IdentifierService {
 
     private final ProductRepository products;
+    private final ActorResolver actors;
 
-    IdentifierServiceImpl(ProductRepository products) {
+    IdentifierServiceImpl(ProductRepository products, ActorResolver actors) {
         this.products = products;
+        this.actors = actors;
     }
 
     @Override
     @Transactional(readOnly = true)
     public GtinCheck check(String raw, boolean isbnRequired) {
+        Actor actor = actors.current();
+        if (!actor.can(CatalogPermissions.READ) && !actor.can(CatalogPermissions.WRITE)) {
+            throw new ForbiddenActionException("auth.missing-permission",
+                    "Missing one of the permissions " + CatalogPermissions.READ + ", " + CatalogPermissions.WRITE);
+        }
         String digits = Gtin.digits(raw);
         if (digits.isEmpty()) {
             return new GtinCheck(digits, false, null, null, isbnRequired ? "ISBN-13 required" : "Required, or request exemption");

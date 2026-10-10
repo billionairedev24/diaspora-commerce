@@ -12,7 +12,7 @@ import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.trustops.domain.SellerEnforcement;
 import com.afrotransact.trustops.domain.SellerHealthMetrics;
 import com.afrotransact.trustops.domain.SuspensionReason;
-import com.afrotransact.trustops.port.SellerAccountClient;
+import com.afrotransact.trustops.port.SellerEnforcementClient;
 import com.afrotransact.trustops.port.SellerEnforcementRepository;
 import com.afrotransact.trustops.port.SellerHealthRepository;
 import com.afrotransact.trustops.port.UpstreamException;
@@ -28,7 +28,7 @@ class SellerEnforcementServiceImpl implements SellerEnforcementService {
 
     private final SellerEnforcementRepository standings;
     private final SellerHealthRepository health;
-    private final SellerAccountClient seller;
+    private final SellerEnforcementClient seller;
     private final PerformancePush push;
     private final PermissionChecker permissions;
     private final DomainEventPublisher events;
@@ -37,7 +37,7 @@ class SellerEnforcementServiceImpl implements SellerEnforcementService {
     private final Clock clock;
 
     SellerEnforcementServiceImpl(SellerEnforcementRepository standings, SellerHealthRepository health,
-                                 SellerAccountClient seller, PerformancePush push, PermissionChecker permissions,
+                                 SellerEnforcementClient seller, PerformancePush push, PermissionChecker permissions,
                                  DomainEventPublisher events, AuditTrail audit, TrustOpsSettings settings,
                                  Clock clock) {
         this.standings = standings;
@@ -102,18 +102,18 @@ class SellerEnforcementServiceImpl implements SellerEnforcementService {
     /** Applies the upstream steps still pending; a failing step stays pending and is retried on the next call. */
     private SellerEnforcement applySteps(SellerEnforcement e, Instant now) {
         SellerEnforcement out = e;
-        if (out.payoutStepPending()) {
+        if (out.sellerStepPending()) {
             boolean hold = out.suspended();
             try {
                 if (hold) {
-                    seller.holdPayouts(out.orgId(), "Suspended by trust & safety: " + out.note());
+                    seller.suspend(out.orgId(), out.reason(), out.note());
                 } else {
-                    seller.releasePayouts(out.orgId(), "Reinstated by trust & safety: " + out.note());
+                    seller.reinstate(out.orgId(), out.note());
                 }
-                out = out.withPayoutsHeld(hold);
+                out = out.withSellerSuspended(hold);
             } catch (UpstreamException ex) {
-                LOG.warn("Payout {} for {} failed ({}): {}", hold ? "hold" : "release", out.orgId(), ex.status(),
-                        ex.getMessage());
+                LOG.warn("Seller {} of {} failed ({}): {}", hold ? "suspension" : "reinstatement", out.orgId(),
+                        ex.status(), ex.getMessage());
             }
         }
         if (out.buyBoxStepPending()) {
@@ -137,9 +137,9 @@ class SellerEnforcementServiceImpl implements SellerEnforcementService {
         m.put("reason", e.reason() == null ? null : e.reason().name());
         m.put("note", e.note());
         m.put("actorId", e.actorId());
-        m.put("payoutsHeld", e.payoutsHeld());
+        m.put("payoutsHeld", e.sellerSuspended());
         m.put("buyBoxRestricted", e.buyBoxRestricted());
-        m.put("listingsHidden", false);
+        m.put("listingsHidden", e.sellerSuspended());
         m.put("changedAt", e.changedAt().toString());
         return m;
     }

@@ -3,12 +3,17 @@ package com.afrotransact.trustops.adapter.out.persistence;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.platform.web.error.ConflictException;
+import com.afrotransact.trustops.domain.ListingFlagSource;
+import com.afrotransact.trustops.domain.ListingReport;
 import com.afrotransact.trustops.domain.ModerationItem;
+import com.afrotransact.trustops.domain.ModerationItemType;
 import com.afrotransact.trustops.domain.ModerationPriority;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.domain.ModerationStatus;
@@ -38,10 +43,13 @@ class JdbcModerationRepository implements ModerationRepository {
         ProductSubmission p = i.product();
         jdbc.sql("""
                 insert into moderation_item (id, product_id, atin, seller_org_id, owner_kind, title, product_type_code,
-                    status, priority, triage_status, triage, enqueued_at, sla_started_at, due_at, version)
+                    status, priority, triage_status, triage, enqueued_at, sla_started_at, due_at, item_type, flag_id,
+                    report_source, report_reason, report_details, reporter_id, report_risk, report_count, version)
                 values (:id, :productId, :atin, :org, :ownerKind, :title, :type, :status, :priority, :triageStatus,
-                    cast(:triage as jsonb), :enqueuedAt, :slaStart, :dueAt, 0)
+                    cast(:triage as jsonb), :enqueuedAt, :slaStart, :dueAt, :itemType, :flagId, :reportSource,
+                    :reportReason, :reportDetails, :reporterId, :reportRisk, :reportCount, 0)
                 """)
+                .params(reportParams(i))
                 .param("id", i.id())
                 .param("productId", p.productId())
                 .param("atin", p.atin())
@@ -67,9 +75,11 @@ class JdbcModerationRepository implements ModerationRepository {
                     triage = cast(:triage as jsonb), sla_started_at = :slaStart, due_at = :dueAt, assignee = :assignee,
                     assigned_at = :assignedAt, escalated = :escalated, escalation_reason = :escReason,
                     escalated_at = :escAt, decided_by = :decidedBy, decided_at = :decidedAt,
-                    reason_code = :reasonCode, decision_note = :note, version = version + 1
+                    reason_code = :reasonCode, decision_note = :note, report_count = :reportCount,
+                    version = version + 1
                 where id = :id and version = :version
                 """)
+                .param("reportCount", i.report() == null ? 0 : i.report().reports())
                 .param("status", i.status().name())
                 .param("priority", i.priority().name())
                 .param("triageStatus", i.triageStatus().name())
@@ -106,9 +116,11 @@ class JdbcModerationRepository implements ModerationRepository {
     }
 
     @Override
-    public Page<ModerationItem> search(ModerationStatus status, String assignee, int page, int size) {
+    public Page<ModerationItem> search(ModerationStatus status, String assignee, ModerationItemType type, int page,
+                                       int size) {
         String where = (status == null ? " where status in " + OPEN : " where status = :status")
-                + (assignee == null ? "" : " and assignee = :assignee");
+                + (assignee == null ? "" : " and assignee = :assignee")
+                + (type == null ? "" : " and item_type = :itemType");
         JdbcClient.StatementSpec count = jdbc.sql("select count(*) from moderation_item" + where);
         JdbcClient.StatementSpec list = jdbc.sql("select * from moderation_item" + where
                 + " order by due_at, enqueued_at limit :limit offset :offset")
@@ -121,6 +133,10 @@ class JdbcModerationRepository implements ModerationRepository {
             count = count.param("assignee", assignee);
             list = list.param("assignee", assignee);
         }
+        if (type != null) {
+            count = count.param("itemType", type.name());
+            list = list.param("itemType", type.name());
+        }
         return new Page<>(list.query(this::map).list(), count.query(Long.class).single(), page, size);
     }
 
@@ -131,12 +147,39 @@ class JdbcModerationRepository implements ModerationRepository {
                 .param("now", Sql.ts(now)).param("limit", limit).query(this::map).list();
     }
 
+    private static Map<String, Object> reportParams(ModerationItem i) {
+        ListingReport r = i.report();
+        Map<String, Object> p = new HashMap<>();
+        p.put("itemType", i.type().name());
+        p.put("flagId", r == null ? null : r.flagId());
+        p.put("reportSource", r == null ? null : r.source().name());
+        p.put("reportReason", r == null ? null : r.reasonCode().name());
+        p.put("reportDetails", r == null ? null : r.details());
+        p.put("reporterId", r == null ? null : r.reporterId());
+        p.put("reportRisk", r == null ? null : r.riskLevel());
+        p.put("reportCount", r == null ? 0 : r.reports());
+        return p;
+    }
+
+    private static ListingReport report(ResultSet rs) throws SQLException {
+        String source = rs.getString("report_source");
+        if (source == null) {
+            return null;
+        }
+        String reason = rs.getString("report_reason");
+        return new ListingReport(rs.getObject("flag_id", UUID.class), ListingFlagSource.valueOf(source),
+                reason == null ? ModerationReasonCode.OTHER : ModerationReasonCode.valueOf(reason),
+                rs.getString("report_details"), rs.getString("reporter_id"), rs.getString("report_risk"),
+                rs.getInt("report_count"));
+    }
+
     private ModerationItem map(ResultSet rs, int row) throws SQLException {
         String reason = rs.getString("reason_code");
         return new ModerationItem(rs.getObject("id", UUID.class),
                 new ProductSubmission(rs.getObject("product_id", UUID.class), rs.getString("atin"),
                         rs.getString("seller_org_id"), rs.getString("owner_kind"), rs.getString("title"),
                         rs.getString("product_type_code")),
+                ModerationItemType.valueOf(rs.getString("item_type")), report(rs),
                 ModerationStatus.valueOf(rs.getString("status")), ModerationPriority.valueOf(rs.getString("priority")),
                 TriageStatus.valueOf(rs.getString("triage_status")), json.triage(rs.getString("triage")),
                 Sql.instant(rs, "enqueued_at"), new Sla(Sql.instant(rs, "sla_started_at"), Sql.instant(rs, "due_at")),

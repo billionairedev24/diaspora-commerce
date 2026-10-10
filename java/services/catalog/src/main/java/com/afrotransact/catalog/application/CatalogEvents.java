@@ -15,6 +15,12 @@ public final class CatalogEvents {
     public static final String PRODUCT_HIDDEN = "catalog.product.hidden";
     /** The owner's listings were restored (payload sellerHidden=false, status unchanged). */
     public static final String PRODUCT_RESTORED = "catalog.product.restored";
+    /** A live listing was reported by a shopper, flagged by staff or flagged automatically (trust-ops queues it). */
+    public static final String PRODUCT_FLAGGED = "catalog.product.flagged";
+    /** Trust and Safety took a live listing down (status TAKEN_DOWN, reasonCode set). */
+    public static final String PRODUCT_TAKEN_DOWN = "catalog.product.taken_down";
+    /** A takedown was reversed; status is the listing's status before the takedown (LIVE or PAUSED). */
+    public static final String PRODUCT_REINSTATED = "catalog.product.reinstated";
     public static final String CATEGORY_REQUESTED = "catalog.category-request.created";
     public static final String CATEGORY_APPROVED = "catalog.category-request.approved";
     public static final String CATEGORY_REJECTED = "catalog.category-request.rejected";

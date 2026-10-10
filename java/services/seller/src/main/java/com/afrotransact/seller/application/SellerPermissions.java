@@ -13,6 +13,11 @@ public final class SellerPermissions {
     public static final String COMPLIANCE_REMIND = "compliance:remind";
     /** Pause and release payout holds (Trust & Safety). */
     public static final String COMPLIANCE_HOLD = "compliance:hold";
+    /**
+     * Suspend and reinstate organisations (Trust &amp; Safety staff and the {@code trust-ops-service} client); also
+     * reads any organisation's Account health.
+     */
+    public static final String SELLERS_ENFORCE = "sellers:enforce";
     /** Staff access to any organisation's plan, payment methods and invoices. */
     public static final String BILLING = "seller:billing";
 

@@ -8,5 +8,7 @@ public enum ProductStatus {
     PENDING_CATEGORY_APPROVAL,
     LIVE,
     REJECTED,
-    PAUSED
+    PAUSED,
+    /** A live (or paused) listing removed by Trust and Safety; hidden publicly until staff restore it. */
+    TAKEN_DOWN
 }

@@ -1,8 +1,12 @@
 package com.afrotransact.catalog.application;
 
-/** Barcode checks used by the product builder while the seller types. */
+/** Barcode checks used by the product builder while the seller types, and GTIN lookups by service clients. */
 public interface IdentifierService {
 
+    /**
+     * Validates a GTIN and finds the product page that uses it. Needs {@code catalog:read} (service clients such as
+     * offers-service, any principal type) or {@code catalog:write} (sellers building a product).
+     */
     GtinCheck check(String raw, boolean isbnRequired);
 
     /**

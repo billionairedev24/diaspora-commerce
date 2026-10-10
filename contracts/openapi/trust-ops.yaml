@@ -497,7 +497,8 @@ paths:
     get:
       tags:
       - Listing moderation
-      summary: 'Moderation queue, soonest due first (default: open items)'
+      summary: 'Moderation queue, soonest due first (default: open items of both types)'
+      description: 'type=NEW_LISTING: submissions awaiting review; type=LIVE_LISTING: reported or flagged live listings (catalog.product.flagged).'
       operationId: queue_2
       parameters:
       - name: status
@@ -522,6 +523,14 @@ paths:
         schema:
           type: boolean
           default: false
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - NEW_LISTING
+          - LIVE_LISTING
       - name: page
         in: query
         required: false
@@ -565,7 +574,9 @@ paths:
     post:
       tags:
       - Listing moderation
-      summary: 'Allow: approves the product in catalog, then closes the item (audited)'
+      summary: Allow, then close the item (audited)
+      description: 'NEW_LISTING: approves the product in catalog. LIVE_LISTING: keeps the listing live and dismisses the reports
+        (no catalog call).'
       operationId: approve
       parameters:
       - name: id
@@ -641,7 +652,9 @@ paths:
     post:
       tags:
       - Listing moderation
-      summary: 'Remove: rejects the product in catalog with the reason code, then closes the item (audited)'
+      summary: Remove with a reason code, then close the item (audited)
+      description: 'NEW_LISTING: rejects the product in catalog. LIVE_LISTING: takes the live listing down in catalog (POST
+        /v1/products/{id}/takedown). If catalog refuses, the item stays open (409).'
       operationId: reject
       parameters:
       - name: id
@@ -736,7 +749,7 @@ paths:
     post:
       tags:
       - Seller health & enforcement
-      summary: 'Reinstate: release the payout hold and the buy-box restriction; audited (sellers:enforce)'
+      summary: 'Reinstate: lift the suspension hold (compliance payout holds stay) and the buy-box restriction; audited (sellers:enforce)'
       operationId: reinstate
       parameters:
       - name: orgId
@@ -761,8 +774,8 @@ paths:
     post:
       tags:
       - Seller health & enforcement
-      summary: 'Suspend: hold payouts (seller-service) and restrict in the buy box (offers); audited. Calling again retries
-        steps that failed (sellers:enforce)'
+      summary: 'Suspend: seller-service suspension hold (payouts paused, listings hidden) and buy-box restriction (offers);
+        audited. Calling again retries steps that failed (sellers:enforce)'
       operationId: suspend
       parameters:
       - name: orgId
@@ -1066,7 +1079,7 @@ components:
           format: date-time
     SuspendRequest:
       type: object
-      description: 'Suspend a seller: holds payouts and restricts it in the buy box'
+      description: 'Suspend a seller: holds payouts, hides its listings and restricts it in the buy box'
       properties:
         reason:
           type: string
@@ -1087,7 +1100,9 @@ components:
       - reason
     StandingResponse:
       type: object
-      description: Seller standing and which upstream effects are applied
+      description: Seller standing and which upstream effects are applied. payoutsHeld and listingsHidden report seller-service's
+        suspension hold only; a Stripe compliance hold may keep payouts paused after reinstatement (see seller-service GET
+        /v1/orgs/{orgId}/enforcement).
       properties:
         orgId:
           type: string
@@ -1115,13 +1130,16 @@ components:
           format: date-time
         payoutsHeld:
           type: boolean
+        listingsHidden:
+          type: boolean
         buyBoxRestricted:
           type: boolean
         stepsPending:
           type: boolean
     ReinstateRequest:
       type: object
-      description: 'Reinstate a seller: releases the payout hold and the buy-box restriction'
+      description: 'Reinstate a seller: lifts the suspension hold (unrelated compliance payout holds stay) and the buy-box
+        restriction'
       properties:
         note:
           type: string
@@ -1160,6 +1178,13 @@ components:
           type: string
         productTypeCode:
           type: string
+        type:
+          type: string
+          enum:
+          - NEW_LISTING
+          - LIVE_LISTING
+        report:
+          $ref: '#/components/schemas/ReportResponse'
         status:
           type: string
           enum:
@@ -1221,6 +1246,42 @@ components:
         version:
           type: integer
           format: int64
+    ReportResponse:
+      type: object
+      description: 'Why a live listing is queued: the first report or flag and how many arrived'
+      properties:
+        flagId:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - CUSTOMER_REPORT
+          - STAFF
+          - AUTOMATED
+        reasonCode:
+          type: string
+          enum:
+          - PROHIBITED_ITEM
+          - UNAPPROVED_HEALTH_CLAIM
+          - RESTRICTED_INGREDIENT
+          - COUNTERFEIT
+          - IMAGE_POLICY
+          - MISLEADING_CONTENT
+          - LABELLING
+          - SHIPPING_METHOD
+          - DUPLICATE_LISTING
+          - WRONG_CATEGORY
+          - OTHER
+        details:
+          type: string
+        reporterId:
+          type: string
+        riskLevel:
+          type: string
+        reports:
+          type: integer
+          format: int32
     TriageResponse:
       type: object
       description: AI triage hint (advisory; absent when AI is off or unavailable)
@@ -1237,7 +1298,8 @@ components:
           type: string
     RejectRequest:
       type: object
-      description: 'Remove the listing: reason code required, note required for OTHER'
+      description: 'Remove the listing (reject a submission, take a live listing down): reason code required, note required
+        for OTHER'
       properties:
         reasonCode:
           type: string
@@ -1279,7 +1341,7 @@ components:
           minLength: 0
     ApproveRequest:
       type: object
-      description: Allow the listing (optional note)
+      description: Allow the listing (optional note); for a live listing this dismisses the reports
       properties:
         note:
           type: string

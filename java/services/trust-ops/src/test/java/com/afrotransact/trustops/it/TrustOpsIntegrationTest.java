@@ -93,7 +93,7 @@ public abstract class TrustOpsIntegrationTest {
         UPSTREAM.stubFor(WireMock.post(WireMock.urlEqualTo("/oauth2/token"))
                 .willReturn(WireMock.okJson("{\"access_token\":\"tok-trust-ops\",\"token_type\":\"Bearer\","
                         + "\"expires_in\":300}")));
-        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/products/[^/]+/(approve|reject)"))
+        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/products/[^/]+/(approve|reject|takedown)"))
                 .willReturn(WireMock.okJson("{\"id\":\"{{request.pathSegments.[2]}}\"}")));
         UPSTREAM.stubFor(WireMock.post(WireMock.urlEqualTo("/v1/ai/triage"))
                 .willReturn(WireMock.okJson("""
@@ -105,8 +105,8 @@ public abstract class TrustOpsIntegrationTest {
                 .willReturn(WireMock.okJson("{\"id\":\"{{randomValue type='UUID'}}\",\"amountMinor\":"
                         + "{{jsonPath request.body '$.lines[0].itemsMinor'}},\"status\":\"SUCCEEDED\","
                         + "\"replayed\":false}")));
-        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/compliance/accounts/[^/]+/payouts/(pause|resume)"))
-                .willReturn(WireMock.okJson("{}")));
+        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/orgs/[^/]+/(suspend|reinstate)"))
+                .willReturn(WireMock.okJson("{\"orgId\":\"{{request.pathSegments.[2]}}\"}")));
         UPSTREAM.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/sellers/[^/]+/standing"))
                 .willReturn(WireMock.okJson("{\"rating\":4.6}")));
         UPSTREAM.stubFor(WireMock.put(WireMock.urlPathMatching("/v1/sellers/[^/]+/performance"))

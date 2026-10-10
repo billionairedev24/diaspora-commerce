@@ -35,14 +35,17 @@ final class SellerDtos {
         }
     }
 
-    @Schema(description = "Seller standing and which upstream effects are applied")
+    @Schema(description = "Seller standing and which upstream effects are applied. payoutsHeld and listingsHidden "
+            + "report seller-service's suspension hold only; a Stripe compliance hold may keep payouts paused after "
+            + "reinstatement (see seller-service GET /v1/orgs/{orgId}/enforcement).")
     record StandingResponse(String orgId, EnforcementStatus status, SuspensionReason reason, String note,
-                            String actorId, Instant changedAt, boolean payoutsHeld, boolean buyBoxRestricted,
-                            boolean stepsPending) {
+                            String actorId, Instant changedAt, boolean payoutsHeld, boolean listingsHidden,
+                            boolean buyBoxRestricted, boolean stepsPending) {
 
         static StandingResponse of(SellerEnforcement e) {
             return new StandingResponse(e.orgId(), e.status(), e.reason(), e.note(), e.actorId(), e.changedAt(),
-                    e.payoutsHeld(), e.buyBoxRestricted(), e.payoutStepPending() || e.buyBoxStepPending());
+                    e.sellerSuspended(), e.sellerSuspended(), e.buyBoxRestricted(),
+                    e.sellerStepPending() || e.buyBoxStepPending());
         }
     }
 
@@ -55,11 +58,12 @@ final class SellerDtos {
         }
     }
 
-    @Schema(description = "Suspend a seller: holds payouts and restricts it in the buy box")
+    @Schema(description = "Suspend a seller: holds payouts, hides its listings and restricts it in the buy box")
     record SuspendRequest(@NotNull SuspensionReason reason, @NotBlank @Size(max = 1000) String note) {
     }
 
-    @Schema(description = "Reinstate a seller: releases the payout hold and the buy-box restriction")
+    @Schema(description = "Reinstate a seller: lifts the suspension hold (unrelated compliance payout holds stay) and "
+            + "the buy-box restriction")
     record ReinstateRequest(@NotBlank @Size(max = 1000) String note) {
     }
 }

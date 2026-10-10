@@ -5,12 +5,17 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * A seller's standing and how far the upstream effects have been applied. Suspension holds payouts (seller-service)
- * and restricts the seller in the buy box (offers-service); reinstatement releases both. The step flags record what
- * upstream has confirmed, so a retried suspend / reinstate only repeats the steps still pending.
+ * A seller's standing and how far the upstream effects have been applied. Suspension places seller-service's
+ * suspension hold (payouts paused, listings hidden in catalog, offers, bookings and search) and restricts the seller in
+ * the buy box (offers-service); reinstatement lifts both. The step flags record what upstream has confirmed, so a
+ * retried suspend / reinstate only repeats the steps still pending.
+ *
+ * @param sellerSuspended seller-service holds its suspension hold for the organisation (payouts paused and listings
+ *                        hidden by it; Stripe compliance holds are separate and may keep payouts paused after
+ *                        reinstatement)
  */
 public record SellerEnforcement(String orgId, EnforcementStatus status, SuspensionReason reason, String note,
-                                String actorId, Instant changedAt, boolean payoutsHeld, boolean buyBoxRestricted,
+                                String actorId, Instant changedAt, boolean sellerSuspended, boolean buyBoxRestricted,
                                 long version) {
 
     public SellerEnforcement {
@@ -42,7 +47,7 @@ public record SellerEnforcement(String orgId, EnforcementStatus status, Suspensi
                     Map.of("reason", "Required"));
         }
         return new SellerEnforcement(orgId, EnforcementStatus.SUSPENDED, why, Texts.required(text, "note", "Note",
-                1000), by, now, payoutsHeld, buyBoxRestricted, version);
+                1000), by, now, sellerSuspended, buyBoxRestricted, version);
     }
 
     public SellerEnforcement reinstate(String text, String by, Instant now) {
@@ -50,24 +55,24 @@ public record SellerEnforcement(String orgId, EnforcementStatus status, Suspensi
             return this;
         }
         return new SellerEnforcement(orgId, EnforcementStatus.ACTIVE, null, Texts.required(text, "note", "Note",
-                1000), by, now, payoutsHeld, buyBoxRestricted, version);
+                1000), by, now, sellerSuspended, buyBoxRestricted, version);
     }
 
-    /** Payouts should be held exactly while suspended. */
-    public boolean payoutStepPending() {
-        return payoutsHeld != suspended();
+    /** seller-service should hold its suspension hold exactly while suspended. */
+    public boolean sellerStepPending() {
+        return sellerSuspended != suspended();
     }
 
     public boolean buyBoxStepPending() {
         return buyBoxRestricted != suspended();
     }
 
-    public SellerEnforcement withPayoutsHeld(boolean held) {
+    public SellerEnforcement withSellerSuspended(boolean held) {
         return new SellerEnforcement(orgId, status, reason, note, actorId, changedAt, held, buyBoxRestricted, version);
     }
 
     public SellerEnforcement withBuyBoxRestricted(boolean restricted) {
-        return new SellerEnforcement(orgId, status, reason, note, actorId, changedAt, payoutsHeld, restricted,
+        return new SellerEnforcement(orgId, status, reason, note, actorId, changedAt, sellerSuspended, restricted,
                 version);
     }
 }

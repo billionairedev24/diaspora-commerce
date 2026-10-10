@@ -61,6 +61,12 @@ class JdbcOrganisationRepository implements OrganisationRepository {
     }
 
     @Override
+    public Optional<Organisation> lock(String id) {
+        return jdbc.sql("select * from organisation where id = :id for update").param("id", id)
+                .query(JdbcOrganisationRepository::map).optional();
+    }
+
+    @Override
     public void addMember(OrgMember m) {
         jdbc.sql("""
                 insert into org_member (org_id, user_id, role_key, created_at) values (:org, :user, :role, :at)

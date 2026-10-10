@@ -16,6 +16,9 @@ public interface OrganisationRepository {
 
     Optional<Organisation> findById(String id);
 
+    /** Reads and row-locks the organisation for the rest of the transaction (serialises suspend / reinstate). */
+    Optional<Organisation> lock(String id);
+
     void addMember(OrgMember member);
 
     Optional<OrgMember> findMember(String orgId, String userId);

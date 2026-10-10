@@ -66,6 +66,43 @@ class ListenersIT extends TrustOpsIntegrationTest {
     }
 
     @Test
+    void flaggedLiveListingIsQueuedAsLiveListingAndTakedownInCatalogClosesIt() {
+        UUID product = UUID.randomUUID();
+        String org = orgId();
+        UUID eventId = UUID.randomUUID();
+        String flagged = """
+                {"flagId":"%s","productId":"%s","atin":"AT00FL0001","ownerKind":"SELLER","ownerOrgId":"%s",
+                 "status":"LIVE","title":"Kente stole handwoven","productTypeCode":"scarves","sellerHidden":false,
+                 "source":"CUSTOMER_REPORT","reasonCode":"COUNTERFEIT","details":"Printed, not woven",
+                 "reporterId":"cust-9","riskLevel":null,"occurredAt":"2026-10-09T12:00:00Z"}
+                """.formatted(UUID.randomUUID(), product, org);
+        products.onMessage(rec("at.product.events", product.toString(), "catalog.product.flagged", eventId, flagged));
+        products.onMessage(rec("at.product.events", product.toString(), "catalog.product.flagged", eventId, flagged));
+        assertThat(jdbc.sql("select item_type || '|' || status || '|' || report_source || '|' || report_reason || '|' "
+                        + "|| report_count from moderation_item where product_id = :p").param("p", product)
+                .query(String.class).list()).containsExactly("LIVE_LISTING|PENDING|CUSTOMER_REPORT|COUNTERFEIT|1");
+
+        // An unknown reason code still queues (as OTHER); a flag without a source is skipped.
+        UUID other = UUID.randomUUID();
+        products.onMessage(rec("at.product.events", other.toString(), "catalog.product.flagged", UUID.randomUUID(),
+                "{\"productId\":\"" + other + "\",\"ownerOrgId\":\"" + org + "\",\"status\":\"LIVE\","
+                        + "\"title\":\"x\",\"source\":\"AUTOMATED\",\"reasonCode\":\"NEW_CODE\"}"));
+        assertThat(jdbc.sql("select report_reason from moderation_item where product_id = :p").param("p", other)
+                .query(String.class).single()).isEqualTo("OTHER");
+        UUID noSource = UUID.randomUUID();
+        products.onMessage(rec("at.product.events", noSource.toString(), "catalog.product.flagged", UUID.randomUUID(),
+                "{\"productId\":\"" + noSource + "\",\"ownerOrgId\":\"" + org + "\",\"status\":\"LIVE\"}"));
+        assertThat(jdbc.sql("select count(*) from moderation_item where product_id = :p").param("p", noSource)
+                .query(Long.class).single()).isZero();
+
+        products.onMessage(rec("at.product.events", product.toString(), "catalog.product.taken_down",
+                UUID.randomUUID(), "{\"productId\":\"" + product + "\",\"ownerOrgId\":\"" + org
+                        + "\",\"status\":\"TAKEN_DOWN\",\"reasonCode\":\"COUNTERFEIT\"}"));
+        assertThat(jdbc.sql("select status from moderation_item where product_id = :p").param("p", product)
+                .query(String.class).single()).isEqualTo("CLOSED");
+    }
+
+    @Test
     void auditListenerCopiesMcpInvocationsVerbatim() {
         UUID eventId = UUID.randomUUID();
         String json = "{\"eventId\":\"" + eventId + "\",\"tool\":\"issue_refund\",\"toolset\":\"staff\","

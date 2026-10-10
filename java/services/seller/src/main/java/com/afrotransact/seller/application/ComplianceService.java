@@ -12,7 +12,10 @@ public interface ComplianceService {
     /** Connect webhook handler (inside the webhook transaction). Returns the outcome recorded in the inbox. */
     String handle(StripeEvent event);
 
-    /** Owner / finance of the organisation. */
+    /**
+     * Owner / finance of the organisation; staff or service clients (SERVICE principal) with compliance:remind,
+     * compliance:hold or sellers:enforce.
+     */
     AccountHealthView accountHealth(String orgId);
 
     /** Validates an answer, uploads documents to Stripe Files, forwards to Accounts / Persons update. */

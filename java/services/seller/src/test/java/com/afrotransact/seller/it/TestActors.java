@@ -51,6 +51,11 @@ class TestActors {
                 Set.of(permissions));
     }
 
+    /** A client-credentials service token (principal type SERVICE), e.g. trust-ops-service. */
+    static Actor service(String clientId, String... permissions) {
+        return new Actor(clientId, PrincipalType.SERVICE, Optional.empty(), Set.of(), Set.of(permissions));
+    }
+
     @Bean
     ActorResolver switchableActorResolver() {
         return CURRENT::get;

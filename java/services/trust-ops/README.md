@@ -2,7 +2,8 @@
 
 Trust & safety for staff: the listing moderation queue, disputes and A-to-z claims, the immutable audit log, seller
 health with suspend / reinstate, and the support-case queue for Lola hand-offs.
-Spring Boot 4.1 · Java 25 · PostgreSQL `trustops` · local port **8110**. Epic E18 (stories S117–S120, plus S223);
+Spring Boot 4.1 · Java 25 · PostgreSQL `trustops` · local port **8110**. Epic E18 (stories S117–S120, plus S223 and
+S228);
 design source `design/AfroTransact Backoffice.dc.html` (Listing moderation, Disputes & returns, Audit log, Sellers &
 providers) and `design/backoffice-data.js`.
 
@@ -17,6 +18,14 @@ providers) and `design/backoffice-data.js`.
   **escalation path** is manual (`/escalate`) or automatic: the SLA sweep escalates pending items past their due time.
   If catalog refuses (409/422/404) the item stays open (`409 trustops.catalog-refused`); if catalog decides a product
   directly, its `catalog.product.approved|rejected` closes the item (`CLOSED`). Every decision is audited.
+- **Flagged live listings (S228).** `catalog.product.flagged` (a shopper's report, a staff flag or an automated flag
+  on a `LIVE` listing) queues a `LIVE_LISTING` item (submissions are `NEW_LISTING`; filter with `?type=`). The item
+  keeps the first report (source, reason code, details, reporter, risk level) and counts further reports for the same
+  product while it is open; a `HIGH`-risk automated flag or AI hint raises the priority (4 h SLA). **Allow** keeps the
+  listing live and dismisses the reports (no catalog call, audited as `trustops.listing.kept`); **remove** takes it
+  down in catalog (`POST /v1/products/{id}/takedown` with the reason code and note, audited as
+  `trustops.listing.taken_down`). If catalog refuses, the item stays open; a takedown made directly in catalog
+  (`catalog.product.taken_down`) closes it.
 - **Disputes and A-to-z claims (S118).** A customer opens a claim on an order or a shipment (one open claim per
   order + shipment) with **evidence = media asset ids**. The domain state machine (`ClaimStatus`):
 
@@ -44,10 +53,14 @@ providers) and `design/backoffice-data.js`.
   rate** (cancelled by `SELLER` or `SYSTEM`) and **order defect rate** (claims / shipments), with targets 4 %, 2.5 % and
   1 % (`GOOD`, `AT_RISK`, `UNKNOWN`). A daily job (03:15 UTC) computes every active seller and pushes
   `onTimeRate`, `defectRate` and `restricted` to offers `PUT /v1/sellers/{orgId}/performance` (the current rating is
-  read from `/standing` and sent back unchanged). **Suspension** holds payouts (seller-service compliance hold) and
-  restricts the seller in the buy box (`restricted=true`); **reinstatement** releases both. Each upstream step is
-  tracked (`payoutsHeld`, `buyBoxRestricted`); a failed step stays pending and calling suspend / reinstate again
-  retries it. Suspensions are audited and published (`trustops.seller.suspended|reinstated`).
+  read from `/standing` and sent back unchanged). **Suspension** places seller-service's suspension hold
+  (`POST /v1/orgs/{orgId}/suspend` with the reason code and note: payouts paused, listings hidden in catalog, offers,
+  bookings and search through `seller.listings.hidden`, organisation `SUSPENDED`) and restricts the seller in the buy
+  box (`restricted=true`); **reinstatement** lifts both (`POST /v1/orgs/{orgId}/reinstate`). seller-service keeps
+  the suspension separate from Stripe compliance holds, so reinstating never releases a compliance payout hold placed
+  for another reason. Each upstream step is tracked (`payoutsHeld` / `listingsHidden` for the seller hold,
+  `buyBoxRestricted`); a failed step stays pending and calling suspend / reinstate again retries it (both seller
+  endpoints are idempotent). Suspensions are audited and published (`trustops.seller.suspended|reinstated`).
 - **Support cases.** Every Lola hand-off (`ai.handoff.requested`) opens one support case (deduplicated by
   `handoffId`) with a 4-hour first-response SLA; agents assign and resolve them.
 
@@ -55,7 +68,7 @@ providers) and `design/backoffice-data.js`.
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/v1/moderation/items?status&assignee&mine`, `/v1/moderation/items/{id}`, `/v1/moderation/reason-codes` | `catalog:moderate` |
+| GET | `/v1/moderation/items?status&assignee&mine&type`, `/v1/moderation/items/{id}`, `/v1/moderation/reason-codes` | `catalog:moderate` |
 | POST | `/v1/moderation/items/{id}/assign`, `/escalate`, `/approve`, `/reject`, `/triage` | `catalog:moderate` |
 | POST | `/v1/claims` | customer (own); staff with `disputes:manage` on behalf (`customerId`) |
 | GET | `/v1/claims/mine` | customer |
@@ -86,9 +99,10 @@ Existing identity keys reused: `catalog:moderate`, `disputes:manage`, `support:r
 suggested for `platform.super_admin`, `platform.trust_safety` and `platform.operations_manager`.
 
 Service-to-service calls use the client-credentials client **`trust-ops-service`** (secret `TRUSTOPS_CLIENT_SECRET`)
-with scopes `catalog:moderate` (catalog approve/reject), `payments:service` (refunds), `compliance:hold` (payout
-hold/release and the accounts list), `offers:write` (seller performance) and `ai:triage` (triage hints). The token
-must carry principal type `SERVICE` (payments and offers check it).
+with scopes `catalog:moderate` (catalog approve / reject / takedown), `payments:service` (refunds),
+`sellers:enforce` (seller-service suspend / reinstate), `offers:write` (seller performance) and `ai:triage` (triage
+hints). The token must carry principal type `SERVICE` (payments and offers check it). `compliance:hold` is no longer
+needed.
 
 ## Events
 
@@ -101,7 +115,7 @@ Consumed (each listener has its own consumer group and inbox consumer, so they n
 
 | Group suffix | Topic | Events |
 |---|---|---|
-| `-moderation` | `at.product.events` | `catalog.product.created` (IN_REVIEW), `catalog.product.approved\|rejected` |
+| `-moderation` | `at.product.events` | `catalog.product.created` (IN_REVIEW), `catalog.product.flagged`, `catalog.product.approved\|rejected\|taken_down` |
 | `-seller-health` | `at.order.events` | `orders.order.placed`, `orders.shipment.delivered\|cancelled\|status_changed` |
 | `-support` | `at.ai-handoff.events` | `ai.handoff.requested` |
 | `-audit` | `TRUSTOPS_AUDIT_TOPICS` (default identity, seller-application, seller-compliance, payout, mcp-tool, order) | `TRUSTOPS_AUDIT_EVENT_TYPES`: role / permission grants and revokes, user disable / enable, seller application decisions, payout holds and listing hides, payout lifecycle, `mcp.tool.invoked`, and shipment status changes / cancellations made by `PLATFORM_ADMIN` or `FULFILMENT_OPS` |
@@ -128,14 +142,11 @@ changes even for the owner.
 
 ## Known upstream gaps
 
-- **seller.yaml has no suspend / reinstate endpoint.** Suspension uses the Stripe-compliance payout hold
-  (`/v1/compliance/accounts/{accountId}/payouts/pause|resume`, found via `GET /v1/compliance/accounts` because
-  `/v1/orgs/{orgId}/account-health` is not open to service tokens). A reinstatement therefore also releases a
-  compliance hold placed for other reasons. Listings are **not hidden** on suspension: catalog only hides them on
-  `seller.listings.hidden`, which seller emits for Stripe states only. Needed: `POST /v1/orgs/{orgId}/suspend|reinstate`
-  in seller-service emitting `seller.listings.hidden|restored` (or catalog consuming `trustops.seller.suspended`).
-- **catalog** only moderates products `IN_REVIEW`; there is no flagged-listing event and no endpoint to take down a
-  `LIVE` listing, so AI flags on live listings cannot be queued or removed yet.
+- **Taken-down listings in search and the buy box.** catalog hides a taken-down listing from its public API, but the
+  indexer and offers-service do not consume `catalog.product.taken_down|reinstated` yet, so the search document and
+  offers stay until they do (seller suspension is not affected: it goes through `seller.listings.hidden`).
+- **Automated flags.** Nothing calls catalog's `POST /v1/products/{id}/flags` automatically yet (for example an AI
+  sweep of live listings); staff flags and shopper reports work.
 - **payments** refunds need the payment id and line ids; there is no "refund by order" endpoint, so staff supply them.
   Claims don't verify order ownership (no orders lookup for services yet).
 - **notifications** consumes `notification.requested` only on identity, orders, seller and bookings topics; it must
@@ -152,6 +163,8 @@ cd java && ./mvnw -B -f services/trust-ops/pom.xml verify    # checkstyle, unit,
 ```
 
 Integration tests run against `postgis/postgis:17-3.5` with one WireMock standing in for identity's token endpoint,
-catalog, payments, seller, offers and ai-gateway; Kafka listeners and jobs are called directly.
+catalog, payments, seller, offers and ai-gateway; Kafka listeners and jobs are called directly. Migrations:
+`V1__trustops_schema.sql`, `V2__live_listings_and_seller_suspension.sql` (moderation item type and report fields;
+`seller_enforcement.payouts_held` renamed `seller_suspended`).
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

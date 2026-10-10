@@ -23,6 +23,9 @@ tags:
 - name: Stripe compliance
   description: Account health for sellers (owner / finance) and the staff compliance console (compliance:remind, compliance:hold).
     Stripe is the source of truth; answers are forwarded to Stripe and verified there.
+- name: Ship-from addresses
+  description: Where a seller ships its own orders from (label purchase, rates). Members read; owner, admin and fulfilment
+    members change them.
 - name: Onboarding
   description: 'The applicant''s resumable application: start (prefilled from the signed-in account), autosave each step,
     Stripe verification, submit. No back-office access until final approval.'
@@ -30,6 +33,9 @@ tags:
   description: 'Two-step staff review. Step 1 (applications:review): approve → AWAITING_FINAL_APPROVAL, flag → FLAGGED, request
     info → INFO_REQUESTED. Step 2 (applications:approve, a different person): final approve → APPROVED (seller.org.approved),
     send back → PENDING_REVIEW, reject.'
+- name: Enforcement
+  description: 'Trust and Safety suspension of an organisation (sellers:enforce; staff or the trust-ops-service client). Separate
+    from Stripe compliance payout holds: reinstating releases only the suspension hold.'
 - name: Plans & billing
   description: Plan catalogue (public) and each organisation's Stripe Billing subscription. Owner and finance can view; only
     the owner changes billing.
@@ -750,6 +756,210 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Billing'
+  /v1/orgs/{orgId}/enforcement:
+    get:
+      tags:
+      - Enforcement
+      summary: Suspension and compliance holds of an organisation — sellers:enforce, compliance:hold or compliance:remind
+      operationId: orgEnforcement
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgEnforcement'
+  /v1/orgs/{orgId}/reinstate:
+    post:
+      tags:
+      - Enforcement
+      summary: Reinstate a suspended organisation — sellers:enforce
+      description: Removes only the suspension hold and restores the previous status (seller.org.updated). seller.payouts.resumed
+        / seller.listings.restored (reason REINSTATED) are published only when no Stripe compliance hold still requires the
+        payout hold or hidden listings. Idempotent.
+      operationId: reinstateOrg
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReinstateOrgRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgEnforcement'
+  /v1/orgs/{orgId}/ship-from-addresses:
+    get:
+      tags:
+      - Ship-from addresses
+      summary: Ship-from addresses, default first
+      operationId: listShipFrom
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShipFromAddress'
+    post:
+      tags:
+      - Ship-from addresses
+      summary: Add a ship-from address (the first one becomes the default)
+      description: 422 seller.invalid-ship-from with fieldErrors; at most 20 per organisation.
+      operationId: createShipFrom
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShipFromAddressRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ShipFromAddress'
+  /v1/orgs/{orgId}/ship-from-addresses/{id}:
+    put:
+      tags:
+      - Ship-from addresses
+      summary: Change a ship-from address
+      description: 'Optimistic: send the version you edited; 409 seller.concurrent-update when it changed meanwhile.'
+      operationId: updateShipFrom
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ShipFromAddressRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ShipFromAddress'
+    delete:
+      tags:
+      - Ship-from addresses
+      summary: Delete an address; returns the remaining ones (a new default is chosen when needed)
+      operationId: deleteShipFrom
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShipFromAddress'
+  /v1/orgs/{orgId}/ship-from-addresses/{id}/default:
+    post:
+      tags:
+      - Ship-from addresses
+      summary: Make an address the default; returns every address
+      operationId: defaultShipFrom
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShipFromAddress'
+  /v1/orgs/{orgId}/suspend:
+    post:
+      tags:
+      - Enforcement
+      summary: Suspend an approved organisation — sellers:enforce
+      description: 'Adds a suspension hold: publishes seller.listings.hidden and seller.payouts.paused (reason SUSPENDED)
+        and seller.org.updated (status SUSPENDED). Idempotent: an organisation that is already suspended is returned unchanged.'
+      operationId: suspendOrg
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuspendOrgRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgEnforcement'
   /v1/plans:
     get:
       tags:
@@ -839,6 +1049,111 @@ paths:
                 $ref: '#/components/schemas/WebhookResult'
 components:
   schemas:
+    ShipFromAddressRequest:
+      type: object
+      description: A ship-from address; US addresses need a state code and ZIP
+      properties:
+        label:
+          type: string
+          example: Houston warehouse
+          maxLength: 60
+          minLength: 0
+        name:
+          type: string
+          example: Ade Okafor
+          maxLength: 120
+          minLength: 0
+        company:
+          type: string
+          maxLength: 120
+          minLength: 0
+        phone:
+          type: string
+          example: +1 713 555 0100
+          maxLength: 40
+          minLength: 0
+        line1:
+          type: string
+          example: 4521 Main St
+          maxLength: 120
+          minLength: 0
+        line2:
+          type: string
+          maxLength: 120
+          minLength: 0
+        city:
+          type: string
+          example: Houston
+          maxLength: 80
+          minLength: 0
+        state:
+          type: string
+          example: TX
+          maxLength: 40
+          minLength: 0
+        postalCode:
+          type: string
+          example: '77002'
+          maxLength: 12
+          minLength: 0
+        country:
+          type: string
+          default: US
+          example: US
+          maxLength: 2
+          minLength: 0
+        makeDefault:
+          type: boolean
+          description: Also make it the default
+        version:
+          type: integer
+          format: int64
+          description: Version being edited (updates); 409 when it changed
+      required:
+      - city
+      - line1
+      - name
+      - postalCode
+      - state
+    ShipFromAddress:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        label:
+          type: string
+        name:
+          type: string
+        company:
+          type: string
+        phone:
+          type: string
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+        isDefault:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     BusinessStep:
       type: object
       description: Step 'business'. Non-live countries return 422 seller.country-not-live.
@@ -1076,6 +1391,93 @@ components:
           type: boolean
         outcome:
           type: string
+    SuspendOrgRequest:
+      type: object
+      description: Reason code required; note required for OTHER
+      properties:
+        reasonCode:
+          type: string
+          enum:
+          - POOR_PERFORMANCE
+          - PROHIBITED_ITEMS
+          - COUNTERFEIT
+          - FRAUD_RISK
+          - POLICY_VIOLATION
+          - COMPLIANCE
+          - OTHER
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - reasonCode
+    OrgEnforcement:
+      type: object
+      description: Suspension hold next to the Stripe compliance holds. payoutsPaused and listingsHidden are the effective
+        state (any hold).
+      properties:
+        orgId:
+          type: string
+        status:
+          type: string
+        suspended:
+          type: boolean
+        suspension:
+          $ref: '#/components/schemas/OrgSuspension'
+        payoutsPaused:
+          type: boolean
+        listingsHidden:
+          type: boolean
+        accountId:
+          type: string
+        compliancePayoutHold:
+          type: boolean
+        complianceHoldReason:
+          type: string
+        complianceListingsHidden:
+          type: boolean
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgSuspension'
+    OrgSuspension:
+      type: object
+      properties:
+        id:
+          type: string
+        reasonCode:
+          type: string
+          enum:
+          - POOR_PERFORMANCE
+          - PROHIBITED_ITEMS
+          - COUNTERFEIT
+          - FRAUD_RISK
+          - POLICY_VIOLATION
+          - COMPLIANCE
+          - OTHER
+        note:
+          type: string
+        actorId:
+          type: string
+        previousStatus:
+          type: string
+        suspendedAt:
+          type: string
+          format: date-time
+        reinstatedAt:
+          type: string
+          format: date-time
+        reinstatedBy:
+          type: string
+        reinstateNote:
+          type: string
+    ReinstateOrgRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
     Billing:
       type: object
       properties:

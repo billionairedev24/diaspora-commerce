@@ -16,6 +16,14 @@ Spring Boot 4.1 · Java 25 · PostgreSQL · local port **8101**.
 - **Category requests**: sellers can request a missing category and build products against it right away; those
   products wait in `PENDING_CATEGORY_APPROVAL` and move to `IN_REVIEW` when staff approve the request.
 - **Moderation**: `IN_REVIEW → LIVE | REJECTED`, owners can pause/resume live listings.
+- **Live listing reports and takedowns (S228)**: signed-in shoppers report a live listing (one report per shopper
+  and listing), staff and service clients flag live or paused listings; each new report or flag is stored in
+  `product_flag` and published as `catalog.product.flagged`, which trust-ops queues for review. Trust and Safety
+  (`catalog:moderate`, e.g. the `trust-ops-service` client) takes a live or paused listing down with a reason code:
+  status `TAKEN_DOWN` (hidden from `/v1/public/**`, the owner cannot resume it, note `[CODE] Taken down: note`),
+  recorded in `product_takedown` and published as `catalog.product.taken_down` (with `reasonCode`). Restoring returns
+  the listing to its previous status (`LIVE` or `PAUSED`) and publishes `catalog.product.reinstated`. Both calls are
+  idempotent.
 
 Validation of a submission (`DefaultProductDraftPolicy`) returns every failing field at once
 (`fieldErrors` in the RFC 9457 problem): title 10–200 chars, required details, 1–10 JPG/PNG/WebP images ≤ 8 MB
@@ -33,21 +41,32 @@ suggested correction) or exemption, ISBN-13 for books, price > 0.
 | POST | `/v1/products/{id}/pause`, `/resume` | `catalog:write` (owner) |
 | POST/GET | `/v1/category-requests`, `/v1/category-requests/mine` | `catalog:write` |
 | GET/POST | `/v1/category-requests?status=`, `/{id}/approve`, `/{id}/reject` | `catalog:taxonomy` |
-| GET | `/v1/identifiers/gtin/{code}?isbn=` | `catalog:write` |
+| POST | `/v1/products/{id}/flags {reasonCode, details, riskLevel}` | `catalog:moderate` (staff = `STAFF`, principal type `SERVICE` = `AUTOMATED`) |
+| POST | `/v1/products/{id}/takedown {reasonCode, note}`, `/v1/products/{id}/restore {note}` | `catalog:moderate` |
+| POST | `/v1/public/products/{atin}/reports {reasonCode, details}` | any signed-in user (201 new, 200 repeated report) |
+| GET | `/v1/identifiers/gtin/{code}?isbn=` | `catalog:read` (service tokens such as offers-service, S224) or `catalog:write` |
 
 Contract: [`contracts/openapi/catalog.yaml`](../../../contracts/openapi/catalog.yaml).
 Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 
 ## Events (transactional outbox → `at.product.events`, `at.category-request.events`)
 
-`catalog.product.created|approved|rejected|paused|resumed|hidden|restored`,
+`catalog.product.created|approved|rejected|paused|resumed|hidden|restored|flagged|taken_down|reinstated`,
 `catalog.category-request.created|approved|rejected` —
 see [`contracts/asyncapi/fragments/catalog.yaml`](../../../contracts/asyncapi/fragments/catalog.yaml). Product payloads
 carry `sellerHidden` (true while the owner's listings are hidden).
 
 Consumed (group `catalog-service`, inbox-deduplicated): `seller.listings.hidden|restored` on
 `at.seller-compliance.events` record the organisation in `org_listing_suppression` (V3), hide its products from
-`/v1/public/**` and publish `catalog.product.hidden|restored` for each of its products so search follows.
+`/v1/public/**` and publish `catalog.product.hidden|restored` for each of its products so search follows. This also
+covers Trust and Safety suspensions (reason `SUSPENDED` / `REINSTATED` from seller-service).
+
+Listing reason codes (reports, flags, takedowns) match the trust-ops moderation codes: `PROHIBITED_ITEM`,
+`UNAPPROVED_HEALTH_CLAIM`, `RESTRICTED_INGREDIENT`, `COUNTERFEIT`, `IMAGE_POLICY`, `MISLEADING_CONTENT`, `LABELLING`,
+`SHIPPING_METHOD`, `DUPLICATE_LISTING`, `WRONG_CATEGORY`, `OTHER` (details / note required for `OTHER`).
+
+Known gap: the indexer and offers-service do not consume `catalog.product.taken_down|reinstated` yet, so a taken-down
+listing leaves catalog's public API at once but stays in search and the buy box until they do.
 
 ## Configuration
 

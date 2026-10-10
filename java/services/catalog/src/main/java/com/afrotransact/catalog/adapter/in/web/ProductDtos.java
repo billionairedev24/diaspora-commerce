@@ -6,7 +6,10 @@ import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.catalog.application.CreateProductCommand;
+import com.afrotransact.catalog.domain.FlagSource;
+import com.afrotransact.catalog.domain.ListingReasonCode;
 import com.afrotransact.catalog.domain.Product;
+import com.afrotransact.catalog.domain.ProductFlag;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.Variant;
 import com.afrotransact.catalog.domain.VariantDraft;
@@ -95,5 +98,32 @@ final class ProductDtos {
 
     @Schema(name = "ModerationNote")
     record NoteRequest(@NotBlank @Size(max = 1000) String note) {
+    }
+
+    @Schema(name = "FlagListingRequest", description = "Reason code required; details required for OTHER")
+    record FlagRequest(@NotNull ListingReasonCode reasonCode, @Size(max = 1000) String details,
+                       @Size(max = 20) String riskLevel) {
+    }
+
+    @Schema(name = "ReportListingRequest", description = "Reason code required; details required for OTHER")
+    record ReportRequest(@NotNull ListingReasonCode reasonCode, @Size(max = 1000) String details) {
+    }
+
+    @Schema(name = "ListingFlag", description = "A report or flag on a live listing (catalog.product.flagged)")
+    record FlagResponse(UUID id, UUID productId, FlagSource source, ListingReasonCode reasonCode, String details,
+                        String riskLevel, Instant createdAt, boolean created) {
+
+        static FlagResponse of(ProductFlag f, boolean created) {
+            return new FlagResponse(f.id(), f.productId(), f.source(), f.reasonCode(), f.details(), f.riskLevel(),
+                    f.createdAt(), created);
+        }
+    }
+
+    @Schema(name = "TakedownRequest", description = "Reason code required; note required for OTHER")
+    record TakedownRequest(@NotNull ListingReasonCode reasonCode, @Size(max = 1000) String note) {
+    }
+
+    @Schema(name = "RestoreListingRequest")
+    record RestoreRequest(@Size(max = 1000) String note) {
     }
 }

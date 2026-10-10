@@ -66,6 +66,25 @@ public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, U
         return withStatus(ProductStatus.LIVE, null, now);
     }
 
+    /** Trust and Safety removes a live or paused listing; the note carries the reason. */
+    public Product takeDown(String note, Instant now) {
+        if (status != ProductStatus.LIVE && status != ProductStatus.PAUSED) {
+            throw new IllegalStateException("Only live or paused listings can be taken down (was " + status + ")");
+        }
+        return withStatus(ProductStatus.TAKEN_DOWN, note, now);
+    }
+
+    /** Reverses a takedown: the listing returns to the status it had before (LIVE or PAUSED). */
+    public Product restoreFromTakedown(ProductStatus previous, Instant now) {
+        if (status != ProductStatus.TAKEN_DOWN) {
+            throw new IllegalStateException("Only taken-down listings can be restored (was " + status + ")");
+        }
+        if (previous != ProductStatus.LIVE && previous != ProductStatus.PAUSED) {
+            throw new IllegalArgumentException("A takedown returns to LIVE or PAUSED, not " + previous);
+        }
+        return withStatus(previous, null, now);
+    }
+
     private Product withStatus(ProductStatus next, String note, Instant now) {
         return new Product(id, atin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes,
                 images, variationTheme, variants, next, note, createdAt, now, version);

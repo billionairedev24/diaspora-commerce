@@ -6,8 +6,10 @@ import com.afrotransact.trustops.domain.SellerEnforcement;
 import com.afrotransact.trustops.domain.SuspensionReason;
 
 /**
- * S120 suspend and reinstate. Suspension holds payouts (seller-service compliance hold) and restricts the seller in
- * the buy box (offers {@code restricted=true}); reinstatement releases both. Calling again retries pending steps.
+ * S120 / S228 suspend and reinstate. Suspension places seller-service's suspension hold
+ * ({@code POST /v1/orgs/{orgId}/suspend}: payouts paused, listings hidden in catalog, offers, bookings and search,
+ * organisation SUSPENDED) and restricts the seller in the buy box (offers {@code restricted=true}); reinstatement
+ * lifts both, leaving unrelated Stripe compliance payout holds in place. Calling again retries pending steps.
  */
 public interface SellerEnforcementService {
 

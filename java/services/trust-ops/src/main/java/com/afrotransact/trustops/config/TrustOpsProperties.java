@@ -67,7 +67,7 @@ public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstr
             tokenUri = tokenUri == null ? "http://localhost:8100/oauth2/token" : tokenUri;
             clientId = clientId == null ? "trust-ops-service" : clientId;
             clientSecret = clientSecret == null ? "" : clientSecret;
-            scopes = scopes == null ? "catalog:moderate payments:service compliance:hold offers:write ai:triage"
+            scopes = scopes == null ? "catalog:moderate payments:service sellers:enforce offers:write ai:triage"
                     : scopes;
             timeout = timeout == null ? Duration.ofSeconds(10) : timeout;
         }

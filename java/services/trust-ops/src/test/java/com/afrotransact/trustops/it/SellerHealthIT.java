@@ -65,12 +65,6 @@ class SellerHealthIT extends TrustOpsIntegrationTest {
         }
     }
 
-    private void stubAccount(String org) {
-        UPSTREAM.stubFor(WireMock.get(WireMock.urlEqualTo("/v1/compliance/accounts"))
-                .willReturn(WireMock.okJson("[{\"accountId\":\"acct_other\",\"orgId\":\"org_other\"},"
-                        + "{\"accountId\":\"acct_" + org + "\",\"orgId\":\"" + org + "\"}]")));
-    }
-
     @Test
     void metricsFromOrdersEventsArePushedToOffers() {
         String org = orgId();
@@ -101,28 +95,30 @@ class SellerHealthIT extends TrustOpsIntegrationTest {
     }
 
     @Test
-    void suspendHoldsPayoutsAndRestrictsTheBuyBoxThenReinstateReleasesBoth() {
+    void suspendUsesTheSellerSuspensionHoldAndRestrictsTheBuyBoxThenReinstateLiftsBoth() {
         String org = orgId();
-        stubAccount(org);
         TestSupport.as(TestSupport.trustSafety("sara"));
 
         SellerEnforcement suspended = enforcement.suspend(org, SuspensionReason.COUNTERFEIT, "Counterfeit wax prints");
         assertThat(suspended.status()).isEqualTo(EnforcementStatus.SUSPENDED);
-        assertThat(suspended.payoutsHeld()).isTrue();
+        assertThat(suspended.sellerSuspended()).isTrue();
         assertThat(suspended.buyBoxRestricted()).isTrue();
-        UPSTREAM.verify(WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/compliance/accounts/acct_" + org
-                        + "/payouts/pause"))
-                .withRequestBody(WireMock.matchingJsonPath("$.note", WireMock.containing("Counterfeit wax prints"))));
+        UPSTREAM.verify(WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/orgs/" + org + "/suspend"))
+                .withHeader("Authorization", WireMock.equalTo("Bearer tok-trust-ops"))
+                .withRequestBody(WireMock.matchingJsonPath("$.reasonCode", WireMock.equalTo("COUNTERFEIT")))
+                .withRequestBody(WireMock.matchingJsonPath("$.note", WireMock.equalTo("Counterfeit wax prints"))));
+        // The old workaround (list every connected account, pause the compliance payout hold) is gone.
+        UPSTREAM.verify(0, WireMock.anyRequestedFor(WireMock.urlPathMatching("/v1/compliance/.*")));
         UPSTREAM.verify(WireMock.putRequestedFor(WireMock.urlEqualTo("/v1/sellers/" + org + "/performance"))
                 .withRequestBody(WireMock.matchingJsonPath("$.restricted", WireMock.equalTo("true"))));
         assertThat(enforcement.suspended()).extracting(SellerEnforcement::orgId).contains(org);
 
         SellerEnforcement active = enforcement.reinstate(org, "Supplier invoices verified");
         assertThat(active.status()).isEqualTo(EnforcementStatus.ACTIVE);
-        assertThat(active.payoutsHeld()).isFalse();
+        assertThat(active.sellerSuspended()).isFalse();
         assertThat(active.buyBoxRestricted()).isFalse();
-        UPSTREAM.verify(WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/compliance/accounts/acct_" + org
-                + "/payouts/resume")));
+        UPSTREAM.verify(WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/orgs/" + org + "/reinstate"))
+                .withRequestBody(WireMock.matchingJsonPath("$.note", WireMock.equalTo("Supplier invoices verified"))));
         UPSTREAM.verify(WireMock.putRequestedFor(WireMock.urlEqualTo("/v1/sellers/" + org + "/performance"))
                 .withRequestBody(WireMock.matchingJsonPath("$.restricted", WireMock.equalTo("false"))));
 
@@ -130,25 +126,27 @@ class SellerHealthIT extends TrustOpsIntegrationTest {
                 + "order by seq").param("org", org).query(String.class).list())
                 .containsExactly("trustops.seller.suspended", "trustops.seller.reinstated");
         assertThat(outbox(org)).contains("trustops.seller.suspended", "trustops.seller.reinstated");
+        String event = jdbc.sql("select payload::text from platform_outbox where aggregate_id = :org and type = "
+                + "'trustops.seller.suspended'").param("org", org).query(String.class).single();
+        assertThat(JSON.readTree(event).path("listingsHidden").asBoolean()).isTrue();
+        assertThat(JSON.readTree(event).path("payoutsHeld").asBoolean()).isTrue();
     }
 
     @Test
     void failedUpstreamStepStaysPendingAndIsRetried() {
         String org = orgId();
-        stubAccount(org);
-        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/compliance/accounts/[^/]+/payouts/pause"))
+        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/orgs/[^/]+/suspend"))
                 .willReturn(WireMock.serverError()));
         TestSupport.as(TestSupport.trustSafety("sara"));
 
         SellerEnforcement first = enforcement.suspend(org, SuspensionReason.FRAUD_RISK, "Chargeback ring");
         assertThat(first.status()).isEqualTo(EnforcementStatus.SUSPENDED);
-        assertThat(first.payoutsHeld()).isFalse();
+        assertThat(first.sellerSuspended()).isFalse();
         assertThat(first.buyBoxRestricted()).isTrue();
 
         stubUpstreams();
-        stubAccount(org);
         SellerEnforcement retried = enforcement.suspend(org, SuspensionReason.FRAUD_RISK, "Chargeback ring");
-        assertThat(retried.payoutsHeld()).isTrue();
+        assertThat(retried.sellerSuspended()).isTrue();
         assertThat(jdbc.sql("select count(*) from audit_entry where action = 'trustops.seller.suspended' "
                 + "and entity_id = :org").param("org", org).query(Long.class).single()).isEqualTo(1);
     }

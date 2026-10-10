@@ -55,14 +55,15 @@ class SellerController {
         return enforcement.suspended().stream().map(StandingResponse::of).toList();
     }
 
-    @Operation(summary = "Suspend: hold payouts (seller-service) and restrict in the buy box (offers); audited. "
-            + "Calling again retries steps that failed (sellers:enforce)")
+    @Operation(summary = "Suspend: seller-service suspension hold (payouts paused, listings hidden) and buy-box "
+            + "restriction (offers); audited. Calling again retries steps that failed (sellers:enforce)")
     @PostMapping("/v1/seller-enforcement/{orgId}/suspend")
     StandingResponse suspend(@PathVariable String orgId, @Valid @RequestBody SuspendRequest body) {
         return StandingResponse.of(enforcement.suspend(orgId, body.reason(), body.note()));
     }
 
-    @Operation(summary = "Reinstate: release the payout hold and the buy-box restriction; audited (sellers:enforce)")
+    @Operation(summary = "Reinstate: lift the suspension hold (compliance payout holds stay) and the buy-box "
+            + "restriction; audited (sellers:enforce)")
     @PostMapping("/v1/seller-enforcement/{orgId}/reinstate")
     StandingResponse reinstate(@PathVariable String orgId, @Valid @RequestBody ReinstateRequest body) {
         return StandingResponse.of(enforcement.reinstate(orgId, body.note()));

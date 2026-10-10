@@ -8,8 +8,13 @@ import java.util.UUID;
 /**
  * A listing in the moderation queue with its SLA timer, assignee, AI triage hint and the human decision.
  * {@code PENDING → ESCALATED → APPROVED | REJECTED}, or {@code CLOSED} when catalog decided it elsewhere.
+ * {@link ModerationItemType#NEW_LISTING} items are submissions (approve / reject in catalog);
+ * {@link ModerationItemType#LIVE_LISTING} items are reported or flagged live listings (keep live, or take down).
+ *
+ * @param report why a live listing is queued (null for new submissions)
  */
-public record ModerationItem(UUID id, ProductSubmission product, ModerationStatus status, ModerationPriority priority,
+public record ModerationItem(UUID id, ProductSubmission product, ModerationItemType type, ListingReport report,
+                             ModerationStatus status, ModerationPriority priority,
                              TriageStatus triageStatus, TriageHint triage, Instant enqueuedAt, Sla sla,
                              String assignee, Instant assignedAt, boolean escalated, String escalationReason,
                              Instant escalatedAt, String decidedBy, Instant decidedAt, ModerationReasonCode reasonCode,
@@ -18,6 +23,7 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationStatu
     public ModerationItem {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(product, "product");
+        Objects.requireNonNull(type, "type");
         Objects.requireNonNull(status, "status");
         Objects.requireNonNull(priority, "priority");
         Objects.requireNonNull(triageStatus, "triageStatus");
@@ -30,9 +36,42 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationStatu
                                        SlaPolicy sla) {
         ModerationPriority priority = triage != null && triage.highRisk() ? ModerationPriority.HIGH
                 : ModerationPriority.NORMAL;
-        return new ModerationItem(id, product, ModerationStatus.PENDING, priority,
+        return new ModerationItem(id, product, ModerationItemType.NEW_LISTING, null, ModerationStatus.PENDING,
+                priority,
                 triage == null ? TriageStatus.UNAVAILABLE : TriageStatus.COMPLETED, triage, now,
                 sla.moderation(now, priority), null, null, false, null, null, null, null, null, null, 0);
+    }
+
+    /**
+     * Queues a reported or flagged live listing. A high-risk AI hint or a high-risk automated flag raises the
+     * priority and shortens the SLA.
+     */
+    public static ModerationItem queueLiveListing(UUID id, ProductSubmission product, ListingReport report,
+                                                  TriageHint triage, Instant now, SlaPolicy sla) {
+        Objects.requireNonNull(report, "report");
+        ModerationPriority priority = (triage != null && triage.highRisk()) || report.highRisk()
+                ? ModerationPriority.HIGH : ModerationPriority.NORMAL;
+        return new ModerationItem(id, product, ModerationItemType.LIVE_LISTING, report, ModerationStatus.PENDING,
+                priority, triage == null ? TriageStatus.UNAVAILABLE : TriageStatus.COMPLETED, triage, now,
+                sla.moderation(now, priority), null, null, false, null, null, null, null, null, null, 0);
+    }
+
+    /**
+     * Another report or flag for this open live-listing item: counted, and a high-risk flag raises the priority
+     * (the SLA is recomputed from the enqueue time unless already escalated).
+     */
+    public ModerationItem reportedAgain(ListingReport another, SlaPolicy policy) {
+        requireOpen();
+        ListingReport counted = report == null ? another : report.another();
+        ModerationPriority p = another.highRisk() ? ModerationPriority.HIGH : priority;
+        Sla timer = escalated || p == priority ? sla : policy.moderation(enqueuedAt, p);
+        return new ModerationItem(id, product, type, counted, status, p, triageStatus, triage, enqueuedAt, timer,
+                assignee, assignedAt, escalated, escalationReason, escalatedAt, decidedBy, decidedAt, reasonCode,
+                decisionNote, version);
+    }
+
+    public boolean liveListing() {
+        return type == ModerationItemType.LIVE_LISTING;
     }
 
     /** Attaches a (re-run) triage hint. The timer is recomputed from the enqueue time unless already escalated. */
@@ -40,16 +79,17 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationStatu
         requireOpen();
         ModerationPriority p = hint.highRisk() ? ModerationPriority.HIGH : priority;
         Sla timer = escalated ? sla : policy.moderation(enqueuedAt, p);
-        return new ModerationItem(id, product, status, p, TriageStatus.COMPLETED, hint, enqueuedAt, timer, assignee,
-                assignedAt, escalated, escalationReason, escalatedAt, decidedBy, decidedAt, reasonCode, decisionNote,
-                version);
+        return new ModerationItem(id, product, type, report, status, p, TriageStatus.COMPLETED, hint, enqueuedAt,
+                timer, assignee, assignedAt, escalated, escalationReason, escalatedAt, decidedBy, decidedAt, reasonCode,
+                decisionNote, version);
     }
 
     public ModerationItem assign(String reviewer, Instant now) {
         requireOpen();
         String who = Texts.required(reviewer, "assignee", "Assignee", 120);
-        return new ModerationItem(id, product, status, priority, triageStatus, triage, enqueuedAt, sla, who, now,
-                escalated, escalationReason, escalatedAt, decidedBy, decidedAt, reasonCode, decisionNote, version);
+        return new ModerationItem(id, product, type, report, status, priority, triageStatus, triage, enqueuedAt, sla,
+                who, now, escalated, escalationReason, escalatedAt, decidedBy, decidedAt, reasonCode, decisionNote,
+                version);
     }
 
     /** Sends the item to senior review with a fresh (escalation) timer; the assignee is cleared. */
@@ -58,9 +98,9 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationStatu
             throw new IllegalStateException("Only pending listings can be escalated; this one is " + status);
         }
         String why = Texts.required(reason, "reason", "Escalation reason", 1000);
-        return new ModerationItem(id, product, ModerationStatus.ESCALATED, priority, triageStatus, triage, enqueuedAt,
-                policy.moderationEscalated(now), null, null, true, why, now, decidedBy, decidedAt, reasonCode,
-                decisionNote, version);
+        return new ModerationItem(id, product, type, report, ModerationStatus.ESCALATED, priority, triageStatus,
+                triage, enqueuedAt, policy.moderationEscalated(now), null, null, true, why, now, decidedBy, decidedAt,
+                reasonCode, decisionNote, version);
     }
 
     public ModerationItem approve(String by, String note, Instant now) {
@@ -79,7 +119,7 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationStatu
         return decided(ModerationStatus.REJECTED, by, code, n, now);
     }
 
-    /** Catalog moved the product on (approved, rejected or withdrawn there); the queue item closes. */
+    /** Catalog moved the product on (approved, rejected, taken down or withdrawn there); the queue item closes. */
     public ModerationItem closeUpstream(String upstreamStatus, Instant now) {
         requireOpen();
         return decided(ModerationStatus.CLOSED, "catalog", null, "Decided in catalog: " + upstreamStatus, now);
@@ -97,8 +137,8 @@ public record ModerationItem(UUID id, ProductSubmission product, ModerationStatu
 
     private ModerationItem decided(ModerationStatus next, String by, ModerationReasonCode code, String note,
                                    Instant now) {
-        return new ModerationItem(id, product, next, priority, triageStatus, triage, enqueuedAt, sla, assignee,
-                assignedAt, escalated, escalationReason, escalatedAt, by, now, code, note, version);
+        return new ModerationItem(id, product, type, report, next, priority, triageStatus, triage, enqueuedAt, sla,
+                assignee, assignedAt, escalated, escalationReason, escalatedAt, by, now, code, note, version);
     }
 
     private void requireOpen() {

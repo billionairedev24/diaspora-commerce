@@ -82,6 +82,18 @@ class AccessGuard {
         return actor;
     }
 
+    /**
+     * Like {@link #orgRole(String, Set, String)}, but staff and service clients (principal type SERVICE) pass with any
+     * one of {@code staffAnyOf}.
+     */
+    Actor orgRoleOrStaff(String orgId, Set<String> roles, String... staffAnyOf) {
+        Actor actor = actors.current();
+        if (isStaff(actor) && Arrays.stream(staffAnyOf).anyMatch(actor::can)) {
+            return actor;
+        }
+        return orgRole(orgId, roles, null);
+    }
+
     static boolean isStaff(Actor actor) {
         return actor.type() == PrincipalType.STAFF || actor.type() == PrincipalType.SERVICE
                 || actor.permissions().contains("*");

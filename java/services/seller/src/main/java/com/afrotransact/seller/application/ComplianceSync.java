@@ -17,27 +17,35 @@ import com.afrotransact.seller.domain.RequirementsSnapshot;
 import com.afrotransact.seller.domain.StripeVerification;
 import com.afrotransact.seller.port.ApplicationRepository;
 import com.afrotransact.seller.port.ConnectAccountRepository;
+import com.afrotransact.seller.port.OrgSuspensionRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Applies Stripe account data to our mirror inside the caller's transaction: stores the snapshot and history,
- * refreshes the onboarding application's verification rows and publishes compliance / enforcement events.
+ * refreshes the onboarding application's verification rows and publishes compliance / enforcement events. Releases
+ * (payouts resumed, listings restored) are held back while the organisation is suspended by Trust and Safety.
  */
 @Component
 class ComplianceSync {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ComplianceSync.class);
+
     private final ConnectAccountRepository accounts;
     private final ApplicationRepository apps;
+    private final OrgSuspensionRepository suspensions;
     private final DomainEventPublisher events;
     private final Clock clock;
 
-    ComplianceSync(ConnectAccountRepository accounts, ApplicationRepository apps, DomainEventPublisher events,
-                   Clock clock) {
+    ComplianceSync(ConnectAccountRepository accounts, ApplicationRepository apps, OrgSuspensionRepository suspensions,
+                   DomainEventPublisher events, Clock clock) {
         this.accounts = accounts;
         this.apps = apps;
+        this.suspensions = suspensions;
         this.events = events;
         this.clock = clock;
     }
@@ -75,6 +83,12 @@ class ComplianceSync {
     @Transactional(propagation = Propagation.MANDATORY)
     void publishEnforcement(ConnectAccount a, Enforcement e, String actorId, String note, Instant now) {
         if (e == Enforcement.NONE || a.orgId() == null) {
+            return;
+        }
+        if ((e == Enforcement.RESUME_PAYOUTS || e == Enforcement.RESTORE_LISTINGS)
+                && suspensions.findActive(a.orgId()).isPresent()) {
+            // A Trust & Safety suspension still holds payouts and hides listings; reinstatement releases them.
+            LOG.info("{} for {} not published: the organisation is suspended", e, a.orgId());
             return;
         }
         List<String> pastDue = a.requirements().pastDue();

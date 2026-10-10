@@ -19,13 +19,15 @@ security:
 - bearer: []
 tags:
 - name: Identifiers
-  description: GTIN / ISBN checks for the product builder
+  description: GTIN / ISBN checks for the product builder and GTIN lookups by service clients
 - name: Public catalog
   description: Anonymous reads of live products (storefront, cart, search)
 - name: Categories
   description: Browse tree, product-type schemas and new-category requests
 - name: Products
   description: Product builder, listing moderation and lookup
+- name: Listing reports
+  description: Shoppers report a live listing (signed in); reports reach the trust-ops moderation queue through catalog.product.flagged
 paths:
   /v1/categories:
     get:
@@ -157,6 +159,8 @@ paths:
       tags:
       - Identifiers
       summary: Validate a GTIN and find an existing product page that already uses it
+      description: Needs catalog:read (service tokens such as offers-service, any principal type) or catalog:write (sellers
+        in the product builder).
       operationId: check
       parameters:
       - name: code
@@ -234,6 +238,7 @@ paths:
           - LIVE
           - REJECTED
           - PAUSED
+          - TAKEN_DOWN
       - name: q
         in: query
         required: false
@@ -338,6 +343,34 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Product'
+  /v1/products/{id}/flags:
+    post:
+      tags:
+      - Products
+      summary: Flag a live listing for review (catalog:moderate)
+      description: Staff flags are source STAFF; service clients (principal type SERVICE) are AUTOMATED. Publishes catalog.product.flagged;
+        trust-ops queues it as a live-listing moderation item.
+      operationId: flag
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FlagListingRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ListingFlag'
   /v1/products/{id}/pause:
     post:
       tags:
@@ -384,6 +417,33 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Product'
+  /v1/products/{id}/restore:
+    post:
+      tags:
+      - Products
+      summary: Reverse a takedown (catalog:moderate)
+      description: Returns the listing to its status before the takedown (LIVE or PAUSED) and publishes catalog.product.reinstated.
+        Idempotent.
+      operationId: restore
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreListingRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
   /v1/products/{id}/resume:
     post:
       tags:
@@ -397,6 +457,34 @@ paths:
         schema:
           type: string
           format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Product'
+  /v1/products/{id}/takedown:
+    post:
+      tags:
+      - Products
+      summary: Take a live or paused listing down with a reason (catalog:moderate)
+      description: 'Status becomes TAKEN_DOWN: hidden from public reads and the owner cannot resume it. Publishes catalog.product.taken_down.
+        Idempotent.'
+      operationId: takeDown
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TakedownRequest'
+        required: true
       responses:
         '200':
           description: OK
@@ -424,6 +512,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicProduct'
       security: []
+  /v1/public/products/{atin}/reports:
+    post:
+      tags:
+      - Listing reports
+      summary: Report a live listing by product ATIN (any signed-in user)
+      description: 'One report per user and listing: a repeated report returns 200 with the earlier report (created=false)
+        and publishes nothing. Listings that are not publicly visible return 404.'
+      operationId: reportListing
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportListingRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ListingFlag'
   /v1/public/variants/{atin}:
     get:
       tags:
@@ -446,6 +561,69 @@ paths:
       security: []
 components:
   schemas:
+    ReportListingRequest:
+      type: object
+      description: Reason code required; details required for OTHER
+      properties:
+        reasonCode:
+          type: string
+          enum:
+          - PROHIBITED_ITEM
+          - UNAPPROVED_HEALTH_CLAIM
+          - RESTRICTED_INGREDIENT
+          - COUNTERFEIT
+          - IMAGE_POLICY
+          - MISLEADING_CONTENT
+          - LABELLING
+          - SHIPPING_METHOD
+          - DUPLICATE_LISTING
+          - WRONG_CATEGORY
+          - OTHER
+        details:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - reasonCode
+    ListingFlag:
+      type: object
+      description: A report or flag on a live listing (catalog.product.flagged)
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum:
+          - CUSTOMER_REPORT
+          - STAFF
+          - AUTOMATED
+        reasonCode:
+          type: string
+          enum:
+          - PROHIBITED_ITEM
+          - UNAPPROVED_HEALTH_CLAIM
+          - RESTRICTED_INGREDIENT
+          - COUNTERFEIT
+          - IMAGE_POLICY
+          - MISLEADING_CONTENT
+          - LABELLING
+          - SHIPPING_METHOD
+          - DUPLICATE_LISTING
+          - WRONG_CATEGORY
+          - OTHER
+        details:
+          type: string
+        riskLevel:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        created:
+          type: boolean
     CreateProductRequest:
       type: object
       description: Exactly one of categoryId or categoryRequestId
@@ -612,6 +790,37 @@ components:
         quantity:
           type: integer
           format: int32
+    TakedownRequest:
+      type: object
+      description: Reason code required; note required for OTHER
+      properties:
+        reasonCode:
+          type: string
+          enum:
+          - PROHIBITED_ITEM
+          - UNAPPROVED_HEALTH_CLAIM
+          - RESTRICTED_INGREDIENT
+          - COUNTERFEIT
+          - IMAGE_POLICY
+          - MISLEADING_CONTENT
+          - LABELLING
+          - SHIPPING_METHOD
+          - DUPLICATE_LISTING
+          - WRONG_CATEGORY
+          - OTHER
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - reasonCode
+    RestoreListingRequest:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
     ModerationNote:
       type: object
       properties:
@@ -621,6 +830,34 @@ components:
           minLength: 0
       required:
       - note
+    FlagListingRequest:
+      type: object
+      description: Reason code required; details required for OTHER
+      properties:
+        reasonCode:
+          type: string
+          enum:
+          - PROHIBITED_ITEM
+          - UNAPPROVED_HEALTH_CLAIM
+          - RESTRICTED_INGREDIENT
+          - COUNTERFEIT
+          - IMAGE_POLICY
+          - MISLEADING_CONTENT
+          - LABELLING
+          - SHIPPING_METHOD
+          - DUPLICATE_LISTING
+          - WRONG_CATEGORY
+          - OTHER
+        details:
+          type: string
+          maxLength: 1000
+          minLength: 0
+        riskLevel:
+          type: string
+          maxLength: 20
+          minLength: 0
+      required:
+      - reasonCode
     CreateCategoryRequest:
       type: object
       properties:

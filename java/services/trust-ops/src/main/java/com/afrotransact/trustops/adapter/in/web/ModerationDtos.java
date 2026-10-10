@@ -7,7 +7,10 @@ import java.util.UUID;
 import com.afrotransact.trustops.adapter.in.web.CommonDtos.SlaResponse;
 import com.afrotransact.trustops.application.ModerationItemView;
 import com.afrotransact.trustops.domain.AiFlag;
+import com.afrotransact.trustops.domain.ListingFlagSource;
+import com.afrotransact.trustops.domain.ListingReport;
 import com.afrotransact.trustops.domain.ModerationItem;
+import com.afrotransact.trustops.domain.ModerationItemType;
 import com.afrotransact.trustops.domain.ModerationPriority;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.domain.ModerationStatus;
@@ -32,9 +35,20 @@ final class ModerationDtos {
         }
     }
 
+    @Schema(description = "Why a live listing is queued: the first report or flag and how many arrived")
+    record ReportResponse(UUID flagId, ListingFlagSource source, ModerationReasonCode reasonCode, String details,
+                          String reporterId, String riskLevel, int reports) {
+
+        static ReportResponse of(ListingReport r) {
+            return r == null ? null : new ReportResponse(r.flagId(), r.source(), r.reasonCode(), r.details(),
+                    r.reporterId(), r.riskLevel(), r.reports());
+        }
+    }
+
     @Schema(description = "A listing in the moderation queue")
     record ModerationItemResponse(UUID id, UUID productId, String atin, String sellerOrgId, String ownerKind,
-                                  String title, String productTypeCode, ModerationStatus status,
+                                  String title, String productTypeCode, ModerationItemType type,
+                                  ReportResponse report, ModerationStatus status,
                                   ModerationPriority priority, TriageStatus triageStatus, TriageResponse triage,
                                   Instant enqueuedAt, SlaResponse sla, String assignee, Instant assignedAt,
                                   boolean escalated, String escalationReason, Instant escalatedAt, String decidedBy,
@@ -45,8 +59,9 @@ final class ModerationDtos {
             ModerationItem i = v.item();
             return new ModerationItemResponse(i.id(), i.product().productId(), i.product().atin(),
                     i.product().sellerOrgId(), i.product().ownerKind(), i.product().title(),
-                    i.product().productTypeCode(), i.status(), i.priority(), i.triageStatus(),
-                    TriageResponse.of(i.triage()), i.enqueuedAt(), i.open() ? SlaResponse.of(v.sla()) : null,
+                    i.product().productTypeCode(), i.type(), ReportResponse.of(i.report()), i.status(), i.priority(),
+                    i.triageStatus(), TriageResponse.of(i.triage()), i.enqueuedAt(),
+                    i.open() ? SlaResponse.of(v.sla()) : null,
                     i.assignee(), i.assignedAt(), i.escalated(), i.escalationReason(), i.escalatedAt(),
                     i.decidedBy(), i.decidedAt(), i.reasonCode(), i.decisionNote(), i.version());
         }
@@ -64,11 +79,12 @@ final class ModerationDtos {
     record EscalateRequest(@NotBlank @Size(max = 1000) String reason) {
     }
 
-    @Schema(description = "Allow the listing (optional note)")
+    @Schema(description = "Allow the listing (optional note); for a live listing this dismisses the reports")
     record ApproveRequest(@Size(max = 1000) String note) {
     }
 
-    @Schema(description = "Remove the listing: reason code required, note required for OTHER")
+    @Schema(description = "Remove the listing (reject a submission, take a live listing down): reason code required, "
+            + "note required for OTHER")
     record RejectRequest(@NotNull ModerationReasonCode reasonCode, @Size(max = 1000) String note) {
     }
 }

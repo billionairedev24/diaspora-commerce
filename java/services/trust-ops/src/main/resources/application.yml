@@ -93,7 +93,7 @@ at:
       client-id: ${TRUSTOPS_CLIENT_ID:trust-ops-service}
       # Only from the environment (identity's trust-ops-service client secret). Blank = no token (local profile).
       client-secret: ${TRUSTOPS_CLIENT_SECRET}
-      scopes: catalog:moderate payments:service compliance:hold offers:write ai:triage
+      scopes: catalog:moderate payments:service sellers:enforce offers:write ai:triage
       timeout: ${UPSTREAM_TIMEOUT:10s}
     catalog:
       base-url: ${CATALOG_URL:http://localhost:8101}

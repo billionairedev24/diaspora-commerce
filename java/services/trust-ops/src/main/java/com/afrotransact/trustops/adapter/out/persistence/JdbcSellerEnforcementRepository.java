@@ -37,7 +37,7 @@ class JdbcSellerEnforcementRepository implements SellerEnforcementRepository {
             try {
                 jdbc.sql("""
                         insert into seller_enforcement (org_id, status, reason_code, note, actor_id, changed_at,
-                            payouts_held, buy_box_restricted, version)
+                            seller_suspended, buy_box_restricted, version)
                         values (:org, :status, :reason, :note, :actor, :changedAt, :held, :restricted, 0)
                         """)
                         .params(params(e))
@@ -48,7 +48,7 @@ class JdbcSellerEnforcementRepository implements SellerEnforcementRepository {
         } else {
             int rows = jdbc.sql("""
                     update seller_enforcement set status = :status, reason_code = :reason, note = :note,
-                        actor_id = :actor, changed_at = :changedAt, payouts_held = :held,
+                        actor_id = :actor, changed_at = :changedAt, seller_suspended = :held,
                         buy_box_restricted = :restricted, version = version + 1
                     where org_id = :org and version = :version
                     """)
@@ -76,7 +76,7 @@ class JdbcSellerEnforcementRepository implements SellerEnforcementRepository {
         p.put("note", e.note());
         p.put("actor", e.actorId());
         p.put("changedAt", Sql.ts(e.changedAt()));
-        p.put("held", e.payoutsHeld());
+        p.put("held", e.sellerSuspended());
         p.put("restricted", e.buyBoxRestricted());
         return p;
     }
@@ -89,7 +89,7 @@ class JdbcSellerEnforcementRepository implements SellerEnforcementRepository {
         String reason = rs.getString("reason_code");
         return new SellerEnforcement(rs.getString("org_id"), EnforcementStatus.valueOf(rs.getString("status")),
                 reason == null ? null : SuspensionReason.valueOf(reason), rs.getString("note"),
-                rs.getString("actor_id"), Sql.instant(rs, "changed_at"), rs.getBoolean("payouts_held"),
+                rs.getString("actor_id"), Sql.instant(rs, "changed_at"), rs.getBoolean("seller_suspended"),
                 rs.getBoolean("buy_box_restricted"), rs.getLong("version"));
     }
 }

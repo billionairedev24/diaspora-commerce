@@ -9,7 +9,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@Tag(name = "Identifiers", description = "GTIN / ISBN checks for the product builder")
+@Tag(name = "Identifiers", description = "GTIN / ISBN checks for the product builder and GTIN lookups by service "
+        + "clients")
 @RestController
 class IdentifierController {
 
@@ -19,7 +20,9 @@ class IdentifierController {
         this.identifiers = identifiers;
     }
 
-    @Operation(summary = "Validate a GTIN and find an existing product page that already uses it")
+    @Operation(summary = "Validate a GTIN and find an existing product page that already uses it",
+            description = "Needs catalog:read (service tokens such as offers-service, any principal type) or "
+                    + "catalog:write (sellers in the product builder).")
     @GetMapping("/v1/identifiers/gtin/{code}")
     GtinCheck check(@PathVariable String code, @RequestParam(defaultValue = "false") boolean isbn) {
         return identifiers.check(code, isbn);

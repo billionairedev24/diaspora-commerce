@@ -12,6 +12,7 @@ import com.afrotransact.trustops.adapter.in.web.ModerationDtos.ModerationItemRes
 import com.afrotransact.trustops.adapter.in.web.ModerationDtos.ReasonCodeResponse;
 import com.afrotransact.trustops.adapter.in.web.ModerationDtos.RejectRequest;
 import com.afrotransact.trustops.application.ModerationService;
+import com.afrotransact.trustops.domain.ModerationItemType;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.domain.ModerationStatus;
 import io.swagger.v3.oas.annotations.Operation;
@@ -35,15 +36,18 @@ class ModerationController {
         this.moderation = moderation;
     }
 
-    @Operation(summary = "Moderation queue, soonest due first (default: open items)")
+    @Operation(summary = "Moderation queue, soonest due first (default: open items of both types)",
+            description = "type=NEW_LISTING: submissions awaiting review; type=LIVE_LISTING: reported or flagged "
+                    + "live listings (catalog.product.flagged).")
     @GetMapping("/v1/moderation/items")
     PageResponse<ModerationItemResponse> queue(@RequestParam(required = false) ModerationStatus status,
                                                @RequestParam(required = false) String assignee,
                                                @RequestParam(defaultValue = "false") boolean mine,
+                                               @RequestParam(required = false) ModerationItemType type,
                                                @RequestParam(required = false) Integer page,
                                                @RequestParam(required = false) Integer size) {
-        return PageResponse.of(moderation.queue(status, assignee, mine, CommonDtos.page(page), CommonDtos.size(size)),
-                ModerationItemResponse::of);
+        return PageResponse.of(moderation.queue(status, assignee, mine, type, CommonDtos.page(page),
+                CommonDtos.size(size)), ModerationItemResponse::of);
     }
 
     @Operation(summary = "One queue item")
@@ -70,13 +74,17 @@ class ModerationController {
         return ModerationItemResponse.of(moderation.escalate(id, body.reason()));
     }
 
-    @Operation(summary = "Allow: approves the product in catalog, then closes the item (audited)")
+    @Operation(summary = "Allow, then close the item (audited)",
+            description = "NEW_LISTING: approves the product in catalog. LIVE_LISTING: keeps the listing live and "
+                    + "dismisses the reports (no catalog call).")
     @PostMapping("/v1/moderation/items/{id}/approve")
     ModerationItemResponse approve(@PathVariable UUID id, @Valid @RequestBody(required = false) ApproveRequest body) {
         return ModerationItemResponse.of(moderation.approve(id, body == null ? null : body.note()));
     }
 
-    @Operation(summary = "Remove: rejects the product in catalog with the reason code, then closes the item (audited)")
+    @Operation(summary = "Remove with a reason code, then close the item (audited)",
+            description = "NEW_LISTING: rejects the product in catalog. LIVE_LISTING: takes the live listing down in "
+                    + "catalog (POST /v1/products/{id}/takedown). If catalog refuses, the item stays open (409).")
     @PostMapping("/v1/moderation/items/{id}/reject")
     ModerationItemResponse reject(@PathVariable UUID id, @Valid @RequestBody RejectRequest body) {
         return ModerationItemResponse.of(moderation.reject(id, body.reasonCode(), body.note()));
