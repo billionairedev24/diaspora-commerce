@@ -1,0 +1,23 @@
+env: prod
+replicas: 3
+autoscaling:
+  enabled: true
+  min: 3
+  max: 12
+  cpu: 70
+rollout:
+  enabled: true
+resources:
+  requests: {cpu: 500m, memory: 1Gi}
+  limits: {memory: 2Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.1"
+tolerations: []
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.afrotransact.com
+  AUTH_TOKEN_URI: https://auth.afrotransact.com/oauth2/token
+  PAYMENTS_URL: http://payments:8080
+  BOOKINGS_REQUEST_SLA: 4h
+  BOOKING_HOLD_TTL: 15m
+  BOOKINGS_MANAGE_URL_BASE: https://afrotransact.com/account/appointments/

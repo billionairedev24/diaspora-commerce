@@ -1,0 +1,109 @@
+spring:
+  application:
+    name: bookings-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/bookings}
+    username: ${DB_USER:bookings}
+    password: ${DB_PASSWORD:bookings}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: bookings-service
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+
+server:
+  port: ${PORT:8109}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: bookings-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  api-docs:
+    title: Bookings API
+    description: >-
+      Provider services and prices with take-home, team members and roles, weekly hours with breaks, time off,
+      booking rules and live slot generation, the booking flow (slot hold, deposit authorised via payments-service,
+      provider confirm / decline / propose a time, reschedules, completion, no-shows), request expiry, and
+      Flexible / Moderate / Strict / Custom cancellation policies with exact refund quotes.
+    version: v1
+  security:
+    public-paths:
+      - /v1/public/**
+      - /v1/services/search
+  events:
+    relay-enabled: true
+  bookings:
+    hold-ttl: ${BOOKING_HOLD_TTL:15m}
+    request-sla: ${BOOKING_REQUEST_SLA:4h}
+    auto-complete-after: ${BOOKING_AUTO_COMPLETE_AFTER:48h}
+    late-provider-fee-minor: ${LATE_PROVIDER_FEE_MINOR:1500}
+    manage-url-base: ${BOOKINGS_MANAGE_URL_BASE:https://afrotransact.com/account/appointments/}
+    fees:
+      commission-bps: ${SERVICES_COMMISSION_BPS:1000}
+      card-pct-bps: ${CARD_PCT_BPS:290}
+      card-fixed-minor: ${CARD_FIXED_MINOR:30}
+    payments:
+      base-url: ${PAYMENTS_URL:http://localhost:8105}
+      token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
+      client-id: ${BOOKINGS_CLIENT_ID:bookings-service}
+      # Only from the environment (identity's bookings-service client secret).
+      client-secret: ${BOOKINGS_CLIENT_SECRET}
+      timeout: ${PAYMENTS_TIMEOUT:10s}
+    payment-events:
+      enabled: ${PAYMENT_EVENTS_ENABLED:true}
+      topic: at.payment.events
+    seller-compliance-events:
+      enabled: ${SELLER_COMPLIANCE_EVENTS_ENABLED:true}
+      topic: at.seller-compliance.events
+    jobs:
+      enabled: ${BOOKINGS_JOBS_ENABLED:true}
+      interval: ${BOOKINGS_JOBS_INTERVAL:60s}

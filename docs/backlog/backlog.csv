@@ -208,7 +208,7 @@
 - Finance can approve, hold or release payout requests","E07","","High","8","payments java stripe","payments","Done"
 "S057","Story","Refund and chargeback reversals","Partial refunds reverse matching transfer and commission; chargebacks debit the responsible seller.","- Partial refund per line updates the ledger
 - Chargeback debits the seller's balance and notifies them","E07","","High","5","payments java","payments","Done"
-"E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","Done"
+"E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","In Progress"
 "S058","Story","Order and sub-order model","One order, one shipment per seller/fulfilment node, each cancellable separately.","- Order totals equal the sum of shipments plus tax
 - Each shipment can be cancelled before it is packed","E08","","Highest","5","orders java","orders","Done"
 "S059","Story","Shipment state machine with actor rules","placed → confirmed → packed → ready → picked_up → in_transit → out_for_delivery → delivered (+ failed, returned, cancelled).","- Seller-fulfilled: only the seller confirms, packs and marks ready
@@ -341,20 +341,20 @@
 - Metered usage for FBA storage, ads and AI credits","E14","","High","8","billing stripe java","billing","In Progress"
 "S104","Story","Billing page with real card/bank presentation","Payment methods shown as brand cards with last 4 or bank with type and verification.","- Default method cannot be removed until another is default
 - Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","Done"
-"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","In Progress"
+"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","Done"
 "S105","Story","Provider availability and calendar","Weekly hours with breaks, blocked dates, minimum notice, buffers, daily limit and instant booking.","- Week and month calendar views with booking quick view
-- Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","In Progress"
+- Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","Done"
 "S106","Story","Services & prices with provider take-home","Duration, price and deposit per service, showing what the provider receives after commission and fees.","- Take-home amount shown per service
-- Price changes don't affect existing bookings","E15","","High","3","bookings java","bookings","In Progress"
+- Price changes don't affect existing bookings","E15","","High","3","bookings java","bookings","Done"
 "S107","Story","Booking flow: service → day → time → summary","Deposit held on request, charged on confirmation, balance charged on completion.","- Only available slots are offered
-- Summary shows deposit now, balance later and the provider's policy","E15","","High","8","bookings web mobile","bookings","In Progress"
+- Summary shows deposit now, balance later and the provider's policy","E15","","High","8","bookings web mobile","bookings","Done"
 "S108","Story","Requests: confirm, decline, propose new time","Providers act on requests; unanswered requests expire after 4 hours.","- Customers can accept or decline a proposed time
-- Expired requests release the deposit hold","E15","","High","5","bookings java","bookings","In Progress"
+- Expired requests release the deposit hold","E15","","High","5","bookings java","bookings","Done"
 "S109","Story","Cancellation policies and refunds","Flexible, Moderate, Strict or Custom; each booking keeps the policy it was made under.","- Customers see the exact refund before cancelling
 - Late provider cancellation costs $15 and a strike
-- Commission taken only on what the customer paid","E15","","High","5","bookings java payments","bookings","In Progress"
+- Commission taken only on what the customer paid","E15","","High","5","bookings java payments","bookings","Done"
 "S110","Story","Provider team roles","Owner, Manager, Practitioner, Finance with what each can and can't do.","- Practitioners edit only their own calendar and hours
-- View-only roles cannot change data (enforced server-side)","E15","","Medium","3","bookings rbac","bookings","In Progress"
+- View-only roles cannot change data (enforced server-side)","E15","","Medium","3","bookings rbac","bookings","Done"
 "E16","Epic","Storefront builder & provider public pages","Sellers and providers design their own pages within contrast-vetted themes.","","","Storefront builder & provider public pages","High","","storefront","storefront","Done"
 "S111","Story","Seller storefront builder","Store name, tagline (AI suggestion), accent colour and section order with live preview.","- Sections can be toggled and reordered
 - Checkout, prices and header stay platform-styled","E16","","Medium","5","storefront go web","storefront","Done"
@@ -636,3 +636,9 @@
 - Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","To Do"
 "S219","Story","Cluster-wide shipment status stream","SSE shipment stream fans out across replicas via Kafka or Valkey pub/sub, and orders consumes carrier.pickup.ready.","- Staff on any replica see every transition within 2s
 - carrier.pickup.ready moves eligible shipments forward","E08","","Medium","3","orders","orders","To Do"
+"S220","Story","Payments support for long-dated bookings","Payments adds release of remaining authorisation after partial capture, off-session charges on saved cards for balances beyond the auth window, and debiting provider late-cancellation fees.","- Remaining authorisation can be released after a deposit capture
+- Balance can be charged off-session on a saved card with SCA fallback
+- Provider late-cancellation fee is debited from the provider balance
+- Bookings reads fees from the payments fee schedule instead of config","E07","","High","8","payments bookings","payments","To Do"
+"S221","Story","Service search by ZIP and ratings","Bookings service search honours ZIP/service area (via geo zones) and returns real ratings from reviews.","- Search filters by provider service area for the ZIP
+- Ratings come from reviews instead of 0","E15","","Medium","3","bookings geo","bookings","To Do"

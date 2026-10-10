@@ -1,0 +1,34 @@
+package com.afrotransact.bookings.config;
+
+import com.afrotransact.bookings.application.BookingsSettings;
+import com.afrotransact.bookings.domain.DefaultSlotGenerator;
+import com.afrotransact.bookings.domain.DefaultTakeHomeCalculator;
+import com.afrotransact.bookings.domain.FeeSchedule;
+import com.afrotransact.bookings.domain.SlotGenerator;
+import com.afrotransact.bookings.domain.TakeHomeCalculator;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+/** Explicit wiring of framework-free domain policies and business settings. */
+@Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(BookingsProperties.class)
+class BookingsConfiguration {
+
+    @Bean
+    SlotGenerator slotGenerator() {
+        return new DefaultSlotGenerator();
+    }
+
+    @Bean
+    TakeHomeCalculator takeHomeCalculator(BookingsProperties props) {
+        BookingsProperties.Fees f = props.fees();
+        return new DefaultTakeHomeCalculator(new FeeSchedule(f.commissionBps(), f.cardPctBps(), f.cardFixedMinor()));
+    }
+
+    @Bean
+    BookingsSettings bookingsSettings(BookingsProperties props) {
+        return new BookingsSettings(props.holdTtl(), props.requestSla(), props.autoCompleteAfter(),
+                props.lateProviderFeeMinor(), props.manageUrlBase());
+    }
+}

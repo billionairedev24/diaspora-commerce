@@ -1,0 +1,11 @@
+# Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
+# payments-service runs locally without security too, so no client-credentials token is requested.
+at:
+  security:
+    enabled: false
+  bookings:
+    payments:
+      client-secret: ${BOOKINGS_CLIENT_SECRET:}
+logging:
+  level:
+    com.afrotransact: DEBUG

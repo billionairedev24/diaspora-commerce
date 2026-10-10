@@ -1,0 +1,2314 @@
+openapi: 3.1.0
+info:
+  title: Bookings API
+  description: Provider services and prices with take-home, team members and roles, weekly hours with breaks, time off, booking
+    rules and live slot generation, the booking flow (slot hold, deposit authorised via payments-service, provider confirm
+    / decline / propose a time, reschedules, completion, no-shows), request expiry, and Flexible / Moderate / Strict / Custom
+    cancellation policies with exact refund quotes.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8109
+  description: local
+- url: https://api.dev.afrotransact.com/bookings
+  description: dev
+- url: https://api.uat.afrotransact.com/bookings
+  description: uat
+- url: https://api.afrotransact.com/bookings
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Public bookings
+  description: 'Anonymous shopper reads (web shop, customer app, Lola): find a service, pick a day and a time, read the summary.
+    Availability is computed live, never cached.'
+- name: Bookings
+  description: Booking flow for customers (CUSTOMER token) and providers (bookings:manage). Every write takes an Idempotency-Key
+    and is safe to retry.
+- name: Provider Hub
+  description: 'Setup, cancellation policy, services & prices, team, working hours, calendar, bookings and earnings of a provider
+    organisation. Roles: Owner and Manager full; Practitioner own calendar and hours only; Finance view only (enforced server-side).'
+paths:
+  /v1/bookings:
+    post:
+      tags:
+      - Bookings
+      summary: Book a slot (customer)
+      description: 'Holds the slot (a database exclusion constraint makes double booking impossible) and creates the payments-service
+        PaymentIntent for the deposit (manual capture: deposit held now, charged on confirmation, balance on completion).
+        Returns the client secret for Stripe.js / PaymentSheet. 409 bookings.slot-taken when the time was just taken.'
+      operationId: create
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBookingRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CreateBookingResponse'
+  /v1/bookings/mine:
+    get:
+      tags:
+      - Bookings
+      summary: Your bookings (customer), active first
+      operationId: mine
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}:
+    get:
+      tags:
+      - Bookings
+      summary: A booking (its customer, or the provider with bookings:read)
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/cancel:
+    post:
+      tags:
+      - Bookings
+      summary: 'Cancel (customer: policy refund; provider: full refund, fee + strike under 24 h)'
+      operationId: cancel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CancelResponse'
+  /v1/bookings/{id}/cancellation-quote:
+    get:
+      tags:
+      - Bookings
+      summary: What cancelling now refunds, keeps or releases
+      description: Customers see the exact refund under the policy the booking was made with before they cancel; providers
+        see the late-cancellation fee.
+      operationId: quote
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CancellationQuote'
+  /v1/bookings/{id}/complete:
+    post:
+      tags:
+      - Bookings
+      summary: 'Mark complete (provider): the balance is charged and the settlement hold starts'
+      operationId: complete
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/confirm:
+    post:
+      tags:
+      - Bookings
+      summary: 'Confirm a request (provider): the deposit is captured'
+      operationId: confirm
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/decline:
+    post:
+      tags:
+      - Bookings
+      summary: 'Decline a request with a reason (provider): the deposit hold is released'
+      operationId: decline
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/history:
+    get:
+      tags:
+      - Bookings
+      summary: History of a booking (who did what, and the money it moved)
+      operationId: history
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BookingActivity'
+  /v1/bookings/{id}/new-time/accept:
+    post:
+      tags:
+      - Bookings
+      summary: Accept the pending new time
+      description: Customer accepts the provider's proposal, or the provider accepts the customer's request.
+      operationId: acceptNewTime
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/new-time/decline:
+    post:
+      tags:
+      - Bookings
+      summary: Decline the pending new time
+      description: Provider keeps the original time; a customer declining the provider's proposal cancels with a full refund.
+      operationId: declineNewTime
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/no-show:
+    post:
+      tags:
+      - Bookings
+      summary: 'Mark no-show (provider, after the start time): deposit kept, or full price per policy'
+      operationId: noShow
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/payment/sync:
+    post:
+      tags:
+      - Bookings
+      summary: Refresh the deposit authorisation from payments
+      description: Call after Stripe.js confirmed the card; payments' intent.succeeded event does the same asynchronously.
+      operationId: syncPayment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/propose-time:
+    post:
+      tags:
+      - Bookings
+      summary: Propose a new time (provider)
+      description: Must be inside the provider's availability; the customer accepts or declines.
+      operationId: proposeTime
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewTimeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/reschedule:
+    post:
+      tags:
+      - Bookings
+      summary: Customer moves the appointment
+      description: Allowed inside the policy's free-change window and reschedule limit; moves straight away when the provider
+        auto-accepts, otherwise waits for the provider (RESCHEDULE_REQUESTED).
+      operationId: reschedule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewTimeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Booking'
+  /v1/providers/{orgId}/bookings:
+    get:
+      tags:
+      - Provider Hub
+      summary: 'Bookings starting in [from, to) (bookings:read; practitioners: own)'
+      operationId: bookings
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: memberId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING_PAYMENT
+          - REQUESTED
+          - CONFIRMED
+          - RESCHEDULE_REQUESTED
+          - RESCHEDULE_PROPOSED
+          - COMPLETED
+          - NO_SHOW
+          - DECLINED
+          - EXPIRED
+          - CANCELLED_CUSTOMER
+          - CANCELLED_PROVIDER
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Booking'
+  /v1/providers/{orgId}/calendar:
+    get:
+      tags:
+      - Provider Hub
+      summary: 'Week / month calendar (bookings:read; practitioners: own column)'
+      description: Open hours and time off per member and day, what's on each day (appointments, hours booked, expected revenue,
+        requests waiting) and the bookings for the quick view.
+      operationId: calendar
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: memberId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Calendar'
+  /v1/providers/{orgId}/cancellation-policy:
+    put:
+      tags:
+      - Provider Hub
+      summary: 'Set the cancellation policy: FLEXIBLE, MODERATE, STRICT or CUSTOM (bookings:services:write)'
+      description: Existing bookings keep the policy they were made under.
+      operationId: savePolicy
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancellationPolicyRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Provider'
+  /v1/providers/{orgId}/earnings:
+    get:
+      tags:
+      - Provider Hub
+      summary: 'Earnings: collected − commission − card fees − late-cancellation fees (bookings:read)'
+      description: Commission is taken only on what the customer actually paid (after refunds).
+      operationId: earnings
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Earnings'
+  /v1/providers/{orgId}/services:
+    get:
+      tags:
+      - Provider Hub
+      summary: Services & prices with the provider's take-home (bookings:read)
+      operationId: services
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Service'
+    post:
+      tags:
+      - Provider Hub
+      summary: Add a service (bookings:services:write)
+      operationId: createService
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Service'
+  /v1/providers/{orgId}/services/{serviceId}:
+    get:
+      tags:
+      - Provider Hub
+      summary: A service with its take-home (bookings:read)
+      operationId: service
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Service'
+    put:
+      tags:
+      - Provider Hub
+      summary: Change a service (bookings:services:write)
+      description: Price changes don't affect existing bookings.
+      operationId: updateService
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Service'
+  /v1/providers/{orgId}/services/{serviceId}/activate:
+    post:
+      tags:
+      - Provider Hub
+      summary: Offer a service again (bookings:services:write)
+      operationId: activate
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Service'
+  /v1/providers/{orgId}/services/{serviceId}/deactivate:
+    post:
+      tags:
+      - Provider Hub
+      summary: Stop offering a service (bookings:services:write)
+      operationId: deactivate
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Service'
+  /v1/providers/{orgId}/services/{serviceId}/members:
+    put:
+      tags:
+      - Provider Hub
+      summary: Who performs a service (bookings:team:manage); empty = every bookable member
+      operationId: assign
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignMembersRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Service'
+  /v1/providers/{orgId}/settings:
+    get:
+      tags:
+      - Provider Hub
+      summary: Booking setup (bookings:read)
+      operationId: settings
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Provider'
+    put:
+      tags:
+      - Provider Hub
+      summary: 'Create or update the setup: name, time zone, rules (bookings:availability:write; not practitioners)'
+      description: Minimum notice, booking horizon, buffer, slot interval, daily limit, instant booking and auto-accepting
+        reschedules. Customers see the change immediately.
+      operationId: saveSettings
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderSettingsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Provider'
+  /v1/providers/{orgId}/team:
+    get:
+      tags:
+      - Provider Hub
+      summary: Team members with their roles and hours (bookings:read)
+      operationId: team
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeamMember'
+    post:
+      tags:
+      - Provider Hub
+      summary: 'Add a team member: Owner, Manager, Practitioner or Finance (bookings:team:manage)'
+      operationId: addMember
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamMemberRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+  /v1/providers/{orgId}/team/{memberId}:
+    put:
+      tags:
+      - Provider Hub
+      summary: Change a member's role, login link, bookability or status (bookings:team:manage)
+      operationId: updateMember
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: memberId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamMemberRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+  /v1/providers/{orgId}/team/{memberId}/hours:
+    put:
+      tags:
+      - Provider Hub
+      summary: 'Set weekly working hours with breaks (bookings:availability:write; practitioners: own)'
+      operationId: setHours
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: memberId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeeklyHours'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+  /v1/providers/{orgId}/team/{memberId}/overrides:
+    get:
+      tags:
+      - Provider Hub
+      summary: 'Time off and special hours in a date range (bookings:read; practitioners: own)'
+      operationId: overrides
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: memberId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DayOverride'
+    put:
+      tags:
+      - Provider Hub
+      summary: 'Block a date (time off) or set special hours (bookings:availability:write; practitioners: own)'
+      operationId: putOverride
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: memberId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DayOverride'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DayOverride'
+  /v1/providers/{orgId}/team/{memberId}/overrides/{date}:
+    delete:
+      tags:
+      - Provider Hub
+      summary: Remove time off / special hours of a date (bookings:availability:write)
+      operationId: removeOverride
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: memberId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: date
+        in: path
+        required: true
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+  /v1/public/providers/{orgId}:
+    get:
+      tags:
+      - Public bookings
+      summary: 'A provider''s booking page: services, policy and bookable team'
+      operationId: provider
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicProvider'
+      security: []
+  /v1/public/services/search:
+    get:
+      tags:
+      - Public bookings
+      summary: Search services (name, description, category, provider) with the next free time
+      operationId: search
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: category
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: zip
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicServiceSearch'
+      security: []
+  /v1/public/services/{serviceId}:
+    get:
+      tags:
+      - Public bookings
+      summary: 'A service: duration, price, deposit, modes, add-ons, policy and who performs it'
+      operationId: service_1
+      parameters:
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicService'
+      security: []
+  /v1/public/services/{serviceId}/days:
+    get:
+      tags:
+      - Public bookings
+      summary: Days with free times (service → day)
+      operationId: days
+      parameters:
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: days
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 14
+      - name: memberId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: addOnIds
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailableDay'
+      security: []
+  /v1/public/services/{serviceId}/slots:
+    get:
+      tags:
+      - Public bookings
+      summary: Free start times on a date (day → time); only bookable slots are offered
+      operationId: slots
+      parameters:
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: date
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date
+      - name: memberId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: addOnIds
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AvailableSlot'
+      security: []
+  /v1/public/services/{serviceId}/summary:
+    get:
+      tags:
+      - Public bookings
+      summary: 'Booking summary: deposit now, balance later and the provider''s policy'
+      operationId: summary
+      parameters:
+      - name: serviceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: addOnIds
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      - name: mode
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - IN_PERSON
+          - AT_HOME
+          - VIRTUAL
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BookingSummary'
+      security: []
+  /v1/services/search:
+    get:
+      tags:
+      - Public bookings
+      summary: Search services (alias used by ai-gateway and mcp-server)
+      operationId: searchAlias
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: category
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: zip
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PublicServiceSearch'
+      deprecated: true
+      security: []
+components:
+  schemas:
+    TeamMemberRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+          description: Identity user id of the member's login
+          maxLength: 120
+          minLength: 0
+        displayName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        role:
+          type: string
+          enum:
+          - OWNER
+          - MANAGER
+          - PRACTITIONER
+          - FINANCE
+        bookable:
+          type: boolean
+          description: 'Takes appointments; default: owners and practitioners'
+        active:
+          type: boolean
+        hours:
+          $ref: '#/components/schemas/WeeklyHours'
+      required:
+      - displayName
+      - role
+    TimeRange:
+      type: object
+      description: Local wall-clock range, end exclusive
+      properties:
+        start:
+          type: string
+          example: 600
+          pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+        end:
+          type: string
+          example: 1080
+          pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+      required:
+      - end
+      - start
+    WeeklyHours:
+      type: object
+      description: Ranges per weekday (MONDAY…SUNDAY); several ranges = breaks; missing day = closed
+      properties:
+        days:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/TimeRange'
+      required:
+      - days
+    TeamMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        userId:
+          type: string
+        displayName:
+          type: string
+        role:
+          type: string
+        bookable:
+          type: boolean
+        active:
+          type: boolean
+        hours:
+          $ref: '#/components/schemas/WeeklyHours'
+        version:
+          type: integer
+          format: int64
+    DayOverride:
+      type: object
+      description: Time off (closed) or special hours on one date
+      properties:
+        date:
+          type: string
+          format: date
+        closed:
+          type: boolean
+        ranges:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimeRange'
+        note:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - date
+    BookingRules:
+      type: object
+      description: Working-hours screen rules
+      properties:
+        leadMinutes:
+          type: integer
+          format: int32
+          description: Minimum notice in minutes
+          example: 720
+          minimum: 0
+        horizonDays:
+          type: integer
+          format: int32
+          description: Book up to N days ahead
+          example: 30
+          maximum: 365
+          minimum: 1
+        bufferMinutes:
+          type: integer
+          format: int32
+          description: Buffer after each booking
+          example: 15
+          maximum: 240
+          minimum: 0
+        stepMinutes:
+          type: integer
+          format: int32
+          description: Time slot interval
+          example: 30
+          maximum: 240
+          minimum: 5
+        maxPerDay:
+          type: integer
+          format: int32
+          description: Max bookings per team member per day
+          example: 6
+          maximum: 50
+          minimum: 1
+        instantBooking:
+          type: boolean
+        autoAcceptReschedule:
+          type: boolean
+    ProviderSettingsRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+          maxLength: 120
+          minLength: 0
+        timeZone:
+          type: string
+          example: America/Chicago
+          minLength: 1
+        currency:
+          type: string
+          example: USD
+          pattern: ^[A-Za-z]{3}$
+        location:
+          type: string
+          maxLength: 200
+          minLength: 0
+        rules:
+          $ref: '#/components/schemas/BookingRules'
+      required:
+      - displayName
+      - timeZone
+    CancellationPolicy:
+      type: object
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        text:
+          type: string
+        freeHours:
+          type: integer
+          format: int32
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundTier'
+        noShow:
+          type: string
+        rescheduleHours:
+          type: integer
+          format: int32
+        maxReschedules:
+          type: integer
+          format: int32
+    Provider:
+      type: object
+      properties:
+        orgId:
+          type: string
+        displayName:
+          type: string
+        timeZone:
+          type: string
+        currency:
+          type: string
+        location:
+          type: string
+        rules:
+          $ref: '#/components/schemas/BookingRules'
+        policy:
+          $ref: '#/components/schemas/CancellationPolicy'
+        strikes:
+          type: integer
+          format: int32
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    RefundTier:
+      type: object
+      properties:
+        hoursBefore:
+          type: integer
+          format: int32
+        shareBps:
+          type: integer
+          format: int32
+    AddOn:
+      type: object
+      properties:
+        id:
+          type: string
+          maxLength: 40
+          minLength: 0
+        name:
+          type: string
+          maxLength: 80
+          minLength: 0
+        priceMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        extraMinutes:
+          type: integer
+          format: int32
+          maximum: 480
+          minimum: 0
+      required:
+      - id
+      - name
+    ServiceRequest:
+      type: object
+      description: Services & prices form
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 3
+        description:
+          type: string
+          maxLength: 2000
+          minLength: 0
+        category:
+          type: string
+          example: hair & beauty
+          maxLength: 60
+          minLength: 0
+        durationMinutes:
+          type: integer
+          format: int32
+          maximum: 1440
+          minimum: 5
+        priceMinor:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+        depositMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        modes:
+          type: array
+          items:
+            type: string
+            enum:
+            - IN_PERSON
+            - AT_HOME
+            - VIRTUAL
+          minItems: 1
+          uniqueItems: true
+        addOns:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddOn'
+          maxItems: 20
+          minItems: 0
+      required:
+      - modes
+      - name
+    Service:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        durationMinutes:
+          type: integer
+          format: int32
+        priceMinor:
+          type: integer
+          format: int64
+        depositMinor:
+          type: integer
+          format: int64
+        balanceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        modes:
+          type: array
+          items:
+            type: string
+            enum:
+            - IN_PERSON
+            - AT_HOME
+            - VIRTUAL
+          uniqueItems: true
+        addOns:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddOn'
+        memberIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          uniqueItems: true
+        active:
+          type: boolean
+        takeHome:
+          $ref: '#/components/schemas/TakeHome'
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    TakeHome:
+      type: object
+      description: What the provider receives at the listed price
+      properties:
+        priceMinor:
+          type: integer
+          format: int64
+        depositMinor:
+          type: integer
+          format: int64
+        balanceMinor:
+          type: integer
+          format: int64
+        commissionBps:
+          type: integer
+          format: int32
+        commissionMinor:
+          type: integer
+          format: int64
+        cardFeesMinor:
+          type: integer
+          format: int64
+        takeHomeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    AssignMembersRequest:
+      type: object
+      properties:
+        memberIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          uniqueItems: true
+      required:
+      - memberIds
+    CancellationPolicyRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - FLEXIBLE
+          - MODERATE
+          - STRICT
+          - CUSTOM
+        custom:
+          $ref: '#/components/schemas/CustomPolicy'
+      required:
+      - kind
+    CustomPolicy:
+      type: object
+      properties:
+        freeHours:
+          type: integer
+          format: int32
+          maximum: 720
+          minimum: 0
+        partialRefund:
+          type: boolean
+        partialFromHours:
+          type: integer
+          format: int32
+          minimum: 0
+        partialPercent:
+          type: integer
+          format: int32
+          maximum: 99
+          minimum: 0
+        noShow:
+          type: string
+          enum:
+          - DEPOSIT
+          - FULL
+        rescheduleHours:
+          type: integer
+          format: int32
+          maximum: 720
+          minimum: 0
+        maxReschedules:
+          type: integer
+          format: int32
+          maximum: 10
+          minimum: 0
+      required:
+      - noShow
+    CreateBookingRequest:
+      type: object
+      description: Service → day → time → summary, then book
+      properties:
+        serviceId:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          format: uuid
+          description: Preferred team member; empty = anyone free
+        startAt:
+          type: string
+          format: date-time
+          description: A start time from the slots endpoint
+        mode:
+          type: string
+          enum:
+          - IN_PERSON
+          - AT_HOME
+          - VIRTUAL
+        addOnIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          maxItems: 20
+          minItems: 0
+        customer:
+          $ref: '#/components/schemas/CustomerContact'
+        location:
+          type: string
+          description: Required for home visits
+          maxLength: 300
+          minLength: 0
+        notes:
+          type: string
+          maxLength: 1000
+          minLength: 0
+        channel:
+          type: string
+          pattern: ^(web|app)$
+      required:
+      - customer
+      - mode
+      - serviceId
+      - startAt
+    CustomerContact:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        email:
+          type: string
+          format: email
+          maxLength: 200
+          minLength: 0
+        phone:
+          type: string
+          description: E.164 preferred
+          maxLength: 40
+          minLength: 0
+      required:
+      - name
+    BookedService:
+      type: object
+      description: The service as booked (later price changes don't apply)
+      properties:
+        serviceId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        durationMinutes:
+          type: integer
+          format: int32
+        priceMinor:
+          type: integer
+          format: int64
+        depositMinor:
+          type: integer
+          format: int64
+        balanceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        addOns:
+          type: array
+          items:
+            type: string
+        mode:
+          type: string
+        providerName:
+          type: string
+        memberName:
+          type: string
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        orgId:
+          type: string
+        memberId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+        customer:
+          $ref: '#/components/schemas/CustomerContact'
+        service:
+          $ref: '#/components/schemas/BookedService'
+        status:
+          type: string
+        statusLabel:
+          type: string
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        proposedStartAt:
+          type: string
+          format: date-time
+        location:
+          type: string
+        notes:
+          type: string
+        channel:
+          type: string
+        policy:
+          $ref: '#/components/schemas/BookingPolicy'
+        reschedules:
+          type: integer
+          format: int32
+        payment:
+          $ref: '#/components/schemas/BookingPayment'
+        holdExpiresAt:
+          type: string
+          format: date-time
+        requestExpiresAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        cancelledBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    BookingPayment:
+      type: object
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        state:
+          type: string
+        clientSecret:
+          type: string
+          description: Only in the create response, for Stripe.js / PaymentSheet confirmation
+        failureMessage:
+          type: string
+        authorizedMinor:
+          type: integer
+          format: int64
+        depositCapturedMinor:
+          type: integer
+          format: int64
+        balanceCapturedMinor:
+          type: integer
+          format: int64
+        refundedMinor:
+          type: integer
+          format: int64
+        releasedMinor:
+          type: integer
+          format: int64
+        providerFeeMinor:
+          type: integer
+          format: int64
+    BookingPolicy:
+      type: object
+      description: The cancellation policy this booking was made under
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        text:
+          type: string
+    CreateBookingResponse:
+      type: object
+      properties:
+        booking:
+          $ref: '#/components/schemas/Booking'
+        replayed:
+          type: boolean
+    NewTimeRequest:
+      type: object
+      properties:
+        startAt:
+          type: string
+          format: date-time
+      required:
+      - startAt
+    ReasonRequest:
+      type: object
+      description: Optional reason (cancel, decline)
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+    CancelResponse:
+      type: object
+      properties:
+        booking:
+          $ref: '#/components/schemas/Booking'
+        applied:
+          $ref: '#/components/schemas/CancellationQuote'
+    CancellationQuote:
+      type: object
+      description: Exactly what cancelling now refunds, keeps or releases
+      properties:
+        by:
+          type: string
+        refundSharePercent:
+          type: integer
+          format: int32
+        depositMinor:
+          type: integer
+          format: int64
+        refundMinor:
+          type: integer
+          format: int64
+        releaseAuthorisation:
+          type: boolean
+        releasedMinor:
+          type: integer
+          format: int64
+        keptMinor:
+          type: integer
+          format: int64
+        providerFeeMinor:
+          type: integer
+          format: int64
+        policy:
+          type: string
+        explanation:
+          type: string
+        currency:
+          type: string
+    PublicServiceListing:
+      type: object
+      properties:
+        serviceId:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        name:
+          type: string
+        providerName:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        durationMinutes:
+          type: integer
+          format: int32
+        priceFromMinor:
+          type: integer
+          format: int64
+        depositMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        modes:
+          type: array
+          items:
+            type: string
+            enum:
+            - IN_PERSON
+            - AT_HOME
+            - VIRTUAL
+          uniqueItems: true
+        rating:
+          type: number
+          format: double
+        nextAvailable:
+          type: string
+        location:
+          type: string
+    PublicServiceSearch:
+      type: object
+      properties:
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicServiceListing'
+    PublicPolicy:
+      type: object
+      properties:
+        kind:
+          type: string
+        label:
+          type: string
+        text:
+          type: string
+    PublicService:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        providerName:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        category:
+          type: string
+        durationMinutes:
+          type: integer
+          format: int32
+        priceMinor:
+          type: integer
+          format: int64
+        depositMinor:
+          type: integer
+          format: int64
+        balanceMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        modes:
+          type: array
+          items:
+            type: string
+            enum:
+            - IN_PERSON
+            - AT_HOME
+            - VIRTUAL
+          uniqueItems: true
+        addOns:
+          type: array
+          items:
+            $ref: '#/components/schemas/AddOn'
+        policy:
+          $ref: '#/components/schemas/PublicPolicy'
+        instantBooking:
+          type: boolean
+        team:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicTeamMember'
+    PublicTeamMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+    BookingSummary:
+      type: object
+      description: Deposit due now, balance after the appointment, the policy
+      properties:
+        serviceId:
+          type: string
+          format: uuid
+        serviceName:
+          type: string
+        providerName:
+          type: string
+        durationMinutes:
+          type: integer
+          format: int32
+        priceMinor:
+          type: integer
+          format: int64
+        depositNowMinor:
+          type: integer
+          format: int64
+        balanceLaterMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        mode:
+          type: string
+        addOns:
+          type: array
+          items:
+            type: string
+        policy:
+          type: string
+        policyText:
+          type: string
+        instantBooking:
+          type: boolean
+        providerAnswersWithinMinutes:
+          type: integer
+          format: int64
+    AvailableSlot:
+      type: object
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        memberIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    AvailableDay:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        slots:
+          type: integer
+          format: int32
+    PublicProvider:
+      type: object
+      properties:
+        orgId:
+          type: string
+        displayName:
+          type: string
+        timeZone:
+          type: string
+        location:
+          type: string
+        policy:
+          $ref: '#/components/schemas/PublicPolicy'
+        instantBooking:
+          type: boolean
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicService'
+        team:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicTeamMember'
+    BookingEarnings:
+      type: object
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        customer:
+          type: string
+        startAt:
+          type: string
+          format: date-time
+        serviceName:
+          type: string
+        status:
+          type: string
+        heldMinor:
+          type: integer
+          format: int64
+        collectedMinor:
+          type: integer
+          format: int64
+        commissionBps:
+          type: integer
+          format: int32
+        commissionMinor:
+          type: integer
+          format: int64
+        cardFeesMinor:
+          type: integer
+          format: int64
+        providerFeeMinor:
+          type: integer
+          format: int64
+        netMinor:
+          type: integer
+          format: int64
+        balanceDueMinor:
+          type: integer
+          format: int64
+    Earnings:
+      type: object
+      properties:
+        orgId:
+          type: string
+        currency:
+          type: string
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookingEarnings'
+        collectedMinor:
+          type: integer
+          format: int64
+        commissionMinor:
+          type: integer
+          format: int64
+        cardFeesMinor:
+          type: integer
+          format: int64
+        providerFeesMinor:
+          type: integer
+          format: int64
+        netMinor:
+          type: integer
+          format: int64
+        depositsOnHoldMinor:
+          type: integer
+          format: int64
+    Calendar:
+      type: object
+      properties:
+        orgId:
+          type: string
+        timeZone:
+          type: string
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/CalendarDay'
+        bookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Booking'
+    CalendarDay:
+      type: object
+      properties:
+        memberId:
+          type: string
+          format: uuid
+        memberName:
+          type: string
+        date:
+          type: string
+          format: date
+        open:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimeRange'
+        timeOff:
+          type: boolean
+        note:
+          type: string
+        appointments:
+          type: integer
+          format: int32
+        bookedMinutes:
+          type: integer
+          format: int64
+        expectedRevenueMinor:
+          type: integer
+          format: int64
+        awaitingAction:
+          type: integer
+          format: int32
+    BookingActivity:
+      type: object
+      properties:
+        at:
+          type: string
+          format: date-time
+        by:
+          type: string
+        action:
+          type: string
+        moneyKind:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

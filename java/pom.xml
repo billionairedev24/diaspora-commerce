@@ -18,6 +18,7 @@
         <module>libs/platform-security</module>
         <module>libs/platform-test</module>
         <module>services/ai-gateway</module>
+        <module>services/bookings</module>
         <module>services/catalog</module>
         <module>services/content</module>
         <module>services/identity</module>
