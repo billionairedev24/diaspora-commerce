@@ -99,7 +99,18 @@ runs:
         severity: CRITICAL
         ignore-unfixed: true
         exit-code: "1"
-        format: table
+        format: json
+        output: trivy-image.json
+
+    - name: Report image vulnerabilities
+      if: always() && inputs.push == 'true'
+      shell: bash
+      run: |
+        # One annotation per finding, so failures are readable from the run summary without downloading logs.
+        [[ -f trivy-image.json ]] || exit 0
+        jq -r '.Results[]? as $r | $r.Vulnerabilities[]? |
+          "::error title=\(.Severity) \(.VulnerabilityID)::\(.PkgName) \(.InstalledVersion) -> \(.FixedVersion // "no fix") (\($r.Target))"' \
+          trivy-image.json | head -50
 
     - name: SBOM (Syft, SPDX)
       if: inputs.push == 'true'

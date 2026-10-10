@@ -63,26 +63,35 @@ jobs:
       - name: Validate inputs
         run: |
           case "$ENVIRONMENT" in dev|uat|prod) ;; *) echo "::error::bad environment $ENVIRONMENT"; exit 1 ;; esac
+          if [[ -z "$CLOUD" ]]; then
+            # The GitHub environment has no CLOUD variable yet: nothing to deploy to (S249).
+            echo "::notice::No CLOUD set for the $ENVIRONMENT environment; $SERVICE is built and signed but not deployed."
+            echo "skip=true" >> "$GITHUB_ENV"
+            exit 0
+          fi
           case "$CLOUD" in aws|gcp|azure) ;; *) echo "::error::bad cloud $CLOUD"; exit 1 ;; esac
           [[ -n "$REGISTRY_URL" ]] || { echo "::error::set the REGISTRY_URL variable on the '$ENVIRONMENT' environment (tofu output registry_url)"; exit 1; }
           [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::tag must be a full git sha"; exit 1; }
 
       - name: GitOps token
         id: token
-        if: env.HAS_GITOPS_APP == 'true'
+        if: env.skip != 'true' && env.HAS_GITOPS_APP == 'true'
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.GITOPS_APP_ID }}
           private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
 
       - uses: actions/checkout@v5
+        if: env.skip != 'true'
         with:
           ref: ${{ env.GITOPS_BRANCH }}
           token: ${{ steps.token.outputs.token || github.token }}
 
       - uses: sigstore/cosign-installer@v3
+        if: env.skip != 'true'
 
       - name: Log in to GHCR
+        if: env.skip != 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -90,6 +99,7 @@ jobs:
           password: ${{ github.token }}
 
       - name: Verify signature
+        if: env.skip != 'true'
         id: src
         env:
           REPO: ${{ github.repository }}
@@ -102,6 +112,7 @@ jobs:
           echo "::notice::verified $src"
 
       - name: Cloud login
+        if: env.skip != 'true'
         id: login
         uses: ./.github/actions/cloud-login
         with:
@@ -131,6 +142,7 @@ jobs:
         run: az acr login --name "${REGISTRY_URL%%.*}"
 
       - name: Mirror image, signature and SBOM attestation
+        if: env.skip != 'true'
         id: mirror
         run: |
           dst="${REGISTRY_URL}/${SERVICE}:${TAG}"
@@ -147,6 +159,7 @@ jobs:
           fi
 
       - name: GitOps bump values-${{ inputs.environment }}.yaml
+        if: env.skip != 'true'
         run: |
           set -euo pipefail
           if [[ -d "java/services/$SERVICE" ]]; then dir="java/services/$SERVICE"; else dir="go/services/$SERVICE"; fi
@@ -166,6 +179,7 @@ jobs:
           done
 
       - name: Summary
+        if: env.skip != 'true'
         run: |
           {
             echo "### ${SERVICE} -> ${ENVIRONMENT} on ${CLOUD}"
