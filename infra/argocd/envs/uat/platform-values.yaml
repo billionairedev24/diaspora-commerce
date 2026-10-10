@@ -1,0 +1,50 @@
+# Environment-wide values for uat.
+#  1. Merged LAST into every service chart by the services ApplicationSet (so it wins over values-uat.yaml):
+#     cloud, workload identity, secret store and image registry are decided here, once per environment.
+#  2. Read by the ApplicationSets (git files generator): the "argocd" block and "cloud" (which picks
+#     infra/k8s/platform/secret-stores/<cloud> and infra/k8s/platform/clouds/<cloud>/*).
+# The at-service chart ignores the "argocd" block.
+#
+# cloud: none renders on kind / any local cluster (no identity annotations, Fake secret store).
+cloud: none
+
+image:
+  registry: ghcr.io/billionairedev24/diaspora-commerce
+
+secrets:
+  enabled: true
+  keySeparator: "/"               # AWS Secrets Manager path; "-" on GCP and Azure (see examples below)
+  store: platform-secrets          # ClusterSecretStore from infra/k8s/platform/secret-stores/<cloud>
+
+# workloadIdentity: set the env-wide default identity in the cloud block below. platform-values is merged last, so a
+# service that needs its own least-privilege identity sets it here with care (or the key is left unset here and each
+# service sets workloadIdentity in its values-uat.yaml).
+
+argocd:
+  env: uat
+  destinationServer: https://kubernetes.default.svc
+  targetRevision: HEAD             # prod may pin a release tag, e.g. v2026.10.1
+  autoSync: true                  # automated sync with prune + selfHeal (Rollouts canary + analysis gate traffic)
+  prune: true
+  selfHeal: true
+
+# ---------------------------------------------------------------------------------------------- AWS (EKS)
+# cloud: aws
+# image:
+#   registry: 111122223333.dkr.ecr.us-east-1.amazonaws.com/afrotransact
+# workloadIdentity:
+#   aws: {roleArn: "arn:aws:iam::111122223333:role/afrotransact-uat-services"}   # IRSA / Pod Identity
+# ---------------------------------------------------------------------------------------------- GCP (GKE)
+# cloud: gcp
+# image:
+#   registry: us-central1-docker.pkg.dev/afrotransact-uat/afrotransact
+# workloadIdentity:
+#   gcp: {serviceAccount: "afrotransact-uat-services@afrotransact-uat.iam.gserviceaccount.com"}
+# secrets: {enabled: true, store: platform-secrets, keySeparator: "-"}   # Secret Manager names allow [A-Za-z0-9_-] only
+# ---------------------------------------------------------------------------------------------- Azure (AKS)
+# cloud: azure
+# image:
+#   registry: afrotransactuat.azurecr.io
+# workloadIdentity:
+#   azure: {clientId: "00000000-0000-0000-0000-000000000000"}                     # user-assigned identity
+# secrets: {enabled: true, store: platform-secrets, keySeparator: "-"}   # Key Vault names allow [A-Za-z0-9-] only

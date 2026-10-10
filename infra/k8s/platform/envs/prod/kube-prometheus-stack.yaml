@@ -1,0 +1,37 @@
+# kube-prometheus-stack — prod
+prometheus:
+  prometheusSpec:
+    replicas: 2
+    retention: 30d
+    # Default scrape class: every target gets env (cluster default "prod", overridden by the afrotransact-<env>
+    # namespace or the afrotransact.com/env pod label) and service (= app.kubernetes.io/name), matching the local
+    # docker-compose labels used by dashboards, recording rules and alerts.
+    scrapeClasses:
+      - name: afrotransact
+        default: true
+        relabelings:
+          - targetLabel: env
+            replacement: prod
+          - sourceLabels: [__meta_kubernetes_namespace]
+            regex: afrotransact-(.+)
+            targetLabel: env
+          - sourceLabels: [__meta_kubernetes_pod_label_afrotransact_com_env]
+            regex: (.+)
+            targetLabel: env
+          - sourceLabels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            regex: (.+)
+            targetLabel: service
+    externalLabels: {cluster: afrotransact-prod, env: prod}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          resources:
+            requests: {storage: 200Gi}
+alertmanager:
+  alertmanagerSpec:
+    replicas: 3
+grafana:
+  grafana.ini:
+    server:
+      root_url: https://grafana.afrotransact.com
+  persistence: {size: 10Gi}

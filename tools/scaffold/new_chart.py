@@ -87,6 +87,7 @@ monitoring:
 secrets:
   enabled: {"true" if secrets else "false"}
   store: platform-secrets
+  keySeparator: "/"     # "-" on GCP Secret Manager and Azure Key Vault (set in platform-values.yaml)
 workloadIdentity:
   aws: {{roleArn: ""}}
   gcp: {{serviceAccount: ""}}

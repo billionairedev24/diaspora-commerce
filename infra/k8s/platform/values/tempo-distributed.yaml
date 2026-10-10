@@ -1,0 +1,48 @@
+# Tempo (grafana tempo-distributed 1.61.3). Traces arrive as OTLP from the OTel Collector gateway
+# (tail sampling already applied there). Object storage per cloud in ../envs/<env>/tempo-distributed.yaml.
+fullnameOverride: tempo
+
+traces:
+  otlp:
+    grpc: {enabled: true}
+    http: {enabled: true}
+
+storage:
+  trace:
+    backend: s3                     # overridden per cloud: s3 | gcs | azure
+    s3:
+      bucket: afrotransact-tempo
+      endpoint: s3.amazonaws.com
+
+serviceAccount:
+  create: true
+  name: tempo
+  annotations: {}
+
+metricsGenerator:
+  enabled: true
+  config:
+    storage:
+      remote_write:
+        - url: http://kube-prometheus-stack-prometheus.observability:9090/api/v1/write
+          send_exemplars: true
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [service-graphs, span-metrics, local-blocks]
+
+ingester:
+  replicas: 3
+  persistence: {enabled: true, size: 10Gi}
+distributor: {replicas: 2}
+querier: {replicas: 2}
+queryFrontend: {replicas: 1}
+compactor:
+  config:
+    compaction:
+      block_retention: 336h         # 14 days
+
+metaMonitoring:
+  serviceMonitor:
+    enabled: true
+    labels: {release: kube-prometheus-stack}

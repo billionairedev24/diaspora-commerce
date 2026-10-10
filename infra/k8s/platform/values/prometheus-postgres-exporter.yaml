@@ -1,0 +1,9 @@
+# Postgres exporter (prometheus-community 8.2.0) against the managed PostgreSQL server (RDS / Cloud SQL /
+# Azure Flexible Server) with a pg_monitor role. DSN from ExternalSecret postgres-exporter (../observability/).
+config:
+  datasourceSecret:
+    name: postgres-exporter
+    key: DATA_SOURCE_NAME
+serviceMonitor:
+  enabled: true
+  labels: {release: kube-prometheus-stack}

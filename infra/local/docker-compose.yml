@@ -1,0 +1,694 @@
+# AfroTransact v2 — local development stack.
+#
+#   make up                      # infrastructure + observability (default profile)
+#   make apps-up                 # + containerised services (profile "apps")
+#   docker compose -f infra/local/docker-compose.yml --profile apps up -d catalog
+#
+# Host ports follow infra/local/PORTS.md exactly. Services run from the IDE reach the stack on localhost;
+# containers reach each other by service name. Credentials here are for LOCAL USE ONLY.
+name: afrotransact
+
+x-restart: &restart
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3"}
+
+# Static busybox copied into a volume so distroless images (collector, OpenFGA, Go services, redis-exporter)
+# can still run an HTTP healthcheck: ["CMD", "/hc/busybox", "wget", ...].
+x-hc-tools: &hc-tools
+  depends_on:
+    hc-tools: {condition: service_completed_successfully}
+
+# ---------------------------------------------------------------------------------------------------------
+# Application service templates (profile "apps"). Append a service by copying a block under "services:"
+# and changing the name, build arg / dockerfile, host port (PORTS.md) and its DB/topic settings.
+# ---------------------------------------------------------------------------------------------------------
+x-java-service: &java-service
+  profiles: [apps]
+  <<: *restart
+  build:
+    context: ../../java
+    dockerfile: Dockerfile
+  depends_on:
+    postgres: {condition: service_healthy}
+    kafka: {condition: service_healthy}
+    otel-collector: {condition: service_healthy}
+  # The image starts with --server.port=8080, so the container always listens on 8080; the host port is
+  # the service's PORTS.md port so Prometheus (host.docker.internal:<port>) scrapes IDE and container alike.
+  healthcheck:
+    test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health/readiness HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+    interval: 10s
+    timeout: 5s
+    retries: 30
+    start_period: 60s
+  deploy:
+    resources:
+      limits: {memory: 1g}
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3", tag: "{{.Name}}"}
+
+x-java-env: &java-env
+  SPRING_PROFILES_ACTIVE: local
+  APP_ENV: local
+  KAFKA_BOOTSTRAP: kafka:29092
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  AUTH_ISSUER_URI: http://identity:8080
+  TRACE_SAMPLING: "1.0"
+  JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75 -XX:+UseZGC
+
+x-go-service: &go-service
+  profiles: [apps]
+  <<: *restart
+  depends_on:
+    hc-tools: {condition: service_completed_successfully}
+    otel-collector: {condition: service_healthy}
+  volumes:
+    - hc-tools:/hc:ro
+  deploy:
+    resources:
+      limits: {memory: 256m}
+  logging:
+    driver: json-file
+    options: {max-size: "10m", max-file: "3", tag: "{{.Name}}"}
+
+x-go-env: &go-env
+  APP_ENV: local
+  OTEL_EXPORTER_OTLP_ENDPOINT_HOST: otel-collector:4318
+  TRACE_SAMPLING: "1.0"
+  AUTH_ISSUER_URI: http://identity:8080
+  KAFKA_BROKERS: kafka:29092
+  REDIS_ADDR: valkey:6379
+
+services:
+  # ======================================== helpers ========================================
+  hc-tools:
+    image: busybox:1.37-uclibc     # statically linked, runs inside distroless images
+    command: ["cp", "/bin/busybox", "/hc/busybox"]
+    volumes:
+      - hc-tools:/hc
+    restart: "no"
+
+  # ======================================== data ========================================
+  postgres:
+    image: postgis/postgis:17-3.5
+    <<: [*restart, *logging]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    command:
+      - postgres
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - log_min_duration_statement=500
+    ports: ["${POSTGRES_HOST_PORT:-5432}:5432"]   # override only if 5432 is taken on your machine
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init-databases.sh:/docker-entrypoint-initdb.d/10-init-databases.sh:ro
+    healthcheck:
+      # Healthy only once the init script has created the last database.
+      test: ["CMD-SHELL", "pg_isready -U postgres -d openfga && psql -U postgres -tAc \"select 1 from pg_roles where rolname='monitoring'\" | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    deploy:
+      resources:
+        limits: {memory: 1g}
+
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    <<: [*restart, *logging]
+    command: ["valkey-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports: ["6379:6379"]
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 384m}
+
+  kafka:
+    image: apache/kafka:4.1.0
+    <<: [*restart, *logging]
+    hostname: kafka
+    ports: ["9092:9092"]
+    environment:
+      CLUSTER_ID: p_DB3lr-TA2eEQr-elrHAQ   # base64 UUID (KRaft cluster id)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9094
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # INTERNAL for containers (kafka:29092), HOST for the IDE (localhost:9092).
+      KAFKA_LISTENERS: INTERNAL://:29092,HOST://:9092,CONTROLLER://:9094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 15s
+      retries: 20
+      start_period: 20s
+    deploy:
+      resources:
+        limits: {memory: 1g}
+
+  kafka-init:
+    image: apache/kafka:4.1.0
+    depends_on:
+      kafka: {condition: service_healthy}
+    entrypoint: ["/bin/bash", "/topics/create-topics.sh"]
+    environment:
+      BOOTSTRAP: kafka:29092
+    volumes:
+      - ./kafka:/topics:ro
+    restart: "no"
+
+  kafka-ui:
+    image: kafbat/kafka-ui:v1.3.0
+    <<: [*restart, *logging]
+    depends_on:
+      kafka: {condition: service_healthy}
+    ports: ["8090:8080"]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: afrotransact-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      DYNAMIC_CONFIG_ENABLED: "true"
+      JAVA_OPTS: -Xmx384m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    deploy:
+      resources:
+        limits: {memory: 512m}
+
+  elasticsearch:
+    image: elasticsearch:9.3.0
+    <<: [*restart, *logging]
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      xpack.ml.enabled: "false"
+      cluster.name: afrotransact-local
+      # Needed on small/overlay disks: never mark the node read-only because of disk watermarks.
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+    # No ulimits block: single-node discovery skips the production bootstrap checks, and some rootless /
+    # sandboxed daemons refuse to set rlimits. Add `ulimits: {nofile: 65536}` if your daemon allows it.
+    ports: ["9200:9200"]
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+    deploy:
+      resources:
+        limits: {memory: 2g}
+
+  elasticsearch-init:
+    image: elasticsearch:9.3.0
+    depends_on:
+      elasticsearch: {condition: service_healthy}
+    entrypoint: ["/bin/bash", "/init/init.sh"]
+    volumes:
+      - ./elasticsearch:/init:ro
+    restart: "no"
+
+  kibana:
+    image: kibana:9.3.0
+    <<: [*restart, *logging]
+    depends_on:
+      elasticsearch: {condition: service_healthy}
+    ports: ["5601:5601"]
+    environment:
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+      SERVER_PUBLICBASEURL: http://localhost:5601
+      TELEMETRY_OPTIN: "false"
+      NODE_OPTIONS: --max-old-space-size=768
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5601/api/status | grep -q '\"level\":\"available\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 40
+      start_period: 60s
+    deploy:
+      resources:
+        limits: {memory: 1g}
+
+  temporal:
+    image: temporalio/auto-setup:1.28.1
+    <<: [*restart, *logging]
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports: ["7233:7233"]
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      DBNAME: temporal
+      VISIBILITY_DBNAME: temporal_visibility
+      SKIP_DB_CREATE: "true"          # both databases are created by postgres/init-databases.sh
+      DEFAULT_NAMESPACE: afrotransact
+      PROMETHEUS_ENDPOINT: 0.0.0.0:8000
+      BIND_ON_IP: 0.0.0.0
+      TEMPORAL_BROADCAST_ADDRESS: 127.0.0.1
+    healthcheck:
+      test: ["CMD-SHELL", "temporal operator namespace describe -n afrotransact --address 127.0.0.1:7233 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 40
+      start_period: 30s
+    deploy:
+      resources:
+        limits: {memory: 768m}
+
+  temporal-ui:
+    image: temporalio/ui:2.39.0
+    <<: [*restart, *logging]
+    depends_on:
+      temporal: {condition: service_healthy}
+    ports: ["8088:8080"]
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_DEFAULT_NAMESPACE: afrotransact
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 256m}
+
+  minio:
+    # Upstream MinIO no longer publishes images; pgsty/minio is the maintained community build (includes mc).
+    # Override with MINIO_IMAGE=quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z if you prefer the last upstream build.
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    <<: [*restart, *logging]
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports: ["9000:9000", "9001:9001"]
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 512m}
+
+  minio-init:
+    image: ${MINIO_IMAGE:-pgsty/minio:RELEASE.2026-08-04T00-00-00Z}
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: ["/bin/bash", "/init/create-buckets.sh"]
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MC_CONFIG_DIR: /tmp/mc
+    volumes:
+      - ./minio:/init:ro
+    restart: "no"
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    <<: [*restart, *logging]
+    ports: ["1025:1025", "8025:8025"]
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      MP_MAX_MESSAGES: 5000
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: {memory: 128m}
+
+  openfga-migrate:
+    image: openfga/openfga:v1.10.0
+    depends_on:
+      postgres: {condition: service_healthy}
+    command: ["migrate"]
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable
+    restart: "no"
+
+  openfga:
+    image: openfga/openfga:v1.10.0
+    <<: [*restart, *logging]
+    depends_on:
+      openfga-migrate: {condition: service_completed_successfully}
+      hc-tools: {condition: service_completed_successfully}
+    command: ["run"]
+    ports: ["8091:8080"]
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://openfga:openfga@postgres:5432/openfga?sslmode=disable
+      OPENFGA_DATASTORE_MAX_OPEN_CONNS: 20
+      OPENFGA_PLAYGROUND_ENABLED: "false"     # playground would need port 3000 (storefront)
+      OPENFGA_METRICS_ENABLED: "true"
+      OPENFGA_TRACE_ENABLED: "true"
+      OPENFGA_TRACE_OTLP_ENDPOINT: otel-collector:4317
+      OPENFGA_TRACE_OTLP_TLS_ENABLED: "false"
+      OPENFGA_TRACE_SAMPLE_RATIO: "0.1"
+    volumes:
+      - hc-tools:/hc:ro
+    healthcheck:
+      test: ["CMD", "/hc/busybox", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 256m}
+
+  # ======================================== observability ========================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    <<: [*restart, *logging, *hc-tools]
+    command: ["--config=/etc/otelcol/config.yaml"]
+    ports: ["4317:4317", "4318:4318"]
+    environment:
+      # Share of "normal" (fast, successful) traces kept by tail sampling. Errors and >500 ms traces are always kept.
+      TAIL_SAMPLING_BASELINE_PERCENT: ${TAIL_SAMPLING_BASELINE_PERCENT:-100}
+      DEPLOYMENT_ENV: local
+    volumes:
+      - ../observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+      - hc-tools:/hc:ro
+    healthcheck:
+      test: ["CMD", "/hc/busybox", "wget", "-qO-", "http://127.0.0.1:13133/"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 512m}
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    <<: [*restart, *logging]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-remote-write-receiver
+      - --web.enable-otlp-receiver
+      - --web.enable-lifecycle
+      - --enable-feature=exemplar-storage
+    ports: ["9090:9090"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 1g}
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    <<: [*restart, *logging]
+    depends_on:
+      mailpit: {condition: service_healthy}
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml", "--storage.path=/alertmanager"]
+    ports: ["9093:9093"]
+    volumes:
+      - ../observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9093/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 128m}
+
+  loki:
+    image: grafana/loki:3.5.5
+    <<: [*restart, *logging]
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    ports: ["3300:3100"]
+    volumes:
+      - ../observability/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    deploy:
+      resources:
+        limits: {memory: 512m}
+
+  tempo:
+    image: grafana/tempo:2.8.2
+    <<: [*restart, *logging]
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    ports: ["3201:3200"]
+    volumes:
+      - ../observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3200/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+    deploy:
+      resources:
+        limits: {memory: 1g}
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    <<: [*restart, *logging]
+    depends_on:
+      prometheus: {condition: service_healthy}
+      loki: {condition: service_healthy}
+      tempo: {condition: service_healthy}
+    ports: ["3200:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SERVER_ROOT_URL: http://localhost:3200
+      GF_FEATURE_TOGGLES_ENABLE: traceqlEditor,traceToMetrics
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    deploy:
+      resources:
+        limits: {memory: 512m}
+
+  # ---- exporters (internal only, scraped by Prometheus) ----
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1
+    <<: [*restart, *logging]
+    depends_on:
+      postgres: {condition: service_healthy}
+    environment:
+      DATA_SOURCE_NAME: postgresql://monitoring:monitoring@postgres:5432/postgres?sslmode=disable
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9187/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: {memory: 128m}
+
+  elasticsearch-exporter:
+    image: prometheuscommunity/elasticsearch-exporter:v1.9.0
+    <<: [*restart, *logging]
+    depends_on:
+      elasticsearch: {condition: service_healthy}
+    command: ["--es.uri=http://elasticsearch:9200", "--es.all", "--es.indices", "--es.shards", "--collector.clustersettings"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9114/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: {memory: 128m}
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    <<: [*restart, *logging]
+    depends_on:
+      kafka: {condition: service_healthy}
+    command: ["--kafka.server=kafka:29092", "--topic.filter=^at\\..*", "--group.filter=.*"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9308/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: {memory: 128m}
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.77.0
+    <<: [*restart, *logging]
+    depends_on:
+      valkey: {condition: service_healthy}
+      hc-tools: {condition: service_completed_successfully}
+    environment:
+      REDIS_ADDR: redis://valkey:6379
+    volumes:
+      - hc-tools:/hc:ro
+    healthcheck:
+      test: ["CMD", "/hc/busybox", "wget", "-qO-", "http://127.0.0.1:9121/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: {memory: 64m}
+
+  # ======================================== apps (profile "apps") ========================================
+  # Ships the containerised services' stdout (json-file, tagged with the container name) to Loki via the
+  # main collector. Linux only: Docker Desktop does not expose /var/lib/docker/containers to bind mounts.
+  log-shipper:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    profiles: [apps]
+    <<: [*restart, *logging]
+    user: "0:0"   # container log files are root-only
+    depends_on:
+      otel-collector: {condition: service_healthy}
+      hc-tools: {condition: service_completed_successfully}
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../observability/otel-log-shipper.yaml:/etc/otelcol/config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - hc-tools:/hc:ro
+    healthcheck:
+      test: ["CMD", "/hc/busybox", "wget", "-qO-", "http://127.0.0.1:13133/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: {memory: 256m}
+
+  catalog:
+    <<: *java-service
+    build:
+      context: ../../java
+      dockerfile: Dockerfile
+      args: {SERVICE: catalog}
+    image: afrotransact/catalog-service:local
+    ports: ["8101:8080"]
+    environment:
+      <<: *java-env
+      DB_URL: jdbc:postgresql://postgres:5432/catalog
+      DB_USER: catalog
+      DB_PASSWORD: catalog
+
+  search:
+    <<: *go-service
+    build:
+      context: ../../go
+      dockerfile: services/search/Dockerfile
+    image: afrotransact/search:local
+    depends_on:
+      hc-tools: {condition: service_completed_successfully}
+      otel-collector: {condition: service_healthy}
+      elasticsearch: {condition: service_healthy}
+    ports: ["8201:8201"]
+    environment:
+      <<: *go-env
+      PORT: "8201"
+      ES_URLS: http://elasticsearch:9200
+      AI_GATEWAY_URL: http://ai-gateway:8080
+    healthcheck:
+      test: ["CMD", "/hc/busybox", "wget", "-qO-", "http://127.0.0.1:8201/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # To add a service, e.g. orders (Java, 8104):
+  #   orders:
+  #     <<: *java-service
+  #     build: {context: ../../java, dockerfile: Dockerfile, args: {SERVICE: orders}}
+  #     image: afrotransact/orders-service:local
+  #     ports: ["8104:8080"]
+  #     environment:
+  #       <<: *java-env
+  #       DB_URL: jdbc:postgresql://postgres:5432/orders
+  #       DB_USER: orders
+  #       DB_PASSWORD: orders
+  #       TEMPORAL_TARGET: temporal:7233
+  # Then add it to infra/observability/prometheus.yml (already pre-listed for every PORTS.md service).
+
+volumes:
+  hc-tools:
+  postgres-data:
+  valkey-data:
+  kafka-data:
+  es-data:
+  minio-data:
+  prometheus-data:
+  alertmanager-data:
+  loki-data:
+  tempo-data:
+  grafana-data:

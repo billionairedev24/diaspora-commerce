@@ -1,0 +1,40 @@
+# Local Alertmanager: every alert is delivered as email to Mailpit (http://localhost:8025).
+# The Kubernetes configuration (PagerDuty / Opsgenie / Slack) lives in
+# infra/k8s/platform/values/kube-prometheus-stack.yaml.
+global:
+  smtp_smarthost: mailpit:1025
+  smtp_from: alertmanager@afrotransact.local
+  smtp_require_tls: false
+  resolve_timeout: 5m
+
+route:
+  receiver: mailpit
+  group_by: [alertname, service, slo]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Locally most services are not running at any given time; do not mail ServiceDown for them.
+    - receiver: blackhole
+      matchers: [env="local", alertname="ServiceDown"]
+    - receiver: mailpit
+      matchers: [severity="page"]
+      repeat_interval: 1h
+
+inhibit_rules:
+  # A paging burn-rate alert suppresses the ticket-level one for the same SLO.
+  - source_matchers: [severity="page"]
+    target_matchers: [severity="ticket"]
+    equal: [slo]
+  # Cluster red suppresses yellow.
+  - source_matchers: [alertname="ElasticsearchClusterRed"]
+    target_matchers: [alertname="ElasticsearchClusterYellow"]
+
+receivers:
+  - name: blackhole
+  - name: mailpit
+    email_configs:
+      - to: oncall@afrotransact.local
+        send_resolved: true
+        headers:
+          Subject: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} {{ .CommonLabels.service }}'

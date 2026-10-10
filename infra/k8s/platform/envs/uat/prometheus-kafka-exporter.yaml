@@ -1,0 +1,5 @@
+# Kafka exporter — uat. Managed Kafka bootstrap (Terraform output) and SASL settings.
+kafkaServer:
+  - kafka-bootstrap.uat.afrotransact.internal:9092
+# sasl: {enabled: true, handshake: true, scram: {enabled: true, mechanism: scram-sha512}}   # MSK / Confluent
+# tls: {enabled: true}

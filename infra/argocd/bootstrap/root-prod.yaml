@@ -1,0 +1,18 @@
+# Root "app of apps" for prod. Apply once per cluster after installing Argo CD:
+#   kubectl apply -n argocd -f infra/argocd/bootstrap/root-prod.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-prod
+  namespace: argocd
+  finalizers: [resources-finalizer.argocd.argoproj.io]
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+    targetRevision: HEAD
+    path: infra/argocd/envs/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  # prod: manual. Sync the root (and then each app) after review: argocd app sync root-prod

@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Needs the cert-manager, external-secrets and Gateway API CRDs (later sync wave than the operators).
+resources:
+  - cluster-issuers.yaml
+  - gateway.yaml

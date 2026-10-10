@@ -1,0 +1,18 @@
+# cert-manager (jetstack v1.19.1). ClusterIssuers (Let's Encrypt via DNS-01 on Cloudflare) are in
+# ../namespaces/cluster-issuers.yaml; the Cloudflare token comes from the secret store.
+crds:
+  enabled: true
+  keep: true
+replicaCount: 2
+podDisruptionBudget: {enabled: true}
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: true
+    labels: {release: kube-prometheus-stack}
+serviceAccount:
+  annotations: {}
+config:
+  apiVersion: controller.config.cert-manager.io/v1alpha1
+  kind: ControllerConfiguration
+  enableGatewayAPI: true             # certificates for Gateway listeners (edge/gateway.yaml)

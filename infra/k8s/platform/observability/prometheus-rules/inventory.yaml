@@ -1,0 +1,37 @@
+# GENERATED from infra/observability/rules/inventory.yaml by generate_rules.py — do not edit by hand.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: afrotransact-inventory
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/part-of: afrotransact
+spec:
+  groups:
+  - name: afrotransact-inventory
+    rules:
+    - alert: InventoryReconciliationDrift
+      expr: |
+        sum by (env, fc) (abs(inventory_reconciliation_drift)) > 10
+      for: 30m
+      labels:
+        severity: ticket
+        team: inventory
+      annotations:
+        summary: '{{ $value }} units of unexplained drift at {{ $labels.fc }}'
+        description: The inventory ledger and physical/channel counts disagree after reconciliation; overselling risk.
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/InventoryReconciliationDrift.md
+        dashboard: /d/at-inventory-reconciliation
+    - alert: InventoryReconciliationStale
+      expr: |
+        time() - max by (env) (inventory_reconciliation_last_run_timestamp_seconds) > 7200
+      for: 10m
+      labels:
+        severity: ticket
+        team: inventory
+      annotations:
+        summary: Inventory reconciliation has not run for {{ $value | humanizeDuration }}
+        description: The scheduled reconciliation job is failing or not scheduled.
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/InventoryReconciliationStale.md
+        dashboard: /d/at-inventory-reconciliation

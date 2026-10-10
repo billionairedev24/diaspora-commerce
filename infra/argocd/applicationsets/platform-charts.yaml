@@ -1,0 +1,81 @@
+# Platform Helm charts for one environment (env selected by envs/<env> kustomization, like services.yaml).
+# Values (last wins): infra/k8s/platform/values/<c>.yaml < envs/<env>/<c>.yaml < clouds/<cloud>/<c>.yaml
+# (cloud = "cloud" in infra/argocd/envs/<env>/platform-values.yaml). Missing env/cloud files are ignored.
+# Sync waves order the rollout: CRD-heavy operators first, then observability, then exporters.
+# Strimzi is deliberately not included: managed Kafka (MSK / Confluent Cloud / Event Hubs) is preferred; if a
+# self-hosted cluster is ever needed, add strimzi-kafka-operator (https://strimzi.io/charts/) here at wave -5.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: platform-charts
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+              revision: HEAD
+              files:
+                - path: infra/argocd/envs/ENV/platform-values.yaml     # patched per env
+          - list:
+              elements:
+                - {component: cert-manager, namespace: cert-manager, wave: "-5", repoURL: https://charts.jetstack.io, chart: cert-manager, version: v1.19.1}
+                - {component: external-secrets, namespace: external-secrets, wave: "-5", repoURL: https://charts.external-secrets.io, chart: external-secrets, version: 2.12.0}
+                - {component: kube-prometheus-stack, namespace: observability, wave: "-5", repoURL: https://prometheus-community.github.io/helm-charts, chart: kube-prometheus-stack, version: 92.3.0}
+                - {component: argo-rollouts, namespace: argo-rollouts, wave: "-4", repoURL: https://argoproj.github.io/argo-helm, chart: argo-rollouts, version: 2.43.6}
+                - {component: eck-operator, namespace: elastic-system, wave: "-4", repoURL: https://helm.elastic.co, chart: eck-operator, version: 3.3.2}
+                - {component: envoy-gateway, namespace: envoy-gateway-system, wave: "-4", repoURL: registry-1.docker.io/envoyproxy, chart: gateway-helm, version: v1.9.2}
+                - {component: loki, namespace: observability, wave: "-3", repoURL: https://grafana.github.io/helm-charts, chart: loki, version: 7.4.0}
+                - {component: tempo-distributed, namespace: observability, wave: "-3", repoURL: https://grafana.github.io/helm-charts, chart: tempo-distributed, version: 1.61.3}
+                - {component: opentelemetry-collector-gateway, namespace: observability, wave: "-2", repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts, chart: opentelemetry-collector, version: 0.175.1}
+                - {component: opentelemetry-collector-agent, namespace: observability, wave: "-2", repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts, chart: opentelemetry-collector, version: 0.175.1}
+                - {component: prometheus-elasticsearch-exporter, namespace: observability, wave: "2", repoURL: https://prometheus-community.github.io/helm-charts, chart: prometheus-elasticsearch-exporter, version: 7.4.0}
+                - {component: prometheus-kafka-exporter, namespace: observability, wave: "2", repoURL: https://prometheus-community.github.io/helm-charts, chart: prometheus-kafka-exporter, version: 4.0.0}
+                - {component: prometheus-postgres-exporter, namespace: observability, wave: "2", repoURL: https://prometheus-community.github.io/helm-charts, chart: prometheus-postgres-exporter, version: 8.2.0}
+  template:
+    metadata:
+      name: '{{ .component }}-{{ .argocd.env }}'
+      labels:
+        app.kubernetes.io/part-of: afrotransact-platform
+        afrotransact.com/env: '{{ .argocd.env }}'
+      annotations:
+        argocd.argoproj.io/sync-wave: '{{ .wave }}'
+    spec:
+      project: 'platform-{{ .argocd.env }}'
+      sources:
+        - repoURL: '{{ .repoURL }}'
+          chart: '{{ .chart }}'
+          targetRevision: '{{ .version }}'
+          helm:
+            releaseName: '{{ .component }}'
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - '$values/infra/k8s/platform/values/{{ .component }}.yaml'
+              - '$values/infra/k8s/platform/envs/{{ .argocd.env }}/{{ .component }}.yaml'
+              - '$values/infra/k8s/platform/clouds/{{ .cloud }}/{{ .component }}.yaml'
+        - repoURL: https://github.com/billionairedev24/diaspora-commerce.git
+          targetRevision: '{{ .argocd.targetRevision }}'
+          ref: values
+      destination:
+        server: '{{ .argocd.destinationServer }}'
+        namespace: '{{ .namespace }}'
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 10
+          backoff: {duration: 15s, factor: 2, maxDuration: 5m}
+  templatePatch: |
+    {{- if .argocd.autoSync }}
+    spec:
+      syncPolicy:
+        automated:
+          prune: {{ .argocd.prune }}
+          selfHeal: {{ .argocd.selfHeal }}
+    {{- end }}

@@ -125,7 +125,8 @@ spec:
     name: {{ include "at-service.name" . }}-secrets
   dataFrom:
     - extract:
-        key: {{ printf "afrotransact/%s/%s" .Values.env (include "at-service.name" .) }}
+        {{- /* AWS Secrets Manager allows "/"; GCP Secret Manager and Azure Key Vault need "-" (secrets.keySeparator). */}}
+        key: {{ join (.Values.secrets.keySeparator | default "/") (list "afrotransact" .Values.env (include "at-service.name" .)) }}
 {{- end }}
 {{- end -}}
 

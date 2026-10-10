@@ -1,0 +1,107 @@
+# GENERATED from infra/observability/rules/slo-checkout.yaml by generate_rules.py — do not edit by hand.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: afrotransact-slo-checkout
+  namespace: observability
+  labels:
+    release: kube-prometheus-stack
+    app.kubernetes.io/part-of: afrotransact
+spec:
+  groups:
+  - name: slo-checkout-recording
+    interval: 30s
+    rules:
+    - record: slo:sli_error:ratio_rate5m
+      expr: |-
+        (sum by (env) (rate(checkout_attempts_total{outcome="failure"}[5m])))
+        /
+        (sum by (env) (rate(checkout_attempts_total{outcome=~"success|failure"}[5m])) > 0)
+      labels:
+        slo: checkout
+    - record: slo:sli_error:ratio_rate30m
+      expr: |-
+        (sum by (env) (rate(checkout_attempts_total{outcome="failure"}[30m])))
+        /
+        (sum by (env) (rate(checkout_attempts_total{outcome=~"success|failure"}[30m])) > 0)
+      labels:
+        slo: checkout
+    - record: slo:sli_error:ratio_rate1h
+      expr: |-
+        (sum by (env) (rate(checkout_attempts_total{outcome="failure"}[1h])))
+        /
+        (sum by (env) (rate(checkout_attempts_total{outcome=~"success|failure"}[1h])) > 0)
+      labels:
+        slo: checkout
+    - record: slo:sli_error:ratio_rate2h
+      expr: |-
+        (sum by (env) (rate(checkout_attempts_total{outcome="failure"}[2h])))
+        /
+        (sum by (env) (rate(checkout_attempts_total{outcome=~"success|failure"}[2h])) > 0)
+      labels:
+        slo: checkout
+    - record: slo:sli_error:ratio_rate6h
+      expr: |-
+        (sum by (env) (rate(checkout_attempts_total{outcome="failure"}[6h])))
+        /
+        (sum by (env) (rate(checkout_attempts_total{outcome=~"success|failure"}[6h])) > 0)
+      labels:
+        slo: checkout
+    - record: slo:sli_error:ratio_rate1d
+      expr: |-
+        (sum by (env) (rate(checkout_attempts_total{outcome="failure"}[1d])))
+        /
+        (sum by (env) (rate(checkout_attempts_total{outcome=~"success|failure"}[1d])) > 0)
+      labels:
+        slo: checkout
+    - record: slo:sli_error:ratio_rate3d
+      expr: |-
+        (sum by (env) (rate(checkout_attempts_total{outcome="failure"}[3d])))
+        /
+        (sum by (env) (rate(checkout_attempts_total{outcome=~"success|failure"}[3d])) > 0)
+      labels:
+        slo: checkout
+    - record: slo:sli_error:ratio_rate30d
+      expr: avg_over_time(slo:sli_error:ratio_rate1h{slo="checkout"}[30d])
+      labels:
+        slo: checkout
+    - record: slo:error_budget:ratio
+      expr: vector(0.001)
+      labels:
+        slo: checkout
+    - record: slo:objective:ratio
+      expr: vector(0.999)
+      labels:
+        slo: checkout
+  - name: slo-checkout-alerts
+    rules:
+    - alert: CheckoutSuccessBudgetBurn
+      expr: |-
+        (slo:sli_error:ratio_rate1h{slo="checkout"} > (14.4 * 0.001) and slo:sli_error:ratio_rate5m{slo="checkout"} > (14.4 * 0.001))
+        or
+        (slo:sli_error:ratio_rate6h{slo="checkout"} > (6 * 0.001) and slo:sli_error:ratio_rate30m{slo="checkout"} > (6 * 0.001))
+      for: 2m
+      labels:
+        severity: page
+        slo: checkout
+        team: orders
+      annotations:
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CheckoutSuccessBudgetBurn.md
+        dashboard: /d/at-business-slo
+        summary: Checkout success SLO (99.9%) is burning its error budget (fast burn)
+        description: "{{ $labels.env }}: error ratio {{ $value | humanizePercentage }} \u2014 at this rate the 30-day budget (0.001) is gone in < 2 days."
+    - alert: CheckoutSuccessBudgetBurn
+      expr: |-
+        (slo:sli_error:ratio_rate1d{slo="checkout"} > (3 * 0.001) and slo:sli_error:ratio_rate2h{slo="checkout"} > (3 * 0.001))
+        or
+        (slo:sli_error:ratio_rate3d{slo="checkout"} > (1 * 0.001) and slo:sli_error:ratio_rate6h{slo="checkout"} > (1 * 0.001))
+      for: 15m
+      labels:
+        severity: ticket
+        slo: checkout
+        team: orders
+      annotations:
+        runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/CheckoutSuccessBudgetBurn.md
+        dashboard: /d/at-business-slo
+        summary: Checkout success SLO (99.9%) is burning its error budget (slow burn)
+        description: "{{ $labels.env }}: error ratio {{ $value | humanizePercentage }} \u2014 the 30-day budget (0.001) will be exhausted before the window ends."

@@ -1,0 +1,13 @@
+# Elastic Cloud on Kubernetes operator (eck-operator 3.3.2). Clusters: ../elasticsearch/overlays/<env>.
+installCRDs: true
+replicaCount: 1
+config:
+  metrics:
+    port: 8080
+podMonitor:
+  enabled: true
+  labels: {release: kube-prometheus-stack}
+managedNamespaces: []                # all namespaces
+resources:
+  requests: {cpu: 100m, memory: 150Mi}
+  limits: {memory: 512Mi}

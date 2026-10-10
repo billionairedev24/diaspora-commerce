@@ -4,8 +4,10 @@ toolchain go1.27.1
 
 use (
 	./pkg
+	./services/cart
 	./services/geo
 	./services/indexer
 	./services/media
+	./services/notifications
 	./services/search
 )

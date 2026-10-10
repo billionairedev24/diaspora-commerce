@@ -1,0 +1,7 @@
+# cloud=none: local block storage, single replicas.
+storage:
+  trace:
+    backend: local
+ingester: {replicas: 1, config: {replication_factor: 1}}
+distributor: {replicas: 1}
+querier: {replicas: 1}

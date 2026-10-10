@@ -1,0 +1,27 @@
+# PostgreSQL (postgres-exporter locally / managed database exporters in the clouds).
+groups:
+  - name: afrotransact-postgres
+    rules:
+      - alert: PostgresConnectionsSaturation
+        expr: |
+          sum by (env, instance) (pg_stat_activity_count)
+          /
+          max by (env, instance) (pg_settings_max_connections) > 0.8
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Postgres {{ $labels.instance }} uses {{ $value | humanizePercentage }} of max_connections"
+          description: "New connections will soon be refused; services will fail health checks."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/PostgresConnectionsSaturation.md
+          dashboard: /d/at-jvm
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: page
+        annotations:
+          summary: "Postgres {{ $labels.instance }} is unreachable"
+          description: "postgres-exporter cannot connect to the database server."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/PostgresDown.md

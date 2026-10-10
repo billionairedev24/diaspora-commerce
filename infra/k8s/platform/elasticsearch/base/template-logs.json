@@ -1,0 +1,13 @@
+{
+  "index_patterns": ["logs-afrotransact-*"],
+  "data_stream": {},
+  "priority": 200,
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "afrotransact-logs",
+      "index.routing.allocation.include._tier_preference": "data_hot",
+      "index.number_of_shards": 1
+    }
+  },
+  "composed_of": []
+}

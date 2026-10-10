@@ -1,0 +1,45 @@
+# uat: 3 hot (master-eligible) + 1 warm.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [../../base]
+configMapGenerator:
+  - name: search-es-setup
+    namespace: elastic
+    behavior: merge
+    files: [ilm-logs.json]
+patches:
+  - target: {kind: Elasticsearch, name: search}
+    patch: |-
+      - op: replace
+        path: /spec/nodeSets
+        value:
+          - name: hot
+            count: 3
+            config:
+              node.roles: [master, data_hot, data_content, ingest]
+              node.store.allow_mmap: false
+              xpack.ml.enabled: false
+            podTemplate:
+              spec:
+                containers:
+                  - name: elasticsearch
+                    resources: {requests: {cpu: "1", memory: 4Gi}, limits: {memory: 4Gi}}
+            volumeClaimTemplates:
+              - metadata: {name: elasticsearch-data}
+                spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 50Gi}}}
+          - name: warm
+            count: 1
+            config:
+              node.roles: [data_warm]
+              node.store.allow_mmap: false
+            podTemplate:
+              spec:
+                containers:
+                  - name: elasticsearch
+                    resources: {requests: {cpu: 500m, memory: 4Gi}, limits: {memory: 4Gi}}
+            volumeClaimTemplates:
+              - metadata: {name: elasticsearch-data}
+                spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 200Gi}}}
+  - target: {kind: Kibana, name: search}
+    patch: |-
+      - {op: replace, path: /spec/count, value: 1}

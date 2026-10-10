@@ -1,0 +1,29 @@
+# dev: one node holding every role, hot tier only.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: [../../base]
+configMapGenerator:
+  - name: search-es-setup
+    namespace: elastic
+    behavior: merge
+    files: [ilm-logs.json]
+patches:
+  - target: {kind: Elasticsearch, name: search}
+    patch: |-
+      - op: replace
+        path: /spec/nodeSets
+        value:
+          - name: hot
+            count: 1
+            config:
+              node.roles: [master, data_hot, data_content, ingest]
+              node.store.allow_mmap: false
+              xpack.ml.enabled: false
+            podTemplate:
+              spec:
+                containers:
+                  - name: elasticsearch
+                    resources: {requests: {cpu: 500m, memory: 2Gi}, limits: {memory: 2Gi}}
+            volumeClaimTemplates:
+              - metadata: {name: elasticsearch-data}
+                spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 20Gi}}}

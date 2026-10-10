@@ -1,0 +1,15 @@
+# Loki — uat. Retention + identity. Uncomment the block for the env's cloud (must match platform-values.yaml).
+loki:
+  limits_config:
+    retention_period: 336h
+  storage:
+    bucketNames:
+      chunks: afrotransact-uat-loki-chunks
+      ruler: afrotransact-uat-loki-ruler
+      admin: afrotransact-uat-loki-admin
+# serviceAccount:
+#   annotations:
+#     eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/afrotransact-uat-loki        # aws
+#     iam.gke.io/gcp-service-account: afrotransact-uat-loki@PROJECT.iam.gserviceaccount.com   # gcp
+#     azure.workload.identity/client-id: 00000000-0000-0000-0000-000000000000                 # azure
+# loki: {storage: {azure: {accountName: afrotransactuatlogs}}}                               # azure only

@@ -1,0 +1,15 @@
+# Argo Rollouts (argo-rollouts 2.43.6). Service charts switch to a canary Rollout (10% -> 50% -> 100%) with the
+# Prometheus AnalysisTemplate "<svc>-slo" when rollout.enabled (uat / prod values).
+installCRDs: true
+controller:
+  replicas: 2
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      additionalLabels: {release: kube-prometheus-stack}
+dashboard:
+  enabled: true
+  readonly: true
+notifications:
+  notifiers: {}

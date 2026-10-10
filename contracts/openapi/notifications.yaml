@@ -1,0 +1,644 @@
+openapi: 3.1.0
+info:
+  title: Notifications API
+  version: v1
+  description: |
+    Templated, consent-checked email, SMS, push and WhatsApp for AfroTransact.
+
+    * **Ports & adapters** — email: Resend (primary), SendGrid, Amazon SES, SMTP (local Mailpit); SMS: Twilio,
+      Vonage, AWS End User Messaging; push: FCM HTTP v1, APNs (HTTP/2, token auth); chat: WhatsApp Cloud API.
+    * **Routing** — ordered provider list per market and channel, per-provider circuit breakers, a 3 s timeout per
+      attempt and failover on timeouts, 5xx and other retryable errors. When every provider fails the message is
+      re-queued with exponential backoff and finally dead-lettered (replayable).
+    * **Compliance** — TCPA SMS consent records, STOP/END/CANCEL/UNSUBSCRIBE/QUIT opt-out and START opt-in, HELP
+      auto-reply, quiet hours (21:00–08:00 recipient local time) for reminders and marketing, OTP/security
+      messages always sent, suppression list from bounces and complaints, RFC 8058 one-click unsubscribe.
+    * **Delivery** — `POST /v1/notifications` (Idempotency-Key) and Kafka events (consumer group `notifications`)
+      write an outbox-style `notification` table drained with `SELECT … FOR UPDATE SKIP LOCKED`; provider
+      webhooks update status (queued → sent → delivered | bounced | failed | complained, or suppressed).
+
+    Permissions: `notifications:read` (log, templates, preview), `notifications:send` (internal callers),
+    `notifications:manage` (replay, suppressions, any recipient's preferences),
+    `notifications:templates:write` (new template versions, test-send — Marketing or Ops edit rights).
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+servers:
+  - url: http://localhost:8208
+    description: local
+  - url: https://api.dev.afrotransact.com/notifications
+    description: dev
+  - url: https://api.uat.afrotransact.com/notifications
+    description: uat
+  - url: https://api.afrotransact.com/notifications
+    description: prod
+security:
+  - bearer: []
+tags:
+  - name: Notifications
+  - name: Templates
+  - name: Preferences
+  - name: Webhooks
+    description: Provider callbacks, authenticated by signature (not bearer tokens).
+paths:
+  /v1/notifications:
+    post:
+      tags: [Notifications]
+      operationId: submitNotification
+      summary: Queue a templated notification on one or more channels
+      description: |
+        Renders the latest template version for each requested channel that the recipient has an address for and
+        queues one notification per channel and address. Repeating the same `Idempotency-Key` returns the original
+        notifications. Requires `notifications:send`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NotificationRequest'}
+            example:
+              templateKey: order.confirmed
+              locale: en
+              market: us
+              channels: [email, sms, push]
+              recipient:
+                id: 5f6c1d9e-2c1a-4f0e-9e1b-1a2b3c4d5e6f
+                email: ada@example.com
+                phone: "+15551234567"
+                timeZone: America/Chicago
+                pushTokens: [{token: "fcm-token", platform: fcm}]
+              data: {firstName: Ada, orderNumber: AT-1001, total: "$42.00", estimatedDelivery: "Tue 14 Oct", orderUrl: "https://afrotransact.com/orders/AT-1001"}
+      responses:
+        '202':
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notifications: {type: array, items: {$ref: '#/components/schemas/Notification'}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+    get:
+      tags: [Notifications]
+      operationId: listNotifications
+      summary: Notification log for the staff console
+      description: Newest first. Shows channel, provider, status and template version. Requires `notifications:read`.
+      parameters:
+        - {name: recipient, in: query, schema: {type: string}, description: Recipient id, email address or phone number}
+        - {name: channel, in: query, schema: {$ref: '#/components/schemas/Channel'}}
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/Status'}}
+        - {name: before, in: query, schema: {type: string, format: date-time}, description: Cursor — createdAt of the last row of the previous page}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: A page of notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Notification'}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/notifications/{id}:
+    get:
+      tags: [Notifications]
+      operationId: getNotification
+      summary: One notification with its delivery status
+      description: Requires `notifications:read`.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: The notification
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Notification'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/dead-letters:
+    get:
+      tags: [Notifications]
+      operationId: listDeadLetters
+      summary: Notifications that failed permanently or exhausted their retries
+      description: Requires `notifications:read`.
+      parameters:
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: Dead letters, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/DeadLetter'}}
+  /v1/dead-letters/{id}/replay:
+    post:
+      tags: [Notifications]
+      operationId: replayDeadLetter
+      summary: Re-queue a dead-lettered notification (once)
+      description: Resets attempts and queues the notification for immediate dispatch. Requires `notifications:manage`.
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '202':
+          description: Re-queued
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Notification'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/templates:
+    get:
+      tags: [Templates]
+      operationId: listTemplates
+      summary: Latest version of every template, or every version of one key
+      description: Requires `notifications:read`.
+      parameters:
+        - {name: key, in: query, schema: {type: string}, example: order.confirmed}
+      responses:
+        '200':
+          description: Templates
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Template'}}
+    post:
+      tags: [Templates]
+      operationId: createTemplateVersion
+      summary: Store a new version of a template
+      description: |
+        Creates the next version for key + locale + channel. Email `bodyHtml` is Go `html/template` (compiled React
+        Email / MJML HTML with `{{.field}}` placeholders); subject and text bodies are `text/template`. For WhatsApp
+        (`chat`), `subject` names an approved WhatsApp template and each body line is a parameter. Requires
+        `notifications:templates:write`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TemplateInput'}
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Template'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/templates/{key}/preview:
+    post:
+      tags: [Templates]
+      operationId: previewTemplate
+      summary: Render a template version with sample data
+      description: Requires `notifications:read`.
+      parameters:
+        - {name: key, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PreviewRequest'}
+            example: {channel: email, locale: en, data: {code: "246810", expiresInMinutes: 10}}
+      responses:
+        '200':
+          description: Rendered output
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Rendered'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/templates/{key}/test-send:
+    post:
+      tags: [Templates]
+      operationId: testSendTemplate
+      summary: Send a rendered template to the caller's own email or phone
+      description: |
+        The destination is always the editor's own address from their access token (`email` / `phone_number`
+        claims) — never a caller-supplied address. Email subjects are prefixed with `[TEST]`. Requires
+        `notifications:templates:write`.
+      parameters:
+        - {name: key, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PreviewRequest'}
+      responses:
+        '200':
+          description: Sent
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TestSendResult'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+  /v1/preferences/{recipientId}:
+    parameters:
+      - {name: recipientId, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Preferences]
+      operationId: getPreferences
+      summary: Effective channel × category preferences
+      description: |
+        Callable by the recipient themselves or staff with `notifications:manage`. Defaults are on for transactional
+        and reminder messages and off for marketing. Security messages cannot be turned off and are not listed.
+      responses:
+        '200':
+          description: Preferences
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Preferences'}
+        '403': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Preferences]
+      operationId: setPreferences
+      summary: Change preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preferences]
+              properties:
+                preferences: {type: array, items: {$ref: '#/components/schemas/Preference'}}
+      responses:
+        '200':
+          description: Updated preferences
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Preferences'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+  /v1/consents/sms:
+    post:
+      tags: [Preferences]
+      operationId: recordSmsConsent
+      summary: Record TCPA SMS consent (sign-up checkbox, settings)
+      description: Requires `notifications:send` (called by identity at sign-up). Every opt-in and opt-out is kept in an audit trail.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SmsConsentInput'}
+      responses:
+        '201':
+          description: Recorded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SmsConsent'}
+        '400': {$ref: '#/components/responses/Problem'}
+  /v1/consents/sms/{phone}:
+    get:
+      tags: [Preferences]
+      operationId: getSmsConsent
+      summary: Current SMS consent for a phone number
+      description: Requires `notifications:read`.
+      parameters:
+        - {name: phone, in: path, required: true, schema: {type: string}, description: E.164, URL-encoded}
+      responses:
+        '200':
+          description: Consent record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SmsConsent'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/suppressions:
+    get:
+      tags: [Preferences]
+      operationId: listSuppressions
+      summary: Suppression list (hard bounces and complaints)
+      description: Requires `notifications:read`.
+      parameters:
+        - {name: address, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+      responses:
+        '200':
+          description: Suppressed addresses
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Suppression'}}
+  /v1/suppressions/{address}:
+    delete:
+      tags: [Preferences]
+      operationId: deleteSuppression
+      summary: Remove an address from the suppression list
+      description: Requires `notifications:manage`.
+      parameters:
+        - {name: address, in: path, required: true, schema: {type: string}}
+      responses:
+        '204': {description: Removed}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/unsubscribe:
+    parameters:
+      - {name: t, in: query, required: true, schema: {type: string}, description: Signed unsubscribe token from the List-Unsubscribe header}
+    get:
+      tags: [Preferences]
+      operationId: unsubscribePage
+      summary: Confirmation page (never unsubscribes, so link scanners cannot trigger it)
+      security: []
+      responses:
+        '200':
+          description: HTML page with a confirm button
+          content:
+            text/html: {schema: {type: string}}
+        '400': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Preferences]
+      operationId: unsubscribeOneClick
+      summary: RFC 8058 one-click unsubscribe
+      description: Mail clients POST `List-Unsubscribe=One-Click`; the signed token identifies recipient, address and category.
+      security: []
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                List-Unsubscribe: {type: string, const: One-Click}
+      responses:
+        '200':
+          description: Unsubscribed (HTML when the client accepts text/html)
+        '400': {$ref: '#/components/responses/Problem'}
+  /v1/webhooks/resend:
+    post:
+      tags: [Webhooks]
+      operationId: resendWebhook
+      summary: Resend delivery events (Svix-signed)
+      description: Verifies `svix-id`, `svix-timestamp` and `svix-signature` (HMAC-SHA256, 5-minute tolerance). Permanent bounces and complaints add the address to the suppression list.
+      security: []
+      parameters:
+        - {name: svix-id, in: header, required: true, schema: {type: string}}
+        - {name: svix-timestamp, in: header, required: true, schema: {type: string}}
+        - {name: svix-signature, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object}
+      responses:
+        '204': {description: Recorded}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/webhooks/sendgrid:
+    post:
+      tags: [Webhooks]
+      operationId: sendgridWebhook
+      summary: SendGrid Event Webhook (signed, ECDSA P-256)
+      security: []
+      parameters:
+        - {name: X-Twilio-Email-Event-Webhook-Signature, in: header, required: true, schema: {type: string}}
+        - {name: X-Twilio-Email-Event-Webhook-Timestamp, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: array, items: {type: object}}
+      responses:
+        '204': {description: Recorded}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/webhooks/twilio/status:
+    post:
+      tags: [Webhooks]
+      operationId: twilioStatusCallback
+      summary: Twilio message status callback
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TwilioSignature'
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                MessageSid: {type: string}
+                MessageStatus: {type: string, enum: [accepted, queued, sending, sent, delivered, undelivered, failed, read]}
+                ErrorCode: {type: string}
+      responses:
+        '204': {description: Recorded}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/webhooks/twilio/inbound:
+    post:
+      tags: [Webhooks]
+      operationId: twilioInboundSms
+      summary: Inbound SMS — STOP/START/HELP keyword handling
+      description: |
+        STOP, END, CANCEL, UNSUBSCRIBE, QUIT (also STOPALL, OPTOUT, REVOKE) revoke SMS consent; START (UNSTOP, YES)
+        restores it; HELP/INFO returns the program help text. Replies are TwiML.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/TwilioSignature'
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                From: {type: string}
+                To: {type: string}
+                Body: {type: string}
+      responses:
+        '200':
+          description: TwiML reply
+          content:
+            text/xml:
+              schema: {type: string}
+        '401': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, maxLength: 200}
+    TwilioSignature:
+      name: X-Twilio-Signature
+      in: header
+      required: true
+      schema: {type: string}
+      description: base64(HMAC-SHA1(auth token, public URL + sorted form params))
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+        code: {type: string, examples: [notifications.invalid-request, notifications.template-not-found, notifications.idempotency-key-required]}
+        errors: {type: object, additionalProperties: {type: string}}
+    Channel:
+      type: string
+      enum: [email, sms, push, chat]
+    Category:
+      type: string
+      enum: [security, transactional, reminder, marketing]
+      description: Set by the template. security always sends; reminder and marketing respect quiet hours; marketing needs opt-in.
+    Status:
+      type: string
+      enum: [queued, sent, delivered, bounced, failed, complained, suppressed]
+    PushToken:
+      type: object
+      required: [token, platform]
+      properties:
+        token: {type: string}
+        platform: {type: string, enum: [fcm, apns]}
+    Recipient:
+      type: object
+      properties:
+        id: {type: string, description: User id; preferences are keyed by it}
+        email: {type: string, format: email}
+        phone: {type: string, description: E.164}
+        pushTokens: {type: array, items: {$ref: '#/components/schemas/PushToken'}}
+        timeZone: {type: string, description: IANA zone for quiet hours, e.g. America/Chicago}
+        locale: {type: string, examples: [en, fr-CA]}
+    NotificationRequest:
+      type: object
+      required: [templateKey, channels, recipient]
+      properties:
+        templateKey: {type: string, examples: [identity.verification, order.confirmed, shipment.out_for_delivery, payout.requirement_due, booking.confirmed]}
+        locale: {type: string, description: Falls back to the language, then en}
+        market: {type: string, default: us}
+        channels: {type: array, minItems: 1, items: {$ref: '#/components/schemas/Channel'}}
+        recipient: {$ref: '#/components/schemas/Recipient'}
+        data: {type: object, additionalProperties: true, description: Template fields}
+    Notification:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        idempotencyKey: {type: string}
+        eventId: {type: string}
+        templateKey: {type: string}
+        templateVersion: {type: integer}
+        locale: {type: string}
+        channel: {$ref: '#/components/schemas/Channel'}
+        category: {$ref: '#/components/schemas/Category'}
+        market: {type: string}
+        recipientId: {type: string}
+        address: {type: string, description: Email, E.164 phone, or fcm:/apns:-prefixed push token}
+        timeZone: {type: string}
+        subject: {type: string}
+        bodyText: {type: string}
+        headers: {type: object, additionalProperties: {type: string}}
+        status: {$ref: '#/components/schemas/Status'}
+        statusDetail: {type: string}
+        attempts: {type: integer}
+        nextAttemptAt: {type: string, format: date-time}
+        lastError: {type: string}
+        provider: {type: string, examples: [resend, sendgrid, ses, smtp, twilio, vonage, aws, fcm, apns, whatsapp, log]}
+        providerMessageId: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        sentAt: {type: string, format: date-time}
+    DeadLetter:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        notificationId: {type: string, format: uuid}
+        reason: {type: string}
+        createdAt: {type: string, format: date-time}
+        replayedAt: {type: string, format: date-time}
+    TemplateInput:
+      type: object
+      required: [key, locale, channel, category, bodyText]
+      properties:
+        key: {type: string}
+        locale: {type: string}
+        channel: {$ref: '#/components/schemas/Channel'}
+        category: {$ref: '#/components/schemas/Category'}
+        subject: {type: string, description: Email subject, push title or WhatsApp template name}
+        bodyHtml: {type: string}
+        bodyText: {type: string}
+    Template:
+      allOf:
+        - $ref: '#/components/schemas/TemplateInput'
+        - type: object
+          properties:
+            version: {type: integer}
+            createdBy: {type: string}
+            createdAt: {type: string, format: date-time}
+    PreviewRequest:
+      type: object
+      required: [channel]
+      properties:
+        channel: {$ref: '#/components/schemas/Channel'}
+        locale: {type: string, default: en}
+        version: {type: integer, description: 0 or omitted = latest}
+        market: {type: string}
+        data: {type: object, additionalProperties: true}
+    Rendered:
+      type: object
+      properties:
+        subject: {type: string}
+        html: {type: string}
+        text: {type: string}
+        version: {type: integer}
+        category: {$ref: '#/components/schemas/Category'}
+    Receipt:
+      type: object
+      properties:
+        provider: {type: string}
+        providerMessageId: {type: string}
+        acceptedAt: {type: string, format: date-time}
+    TestSendResult:
+      type: object
+      properties:
+        to: {type: string}
+        receipt: {$ref: '#/components/schemas/Receipt'}
+    Preference:
+      type: object
+      required: [channel, category, enabled]
+      properties:
+        channel: {$ref: '#/components/schemas/Channel'}
+        category: {type: string, enum: [transactional, reminder, marketing]}
+        enabled: {type: boolean}
+    Preferences:
+      type: object
+      properties:
+        recipientId: {type: string}
+        preferences: {type: array, items: {$ref: '#/components/schemas/Preference'}}
+    SmsConsentInput:
+      type: object
+      required: [phone, source, textVersion]
+      properties:
+        phone: {type: string}
+        recipientId: {type: string}
+        source: {type: string, examples: [web-signup, mobile-signup, settings]}
+        textVersion: {type: string, description: Version of the disclosure shown, e.g. sms-terms-2026-01}
+        consentedAt: {type: string, format: date-time}
+    SmsConsent:
+      allOf:
+        - $ref: '#/components/schemas/SmsConsentInput'
+        - type: object
+          properties:
+            optedIn: {type: boolean}
+            revokedAt: {type: string, format: date-time}
+            revokedVia: {type: string, examples: [sms-STOP, sms-UNSUBSCRIBE]}
+    Suppression:
+      type: object
+      properties:
+        address: {type: string}
+        reason: {type: string, examples: [bounced, complained]}
+        createdAt: {type: string, format: date-time}

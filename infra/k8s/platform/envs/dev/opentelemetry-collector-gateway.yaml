@@ -1,0 +1,17 @@
+# OTel gateway — dev: share of fast, successful traces kept (errors and > 500 ms are always kept).
+replicaCount: 1
+config:
+  processors:
+    resource/env:
+      attributes:
+        - {key: deployment.environment, value: dev, action: insert}
+    tail_sampling:
+      policies:
+        - {name: keep-errors, type: status_code, status_code: {status_codes: [ERROR]}}
+        - {name: keep-slow, type: latency, latency: {threshold_ms: 500}}
+        - {name: baseline, type: probabilistic, probabilistic: {sampling_percentage: 100}}
+  service:
+    pipelines:
+      traces: {processors: [memory_limiter, resource/env, tail_sampling, batch]}
+      metrics: {processors: [memory_limiter, resource/env, batch]}
+      logs: {processors: [memory_limiter, resource/env, batch]}

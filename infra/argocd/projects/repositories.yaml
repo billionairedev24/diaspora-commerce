@@ -1,0 +1,13 @@
+# Helm repositories used by the platform ApplicationSet (public, no credentials). The Git repository credential
+# (GitHub App or deploy key) is created out of band: argocd repo add https://github.com/billionairedev24/diaspora-commerce.git ...
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-envoy-gateway-oci
+  namespace: argocd
+  labels: {argocd.argoproj.io/secret-type: repository}
+stringData:
+  name: envoyproxy
+  type: helm
+  url: registry-1.docker.io/envoyproxy
+  enableOCI: "true"

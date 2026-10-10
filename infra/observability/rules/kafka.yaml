@@ -1,0 +1,54 @@
+# Kafka consumer lag (kafka-exporter) and search indexer lag (S177).
+groups:
+  - name: afrotransact-kafka
+    rules:
+      - alert: KafkaConsumerLagHigh
+        expr: |
+          sum by (env, consumergroup, topic) (kafka_consumergroup_lag{topic=~"at\\..*"}) > 1000
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.consumergroup }} is {{ $value }} messages behind on {{ $labels.topic }}"
+          description: "Consumer group lag above 1000 messages for 10 minutes in {{ $labels.env }}."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/KafkaConsumerLagHigh.md
+          dashboard: /d/at-kafka-consumer-lag
+
+      - alert: KafkaConsumerLagGrowing
+        expr: |
+          sum by (env, consumergroup, topic) (kafka_consumergroup_lag{topic=~"at\\..*"}) > 100
+          and
+          sum by (env, consumergroup, topic) (delta(kafka_consumergroup_lag{topic=~"at\\..*"}[15m])) > 0
+          and
+          sum by (env, consumergroup, topic) (rate(kafka_consumergroup_current_offset{topic=~"at\\..*"}[15m])) == 0
+        for: 15m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.consumergroup }} is stuck on {{ $labels.topic }}"
+          description: "Lag is growing and the group has committed no offsets for 15 minutes (poison message or crashed consumer)."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/KafkaConsumerLagGrowing.md
+          dashboard: /d/at-kafka-consumer-lag
+
+      - alert: KafkaDeadLetterMessages
+        expr: |
+          sum by (env, topic) (increase(kafka_topic_partition_current_offset{topic=~".*\\.dlq"}[30m])) > 0
+        labels:
+          severity: ticket
+        annotations:
+          summary: "New messages on dead-letter topic {{ $labels.topic }}"
+          description: "{{ $value }} messages were dead-lettered in the last 30 minutes."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/KafkaDeadLetterMessages.md
+          dashboard: /d/at-kafka-consumer-lag
+
+      - alert: IndexerLagHigh
+        expr: |
+          max by (env) (indexer_event_lag_seconds) > 60
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: "Search index is {{ $value | humanizeDuration }} behind the catalog"
+          description: "The indexer (Kafka -> Elasticsearch projection) lag has exceeded 60 s for 5 minutes."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/IndexerLagHigh.md
+          dashboard: /d/at-elasticsearch

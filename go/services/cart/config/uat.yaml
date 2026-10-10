@@ -1,0 +1,17 @@
+# cart · uat. DB_URL and REDIS_URL come from the environment outside local.
+port: 8080
+docsEnabled: true
+databaseUrl: ""
+redisUrl: ""
+guestTtlDays: 30
+catalogUrl: http://catalog
+inventoryUrl: http://inventory
+retailOrgId: org_afrotransact_retail
+sellerNames: {}
+auth:
+  enabled: true
+  issuer: https://auth.uat.afrotransact.com
+  audience: cart
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampleRatio: 0.5

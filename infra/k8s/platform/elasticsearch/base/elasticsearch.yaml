@@ -1,0 +1,98 @@
+# ECK Elasticsearch cluster "search" (namespace elastic). Products indices stay on the hot tier; log-type data
+# streams (logs-afrotransact-*) roll hot -> warm -> frozen via ILM (policy per env in overlays/<env>/ilm-logs.json).
+# Node sets are replaced per environment (overlays/<env>/kustomization.yaml).
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: search
+  namespace: elastic
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  version: 9.3.0
+  auth:
+    fileRealm:
+      - secretName: search-es-monitoring        # basic-auth user for the Prometheus exporter
+  http:
+    tls:
+      selfSignedCertificate:
+        subjectAltNames:
+          - dns: search-es-http.elastic.svc
+  podDisruptionBudget: {}
+  nodeSets:
+    - name: hot
+      count: 1
+      config:
+        node.roles: [master, data_hot, data_content, ingest]
+        node.store.allow_mmap: false
+        xpack.ml.enabled: false
+      podTemplate:
+        spec:
+          containers:
+            - name: elasticsearch
+              resources:
+                requests: {cpu: "1", memory: 4Gi}
+                limits: {memory: 4Gi}
+      volumeClaimTemplates:
+        - metadata: {name: elasticsearch-data}
+          spec:
+            accessModes: [ReadWriteOnce]
+            resources:
+              requests: {storage: 50Gi}
+---
+apiVersion: kibana.k8s.elastic.co/v1
+kind: Kibana
+metadata:
+  name: search
+  namespace: elastic
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  version: 9.3.0
+  count: 1
+  elasticsearchRef: {name: search}
+  config:
+    telemetry.optIn: false
+  podTemplate:
+    spec:
+      containers:
+        - name: kibana
+          resources:
+            requests: {cpu: 200m, memory: 1Gi}
+            limits: {memory: 1Gi}
+---
+# Basic-auth file-realm user for elasticsearch-exporter (same credentials synced into observability ns).
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: search-es-monitoring
+  namespace: elastic
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: platform-secrets}
+  target:
+    name: search-es-monitoring
+    template:
+      type: kubernetes.io/basic-auth
+      data:
+        username: "{{ .username }}"
+        password: "{{ .password }}"
+        roles: monitoring_user,remote_monitoring_collector
+  data:
+    - {secretKey: username, remoteRef: {key: afrotransact/platform/elasticsearch-monitoring, property: username}}
+    - {secretKey: password, remoteRef: {key: afrotransact/platform/elasticsearch-monitoring, property: password}}
+---
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: search-es-monitoring
+  namespace: observability
+spec:
+  refreshInterval: 1h
+  secretStoreRef: {kind: ClusterSecretStore, name: platform-secrets}
+  target: {name: search-es-monitoring}
+  data:
+    - {secretKey: username, remoteRef: {key: afrotransact/platform/elasticsearch-monitoring, property: username}}
+    - {secretKey: password, remoteRef: {key: afrotransact/platform/elasticsearch-monitoring, property: password}}

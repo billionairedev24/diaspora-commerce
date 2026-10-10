@@ -1,0 +1,104 @@
+# OpenTelemetry Collector AGENT (DaemonSet, open-telemetry 0.175.1). On every node it:
+#   - receives OTLP from pods on the node (hostPort 4317/4318) and forwards to the gateway,
+#   - tails container logs (filelog), parses the JSON logs of Java (logstash encoder: traceId, correlationId,
+#     service) and Go (slog: trace_id, correlation_id), enriches with k8s metadata and forwards to the gateway.
+# Loki then indexes service.name / deployment.environment / k8s.namespace.name; correlation_id and trace_id are
+# kept as structured metadata (S175 "Logs shipped with service, env and correlation id labels").
+fullnameOverride: otel-agent
+mode: daemonset
+image:
+  repository: otel/opentelemetry-collector-contrib
+command:
+  name: otelcol-contrib
+
+presets:
+  logsCollection:
+    enabled: true
+    includeCollectorLogs: false
+  kubernetesAttributes:
+    enabled: true
+    extractAllPodLabels: false
+  hostMetrics:
+    enabled: false                  # node-exporter (kube-prometheus-stack) covers node metrics
+
+ports:
+  otlp:
+    enabled: true
+    hostPort: 4317
+  otlp-http:
+    enabled: true
+    hostPort: 4318
+  jaeger-compact: {enabled: false}
+  jaeger-thrift: {enabled: false}
+  jaeger-grpc: {enabled: false}
+  zipkin: {enabled: false}
+
+config:
+  receivers:
+    filelog:
+      operators:
+        # Listing operators replaces the preset's list, so the container parser is repeated here first.
+        - type: container
+          id: container-parser
+          max_log_size: 102400
+        - type: json_parser
+          id: app-json
+          if: 'body matches "^\\s*\\{"'
+          parse_from: body
+          parse_to: attributes
+          on_error: send_quiet
+        - type: move
+          if: 'attributes.correlationId != nil'
+          from: attributes.correlationId
+          to: attributes.correlation_id
+        - type: trace_parser
+          if: 'attributes.traceId != nil'
+          trace_id: {parse_from: attributes.traceId}
+          span_id: {parse_from: attributes.spanId}
+          on_error: send_quiet
+        - type: trace_parser
+          if: 'attributes.trace_id != nil'
+          trace_id: {parse_from: attributes.trace_id}
+          span_id: {parse_from: attributes.span_id}
+          on_error: send_quiet
+  processors:
+    resource/service:
+      attributes:
+        - key: service.name
+          from_attribute: app.kubernetes.io/name
+          action: insert
+    k8sattributes:
+      extract:
+        labels:
+          - tag_name: app.kubernetes.io/name
+            key: app.kubernetes.io/name
+            from: pod
+          - tag_name: deployment.environment
+            key: afrotransact.com/env
+            from: pod
+  exporters:
+    otlp/gateway:
+      endpoint: otel-collector.observability:4317
+      tls: {insecure: true}
+      sending_queue: {enabled: true, queue_size: 5000}
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, k8sattributes, batch]
+        exporters: [otlp/gateway]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, k8sattributes, batch]
+        exporters: [otlp/gateway]
+      logs:
+        receivers: [otlp, filelog]
+        processors: [memory_limiter, k8sattributes, resource/service, batch]
+        exporters: [otlp/gateway]
+
+resources:
+  requests: {cpu: 50m, memory: 128Mi}
+  limits: {memory: 384Mi}
+
+tolerations:
+  - operator: Exists                # run on every node incl. spot / system pools

@@ -127,16 +127,23 @@ paths:
     put:
       tags: [Location]
       operationId: setDeliveryLocation
-      summary: Change the deliver-to ZIP (updates every delivery promise)
+      summary: Change the deliver-to location by ZIP or device coordinates (updates every delivery promise)
+      description: Coordinates come from "Use my current location" and are reverse-geocoded to a ZIP by the geo service; they are not stored.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [zip]
-              properties:
-                zip: {type: string, pattern: '^\d{5}$'}
+              oneOf:
+                - type: object
+                  required: [zip]
+                  properties:
+                    zip: {type: string, pattern: '^\d{5}$'}
+                - type: object
+                  required: [lat, lon]
+                  properties:
+                    lat: {type: number, minimum: -90, maximum: 90}
+                    lon: {type: number, minimum: -180, maximum: 180}
       responses:
         '200':
           description: Updated location

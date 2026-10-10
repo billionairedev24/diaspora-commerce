@@ -1,0 +1,16 @@
+# Elasticsearch exporter (prometheus-community 7.4.0) for the ECK cluster "search" (namespace elastic).
+# Feeds the Elasticsearch dashboard and ElasticsearchCluster* alerts (S177).
+es:
+  uri: https://search-es-http.elastic:9200
+  all: true
+  indices: true
+  shards: true
+  cluster_settings: true
+  sslSkipVerify: true                # ECK self-signed HTTP cert inside the cluster
+extraEnvSecrets:
+  ES_USERNAME: {secret: search-es-monitoring, key: username}
+  ES_PASSWORD: {secret: search-es-monitoring, key: password}
+serviceMonitor:
+  enabled: true
+  labels: {release: kube-prometheus-stack}
+  targetLabels: []

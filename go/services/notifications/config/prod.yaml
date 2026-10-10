@@ -1,0 +1,67 @@
+# notifications · prod. Secrets come from env vars only: DB_URL, RESEND_API_KEY, SENDGRID_API_KEY,
+# TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN, VONAGE_API_KEY/VONAGE_API_SECRET, FCM_SERVICE_ACCOUNT_JSON, APNS_KEY_P8,
+# WHATSAPP_TOKEN, RESEND_WEBHOOK_SECRET, SENDGRID_WEBHOOK_PUBLIC_KEY, UNSUBSCRIBE_SIGNING_KEY. AWS (SES, End User
+# Messaging) uses the default credential chain (workload identity).
+port: 8080
+docsEnabled: false
+publicBaseUrl: https://api.afrotransact.com/notifications
+database:
+  url: ""
+  migrate: true
+kafka:
+  enabled: true
+  brokers: [kafka:9092]
+auth:
+  enabled: true
+  issuer: https://auth.afrotransact.com
+  audience: notifications
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampleRatio: 0.1
+dispatcher:
+  enabled: true
+  batch: 100
+  concurrency: 16
+  lease: 2m
+  pollInterval: 1s
+  maxAttempts: 8
+  backoffBase: 30s
+  backoffMax: 1h
+routing:
+  sendTimeout: 3s
+  # Ordered provider lists per market; "default" covers markets without their own list.
+  email:
+    default: [resend, sendgrid, ses]
+    us: [resend, sendgrid, ses]
+  sms:
+    default: [twilio, vonage, aws]
+    us: [twilio, aws, vonage]
+  push:
+    default: [fcm, apns]
+  chat:
+    default: [whatsapp]
+breaker:
+  failureThreshold: 5
+  coolDown: 30s
+  halfOpenProbes: 1
+quietHours: {start: "21:00", end: "08:00"}
+marketTimeZones: {us: America/New_York, ca: America/Toronto, uk: Europe/London}
+email:
+  from: AfroTransact <no-reply@mail.afrotransact.com>
+  replyTo: support@afrotransact.com
+  unsubscribeMailto: unsubscribe@mail.afrotransact.com
+webhooks:
+  verify: true
+smsCompliance:
+  textVersion: sms-terms-2026-01
+  help: "AfroTransact Alerts: order, delivery and account texts. Msg frequency varies. Msg & data rates may apply. Help: support@afrotransact.com or +1 (800) 555-0199. Reply STOP to opt out."
+  stop: "AfroTransact Alerts: you're unsubscribed and will receive no further messages. Reply START to resubscribe."
+  start: "AfroTransact Alerts: you're resubscribed. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
+providers:
+  ses: {region: us-east-1, configurationSet: notifications-prod}
+  twilio: {messagingServiceSid: ""}
+  vonage: {from: AfroTransact}
+  aws: {region: us-east-1, originationIdentity: "", configurationSet: notifications-prod}
+  fcm: {projectId: ""}
+  apns: {keyId: "", teamId: "", bundleId: com.afrotransact.customer, production: true}
+  whatsapp: {phoneNumberId: "", apiVersion: v21.0}

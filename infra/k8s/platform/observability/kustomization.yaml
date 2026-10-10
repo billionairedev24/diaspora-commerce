@@ -1,0 +1,23 @@
+# Observability content for kube-prometheus-stack: PrometheusRules (generated from infra/observability/rules),
+# Grafana dashboards (generated from infra/observability/grafana/dashboards) and secrets. Regenerate with `make rules dashboards`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - external-secrets.yaml
+  - prometheus-rules/elasticsearch.yaml
+  - prometheus-rules/inventory.yaml
+  - prometheus-rules/kafka.yaml
+  - prometheus-rules/postgres.yaml
+  - prometheus-rules/services.yaml
+  - prometheus-rules/slo-checkout.yaml
+  - prometheus-rules/slo-notification-delivery.yaml
+  - prometheus-rules/slo-payment-webhook-lag.yaml
+  - prometheus-rules/slo-payout-on-time.yaml
+  - prometheus-rules/slo-search-latency.yaml
+  - dashboards/business-slo.yaml
+  - dashboards/elasticsearch.yaml
+  - dashboards/go-runtime.yaml
+  - dashboards/inventory-reconciliation.yaml
+  - dashboards/jvm.yaml
+  - dashboards/kafka-consumer-lag.yaml
+  - dashboards/platform-overview.yaml

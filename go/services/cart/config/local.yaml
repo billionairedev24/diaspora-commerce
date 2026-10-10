@@ -1,0 +1,17 @@
+# cart · local. DB_URL and REDIS_URL come from the environment outside local.
+port: 8203
+docsEnabled: true
+databaseUrl: postgres://cart:cart@localhost:5432/cart
+redisUrl: redis://localhost:6379/0
+guestTtlDays: 30
+catalogUrl: http://localhost:8101
+inventoryUrl: http://localhost:8103
+retailOrgId: org_afrotransact_retail
+sellerNames: {}
+auth:
+  enabled: false
+  issuer: http://localhost:8100
+  audience: cart
+telemetry:
+  otlpEndpoint: localhost:4318
+  sampleRatio: 1.0

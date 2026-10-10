@@ -59,6 +59,40 @@ channels:
     messages:
       inventoryReconciliationDriftDetected:
         $ref: '#/components/messages/inventoryReconciliationDriftDetected'
+  notificationsIdentityEvents:
+    address: at.identity.events
+    description: Identity events that trigger notifications (key = user id).
+    messages:
+      notificationsIdentityVerificationRequested:
+        $ref: '#/components/messages/notificationsIdentityVerificationRequested'
+      notificationsRequestedIdentity:
+        $ref: '#/components/messages/notificationsRequested'
+  notificationsOrdersEvents:
+    address: at.orders.events
+    description: Order and shipment events that trigger notifications (key = order id).
+    messages:
+      notificationsOrderPlaced:
+        $ref: '#/components/messages/notificationsOrderPlaced'
+      notificationsShipmentOutForDelivery:
+        $ref: '#/components/messages/notificationsShipmentOutForDelivery'
+      notificationsRequestedOrders:
+        $ref: '#/components/messages/notificationsRequested'
+  notificationsSellerEvents:
+    address: at.seller.events
+    description: Seller compliance events that trigger reminders (key = seller org id).
+    messages:
+      notificationsSellerPayoutRequirementDue:
+        $ref: '#/components/messages/notificationsSellerPayoutRequirementDue'
+      notificationsRequestedSeller:
+        $ref: '#/components/messages/notificationsRequested'
+  notificationsBookingsEvents:
+    address: at.bookings.events
+    description: Booking events that trigger confirmations (key = booking id).
+    messages:
+      notificationsBookingConfirmed:
+        $ref: '#/components/messages/notificationsBookingConfirmed'
+      notificationsRequestedBookings:
+        $ref: '#/components/messages/notificationsRequested'
 components:
   messages:
     catalogProductCreated:
@@ -192,6 +226,47 @@ components:
           positions:
             type: integer
             description: Number of positions with drift
+    notificationsIdentityVerificationRequested:
+      name: identity.verification.requested
+      title: Email/phone verification code requested
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/NotificationsVerificationPayload'
+    notificationsOrderPlaced:
+      name: order.placed
+      title: Order placed (sends order.confirmed)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/NotificationsOrderPayload'
+    notificationsShipmentOutForDelivery:
+      name: shipment.out_for_delivery
+      title: Shipment out for delivery, with the customer's handover code
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/NotificationsShipmentPayload'
+    notificationsSellerPayoutRequirementDue:
+      name: seller.payout.requirement_due
+      title: Stripe Connect compliance requirement due
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/NotificationsPayoutRequirementPayload'
+    notificationsBookingConfirmed:
+      name: booking.confirmed
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/NotificationsBookingPayload'
+    notificationsRequested:
+      name: notification.requested
+      title: Explicit templated notification request (any topic)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/NotificationsRequestedPayload'
   schemas:
     EventHeaders:
       properties:
@@ -471,6 +546,187 @@ components:
         amountMinor:
           type: integer
           format: int64
+    NotificationsRecipient:
+      type: object
+      description: Who to notify. Every field is optional; a channel is used only when its address is present. When id is
+        missing the event key is used.
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          description: E.164
+        pushTokens:
+          type: array
+          items:
+            type: object
+            required:
+            - token
+            - platform
+            properties:
+              token:
+                type: string
+              platform:
+                type: string
+                enum:
+                - fcm
+                - apns
+        timeZone:
+          type: string
+          description: IANA zone for quiet hours
+        locale:
+          type: string
+    NotificationsEnvelopeFields:
+      type: object
+      description: Common fields; every other top-level field becomes template data.
+      required:
+      - recipient
+      properties:
+        recipient:
+          $ref: '#/components/schemas/NotificationsRecipient'
+        market:
+          type: string
+          default: us
+        locale:
+          type: string
+        channel:
+          type: string
+          enum:
+          - email
+          - sms
+          - push
+          - chat
+          description: Optional single-channel override
+    NotificationsVerificationPayload:
+      allOf:
+      - $ref: '#/components/schemas/NotificationsEnvelopeFields'
+      - type: object
+        required:
+        - code
+        - expiresInMinutes
+        properties:
+          code:
+            type: string
+            pattern: ^[0-9]{6}$
+          expiresInMinutes:
+            type: integer
+    NotificationsOrderPayload:
+      allOf:
+      - $ref: '#/components/schemas/NotificationsEnvelopeFields'
+      - type: object
+        required:
+        - firstName
+        - orderNumber
+        - total
+        - estimatedDelivery
+        - orderUrl
+        properties:
+          firstName:
+            type: string
+          orderNumber:
+            type: string
+          total:
+            type: string
+            description: Formatted amount
+            e.g. "$42.00": null
+          estimatedDelivery:
+            type: string
+          orderUrl:
+            type: string
+            format: uri
+    NotificationsShipmentPayload:
+      allOf:
+      - $ref: '#/components/schemas/NotificationsEnvelopeFields'
+      - type: object
+        required:
+        - orderNumber
+        - eta
+        - handoverCode
+        properties:
+          orderNumber:
+            type: string
+          eta:
+            type: string
+          handoverCode:
+            type: string
+            pattern: ^[0-9]{4}$
+    NotificationsPayoutRequirementPayload:
+      allOf:
+      - $ref: '#/components/schemas/NotificationsEnvelopeFields'
+      - type: object
+        required:
+        - businessName
+        - requirement
+        - dueDate
+        - actionUrl
+        properties:
+          businessName:
+            type: string
+          requirement:
+            type: string
+          dueDate:
+            type: string
+          actionUrl:
+            type: string
+            format: uri
+    NotificationsBookingPayload:
+      allOf:
+      - $ref: '#/components/schemas/NotificationsEnvelopeFields'
+      - type: object
+        required:
+        - firstName
+        - serviceName
+        - providerName
+        - startsAt
+        - location
+        - bookingReference
+        - manageUrl
+        properties:
+          firstName:
+            type: string
+          serviceName:
+            type: string
+          providerName:
+            type: string
+          startsAt:
+            type: string
+          location:
+            type: string
+          bookingReference:
+            type: string
+          manageUrl:
+            type: string
+            format: uri
+    NotificationsRequestedPayload:
+      type: object
+      required:
+      - templateKey
+      - channels
+      - recipient
+      properties:
+        templateKey:
+          type: string
+        channels:
+          type: array
+          items:
+            type: string
+            enum:
+            - email
+            - sms
+            - push
+            - chat
+        recipient:
+          $ref: '#/components/schemas/NotificationsRecipient'
+        market:
+          type: string
+        locale:
+          type: string
+        data:
+          type: object
+          additionalProperties: true
 defaultContentType: application/json
 info:
   description: Every domain event on the bus. Topics are at.<aggregate>.events, keyed by aggregate id; headers carry event-id,
@@ -503,6 +759,27 @@ operations:
     channel:
       $ref: '#/channels/inventoryReconciliationEvents'
     summary: Raised when positions differ from the ledger or lots; alerts the inventory channel.
+  consumeNotificationsIdentityEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationsIdentityEvents'
+    summary: identity.verification.requested → template identity.verification (email, or the payload's channel).
+  consumeNotificationsOrdersEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationsOrdersEvents'
+    summary: order.placed → order.confirmed (email, sms, push); shipment.out_for_delivery → shipment.out_for_delivery (sms,
+      push, email).
+  consumeNotificationsSellerEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationsSellerEvents'
+    summary: seller.payout.requirement_due → payout.requirement_due (email, sms; reminder category, quiet hours apply).
+  consumeNotificationsBookingsEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/notificationsBookingsEvents'
+    summary: booking.confirmed → booking.confirmed (email, sms, push).
 servers:
   cloud:
     description: Confluent Cloud (same on AWS, GCP and Azure)

@@ -1,0 +1,15 @@
+# Tempo — prod.
+compactor:
+  config:
+    compaction:
+      block_retention: 720h
+storage:
+  trace:
+    s3: {bucket: afrotransact-prod-tempo}               # aws
+    gcs: {bucket_name: afrotransact-prod-tempo}         # gcp
+    azure: {storage_account_name: afrotransactprodtraces}   # azure
+# serviceAccount:
+#   annotations:
+#     eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/afrotransact-prod-tempo
+#     iam.gke.io/gcp-service-account: afrotransact-prod-tempo@PROJECT.iam.gserviceaccount.com
+#     azure.workload.identity/client-id: 00000000-0000-0000-0000-000000000000

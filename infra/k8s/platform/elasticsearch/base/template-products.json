@@ -1,0 +1,14 @@
+{
+  "index_patterns": ["products-*"],
+  "priority": 100,
+  "_meta": {"description": "Product read model (go/pkg/searchindex): always on the hot tier, never managed by ILM."},
+  "template": {
+    "settings": {
+      "index.routing.allocation.include._tier_preference": "data_hot",
+      "index.search.slowlog.threshold.query.warn": "500ms",
+      "index.search.slowlog.threshold.query.info": "150ms",
+      "index.search.slowlog.threshold.fetch.warn": "200ms",
+      "index.indexing.slowlog.threshold.index.warn": "1s"
+    }
+  }
+}

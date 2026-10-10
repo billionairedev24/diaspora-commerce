@@ -1,0 +1,55 @@
+# notifications · local. Secrets (DB_URL in other envs, provider keys, webhook secrets, UNSUBSCRIBE_SIGNING_KEY)
+# come from env vars only. Local sends email to Mailpit (http://localhost:8025) and logs SMS/push/WhatsApp.
+port: 8208
+docsEnabled: true
+publicBaseUrl: http://localhost:8208
+database:
+  url: postgres://notifications:notifications@localhost:5432/notifications?sslmode=disable
+  migrate: true
+kafka:
+  enabled: true
+  brokers: [localhost:9092]
+auth:
+  enabled: false
+  issuer: http://localhost:8100
+  audience: notifications
+telemetry:
+  otlpEndpoint: localhost:4318
+  sampleRatio: 1.0
+dispatcher:
+  enabled: true
+  batch: 50
+  concurrency: 4
+  lease: 2m
+  pollInterval: 1s
+  maxAttempts: 5
+  backoffBase: 5s
+  backoffMax: 5m
+routing:
+  sendTimeout: 3s
+  email: {default: [smtp]}
+  sms: {default: [log]}
+  push: {default: [log]}
+  chat: {default: [log]}
+breaker:
+  failureThreshold: 5
+  coolDown: 30s
+  halfOpenProbes: 1
+quietHours: {start: "21:00", end: "08:00"}
+marketTimeZones: {us: America/New_York, ca: America/Toronto, uk: Europe/London}
+email:
+  from: AfroTransact <no-reply@afrotransact.local>
+  replyTo: support@afrotransact.local
+  unsubscribeMailto: unsubscribe@afrotransact.local
+webhooks:
+  verify: false
+smsCompliance:
+  textVersion: sms-terms-2026-01
+  help: "AfroTransact Alerts: order, delivery and account texts. Msg frequency varies. Msg & data rates may apply. Help: support@afrotransact.com or +1 (800) 555-0199. Reply STOP to opt out."
+  stop: "AfroTransact Alerts: you're unsubscribed and will receive no further messages. Reply START to resubscribe."
+  start: "AfroTransact Alerts: you're resubscribed. Msg frequency varies. Msg & data rates may apply. Reply HELP for help, STOP to opt out."
+testSend:
+  localEmail: local-dev@afrotransact.local
+  localPhone: "+15555550100"
+providers:
+  smtp: {host: localhost, port: 1025}

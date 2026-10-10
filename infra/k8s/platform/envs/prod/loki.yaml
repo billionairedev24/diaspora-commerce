@@ -1,0 +1,15 @@
+# Loki — prod. Retention + identity. Uncomment the block for the env's cloud (must match platform-values.yaml).
+loki:
+  limits_config:
+    retention_period: 2160h
+  storage:
+    bucketNames:
+      chunks: afrotransact-prod-loki-chunks
+      ruler: afrotransact-prod-loki-ruler
+      admin: afrotransact-prod-loki-admin
+# serviceAccount:
+#   annotations:
+#     eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/afrotransact-prod-loki        # aws
+#     iam.gke.io/gcp-service-account: afrotransact-prod-loki@PROJECT.iam.gserviceaccount.com   # gcp
+#     azure.workload.identity/client-id: 00000000-0000-0000-0000-000000000000                 # azure
+# loki: {storage: {azure: {accountName: afrotransactprodlogs}}}                               # azure only

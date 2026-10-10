@@ -1,0 +1,13 @@
+# Envoy Gateway (oci://docker.io/envoyproxy/gateway-helm v1.9.2) — Gateway API implementation used for ingress.
+# (ingress-nginx is retired upstream, so it is not used.) Installed in namespace "ingress" — the at-service
+# NetworkPolicy admits traffic from that namespace. The Gateway / HTTPRoutes live in ../namespaces/gateway.yaml.
+deployment:
+  replicas: 2
+config:
+  envoyGateway:
+    telemetry:
+      metrics:
+        prometheus: {disable: false}
+    logging:
+      level:
+        default: info

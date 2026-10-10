@@ -1,0 +1,52 @@
+# AppProject for the AfroTransact services of one environment. The env kustomization adds the "-<env>" suffix
+# (afrotransact-dev / -uat / -prod) so one Argo CD can manage several environments without clashes.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: afrotransact
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  description: AfroTransact services (one Application per service per environment)
+  sourceRepos:
+    - https://github.com/billionairedev24/diaspora-commerce.git
+  destinations:
+    - server: "*"
+      namespace: afrotransact-*
+  clusterResourceWhitelist:
+    - {group: "", kind: Namespace}
+  namespaceResourceBlacklist:
+    - {group: "", kind: ResourceQuota}
+    - {group: "", kind: LimitRange}
+  orphanedResources:
+    warn: true
+  # CI does not sync: it bumps image tags in values-<env>.yaml; Argo CD syncs dev/uat automatically and prod by approval.
+---
+# AppProject for shared platform components (operators, observability, Elasticsearch, secret stores, edge).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  description: Cluster platform (observability, operators, secret stores, ingress)
+  sourceRepos:
+    - https://github.com/billionairedev24/diaspora-commerce.git
+    - https://prometheus-community.github.io/helm-charts
+    - https://grafana.github.io/helm-charts
+    - https://open-telemetry.github.io/opentelemetry-helm-charts
+    - https://charts.external-secrets.io
+    - https://argoproj.github.io/argo-helm
+    - https://charts.jetstack.io
+    - https://helm.elastic.co
+    - registry-1.docker.io/envoyproxy
+  destinations:
+    - server: "*"
+      namespace: "*"
+  clusterResourceWhitelist:
+    - {group: "*", kind: "*"}
+  orphanedResources:
+    warn: false

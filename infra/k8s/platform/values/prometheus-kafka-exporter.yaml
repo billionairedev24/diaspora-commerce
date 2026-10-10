@@ -1,0 +1,11 @@
+# Kafka exporter (prometheus-community 4.0.0): consumer-group lag for the managed Kafka
+# (MSK / Confluent Cloud / Event Hubs Kafka endpoint). Brokers and SASL credentials per env in ../envs/<env>/.
+kafkaServer:
+  - kafka-bootstrap.example.internal:9092
+extraArgs:
+  - --topic.filter=^at\..*
+  - --group.filter=.*
+prometheus:
+  serviceMonitor:
+    enabled: true
+    additionalLabels: {release: kube-prometheus-stack}

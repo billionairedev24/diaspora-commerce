@@ -1,0 +1,38 @@
+# Platform namespaces. Service namespaces (afrotransact-<env>) are created by Argo CD (CreateNamespace=true)
+# with the labels below via managedNamespaceMetadata. Names matter: the at-service NetworkPolicy admits traffic
+# from the "ingress" and "observability" namespaces by kubernetes.io/metadata.name.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels: {app.kubernetes.io/part-of: afrotransact-platform}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress
+  labels: {app.kubernetes.io/part-of: afrotransact-platform}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: elastic
+  labels: {app.kubernetes.io/part-of: afrotransact-platform}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: external-secrets
+  labels: {app.kubernetes.io/part-of: afrotransact-platform}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels: {app.kubernetes.io/part-of: afrotransact-platform}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argo-rollouts
+  labels: {app.kubernetes.io/part-of: afrotransact-platform}

@@ -10,7 +10,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 )
 
 // Shutdown flushes and stops the tracer provider.
@@ -29,7 +29,7 @@ func Setup(ctx context.Context, service, env, endpoint string, sampleRatio float
 	}
 	res, err := resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL,
 		semconv.ServiceName(service), semconv.ServiceNamespace("afrotransact"),
-		semconv.DeploymentEnvironment(env)))
+		semconv.DeploymentEnvironmentNameKey.String(env)))
 	if err != nil {
 		return nil, fmt.Errorf("otel resource: %w", err)
 	}

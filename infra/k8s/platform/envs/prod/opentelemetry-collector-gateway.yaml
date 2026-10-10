@@ -1,0 +1,22 @@
+# OTel gateway — prod: share of fast, successful traces kept (errors and > 500 ms are always kept).
+replicaCount: 3
+config:
+  processors:
+    resource/env:
+      attributes:
+        - {key: deployment.environment, value: prod, action: insert}
+    tail_sampling:
+      policies:
+        - {name: keep-errors, type: status_code, status_code: {status_codes: [ERROR]}}
+        - {name: keep-slow, type: latency, latency: {threshold_ms: 500}}
+        - {name: baseline, type: probabilistic, probabilistic: {sampling_percentage: 10}}
+  service:
+    pipelines:
+      traces: {processors: [memory_limiter, resource/env, tail_sampling, batch]}
+      metrics: {processors: [memory_limiter, resource/env, batch]}
+      logs: {processors: [memory_limiter, resource/env, batch]}
+# NOTE (prod, replicas > 1): tail sampling needs every span of a trace on one replica. Either keep the agent's
+# otlp/gateway exporter pointed at a headless service with the loadbalancing exporter (routing_key: traceID),
+# or run the tail-sampling tier as a StatefulSet behind it. See opentelemetry-collector-agent.yaml.
+autoscaling:
+  enabled: false

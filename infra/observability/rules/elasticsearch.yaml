@@ -1,0 +1,49 @@
+# Elasticsearch cluster health (elasticsearch-exporter locally / ECK + exporter in Kubernetes) — S177.
+groups:
+  - name: afrotransact-elasticsearch
+    rules:
+      - alert: ElasticsearchClusterRed
+        expr: max by (env, cluster) (elasticsearch_cluster_health_status{color="red"}) == 1
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "Elasticsearch cluster {{ $labels.cluster }} is RED"
+          description: "At least one primary shard is unassigned; search and indexing for that index are failing."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/ElasticsearchClusterRed.md
+          dashboard: /d/at-elasticsearch
+
+      - alert: ElasticsearchClusterYellow
+        expr: max by (env, cluster) (elasticsearch_cluster_health_status{color="yellow"}) == 1 and on (env, cluster) max by (env, cluster) (elasticsearch_cluster_health_number_of_nodes) > 1
+        for: 30m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Elasticsearch cluster {{ $labels.cluster }} is YELLOW for 30 minutes"
+          description: "Replica shards are unassigned; the cluster has no redundancy for some indices. (Single-node clusters are excluded.)"
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/ElasticsearchClusterYellow.md
+          dashboard: /d/at-elasticsearch
+
+      - alert: ElasticsearchHeapPressure
+        expr: |
+          max by (env, cluster, name) (elasticsearch_jvm_memory_used_bytes{area="heap"} / elasticsearch_jvm_memory_max_bytes{area="heap"}) > 0.85
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Elasticsearch node {{ $labels.name }} heap at {{ $value | humanizePercentage }}"
+          description: "Sustained heap pressure leads to long GC pauses and circuit-breaker rejections."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/ElasticsearchHeapPressure.md
+          dashboard: /d/at-elasticsearch
+
+      - alert: ElasticsearchDiskLow
+        expr: |
+          min by (env, cluster, name) (elasticsearch_filesystem_data_available_bytes / elasticsearch_filesystem_data_size_bytes) < 0.15
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "Elasticsearch node {{ $labels.name }} has {{ $value | humanizePercentage }} disk free"
+          description: "Below the high watermark shards relocate; below flood stage indices become read-only."
+          runbook_url: https://github.com/billionairedev24/diaspora-commerce/blob/main/docs/runbooks/ElasticsearchDiskLow.md
+          dashboard: /d/at-elasticsearch

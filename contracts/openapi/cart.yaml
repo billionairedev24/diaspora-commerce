@@ -1,0 +1,144 @@
+openapi: 3.1.0
+info:
+  title: Cart API
+  version: v1
+  description: |
+    Shopping cart split into packages per seller and fulfilment type, with save-for-later and guest-to-customer
+    merge on sign-in. Quantities are always capped by live sellable stock from inventory; prices are snapshotted
+    when a line is added and the live price is shown with a `priceChanged` flag. Lines without a live offer or stock
+    are marked `unavailable` and excluded from checkout. Guests are identified by the `X-Guest-Cart` header, which
+    the service issues on first use; signed-in customers by their access token.
+servers:
+  - {url: 'http://localhost:8203', description: local}
+  - {url: 'https://api.dev.afrotransact.com/cart', description: dev}
+  - {url: 'https://api.uat.afrotransact.com/cart', description: uat}
+  - {url: 'https://api.afrotransact.com/cart', description: prod}
+security: [{}, {bearer: []}]
+paths:
+  /v1/cart:
+    get:
+      operationId: getCart
+      parameters: [{$ref: '#/components/parameters/Guest'}]
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+  /v1/cart/items:
+    post:
+      operationId: addToCart
+      parameters: [{$ref: '#/components/parameters/Guest'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [variantAtin]
+              properties:
+                variantAtin: {type: string}
+                quantity: {type: integer, minimum: 1, default: 1}
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '409': {$ref: '#/components/responses/Problem'}
+  /v1/cart/items/{atin}:
+    put:
+      operationId: setQuantity
+      summary: Set the exact quantity (stepper); 0 removes the line
+      parameters: [{$ref: '#/components/parameters/Atin'}, {$ref: '#/components/parameters/Guest'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, required: [quantity], properties: {quantity: {type: integer, minimum: 0}}}}}
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '409': {$ref: '#/components/responses/Problem'}
+    delete:
+      operationId: removeLine
+      parameters: [{$ref: '#/components/parameters/Atin'}, {$ref: '#/components/parameters/Guest'}]
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+  /v1/cart/items/{atin}/save-for-later:
+    post:
+      operationId: saveForLater
+      parameters: [{$ref: '#/components/parameters/Atin'}, {$ref: '#/components/parameters/Guest'}]
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+  /v1/cart/saved/{atin}/move-to-cart:
+    post:
+      operationId: moveToCart
+      parameters: [{$ref: '#/components/parameters/Atin'}, {$ref: '#/components/parameters/Guest'}]
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '409': {$ref: '#/components/responses/Problem'}
+  /v1/cart/merge:
+    post:
+      operationId: mergeGuestCart
+      summary: After sign-in, fold the guest cart (X-Guest-Cart) into the customer's cart
+      security: [{bearer: []}]
+      parameters: [{$ref: '#/components/parameters/Guest'}]
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+  /v1/carts/{customerId}/ordered:
+    post:
+      operationId: removeOrderedLines
+      summary: Clear checked-out lines after an order is placed (cart:service)
+      security: [{bearer: []}]
+      parameters: [{name: customerId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, properties: {variantAtins: {type: array, items: {type: string}}}}}}
+      responses:
+        '204': {description: Cleared}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    Guest: {name: X-Guest-Cart, in: header, schema: {type: string, format: uuid}}
+    Atin: {name: atin, in: path, required: true, schema: {type: string}}
+  responses:
+    Cart:
+      description: The cart
+      headers:
+        X-Guest-Cart: {schema: {type: string}, description: Guest cart id (store it client-side)}
+      content: {application/json: {schema: {$ref: '#/components/schemas/CartView'}}}
+    Problem:
+      description: RFC 9457 problem (cart.insufficient-stock, cart.not-sellable, cart.concurrent-update …)
+      content: {application/problem+json: {schema: {type: object, properties: {type: {type: string}, status: {type: integer}, detail: {type: string}, code: {type: string}}}}}
+  schemas:
+    LineView:
+      type: object
+      properties:
+        variantAtin: {type: string}
+        productAtin: {type: string}
+        title: {type: string}
+        options: {type: object, additionalProperties: {type: string}}
+        imageUrl: {type: string}
+        sellerOrgId: {type: string}
+        sellerName: {type: string}
+        sellerKind: {type: string, enum: [PLATFORM, SELLER]}
+        fulfilment: {type: string, enum: [AFROTRANSACT, SELLER]}
+        priceMinor: {type: integer, format: int64}
+        currency: {type: string}
+        quantity: {type: integer}
+        addedPriceMinor: {type: integer, format: int64}
+        addedAt: {type: string, format: date-time}
+        available: {type: integer}
+        lowStock: {type: boolean}
+        unavailable: {type: boolean}
+        priceChanged: {type: boolean}
+        lineTotalMinor: {type: integer, format: int64}
+    Package:
+      type: object
+      properties:
+        sellerOrgId: {type: string}
+        sellerName: {type: string}
+        fulfilment: {type: string}
+        lines: {type: array, items: {$ref: '#/components/schemas/LineView'}}
+        subtotalMinor: {type: integer, format: int64}
+    CartView:
+      type: object
+      properties:
+        packages: {type: array, items: {$ref: '#/components/schemas/Package'}}
+        saved: {type: array, items: {$ref: '#/components/schemas/LineView'}}
+        itemCount: {type: integer}
+        subtotalMinor: {type: integer, format: int64}
+        currency: {type: string}
+        checkoutable: {type: boolean}
+        version: {type: integer, format: int64}

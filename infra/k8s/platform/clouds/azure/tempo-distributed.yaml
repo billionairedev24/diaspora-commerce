@@ -1,0 +1,6 @@
+storage:
+  trace:
+    backend: azure
+    azure:
+      container_name: tempo
+      use_federated_token: true

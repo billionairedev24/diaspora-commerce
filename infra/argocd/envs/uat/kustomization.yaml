@@ -1,0 +1,14 @@
+# Everything Argo CD manages for uat: AppProjects (afrotransact-uat, platform-uat) and the three
+# ApplicationSets pointed at envs/uat/platform-values.yaml. Synced by bootstrap/root-uat.yaml (app of apps).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+nameSuffix: -uat
+resources:
+  - ../../projects
+  - ../../applicationsets
+patches:
+  - target: {kind: ApplicationSet}
+    patch: |-
+      - op: replace
+        path: /spec/generators/0/matrix/generators/0/git/files/0/path
+        value: infra/argocd/envs/uat/platform-values.yaml

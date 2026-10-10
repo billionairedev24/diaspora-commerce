@@ -1,0 +1,56 @@
+# Tails json-file logs of containerised services (compose profile "apps") and forwards them over OTLP to
+# the main collector. Only containers whose log driver sets `tag` (the x-java-service / x-go-service
+# templates do) are kept, so infrastructure containers are not shipped.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  filelog:
+    include: [/var/lib/docker/containers/*/*-json.log]
+    start_at: end
+    operators:
+      - type: json_parser            # docker envelope: {"log": "...", "stream": "...", "attrs": {"tag": "..."}, "time": "..."}
+        timestamp: {parse_from: attributes.time, layout_type: gotime, layout: "2006-01-02T15:04:05.999999999Z07:00"}
+      - type: filter
+        expr: 'attributes.attrs == nil or attributes.attrs.tag == nil'
+      - type: move
+        from: attributes.attrs.tag
+        to: resource["service.name"]
+      - type: move
+        from: attributes.log
+        to: body
+      - type: json_parser            # application JSON logs (logstash encoder / slog JSON); plain text passes through
+        if: 'body matches "^\\s*\\{"'
+        parse_from: body
+        parse_to: attributes
+        on_error: send_quiet
+      - type: trace_parser           # traceId (logstash) or trace_id (slog) -> log record trace context
+        if: 'attributes.traceId != nil'
+        trace_id: {parse_from: attributes.traceId}
+        span_id: {parse_from: attributes.spanId}
+        on_error: send_quiet
+      - type: trace_parser
+        if: 'attributes.trace_id != nil'
+        trace_id: {parse_from: attributes.trace_id}
+        span_id: {parse_from: attributes.span_id}
+        on_error: send_quiet
+      - type: remove
+        field: attributes.attrs
+        on_error: send_quiet
+
+exporters:
+  otlp:
+    endpoint: otel-collector:4317
+    tls: {insecure: true}
+
+processors:
+  batch: {}
+
+service:
+  extensions: [health_check]
+  pipelines:
+    logs:
+      receivers: [filelog]
+      processors: [batch]
+      exporters: [otlp]

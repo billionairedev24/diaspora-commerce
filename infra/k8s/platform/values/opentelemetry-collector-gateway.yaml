@@ -1,0 +1,73 @@
+# OpenTelemetry Collector GATEWAY (Deployment, open-telemetry 0.175.1). Service otel-collector.observability:4317/4318
+# is the endpoint every service chart uses (telemetry.otlpEndpoint). Same pipeline as the local collector
+# (infra/observability/otel-collector.yaml): tail sampling keeps errors + traces slower than 500 ms + a baseline %.
+# Tail sampling needs all spans of a trace on one replica: with replicas > 1 put the loadbalancing exporter in the
+# agent (routing_key: traceID) — see envs/prod/opentelemetry-collector-gateway.yaml.
+fullnameOverride: otel-collector
+mode: deployment
+replicaCount: 2
+image:
+  repository: otel/opentelemetry-collector-contrib
+command:
+  name: otelcol-contrib
+
+ports:
+  jaeger-compact: {enabled: false}
+  jaeger-thrift: {enabled: false}
+  jaeger-grpc: {enabled: false}
+  zipkin: {enabled: false}
+  metrics: {enabled: true}
+
+config:
+  extensions:
+    health_check: {endpoint: "${env:MY_POD_IP}:13133"}
+  processors:
+    tail_sampling:
+      decision_wait: 10s
+      num_traces: 100000
+      expected_new_traces_per_sec: 500
+      policies:
+        - name: keep-errors
+          type: status_code
+          status_code: {status_codes: [ERROR]}
+        - name: keep-slow
+          type: latency
+          latency: {threshold_ms: 500}
+        - name: baseline
+          type: probabilistic
+          probabilistic: {sampling_percentage: 10}
+  exporters:
+    otlp/tempo:
+      endpoint: tempo-distributor.observability:4317
+      tls: {insecure: true}
+    prometheusremotewrite:
+      endpoint: http://kube-prometheus-stack-prometheus.observability:9090/api/v1/write
+      resource_to_telemetry_conversion: {enabled: true}
+    otlphttp/loki:
+      endpoint: http://loki-gateway.observability/otlp
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, tail_sampling, batch]
+        exporters: [otlp/tempo]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [prometheusremotewrite]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, batch]
+        exporters: [otlphttp/loki]
+
+serviceMonitor:
+  enabled: true
+  extraLabels: {release: kube-prometheus-stack}
+
+resources:
+  requests: {cpu: 200m, memory: 512Mi}
+  limits: {memory: 1Gi}
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

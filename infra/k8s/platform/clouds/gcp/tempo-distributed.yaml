@@ -1,0 +1,5 @@
+storage:
+  trace:
+    backend: gcs
+    gcs:
+      bucket_name: afrotransact-tempo

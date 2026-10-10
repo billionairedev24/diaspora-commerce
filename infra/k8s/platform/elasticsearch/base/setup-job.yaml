@@ -1,0 +1,40 @@
+# Applies index templates and ILM policies after every sync (Argo CD PostSync hook). Idempotent PUTs.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: search-es-setup
+  namespace: elastic
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 100
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: setup
+          image: curlimages/curl:8.16.0
+          command: ["/bin/sh", "/setup/setup.sh"]
+          env:
+            - name: ES_URL
+              value: https://search-es-http.elastic.svc:9200
+            - name: ES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: search-es-elastic-user, key: elastic}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - {name: setup, mountPath: /setup}
+            - {name: ca, mountPath: /ca}
+      volumes:
+        - name: setup
+          configMap: {name: search-es-setup}
+        - name: ca
+          secret: {secretName: search-es-http-certs-public}

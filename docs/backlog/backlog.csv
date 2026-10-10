@@ -160,14 +160,14 @@
 - Funding source (AfroTransact or seller) is recorded for settlement","E05","","Medium","5","offers java","offers","To Do"
 "S043","Story","Other sellers on product page","Product page lists other offers for the same item with price, delivery and seller rating.","- All eligible offers listed with landed price
 - Customers can add a non-buy-box offer to cart","E05","","Medium","3","offers","offers","To Do"
-"E06","Epic","Cart & checkout","Amazon-style cart split per seller, stock-capped quantities, and a clean three-step checkout saga.","","","Cart & checkout","High","","checkout","checkout","To Do"
+"E06","Epic","Cart & checkout","Amazon-style cart split per seller, stock-capped quantities, and a clean three-step checkout saga.","","","Cart & checkout","High","","checkout","checkout","In Progress"
 "S044","Story","Cart service (Redis + Postgres)","Carts with price snapshots, save for later and merge on login.","- Quantities can never exceed sellable stock
 - Lines that lose stock are flagged and excluded from checkout
 - Guest cart merges into the account cart on sign-in
-- Save for later moves lines out of the active cart","E06","","Highest","5","checkout go","checkout","To Do"
+- Save for later moves lines out of the active cart","E06","","Highest","5","checkout go","checkout","Done"
 "S045","Story","Add-to-cart stepper and stock caps","'Add to cart' becomes a − / + stepper; out-of-stock shows 'Currently unavailable' with back-in-stock alert.","- Stepper never exceeds available stock
 - Out-of-stock items cannot be added
-- 'Email me when available' subscribes the user","E06","","High","3","checkout web","checkout","To Do"
+- 'Email me when available' subscribes the user","E06","","High","3","checkout web","checkout","In Progress"
 "S046","Story","Checkout saga (Temporal) with compensations","Validate cart → reserve inventory → PaymentIntent (manual capture) → order + shipments → confirm.","- Each step has a compensation (release reservation, cancel intent, void order)
 - Idempotency-Key on placeOrder returns the same order on retry
 - A failed payment releases reservations within 1 minute
@@ -380,20 +380,20 @@
 - Filter by actor, entity and date","E18","","High","3","trust java","trust","To Do"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
 - Reinstatement restores them","E18","","Medium","5","trust","trust","To Do"
-"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","To Do"
+"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","Done"
 "S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
 - SMS adapters: Twilio, Vonage, AWS End User Messaging
 - Push: FCM and APNs; WhatsApp: Meta Cloud API
-- Each adapter is an implementation of the port with its own tests","E19","","Highest","8","notifications go","notifications","To Do"
+- Each adapter is an implementation of the port with its own tests","E19","","Highest","8","notifications go","notifications","Done"
 "S122","Story","Routing, failover and circuit breakers","Per market/channel priority lists with automatic failover on timeout or 5xx.","- A failing provider opens its breaker and the next provider is used
-- All providers failing re-queues with backoff and DLQ","E19","","High","5","notifications go","notifications","To Do"
+- All providers failing re-queues with backoff and DLQ","E19","","High","5","notifications go","notifications","Done"
 "S123","Story","Consent, STOP/HELP and quiet hours","TCPA consent, 10DLC, STOP/HELP keywords, quiet hours by recipient time zone, one-click unsubscribe.","- STOP, END, CANCEL, UNSUBSCRIBE, QUIT opt out; START rejoins
 - Marketing never sent without consent; OTP always sends
-- RFC 8058 List-Unsubscribe headers on marketing email","E19","","High","5","notifications legal","notifications","To Do"
+- RFC 8058 List-Unsubscribe headers on marketing email","E19","","High","5","notifications legal","notifications","Done"
 "S124","Story","Templates and preview","Versioned templates (React Email/MJML, ICU MessageFormat) with locales, preview and test-send.","- Editing needs Marketing or Ops edit rights
-- Test-send goes only to the editor","E19","","Medium","5","notifications staff-console","notifications","To Do"
+- Test-send goes only to the editor","E19","","Medium","5","notifications staff-console","notifications","Done"
 "S125","Story","Delivery receipts and notification log","Provider webhooks update status; staff can see every message sent.","- Bounces and complaints add to suppression list
-- Log shows channel, provider, status and template version","E19","","Medium","3","notifications","notifications","To Do"
+- Log shows channel, provider, status and template version","E19","","Medium","3","notifications","notifications","Done"
 "E20","Epic","Content, ads, announcements, markets & site config","Nothing promotional or legal is hard-coded: placements, campaigns, markets and site settings are data.","","","Content, ads, announcements, markets & site config","High","","content","content","To Do"
 "S126","Story","Placements: announcement bar, hero, banners","Slots with schemas and targeting edited in the back office and cached at the edge.","- Draft → review → scheduled → live → ended workflow
 - Publishing purges the CDN cache
@@ -519,20 +519,20 @@
 - Catalog rendered in the portal","E27","","High","3","docs events","docs","To Do"
 "S173","Story","Generated TypeScript clients and Zod schemas","Clients for web and mobile generated from contracts.","- Clients regenerate in CI when contracts change
 - Generated code is never edited by hand","E27","","High","5","docs web","docs","To Do"
-"E28","Epic","Observability & monitoring","OpenTelemetry everywhere, Prometheus/Grafana/Loki/Tempo, SLOs, alerting and on-call.","","","Observability & monitoring","High","","observability","observability","To Do"
+"E28","Epic","Observability & monitoring","OpenTelemetry everywhere, Prometheus/Grafana/Loki/Tempo, SLOs, alerting and on-call.","","","Observability & monitoring","High","","observability","observability","In Progress"
 "S174","Story","Local observability stack","OTel Collector, Prometheus, Grafana, Loki, Tempo and Alertmanager in docker compose.","- Grafana provisioned with datasources and service dashboards
-- Traces from Java and Go services visible in Tempo","E28","","High","3","observability infra","observability","To Do"
+- Traces from Java and Go services visible in Tempo","E28","","High","3","observability infra","observability","Done"
 "S175","Story","Kubernetes monitoring stack","kube-prometheus-stack, Loki, Tempo and OTel Collector via Helm/Argo CD per environment.","- ServiceMonitors scrape every service
-- Logs shipped with service, env and correlation id labels","E28","","High","5","observability infra","observability","To Do"
+- Logs shipped with service, env and correlation id labels","E28","","High","5","observability infra","observability","Done"
 "S176","Story","SLOs and burn-rate alerts","Checkout success ≥ 99.9%, search p95 < 150 ms, webhook lag < 60 s, payout on time ≥ 99.5%.","- Multi-window burn-rate alerts route to PagerDuty/Opsgenie
-- Runbook linked from every alert","E28","","High","5","observability","observability","To Do"
+- Runbook linked from every alert","E28","","High","5","observability","observability","Done"
 "S177","Story","Elasticsearch & Kibana monitoring","Cluster health, index lag and slow queries dashboards.","- Indexer lag alert when > 60 s
-- Slow query log enabled in dev/uat","E28","","Medium","3","observability search","observability","To Do"
+- Slow query log enabled in dev/uat","E28","","Medium","3","observability search","observability","Done"
 "S178","Story","Front-end and mobile error tracking","Sentry for web and mobile with release tagging and source maps.","- Errors grouped by release
 - PII scrubbing enabled","E28","","Medium","2","observability web mobile","observability","To Do"
-"E29","Epic","Infrastructure & multi-cloud","Terraform/OpenTofu modules for AWS, GCP and Azure behind identical interfaces; Cloudflare in front.","","","Infrastructure & multi-cloud","High","","infra","infra","To Do"
+"E29","Epic","Infrastructure & multi-cloud","Terraform/OpenTofu modules for AWS, GCP and Azure behind identical interfaces; Cloudflare in front.","","","Infrastructure & multi-cloud","High","","infra","infra","In Progress"
 "S179","Story","Local development stack (docker compose)","Postgres+PostGIS (one DB per service), Kafka, Elasticsearch, Kibana, Redis, Temporal, MinIO, Mailpit, OpenFGA.","- make up starts the full stack
-- Every service database and user is created automatically","E29","","Highest","3","infra local","infra","To Do"
+- Every service database and user is created automatically","E29","","Highest","3","infra local","infra","Done"
 "S180","Story","Terraform modules per cloud with a shared interface","Cluster, Postgres, cache, bucket, secrets and network modules for aws, gcp and azure with identical inputs/outputs.","- envs/<env> choose the provider with a single variable
 - OPA/Conftest blocks public buckets, missing encryption and untagged resources","E29","","High","13","infra terraform","infra","To Do"
 "S181","Story","Cloudflare edge as code","DNS, WAF rules, rate limits, Turnstile and Workers routes in Terraform.","- WAF managed rules on all hostnames
@@ -541,18 +541,18 @@
 - Elasticsearch ILM hot-warm-frozen policies defined","E29","","Medium","5","infra finops","infra","To Do"
 "S183","Story","Secrets via External Secrets Operator","AWS Secrets Manager, GCP Secret Manager or Azure Key Vault behind ESO.","- No secret values in git
 - Same ExternalSecret manifests work on all three clouds","E29","","High","3","infra security","infra","To Do"
-"E30","Epic","CI/CD, environments & Kubernetes deployment","Each service built, tested, signed and deployed independently to local/dev/uat/prod on the chosen cloud.","","","CI/CD, environments & Kubernetes deployment","High","","cicd","cicd","To Do"
+"E30","Epic","CI/CD, environments & Kubernetes deployment","Each service built, tested, signed and deployed independently to local/dev/uat/prod on the chosen cloud.","","","CI/CD, environments & Kubernetes deployment","High","","cicd","cicd","In Progress"
 "S184","Story","Helm library chart and per-service charts","Shared at-service library chart; every service has its own chart and values per environment.","- helm template works for every service and environment
-- Charts include Deployment, Service, HPA, PDB, ServiceMonitor, NetworkPolicy and ExternalSecret","E30","","Highest","5","cicd k8s","cicd","To Do"
+- Charts include Deployment, Service, HPA, PDB, ServiceMonitor, NetworkPolicy and ExternalSecret","E30","","Highest","5","cicd k8s","cicd","Done"
 "S185","Story","Per-service GitHub Actions workflows","Path-filtered workflows calling reusable Java/Go pipelines.","- A change to one service builds and tests only that service
 - Pipeline: lint, arch tests, unit, integration, OpenAPI diff, security scans, image, SBOM, cosign","E30","","Highest","5","cicd github-actions","cicd","To Do"
 "S186","Story","Deploy workflow with cloud target (aws | gcp | azure)","OIDC federation to the chosen cloud; images mirrored to its registry.","- No long-lived cloud keys in GitHub
 - Target cloud is a single input/variable","E30","","High","5","cicd github-actions","cicd","To Do"
 "S187","Story","Argo CD apps per service and environment","ApplicationSet generates one app per service per environment; Argo Rollouts canary in uat/prod.","- Canary 10% → 50% → 100% with Prometheus analysis
-- Automatic rollback on SLO breach; prod promotion needs approval","E30","","High","8","cicd k8s","cicd","To Do"
+- Automatic rollback on SLO breach; prod promotion needs approval","E30","","High","8","cicd k8s","cicd","Done"
 "S188","Story","Environment configuration: local, dev, uat, prod","Profile/config per environment for every service and app.","- Spring profiles application-<env>.yml and Go config/<env>.yaml
 - Docs pages on in local/dev/uat, off in prod
-- Trace sampling 100% dev, 50% uat, 10% prod","E30","","Highest","3","cicd config","cicd","To Do"
+- Trace sampling 100% dev, 50% uat, 10% prod","E30","","Highest","3","cicd config","cicd","In Progress"
 "S189","Story","Web deploys to Cloudflare Workers with PR previews","OpenNext builds for storefront, Seller Center and staff console; Vercel fallback.","- Each PR gets a preview URL
 - Same build output deploys to Vercel if needed","E30","","High","5","cicd web cloudflare","cicd","To Do"
 "S190","Story","Mobile builds with EAS","Expo EAS builds and store submissions per environment.","- Dev, preview and production channels

@@ -1,0 +1,14 @@
+# Everything Argo CD manages for dev: AppProjects (afrotransact-dev, platform-dev) and the three
+# ApplicationSets pointed at envs/dev/platform-values.yaml. Synced by bootstrap/root-dev.yaml (app of apps).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+nameSuffix: -dev
+resources:
+  - ../../projects
+  - ../../applicationsets
+patches:
+  - target: {kind: ApplicationSet}
+    patch: |-
+      - op: replace
+        path: /spec/generators/0/matrix/generators/0/git/files/0/path
+        value: infra/argocd/envs/dev/platform-values.yaml

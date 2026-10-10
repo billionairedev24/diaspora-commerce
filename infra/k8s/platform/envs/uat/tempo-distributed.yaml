@@ -1,0 +1,15 @@
+# Tempo — uat.
+compactor:
+  config:
+    compaction:
+      block_retention: 168h
+storage:
+  trace:
+    s3: {bucket: afrotransact-uat-tempo}               # aws
+    gcs: {bucket_name: afrotransact-uat-tempo}         # gcp
+    azure: {storage_account_name: afrotransactuattraces}   # azure
+# serviceAccount:
+#   annotations:
+#     eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/afrotransact-uat-tempo
+#     iam.gke.io/gcp-service-account: afrotransact-uat-tempo@PROJECT.iam.gserviceaccount.com
+#     azure.workload.identity/client-id: 00000000-0000-0000-0000-000000000000
