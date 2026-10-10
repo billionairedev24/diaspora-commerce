@@ -17,6 +17,7 @@
 | content | Spring Boot | 8112 | announcements, placements, ads campaigns, site/legal config, markets | Postgres `content` |
 | ai-gateway | Spring Boot + Spring AI | 8113 | Lola agent, OpenRouter routing, budgets, redaction | Postgres `ai` |
 | mcp-server | Spring Boot + Spring AI MCP | 8114 | MCP tools for shoppers, sellers, staff | — |
+| delivery-runs | Spring Boot | 8115 | community delivery runs: locations, runs (cutoff, minimum, capacity), run slots, subscriptions, run economics | Postgres `deliveryruns` |
 | gateway-bff | Go | 8200 | screen-shaped APIs for web/mobile, token relay | Redis |
 | search | Go | 8201 | query, facets, autocomplete, hybrid retrieval | Elasticsearch |
 | indexer | Go | 8202 | Kafka → Elasticsearch projection | Elasticsearch |

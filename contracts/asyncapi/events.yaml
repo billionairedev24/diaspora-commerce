@@ -154,6 +154,35 @@ channels:
         $ref: '#/components/messages/contentCareerApplicationReceived'
       contentAdsCampaignPaused:
         $ref: '#/components/messages/contentAdsCampaignPaused'
+  deliveryRunsEvents:
+    address: at.delivery-runs.events
+    description: Community delivery runs (E34) from delivery-runs-service via its transactional outbox. Run events are keyed
+      by run id (one run's events stay in order), subscription events by subscription id. Headers event-id, event-type, occurred-at;
+      consumers de-duplicate on event-id. Links are built from the environment's PUBLIC_WEB_URL and carry UTM attribution
+      (utm_source / utm_medium = channel, utm_campaign = delivery-run-<slug>-<yyyymmdd>, utm_content = event).
+    messages:
+      deliveryRunsRunAnnounced:
+        $ref: '#/components/messages/deliveryRunsRunAnnounced'
+      deliveryRunsRunOpened:
+        $ref: '#/components/messages/deliveryRunsRunOpened'
+      deliveryRunsRunCutoffReminder:
+        $ref: '#/components/messages/deliveryRunsRunCutoffReminder'
+      deliveryRunsRunConfirmed:
+        $ref: '#/components/messages/deliveryRunsRunConfirmed'
+      deliveryRunsRunExtended:
+        $ref: '#/components/messages/deliveryRunsRunExtended'
+      deliveryRunsRunCancelled:
+        $ref: '#/components/messages/deliveryRunsRunCancelled'
+      deliveryRunsRunOutForDelivery:
+        $ref: '#/components/messages/deliveryRunsRunOutForDelivery'
+      deliveryRunsRunCompleted:
+        $ref: '#/components/messages/deliveryRunsRunCompleted'
+      deliveryRunsSubscriptionCreated:
+        $ref: '#/components/messages/deliveryRunsSubscriptionCreated'
+      deliveryRunsSubscriptionConfirmed:
+        $ref: '#/components/messages/deliveryRunsSubscriptionConfirmed'
+      deliveryRunsSubscriptionCancelled:
+        $ref: '#/components/messages/deliveryRunsSubscriptionCancelled'
   fulfilmentEvents:
     address: at.fulfilment.events
     description: 'Fulfilment-centre tasks, delivery routes and stops, vehicle defects, SOS alerts and driver access changes
@@ -1083,6 +1112,87 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/ContentCareerApplicationReceived'
+    deliveryRunsRunAnnounced:
+      name: delivery-runs.run.announced
+      title: A run was announced (date and fee known; preorders not open yet)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsRunOpened:
+      name: delivery-runs.run.opened
+      title: Preorders are open until cutoffAt (staff, or automatically at opensAt)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsRunCutoffReminder:
+      name: delivery-runs.run.cutoff_reminder
+      title: 24 hours (configurable) before the cutoff; sent again for a new cutoff after an extension
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsRunConfirmed:
+      name: delivery-runs.run.confirmed
+      title: The run goes ahead (minimum met at cutoff, or confirmed by staff); orders[] are the confirmed orders, with handover
+        codes for pickup-point runs. Capture payments now.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsRunExtended:
+      name: delivery-runs.run.extended
+      title: The cutoff (and window) moved later (staff, or the EXTEND policy once when the minimum was not met; reason MINIMUM_NOT_MET);
+        previousCutoffAt is the old cutoff. Preorders stay held.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsRunCancelled:
+      name: delivery-runs.run.cancelled
+      title: The run will not happen (minimum not met after the policy, or staff with a reason); orders[] lists every affected
+        order and customer. Release stock and payment holds and tell the customers.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsRunOutForDelivery:
+      name: delivery-runs.run.out_for_delivery
+      title: The run left for the town (dispatch announcement); orders[] are the orders on board
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsRunCompleted:
+      name: delivery-runs.run.completed
+      title: Every drop was made; orders[] are the run's orders
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsRunEvent'
+    deliveryRunsSubscriptionCreated:
+      name: delivery-runs.subscription.created
+      title: 'A shopper subscribed to a location''s run alerts or added channels (changedChannels). Email-only subscribers
+        are PENDING_CONFIRMATION: send confirmUrl (double opt-in); nothing else may be sent until it is used.'
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsSubscriptionEvent'
+    deliveryRunsSubscriptionConfirmed:
+      name: delivery-runs.subscription.confirmed
+      title: An email subscriber confirmed (double opt-in); welcome message with the WhatsApp community link
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsSubscriptionEvent'
+    deliveryRunsSubscriptionCancelled:
+      name: delivery-runs.subscription.cancelled
+      title: Consent withdrawn on changedChannels; status CANCELLED when no channel is left. Stop messaging those channels.
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/DeliveryRunsSubscriptionEvent'
     fulfilmentTaskCreated:
       name: fulfilment.task.created
       title: Pick/pack task created for an FBA / Retail 1P shipment
@@ -3487,6 +3597,332 @@ components:
         submittedAt:
           type: string
           format: date-time
+    DeliveryRunsPickupPoint:
+      type: object
+      required:
+      - name
+      - line1
+      - city
+      - hours
+      properties:
+        name:
+          type: string
+          examples:
+          - Bastrop Public Library
+        line1:
+          type: string
+        city:
+          type: string
+        state:
+          type:
+          - string
+          - 'null'
+        postalCode:
+          type:
+          - string
+          - 'null'
+        hours:
+          type: string
+          examples:
+          - Sat 2–5 PM
+        notes:
+          type:
+          - string
+          - 'null'
+    DeliveryRunsOrderRef:
+      type: object
+      required:
+      - orderId
+      - customerId
+      - packages
+      - status
+      properties:
+        orderId:
+          type: string
+        customerId:
+          type: string
+          description: Customer (token subject); notifications resolves contacts
+        packages:
+          type: integer
+        status:
+          type: string
+          enum:
+          - RESERVED
+          - CONFIRMED
+          - RELEASED
+          - CANCELLED
+        handoverCode:
+          type:
+          - string
+          - 'null'
+          description: Six digits; confirmed pickup-point runs only
+    DeliveryRunsRunEvent:
+      type: object
+      required:
+      - runId
+      - status
+      - locationId
+      - locationSlug
+      - town
+      - market
+      - timeZone
+      - windowStart
+      - windowEnd
+      - cutoffAt
+      - deliveryDay
+      - windowDisplay
+      - cutoffDisplay
+      - feeMinor
+      - currency
+      - feeDisplay
+      - dropMode
+      - minOrders
+      - reservedOrders
+      - extensions
+      - runUrl
+      - links
+      - locationUrl
+      properties:
+        runId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ANNOUNCED
+          - OPEN
+          - EXTENDED
+          - CUT_OFF
+          - CONFIRMED
+          - COLLECTING
+          - OUT_FOR_DELIVERY
+          - COMPLETED
+          - CANCELLED
+        previousStatus:
+          type:
+          - string
+          - 'null'
+        locationId:
+          type: string
+          format: uuid
+        locationSlug:
+          type: string
+          examples:
+          - bastrop-tx
+        town:
+          type: string
+          examples:
+          - Bastrop
+        market:
+          type: string
+          examples:
+          - US
+        state:
+          type:
+          - string
+          - 'null'
+          examples:
+          - TX
+        timeZone:
+          type: string
+          examples:
+          - America/Chicago
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        cutoffAt:
+          type: string
+          format: date-time
+          description: Order cutoff (the new one for extended)
+        previousCutoffAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Extended only
+        sellerPickupAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
+          description: Seller sweep time when scheduled
+        deliveryDay:
+          type: string
+          examples:
+          - Saturday, October 24
+        windowDisplay:
+          type: string
+          examples:
+          - 10:00 AM – 2:00 PM
+        cutoffDisplay:
+          type: string
+          examples:
+          - Thu, Oct 22 · 8:00 PM CDT
+        feeMinor:
+          type: integer
+          format: int64
+          examples:
+          - 799
+        currency:
+          type: string
+          examples:
+          - USD
+        feeDisplay:
+          type: string
+          examples:
+          - $7.99
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        pickupPoint:
+          oneOf:
+          - $ref: '#/components/schemas/DeliveryRunsPickupPoint'
+          - type: 'null'
+        minOrders:
+          type: integer
+        reservedOrders:
+          type: integer
+        capacityOrders:
+          type:
+          - integer
+          - 'null'
+        extensions:
+          type: integer
+        reason:
+          type:
+          - string
+          - 'null'
+          description: 'Extended / cancelled: MINIMUM_NOT_MET, STAFF or the staff reason'
+        runUrl:
+          type: string
+          format: uri
+          description: <PUBLIC_WEB_URL>/delivery-runs/<slug>?run=<id>
+        links:
+          type: object
+          description: runUrl with UTM per channel
+          properties:
+            email:
+              type: string
+              format: uri
+            sms:
+              type: string
+              format: uri
+            push:
+              type: string
+              format: uri
+            whatsapp:
+              type: string
+              format: uri
+            social:
+              type: string
+              format: uri
+        locationUrl:
+          type: string
+          format: uri
+        whatsappInviteUrl:
+          type:
+          - string
+          - 'null'
+          format: uri
+          description: The location's WhatsApp community
+        orders:
+          type:
+          - array
+          - 'null'
+          description: confirmed, cancelled, out_for_delivery and completed only
+          items:
+            $ref: '#/components/schemas/DeliveryRunsOrderRef'
+    DeliveryRunsSubscriptionEvent:
+      type: object
+      required:
+      - subscriptionId
+      - locationId
+      - locationSlug
+      - town
+      - status
+      - channels
+      - changedChannels
+      - unsubscribeUrl
+      - locationUrl
+      properties:
+        subscriptionId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        locationSlug:
+          type: string
+        town:
+          type: string
+        userId:
+          type:
+          - string
+          - 'null'
+          description: Signed-in shopper; notifications resolves verified contacts
+        email:
+          type:
+          - string
+          - 'null'
+          format: email
+          description: Email-only subscriber
+        status:
+          type: string
+          enum:
+          - PENDING_CONFIRMATION
+          - ACTIVE
+          - CANCELLED
+        channels:
+          type: array
+          description: Channels with consent in force
+          items:
+            type: string
+            enum:
+            - EMAIL
+            - SMS
+            - PUSH
+            - WHATSAPP
+        changedChannels:
+          type: array
+          description: Granted (created / confirmed) or withdrawn (cancelled) by this change
+          items:
+            type: string
+            enum:
+            - EMAIL
+            - SMS
+            - PUSH
+            - WHATSAPP
+        source:
+          type:
+          - string
+          - 'null'
+          examples:
+          - location-page
+          - checkout
+          - unsubscribe-link
+        confirmUrl:
+          type:
+          - string
+          - 'null'
+          format: uri
+          description: Double opt-in link (pending email subscribers)
+        unsubscribeUrl:
+          type: string
+          format: uri
+        locationUrl:
+          type: string
+          format: uri
+        whatsappInviteUrl:
+          type:
+          - string
+          - 'null'
+          format: uri
     FulfilmentPickupAssigned:
       type: object
       required:
@@ -8526,6 +8962,16 @@ operations:
       $ref: '#/channels/ordersOrderEvents'
     summary: orders.order.placed attributes order lines to the shopper's last sponsored-product click on the ordered variant
       from the same seller within 7 days (attributed orders and sales, ROAS). Each line is attributed once.
+  publishDeliveryRunsEvents:
+    action: send
+    channel:
+      $ref: '#/channels/deliveryRunsEvents'
+    summary: delivery-runs-service publishes run lifecycle and subscription events. notifications announces opened, cutoff_reminder
+      (24 h before cutoff, again after an extension) and out_for_delivery to the location's opted-in subscribers (audience
+      from GET /v1/service/locations/{id}/audience) and the run's customers (orders[]), sends the double opt-in link of subscription.created
+      (confirmUrl) and confirms / cancels customers' preorders on confirmed / cancelled. orders captures payment on run.confirmed
+      and releases stock and payment holds on run.cancelled. fulfilment plans the sweep on run.confirmed (GET /v1/service/runs/{id}/dispatch).
+      content refreshes run advertorials on announced / opened / extended and expires them on cancelled / confirmed.
   publishFulfilmentEvents:
     action: send
     channel:

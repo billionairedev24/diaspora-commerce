@@ -1,0 +1,21 @@
+# Production: reference pages off (published on the developer portal), sampled traces.
+at:
+  api-docs:
+    enabled: false
+  delivery-runs:
+    public-web-url: ${PUBLIC_WEB_URL:https://afrotransact.com}
+    geo:
+      base-url: ${GEO_URL:http://geo}
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:30}
+management:
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:0.1}

@@ -1,0 +1,16 @@
+# UAT / staging: production-like, anonymised data, API reference pages on for testers.
+at:
+  api-docs:
+    enabled: true
+  delivery-runs:
+    public-web-url: ${PUBLIC_WEB_URL:https://uat.afrotransact.com}
+    geo:
+      base-url: ${GEO_URL:http://geo}
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+management:
+  tracing:
+    sampling:
+      probability: 0.5

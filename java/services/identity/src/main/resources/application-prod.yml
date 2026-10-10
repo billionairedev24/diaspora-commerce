@@ -96,8 +96,7 @@ at:
         type: confidential
         secret: ${ORDERS_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read, "tax:quote",
-                 "sellers:ship-from.read", offers:read]
+        scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read, "tax:quote", "sellers:ship-from.read", offers:read, delivery-runs:reserve]
       - client-id: tax-returns-service
         name: Tax returns service
         type: confidential
@@ -115,7 +114,7 @@ at:
         type: confidential
         secret: ${FULFILMENT_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [orders:update-status, inventory:reserve, delivery:relay]
+        scopes: [orders:update-status, inventory:reserve, delivery:relay, delivery-runs:read, delivery-runs:manage]
       - client-id: payments-service
         name: Payments service
         type: confidential
@@ -127,7 +126,7 @@ at:
         type: confidential
         secret: ${NOTIFICATIONS_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [users:read]
+        scopes: [users:read, delivery-runs:audience.read]
       - client-id: trust-ops-service
         name: Trust & safety operations service
         type: confidential
@@ -140,6 +139,12 @@ at:
         secret: ${SEARCH_CLIENT_SECRET}
         grant-types: [client_credentials]
         scopes: [ai:use, ads:serve]
+      - client-id: delivery-runs-service
+        name: Delivery runs service
+        type: confidential
+        secret: ${DELIVERY_RUNS_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [geo:zones:write]
       - client-id: media-service
         name: Media service
         type: confidential

@@ -1,0 +1,295 @@
+package com.afrotransact.deliveryruns.application;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+import com.afrotransact.deliveryruns.domain.Capacity;
+import com.afrotransact.deliveryruns.domain.DeliveryWindow;
+import com.afrotransact.deliveryruns.domain.DropMode;
+import com.afrotransact.deliveryruns.domain.GeoPoint;
+import com.afrotransact.deliveryruns.domain.Location;
+import com.afrotransact.deliveryruns.domain.LocationDetails;
+import com.afrotransact.deliveryruns.domain.PickupPoint;
+import com.afrotransact.deliveryruns.domain.RouteEstimate;
+import com.afrotransact.deliveryruns.domain.RuleViolation;
+import com.afrotransact.deliveryruns.domain.Run;
+import com.afrotransact.deliveryruns.domain.RunEconomics;
+import com.afrotransact.deliveryruns.domain.RunEconomicsCalculator;
+import com.afrotransact.deliveryruns.domain.RunOrder;
+import com.afrotransact.deliveryruns.domain.RunOrderStatus;
+import com.afrotransact.deliveryruns.domain.RunStatus;
+import com.afrotransact.deliveryruns.domain.RunTerms;
+import com.afrotransact.deliveryruns.port.GeoGateway;
+import com.afrotransact.deliveryruns.port.GeoUnavailableException;
+import com.afrotransact.deliveryruns.port.LocationRepository;
+import com.afrotransact.deliveryruns.port.RunOrderRepository;
+import com.afrotransact.deliveryruns.port.RunRepository;
+import com.afrotransact.platform.security.PermissionChecker;
+import com.afrotransact.platform.web.error.NotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+class RunServiceImpl implements RunService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RunServiceImpl.class);
+
+    private final RunRepository runs;
+    private final RunOrderRepository runOrders;
+    private final LocationRepository locations;
+    private final GeoGateway geo;
+    private final RunEconomicsCalculator economics;
+    private final RunLifecycle lifecycle;
+    private final DeliveryRunsSettings settings;
+    private final PermissionChecker permissions;
+    private final Clock clock;
+
+    RunServiceImpl(RunRepository runs, RunOrderRepository runOrders, LocationRepository locations, GeoGateway geo,
+                   RunEconomicsCalculator economics, RunLifecycle lifecycle, DeliveryRunsSettings settings,
+                   PermissionChecker permissions, Clock clock) {
+        this.runs = runs;
+        this.runOrders = runOrders;
+        this.locations = locations;
+        this.geo = geo;
+        this.economics = economics;
+        this.lifecycle = lifecycle;
+        this.settings = settings;
+        this.permissions = permissions;
+        this.clock = clock;
+    }
+
+    @Override
+    @Transactional
+    public Run create(RunCommand command) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Location location = location(command.locationId());
+        if (!location.active()) {
+            throw new RuleViolation("delivery-runs.location-inactive", "The location is not active");
+        }
+        Instant now = Instant.now(clock);
+        RunTerms terms = terms(location, command);
+        if (!terms.cutoffAt().isAfter(now)) {
+            throw new RuleViolation("delivery-runs.invalid-cutoff", "The cutoff must be in the future");
+        }
+        return runs.insert(Run.draft(UUID.randomUUID(), location.id(), terms, tryRoute(location), now));
+    }
+
+    @Override
+    @Transactional
+    public Run update(UUID id, RunCommand command) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        if (command.locationId() != null && !command.locationId().equals(run.locationId())) {
+            throw new RuleViolation("delivery-runs.location-fixed", "A run cannot move to another location");
+        }
+        Location location = location(run.locationId());
+        Run changed = run.reschedule(terms(location, command), Instant.now(clock));
+        if (changed.estimate() == null) {
+            changed = changed.withEstimate(tryRoute(location), changed.updatedAt());
+        }
+        return runs.update(changed);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Run get(UUID id) {
+        permissions.require(DeliveryRunsPermissions.READ);
+        return find(id);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Run> list(UUID locationId, Set<RunStatus> statuses, int limit) {
+        permissions.require(DeliveryRunsPermissions.READ);
+        return runs.find(locationId, statuses, Math.min(Math.max(limit, 1), 500));
+    }
+
+    @Override
+    @Transactional
+    public void delete(UUID id) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        if (run.status() != RunStatus.DRAFT) {
+            throw new RuleViolation("delivery-runs.run-not-draft", "Only draft runs can be deleted; cancel instead");
+        }
+        runs.delete(id);
+    }
+
+    @Override
+    @Transactional
+    public Run announce(UUID id) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        return lifecycle.moved(location(run.locationId()), run.announce(Instant.now(clock)), run.status(),
+                DeliveryRunsEvents.RUN_ANNOUNCED, false);
+    }
+
+    @Override
+    @Transactional
+    public Run open(UUID id) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        return lifecycle.moved(location(run.locationId()), run.open(Instant.now(clock)), run.status(),
+                DeliveryRunsEvents.RUN_OPENED, false);
+    }
+
+    @Override
+    @Transactional
+    public Run extend(UUID id, ExtendCommand command) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        Instant now = Instant.now(clock);
+        if (command.cutoffAt() == null) {
+            throw new RuleViolation("delivery-runs.invalid-extension", "The new cutoff is required");
+        }
+        Duration shift = Duration.between(run.terms().cutoffAt(), command.cutoffAt());
+        DeliveryWindow window = command.windowStart() != null && command.windowEnd() != null
+                ? new DeliveryWindow(command.windowStart(), command.windowEnd())
+                : run.terms().window().shift(shift);
+        Instant pickup = command.sellerPickupAt() != null ? command.sellerPickupAt()
+                : run.terms().sellerPickupAt() == null ? null : run.terms().sellerPickupAt().plus(shift);
+        Run extended = run.extend(command.cutoffAt(), window, pickup, now);
+        String reason = command.reason() == null || command.reason().isBlank() ? "STAFF" : command.reason().trim();
+        return lifecycle.extended(location(run.locationId()), extended, run.status(), run.terms().cutoffAt(), reason);
+    }
+
+    @Override
+    @Transactional
+    public Run cancel(UUID id, String reason) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        return lifecycle.cancel(location(run.locationId()), run, reason, Instant.now(clock));
+    }
+
+    @Override
+    @Transactional
+    public Run confirm(UUID id) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        Instant now = Instant.now(clock);
+        Run cutOff = run.status().takesOrders() ? run.cutOff(now) : run;
+        return lifecycle.confirm(location(run.locationId()), cutOff, run.status(), now);
+    }
+
+    @Override
+    @Transactional
+    public Run startCollecting(UUID id) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        return lifecycle.moved(location(run.locationId()), run.startCollecting(Instant.now(clock)), run.status(),
+                null, false);
+    }
+
+    @Override
+    @Transactional
+    public Run outForDelivery(UUID id) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        return lifecycle.moved(location(run.locationId()), run.outForDelivery(Instant.now(clock)), run.status(),
+                DeliveryRunsEvents.RUN_OUT_FOR_DELIVERY, true);
+    }
+
+    @Override
+    @Transactional
+    public Run complete(UUID id) {
+        permissions.require(DeliveryRunsPermissions.MANAGE);
+        Run run = lock(id);
+        return lifecycle.moved(location(run.locationId()), run.complete(Instant.now(clock)), run.status(),
+                DeliveryRunsEvents.RUN_COMPLETED, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RunEconomics preview(EconomicsPreviewCommand c) {
+        permissions.require(DeliveryRunsPermissions.READ);
+        Location location = location(c.locationId());
+        LocationDetails d = location.details();
+        long fee = c.feeMinor() == null ? d.defaultFeeMinor() : c.feeMinor();
+        int min = c.minOrders() == null ? d.defaultMinOrders() : c.minOrders();
+        Integer capacity = c.capacityOrders() == null ? d.defaultCapacity().maxOrders() : c.capacityOrders();
+        DropMode mode = c.dropMode() == null ? d.dropMode() : c.dropMode();
+        int expected = c.expectedOrders() == null ? min : c.expectedOrders();
+        if (fee < 0 || min < 1 || expected < 0 || (capacity != null && capacity < 1)) {
+            throw new RuleViolation("delivery-runs.invalid-preview", "Fee, minimum, capacity or orders out of range");
+        }
+        return economics.evaluate(route(location), mode, fee, d.currency(), min, capacity, expected,
+                c.commissionShareMinor());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public RunEconomics economics(UUID id, Long commissionShareMinor) {
+        permissions.require(DeliveryRunsPermissions.READ);
+        Run run = find(id);
+        RouteEstimate route = run.estimate() != null ? run.estimate() : route(location(run.locationId()));
+        RunTerms t = run.terms();
+        return economics.evaluate(route, t.dropMode(), t.feeMinor(), t.currency(), t.minOrders(),
+                t.capacity().maxOrders(), run.reservedOrders(), commissionShareMinor);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<RunOrder> orders(UUID id, RunOrderStatus status) {
+        permissions.require(DeliveryRunsPermissions.READ);
+        find(id);
+        return runOrders.findByRun(id, status);
+    }
+
+    private RunTerms terms(Location location, RunCommand c) {
+        LocationDetails d = location.details();
+        if (c.windowStart() == null || c.windowEnd() == null) {
+            throw new RuleViolation("delivery-runs.invalid-window", "Delivery window start and end are required");
+        }
+        DropMode mode = c.dropMode() == null ? d.dropMode() : c.dropMode();
+        PickupPoint point = c.pickupPoint() != null ? c.pickupPoint()
+                : mode == DropMode.PICKUP_POINT ? d.pickupPoint() : null;
+        Capacity capacity = c.capacityOrders() == null && c.capacityPackages() == null ? d.defaultCapacity()
+                : new Capacity(c.capacityOrders(), c.capacityPackages());
+        return new RunTerms(new DeliveryWindow(c.windowStart(), c.windowEnd()), c.cutoffAt(), c.opensAt(),
+                c.sellerPickupAt(), c.feeMinor() == null ? d.defaultFeeMinor() : c.feeMinor(),
+                c.currency() == null ? d.currency() : c.currency(),
+                c.minOrders() == null ? d.defaultMinOrders() : c.minOrders(), capacity, mode, point,
+                c.cutoffPolicy() == null ? d.defaultCutoffPolicy() : c.cutoffPolicy(),
+                c.extendDays() == null ? d.defaultExtendDays() : c.extendDays());
+    }
+
+    private RouteEstimate route(Location location) {
+        GeoPoint origin = location.details().origin() == null ? settings.defaultOrigin() : location.details().origin();
+        return geo.route(origin, location.details().area().center());
+    }
+
+    private RouteEstimate tryRoute(Location location) {
+        try {
+            return route(location);
+        } catch (GeoUnavailableException e) {
+            LOG.warn("No route estimate for location {}: {}", location.slug(), e.getMessage());
+            return null;
+        }
+    }
+
+    private Location location(UUID id) {
+        if (id == null) {
+            throw new RuleViolation("delivery-runs.location-required", "locationId is required");
+        }
+        return locations.findById(id).orElseThrow(() -> new NotFoundException("delivery-runs.location-not-found",
+                "Location not found"));
+    }
+
+    private Run find(UUID id) {
+        return runs.findById(id).orElseThrow(RunServiceImpl::notFound);
+    }
+
+    private Run lock(UUID id) {
+        return runs.lockById(id).orElseThrow(RunServiceImpl::notFound);
+    }
+
+    private static NotFoundException notFound() {
+        return new NotFoundException("delivery-runs.run-not-found", "Run not found");
+    }
+}

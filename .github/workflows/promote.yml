@@ -9,7 +9,7 @@ on:
       service:
         description: Service
         type: choice
-        options: [identity, catalog, offers, inventory, orders, payments, seller, retail, fulfilment, bookings, trust-ops, tax-returns, content, ai-gateway, mcp-server, gateway-bff, search, indexer, cart, promise, geo, storefront, media, notifications, carrier-gateway, authz-sync, delivery-runs]
+        options: [identity, catalog, offers, inventory, orders, payments, seller, retail, fulfilment, bookings, trust-ops, tax-returns, content, ai-gateway, mcp-server, delivery-runs, gateway-bff, search, indexer, cart, promise, geo, storefront, media, notifications, carrier-gateway, authz-sync]
       environment:
         description: Target environment
         type: choice

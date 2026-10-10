@@ -1,0 +1,116 @@
+spring:
+  application:
+    name: delivery-runs-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/deliveryruns}
+    username: ${DB_USER:deliveryruns}
+    password: ${DB_PASSWORD:deliveryruns}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
+
+server:
+  port: ${PORT:8115}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: delivery-runs-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  api-docs:
+    title: Delivery Runs API
+    description: >-
+      Community delivery runs: locations (towns / areas by geo polygon or radius), scheduled runs with cutoff,
+      minimum orders and capacity, run slots for preorders, location subscriptions with per-channel consent,
+      advertorial data and run economics.
+    version: v1
+  security:
+    public-paths:
+      - /v1/public/**
+    # Anonymous subscription sign-up, double opt-in confirmation and one-click unsubscribe (token-authenticated).
+    public-post-paths:
+      - /v1/public/subscriptions
+      - /v1/public/subscriptions/confirm
+      - /v1/public/subscriptions/unsubscribe
+  events:
+    relay-enabled: true
+  delivery-runs:
+    # Storefront origin for every link in events, advertorials and location pages (injected per environment by the
+    # at-service Helm library chart; docs/engineering/environments.md).
+    public-web-url: ${PUBLIC_WEB_URL:http://localhost:3000}
+    location-path: ${DELIVERY_RUNS_LOCATION_PATH:/delivery-runs}
+    reminder-lead: ${DELIVERY_RUNS_REMINDER_LEAD:24h}
+    confirmation-ttl: ${DELIVERY_RUNS_CONFIRMATION_TTL:72h}
+    next-run-search-limit: 5
+    # Where runs leave from (FC / hub) when a location sets no origin; used for the route estimate.
+    origin:
+      lat: ${DELIVERY_RUNS_ORIGIN_LAT:30.2672}
+      lng: ${DELIVERY_RUNS_ORIGIN_LNG:-97.7431}
+    geo:
+      base-url: ${GEO_URL:http://localhost:8205}
+      timeout: ${GEO_TIMEOUT:3s}
+      # Zone type of run-area polygons registered in geo-service (and of coverage lookups).
+      zone-type: ${DELIVERY_RUNS_GEO_ZONE_TYPE:SERVICE_AREA}
+      # Client credentials of delivery-runs-service (scope geo:zones:write) for registering polygons.
+      token-uri: ${AUTH_TOKEN_URL:${AUTH_ISSUER_URL:http://localhost:8100}/oauth2/token}
+      client-id: ${DELIVERY_RUNS_CLIENT_ID:delivery-runs-service}
+      client-secret: ${DELIVERY_RUNS_CLIENT_SECRET:}
+    # S265 driver cost model (minor units). cost(n) = fixed (drive both ways + collection [+ pickup-point stop])
+    # + n x per-order (doorstep stop or handover).
+    economics:
+      driver-cost-per-hour-minor: ${DRIVER_COST_PER_HOUR_MINOR:2500}
+      driver-cost-per-mile-minor: ${DRIVER_COST_PER_MILE_MINOR:70}
+      collection-minutes: ${RUN_COLLECTION_MINUTES:45}
+      per-stop-minutes: ${RUN_PER_STOP_MINUTES:6}
+      pickup-point-stop-minutes: ${RUN_PICKUP_POINT_STOP_MINUTES:30}
+      handover-minutes-per-order: ${RUN_HANDOVER_MINUTES_PER_ORDER:1}
+      round-trip: true
+    # Auto-open, 24 h cutoff reminder and cutoff decision; safe on every replica (FOR UPDATE SKIP LOCKED).
+    jobs:
+      enabled: ${DELIVERY_RUNS_JOBS_ENABLED:true}
+      interval: ${DELIVERY_RUNS_JOBS_INTERVAL:60s}
+      batch-size: 50

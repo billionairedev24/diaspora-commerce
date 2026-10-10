@@ -1,0 +1,16 @@
+env: prod
+replicas: 3
+autoscaling:
+  enabled: true
+  min: 3
+  max: 12
+  cpu: 70
+rollout:
+  enabled: true
+resources:
+  requests: {cpu: 500m, memory: 1Gi}
+  limits: {memory: 2Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.1"
+tolerations: []

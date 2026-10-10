@@ -6,7 +6,7 @@ set -euo pipefail
 
 SERVICES=(
   identity catalog offers inventory orders payments seller retail fulfilment bookings
-  trustops taxreturns content ai cart geo storefront media notifications carriers
+  trustops taxreturns content ai cart geo storefront media notifications carriers deliveryruns
   temporal openfga
 )
 

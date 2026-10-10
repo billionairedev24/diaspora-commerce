@@ -1,0 +1,2307 @@
+openapi: 3.1.0
+info:
+  title: Delivery Runs API
+  description: 'Community delivery runs: locations (towns / areas by geo polygon or radius), scheduled runs with cutoff, minimum
+    orders and capacity, run slots for preorders, location subscriptions with per-channel consent, advertorial data and run
+    economics.'
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8115
+  description: local
+- url: https://api.dev.afrotransact.com/delivery-runs
+  description: dev
+- url: https://api.uat.afrotransact.com/delivery-runs
+  description: uat
+- url: https://api.afrotransact.com/delivery-runs
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Locations
+  description: 'Staff: towns / areas served by delivery runs (delivery-runs:read / :manage)'
+- name: Public runs
+  description: 'No sign-in: run availability, location pages, advertorial data'
+- name: Subscriptions
+  description: Run alerts per location with per-channel consent (S262)
+- name: Runs
+  description: 'Staff: schedule runs and move them through their lifecycle (delivery-runs:manage)'
+- name: Service
+  description: 'Service clients: orders (run slots), fulfilment (dispatch), notifications (audience)'
+paths:
+  /v1/locations:
+    get:
+      tags:
+      - Locations
+      summary: List locations, optionally only active or inactive ones (delivery-runs:read)
+      operationId: list_1
+      parameters:
+      - name: active
+        in: query
+        required: false
+        schema:
+          type: boolean
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Location'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags:
+      - Locations
+      summary: Create a location (delivery-runs:manage)
+      operationId: create_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Location'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/locations/{id}:
+    get:
+      tags:
+      - Locations
+      summary: Get a location (delivery-runs:read)
+      operationId: get_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Location'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    put:
+      tags:
+      - Locations
+      summary: Replace a location's details (delivery-runs:manage)
+      operationId: update_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Location'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags:
+      - Locations
+      summary: 'Deactivate a location (never deleted: runs and consent records refer to it)'
+      description: delivery-runs:manage. Inactive locations get no new runs and disappear from public reads.
+      operationId: deactivate
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Location'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/locations/{id}/history:
+    get:
+      tags:
+      - Locations
+      summary: 'Per-location history: runs with orders and fees, subscribers and monthly growth'
+      description: delivery-runs:read (S265)
+      operationId: history
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocationHistory'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/locations/{id}/subscribers/counts:
+    get:
+      tags:
+      - Locations
+      summary: Subscriber counts of a location, per channel (delivery-runs:read)
+      operationId: counts
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SubscriberCounts'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/me/run-subscriptions:
+    get:
+      tags:
+      - Subscriptions
+      summary: 'Signed-in shopper: my run subscriptions'
+      operationId: mine
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Subscription'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags:
+      - Subscriptions
+      summary: 'Signed-in shopper: subscribe to a location (or add channels); active at once'
+      operationId: subscribe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MySubscriptionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/me/run-subscriptions/{locationId}:
+    delete:
+      tags:
+      - Subscriptions
+      summary: 'Signed-in shopper: withdraw channels for a location (no channel = all)'
+      operationId: unsubscribeMine
+      parameters:
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: channel
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - EMAIL
+            - SMS
+            - PUSH
+            - WHATSAPP
+          uniqueItems: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/public/locations:
+    get:
+      tags:
+      - Public runs
+      summary: Active locations
+      operationId: locations
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicLocation'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/locations/{slug}:
+    get:
+      tags:
+      - Public runs
+      summary: 'Location page data: upcoming runs, WhatsApp community link, social and share links'
+      operationId: locationPage
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LocationPage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/runs/available:
+    get:
+      tags:
+      - Public runs
+      summary: Open runs covering an address (checkout, deliver-to targeting)
+      description: Give a 5-digit zip or lat and lng. Polygon areas are matched with geo-service zone coverage, radius areas
+        with geo-service distances. Earliest cutoff first; `full` runs have no room (checkout offers the next one). 502 when
+        geo-service is unavailable.
+      operationId: available
+      parameters:
+      - name: zip
+        in: query
+        description: 5-digit ZIP, e.g. 78602
+        required: false
+        schema:
+          type: string
+      - name: lat
+        in: query
+        required: false
+        schema:
+          type: number
+          format: double
+      - name: lng
+        in: query
+        required: false
+        schema:
+          type: number
+          format: double
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AvailableRuns'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/runs/{id}/advertorial:
+    get:
+      tags:
+      - Public runs
+      summary: Advertorial data for a run (content-service, S263)
+      description: Town, date, window, cutoff, fee, countdown target and attributed CTA URL. 404 for draft runs. Expire the
+        advertorial at `expiresAt` (the cutoff).
+      operationId: advertorial
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Advertorial'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/subscriptions:
+    post:
+      tags:
+      - Subscriptions
+      summary: Subscribe by email (no sign-in, double opt-in)
+      description: Always 202, whether or not the address was known. notifications sends the confirmation link from delivery-runs.subscription.created;
+        nothing else is sent until it is used.
+      operationId: subscribeEmail
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailSubscriptionRequest'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SubscriptionAccepted'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/subscriptions/confirm:
+    post:
+      tags:
+      - Subscriptions
+      summary: Confirm an email subscription (token from the confirmation link)
+      operationId: confirm_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/public/subscriptions/unsubscribe:
+    post:
+      tags:
+      - Subscriptions
+      summary: Unsubscribe from a message link (token), per channel or all
+      operationId: unsubscribe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnsubscribeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+      security: []
+  /v1/runs:
+    get:
+      tags:
+      - Runs
+      summary: List runs, newest window first (delivery-runs:read)
+      operationId: list
+      parameters:
+      - name: locationId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - DRAFT
+            - ANNOUNCED
+            - OPEN
+            - EXTENDED
+            - CUT_OFF
+            - CONFIRMED
+            - COLLECTING
+            - OUT_FOR_DELIVERY
+            - COMPLETED
+            - CANCELLED
+          uniqueItems: true
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    post:
+      tags:
+      - Runs
+      summary: Schedule a run (DRAFT); the response carries the route estimate and break-even orders
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/economics-preview:
+    post:
+      tags:
+      - Runs
+      summary: 'Economics of a run being planned: route, cost, break-even, P&L (delivery-runs:read)'
+      description: Route from geo-service (origin → location centre); 502 when geo is unavailable.
+      operationId: preview
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EconomicsPreviewRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunEconomics'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}:
+    get:
+      tags:
+      - Runs
+      summary: Get a run with its break-even orders (delivery-runs:read)
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    put:
+      tags:
+      - Runs
+      summary: 'Reschedule a run (DRAFT / ANNOUNCED freely; OPEN: window, minimum, capacity, policy)'
+      operationId: update
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    delete:
+      tags:
+      - Runs
+      summary: Delete a DRAFT run (others are cancelled instead)
+      operationId: delete
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/announce:
+    post:
+      tags:
+      - Runs
+      summary: DRAFT → ANNOUNCED (delivery-runs.run.announced)
+      operationId: announce
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/cancel:
+    post:
+      tags:
+      - Runs
+      summary: Cancel; active slots are cancelled (delivery-runs.run.cancelled lists orders and customers)
+      operationId: cancel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRunRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/complete:
+    post:
+      tags:
+      - Runs
+      summary: OUT_FOR_DELIVERY → COMPLETED (delivery-runs.run.completed)
+      operationId: complete
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/confirm:
+    post:
+      tags:
+      - Runs
+      summary: Confirm now whatever the minimum (closes ordering if still open; delivery-runs.run.confirmed)
+      operationId: confirm
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/economics:
+    get:
+      tags:
+      - Runs
+      summary: P&L of a run at its reserved / confirmed orders (delivery-runs:read)
+      description: 'commissionShareMinor: commission attributed to the run, reported by payments/analytics.'
+      operationId: economics
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: commissionShareMinor
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunEconomics'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/extend:
+    post:
+      tags:
+      - Runs
+      summary: Move the cutoff later (OPEN / EXTENDED / CUT_OFF → EXTENDED, delivery-runs.run.extended)
+      operationId: extend
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtendRunRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/open:
+    post:
+      tags:
+      - Runs
+      summary: DRAFT / ANNOUNCED → OPEN for preorders (delivery-runs.run.opened)
+      operationId: open
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/orders:
+    get:
+      tags:
+      - Runs
+      summary: Orders on a run (delivery-runs:read)
+      operationId: orders
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - RESERVED
+          - CONFIRMED
+          - RELEASED
+          - CANCELLED
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RunOrder'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/out-for-delivery:
+    post:
+      tags:
+      - Runs
+      summary: COLLECTING → OUT_FOR_DELIVERY (delivery-runs.run.out_for_delivery)
+      operationId: outForDelivery
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/runs/{id}/start-collecting:
+    post:
+      tags:
+      - Runs
+      summary: CONFIRMED → COLLECTING (seller sweep started)
+      operationId: startCollecting
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Run'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/service/locations/{locationId}/audience:
+    get:
+      tags:
+      - Service
+      summary: Opted-in subscribers of a location on a channel (delivery-runs:audience.read)
+      description: 'Keyset paging: pass `next` as `after`. For notifications'' announcement fan-out.'
+      operationId: audience
+      parameters:
+      - name: locationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: channel
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - EMAIL
+          - SMS
+          - PUSH
+          - WHATSAPP
+      - name: after
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 500
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AudiencePage'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/service/runs/dispatchable:
+    get:
+      tags:
+      - Service
+      summary: Runs confirmed for dispatch (CONFIRMED / COLLECTING), earliest window first
+      operationId: dispatchable
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  type: string
+                  format: uuid
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/service/runs/{runId}/dispatch:
+    get:
+      tags:
+      - Service
+      summary: Confirmed orders of a confirmed run, with handover codes (delivery-runs:read)
+      operationId: dispatch
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DispatchList'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/service/runs/{runId}/reservations:
+    post:
+      tags:
+      - Service
+      summary: Reserve a slot on a run for an order (delivery-runs:reserve)
+      description: Idempotent per orderId (200 with the existing slot; 201 when created). A full or closed run moves the order
+        to the location's next open run (`moved`) unless allowNextRun=false; 409 delivery-runs.run-full / run-closed when
+        no run has room.
+      operationId: reserve
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveSlotRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SlotReservation'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/service/runs/{runId}/reservations/{orderId}:
+    delete:
+      tags:
+      - Service
+      summary: Release an order's slot (customer cancelled; idempotent) (delivery-runs:reserve)
+      operationId: release
+      parameters:
+      - name: runId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RunOrder'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /v1/subscribers/counts:
+    get:
+      tags:
+      - Locations
+      summary: Subscriber counts of every location, per channel (delivery-runs:read)
+      operationId: allCounts
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SubscriberCounts'
+        4XX:
+          description: Problem (RFC 9457)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  schemas:
+    PickupPoint:
+      type: object
+      description: Community pickup point of a PICKUP_POINT drop
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        line1:
+          type: string
+          maxLength: 200
+          minLength: 0
+        city:
+          type: string
+          maxLength: 80
+          minLength: 0
+        state:
+          type: string
+          maxLength: 8
+          minLength: 0
+        postalCode:
+          type: string
+          maxLength: 10
+          minLength: 0
+        hours:
+          type: string
+          example: Sat 2–5 PM
+          maxLength: 120
+          minLength: 0
+        notes:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - city
+      - hours
+      - line1
+      - name
+    RunRequest:
+      type: object
+      description: 'Schedule (or reschedule) a run. Null fee, currency, minimum, capacity, drop mode, pickup point, cutoff
+
+        policy and extend days take the location''s defaults. OPEN runs keep their fee, currency, cutoff and drop
+
+        mode (use extend to move the cutoff); capacity can never drop below what is reserved.'
+      properties:
+        locationId:
+          type: string
+          format: uuid
+          description: Required on create; a run cannot move to another location
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        cutoffAt:
+          type: string
+          format: date-time
+        opensAt:
+          type: string
+          format: date-time
+          description: ANNOUNCED runs open automatically at this time
+        sellerPickupAt:
+          type: string
+          format: date-time
+          description: When the sweep collects from sellers
+        feeMinor:
+          type: integer
+          format: int64
+          example: 799
+          minimum: 0
+        currency:
+          type: string
+          pattern: ^[A-Z]{3}$
+        minOrders:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 1
+        capacityOrders:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 1
+        capacityPackages:
+          type: integer
+          format: int32
+          maximum: 100000
+          minimum: 1
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        pickupPoint:
+          $ref: '#/components/schemas/PickupPoint'
+        cutoffPolicy:
+          type: string
+          enum:
+          - EXTEND
+          - CANCEL
+        extendDays:
+          type: integer
+          format: int32
+          maximum: 30
+          minimum: 1
+      required:
+      - cutoffAt
+      - windowEnd
+      - windowStart
+    RouteEstimate:
+      type: object
+      properties:
+        roadMiles:
+          type: number
+          format: double
+        driveMinutes:
+          type: number
+          format: double
+        method:
+          type: string
+    Run:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        cutoffAt:
+          type: string
+          format: date-time
+        originalCutoffAt:
+          type: string
+          format: date-time
+        opensAt:
+          type: string
+          format: date-time
+        sellerPickupAt:
+          type: string
+          format: date-time
+        feeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        minOrders:
+          type: integer
+          format: int32
+        capacityOrders:
+          type: integer
+          format: int32
+        capacityPackages:
+          type: integer
+          format: int32
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        pickupPoint:
+          $ref: '#/components/schemas/PickupPoint'
+        cutoffPolicy:
+          type: string
+          enum:
+          - EXTEND
+          - CANCEL
+        extendDays:
+          type: integer
+          format: int32
+        extensions:
+          type: integer
+          format: int32
+        reservedOrders:
+          type: integer
+          format: int32
+        reservedPackages:
+          type: integer
+          format: int32
+        ordersLeft:
+          type: integer
+          format: int32
+        minimumMet:
+          type: boolean
+        cancelReason:
+          type: string
+        estimate:
+          $ref: '#/components/schemas/RouteEstimate'
+        breakEvenOrders:
+          type: integer
+          format: int32
+          description: Fewest orders covering the estimated cost (create / get only)
+        milestones:
+          $ref: '#/components/schemas/RunMilestones'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    RunMilestones:
+      type: object
+      properties:
+        announcedAt:
+          type: string
+          format: date-time
+        openedAt:
+          type: string
+          format: date-time
+        cutOffAt:
+          type: string
+          format: date-time
+        confirmedAt:
+          type: string
+          format: date-time
+        collectingAt:
+          type: string
+          format: date-time
+        outForDeliveryAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        cancelledAt:
+          type: string
+          format: date-time
+    LocationRequest:
+      type: object
+      description: 'A town or area. areaKind RADIUS needs radiusMiles; POLYGON needs geoZoneId (an existing geo-service zone)
+
+        or polygonGeoJson (registered in geo-service as a zone owned by delivery-runs:<slug>). centerLat/centerLng
+
+        is always required: the circle centre, and the drive destination for run economics.'
+      properties:
+        slug:
+          type: string
+          example: bastrop-tx
+          maxLength: 80
+          minLength: 0
+          pattern: ^[a-z0-9]+(-[a-z0-9]+)*$
+        name:
+          type: string
+          example: Bastrop
+          maxLength: 120
+          minLength: 0
+        market:
+          type: string
+          example: US
+          maxLength: 16
+          minLength: 0
+        state:
+          type: string
+          example: TX
+          maxLength: 8
+          minLength: 0
+        timeZone:
+          type: string
+          description: IANA time zone; default America/Chicago
+          example: America/Chicago
+        areaKind:
+          type: string
+          enum:
+          - POLYGON
+          - RADIUS
+        geoZoneId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        polygonGeoJson:
+          type: string
+          maxLength: 200000
+          minLength: 0
+        centerLat:
+          type: number
+          format: double
+          example: 30.1105
+          maximum: 90
+          minimum: -90
+        centerLng:
+          type: number
+          format: double
+          example: -97.3153
+          maximum: 180
+          minimum: -180
+        radiusMiles:
+          type: number
+          format: double
+          example: 12
+          exclusiveMinimum: 0
+          maximum: 100
+        originLat:
+          type: number
+          format: double
+          maximum: 90
+          minimum: -90
+        originLng:
+          type: number
+          format: double
+          maximum: 180
+          minimum: -180
+        defaultFeeMinor:
+          type: integer
+          format: int64
+          description: Default run fee, minor units (default 799)
+          example: 799
+          minimum: 0
+        currency:
+          type: string
+          example: USD
+          pattern: ^[A-Z]{3}$
+        defaultMinOrders:
+          type: integer
+          format: int32
+          example: 10
+          maximum: 10000
+          minimum: 1
+        defaultCapacityOrders:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 1
+        defaultCapacityPackages:
+          type: integer
+          format: int32
+          maximum: 100000
+          minimum: 1
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        pickupPoint:
+          $ref: '#/components/schemas/PickupPoint'
+        whatsappInviteUrl:
+          type: string
+          example: https://chat.whatsapp.com/AbCdEf123
+          maxLength: 500
+          minLength: 0
+        socialLinks:
+          type: object
+          additionalProperties:
+            type: string
+        defaultCutoffPolicy:
+          type: string
+          enum:
+          - EXTEND
+          - CANCEL
+        defaultExtendDays:
+          type: integer
+          format: int32
+          maximum: 30
+          minimum: 1
+        active:
+          type: boolean
+      required:
+      - areaKind
+      - centerLat
+      - centerLng
+      - market
+      - name
+      - slug
+    Location:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        market:
+          type: string
+        state:
+          type: string
+        timeZone:
+          type: string
+        area:
+          $ref: '#/components/schemas/RunArea'
+        originLat:
+          type: number
+          format: double
+        originLng:
+          type: number
+          format: double
+        defaultFeeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        defaultMinOrders:
+          type: integer
+          format: int32
+        defaultCapacityOrders:
+          type: integer
+          format: int32
+        defaultCapacityPackages:
+          type: integer
+          format: int32
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        pickupPoint:
+          $ref: '#/components/schemas/PickupPoint'
+        whatsappInviteUrl:
+          type: string
+        socialLinks:
+          type: object
+          additionalProperties:
+            type: string
+        defaultCutoffPolicy:
+          type: string
+          enum:
+          - EXTEND
+          - CANCEL
+        defaultExtendDays:
+          type: integer
+          format: int32
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    RunArea:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - POLYGON
+          - RADIUS
+        geoZoneId:
+          type: string
+        centerLat:
+          type: number
+          format: double
+        centerLng:
+          type: number
+          format: double
+        radiusMiles:
+          type: number
+          format: double
+    ReserveSlotRequest:
+      type: object
+      properties:
+        orderId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        customerId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        packages:
+          type: integer
+          format: int32
+          description: Default 1
+          maximum: 50
+          minimum: 1
+        allowNextRun:
+          type: boolean
+          description: Roll over to the location's next open run when this one is full or closed (default true)
+      required:
+      - customerId
+      - orderId
+    RunOrder:
+      type: object
+      description: A run slot held by an order
+      properties:
+        id:
+          type: string
+          format: uuid
+        runId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+        customerId:
+          type: string
+        packages:
+          type: integer
+          format: int32
+        status:
+          type: string
+        handoverCode:
+          type: string
+        requestedRunId:
+          type: string
+          format: uuid
+        reservedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    SlotReservation:
+      type: object
+      properties:
+        slot:
+          $ref: '#/components/schemas/RunOrder'
+        runId:
+          type: string
+          format: uuid
+        requestedRunId:
+          type: string
+          format: uuid
+        moved:
+          type: boolean
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        cutoffAt:
+          type: string
+          format: date-time
+        feeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    ExtendRunRequest:
+      type: object
+      description: New cutoff; without a new window the window moves by as much
+      properties:
+        cutoffAt:
+          type: string
+          format: date-time
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        sellerPickupAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - cutoffAt
+    CancelRunRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          example: 'Weather: tropical storm warning'
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    EconomicsPreviewRequest:
+      type: object
+      description: Nulls take the location's defaults
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        feeMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        minOrders:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 1
+        capacityOrders:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 1
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        expectedOrders:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 0
+        commissionShareMinor:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - locationId
+    CostModel:
+      type: object
+      properties:
+        driveMiles:
+          type: number
+          format: double
+        fixedMinutes:
+          type: number
+          format: double
+        perOrderMinutes:
+          type: number
+          format: double
+        fixedCostMinor:
+          type: number
+          format: double
+        perOrderCostMinor:
+          type: number
+          format: double
+    EconomicsSnapshot:
+      type: object
+      properties:
+        orders:
+          type: integer
+          format: int32
+        feeRevenueMinor:
+          type: integer
+          format: int64
+        commissionShareMinor:
+          type: integer
+          format: int64
+        revenueMinor:
+          type: integer
+          format: int64
+        estimatedCostMinor:
+          type: integer
+          format: int64
+        contributionMarginMinor:
+          type: integer
+          format: int64
+    RunEconomics:
+      type: object
+      properties:
+        route:
+          $ref: '#/components/schemas/RouteEstimate'
+        cost:
+          $ref: '#/components/schemas/CostModel'
+        feeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        breakEvenOrders:
+          type: integer
+          format: int32
+        atMinimum:
+          $ref: '#/components/schemas/EconomicsSnapshot'
+        atCapacity:
+          $ref: '#/components/schemas/EconomicsSnapshot'
+        atOrders:
+          $ref: '#/components/schemas/EconomicsSnapshot'
+    EmailSubscriptionRequest:
+      type: object
+      description: 'Anonymous sign-up: email alerts after double opt-in'
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          minLength: 0
+        source:
+          type: string
+          example: location-page
+          maxLength: 80
+          minLength: 0
+      required:
+      - email
+      - locationId
+    SubscriptionAccepted:
+      type: object
+      properties:
+        status:
+          type: string
+          example: CONFIRMATION_SENT
+    UnsubscribeRequest:
+      type: object
+      description: Channels to withdraw; empty or missing = all
+      properties:
+        token:
+          type: string
+          maxLength: 200
+          minLength: 0
+        channels:
+          type: array
+          items:
+            type: string
+            enum:
+            - EMAIL
+            - SMS
+            - PUSH
+            - WHATSAPP
+          uniqueItems: true
+      required:
+      - token
+    ChannelConsent:
+      type: object
+      properties:
+        channel:
+          type: string
+          enum:
+          - EMAIL
+          - SMS
+          - PUSH
+          - WHATSAPP
+        granted:
+          type: boolean
+        consentedAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+        withdrawnAt:
+          type: string
+          format: date-time
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        status:
+          type: string
+        consents:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChannelConsent'
+        createdAt:
+          type: string
+          format: date-time
+        confirmedAt:
+          type: string
+          format: date-time
+    TokenRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - token
+    MySubscriptionRequest:
+      type: object
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        channels:
+          type: array
+          items:
+            type: string
+            enum:
+            - EMAIL
+            - SMS
+            - PUSH
+            - WHATSAPP
+          minItems: 1
+          uniqueItems: true
+        source:
+          type: string
+          example: location-page
+          maxLength: 80
+          minLength: 0
+      required:
+      - channels
+      - locationId
+    SubscriberCounts:
+      type: object
+      properties:
+        locationId:
+          type: string
+          format: uuid
+        total:
+          type: integer
+          format: int64
+        active:
+          type: integer
+          format: int64
+        pending:
+          type: integer
+          format: int64
+        byChannel:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+    DispatchList:
+      type: object
+      description: Confirmed run orders for one sweep (seller pickups, then drops)
+      properties:
+        run:
+          $ref: '#/components/schemas/Run'
+        location:
+          $ref: '#/components/schemas/DispatchLocation'
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        pickupPoint:
+          $ref: '#/components/schemas/PickupPoint'
+        sellerPickupAt:
+          type: string
+          format: date-time
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunOrder'
+    DispatchLocation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        state:
+          type: string
+        timeZone:
+          type: string
+        centerLat:
+          type: number
+          format: double
+        centerLng:
+          type: number
+          format: double
+    AudiencePage:
+      type: object
+      properties:
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/Member'
+        next:
+          type: string
+          format: uuid
+    Member:
+      type: object
+      properties:
+        subscriptionId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+        email:
+          type: string
+        unsubscribeUrl:
+          type: string
+    Advertorial:
+      type: object
+      properties:
+        runId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        locationSlug:
+          type: string
+        town:
+          type: string
+        market:
+          type: string
+        state:
+          type: string
+        status:
+          type: string
+        acceptingOrders:
+          type: boolean
+        deliveryDate:
+          type: string
+        deliveryDay:
+          type: string
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        windowDisplay:
+          type: string
+        cutoffAt:
+          type: string
+          format: date-time
+        cutoffDisplay:
+          type: string
+        countdownTarget:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        feeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        feeDisplay:
+          type: string
+        dropMode:
+          type: string
+        pickupPointDisplay:
+          type: string
+        headline:
+          type: string
+        ctaLabel:
+          type: string
+        ctaUrl:
+          type: string
+        whatsappInviteUrl:
+          type: string
+        areaKind:
+          type: string
+          enum:
+          - POLYGON
+          - RADIUS
+        geoZoneId:
+          type: string
+        centerLat:
+          type: number
+          format: double
+        centerLng:
+          type: number
+          format: double
+        radiusMiles:
+          type: number
+          format: double
+    AvailableRuns:
+      type: object
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicRun'
+    PublicRun:
+      type: object
+      description: A run as shoppers see it
+      properties:
+        runId:
+          type: string
+          format: uuid
+        locationId:
+          type: string
+          format: uuid
+        locationSlug:
+          type: string
+        town:
+          type: string
+        status:
+          type: string
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        cutoffAt:
+          type: string
+          format: date-time
+        feeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        pickupPoint:
+          $ref: '#/components/schemas/PickupPoint'
+        acceptingOrders:
+          type: boolean
+        ordersLeft:
+          type: integer
+          format: int32
+          description: Orders left (null = not limited)
+        full:
+          type: boolean
+          description: No room left; checkout offers the next run
+        runUrl:
+          type: string
+    PublicLocation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        market:
+          type: string
+        state:
+          type: string
+        timeZone:
+          type: string
+        area:
+          $ref: '#/components/schemas/RunArea'
+        defaultFeeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        dropMode:
+          type: string
+          enum:
+          - DOORSTEP
+          - PICKUP_POINT
+        pickupPoint:
+          $ref: '#/components/schemas/PickupPoint'
+        whatsappInviteUrl:
+          type: string
+        socialLinks:
+          type: object
+          additionalProperties:
+            type: string
+    LocationPage:
+      type: object
+      description: 'Location page data: location, upcoming runs, share links'
+      properties:
+        location:
+          $ref: '#/components/schemas/PublicLocation'
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicRun'
+        locationUrl:
+          type: string
+        shareLinks:
+          type: object
+          additionalProperties:
+            type: string
+    LocationHistory:
+      type: object
+      description: 'Per-location history: runs with orders, subscriber growth'
+      properties:
+        location:
+          $ref: '#/components/schemas/Location'
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LocationRunSummary'
+        subscribers:
+          $ref: '#/components/schemas/SubscriberCounts'
+        subscriberGrowth:
+          type: array
+          items:
+            $ref: '#/components/schemas/MonthlyCount'
+    LocationRunSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        windowStart:
+          type: string
+          format: date-time
+        cutoffAt:
+          type: string
+          format: date-time
+        orders:
+          type: integer
+          format: int32
+        packages:
+          type: integer
+          format: int32
+        feeMinor:
+          type: integer
+          format: int64
+        feeRevenueMinor:
+          type: integer
+          format: int64
+        minOrders:
+          type: integer
+          format: int32
+        minimumMet:
+          type: boolean
+    MonthlyCount:
+      type: object
+      properties:
+        month:
+          type: string
+          example: 2026-10
+        count:
+          type: integer
+          format: int64
+    Problem:
+      type: object
+      description: RFC 9457 problem details; `code` is a stable delivery-runs.* (or auth.*) code
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+          example: delivery-runs.invalid-transition
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

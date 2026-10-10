@@ -1,0 +1,48 @@
+# Base values for delivery-runs. Environment files override; Argo CD adds platform-values.yaml (cloud, identity, store).
+service:
+  name: delivery-runs
+  runtime: java
+  port: 8080
+env: dev
+cloud: none            # aws | gcp | azure | none (kind / local clusters)
+image:
+  registry: ghcr.io/billionairedev24/diaspora-commerce
+  repository: delivery-runs-service
+  tag: dev   # sentinel for local renders; the deploy pipeline writes the git sha into values-<env>.yaml
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 3
+  cpu: 70
+rollout:
+  enabled: false
+  pause: 2m
+  maxErrorRate: "0.01"
+resources:
+  requests: {cpu: 100m, memory: 512Mi}
+  limits: {memory: 1Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+monitoring:
+  serviceMonitor: true
+  prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
+# Secret keys expected at afrotransact/<env>/delivery-runs in the cloud secret store:
+#   - DB_URL
+#   - DB_USER
+#   - DB_PASSWORD
+#   - KAFKA_BOOTSTRAP
+#   - DELIVERY_RUNS_CLIENT_SECRET  (identity client delivery-runs-service, scope geo:zones:write: registers
+#                                   run-area polygons in geo-service)
+secrets:
+  enabled: true
+  store: platform-secrets
+  keySeparator: "/"     # "-" on GCP Secret Manager and Azure Key Vault (set in platform-values.yaml)
+workloadIdentity:
+  aws: {roleArn: ""}
+  gcp: {serviceAccount: ""}
+  azure: {clientId: ""}
+extraEnv: {}
+nodeSelector: {}
+tolerations: []

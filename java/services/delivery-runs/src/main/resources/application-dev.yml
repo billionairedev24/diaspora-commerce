@@ -1,0 +1,13 @@
+# Shared dev cluster: per-PR preview namespaces; API reference pages on.
+at:
+  api-docs:
+    enabled: true
+  delivery-runs:
+    # Links in announcements and advertorials point at this environment's storefront.
+    public-web-url: ${PUBLIC_WEB_URL:https://dev.afrotransact.com}
+    geo:
+      base-url: ${GEO_URL:http://geo}
+management:
+  tracing:
+    sampling:
+      probability: 1.0
