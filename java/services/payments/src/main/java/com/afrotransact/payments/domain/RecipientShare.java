@@ -4,7 +4,8 @@ import java.util.Map;
 
 /**
  * One recipient's part of a charge. For sellers, commission / FBA fees / Stripe fee are deductions and
- * {@code net = items + shipping − commission − fbaFees − stripeFee}. For the platform row, commission and FBA fees are
+ * {@code net = items + shipping − commission − fbaFees − stripeFee}. AfroTransact Retail pays no commission and no FBA
+ * fee: {@code net = items + shipping − stripeFee}, booked as AfroTransact revenue (4400), never as a payable. For the platform row, commission and FBA fees are
  * the totals earned and {@code net = shipping + commission + fbaFees − stripeFee}. Tax is collected and remitted by
  * AfroTransact (never paid out) and only attributed to the seller.
  */
@@ -23,5 +24,10 @@ public record RecipientShare(String recipientId, RecipientKind kind, Money items
 
     public boolean isPlatform() {
         return kind == RecipientKind.PLATFORM;
+    }
+
+    /** AfroTransact Retail (first party): its net is AfroTransact revenue, not owed to anyone. */
+    public boolean isRetail() {
+        return kind == RecipientKind.RETAIL;
     }
 }

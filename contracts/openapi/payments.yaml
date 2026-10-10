@@ -237,9 +237,10 @@ paths:
       tags:
       - Finance
       summary: Effective fees for an organisation and category (payments:service or payments:read)
-      description: Commission (seller override, then category, then default; none for AfroTransact Retail), card-fee estimate
-        (cardPctBps + cardFixedMinor per charge) and FBA fee of the version in force at `at` (default now). Callers such as
-        bookings use it instead of hard-coding fees. Fee schedules are per currency; there is no market dimension.
+      description: 'Commission (seller override, then category, then default), card-fee estimate (cardPctBps + cardFixedMinor
+        per charge) and FBA fee of the version in force at `at` (default now). AfroTransact Retail gets zero commission and
+        zero FBA fee (source RETAIL): only its card fee share applies. Callers such as bookings use it instead of hard-coding
+        fees. Fee schedules are per currency; there is no market dimension.'
       operationId: effectiveFees
       parameters:
       - name: category
@@ -270,6 +271,8 @@ paths:
       tags:
       - Finance
       summary: Ledger balances of every account (payments:read)
+      description: AfroTransact Retail sales appear on their own revenue account 4400, separate from the 2000:<org> seller
+        payables (Retail is never a payable).
       operationId: balances
       responses:
         '200':
@@ -704,6 +707,7 @@ paths:
       - Settlement & payouts
       summary: 'Your balance: available to request, on hold per order (with release date), requested / on the way, provider
         fees, and whether payouts are paused (payoutsPaused + payoutsPausedReason)'
+      description: 'AfroTransact Retail is not a payable organisation: its balance is always zero and canRequestToday false.'
       operationId: balance
       parameters:
       - name: orgId
@@ -789,7 +793,8 @@ paths:
       tags:
       - Settlement & payouts
       summary: Request a payout (owner / finance roles, payouts:request)
-      description: Minimum USD 25, one request per day, never more than available; no fee.
+      description: Minimum USD 25, one request per day, never more than available; no fee. AfroTransact Retail is refused
+        with 422 payments.retail-no-payouts.
       operationId: request
       parameters:
       - name: Idempotency-Key
@@ -962,7 +967,8 @@ paths:
       tags:
       - Settlement & payouts
       summary: 'Order delivered / service completed: start the settlement hold (payments:service)'
-      description: Each seller's net becomes transferable after the hold (7 days by default). Idempotent.
+      description: Each seller's net becomes transferable after the hold (7 days by default). AfroTransact Retail lines are
+        AfroTransact revenue and are never transferred. Idempotent.
       operationId: delivered
       parameters:
       - name: orderId
@@ -1991,13 +1997,19 @@ components:
           type: boolean
     RecipientResponse:
       type: object
-      description: One recipient. For sellers commission, FBA fees and Stripe fee are deductions; for the AfroTransact platform
-        row they are the totals earned. Tax is collected and remitted by AfroTransact.
+      description: 'One recipient. For sellers commission, FBA fees and Stripe fee are deductions; for the AfroTransact platform
+        row they are the totals earned. AfroTransact Retail (kind RETAIL) pays no commission and no FBA fee: its net (items
+        + shipping − Stripe fee share) is AfroTransact revenue (4400 Retail sales), never transferred or paid out. Tax is
+        collected and remitted by AfroTransact.'
       properties:
         recipient:
           type: string
         kind:
           type: string
+          enum:
+          - SELLER
+          - RETAIL
+          - PLATFORM
         itemsMinor:
           type: integer
           format: int64
@@ -2162,6 +2174,7 @@ components:
         fbaPerUnitMinor:
           type: integer
           format: int64
+          description: FBA fee per unit; 0 for AfroTransact Retail
         reverseCommissionOnRefund:
           type: boolean
   securitySchemes:

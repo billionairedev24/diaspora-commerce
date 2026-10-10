@@ -20,11 +20,14 @@ class SellerEnforcementServiceImpl implements SellerEnforcementService {
 
     private final InboxDeduplicator inbox;
     private final PayoutHoldRepository holds;
+    private final PaymentsSettings settings;
     private final Clock clock;
 
-    SellerEnforcementServiceImpl(InboxDeduplicator inbox, PayoutHoldRepository holds, Clock clock) {
+    SellerEnforcementServiceImpl(InboxDeduplicator inbox, PayoutHoldRepository holds, PaymentsSettings settings,
+                                 Clock clock) {
         this.inbox = inbox;
         this.holds = holds;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -46,6 +49,10 @@ class SellerEnforcementServiceImpl implements SellerEnforcementService {
         }
         if (n.orgId() == null || n.orgId().isBlank()) {
             LOG.warn("Ignoring payout enforcement event {} without orgId", n.eventId());
+            return false;
+        }
+        if (n.orgId().equals(settings.retailOrgId())) {
+            LOG.warn("Ignoring payout enforcement event {}: AfroTransact Retail has no payouts to hold", n.eventId());
             return false;
         }
         Instant now = Instant.now(clock);

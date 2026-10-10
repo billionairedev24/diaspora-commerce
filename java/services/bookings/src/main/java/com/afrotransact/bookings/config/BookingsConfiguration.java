@@ -33,6 +33,7 @@ class BookingsConfiguration {
         return new BookingsSettings(props.holdTtl(), props.requestSla(), props.autoCompleteAfter(),
                 props.lateProviderFeeMinor(), props.manageUrlBase(),
                 new BalanceChargePolicy(b.authorisationWindow(), b.chargeBefore(), b.maxAttempts(), b.retryDelay()),
-                new FeeSchedule(f.commissionBps(), f.cardPctBps(), f.cardFixedMinor()), f.cacheTtl());
+                new FeeSchedule(f.commissionBps(), f.cardPctBps(), f.cardFixedMinor()), f.cacheTtl(),
+                props.retailOrgId());
     }
 }

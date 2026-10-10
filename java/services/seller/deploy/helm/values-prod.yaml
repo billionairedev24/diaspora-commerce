@@ -15,6 +15,5 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.afrotransact.com
-  MEDIA_BASE_URL: http://media.prod.svc.cluster.local:8080
+  MEDIA_BASE_URL: http://media:8080
   SELLER_LIVE_COUNTRIES: US

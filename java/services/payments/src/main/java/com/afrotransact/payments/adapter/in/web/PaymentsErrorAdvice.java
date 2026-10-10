@@ -1,12 +1,11 @@
 package com.afrotransact.payments.adapter.in.web;
 
-import java.net.URI;
-
 import com.afrotransact.payments.domain.PaymentsForbidden;
 import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.domain.PaymentsStateConflict;
 import com.afrotransact.payments.port.StripeGatewayException;
 import com.afrotransact.payments.port.StripeWebhookVerifier.InvalidWebhookSignatureException;
+import com.afrotransact.platform.web.error.ProblemTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -22,7 +21,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 class PaymentsErrorAdvice {
 
     private static final Logger LOG = LoggerFactory.getLogger(PaymentsErrorAdvice.class);
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     @ExceptionHandler(PaymentsRuleViolation.class)
     ProblemDetail rule(PaymentsRuleViolation ex) {
@@ -75,7 +73,7 @@ class PaymentsErrorAdvice {
 
     private static ProblemDetail problem(HttpStatus status, String code, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setType(URI.create(TYPE_BASE + code));
+        pd.setType(ProblemTypes.of(code));
         pd.setTitle(title);
         pd.setProperty("code", code);
         return pd;

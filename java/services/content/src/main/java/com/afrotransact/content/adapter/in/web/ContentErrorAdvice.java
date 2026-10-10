@@ -1,9 +1,8 @@
 package com.afrotransact.content.adapter.in.web;
 
-import java.net.URI;
-
 import com.afrotransact.content.domain.ContentRuleViolation;
 import com.afrotransact.content.domain.ContentStateConflict;
+import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -15,8 +14,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class ContentErrorAdvice {
-
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     @ExceptionHandler(ContentRuleViolation.class)
     ProblemDetail rule(ContentRuleViolation ex) {
@@ -37,7 +34,7 @@ class ContentErrorAdvice {
 
     private static ProblemDetail problem(HttpStatus status, String code, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setType(URI.create(TYPE_BASE + code));
+        pd.setType(ProblemTypes.of(code));
         pd.setTitle(title);
         pd.setProperty("code", code);
         return pd;

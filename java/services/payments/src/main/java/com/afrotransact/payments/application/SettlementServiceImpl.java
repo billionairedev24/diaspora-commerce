@@ -146,7 +146,10 @@ class SettlementServiceImpl implements SettlementService {
         return transfers;
     }
 
-    /** Transfers every positive seller payable of the order; leaves it OPEN for a later check if one is blocked. */
+    /**
+     * Transfers every positive seller payable of the order; leaves it OPEN for a later check if one is blocked.
+     * AfroTransact Retail is never transferred to (its sales are 4400 revenue, not a 2000 payable).
+     */
     private int settle(Settlement s, Instant now) {
         Optional<Payment> payment = payments.findByOrderId(s.orderId());
         if (payment.isEmpty()) {
@@ -157,7 +160,7 @@ class SettlementServiceImpl implements SettlementService {
         boolean blocked = false;
         int created = 0;
         for (Map.Entry<String, Long> e : ledgerReader.payableByOrg(s.orderId(), currency).entrySet()) {
-            if (e.getValue() <= 0) {
+            if (e.getValue() <= 0 || isRetail(e.getKey())) {
                 continue;
             }
             Outcome outcome = transfer(s.orderId(), e.getKey(), Money.of(e.getValue(), currency), now);
@@ -198,7 +201,7 @@ class SettlementServiceImpl implements SettlementService {
         int created = 0;
         for (Map.Entry<String, Long> e : captured.entrySet()) {
             long amount = Math.min(e.getValue(), payable.getOrDefault(e.getKey(), 0L));
-            if (amount <= 0) {
+            if (amount <= 0 || isRetail(e.getKey())) {
                 continue;
             }
             Outcome outcome = transfer(s.orderId(), e.getKey(), Money.of(amount, currency), now);
@@ -225,6 +228,10 @@ class SettlementServiceImpl implements SettlementService {
             }
         }
         return out;
+    }
+
+    private boolean isRetail(String org) {
+        return settings.retailOrgId().equals(org);
     }
 
     /** What happened to one transfer attempt. */

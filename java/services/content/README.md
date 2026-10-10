@@ -73,6 +73,12 @@ six launch flags; the ten open roles.
   inbox-deduplicated on event-id and the click id. `orders.order.placed` attributes each line to the shopper's last
   click on that variant from the same seller within 7 days. `GET /v1/ads/campaigns/{id}/report` gives impressions,
   clicks, CTR, spend, CPC, attributed orders and sales, ROAS by day.
+  **AfroTransact Retail campaigns are internal** (`internal: true`; `RETAIL_ORG_ID`). They're allowed, and they run
+  through the same auction, with a bid and a budget. That budget is only an internal pacing cap: without it, Retail
+  could bid high at no real cost and take every sponsored slot from the sellers who pay for theirs. Clicks are recorded
+  at the second price as a notional cost, so ROAS stays comparable, but that spend is never billed. Retail is left out
+  of `GET /v1/ads/spend`, so seller-service's metered billing never sees it, and seller-service also drops Retail
+  samples itself.
 - **Newsletter**: subscribe → PENDING + `content.newsletter.confirmation_requested` (signed HMAC confirm link,
   72 h, and unsubscribe link) → confirm → CONFIRMED. Re-subscribing a confirmed address is a no-op.
 - **Careers**: applications validated (name, email, LinkedIn `/in/` URL or empty, work authorisation, résumé asset id
@@ -131,7 +137,7 @@ Consumed (consumer group `content-service`, `CONSUMERS_ENABLED`): `ads.impressio
 
 `application.yml` + `application-{local,dev,uat,prod}.yml`. Secrets only from env: `DB_URL`, `DB_USER`,
 `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `NEWSLETTER_TOKEN_KEY` (≥ 32 chars; the service refuses to start without it outside
-`local`), `AUTH_ISSUER_URI` per env. Tunables (`at.content.*`): `flags.cache-ttl` (`FLAGS_CACHE_TTL`, 30s),
+`local`), `AUTH_ISSUER_URL` per env. Tunables (`at.content.*`): `flags.cache-ttl` (`FLAGS_CACHE_TTL`, 30s),
 `markets.cache-ttl` (30s), `placements.cache-ttl` (10s), `placements.resolve-max-age`, `bundle-max-age`,
 `bundle-shared-max-age`, `site.max-age`, `site.legal-base-href`, `newsletter.token-ttl` (72h),
 `newsletter.confirm-url` / `unsubscribe-url` (per env), `jobs.enabled` (`CONTENT_JOBS_ENABLED`),

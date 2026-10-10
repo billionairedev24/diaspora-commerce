@@ -4,8 +4,8 @@ at:
     enabled: false
   content:
     newsletter:
-      confirm-url: https://www.afrotransact.com/newsletter/confirm
-      unsubscribe-url: https://www.afrotransact.com/newsletter/unsubscribe
+      confirm-url: ${NEWSLETTER_CONFIRM_URL:${PUBLIC_WEB_URL:https://afrotransact.com}/newsletter/confirm}
+      unsubscribe-url: ${NEWSLETTER_UNSUBSCRIBE_URL:${PUBLIC_WEB_URL:https://afrotransact.com}/newsletter/unsubscribe}
 springdoc:
   api-docs:
     enabled: false

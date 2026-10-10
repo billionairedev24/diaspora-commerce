@@ -12,6 +12,7 @@ import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.trustops.domain.SellerEnforcement;
 import com.afrotransact.trustops.domain.SellerHealthMetrics;
 import com.afrotransact.trustops.domain.SuspensionReason;
+import com.afrotransact.trustops.domain.TrustRuleViolation;
 import com.afrotransact.trustops.port.SellerEnforcementClient;
 import com.afrotransact.trustops.port.SellerEnforcementRepository;
 import com.afrotransact.trustops.port.SellerHealthRepository;
@@ -55,6 +56,10 @@ class SellerEnforcementServiceImpl implements SellerEnforcementService {
     @Transactional
     public SellerEnforcement suspend(String orgId, SuspensionReason reason, String note) {
         Actor actor = permissions.require(TrustOpsPermissions.SELLERS_ENFORCE);
+        if (settings.isRetail(orgId)) {
+            throw new TrustRuleViolation("trustops.retail-exempt", "AfroTransact Retail is the merchant of record: it "
+                    + "is never suspended and has no payouts to hold; delist individual products instead");
+        }
         Instant now = Instant.now(clock);
         SellerEnforcement current = load(orgId, now);
         SellerEnforcement next = current.suspend(reason, note, actor.subject(), now);

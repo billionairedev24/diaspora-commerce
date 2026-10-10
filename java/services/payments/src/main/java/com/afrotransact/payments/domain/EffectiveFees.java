@@ -8,7 +8,9 @@ import java.util.UUID;
  * bookings' take-home estimates) never hard-code them.
  *
  * @param commissionSource OVERRIDE (negotiated for the organisation), CATEGORY, DEFAULT or RETAIL (no commission)
- * @param retail           the organisation is AfroTransact Retail, which pays no commission
+ * @param fbaPerUnit       FBA fee per unit (zero for AfroTransact Retail)
+ * @param retail           the organisation is AfroTransact Retail: no commission, no FBA fee, only its Stripe-fee
+ *                         share
  */
 public record EffectiveFees(UUID feeScheduleId, int version, Instant effectiveFrom, String currency, String category,
                             String orgId, int commissionBps, String commissionSource, int cardPctBps,

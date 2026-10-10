@@ -16,8 +16,6 @@ telemetry:
 tolerations:
   - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
-  AUTH_TOKEN_URI: https://auth.dev.afrotransact.com/oauth2/token
   PAYMENTS_URL: http://payments:8080
   INVENTORY_URL: http://inventory:8080
   CARRIER_GATEWAY_URL: http://carrier-gateway:8080

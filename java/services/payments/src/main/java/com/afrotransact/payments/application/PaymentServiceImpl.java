@@ -67,13 +67,14 @@ class PaymentServiceImpl implements PaymentService {
     private final MoneyTransactions tx;
     private final PaymentsAccess access;
     private final DomainEventPublisher events;
+    private final PaymentsSettings settings;
     private final Clock clock;
 
     PaymentServiceImpl(PaymentRepository payments, FeeScheduleRepository feeSchedules,
                        SettlementRepository settlements, StripeGateway stripe, PaymentSplitter splitter,
                        LedgerPoster ledger, IdempotencyStore idempotency, PaymentStatusUpdater statuses,
                        WalletSync wallet, MoneyTransactions tx, PaymentsAccess access, DomainEventPublisher events,
-                       Clock clock) {
+                       PaymentsSettings settings, Clock clock) {
         this.payments = payments;
         this.feeSchedules = feeSchedules;
         this.settlements = settlements;
@@ -86,6 +87,7 @@ class PaymentServiceImpl implements PaymentService {
         this.tx = tx;
         this.access = access;
         this.events = events;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -415,7 +417,8 @@ class PaymentServiceImpl implements PaymentService {
             Refund refund = new Refund(refundId, p.id(), p.orderId(), stripeRefund.id(), amount,
                     RefundStatus.PENDING, cmd.reason(), lines, now, null);
             ledger.post(Postings.refund(Fingerprint.id("journal", "refund", refundId.toString()), now,
-                    "refund:" + refundId, p.orderId(), p.id().toString(), stripeRefund.id(), lines),
+                    "refund:" + refundId, p.orderId(), p.id().toString(), stripeRefund.id(), lines,
+                    settings.retailOrgId()),
                     actor.subject());
             payments.insertRefund(refund);
             if ("succeeded".equals(stripeRefund.status())) {
@@ -441,12 +444,15 @@ class PaymentServiceImpl implements PaymentService {
 
     /**
      * When a seller's net for the order was already transferred, take back what the refund debits from them
-     * (capped at what is left of their transfers) with Stripe transfer reversals.
+     * (capped at what is left of their transfers) with Stripe transfer reversals. AfroTransact Retail lines are
+     * skipped: Retail money is never transferred, its refund only debits 4400 Retail sales.
      */
     private List<RefundResult.Reversal> reverseTransfers(Payment p, Refund refund, Instant now, String by) {
         Map<String, Money> debitByOrg = new LinkedHashMap<>();
         for (RefundLine l : refund.lines()) {
-            debitByOrg.merge(l.sellerOrg(), l.sellerDebit(), Money::plus);
+            if (!l.sellerOrg().equals(settings.retailOrgId())) {
+                debitByOrg.merge(l.sellerOrg(), l.sellerDebit(), Money::plus);
+            }
         }
         List<RefundResult.Reversal> out = new ArrayList<>();
         for (Map.Entry<String, Money> e : debitByOrg.entrySet()) {

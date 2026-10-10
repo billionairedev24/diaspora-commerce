@@ -38,6 +38,7 @@ import org.springframework.stereotype.Service;
 class PayoutServiceImpl implements PayoutService {
 
     static final String PAYOUTS_PAUSED = "payments.payouts_paused";
+    static final String RETAIL_NO_PAYOUTS = "payments.retail-no-payouts";
 
     private static final int MAX_LIST = 500;
 
@@ -86,6 +87,12 @@ class PayoutServiceImpl implements PayoutService {
 
     private PayoutBalance compute(String org, String currency) {
         Money zero = Money.zero(currency);
+        if (isRetail(org)) {
+            // AfroTransact Retail is the merchant of record: its sales are AfroTransact revenue (4400), nothing is
+            // held, transferred or paid out, and compliance holds do not apply.
+            return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, policy.minimum(currency),
+                    false, false, null);
+        }
         Money transferred = settlements.transferredTo(org, currency);
         Map<PayoutStatus, Long> totals = payouts.totals(org, currency);
         long consumed = 0;
@@ -129,6 +136,7 @@ class PayoutServiceImpl implements PayoutService {
             if (prior.isPresent()) {
                 return payouts.find(prior.get().id()).orElseThrow();
             }
+            ensureNotRetail(org);
             ensureNotPaused(org);
             PayoutBalance balance = compute(org, currency);
             PayoutAsk ask = new PayoutAsk(cmd.amountMinor() == null ? null : Money.of(cmd.amountMinor(), currency),
@@ -169,6 +177,7 @@ class PayoutServiceImpl implements PayoutService {
             if (r.status() == PayoutStatus.IN_TRANSIT || r.status() == PayoutStatus.PAID) {
                 return r;
             }
+            ensureNotRetail(r.orgId());
             ensureNotPaused(r.orgId());
             String account = accounts.find(r.orgId()).orElseThrow(() -> new PaymentsRuleViolation(
                     "payments.no-connected-account", "Organisation " + r.orgId() + " has no connected account"));
@@ -197,6 +206,17 @@ class PayoutServiceImpl implements PayoutService {
         Actor actor = access.approver();
         return tx.serializable(() -> payouts.update(payouts.lock(id).orElseThrow(() -> notFound(id))
                 .release(actor.subject(), Instant.now(clock))));
+    }
+
+    private boolean isRetail(String org) {
+        return settings.retailOrgId().equals(org);
+    }
+
+    private void ensureNotRetail(String org) {
+        if (isRetail(org)) {
+            throw new PaymentsRuleViolation(RETAIL_NO_PAYOUTS, "AfroTransact Retail is the merchant of record: its "
+                    + "sales are AfroTransact revenue and are never paid out");
+        }
     }
 
     /** Compliance holds from seller-service (seller.payouts.paused) block new requests and approvals. */

@@ -70,9 +70,11 @@ class PaymentLifecycleIT extends PaymentsIntegrationTest {
                 "/v1/payment_intents/pi_" + order + "/capture"))).getLast().getBodyAsString())
                 .contains("amount_to_capture=4631", "final_capture=true");
         assertEveryJournalBalances();
-        assertThat(balance(order, "2000", RETAIL)).isEqualTo(1000 - 325 - 38);
-        assertThat(balance(order, "4100", "")).isEqualTo(1300);
-        assertThat(balance(order, "4200", "")).isEqualTo(300);
+        // AfroTransact Retail: no FBA fee, keeps its shipping, net (1000 + 300 − 49 fee share) is 4400 revenue.
+        assertThat(balance(order, "2000", RETAIL)).isZero();
+        assertThat(balance(order, "4400", "")).isEqualTo(1000 + 300 - 49);
+        assertThat(balance(order, "4100", "")).isEqualTo(975);
+        assertThat(balance(order, "4200", "")).isZero();
         assertThat(outbox(PaymentsEvents.CAPTURED, order)).isEqualTo(2);
 
         TestSupport.as(TestSupport.FINANCE);

@@ -10,10 +10,13 @@ import java.util.Objects;
 /**
  * Default split:
  * <ul>
- *   <li>commission = items × category rate (seller override first), rounded half up per line; AfroTransact Retail
- *       pays none;</li>
- *   <li>FBA fee = units × fee per unit on FBA lines (Retail pays it too — same fulfilment costs internally);</li>
- *   <li>shipping of FBA lines is AfroTransact revenue, seller-shipped lines keep their shipping;</li>
+ *   <li>commission = items × category rate (seller override first), rounded half up per line;</li>
+ *   <li>FBA fee = units × fee per unit on marketplace sellers' FBA lines;</li>
+ *   <li>shipping of a marketplace seller's FBA line is AfroTransact revenue (4200), seller-shipped lines keep their
+ *       shipping;</li>
+ *   <li>AfroTransact Retail is the merchant of record, not a marketplace seller: no commission (even with an
+ *       override), no FBA fee, and it keeps the shipping of all its lines, FBA or not, so
+ *       {@code Retail net = items + shipping − Stripe-fee share} (booked to 4400 Retail sales);</li>
  *   <li>the Stripe fee is apportioned by each recipient's share of the charge (items + shipping + tax) with the
  *       largest-remainder method; AfroTransact takes the tie-break and any leftover cent, so totals always
  *       reconcile to the charge exactly.</li>
@@ -51,18 +54,20 @@ public class DefaultPaymentSplitter implements PaymentSplitter {
             int bps = retail ? 0 : schedule.commissionBps(line.sellerOrg(), line.category());
             Money commission = line.items().basisPoints(bps);
             boolean fba = line.fulfilment() == Fulfilment.FBA;
-            Money fbaFee = fba ? schedule.fbaPerUnit().times(line.quantity()) : zero;
+            Money fbaFee = fba && !retail ? schedule.fbaPerUnit().times(line.quantity()) : zero;
+            boolean shippingToPlatform = fba && !retail;
             acc.items = acc.items.plus(line.items());
             acc.tax = acc.tax.plus(line.tax());
             acc.taxByJurisdiction.merge(line.taxJurisdiction(), line.tax(), Money::plus);
             acc.commission = acc.commission.plus(commission);
             acc.fba = acc.fba.plus(fbaFee);
-            if (fba) {
+            if (shippingToPlatform) {
                 platform.shipping = platform.shipping.plus(line.shipping());
             } else {
                 acc.shipping = acc.shipping.plus(line.shipping());
             }
-            lineSplits.add(new LineSplit(line.lineId(), line.sellerOrg(), bps, commission, fbaFee, fba));
+            lineSplits.add(new LineSplit(line.lineId(), line.sellerOrg(), bps, commission, fbaFee,
+                    shippingToPlatform));
         }
 
         List<Acc> ordered = new ArrayList<>(accs.values());

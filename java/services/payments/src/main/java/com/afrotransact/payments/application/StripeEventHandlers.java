@@ -58,12 +58,13 @@ class StripeEventHandlers {
     private final LedgerPoster ledger;
     private final DomainEventPublisher events;
     private final JsonMapper json;
+    private final PaymentsSettings settings;
     private final Clock clock;
 
     StripeEventHandlers(PaymentRepository payments, DisputeRepository disputes, SettlementRepository settlements,
                         PayoutRepository payouts, PaymentStatusUpdater statuses, WalletSync wallet,
                         StripeGateway stripe, LedgerPoster ledger,
-                        DomainEventPublisher events, JsonMapper json, Clock clock) {
+                        DomainEventPublisher events, JsonMapper json, PaymentsSettings settings, Clock clock) {
         this.payments = payments;
         this.disputes = disputes;
         this.settlements = settlements;
@@ -74,6 +75,7 @@ class StripeEventHandlers {
         this.ledger = ledger;
         this.events = events;
         this.json = json;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -177,12 +179,14 @@ class StripeEventHandlers {
             return;
         }
         ledger.post(Postings.disputeOpened(Fingerprint.id("journal", "dispute-opened", dispute.id()), now,
-                "dispute-opened:" + dispute.id(), dispute), SYSTEM);
+                "dispute-opened:" + dispute.id(), dispute, settings.retailOrgId()), SYSTEM);
         events.publish(PaymentsEvents.DISPUTE_OPENED, PaymentsEvents.AGGREGATE_PAYMENT, p.orderId(),
                 PaymentsEventPayloads.DisputePayload.of(dispute));
     }
 
-    /** Captured, not refunded amounts per recipient: sellers carry items + tax + own shipping. */
+    /**
+     * Captured, not refunded amounts per recipient: sellers (and AfroTransact Retail) carry items + tax + own shipping.
+     */
     private static Map<String, Money> chargedByRecipient(Payment p) {
         Map<String, Money> charged = new LinkedHashMap<>();
         Money zero = Money.zero(p.currency());
@@ -217,10 +221,10 @@ class StripeEventHandlers {
         Dispute closed = open.close(outcome, now);
         if (outcome == DisputeStatus.WON) {
             ledger.post(Postings.disputeWon(Fingerprint.id("journal", "dispute-won", id), now, "dispute-won:" + id,
-                    closed), SYSTEM);
+                    closed, settings.retailOrgId()), SYSTEM);
         } else {
             ledger.post(Postings.disputeLost(Fingerprint.id("journal", "dispute-lost", id), now,
-                    "dispute-lost:" + id, closed), SYSTEM);
+                    "dispute-lost:" + id, closed, settings.retailOrgId()), SYSTEM);
         }
         disputes.update(closed);
         events.publish(PaymentsEvents.DISPUTE_CLOSED, PaymentsEvents.AGGREGATE_PAYMENT, closed.orderId(),

@@ -30,7 +30,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
 
 server:
   port: ${PORT:8110}
@@ -79,6 +79,8 @@ at:
   events:
     relay-enabled: true
   trustops:
+    # AfroTransact Retail (1P merchant of record): exempt from seller suspension and payout holds.
+    retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
     sla:
       moderation: ${TRUSTOPS_SLA_MODERATION:24h}
       moderation-high-risk: ${TRUSTOPS_SLA_MODERATION_HIGH_RISK:4h}
@@ -90,7 +92,7 @@ at:
       support-first-response: ${TRUSTOPS_SLA_SUPPORT_FIRST_RESPONSE:4h}
     # OAuth2 client-credentials client used for every service-to-service call (identity: trust-ops-service).
     client:
-      token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
+      token-uri: ${AUTH_TOKEN_URL:${AUTH_ISSUER_URL:http://localhost:8100}/oauth2/token}
       client-id: ${TRUSTOPS_CLIENT_ID:trust-ops-service}
       # Only from the environment (identity's trust-ops-service client secret). Blank = no token (local profile).
       client-secret: ${TRUSTOPS_CLIENT_SECRET}

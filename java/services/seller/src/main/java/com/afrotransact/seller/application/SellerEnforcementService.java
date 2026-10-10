@@ -6,7 +6,8 @@ import com.afrotransact.seller.domain.SuspensionReason;
  * Trust and Safety suspension of an organisation (permission sellers:enforce; staff or the trust-ops-service
  * client). Suspension is its own enforcement hold, separate from Stripe compliance payout holds: it pauses payouts,
  * hides listings and sets the organisation SUSPENDED. Reinstating releases only the suspension hold; payouts and
- * listings come back only when no compliance hold still requires them. Both calls are idempotent.
+ * listings come back only when no compliance hold still requires them. Both calls are idempotent. AfroTransact
+ * Retail is exempt: suspending it is refused with 422 {@code seller.retail-exempt}.
  */
 public interface SellerEnforcementService {
 

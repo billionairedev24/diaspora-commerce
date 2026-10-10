@@ -13,6 +13,5 @@ resources:
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampling: "0.1"
-extraEnv:
-  AUTH_ISSUER_URI: https://auth.afrotransact.com
+extraEnv: {}
 tolerations: []

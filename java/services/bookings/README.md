@@ -119,6 +119,10 @@ per organisation for `FEES_CACHE_TTL` (5 min). While payments cannot answer, the
 `SERVICES_COMMISSION_BPS` / `CARD_PCT_BPS` / `CARD_FIXED_MINOR` apply (logged as a warning, retried after 30 s); the
 service's `takeHome.feeSource` then reads `CONFIG`.
 
+AfroTransact Retail (`RETAIL_ORG_ID`) is the first-party merchant of record, never charged seller fees: commission is
+0 (source `RETAIL`) even through the configured fallback, and a late provider cancellation by Retail costs no fee and
+no reliability strike. Refunds go through payments, which never reverses a transfer for Retail lines.
+
 ## API
 
 RFC 9457 problems with `code` `bookings.*`. Contract: [`contracts/openapi/bookings.yaml`](../../../contracts/openapi/bookings.yaml).
@@ -204,8 +208,8 @@ round. Every `BOOKINGS_BALANCE_JOB_INTERVAL` (5 min): charge due balances off-se
 |---|---|
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL (needs the `btree_gist` extension; created by the first migration) |
 | `KAFKA_BOOTSTRAP` | Kafka (outbox relay, consumers) |
-| `AUTH_ISSUER_URI` | identity issuer (JWT validation) |
-| `PAYMENTS_URL`, `AUTH_TOKEN_URI`, `BOOKINGS_CLIENT_ID`, `BOOKINGS_CLIENT_SECRET` | payments-service and the `bookings-service` client credentials (**secret only from the environment**; blank in `local`, where payments runs without security) |
+| `AUTH_ISSUER_URL` | identity issuer (JWT validation) |
+| `PAYMENTS_URL`, `AUTH_TOKEN_URL`, `BOOKINGS_CLIENT_ID`, `BOOKINGS_CLIENT_SECRET` | payments-service and the `bookings-service` client credentials (**secret only from the environment**; blank in `local`, where payments runs without security) |
 | `BOOKING_HOLD_TTL`, `BOOKING_REQUEST_SLA`, `BOOKING_AUTO_COMPLETE_AFTER`, `LATE_PROVIDER_FEE_MINOR` | flow settings (15m, 4h, 48h, 1500) |
 | `SERVICES_COMMISSION_BPS`, `CARD_PCT_BPS`, `CARD_FIXED_MINOR` | **fallback** take-home / earnings fees while payments' fee schedule is unavailable (1000, 290, 30) |
 | `FEES_CACHE_TTL` | how long payments' effective fees are reused per provider (5m) |

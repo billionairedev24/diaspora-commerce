@@ -19,7 +19,9 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * payments-service (contracts/openapi/payments.yaml): {@code GET /v1/payments?orderId=} for the lines as charged and
  * {@code POST /v1/payments/{id}/refunds} (line-level, Idempotency-Key). Payments reverses the seller payable, tax and
- * commission per its fee policy and takes back transferred seller funds with a transfer reversal.
+ * commission per its fee policy and takes back transferred seller funds with a transfer reversal. AfroTransact Retail
+ * lines are the merchant of record's own sales: payments debits its Retail sales account and never attempts a
+ * transfer reversal for them, so this service needs no Retail special case.
  */
 @Component
 class HttpPaymentsGateway implements PaymentsGateway {

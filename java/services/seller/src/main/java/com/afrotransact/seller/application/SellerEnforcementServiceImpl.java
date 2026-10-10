@@ -13,6 +13,7 @@ import com.afrotransact.seller.domain.OrgMember;
 import com.afrotransact.seller.domain.OrgStatus;
 import com.afrotransact.seller.domain.OrgSuspension;
 import com.afrotransact.seller.domain.Organisation;
+import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SuspensionReason;
 import com.afrotransact.seller.port.ConnectAccountRepository;
 import com.afrotransact.seller.port.OrgSuspensionRepository;
@@ -34,16 +35,18 @@ class SellerEnforcementServiceImpl implements SellerEnforcementService {
     private final ConnectAccountRepository accounts;
     private final AccessGuard access;
     private final DomainEventPublisher events;
+    private final SellerSettings settings;
     private final Clock clock;
 
     SellerEnforcementServiceImpl(OrganisationRepository orgs, OrgSuspensionRepository suspensions,
                                  ConnectAccountRepository accounts, AccessGuard access, DomainEventPublisher events,
-                                 Clock clock) {
+                                 SellerSettings settings, Clock clock) {
         this.orgs = orgs;
         this.suspensions = suspensions;
         this.accounts = accounts;
         this.access = access;
         this.events = events;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -51,6 +54,10 @@ class SellerEnforcementServiceImpl implements SellerEnforcementService {
     @Transactional
     public EnforcementView suspend(String orgId, SuspensionReason reason, String note) {
         Actor actor = access.staff(SellerPermissions.SELLERS_ENFORCE);
+        if (settings.isRetail(orgId)) {
+            throw new SellerRuleViolation("seller.retail-exempt", "AfroTransact Retail is the merchant of record: it "
+                    + "is never suspended and has no payouts to pause; delist individual products instead");
+        }
         Organisation org = orgs.lock(orgId).orElseThrow(() -> notFound(orgId));
         // Lock the connected account too, so a concurrent Stripe webhook cannot interleave its own hold / release.
         Optional<ConnectAccount> account = lockedAccount(orgId);

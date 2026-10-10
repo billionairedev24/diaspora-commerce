@@ -52,6 +52,6 @@ class TrustOpsConfiguration {
     TrustOpsSettings trustOpsSettings(TrustOpsProperties props) {
         return new TrustOpsSettings(new LinkedHashSet<>(props.audit().eventTypes()), props.audit().streamEnabled(),
                 props.audit().exportMaxRows(), props.sellerHealth().window(), props.sellerHealth().pushToOffers(),
-                props.sla().sellerResponseReminder());
+                props.sla().sellerResponseReminder(), props.retailOrgId());
     }
 }

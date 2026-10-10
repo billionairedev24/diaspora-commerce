@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.afrotransact.content.application.AdsSettings;
 import com.afrotransact.content.application.CampaignReport;
 import com.afrotransact.content.application.ServableCampaign;
 import com.afrotransact.content.domain.ads.Campaign;
@@ -49,14 +50,18 @@ final class AdDtos {
                             long bidMinor, Long dailyBudgetMinor, long totalBudgetMinor, long spentMinor,
                             long remainingMinor, String currency, List<String> keywords, List<String> categories,
                             List<String> atins, Instant startsAt, Instant endsAt, String createdBy, Instant createdAt,
-                            Instant updatedAt, long version) {
+                            Instant updatedAt, long version,
+                            @Schema(description = "AfroTransact Retail campaign: the budget is an internal pacing cap "
+                                    + "and the spend is a notional cost, never billed")
+                            boolean internal) {
 
-        static CampaignResponse of(Campaign c) {
+        static CampaignResponse of(Campaign c, AdsSettings ads) {
             CampaignContent k = c.content();
             return new CampaignResponse(c.id(), c.sellerOrgId(), k.name(), k.advertiser(), k.market(), c.status().name(),
                     c.pauseReason() == null ? null : c.pauseReason().name(), k.bidMinor(), k.dailyBudgetMinor(),
                     k.totalBudgetMinor(), c.spentMinor(), c.remainingMinor(), k.currency(), k.keywords(), k.categories(),
-                    k.atins(), k.startsAt(), k.endsAt(), c.createdBy(), c.createdAt(), c.updatedAt(), c.version());
+                    k.atins(), k.startsAt(), k.endsAt(), c.createdBy(), c.createdAt(), c.updatedAt(), c.version(),
+                    ads.isInternal(c.sellerOrgId()));
         }
     }
 

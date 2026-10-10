@@ -231,8 +231,12 @@ final class PaymentsDtos {
     }
 
     @Schema(description = "One recipient. For sellers commission, FBA fees and Stripe fee are deductions; for the "
-            + "AfroTransact platform row they are the totals earned. Tax is collected and remitted by AfroTransact.")
-    record RecipientResponse(String recipient, String kind, long itemsMinor, long shippingMinor, long taxMinor,
+            + "AfroTransact platform row they are the totals earned. AfroTransact Retail (kind RETAIL) pays no "
+            + "commission and no FBA fee: its net (items + shipping − Stripe fee share) is AfroTransact revenue "
+            + "(4400 Retail sales), never transferred or paid out. Tax is collected and remitted by AfroTransact.")
+    record RecipientResponse(String recipient,
+                             @Schema(allowableValues = {"SELLER", "RETAIL", "PLATFORM"}) String kind,
+                             long itemsMinor, long shippingMinor, long taxMinor,
                              Map<String, Long> taxByJurisdiction, long commissionMinor, long fbaFeesMinor,
                              long stripeFeeMinor, long netMinor) {
 
@@ -301,6 +305,7 @@ final class PaymentsDtos {
                                  @Schema(description = "Card fee estimate per charge: percentage part in bps")
                                  int cardPctBps,
                                  @Schema(description = "Card fee estimate per charge: fixed part") long cardFixedMinor,
+                                 @Schema(description = "FBA fee per unit; 0 for AfroTransact Retail")
                                  long fbaPerUnitMinor, boolean reverseCommissionOnRefund) {
 
         static EffectiveFeesResponse of(EffectiveFees f) {

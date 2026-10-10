@@ -7,7 +7,8 @@ import java.util.List;
  * Metered billing (S206). A run reads FBA storage (inventory), ads spend (content) and AI credits (ai-gateway) per
  * organisation and UTC day for a period, stores each day's quantity (overwriting earlier reads, so a re-run is exact)
  * and sends Stripe Billing meter events for the difference between the quantity and what Stripe already has. Runs
- * are idempotent and re-runnable per period; one runs at a time across replicas.
+ * are idempotent and re-runnable per period; one runs at a time across replicas. AfroTransact Retail is never
+ * metered: its samples are dropped before anything is stored or sent to Stripe.
  */
 public interface UsageMeteringService {
 

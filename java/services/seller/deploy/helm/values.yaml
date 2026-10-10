@@ -46,8 +46,7 @@ workloadIdentity:
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
-  MEDIA_BASE_URL: http://media.dev.svc.cluster.local:8080
+  MEDIA_BASE_URL: http://media:8080
   SELLER_LIVE_COUNTRIES: US
 nodeSelector: {}
 tolerations: []

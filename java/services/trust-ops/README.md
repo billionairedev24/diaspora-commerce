@@ -88,6 +88,10 @@ providers) and `design/backoffice-data.js`.
   for another reason. Each upstream step is tracked (`payoutsHeld` / `listingsHidden` for the seller hold,
   `buyBoxRestricted`); a failed step stays pending and calling suspend / reinstate again retries it (both seller
   endpoints are idempotent). Suspensions are audited and published (`trustops.seller.suspended|reinstated`).
+  AfroTransact Retail (`RETAIL_ORG_ID`) is exempt. It is the merchant of record and has no payouts to hold, so
+  suspending it is refused with `422 trustops.retail-exempt` and nothing is sent upstream. Its health is still
+  computed and pushed to offers, because the buy box treats Retail like any offer. Claim refunds go through payments,
+  which debits Retail sales for Retail lines and never attempts a transfer reversal.
 - **Support cases.** Every Lola hand-off (`ai.handoff.requested`) opens one support case (deduplicated by
   `handoffId`) with a 4-hour first-response SLA; agents assign and resolve them.
 
@@ -157,7 +161,7 @@ Consumed (each listener has its own consumer group and inbox consumer, so they n
 |---|---|
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL (`trustops`) |
 | `KAFKA_BOOTSTRAP` | Kafka for the outbox relay and the consumers |
-| `AUTH_ISSUER_URI`, `AUTH_TOKEN_URI` | identity issuer (JWT validation) and token endpoint (client credentials) |
+| `AUTH_ISSUER_URL`, `AUTH_TOKEN_URL` | identity issuer (JWT validation) and token endpoint (client credentials) |
 | `TRUSTOPS_CLIENT_SECRET` (secret), `TRUSTOPS_CLIENT_ID` | the `trust-ops-service` client; blank in `local` = no token |
 | `CATALOG_URL`, `BOOKINGS_URL`, `PAYMENTS_URL`, `SELLER_URL`, `OFFERS_URL`, `AI_GATEWAY_URL`, `UPSTREAM_TIMEOUT` | upstream services |
 | `AI_TRIAGE_ENABLED`, `AI_TRIAGE_TIMEOUT` | AI triage hints (default on, 5 s) |

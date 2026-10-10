@@ -16,10 +16,7 @@ telemetry:
 tolerations:
   - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
-  AUTH_TOKEN_URI: https://auth.dev.afrotransact.com/oauth2/token
   PAYMENTS_URL: http://payments:8080
   GEO_URL: http://geo:8080
   BOOKINGS_REQUEST_SLA: 4h
   BOOKING_HOLD_TTL: 15m
-  BOOKINGS_MANAGE_URL_BASE: https://dev.afrotransact.com/account/appointments/

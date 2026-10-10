@@ -15,8 +15,6 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.afrotransact.com
-  AUTH_TOKEN_URI: https://auth.afrotransact.com/oauth2/token
   PAYMENTS_URL: http://payments:8080
   INVENTORY_URL: http://inventory:8080
   CARRIER_GATEWAY_URL: http://carrier-gateway:8080

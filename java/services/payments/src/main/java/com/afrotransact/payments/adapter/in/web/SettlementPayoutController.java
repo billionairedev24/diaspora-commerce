@@ -48,7 +48,8 @@ class SettlementPayoutController {
     }
 
     @Operation(summary = "Order delivered / service completed: start the settlement hold (payments:service)",
-            description = "Each seller's net becomes transferable after the hold (7 days by default). Idempotent.")
+            description = "Each seller's net becomes transferable after the hold (7 days by default). AfroTransact "
+                    + "Retail lines are AfroTransact revenue and are never transferred. Idempotent.")
     @PostMapping("/v1/settlements/{orderId}/delivered")
     SettlementResponse delivered(@PathVariable String orderId, @Valid @RequestBody(required = false)
                                  DeliveredRequest body) {
@@ -84,7 +85,9 @@ class SettlementPayoutController {
     }
 
     @Operation(summary = "Your balance: available to request, on hold per order (with release date), requested / "
-            + "on the way, provider fees, and whether payouts are paused (payoutsPaused + payoutsPausedReason)")
+            + "on the way, provider fees, and whether payouts are paused (payoutsPaused + payoutsPausedReason)",
+            description = "AfroTransact Retail is not a payable organisation: its balance is always zero and "
+                    + "canRequestToday false.")
     @GetMapping("/v1/payouts/balance")
     PayoutBalanceResponse balance(@RequestParam(required = false) String orgId,
                                   @RequestParam(required = false) String currency) {
@@ -100,7 +103,8 @@ class SettlementPayoutController {
     }
 
     @Operation(summary = "Request a payout (owner / finance roles, payouts:request)",
-            description = "Minimum USD 25, one request per day, never more than available; no fee.")
+            description = "Minimum USD 25, one request per day, never more than available; no fee. AfroTransact "
+                    + "Retail is refused with 422 payments.retail-no-payouts.")
     @PostMapping("/v1/payouts/requests")
     @ResponseStatus(HttpStatus.CREATED)
     PayoutResponse request(@RequestHeader(value = PaymentController.IDEMPOTENCY_KEY, required = false)

@@ -15,10 +15,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param site            site config and legal pages
  * @param newsletter      double opt-in links
  * @param jobs            scheduled jobs
+ * @param retailOrgId     AfroTransact Retail (1P): its ads campaigns are internal and never billed
  */
 @ConfigurationProperties(prefix = "at.content")
 public record ContentProperties(List<String> publicPostPaths, Flags flags, Markets markets, Placements placements,
-                                Site site, Newsletter newsletter, Jobs jobs) {
+                                Site site, Newsletter newsletter, Jobs jobs, String retailOrgId) {
 
     public ContentProperties {
         publicPostPaths = publicPostPaths == null ? List.of() : List.copyOf(publicPostPaths);
@@ -28,6 +29,7 @@ public record ContentProperties(List<String> publicPostPaths, Flags flags, Marke
         site = site == null ? new Site(null, null) : site;
         newsletter = newsletter == null ? new Newsletter(null, null, null, null) : newsletter;
         jobs = jobs == null ? new Jobs(null) : jobs;
+        retailOrgId = retailOrgId == null || retailOrgId.isBlank() ? "org_afrotransact_retail" : retailOrgId.trim();
     }
 
     /** @param cacheTtl changes reach every replica within this TTL (kill switch: 30 s) */
@@ -84,15 +86,18 @@ public record ContentProperties(List<String> publicPostPaths, Flags flags, Marke
      *
      * @param tokenKey       HMAC key (secret, NEWSLETTER_TOKEN_KEY)
      * @param tokenTtl       confirm link lifetime
-     * @param confirmUrl     storefront confirm page
-     * @param unsubscribeUrl storefront unsubscribe page
+     * @param confirmUrl     storefront confirm page (absolute: it goes into emails; built from PUBLIC_WEB_URL)
+     * @param unsubscribeUrl storefront unsubscribe page (absolute, as confirmUrl)
      */
     public record Newsletter(String tokenKey, Duration tokenTtl, String confirmUrl, String unsubscribeUrl) {
 
+        /** Local storefront (infra/local/PORTS.md); deployed environments always set the URLs from PUBLIC_WEB_URL. */
+        private static final String LOCAL_STOREFRONT = "http://localhost:3000";
+
         public Newsletter {
             tokenTtl = tokenTtl == null ? Duration.ofHours(72) : tokenTtl;
-            confirmUrl = confirmUrl == null ? "https://www.afrotransact.com/newsletter/confirm" : confirmUrl;
-            unsubscribeUrl = unsubscribeUrl == null ? "https://www.afrotransact.com/newsletter/unsubscribe" : unsubscribeUrl;
+            confirmUrl = confirmUrl == null ? LOCAL_STOREFRONT + "/newsletter/confirm" : confirmUrl;
+            unsubscribeUrl = unsubscribeUrl == null ? LOCAL_STOREFRONT + "/newsletter/unsubscribe" : unsubscribeUrl;
         }
 
         @Override

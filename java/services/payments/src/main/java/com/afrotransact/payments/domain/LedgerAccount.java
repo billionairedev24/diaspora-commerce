@@ -27,6 +27,11 @@ public record LedgerAccount(Chart chart, String key) {
         return new LedgerAccount(Chart.SELLER_PAYABLE, orgId);
     }
 
+    /** {@code 4400} AfroTransact Retail sales (first-party revenue, never a payable). */
+    public static LedgerAccount retailSales() {
+        return new LedgerAccount(Chart.RETAIL_SALES, "");
+    }
+
     public static LedgerAccount chargebackReserve(String orgId) {
         return new LedgerAccount(Chart.CHARGEBACK_RESERVE, orgId);
     }

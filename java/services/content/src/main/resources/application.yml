@@ -33,7 +33,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
 
 server:
   port: ${PORT:8112}
@@ -103,6 +103,8 @@ at:
   events:
     relay-enabled: true
   content:
+    # AfroTransact Retail (1P): its sponsored-products campaigns are internal, their spend is never billed.
+    retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
     # Anonymous POSTs: visitor forms and flag evaluation (roles in an anonymous context are ignored).
     public-post-paths:
       - /v1/newsletter/subscriptions
@@ -130,8 +132,9 @@ at:
     newsletter:
       token-key: ${NEWSLETTER_TOKEN_KEY:}
       token-ttl: 72h
-      confirm-url: https://www.afrotransact.com/newsletter/confirm
-      unsubscribe-url: https://www.afrotransact.com/newsletter/unsubscribe
+      # Absolute storefront links for the emails; PUBLIC_WEB_URL comes from the Helm library chart per environment.
+      confirm-url: ${NEWSLETTER_CONFIRM_URL:${PUBLIC_WEB_URL:http://localhost:3000}/newsletter/confirm}
+      unsubscribe-url: ${NEWSLETTER_UNSUBSCRIBE_URL:${PUBLIC_WEB_URL:http://localhost:3000}/newsletter/unsubscribe}
     jobs:
       enabled: ${CONTENT_JOBS_ENABLED:true}
       placement-lifecycle-interval: ${PLACEMENT_LIFECYCLE_INTERVAL:60s}

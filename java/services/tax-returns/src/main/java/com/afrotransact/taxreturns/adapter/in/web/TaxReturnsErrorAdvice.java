@@ -1,7 +1,6 @@
 package com.afrotransact.taxreturns.adapter.in.web;
 
-import java.net.URI;
-
+import com.afrotransact.platform.web.error.ProblemTypes;
 import com.afrotransact.taxreturns.domain.returns.ReturnRuleViolation;
 import com.afrotransact.taxreturns.port.UpstreamException;
 import org.springframework.core.Ordered;
@@ -16,8 +15,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class TaxReturnsErrorAdvice {
-
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     @ExceptionHandler(ReturnRuleViolation.class)
     ProblemDetail ruleViolation(ReturnRuleViolation ex) {
@@ -57,7 +54,7 @@ class TaxReturnsErrorAdvice {
 
     private static ProblemDetail problem(HttpStatus status, String code, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setType(URI.create(TYPE_BASE + code));
+        pd.setType(ProblemTypes.of(code));
         pd.setProperty("code", code);
         return pd;
     }

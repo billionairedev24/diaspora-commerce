@@ -2,6 +2,8 @@
 at:
   api-docs:
     enabled: false
+  bookings:
+    manage-url-base: ${BOOKINGS_MANAGE_URL_BASE:${PUBLIC_WEB_URL:https://afrotransact.com}/account/appointments/}
 springdoc:
   api-docs:
     enabled: false

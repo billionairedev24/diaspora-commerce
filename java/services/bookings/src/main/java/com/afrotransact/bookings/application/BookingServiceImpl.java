@@ -217,7 +217,7 @@ class BookingServiceImpl implements BookingService {
     public CancellationQuote cancellationQuote(UUID id) {
         Booking b = require(id);
         Party party = access.partyFor(b, BookingsPermissions.MANAGE, assignee(b));
-        return b.quoteCancellation(party, Instant.now(clock), settings.lateProviderFeeMinor());
+        return b.quoteCancellation(party, Instant.now(clock), settings.lateProviderFeeFor(b.orgId()));
     }
 
     @Override
@@ -271,8 +271,8 @@ class BookingServiceImpl implements BookingService {
     public Cancelled cancel(UUID id, String reason, String idempotencyKey) {
         Booking.Cancellation[] applied = new Booking.Cancellation[1];
         Booking saved = act(id, "cancel", idempotencyKey, reason, null, (b, party) -> {
-            applied[0] = b.cancel(party, reason, Instant.now(clock), settings.lateProviderFeeMinor());
-            if (party == Party.PROVIDER && applied[0].quote().providerFeeMinor() > 0) {
+            applied[0] = b.cancel(party, reason, Instant.now(clock), settings.lateProviderFeeFor(b.orgId()));
+            if (party == Party.PROVIDER && applied[0].quote().providerFeeMinor() > 0 && !settings.isRetail(b.orgId())) {
                 providers.lock(b.orgId()).ifPresent(p -> providers.update(p.withStrike(Instant.now(clock))));
             }
             return applied[0].transition();

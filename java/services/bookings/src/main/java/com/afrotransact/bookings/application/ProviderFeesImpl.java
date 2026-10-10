@@ -45,7 +45,10 @@ class ProviderFeesImpl implements ProviderFees {
             fees = new FeeSchedule(e.commissionBps(), e.cardPctBps(), e.cardFixedMinor(), e.commissionSource(),
                     e.version());
         } catch (PaymentsClientException | IllegalArgumentException e) {
-            fees = settings.fallbackFees();
+            FeeSchedule fallback = settings.fallbackFees();
+            // AfroTransact Retail pays no commission even while payments can't be asked; only card fees apply.
+            fees = settings.isRetail(orgId) ? new FeeSchedule(0, fallback.cardPctBps(), fallback.cardFixedMinor(),
+                    FeeSchedule.RETAIL, null) : fallback;
             ttl = FALLBACK_TTL.compareTo(ttl) < 0 ? FALLBACK_TTL : ttl;
             LOG.warn("Fee schedule for {} unavailable from payments ({}); using configured fees "
                     + "(commission {} bps, card {} bps + {})", orgId, e.getMessage(), fees.commissionBps(),

@@ -4,8 +4,8 @@ at:
     enabled: true
   content:
     newsletter:
-      confirm-url: https://www.uat.afrotransact.com/newsletter/confirm
-      unsubscribe-url: https://www.uat.afrotransact.com/newsletter/unsubscribe
+      confirm-url: ${NEWSLETTER_CONFIRM_URL:${PUBLIC_WEB_URL:https://uat.afrotransact.com}/newsletter/confirm}
+      unsubscribe-url: ${NEWSLETTER_UNSUBSCRIBE_URL:${PUBLIC_WEB_URL:https://uat.afrotransact.com}/newsletter/unsubscribe}
 spring:
   datasource:
     hikari:

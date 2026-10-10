@@ -22,11 +22,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param orders       orders-service (order lookup for claims)
  * @param claims       claim ownership checks
  * @param bookings     bookings-service (review moderation decisions)
+ * @param retailOrgId  AfroTransact Retail (1P merchant of record): never suspended, no payouts to hold
  */
 @ConfigurationProperties(prefix = "at.trustops")
 public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstream payments, Upstream seller,
                                  Upstream offers, Ai ai, Audit audit, SellerHealth sellerHealth, Jobs jobs,
-                                 Upstream orders, Claims claims, Upstream bookings) {
+                                 Upstream orders, Claims claims, Upstream bookings, String retailOrgId) {
 
     public TrustOpsProperties {
         sla = sla == null ? new Sla(null, null, null, null, null, null, null, null) : sla;
@@ -42,6 +43,7 @@ public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstr
         orders = orders == null ? new Upstream("http://localhost:8104") : orders;
         claims = claims == null ? new Claims(null) : claims;
         bookings = bookings == null ? new Upstream("http://localhost:8109") : bookings;
+        retailOrgId = retailOrgId == null || retailOrgId.isBlank() ? "org_afrotransact_retail" : retailOrgId.trim();
     }
 
     /**

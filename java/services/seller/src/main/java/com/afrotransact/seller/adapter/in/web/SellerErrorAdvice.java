@@ -1,7 +1,6 @@
 package com.afrotransact.seller.adapter.in.web;
 
-import java.net.URI;
-
+import com.afrotransact.platform.web.error.ProblemTypes;
 import com.afrotransact.seller.domain.SellerForbidden;
 import com.afrotransact.seller.domain.SellerRuleViolation;
 import com.afrotransact.seller.domain.SellerStateConflict;
@@ -21,7 +20,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 class SellerErrorAdvice {
 
     private static final Logger LOG = LoggerFactory.getLogger(SellerErrorAdvice.class);
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     @ExceptionHandler(SellerRuleViolation.class)
     ProblemDetail rule(SellerRuleViolation ex) {
@@ -58,7 +56,7 @@ class SellerErrorAdvice {
 
     private static ProblemDetail problem(HttpStatus status, String code, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setType(URI.create(TYPE_BASE + code));
+        pd.setType(ProblemTypes.of(code));
         pd.setTitle(title);
         pd.setProperty("code", code);
         return pd;

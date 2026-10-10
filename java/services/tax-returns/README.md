@@ -217,7 +217,7 @@ could not be prepared or issued, inventory postings.
 
 | Env var | Purpose |
 |---|---|
-| `AUTH_ISSUER_URI`, `AUTH_TOKEN_URI`, `TAX_RETURNS_CLIENT_ID` | JWT validation; client-credentials token |
+| `AUTH_ISSUER_URL`, `AUTH_TOKEN_URL`, `TAX_RETURNS_CLIENT_ID` | JWT validation; client-credentials token |
 | `PAYMENTS_URL`, `INVENTORY_URL`, `CARRIER_GATEWAY_URL`, `CATALOG_URL`, `UPSTREAM_TIMEOUT` | upstreams |
 | `TAX_PROVIDER` | `RULES` (default) |
 | `RETURN_WINDOW_DAYS`, `RETURN_LOW_VALUE_MINOR`, `RETURN_FIRST_SCAN_MAX_MINOR`, `RETURN_SELLER_SLA`, `RETURN_DROP_OFF_DAYS` | return policy |

@@ -46,8 +46,13 @@ public record Dispute(String id, UUID paymentId, String orderId, String chargeId
         return out;
     }
 
-    public List<DisputeAllocation> sellerAllocations() {
-        return allocations.stream().filter(a -> !PaymentSplitter.PLATFORM.equals(a.recipientId())).toList();
+    /**
+     * Allocations borne by marketplace sellers (who have a payable to reserve): neither AfroTransact nor AfroTransact
+     * Retail ({@code retailOrgId}).
+     */
+    public List<DisputeAllocation> sellerAllocations(String retailOrgId) {
+        return allocations.stream().filter(a -> !PaymentSplitter.PLATFORM.equals(a.recipientId())
+                && !a.recipientId().equals(retailOrgId)).toList();
     }
 
     public Dispute close(DisputeStatus outcome, Instant at) {

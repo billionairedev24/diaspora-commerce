@@ -220,7 +220,11 @@ components:
             type: object
             properties:
               recipientId: {type: string, description: 'Seller org id, AfroTransact Retail, or afrotransact (platform)'}
-              kind: {type: string, enum: [SELLER, RETAIL, PLATFORM]}
+              kind:
+                type: string
+                enum: [SELLER, RETAIL, PLATFORM]
+                description: 'RETAIL = AfroTransact Retail (merchant of record): no commission or FBA fee; its net is
+                  AfroTransact revenue (4400 Retail sales), never transferred or paid out'
               netMinor: {type: integer, format: int64}
               commissionMinor: {type: integer, format: int64}
               taxMinor: {type: integer, format: int64}

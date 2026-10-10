@@ -55,11 +55,12 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
     private final StripeBillingGateway stripe;
     private final AccessGuard access;
     private final TransactionOperations tx;
+    private final SellerSettings settings;
     private final Clock clock;
 
     UsageMeteringServiceImpl(UsageRepository usage, SubscriptionRepository subs, StorageUsageSource storage,
                              AdSpendSource ads, AiUsageSource ai, StripeBillingGateway stripe, AccessGuard access,
-                             TransactionOperations tx, Clock clock) {
+                             TransactionOperations tx, SellerSettings settings, Clock clock) {
         this.usage = usage;
         this.subs = subs;
         this.storage = storage;
@@ -68,6 +69,7 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
         this.stripe = stripe;
         this.access = access;
         this.tx = tx;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -220,11 +222,20 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
             return 0;
         }
         Map<String, Long> totals = new HashMap<>();
+        int retailSkipped = 0;
         for (Sample s : samples) {
             if (s.orgId() == null || s.day() == null || s.day().isBefore(from) || s.day().isAfter(to)) {
                 continue;
             }
+            if (settings.isRetail(s.orgId())) {
+                // AfroTransact Retail's own storage, ads and AI use are internal costs, never seller fees.
+                retailSkipped++;
+                continue;
+            }
             totals.merge(s.orgId() + "|" + s.day(), s.quantity(), Long::sum);
+        }
+        if (retailSkipped > 0) {
+            LOG.debug("Skipped {} {} samples of AfroTransact Retail (not metered)", retailSkipped, meter);
         }
         Set<String> orgIds = new HashSet<>();
         totals.keySet().forEach(k -> orgIds.add(k.substring(0, k.indexOf('|'))));
@@ -259,7 +270,7 @@ class UsageMeteringServiceImpl implements UsageMeteringService {
         int pending = 0;
         int corrections = 0;
         Map<String, List<UsageDay>> byOrg = new LinkedHashMap<>();
-        tx.execute(s -> usage.unreported(from, to)).forEach(d ->
+        tx.execute(s -> usage.unreported(from, to)).stream().filter(d -> !settings.isRetail(d.orgId())).forEach(d ->
                 byOrg.computeIfAbsent(d.orgId(), k -> new ArrayList<>()).add(d));
         for (Map.Entry<String, List<UsageDay>> e : byOrg.entrySet()) {
             Optional<Subscription> sub = tx.execute(s -> subs.find(e.getKey()));

@@ -56,7 +56,9 @@ class SellerController {
     }
 
     @Operation(summary = "Suspend: seller-service suspension hold (payouts paused, listings hidden) and buy-box "
-            + "restriction (offers); audited. Calling again retries steps that failed (sellers:enforce)")
+            + "restriction (offers); audited. Calling again retries steps that failed (sellers:enforce)",
+            description = "AfroTransact Retail (the first-party merchant of record) is exempt: 422 "
+                    + "trustops.retail-exempt.")
     @PostMapping("/v1/seller-enforcement/{orgId}/suspend")
     StandingResponse suspend(@PathVariable String orgId, @Valid @RequestBody SuspendRequest body) {
         return StandingResponse.of(enforcement.suspend(orgId, body.reason(), body.note()));

@@ -44,11 +44,12 @@ class ProviderFeeServiceImpl implements ProviderFeeService {
     private final MoneyTransactions tx;
     private final PaymentsAccess access;
     private final DomainEventPublisher events;
+    private final PaymentsSettings settings;
     private final Clock clock;
 
     ProviderFeeServiceImpl(ProviderFeeRepository fees, ConnectedAccountRepository accounts, StripeGateway stripe,
                            LedgerPoster ledger, InboxDeduplicator inbox, MoneyTransactions tx, PaymentsAccess access,
-                           DomainEventPublisher events, Clock clock) {
+                           DomainEventPublisher events, PaymentsSettings settings, Clock clock) {
         this.fees = fees;
         this.accounts = accounts;
         this.stripe = stripe;
@@ -57,6 +58,7 @@ class ProviderFeeServiceImpl implements ProviderFeeService {
         this.tx = tx;
         this.access = access;
         this.events = events;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -65,6 +67,10 @@ class ProviderFeeServiceImpl implements ProviderFeeService {
         if (n.orgId() == null || n.orgId().isBlank() || n.bookingId() == null || n.bookingId().isBlank()
                 || n.amountMinor() <= 0 || n.currency() == null || n.currency().isBlank()) {
             LOG.warn("Ignoring provider fee event {}: incomplete ({})", n.eventId(), n);
+            return false;
+        }
+        if (n.orgId().trim().equals(settings.retailOrgId())) {
+            LOG.info("Ignoring provider fee event {}: AfroTransact Retail is not charged seller fees", n.eventId());
             return false;
         }
         return tx.serializable(() -> {

@@ -42,7 +42,8 @@ class AdSpendController {
 
     @Operation(summary = "Charged ads spend per organisation and UTC day (metered billing, S206)",
             description = "Service scope ads:spend.read (seller-service) or staff with content:ads.view / "
-                    + "content:ads.edit. Inclusive range of at most 93 days; only days with spend are listed.")
+                    + "content:ads.edit. Inclusive range of at most 93 days; only days with spend are listed. "
+                    + "AfroTransact Retail's internal campaigns are never billed and are not listed.")
     @GetMapping("/v1/ads/spend")
     ResponseEntity<SpendResponse> spend(@RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
                                         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {

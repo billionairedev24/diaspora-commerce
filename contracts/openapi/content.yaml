@@ -311,7 +311,8 @@ paths:
       - Sponsored products
       summary: Charged ads spend per organisation and UTC day (metered billing, S206)
       description: Service scope ads:spend.read (seller-service) or staff with content:ads.view / content:ads.edit. Inclusive
-        range of at most 93 days; only days with spend are listed.
+        range of at most 93 days; only days with spend are listed. AfroTransact Retail's internal campaigns are never billed
+        and are not listed.
       operationId: spend
       parameters:
       - name: from
@@ -2174,6 +2175,10 @@ components:
         version:
           type: integer
           format: int64
+        internal:
+          type: boolean
+          description: 'AfroTransact Retail campaign: the budget is an internal pacing cap and the spend is a notional cost,
+            never billed'
     RejectPlacementRequest:
       type: object
       properties:

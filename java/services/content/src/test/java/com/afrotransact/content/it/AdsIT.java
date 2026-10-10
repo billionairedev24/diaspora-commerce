@@ -226,6 +226,39 @@ class AdsIT extends ContentIntegrationTest {
         assertThat(get("/v1/ads/spend?from=" + today + "&to=" + today).statusCode()).isEqualTo(403);
     }
 
+    /**
+     * AfroTransact Retail's campaigns are internal: they compete in the auction and their budget paces them, but the
+     * recorded spend is notional and never reaches seller-service's metered billing.
+     */
+    @Test
+    void retailCampaignsAreInternalAndNeverBilled() {
+        String retail = "org_afrotransact_retail";
+        TestActors.as(TestActors.staff("ads-ops", ContentPermissions.ADS_EDIT));
+        HttpResponse<String> created = post("/v1/ads/campaigns", campaign(retail, 60, 5000, "AT1RTL0001"));
+        assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
+        String id = json(created).get("id").asString();
+        assertThat(json(created).get("internal").asBoolean()).isTrue();
+        String org = "org_spend_" + UUID.randomUUID().toString().substring(0, 8);
+        TestActors.as(seller(org));
+        HttpResponse<String> sellerCampaign = post("/v1/ads/campaigns", campaign(org, 50, 5000, "AT1SPD0002"));
+        assertThat(json(sellerCampaign).get("internal").asBoolean()).isFalse();
+        assertThat(servingIds()).contains(id);
+
+        Instant now = Instant.now();
+        LocalDate today = LocalDate.ofInstant(now, ZoneOffset.UTC);
+        AdDeliveryService.ClickOutcome o = delivery.click(UUID.randomUUID(), click(id, "clk-rtl-" + id, 55, "cus_r1",
+                now));
+        assertThat(o.recorded()).isTrue();
+        TestActors.as(TestActors.staff("viewer", ContentPermissions.ADS_VIEW));
+        assertThat(json(get("/v1/ads/campaigns/" + id)).get("spentMinor").asLong()).isEqualTo(55);
+
+        TestActors.as(new Actor("seller-service", PrincipalType.SERVICE, Optional.empty(), Set.of(),
+                Set.of(ContentPermissions.ADS_SPEND_READ)));
+        HttpResponse<String> r = get("/v1/ads/spend?from=" + today + "&to=" + today);
+        assertThat(r.statusCode()).as(r.body()).isEqualTo(200);
+        json(r).get("items").forEach(i -> assertThat(i.get("sellerOrgId").asString()).isNotEqualTo(retail));
+    }
+
     private static AdClick click(String campaignId, String clickId, long price, String customer, Instant at) {
         return new AdClick(clickId, campaignId, "AT1EGU0001", List.of("AT1EGU0001V"), customer, price, "US", "egusi", at);
     }

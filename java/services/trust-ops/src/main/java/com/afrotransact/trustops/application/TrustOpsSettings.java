@@ -14,13 +14,21 @@ import java.util.Set;
  * @param pushToOffers     push computed performance to offers-service
  * @param responseReminder how long before a claim's seller deadline the sweep sends
  *                         {@code trustops.claim.response_due_soon}
+ * @param retailOrgId      AfroTransact Retail, the first-party merchant of record: exempt from seller suspension
+ *                         (it has no payouts to hold); its health is still computed for the buy box
  */
 public record TrustOpsSettings(Set<String> auditEventTypes, boolean auditStream, int exportMaxRows,
-                               Duration healthWindow, boolean pushToOffers, Duration responseReminder) {
+                               Duration healthWindow, boolean pushToOffers, Duration responseReminder,
+                               String retailOrgId) {
 
     public TrustOpsSettings {
         auditEventTypes = Set.copyOf(auditEventTypes);
         Objects.requireNonNull(healthWindow, "healthWindow");
         Objects.requireNonNull(responseReminder, "responseReminder");
+        Objects.requireNonNull(retailOrgId, "retailOrgId");
+    }
+
+    public boolean isRetail(String orgId) {
+        return retailOrgId.equals(orgId);
     }
 }

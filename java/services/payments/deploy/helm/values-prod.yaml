@@ -15,7 +15,6 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.afrotransact.com
   RETAIL_ORG_ID: org_afrotransact_retail
   SETTLEMENT_HOLD: 7d
   PAYMENTS_ZONE: America/New_York

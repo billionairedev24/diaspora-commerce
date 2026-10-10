@@ -115,6 +115,68 @@ class MeteringIT extends SellerIntegrationTest {
                 .isEqualTo("PENDING");
     }
 
+    /**
+     * AfroTransact Retail is the merchant of record, not a marketplace seller: even when seller-service knows the org
+     * and it has a Stripe customer, its storage, ads and AI usage is never stored, metered or reported; it can't be
+     * put on a plan and can't be suspended.
+     */
+    @Test
+    void afroTransactRetailIsNeverMetered() {
+        String owner = unique("meter-r");
+        String paid = approvedSeller(owner, "seller_growth", Cadence.MONTHLY);
+        String retail = "org_afrotransact_retail";
+        jdbc.sql("""
+                insert into organisation (id, kind, legal_name, display_name, country, status, created_at, updated_at)
+                values (:id, 'SELLER', 'AfroTransact Retail', 'AfroTransact', 'US', 'APPROVED', now(), now())
+                on conflict (id) do nothing
+                """).param("id", retail).update();
+        jdbc.sql("""
+                insert into subscription (org_id, plan_code, cadence, status, stripe_customer_id, updated_at)
+                values (:id, 'seller_growth', 'MONTHLY', 'ACTIVE', 'cus_retail_meter_it', now())
+                on conflict (org_id) do nothing
+                """).param("id", retail).update();
+        // Days of their own, so the other test's runs never touch these rows.
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate d1 = today.minusDays(5);
+        LocalDate d2 = today.minusDays(4);
+        storage(item("ownerOrg", retail, d1, "cubicFeet", "500"), item("ownerOrg", paid, d2, "cubicFeet", "2"));
+        source("/v1/ads/spend", item("sellerOrgId", retail, d2, "spendMinor", "90000", "currency", "\"USD\""),
+                item("sellerOrgId", paid, d2, "spendMinor", "120", "currency", "\"USD\""));
+        source("/v1/ai/usage/orgs", item("orgId", retail, d1, "credits", "4000"), item("orgId", paid, d1, "credits",
+                "5"));
+
+        TestActors.as(TestActors.staff("finance-ops", SellerPermissions.USAGE));
+        int before = StripeStub.bodies(STRIPE, "POST", METER_EVENTS).size();
+        Response run = post("/v1/billing/usage/runs", Map.of("from", d1.toString(), "to", d2.toString()));
+        assertThat(run.status()).as(run.body().toString()).isEqualTo(200);
+        assertThat(run.body().path("rowsChanged").asInt()).isEqualTo(3);
+        assertThat(run.body().path("reported").asInt()).isEqualTo(3);
+        assertThat(run.body().path("pending").asInt()).isZero();
+        List<String> sent = newest(StripeStub.bodies(STRIPE, "POST", METER_EVENTS), before);
+        assertThat(sent).hasSize(3).allSatisfy(b -> assertThat(b).contains("identifier=" + paid)
+                .doesNotContain(retail).doesNotContain("cus_retail_meter_it"));
+        assertThat(jdbc.sql("select count(*) from usage_daily where org_id = :o").param("o", retail)
+                .query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("select count(*) from metered_subscription_item where org_id = :o").param("o", retail)
+                .query(Long.class).single()).isZero();
+        JsonNode statement = get("/v1/orgs/" + retail + "/billing/usage?from=" + d1 + "&to=" + d2).body();
+        assertThat(statement.path("estimatedTotalCents").asLong()).isZero();
+
+        // No plan or billing for Retail, and Trust and Safety can't suspend it or pause its payouts.
+        TestActors.as(TestActors.member(unique("r-owner"), retail, "seller.owner"));
+        Response plan = post("/v1/orgs/" + retail + "/billing/plan", Map.of("planCode", "seller_pro",
+                "cadence", "MONTHLY"));
+        assertThat(plan.status()).as(plan.body().toString()).isEqualTo(422);
+        assertThat(plan.text("/code")).isEqualTo("seller.retail-not-billed");
+        TestActors.as(TestActors.service("trust-ops-service", SellerPermissions.SELLERS_ENFORCE));
+        Response suspend = post("/v1/orgs/" + retail + "/suspend", Map.of("reasonCode", "COUNTERFEIT",
+                "note", "test"));
+        assertThat(suspend.status()).as(suspend.body().toString()).isEqualTo(422);
+        assertThat(suspend.text("/code")).isEqualTo("seller.retail-exempt");
+        assertThat(jdbc.sql("select status from organisation where id = :o").param("o", retail).query(String.class)
+                .single()).isEqualTo("APPROVED");
+    }
+
     @Test
     void invoicesShowMeteredLines() {
         String owner = unique("meter-inv");

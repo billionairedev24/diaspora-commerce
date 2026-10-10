@@ -9,6 +9,7 @@ import com.afrotransact.content.adapter.in.web.AdDtos.CampaignRequest;
 import com.afrotransact.content.adapter.in.web.AdDtos.CampaignResponse;
 import com.afrotransact.content.adapter.in.web.AdDtos.ReportResponse;
 import com.afrotransact.content.application.AdCampaignService;
+import com.afrotransact.content.application.AdsSettings;
 import com.afrotransact.content.domain.ads.CampaignStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,10 +32,12 @@ import org.springframework.web.bind.annotation.RestController;
 class AdCampaignController {
 
     private final AdCampaignService campaigns;
+    private final AdsSettings ads;
     private final Clock clock;
 
-    AdCampaignController(AdCampaignService campaigns, Clock clock) {
+    AdCampaignController(AdCampaignService campaigns, AdsSettings ads, Clock clock) {
         this.campaigns = campaigns;
+        this.ads = ads;
         this.clock = clock;
     }
 
@@ -42,20 +45,20 @@ class AdCampaignController {
     @GetMapping
     List<CampaignResponse> list(@RequestParam(required = false) String sellerOrgId,
                                 @RequestParam(required = false) CampaignStatus status) {
-        return campaigns.list(sellerOrgId, status).stream().map(CampaignResponse::of).toList();
+        return campaigns.list(sellerOrgId, status).stream().map(c -> CampaignResponse.of(c, ads)).toList();
     }
 
     @Operation(summary = "Get a campaign")
     @GetMapping("/{id}")
     CampaignResponse get(@PathVariable String id) {
-        return CampaignResponse.of(campaigns.get(id));
+        return CampaignResponse.of(campaigns.get(id), ads);
     }
 
     @Operation(summary = "Create a campaign (ACTIVE from startsAt; ads:manage for the organisation, or content:ads.edit)")
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     CampaignResponse create(@Valid @RequestBody CampaignRequest body) {
-        return CampaignResponse.of(campaigns.create(body.sellerOrgId(), body.toContent(Instant.now(clock))));
+        return CampaignResponse.of(campaigns.create(body.sellerOrgId(), body.toContent(Instant.now(clock))), ads);
     }
 
     @Operation(summary = "Edit bids, budgets, targeting or schedule (expectedVersion required); raising the budget of "
@@ -65,25 +68,26 @@ class AdCampaignController {
         if (body.expectedVersion() == null) {
             throw new IllegalArgumentException("expectedVersion is required");
         }
-        return CampaignResponse.of(campaigns.update(id, body.toContent(Instant.now(clock)), body.expectedVersion()));
+        return CampaignResponse.of(campaigns.update(id, body.toContent(Instant.now(clock)), body.expectedVersion()),
+                ads);
     }
 
     @Operation(summary = "Pause (publishes content.ads.campaign_paused)")
     @PostMapping("/{id}/pause")
     CampaignResponse pause(@PathVariable String id) {
-        return CampaignResponse.of(campaigns.pause(id));
+        return CampaignResponse.of(campaigns.pause(id), ads);
     }
 
     @Operation(summary = "Resume a paused campaign (409 content.ads-budget-exhausted when nothing is left)")
     @PostMapping("/{id}/resume")
     CampaignResponse resume(@PathVariable String id) {
-        return CampaignResponse.of(campaigns.resume(id));
+        return CampaignResponse.of(campaigns.resume(id), ads);
     }
 
     @Operation(summary = "End the campaign for good")
     @PostMapping("/{id}/end")
     CampaignResponse end(@PathVariable String id) {
-        return CampaignResponse.of(campaigns.end(id));
+        return CampaignResponse.of(campaigns.end(id), ads);
     }
 
     @Operation(summary = "Daily report: impressions, clicks, CTR, spend, CPC, attributed orders and sales (7-day "

@@ -5558,6 +5558,8 @@ components:
                 - SELLER
                 - RETAIL
                 - PLATFORM
+                description: 'RETAIL = AfroTransact Retail (merchant of record): no commission or FBA fee; its net is AfroTransact
+                  revenue (4400 Retail sales), never transferred or paid out'
               netMinor:
                 type: integer
                 format: int64

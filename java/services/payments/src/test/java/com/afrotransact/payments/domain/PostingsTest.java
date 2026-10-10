@@ -37,7 +37,77 @@ class PostingsTest {
             long clearing = j.lines().stream().filter(l -> l.account().chart() == Chart.STRIPE_CLEARING)
                     .mapToLong(JournalLine::signedMinor).sum();
             assertThat(clearing).isEqualTo(split.charge().minus(split.stripeFee()).minor());
+            assertThat(j.lines()).noneMatch(l -> l.account().equals(LedgerAccount.sellerPayable(Fixtures.RETAIL)));
+            long retailNet = split.recipients().stream().filter(RecipientShare::isRetail)
+                    .mapToLong(r -> r.net().minor()).sum();
+            assertThat(credit(j, LedgerAccount.retailSales()) - debit(j, LedgerAccount.retailSales()))
+                    .isEqualTo(retailNet);
         }
+    }
+
+    /** Retail's net is 4400 revenue, never a 2000 payable; tax still goes to 2100; nothing to 4000 / 4100. */
+    @Test
+    void captureBooksRetailNetAsRetailSales() {
+        PaymentSplit split = splitter.split(List.of(
+                Fixtures.line("R1", Fixtures.RETAIL, "Groceries", Fulfilment.FBA, 2, 2400, 400, 198),
+                Fixtures.line("A1", "org_a", "Groceries", Fulfilment.SELF, 1, 1000, 0, 83)),
+                Fixtures.schedule(), Fixtures.usd(150));
+        RecipientShare retail = split.recipients().stream().filter(RecipientShare::isRetail).findFirst()
+                .orElseThrow();
+        Journal j = Postings.capture(UUID.randomUUID(), NOW, "k", "o", "p", "ch_1", split);
+        assertThat(credit(j, LedgerAccount.retailSales())).isEqualTo(2400 + 400 - retail.stripeFee().minor());
+        assertThat(credit(j, LedgerAccount.sellerPayable(Fixtures.RETAIL))).isZero();
+        assertThat(credit(j, LedgerAccount.of(Chart.FBA_FEE_REVENUE))).isZero();
+        assertThat(credit(j, LedgerAccount.of(Chart.SHIPPING_REVENUE))).isZero();
+        assertThat(credit(j, LedgerAccount.of(Chart.COMMISSION_REVENUE))).isEqualTo(80);
+        assertThat(credit(j, LedgerAccount.salesTax("US-TX"))).isEqualTo(198 + 83);
+        assertThat(j.lines()).filteredOn(l -> l.account().equals(LedgerAccount.retailSales()))
+                .allSatisfy(l -> assertThat(l.orgId()).isEqualTo(Fixtures.RETAIL));
+    }
+
+    /** A Retail refund debits 4400 for items + all its shipping, gives no commission back and touches no payable. */
+    @Test
+    void retailRefundDebitsRetailSales() {
+        OrderLine line = Fixtures.line("R1", Fixtures.RETAIL, "Groceries", Fulfilment.FBA, 2, 2400, 400, 198);
+        PaymentSplit split = splitter.split(List.of(line), Fixtures.schedule(), Fixtures.usd(100));
+        PaymentLine pl = PaymentLine.uncaptured(line).captured(UUID.randomUUID(), split.lines().getFirst());
+        RefundLine r = RefundLine.allocate(pl, Fixtures.usd(1200), Fixtures.usd(400), Fixtures.usd(99), true);
+        assertThat(r.commissionReversed().minor()).isZero();
+        Journal j = Postings.refund(UUID.randomUUID(), NOW, "r", "o", "p", "re_1", List.of(r), Fixtures.RETAIL);
+        assertThat(Journal.imbalance(j.lines())).isEmpty();
+        assertThat(debit(j, LedgerAccount.retailSales())).isEqualTo(1200 + 400);
+        assertThat(debit(j, LedgerAccount.salesTax("US-TX"))).isEqualTo(99);
+        assertThat(debit(j, LedgerAccount.sellerPayable(Fixtures.RETAIL))).isZero();
+        assertThat(debit(j, LedgerAccount.of(Chart.SHIPPING_REVENUE))).isZero();
+        assertThat(debit(j, LedgerAccount.of(Chart.COMMISSION_REVENUE))).isZero();
+        assertThat(credit(j, LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE))).isEqualTo(1699);
+    }
+
+    /** Retail's part of a chargeback reserves nothing; a lost dispute reverses Retail sales (Dr 4400). */
+    @Test
+    void retailChargebackDebitsRetailSalesWhenLost() {
+        Map<String, Money> charged = new LinkedHashMap<>();
+        charged.put(PaymentSplitter.PLATFORM, Fixtures.usd(0));
+        charged.put(Fixtures.RETAIL, Fixtures.usd(3000));
+        charged.put("org_a", Fixtures.usd(1000));
+        List<DisputeAllocation> allocations = Dispute.allocate(Fixtures.usd(4000), charged);
+        Dispute d = new Dispute("dp_r", UUID.randomUUID(), "o", "ch_1", Fixtures.usd(4000), Fixtures.usd(1500),
+                DisputeStatus.OPEN, "fraudulent", allocations, NOW, null);
+        assertThat(d.sellerAllocations(Fixtures.RETAIL)).extracting(DisputeAllocation::recipientId)
+                .containsExactly("org_a");
+        Journal opened = Postings.disputeOpened(UUID.randomUUID(), NOW, "o1", d, Fixtures.RETAIL);
+        Journal won = Postings.disputeWon(UUID.randomUUID(), NOW, "w", d.close(DisputeStatus.WON, NOW),
+                Fixtures.RETAIL);
+        Journal lost = Postings.disputeLost(UUID.randomUUID(), NOW, "l", d.close(DisputeStatus.LOST, NOW),
+                Fixtures.RETAIL);
+        for (Journal j : List.of(opened, won, lost)) {
+            assertThat(Journal.imbalance(j.lines())).isEmpty();
+            assertThat(j.lines()).noneMatch(l -> l.account().key().equals(Fixtures.RETAIL));
+        }
+        assertThat(debit(opened, LedgerAccount.sellerPayable("org_a"))).isEqualTo(1000);
+        assertThat(debit(lost, LedgerAccount.retailSales())).isEqualTo(3000);
+        assertThat(debit(lost, LedgerAccount.chargebackReserve("org_a"))).isEqualTo(1000);
+        assertThat(debit(won, LedgerAccount.retailSales()) + credit(won, LedgerAccount.retailSales())).isZero();
     }
 
     @Test
@@ -68,7 +138,8 @@ class PostingsTest {
         assertThat(first.commissionReversed().minor() + second.commissionReversed().minor()
                 + third.commissionReversed().minor()).isEqualTo(80);
         assertThat(pl.refundedTotal()).isEqualTo(pl.line().total());
-        Journal j = Postings.refund(UUID.randomUUID(), NOW, "r", "o", "p", "re_1", List.of(third));
+        Journal j = Postings.refund(UUID.randomUUID(), NOW, "r", "o", "p", "re_1", List.of(third),
+                Fixtures.RETAIL);
         assertThat(Journal.imbalance(j.lines())).isEmpty();
         assertThat(credit(j, LedgerAccount.of(Chart.CUSTOMER_REFUNDS_PAYABLE))).isEqualTo(664);
         assertThat(debit(j, LedgerAccount.sellerPayable("org_a")))
@@ -109,9 +180,11 @@ class PostingsTest {
         assertThat(allocations.stream().mapToLong(a -> a.amount().minor()).sum()).isEqualTo(5000);
         Dispute d = new Dispute("dp_1", UUID.randomUUID(), "o", "ch_1", Fixtures.usd(5000), Fixtures.usd(1500),
                 DisputeStatus.OPEN, "fraudulent", allocations, NOW, null);
-        Journal opened = Postings.disputeOpened(UUID.randomUUID(), NOW, "o1", d);
-        Journal won = Postings.disputeWon(UUID.randomUUID(), NOW, "w", d.close(DisputeStatus.WON, NOW));
-        Journal lost = Postings.disputeLost(UUID.randomUUID(), NOW, "l", d.close(DisputeStatus.LOST, NOW));
+        Journal opened = Postings.disputeOpened(UUID.randomUUID(), NOW, "o1", d, Fixtures.RETAIL);
+        Journal won = Postings.disputeWon(UUID.randomUUID(), NOW, "w", d.close(DisputeStatus.WON, NOW),
+                Fixtures.RETAIL);
+        Journal lost = Postings.disputeLost(UUID.randomUUID(), NOW, "l", d.close(DisputeStatus.LOST, NOW),
+                Fixtures.RETAIL);
         assertThat(debit(opened, LedgerAccount.sellerPayable("org_a"))).isEqualTo(allocations.stream()
                 .filter(a -> a.recipientId().equals("org_a")).findFirst().orElseThrow().amount().minor());
         assertThat(credit(opened, LedgerAccount.of(Chart.STRIPE_CLEARING))).isEqualTo(6500);

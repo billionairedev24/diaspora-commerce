@@ -30,17 +30,21 @@ use the **manual payout schedule**; sellers are paid **on request**.
 
 `1000` Stripe clearing · `1100` Chargeback receivable · `1200:<org>` Provider fees receivable · `2000:<org>` Seller payable · `2100:<jurisdiction>` Sales tax
 payable (attributed to the seller) · `2200` Customer refunds payable · `2300:<org>` Chargeback reserve · `4000`
-Commission · `4100` FBA fees · `4200` AfroTransact shipping · `4300` Provider late-cancellation fees · `5000` Stripe
-fees · `5100` Chargeback losses.
+Commission · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA lines) · `4300` Provider
+late-cancellation fees · `4400` AfroTransact Retail sales · `5000` Stripe fees · `5100` Chargeback losses.
+
+`4400` holds AfroTransact Retail's net (items + all its shipping − its Stripe-fee share); its lines carry the Retail
+org id for attribution. Retail is the merchant of record, so there is never a `2000:<retail>` payable, a `2300` reserve,
+a transfer, a reversal or a payout for it. Staff see Retail revenue as its own `4400` row in `GET /v1/ledger/balances`.
 
 | Event | Journal |
 |---|---|
-| Capture (per shipment) | Dr 1000 (charge − fee), Dr 5000 (AfroTransact's fee share) / Cr 2000 sellers' net, Cr 2100 tax, Cr 4000, Cr 4100, Cr 4200 |
-| Refund | Dr 2100 tax, Dr 2000 (items + own shipping − commission returned), Dr 4000 (commission returned), Dr 4200 / Cr 2200 |
+| Capture (per shipment) | Dr 1000 (charge − fee), Dr 5000 (AfroTransact's fee share) / Cr 2000 sellers' net, Cr 4400 Retail's net, Cr 2100 tax, Cr 4000, Cr 4100, Cr 4200 |
+| Refund | Dr 2100 tax, Dr 2000 (items + own shipping − commission returned), Dr 4000 (commission returned), Dr 4200 / Cr 2200; Retail lines: Dr 4400 (items + shipping), Dr 2100 / Cr 2200 |
 | Refund paid by Stripe | Dr 2200 / Cr 1000 |
 | Transfer after the hold | Dr 2000 / Cr 1000 · reversal: Dr 1000 / Cr 2000 |
-| Chargeback opened | Dr 1100 + Dr 5100 (dispute fee) / Cr 1000; Dr 2000 / Cr 2300 per responsible seller |
-| Won / lost | Dr 1000 / Cr 1100 and Dr 2300 / Cr 2000 · lost: Dr 2300 (+ 5100 platform part) / Cr 1100 |
+| Chargeback opened | Dr 1100 + Dr 5100 (dispute fee) / Cr 1000; Dr 2000 / Cr 2300 per responsible seller (Retail's part stays in 1100) |
+| Won / lost | Dr 1000 / Cr 1100 and Dr 2300 / Cr 2000 · lost: Dr 2300 (+ 5100 platform part, + 4400 Retail part) / Cr 1100 |
 | Provider late-cancellation fee recorded | Dr 1200:<org> / Cr 4300 |
 | Fee collected (Stripe account debit) | Dr 1000 / Cr 1200:<org> |
 | Authorisation released | — (authorisations never reach the ledger; 1000 moves only at capture) |
@@ -55,11 +59,43 @@ charge uses the prefix `<order>:os:<paymentId>` instead of `<order>` so its keys
 
 ## Payment split (S054)
 
-Per recipient: items, shipping (FBA shipping → AfroTransact), tax (collected and remitted by AfroTransact as
-marketplace facilitator, attributed to the seller), commission (category rate, seller override first, half-up per
-line; **AfroTransact Retail pays none**), FBA fee per unit, and a share of the Stripe fee pro rata to each recipient's
-part of the charge (largest-remainder; AfroTransact wins ties and takes any leftover cent). Invariant, checked on
-every split and by 5 000 random property cases: `Σ nets + tax = charge − Stripe fee`.
+Per recipient: items, shipping (a marketplace seller's FBA shipping → AfroTransact), tax (collected and remitted by
+AfroTransact as marketplace facilitator, attributed to the seller), commission (category rate, seller override first,
+half-up per line), FBA fee per unit, and a share of the Stripe fee pro rata to each recipient's part of the charge
+(largest-remainder; AfroTransact wins ties and takes any leftover cent). Invariant, checked on every split and by
+5 000 random property cases (including Retail lines): `Σ nets + tax = charge − Stripe fee`.
+
+**AfroTransact Retail** (`RETAIL_ORG_ID`, recipient kind `RETAIL`) is the merchant of record, not a marketplace
+seller. Commission, FBA fees, seller fees, plans, metered billing and ads charges never apply to it (even with a
+commission override). Its only cost is its Stripe-fee share, and it keeps the shipping of all its lines, FBA or not:
+`Retail net = items + shipping − Stripe-fee share`, credited to `4400 Retail sales`. Tax still goes to
+`2100:<jurisdiction>`. Settlement never transfers Retail money, refunds of Retail lines debit `4400` and never reverse a
+transfer, Retail's payout balance is always zero (requests fail with `422 payments.retail-no-payouts`), a connected
+account can't be registered for it (`422 payments.retail-no-connected-account`), `seller.payouts.paused` for it is
+ignored, and so are provider late-cancellation fees. `GET /v1/fee-schedules/effective?orgId=<retail>` reports
+`commissionBps 0`, `fbaPerUnitMinor 0`, source `RETAIL`.
+
+Worked example (fee schedule: Groceries 8 %, Fashion 12 %, FBA $3.25/unit, card 2.9 % + 30¢; amounts in cents):
+
+| Line | Org | Fulfilment | Qty | Items | Shipping | Tax |
+|---|---|---|---|---|---|---|
+| R1 Groceries | Retail | FBA | 2 | 2 400 | 400 | 198 |
+| R2 Fashion | Retail | seller-shipped | 1 | 1 500 | 300 | 124 |
+| A1 Groceries | org_a | seller-shipped | 2 | 2 000 | 500 | 165 |
+| B1 Fashion | org_b | FBA | 3 | 3 000 | 600 | 248 |
+
+Charge 11 435, Stripe fee 362 (2.9 % + 30¢).
+
+| Recipient | Items | Shipping | Tax | Commission | FBA | Stripe share | Net | Booked to |
+|---|---|---|---|---|---|---|---|---|
+| AfroTransact | – | 600 (B1) | – | +520 | +975 | 19 | 2 076 | 4000 / 4100 / 4200, Dr 5000 19 |
+| Retail | 3 900 | 700 | 322 | 0 | 0 | 156 | 4 444 | Cr 4400 |
+| org_a | 2 000 | 500 | 165 | 160 | 0 | 84 | 2 256 | Cr 2000:org_a, transferred after the hold |
+| org_b | 3 000 | 0 | 248 | 360 | 975 | 103 | 1 562 | Cr 2000:org_b, transferred after the hold |
+
+Σ nets 10 338 + tax 735 = 11 073 = 11 435 − 362. Refunding R1 1 200 items + 400 shipping + 99 tax and A1 1 000 items
+debits 4400 by 1 600, 2000:org_a by 920 (1 000 − 80 commission returned, Stripe reversal of 920 from org_a's transfer),
+4000 by 80 and 2100 by 99. No reversal is attempted for Retail.
 
 ## API
 
@@ -175,8 +211,8 @@ of yesterday (`RECONCILIATION_CRON`, 03:10): ledger 1000 per Stripe object vs St
 |---|---|
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | **Only from the environment.** prod requires `sk_live_`/`rk_live_`; every other profile refuses live keys |
 | `STRIPE_API_BASE` | default `https://api.stripe.com` (tests point it at WireMock) |
-| `DB_URL`, `DB_USER`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `AUTH_ISSUER_URI` | infrastructure |
-| `RETAIL_ORG_ID` | AfroTransact Retail org (no commission) |
+| `DB_URL`, `DB_USER`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `AUTH_ISSUER_URL` | infrastructure |
+| `RETAIL_ORG_ID` | AfroTransact Retail org (merchant of record: no commission, FBA fee, transfer or payout; sales to 4400) |
 | `SETTLEMENT_HOLD` (7d), `PAYOUT_MINIMUM_MINOR` (2500), `PAYMENTS_ZONE` | business settings |
 
 Local: `local` profile uses Stripe **test mode** on api.stripe.com — export a real `sk_test_…` key and run
@@ -187,7 +223,7 @@ Local: `local` profile uses Stripe **test mode** on api.stripe.com — export a 
 
 ```bash
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64
-cd java && ./mvnw -B -f services/payments/pom.xml verify   # checkstyle, 49 unit + ArchUnit, 27 Testcontainers ITs
+cd java && ./mvnw -B -f services/payments/pom.xml verify   # checkstyle, 57 unit + ArchUnit, 32 Testcontainers ITs
 helm dependency build java/services/payments/deploy/helm
 helm template x java/services/payments/deploy/helm -f java/services/payments/deploy/helm/values-prod.yaml \
   | kubeconform -strict -ignore-missing-schemas

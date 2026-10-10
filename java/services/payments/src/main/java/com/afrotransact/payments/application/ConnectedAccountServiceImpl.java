@@ -15,11 +15,14 @@ class ConnectedAccountServiceImpl implements ConnectedAccountService {
 
     private final ConnectedAccountRepository accounts;
     private final PaymentsAccess access;
+    private final PaymentsSettings settings;
     private final Clock clock;
 
-    ConnectedAccountServiceImpl(ConnectedAccountRepository accounts, PaymentsAccess access, Clock clock) {
+    ConnectedAccountServiceImpl(ConnectedAccountRepository accounts, PaymentsAccess access, PaymentsSettings settings,
+                                Clock clock) {
         this.accounts = accounts;
         this.access = access;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -27,6 +30,11 @@ class ConnectedAccountServiceImpl implements ConnectedAccountService {
     @Transactional
     public void register(String orgId, String stripeAccountId) {
         access.accountRegistrar();
+        if (settings.retailOrgId().equals(orgId)) {
+            throw new PaymentsRuleViolation("payments.retail-no-connected-account", "AfroTransact Retail is the "
+                    + "merchant of record; its money stays on the platform and is never transferred to a connected "
+                    + "account");
+        }
         if (stripeAccountId == null || !stripeAccountId.matches("acct_[A-Za-z0-9]{6,64}")) {
             throw new PaymentsRuleViolation("payments.invalid-account", "Not a Stripe connected account id",
                     Map.of("stripeAccountId", "Must look like acct_…"));

@@ -10,6 +10,7 @@ import com.afrotransact.trustops.domain.SuspensionReason;
  * ({@code POST /v1/orgs/{orgId}/suspend}: payouts paused, listings hidden in catalog, offers, bookings and search,
  * organisation SUSPENDED) and restricts the seller in the buy box (offers {@code restricted=true}); reinstatement
  * lifts both, leaving unrelated Stripe compliance payout holds in place. Calling again retries pending steps.
+ * AfroTransact Retail is exempt (422 {@code trustops.retail-exempt}): it is the merchant of record and has no payouts.
  */
 public interface SellerEnforcementService {
 

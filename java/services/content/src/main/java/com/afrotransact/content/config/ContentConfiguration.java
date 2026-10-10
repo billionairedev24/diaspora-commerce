@@ -1,5 +1,6 @@
 package com.afrotransact.content.config;
 
+import com.afrotransact.content.application.AdsSettings;
 import com.afrotransact.content.application.ContentSettings;
 import com.afrotransact.content.domain.careers.ApplicationPolicy;
 import com.afrotransact.content.domain.careers.DefaultApplicationPolicy;
@@ -43,6 +44,11 @@ class ContentConfiguration {
     @Bean
     ApplicationPolicy applicationPolicy() {
         return new DefaultApplicationPolicy();
+    }
+
+    @Bean
+    AdsSettings adsSettings(ContentProperties p) {
+        return new AdsSettings(p.retailOrgId());
     }
 
     @Bean

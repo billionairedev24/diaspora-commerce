@@ -1,11 +1,10 @@
 package com.afrotransact.bookings.adapter.in.web;
 
-import java.net.URI;
-
 import com.afrotransact.bookings.domain.BookingsRuleViolation;
 import com.afrotransact.bookings.domain.BookingsStateConflict;
 import com.afrotransact.bookings.port.GeoClientException;
 import com.afrotransact.bookings.port.PaymentsClientException;
+import com.afrotransact.platform.web.error.ProblemTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -21,7 +20,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 class BookingsErrorAdvice {
 
     private static final Logger LOG = LoggerFactory.getLogger(BookingsErrorAdvice.class);
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     @ExceptionHandler(BookingsRuleViolation.class)
     ProblemDetail ruleViolation(BookingsRuleViolation ex) {
@@ -65,7 +63,7 @@ class BookingsErrorAdvice {
 
     private static ProblemDetail problem(HttpStatus status, String code, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setType(URI.create(TYPE_BASE + code));
+        pd.setType(ProblemTypes.of(code));
         pd.setTitle(title);
         pd.setProperty("code", code);
         return pd;

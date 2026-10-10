@@ -17,6 +17,11 @@ public enum Chart {
     FBA_FEE_REVENUE("4100", "FBA fee revenue", AccountType.REVENUE, Scope.NONE),
     SHIPPING_REVENUE("4200", "AfroTransact shipping revenue", AccountType.REVENUE, Scope.NONE),
     PROVIDER_FEE_REVENUE("4300", "Provider late-cancellation fees", AccountType.REVENUE, Scope.NONE),
+    /**
+     * AfroTransact Retail (1P, merchant of record) sales: items + shipping of Retail lines net of their Stripe-fee
+     * share. Never owed to anyone, never transferred or paid out; lines carry the Retail org for attribution.
+     */
+    RETAIL_SALES("4400", "AfroTransact Retail sales", AccountType.REVENUE, Scope.NONE),
     STRIPE_FEES("5000", "Stripe processing fees", AccountType.EXPENSE, Scope.NONE),
     CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE);
 

@@ -22,6 +22,7 @@ import com.afrotransact.trustops.domain.SellerEnforcement;
 import com.afrotransact.trustops.domain.SellerHealthReport;
 import com.afrotransact.trustops.domain.SellerHealthStatus;
 import com.afrotransact.trustops.domain.SuspensionReason;
+import com.afrotransact.trustops.domain.TrustRuleViolation;
 import com.afrotransact.trustops.port.ShipmentFact;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import org.junit.jupiter.api.Test;
@@ -183,6 +184,21 @@ class SellerHealthIT extends TrustOpsIntegrationTest {
         assertThat(retried.sellerSuspended()).isTrue();
         assertThat(jdbc.sql("select count(*) from audit_entry where action = 'trustops.seller.suspended' "
                 + "and entity_id = :org").param("org", org).query(Long.class).single()).isEqualTo(1);
+    }
+
+    /** AfroTransact Retail is the merchant of record: never suspended, its (non-existent) payouts never held. */
+    @Test
+    void afroTransactRetailIsExemptFromSuspension() {
+        String retail = "org_afrotransact_retail";
+        TestSupport.as(TestSupport.trustSafety("sara"));
+        assertThatThrownBy(() -> enforcement.suspend(retail, SuspensionReason.COUNTERFEIT, "x"))
+                .isInstanceOfSatisfying(TrustRuleViolation.class,
+                        e -> assertThat(e.code()).isEqualTo("trustops.retail-exempt"));
+        problem(send("POST", "/v1/seller-enforcement/" + retail + "/suspend",
+                Map.of("reason", "COUNTERFEIT", "note", "x")), 422, "trustops.retail-exempt");
+        UPSTREAM.verify(0, WireMock.postRequestedFor(WireMock.urlEqualTo("/v1/orgs/" + retail + "/suspend")));
+        assertThat(enforcement.standing(retail).status()).isEqualTo(EnforcementStatus.ACTIVE);
+        assertThat(outbox(retail)).doesNotContain("trustops.seller.suspended");
     }
 
     @Test

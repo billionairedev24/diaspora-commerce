@@ -792,6 +792,7 @@ paths:
       - Seller health & enforcement
       summary: 'Suspend: seller-service suspension hold (payouts paused, listings hidden) and buy-box restriction (offers);
         audited. Calling again retries steps that failed (sellers:enforce)'
+      description: 'AfroTransact Retail (the first-party merchant of record) is exempt: 422 trustops.retail-exempt.'
       operationId: suspend
       parameters:
       - name: orgId

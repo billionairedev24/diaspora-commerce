@@ -64,7 +64,9 @@ class RefundController {
 
     @Operation(summary = "Partial refund without return (Idempotency-Key; staff or the seller of every line)",
             description = "Calls payments POST /v1/payments/{id}/refunds with Idempotency-Key = refund id; payments "
-                    + "reverses the seller transfer portion and commission. The tax reversal is booked in the ledger.")
+                    + "reverses the seller transfer portion and commission. AfroTransact Retail lines have neither "
+                    + "(payments debits Retail sales; nothing is transferred). The tax reversal is booked in the "
+                    + "ledger.")
     @PostMapping("/v1/refunds")
     @ResponseStatus(HttpStatus.CREATED)
     RefundResponse create(@RequestHeader("Idempotency-Key") String idempotencyKey,

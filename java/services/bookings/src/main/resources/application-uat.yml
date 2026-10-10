@@ -2,6 +2,8 @@
 at:
   api-docs:
     enabled: true
+  bookings:
+    manage-url-base: ${BOOKINGS_MANAGE_URL_BASE:${PUBLIC_WEB_URL:https://uat.afrotransact.com}/account/appointments/}
 spring:
   datasource:
     hikari:

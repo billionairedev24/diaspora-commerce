@@ -17,10 +17,12 @@ import com.afrotransact.bookings.domain.FeeSchedule;
  * @param balance                long-dated bookings: balance release and off-session charge
  * @param fallbackFees           fees used while payments' fee schedule cannot be read
  * @param feesCacheTtl           how long payments' effective fees are reused per organisation
+ * @param retailOrgId            AfroTransact Retail, the first-party merchant of record: never charged commission
+ *                               (not even by the fallback), a late-cancellation fee or a reliability strike
  */
 public record BookingsSettings(Duration holdTtl, Duration requestSla, Duration autoCompleteAfter,
                                long lateProviderFeeMinor, String manageUrlBase, BalanceChargePolicy balance,
-                               FeeSchedule fallbackFees, Duration feesCacheTtl) {
+                               FeeSchedule fallbackFees, Duration feesCacheTtl, String retailOrgId) {
 
     public BookingsSettings {
         Objects.requireNonNull(holdTtl, "holdTtl");
@@ -29,6 +31,16 @@ public record BookingsSettings(Duration holdTtl, Duration requestSla, Duration a
         Objects.requireNonNull(balance, "balance");
         Objects.requireNonNull(fallbackFees, "fallbackFees");
         Objects.requireNonNull(feesCacheTtl, "feesCacheTtl");
+        Objects.requireNonNull(retailOrgId, "retailOrgId");
         manageUrlBase = manageUrlBase == null ? "" : manageUrlBase;
+    }
+
+    public boolean isRetail(String orgId) {
+        return retailOrgId.equals(orgId);
+    }
+
+    /** Late provider-cancellation fee of an organisation: none for AfroTransact Retail. */
+    public long lateProviderFeeFor(String orgId) {
+        return isRetail(orgId) ? 0 : lateProviderFeeMinor;
     }
 }

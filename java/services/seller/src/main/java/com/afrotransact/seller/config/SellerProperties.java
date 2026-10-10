@@ -15,10 +15,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param media         media-service base URL and service token
  * @param jobs          scheduled jobs switch
  * @param metering      usage sources of metered billing (S206) and the seller-service client credentials
+ * @param retailOrgId   AfroTransact Retail (1P merchant of record): no plan, no metered billing, no suspension
  */
 @ConfigurationProperties(prefix = "at.seller")
 public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto crypto, Media media, Jobs jobs,
-                               Metering metering) {
+                               Metering metering, String retailOrgId) {
 
     public SellerProperties {
         liveCountries = liveCountries == null || liveCountries.isEmpty() ? List.of("US") : List.copyOf(liveCountries);
@@ -27,6 +28,7 @@ public record SellerProperties(List<String> liveCountries, Stripe stripe, Crypto
         media = media == null ? new Media(null, null) : media;
         jobs = jobs == null ? new Jobs(null) : jobs;
         metering = metering == null ? new Metering(null, null, null, null, null, null, null) : metering;
+        retailOrgId = retailOrgId == null || retailOrgId.isBlank() ? "org_afrotransact_retail" : retailOrgId.trim();
     }
 
     /** Usage sources (inventory, content, ai-gateway) called with the seller-service client-credentials token. */

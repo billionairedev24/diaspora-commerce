@@ -33,7 +33,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
 
 server:
   port: ${PORT:8106}
@@ -89,6 +89,8 @@ at:
   seller:
     # Markets open to sellers; other countries get 422 seller.country-not-live and the launch list.
     live-countries: ${SELLER_LIVE_COUNTRIES:US}
+    # AfroTransact Retail (1P): never on a plan, never metered, never suspended.
+    retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
     stripe:
       secret-key: ${STRIPE_SECRET_KEY:}
       connect-webhook-secret: ${STRIPE_CONNECT_WEBHOOK_SECRET:}
@@ -112,7 +114,7 @@ at:
       inventory-url: ${INVENTORY_URL:http://localhost:8103}
       content-url: ${CONTENT_URL:http://localhost:8112}
       ai-url: ${AI_GATEWAY_URL:http://localhost:8113}
-      token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
+      token-uri: ${AUTH_TOKEN_URL:${AUTH_ISSUER_URL:http://localhost:8100}/oauth2/token}
       client-id: ${SELLER_SERVICE_CLIENT_ID:seller-service}
       client-secret: ${SELLER_SERVICE_CLIENT_SECRET:}
       timeout: ${METERING_TIMEOUT:10s}

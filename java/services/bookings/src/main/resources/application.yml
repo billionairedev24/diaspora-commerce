@@ -30,7 +30,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
 
 server:
   port: ${PORT:8109}
@@ -86,7 +86,10 @@ at:
     request-sla: ${BOOKING_REQUEST_SLA:4h}
     auto-complete-after: ${BOOKING_AUTO_COMPLETE_AFTER:48h}
     late-provider-fee-minor: ${LATE_PROVIDER_FEE_MINOR:1500}
-    manage-url-base: ${BOOKINGS_MANAGE_URL_BASE:https://afrotransact.com/account/appointments/}
+    # AfroTransact Retail (1P): no commission, no late-cancellation fee or strike.
+    retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # Absolute storefront link in booking messages; PUBLIC_WEB_URL comes from the Helm library chart per environment.
+    manage-url-base: ${BOOKINGS_MANAGE_URL_BASE:${PUBLIC_WEB_URL:http://localhost:3000}/account/appointments/}
     # Fees come from payments (GET /v1/fee-schedules/effective, cached per organisation); these values are only the
     # fallback while payments cannot answer.
     fees:
@@ -103,7 +106,7 @@ at:
       retry-delay: ${BOOKING_BALANCE_RETRY_DELAY:6h}
     payments:
       base-url: ${PAYMENTS_URL:http://localhost:8105}
-      token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
+      token-uri: ${AUTH_TOKEN_URL:${AUTH_ISSUER_URL:http://localhost:8100}/oauth2/token}
       client-id: ${BOOKINGS_CLIENT_ID:bookings-service}
       # Only from the environment (identity's bookings-service client secret).
       client-secret: ${BOOKINGS_CLIENT_SECRET}

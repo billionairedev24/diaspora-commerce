@@ -75,9 +75,10 @@ class FinanceController {
     }
 
     @Operation(summary = "Effective fees for an organisation and category (payments:service or payments:read)",
-            description = "Commission (seller override, then category, then default; none for AfroTransact Retail), "
-                    + "card-fee estimate (cardPctBps + cardFixedMinor per charge) and FBA fee of the version in force "
-                    + "at `at` (default now). Callers such as bookings use it instead of hard-coding fees. "
+            description = "Commission (seller override, then category, then default), card-fee estimate "
+                    + "(cardPctBps + cardFixedMinor per charge) and FBA fee of the version in force at `at` (default "
+                    + "now). AfroTransact Retail gets zero commission and zero FBA fee (source RETAIL): only its card "
+                    + "fee share applies. Callers such as bookings use it instead of hard-coding fees. "
                     + "Fee schedules are per currency; there is no market dimension.")
     @GetMapping("/v1/fee-schedules/effective")
     EffectiveFeesResponse effectiveFees(@RequestParam String category,
@@ -97,7 +98,9 @@ class FinanceController {
                 body.cardFixedMinor(), body.fbaPerUnitMinor(), !Boolean.FALSE.equals(body.reverseCommissionOnRefund()), body.note())));
     }
 
-    @Operation(summary = "Ledger balances of every account (payments:read)")
+    @Operation(summary = "Ledger balances of every account (payments:read)",
+            description = "AfroTransact Retail sales appear on their own revenue account 4400, separate from the "
+                    + "2000:<org> seller payables (Retail is never a payable).")
     @GetMapping("/v1/ledger/balances")
     List<BalanceResponse> balances() {
         return ledger.balances().stream().map(BalanceResponse::of).toList();

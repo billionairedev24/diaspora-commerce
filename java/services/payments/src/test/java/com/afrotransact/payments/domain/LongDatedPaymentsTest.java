@@ -114,6 +114,9 @@ class LongDatedPaymentsTest {
         EffectiveFees retail = s.effectiveFor(Fixtures.RETAIL, "services", Fixtures.RETAIL);
         assertThat(retail.commissionBps()).isZero();
         assertThat(retail.retail()).isTrue();
+        assertThat(retail.commissionSource()).isEqualTo("RETAIL");
+        assertThat(retail.fbaPerUnit().minor()).isZero();
+        assertThat(services.fbaPerUnit().minor()).isEqualTo(325);
         assertThat(s.effectiveFor(null, "unknown-category", Fixtures.RETAIL).commissionSource())
                 .isEqualTo("DEFAULT");
     }

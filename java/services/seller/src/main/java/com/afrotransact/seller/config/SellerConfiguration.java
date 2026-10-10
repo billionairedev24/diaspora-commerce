@@ -52,7 +52,8 @@ class SellerConfiguration {
 
     @Bean
     SellerSettings sellerSettings(SellerProperties props) {
-        return new SellerSettings(Set.copyOf(props.liveCountries()), props.stripe().sessionComponents());
+        return new SellerSettings(Set.copyOf(props.liveCountries()), props.stripe().sessionComponents(),
+                props.retailOrgId());
     }
 
     @Bean

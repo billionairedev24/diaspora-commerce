@@ -185,7 +185,7 @@
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
 - Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","Done"
-"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","In Progress"
+"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","Done"
 "S051","Story","Payments service with Stripe PaymentIntents","Create, confirm (3-D Secure), capture per shipment and refund through Stripe.","- Manual capture per shipment on carrier acceptance
 - 3-D Secure test card triggers authentication
 - Declined test card returns a clear error
@@ -762,4 +762,4 @@
 - Retail net = items + shipping - Stripe fee share, posted to Retail sales revenue
 - No settlement transfer, payout or reversal for Retail
 - Seller billing and metering skip Retail
-- Enforcement never suspends Retail","E07","","Highest","5","payments retail seller","payments","In Progress"
+- Enforcement never suspends Retail","E07","","Highest","5","payments retail seller","payments","Done"

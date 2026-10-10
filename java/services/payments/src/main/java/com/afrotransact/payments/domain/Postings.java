@@ -14,7 +14,8 @@ public final class Postings {
     /**
      * Capture of a charge: Dr 1000 Stripe clearing (charge − fee) and Dr 5000 Stripe fees (AfroTransact's share) /
      * Cr 2000 seller payable (net), Cr 2100 sales tax payable per jurisdiction, Cr 4000 commission, Cr 4100 FBA fees,
-     * Cr 4200 AfroTransact shipping. Sellers bear their fee share through a lower payable.
+     * Cr 4200 AfroTransact shipping. Sellers bear their fee share through a lower payable. AfroTransact Retail's net
+     * (items + shipping − its fee share) is AfroTransact revenue: Cr 4400 Retail sales, never 2000.
      */
     public static Journal capture(UUID id, Instant at, String key, String orderId, String paymentId,
                                   String chargeId, PaymentSplit split) {
@@ -24,7 +25,9 @@ public final class Postings {
         b.debit(LedgerAccount.of(Chart.STRIPE_CLEARING), split.charge().minus(split.stripeFee()));
         b.debit(LedgerAccount.of(Chart.STRIPE_FEES), platform.stripeFee());
         for (RecipientShare s : split.sellers()) {
-            b.credit(LedgerAccount.sellerPayable(s.recipientId()), s.net(), s.recipientId());
+            LedgerAccount owner = s.isRetail() ? LedgerAccount.retailSales()
+                    : LedgerAccount.sellerPayable(s.recipientId());
+            b.credit(owner, s.net(), s.recipientId());
             for (Map.Entry<String, Money> tax : s.taxByJurisdiction().entrySet()) {
                 b.credit(LedgerAccount.salesTax(tax.getKey()), tax.getValue(), s.recipientId());
             }
@@ -38,17 +41,18 @@ public final class Postings {
     /**
      * Refund: Dr 2100 tax, Dr 2000 seller payable (items + own shipping − commission returned), Dr 4000 commission
      * returned, Dr 4200 AfroTransact shipping / Cr 2200 customer refunds payable. FBA fees and Stripe fee shares
-     * are not given back.
+     * are not given back. Lines of AfroTransact Retail ({@code retailOrgId}) debit 4400 Retail sales instead of a
+     * payable (Retail paid no commission, so none is returned).
      */
     public static Journal refund(UUID id, Instant at, String key, String orderId, String paymentId, String refundRef,
-                                 List<RefundLine> lines) {
+                                 List<RefundLine> lines, String retailOrgId) {
         Journal.Builder b = Journal.builder(JournalType.REFUND, key).order(orderId).payment(paymentId)
                 .stripeRef(refundRef).description("Refund on order " + orderId);
         Money total = null;
         for (RefundLine l : lines) {
             total = total == null ? l.total() : total.plus(l.total());
             b.debit(LedgerAccount.salesTax(l.taxJurisdiction()), l.tax(), l.sellerOrg());
-            b.debit(LedgerAccount.sellerPayable(l.sellerOrg()), l.sellerDebit(), l.sellerOrg());
+            b.debit(owner(l.sellerOrg(), retailOrgId), l.sellerDebit(), l.sellerOrg());
             b.debit(LedgerAccount.of(Chart.COMMISSION_REVENUE), l.commissionReversed(), l.sellerOrg());
             if (l.shippingToPlatform()) {
                 b.debit(LedgerAccount.of(Chart.SHIPPING_REVENUE), l.shipping());
@@ -120,49 +124,63 @@ public final class Postings {
     /**
      * Dispute opened: Stripe withdraws the amount (Dr 1100 chargeback receivable / Cr 1000) and each responsible
      * seller's payable is debited into a chargeback reserve (Dr 2000 / Cr 2300) until the outcome. Stripe's dispute fee
-     * is AfroTransact's cost (Dr 5100).
+     * is AfroTransact's cost (Dr 5100). AfroTransact Retail's part has no payable to reserve: it stays in 1100 until
+     * the outcome.
      */
-    public static Journal disputeOpened(UUID id, Instant at, String key, Dispute d) {
+    public static Journal disputeOpened(UUID id, Instant at, String key, Dispute d, String retailOrgId) {
         Journal.Builder b = Journal.builder(JournalType.DISPUTE_OPENED, key).order(d.orderId())
                 .payment(d.paymentId().toString()).stripeRef(d.id())
                 .description("Chargeback " + d.id() + " opened (" + d.reason() + ")")
                 .debit(LedgerAccount.of(Chart.CHARGEBACK_RECEIVABLE), d.amount())
                 .debit(LedgerAccount.of(Chart.CHARGEBACK_LOSSES), d.fee())
                 .credit(LedgerAccount.of(Chart.STRIPE_CLEARING), d.amount().plus(d.fee()));
-        for (DisputeAllocation a : d.sellerAllocations()) {
+        for (DisputeAllocation a : d.sellerAllocations(retailOrgId)) {
             b.debit(LedgerAccount.sellerPayable(a.recipientId()), a.amount(), a.recipientId());
             b.credit(LedgerAccount.chargebackReserve(a.recipientId()), a.amount(), a.recipientId());
         }
         return b.build(id, at);
     }
 
-    /** Won: Stripe reinstates the funds (Dr 1000 / Cr 1100) and the reserve goes back to the sellers (Dr 2300 / Cr 2000). */
-    public static Journal disputeWon(UUID id, Instant at, String key, Dispute d) {
+    /**
+     * Won: Stripe reinstates the funds (Dr 1000 / Cr 1100) and the reserve goes back to the sellers (Dr 2300 / Cr 2000);
+     * AfroTransact Retail's part simply returns with the funds.
+     */
+    public static Journal disputeWon(UUID id, Instant at, String key, Dispute d, String retailOrgId) {
         Journal.Builder b = Journal.builder(JournalType.DISPUTE_WON, key).order(d.orderId())
                 .payment(d.paymentId().toString()).stripeRef(d.id())
                 .description("Chargeback " + d.id() + " won")
                 .debit(LedgerAccount.of(Chart.STRIPE_CLEARING), d.amount())
                 .credit(LedgerAccount.of(Chart.CHARGEBACK_RECEIVABLE), d.amount());
-        for (DisputeAllocation a : d.sellerAllocations()) {
+        for (DisputeAllocation a : d.sellerAllocations(retailOrgId)) {
             b.debit(LedgerAccount.chargebackReserve(a.recipientId()), a.amount(), a.recipientId());
             b.credit(LedgerAccount.sellerPayable(a.recipientId()), a.amount(), a.recipientId());
         }
         return b.build(id, at);
     }
 
-    /** Lost: the sellers' reserve covers the receivable (Dr 2300 / Cr 1100); AfroTransact's part is a loss (Dr 5100). */
-    public static Journal disputeLost(UUID id, Instant at, String key, Dispute d) {
+    /**
+     * Lost: the sellers' reserve covers the receivable (Dr 2300 / Cr 1100); AfroTransact's part is a loss (Dr 5100);
+     * AfroTransact Retail's part reverses its sales (Dr 4400).
+     */
+    public static Journal disputeLost(UUID id, Instant at, String key, Dispute d, String retailOrgId) {
         Journal.Builder b = Journal.builder(JournalType.DISPUTE_LOST, key).order(d.orderId())
                 .payment(d.paymentId().toString()).stripeRef(d.id() + ":lost")
                 .description("Chargeback " + d.id() + " lost");
         for (DisputeAllocation a : d.allocations()) {
             if (PaymentSplitter.PLATFORM.equals(a.recipientId())) {
                 b.debit(LedgerAccount.of(Chart.CHARGEBACK_LOSSES), a.amount());
+            } else if (a.recipientId().equals(retailOrgId)) {
+                b.debit(LedgerAccount.retailSales(), a.amount(), a.recipientId());
             } else {
                 b.debit(LedgerAccount.chargebackReserve(a.recipientId()), a.amount(), a.recipientId());
             }
         }
         b.credit(LedgerAccount.of(Chart.CHARGEBACK_RECEIVABLE), d.amount());
         return b.build(id, at);
+    }
+
+    /** Who carries an order line's money: 4400 Retail sales for AfroTransact Retail, else the seller's 2000 payable. */
+    public static LedgerAccount owner(String orgId, String retailOrgId) {
+        return orgId.equals(retailOrgId) ? LedgerAccount.retailSales() : LedgerAccount.sellerPayable(orgId);
     }
 }

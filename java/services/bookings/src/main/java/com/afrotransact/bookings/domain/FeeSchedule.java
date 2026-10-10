@@ -15,6 +15,8 @@ public record FeeSchedule(int commissionBps, int cardPctBps, long cardFixedMinor
 
     /** Source of the configured fallback. */
     public static final String CONFIG = "CONFIG";
+    /** AfroTransact Retail: no commission, only card fees. */
+    public static final String RETAIL = "RETAIL";
 
     public FeeSchedule {
         if (commissionBps < 0 || commissionBps > 10_000 || cardPctBps < 0 || cardPctBps > 10_000

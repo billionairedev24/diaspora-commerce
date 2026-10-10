@@ -69,12 +69,13 @@ class BillingServiceImpl implements BillingService {
     private final AccessGuard access;
     private final DomainEventPublisher events;
     private final TransactionOperations tx;
+    private final SellerSettings settings;
     private final Clock clock;
 
     BillingServiceImpl(SubscriptionRepository subs, PaymentMethodRepository methods, InvoiceRepository invoices,
                        PlanRepository plans, ApplicationRepository apps, OrganisationRepository orgs,
                        StripeBillingGateway stripe, UsageRepository usage, AccessGuard access,
-                       DomainEventPublisher events, TransactionOperations tx, Clock clock) {
+                       DomainEventPublisher events, TransactionOperations tx, SellerSettings settings, Clock clock) {
         this.subs = subs;
         this.methods = methods;
         this.invoices = invoices;
@@ -86,6 +87,7 @@ class BillingServiceImpl implements BillingService {
         this.access = access;
         this.events = events;
         this.tx = tx;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -100,6 +102,7 @@ class BillingServiceImpl implements BillingService {
     @Transactional
     public PlanChangeResult changePlan(String orgId, String planCode, Cadence cadence) {
         access.orgRole(orgId, AccessGuard.OWNER, null);
+        requireNotRetail(orgId);
         Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
         requireActive(sub);
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
@@ -174,6 +177,7 @@ class BillingServiceImpl implements BillingService {
     @Transactional
     public PaymentMethod addPaymentMethod(String orgId, AddPaymentMethodCommand cmd) {
         access.orgRole(orgId, AccessGuard.OWNER, null);
+        requireNotRetail(orgId);
         validate(cmd);
         Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
         Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
@@ -196,6 +200,7 @@ class BillingServiceImpl implements BillingService {
     @Transactional
     public List<PaymentMethod> makeDefault(String orgId, UUID paymentMethodId) {
         access.orgRole(orgId, AccessGuard.OWNER, null);
+        requireNotRetail(orgId);
         PaymentMethod pm = method(orgId, paymentMethodId);
         Subscription sub = subscription(orgId);
         if (sub.stripeCustomerId() != null) {
@@ -209,6 +214,7 @@ class BillingServiceImpl implements BillingService {
     @Transactional
     public List<PaymentMethod> removePaymentMethod(String orgId, UUID paymentMethodId) {
         access.orgRole(orgId, AccessGuard.OWNER, null);
+        requireNotRetail(orgId);
         PaymentMethod pm = method(orgId, paymentMethodId);
         if (pm.isDefault()) {
             throw new SellerStateConflict("seller.default-payment-method",
@@ -228,6 +234,10 @@ class BillingServiceImpl implements BillingService {
 
     @Override
     public void activate(String orgId) {
+        if (settings.isRetail(orgId)) {
+            LOG.info("AfroTransact Retail is not on a plan; no subscription is activated");
+            return;
+        }
         Subscription sub = tx.execute(s -> prepare(orgId));
         if (sub == null || sub.status() != SubscriptionStatus.PENDING_ACTIVATION) {
             return;
@@ -434,8 +444,17 @@ class BillingServiceImpl implements BillingService {
         return customer;
     }
 
+    /** AfroTransact Retail is the merchant of record, not a marketplace seller: it has no plan or billing. */
+    private void requireNotRetail(String orgId) {
+        if (settings.isRetail(orgId)) {
+            throw new SellerRuleViolation("seller.retail-not-billed", "AfroTransact Retail is not on a seller plan "
+                    + "and is never billed");
+        }
+    }
+
     private BillingOverview setCancel(String orgId, boolean cancel) {
         access.orgRole(orgId, AccessGuard.OWNER, null);
+        requireNotRetail(orgId);
         Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
         if (sub.stripeSubscriptionId() == null) {
             throw new SellerStateConflict("seller.no-paid-subscription", "There is no paid subscription to "

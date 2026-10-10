@@ -11,29 +11,31 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param requestSla           provider answer window for requests (design: 4 h)
  * @param autoCompleteAfter    confirmed bookings auto-complete this long after they end (design: 48 h)
  * @param lateProviderFeeMinor provider cancellation under 24 h (design: $15)
- * @param manageUrlBase        customer link to manage a booking
+ * @param manageUrlBase        customer link to manage a booking (absolute; built from PUBLIC_WEB_URL)
  * @param fees                 fallback commission and card fees while payments' fee schedule is unavailable
  * @param balance              long-dated bookings: balance release and off-session charge
  * @param payments             payments-service client
  * @param geo                  geo-service client (service areas for ZIP search)
  * @param jobs                 background jobs
+ * @param retailOrgId          AfroTransact Retail (1P): no commission, no late-cancellation fee or strike
  */
 @ConfigurationProperties(prefix = "at.bookings")
 public record BookingsProperties(Duration holdTtl, Duration requestSla, Duration autoCompleteAfter,
                                  Long lateProviderFeeMinor, String manageUrlBase, Fees fees, Balance balance,
-                                 Payments payments, Geo geo, Jobs jobs) {
+                                 Payments payments, Geo geo, Jobs jobs, String retailOrgId) {
 
     public BookingsProperties {
         holdTtl = holdTtl == null ? Duration.ofMinutes(15) : holdTtl;
         requestSla = requestSla == null ? Duration.ofHours(4) : requestSla;
         autoCompleteAfter = autoCompleteAfter == null ? Duration.ofHours(48) : autoCompleteAfter;
         lateProviderFeeMinor = lateProviderFeeMinor == null ? 1500L : lateProviderFeeMinor;
-        manageUrlBase = manageUrlBase == null ? "https://afrotransact.com/account/appointments/" : manageUrlBase;
+        manageUrlBase = manageUrlBase == null ? "http://localhost:3000/account/appointments/" : manageUrlBase;
         fees = fees == null ? new Fees(null, null, null, null) : fees;
         balance = balance == null ? new Balance(null, null, null, null) : balance;
         payments = payments == null ? new Payments(null, null, null, null, null) : payments;
         geo = geo == null ? new Geo(null, null) : geo;
         jobs = jobs == null ? new Jobs(null) : jobs;
+        retailOrgId = retailOrgId == null || retailOrgId.isBlank() ? "org_afrotransact_retail" : retailOrgId.trim();
     }
 
     /**

@@ -19,10 +19,12 @@ class AdSpendServiceImpl implements AdSpendService {
 
     private final AdStatsRepository stats;
     private final ContentAccess access;
+    private final AdsSettings settings;
 
-    AdSpendServiceImpl(AdStatsRepository stats, ContentAccess access) {
+    AdSpendServiceImpl(AdStatsRepository stats, ContentAccess access, AdsSettings settings) {
         this.stats = stats;
         this.access = access;
+        this.settings = settings;
     }
 
     @Override
@@ -45,6 +47,7 @@ class AdSpendServiceImpl implements AdSpendService {
             throw new ContentRuleViolation("content.invalid-range", "At most " + MAX_DAYS + " days per request",
                     Map.of("to", "At most " + MAX_DAYS + " days after from"));
         }
-        return stats.spendByOrg(from, to);
+        // AfroTransact Retail's campaigns are internal: their notional spend is never billed.
+        return stats.spendByOrg(from, to).stream().filter(s -> !settings.isInternal(s.sellerOrgId())).toList();
     }
 }

@@ -30,7 +30,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
 
 server:
   port: ${PORT:8111}
@@ -131,7 +131,7 @@ at:
       # Driver pickups are scheduled with fulfilment-service from this many days after approval.
       pickup-ready-days: ${RETURN_PICKUP_READY_DAYS:1}
     upstreams:
-      token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
+      token-uri: ${AUTH_TOKEN_URL:${AUTH_ISSUER_URL:http://localhost:8100}/oauth2/token}
       client-id: ${TAX_RETURNS_CLIENT_ID:tax-returns-service}
       # Only from the environment (identity's tax-returns-service client secret).
       client-secret: ${TAX_RETURNS_CLIENT_SECRET}

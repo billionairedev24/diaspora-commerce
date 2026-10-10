@@ -36,22 +36,98 @@ class DefaultPaymentSplitterTest {
         assertThat(b.commission().minor()).isEqualTo(360);
         assertThat(retail.commission().minor()).isZero();
         assertThat(retail.kind()).isEqualTo(RecipientKind.RETAIL);
-        assertThat(retail.fbaFees().minor()).isEqualTo(325);
+        assertThat(retail.fbaFees().minor()).isZero();
+        assertThat(retail.shipping().minor()).isEqualTo(300);
         assertThat(b.fbaFees().minor()).isEqualTo(975);
-        assertThat(platform.shipping().minor()).isEqualTo(300);
-        // Largest remainder: exact 9.95 / 88.40 / 35.92 / 107.73 → floors 239, three cents to the largest remainders.
-        assertThat(platform.stripeFee().minor()).isEqualTo(10);
+        assertThat(platform.shipping().minor()).isZero();
+        // Largest remainder: exact 0 / 88.40 / 45.87 / 107.73 → floors 240, two cents to the largest remainders.
+        assertThat(platform.stripeFee().minor()).isZero();
         assertThat(a.stripeFee().minor()).isEqualTo(88);
-        assertThat(retail.stripeFee().minor()).isEqualTo(36);
+        assertThat(retail.stripeFee().minor()).isEqualTo(46);
         assertThat(b.stripeFee().minor()).isEqualTo(108);
         assertThat(a.net().minor()).isEqualTo(2252);
-        assertThat(retail.net().minor()).isEqualTo(639);
+        assertThat(retail.net().minor()).isEqualTo(1000 + 300 - 46);
         assertThat(b.net().minor()).isEqualTo(1557);
         assertThat(platform.commission().minor()).isEqualTo(520);
-        assertThat(platform.fbaFees().minor()).isEqualTo(1300);
-        assertThat(platform.net().minor()).isEqualTo(2110);
+        assertThat(platform.fbaFees().minor()).isEqualTo(975);
+        assertThat(platform.net().minor()).isEqualTo(1495);
         assertThat(split.totalTax().minor()).isEqualTo(496);
         assertThat(a.taxByJurisdiction()).containsEntry("US-TX", Fixtures.usd(165));
+    }
+
+    /**
+     * Retail lines (one FBA, one self-shipped) with two marketplace sellers (one FBA, one self-shipped): Retail pays
+     * no commission and no FBA fee and keeps all its shipping; sellers pay as before.
+     */
+    @Test
+    void mixedRetailAndTwoSellersOrder() {
+        List<OrderLine> lines = List.of(
+                Fixtures.line("R1", Fixtures.RETAIL, "Groceries", Fulfilment.FBA, 2, 2400, 400, 198),
+                Fixtures.line("R2", Fixtures.RETAIL, "Fashion", Fulfilment.SELF, 1, 1500, 300, 124),
+                Fixtures.line("A1", "org_a", "Groceries", Fulfilment.SELF, 2, 2000, 500, 165),
+                Fixtures.line("B1", "org_b", "Fashion", Fulfilment.FBA, 3, 3000, 600, 248));
+        FeeSchedule schedule = Fixtures.schedule();
+        Money fee = schedule.estimateCardFee(Fixtures.usd(11_435));
+        assertThat(fee.minor()).isEqualTo(362);
+
+        PaymentSplit split = splitter.split(lines, schedule, fee);
+
+        RecipientShare platform = split.platform();
+        RecipientShare retail = share(split, Fixtures.RETAIL);
+        RecipientShare a = share(split, "org_a");
+        RecipientShare b = share(split, "org_b");
+        assertThat(split.charge().minor()).isEqualTo(11_435);
+        assertThat(retail.items().minor()).isEqualTo(3900);
+        assertThat(retail.shipping().minor()).isEqualTo(700);
+        assertThat(retail.tax().minor()).isEqualTo(322);
+        assertThat(retail.commission().minor()).isZero();
+        assertThat(retail.fbaFees().minor()).isZero();
+        assertThat(a.commission().minor()).isEqualTo(160);
+        assertThat(a.fbaFees().minor()).isZero();
+        assertThat(b.commission().minor()).isEqualTo(360);
+        assertThat(b.fbaFees().minor()).isEqualTo(975);
+        assertThat(b.shipping().minor()).isZero();
+        assertThat(platform.shipping().minor()).isEqualTo(600);
+        // Weights 600 / 4922 / 2665 / 3248: exact 18.99 / 155.82 / 84.37 / 102.82 → floors 359; the three leftover
+        // cents go to AfroTransact, org_b and Retail (largest remainders).
+        assertThat(platform.stripeFee().minor()).isEqualTo(19);
+        assertThat(retail.stripeFee().minor()).isEqualTo(156);
+        assertThat(a.stripeFee().minor()).isEqualTo(84);
+        assertThat(b.stripeFee().minor()).isEqualTo(103);
+        assertThat(retail.net().minor()).isEqualTo(3900 + 700 - 156);
+        assertThat(a.net().minor()).isEqualTo(2000 + 500 - 160 - 84);
+        assertThat(b.net().minor()).isEqualTo(3000 - 360 - 975 - 103);
+        assertThat(platform.net().minor()).isEqualTo(600 + 520 + 975 - 19);
+        long nets = split.recipients().stream().mapToLong(r -> r.net().minor()).sum();
+        assertThat(nets + split.totalTax().minor()).isEqualTo(11_435 - 362);
+        assertThat(split.line("R1").orElseThrow().fbaFee().minor()).isZero();
+        assertThat(split.line("R1").orElseThrow().shippingToPlatform()).isFalse();
+        assertThat(split.line("B1").orElseThrow().shippingToPlatform()).isTrue();
+    }
+
+    @Test
+    void retailOnlyOrderPaysOnlyItsStripeFee() {
+        List<OrderLine> lines = List.of(
+                Fixtures.line("R1", Fixtures.RETAIL, "Groceries", Fulfilment.FBA, 2, 2400, 400, 198),
+                Fixtures.line("R2", Fixtures.RETAIL, "Fashion", Fulfilment.SELF, 1, 1500, 300, 124));
+        FeeSchedule schedule = Fixtures.schedule();
+        Money fee = schedule.estimateCardFee(Fixtures.usd(4922));
+        assertThat(fee.minor()).isEqualTo(173);
+
+        PaymentSplit split = splitter.split(lines, schedule, fee);
+
+        RecipientShare retail = share(split, Fixtures.RETAIL);
+        assertThat(split.recipients()).hasSize(2);
+        assertThat(retail.commission().minor()).isZero();
+        assertThat(retail.fbaFees().minor()).isZero();
+        assertThat(retail.stripeFee().minor()).isEqualTo(173);
+        assertThat(retail.net().minor()).isEqualTo(3900 + 700 - 173);
+        RecipientShare platform = split.platform();
+        assertThat(platform.commission().minor()).isZero();
+        assertThat(platform.fbaFees().minor()).isZero();
+        assertThat(platform.shipping().minor()).isZero();
+        assertThat(platform.net().minor()).isZero();
+        assertThat(retail.net().minor() + split.totalTax().minor()).isEqualTo(4922 - 173);
     }
 
     @Test
@@ -63,6 +139,7 @@ class DefaultPaymentSplitterTest {
                 Fixtures.usd(0));
         assertThat(share(split, Fixtures.RETAIL).commission().minor()).isZero();
         assertThat(split.lines().getFirst().commissionBps()).isZero();
+        assertThat(share(split, Fixtures.RETAIL).fbaFees().minor()).isZero();
     }
 
     @Test
@@ -99,7 +176,8 @@ class DefaultPaymentSplitterTest {
 
     /**
      * Property: for thousands of random multi-seller orders and fees, the split reconciles exactly to the charge,
-     * fee shares are within one cent of the exact pro-rata share, and Retail never pays commission.
+     * fee shares are within one cent of the exact pro-rata share, and Retail never pays commission or FBA fees and
+     * keeps the shipping of all its lines (net = items + shipping − fee share).
      */
     @Test
     void randomSplitsAlwaysReconcileToTheCharge() {
@@ -112,7 +190,9 @@ class DefaultPaymentSplitterTest {
             List<OrderLine> lines = new ArrayList<>();
             int n = 1 + random.nextInt(6);
             for (int i = 0; i < n; i++) {
-                lines.add(Fixtures.line("L" + i, orgs[random.nextInt(orgs.length)],
+                // Every other order has at least one Retail line.
+                String org = i == 0 && run % 2 == 0 ? Fixtures.RETAIL : orgs[random.nextInt(orgs.length)];
+                lines.add(Fixtures.line("L" + i, org,
                         categories[random.nextInt(categories.length)],
                         random.nextBoolean() ? Fulfilment.FBA : Fulfilment.SELF, 1 + random.nextInt(5),
                         random.nextInt(50_000), random.nextInt(2_000), random.nextInt(4_000)));
@@ -133,13 +213,28 @@ class DefaultPaymentSplitterTest {
                     assertThat(Math.abs(r.stripeFee().minor() - exact)).isLessThan(1.0);
                 }
                 if (r.kind() == RecipientKind.RETAIL) {
+                    long items = lines.stream().filter(l -> l.sellerOrg().equals(Fixtures.RETAIL))
+                            .mapToLong(l -> l.items().minor()).sum();
+                    long shipping = lines.stream().filter(l -> l.sellerOrg().equals(Fixtures.RETAIL))
+                            .mapToLong(l -> l.shipping().minor()).sum();
                     assertThat(r.commission().minor()).isZero();
+                    assertThat(r.fbaFees().minor()).isZero();
+                    assertThat(r.net().minor()).isEqualTo(items + shipping - r.stripeFee().minor());
                 }
             }
             long platformIncome = split.sellers().stream()
                     .mapToLong(r -> r.commission().minor() + r.fbaFees().minor()).sum();
             assertThat(split.platform().commission().minor() + split.platform().fbaFees().minor())
                     .isEqualTo(platformIncome);
+            long sellerFbaShipping = lines.stream().filter(l -> l.fulfilment() == Fulfilment.FBA
+                    && !l.sellerOrg().equals(Fixtures.RETAIL)).mapToLong(l -> l.shipping().minor()).sum();
+            assertThat(split.platform().shipping().minor()).isEqualTo(sellerFbaShipping);
+            assertThat(split.lines()).filteredOn(l -> l.sellerOrg().equals(Fixtures.RETAIL))
+                    .allSatisfy(l -> {
+                        assertThat(l.commission().minor()).isZero();
+                        assertThat(l.fbaFee().minor()).isZero();
+                        assertThat(l.shippingToPlatform()).isFalse();
+                    });
         }
     }
 

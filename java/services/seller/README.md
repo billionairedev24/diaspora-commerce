@@ -165,8 +165,22 @@ run at a time across replicas; every run is recorded in `usage_run`.
 | `GET /v1/orgs/{orgId}/billing/invoices` | now with `lines[]` (`metered`, `meter`) and `meteredAmountCents` |
 
 Job: `metering-cron` (`0 20 1 * * *` UTC) meters the two previous UTC days. Config `at.seller.metering.*`:
-`INVENTORY_URL`, `CONTENT_URL`, `AI_GATEWAY_URL`, `AUTH_TOKEN_URI`, `SELLER_SERVICE_CLIENT_ID`,
+`INVENTORY_URL`, `CONTENT_URL`, `AI_GATEWAY_URL`, `AUTH_TOKEN_URL`, `SELLER_SERVICE_CLIENT_ID`,
 `SELLER_SERVICE_CLIENT_SECRET` (blank = no token, local), `METERING_TIMEOUT`.
+
+### AfroTransact Retail is never billed
+
+AfroTransact Retail (`RETAIL_ORG_ID`, `at.seller.retail-org-id`, default `org_afrotransact_retail`) is the first-party
+merchant of record, not a marketplace seller, so seller fees never apply to it:
+
+- **Metering:** its samples from every source (FBA storage, ads spend, AI credits) are dropped before anything is
+  stored in `usage_daily` or sent to Stripe, even if seller-service knows the org and it has a Stripe customer; stale
+  Retail rows are never reported. Its storage, ads and AI use are internal costs. (content also leaves Retail out of
+  `/v1/ads/spend`; inventory reports Retail stock as usual and the exclusion happens here, on the billing side.)
+- **Plans & billing:** no subscription is activated for it, and plan changes, cancel / resume and payment-method
+  changes are refused with `422 seller.retail-not-billed`.
+- **Enforcement:** `POST /v1/orgs/{retail}/suspend` is refused with `422 seller.retail-exempt`; seller-service never
+  publishes `seller.payouts.paused` or `seller.listings.hidden` for Retail (payments ignores a pause for it anyway).
 
 ## Members (S236)
 
@@ -200,7 +214,7 @@ knows the organisation.
 `application.yml` + `application-{local,dev,uat,prod}.yml`. Secrets only from env: `DB_URL`, `DB_USER`,
 `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `STRIPE_SECRET_KEY`, `STRIPE_CONNECT_WEBHOOK_SECRET`,
 `STRIPE_BILLING_WEBHOOK_SECRET`, `FIELD_ENCRYPTION_KEY` (base64 32 bytes; `FIELD_ENCRYPTION_KEY_ID`, default `k1`).
-Other: `AUTH_ISSUER_URI`, `SELLER_LIVE_COUNTRIES` (`US`), `MEDIA_BASE_URL`, `MEDIA_SERVICE_TOKEN`,
+Other: `AUTH_ISSUER_URL`, `SELLER_LIVE_COUNTRIES` (`US`), `MEDIA_BASE_URL`, `MEDIA_SERVICE_TOKEN`,
 `SELLER_JOBS_ENABLED`, `REMINDER_CRON`, `PLAN_CHANGE_CRON`, `ACTIVATION_RETRY_INTERVAL`. `at.seller.stripe.api-base` /
 `files-base` point stripe-java at another host (the ITs use WireMock). The local profile ships a well-known dev
 encryption key; every other environment must provide its own.

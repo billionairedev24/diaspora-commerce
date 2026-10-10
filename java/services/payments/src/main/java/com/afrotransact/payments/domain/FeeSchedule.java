@@ -73,7 +73,9 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
     }
 
     /**
-     * Fees for {@code orgId} selling in {@code category}; AfroTransact Retail ({@code retailOrgId}) pays no commission.
+     * Fees for {@code orgId} selling in {@code category}. AfroTransact Retail ({@code retailOrgId}) is not a
+     * marketplace seller: zero commission (whatever the overrides say) and zero FBA fee, source {@code RETAIL}; only
+     * the card-fee estimate (its Stripe-fee share) applies.
      */
     public EffectiveFees effectiveFor(String orgId, String category, String retailOrgId) {
         String cat = category == null ? "" : category.trim().toLowerCase(Locale.ROOT);
@@ -89,7 +91,7 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         }
         int bps = retail ? 0 : commissionBps(orgId == null ? "" : orgId, cat);
         return new EffectiveFees(id, version, effectiveFrom, currency, cat, orgId, bps, source, cardPctBps, cardFixed,
-                fbaPerUnit, reverseCommissionOnRefund, retail);
+                retail ? Money.zero(currency) : fbaPerUnit, reverseCommissionOnRefund, retail);
     }
 
     /** Card fee estimate (percentage + fixed) used before Stripe reports the real fee of a charge. */
