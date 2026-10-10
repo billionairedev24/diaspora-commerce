@@ -1,0 +1,34 @@
+{
+  "policy": {
+    "_meta": {
+      "description": "Append-only analytics/search-log/audit indices: hot 7d -> warm 30d -> frozen (searchable snapshot) -> delete at 400d.",
+      "managed_by": "infra/terraform/modules/shared/elastic"
+    },
+    "phases": {
+      "hot": {
+        "actions": {
+          "rollover": { "max_primary_shard_size": "50gb", "max_age": "7d" },
+          "set_priority": { "priority": 100 }
+        }
+      },
+      "warm": {
+        "min_age": "7d",
+        "actions": {
+          "shrink": { "number_of_shards": 1 },
+          "forcemerge": { "max_num_segments": 1 },
+          "set_priority": { "priority": 50 }
+        }
+      },
+      "frozen": {
+        "min_age": "30d",
+        "actions": {
+          "searchable_snapshot": { "snapshot_repository": "found-snapshots" }
+        }
+      },
+      "delete": {
+        "min_age": "400d",
+        "actions": { "delete": {} }
+      }
+    }
+  }
+}

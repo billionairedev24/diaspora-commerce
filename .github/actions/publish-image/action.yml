@@ -1,0 +1,129 @@
+name: Publish signed image
+description: >
+  Multi-arch (linux/amd64 + linux/arm64) build and push to GHCR, Trivy image scan (CRITICAL fails),
+  Syft SPDX SBOM (artifact + cosign attestation), cosign keyless signature. Requires the job to have
+  `packages: write` and `id-token: write`.
+inputs:
+  service:
+    description: Service name (image repository).
+    required: true
+  context:
+    description: Docker build context.
+    required: true
+  dockerfile:
+    description: Path to the Dockerfile.
+    required: true
+  build-args:
+    description: Extra build args (newline separated).
+    required: false
+    default: ""
+  push:
+    description: Push, scan, SBOM and sign (false = build only, e.g. on pull requests).
+    required: false
+    default: "true"
+outputs:
+  image:
+    description: Image repository without tag.
+    value: ${{ steps.meta.outputs.image }}
+  tag:
+    description: Immutable tag (git sha).
+    value: ${{ steps.meta.outputs.tag }}
+  digest:
+    description: Manifest list digest.
+    value: ${{ steps.build.outputs.digest }}
+runs:
+  using: composite
+  steps:
+    - name: Image name
+      id: meta
+      shell: bash
+      env:
+        SERVICE: ${{ inputs.service }}
+        REPO: ${{ github.repository }}
+        SHA: ${{ github.sha }}
+      run: |
+        image="ghcr.io/${REPO,,}/${SERVICE}"
+        echo "image=${image}" >> "$GITHUB_OUTPUT"
+        echo "tag=${SHA}" >> "$GITHUB_OUTPUT"
+
+    - uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+
+    - uses: docker/setup-buildx-action@v3
+
+    - name: Log in to GHCR
+      if: inputs.push == 'true'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Labels
+      id: labels
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ steps.meta.outputs.image }}
+        tags: |
+          type=raw,value=${{ steps.meta.outputs.tag }}
+          type=sha,format=short
+          type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+        labels: |
+          org.opencontainers.image.title=${{ inputs.service }}
+          com.afrotransact.service=${{ inputs.service }}
+
+    - name: Build and push
+      id: build
+      uses: docker/build-push-action@v6
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        build-args: |
+          VERSION=${{ steps.meta.outputs.tag }}
+          ${{ inputs.build-args }}
+        platforms: linux/amd64,linux/arm64
+        push: ${{ inputs.push == 'true' }}
+        tags: ${{ steps.labels.outputs.tags }}
+        labels: ${{ steps.labels.outputs.labels }}
+        provenance: mode=max
+        cache-from: type=gha,scope=${{ inputs.service }}
+        cache-to: type=gha,scope=${{ inputs.service }},mode=max
+
+    - name: Trivy image scan (CRITICAL fails)
+      if: inputs.push == 'true'
+      uses: aquasecurity/trivy-action@v0.36.0
+      with:
+        trivy-config: trivy.yaml
+        image-ref: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        severity: CRITICAL
+        ignore-unfixed: true
+        exit-code: "1"
+        format: table
+
+    - name: SBOM (Syft, SPDX)
+      if: inputs.push == 'true'
+      uses: anchore/sbom-action@v0
+      with:
+        image: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        format: spdx-json
+        output-file: sbom-${{ inputs.service }}.spdx.json
+        artifact-name: sbom-${{ inputs.service }}.spdx.json
+
+    - uses: sigstore/cosign-installer@v3
+      if: inputs.push == 'true'
+
+    - name: Sign image and attest SBOM (keyless)
+      if: inputs.push == 'true'
+      shell: bash
+      env:
+        REF: ${{ steps.meta.outputs.image }}@${{ steps.build.outputs.digest }}
+        SERVICE: ${{ inputs.service }}
+      run: |
+        cosign sign --yes "$REF"
+        cosign attest --yes --type spdxjson --predicate "sbom-${SERVICE}.spdx.json" "$REF"
+        {
+          echo "### Image"
+          echo "\`$REF\`"
+          echo "- signed (keyless, Fulcio/Rekor) and SBOM attested"
+        } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,212 @@
+# Reusable pipeline for ONE Go service (go/services/<service>, its own module). Called by go-<service>.yml,
+# which is path-filtered so a change to one service only builds that service.
+#   verify   : golangci-lint (go/.golangci.yml), go vet, go test -race incl. Testcontainers integration tests
+#   contract : api/openapi.yaml == contracts/openapi/<svc>.yaml, breaking-change diff vs base (oasdiff)
+#   security : gitleaks, Trivy filesystem scan, govulncheck, optional CodeQL
+#   helm     : chart lint + template (dev/uat/prod x none/aws/gcp/azure) + kubeconform
+#   image    : multi-arch build (context go/) -> GHCR, Trivy image scan, Syft SBOM, cosign keyless (main only)
+name: _go-service
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Service directory name under go/services.
+        type: string
+        required: true
+      publish:
+        description: Push, scan, sign the image (true on main).
+        type: boolean
+        default: false
+      codeql:
+        description: Run CodeQL for this service.
+        type: boolean
+        default: false
+    outputs:
+      image:
+        value: ${{ jobs.image.outputs.image }}
+      tag:
+        value: ${{ jobs.image.outputs.tag }}
+      digest:
+        value: ${{ jobs.image.outputs.digest }}
+      exists:
+        value: ${{ jobs.meta.outputs.exists }}
+
+permissions:
+  contents: read
+
+env:
+  SERVICE: ${{ inputs.service }}
+  SERVICE_DIR: go/services/${{ inputs.service }}
+  GO_VERSION: "1.27.1"
+  GOTOOLCHAIN: local
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: check
+        run: |
+          if [[ -f "$SERVICE_DIR/go.mod" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$SERVICE_DIR does not exist yet - nothing to build."
+          fi
+
+  verify:
+    name: verify (lint, vet, unit, integration)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: |
+            ${{ env.SERVICE_DIR }}/go.sum
+            go/pkg/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14.0
+          # Build the linter with the job's Go 1.27.1 so it understands the module's go directive.
+          install-mode: goinstall
+          working-directory: ${{ env.SERVICE_DIR }}
+          args: --config ../../.golangci.yml --timeout 5m
+      - name: go vet
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: go vet ./...
+      - name: go test -race (unit + Testcontainers integration)
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./...
+      - name: Coverage summary
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: go tool cover -func=coverage.out | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-${{ inputs.service }}
+          path: ${{ env.SERVICE_DIR }}/coverage.out
+          if-no-files-found: ignore
+          retention-days: 14
+
+  contract:
+    name: contract (OpenAPI copy + diff)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Service copy matches contracts/
+        run: |
+          spec="contracts/openapi/${SERVICE}.yaml"
+          if [[ -f "$SERVICE_DIR/api/openapi.yaml" && -f "$spec" ]]; then
+            diff -u "$spec" "$SERVICE_DIR/api/openapi.yaml" \
+              || { echo "::error::$SERVICE_DIR/api/openapi.yaml differs from $spec"; exit 1; }
+          fi
+      - name: Breaking changes vs base branch
+        env:
+          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
+        run: |
+          spec="contracts/openapi/${SERVICE}.yaml"
+          if [[ ! -f "$spec" ]]; then
+            echo "::warning::$spec missing (definition of done #2)."
+            exit 0
+          fi
+          if ! git cat-file -e "origin/${BASE_REF}:${spec}" 2>/dev/null; then
+            echo "::notice::$spec is new on this branch - nothing to diff."
+            exit 0
+          fi
+          git show "origin/${BASE_REF}:${spec}" > "$RUNNER_TEMP/base.yaml"
+          cp "$spec" "$RUNNER_TEMP/head.yaml"
+          docker run --rm -v "$RUNNER_TEMP:/specs" tufin/oasdiff:latest \
+            breaking /specs/base.yaml /specs/head.yaml --fail-on ERR --format githubactions
+
+  security:
+    name: security (gitleaks, trivy fs, govulncheck)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: ${{ env.SERVICE_DIR }}/go.sum
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            dir "/repo/$SERVICE_DIR" --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          trivy-config: trivy.yaml
+          scan-type: fs
+          scan-ref: ${{ env.SERVICE_DIR }}
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: govulncheck
+        working-directory: ${{ env.SERVICE_DIR }}
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+      - name: CodeQL init
+        if: inputs.codeql
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          build-mode: autobuild
+          source-root: ${{ env.SERVICE_DIR }}
+      - name: CodeQL analyze
+        if: inputs.codeql
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: go-${{ inputs.service }}
+
+  helm:
+    name: helm (lint, template, kubeconform)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/helm-check
+        with:
+          chart: ${{ env.SERVICE_DIR }}/deploy/helm
+
+  image:
+    name: image (build${{ inputs.publish && ', push, SBOM, sign' || '' }})
+    needs: [meta, verify, contract, security, helm]
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+      tag: ${{ steps.publish.outputs.tag }}
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: publish
+        uses: ./.github/actions/publish-image
+        with:
+          service: ${{ inputs.service }}
+          context: go
+          dockerfile: go/services/${{ inputs.service }}/Dockerfile
+          push: ${{ inputs.publish }}

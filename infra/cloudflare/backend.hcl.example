@@ -1,0 +1,6 @@
+# Reuse the state bucket created by infra/terraform/bootstrap/<cloud>; uncomment the matching backend block
+# in main.tf, copy this to backend.hcl and run:
+#   tofu init -backend-config=backend.hcl -backend-config="key=cloudflare/<env>.tfstate"
+# aws:   bucket = "afrotransact-tfstate-<account-id>"  region = "us-east-1"  use_lockfile = true  encrypt = true
+# gcp:   bucket = "afrotransact-tfstate-<project-id>"  (use prefix = "cloudflare/<env>" instead of key)
+# azure: resource_group_name = "afrotransact-tfstate"  storage_account_name = "attfstate<suffix>"  container_name = "tfstate"  use_azuread_auth = true

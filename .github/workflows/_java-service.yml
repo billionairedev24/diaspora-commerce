@@ -1,0 +1,196 @@
+# Reusable pipeline for ONE Java service (java/services/<service>). Called by java-<service>.yml, which is
+# path-filtered so a change to one service only builds that service.
+#   verify   : Checkstyle/Spotless + unit + ArchUnit + Testcontainers ITs (./mvnw verify), JaCoCo report
+#   contract : OpenAPI breaking-change diff vs the base branch (oasdiff)
+#   security : gitleaks, Trivy filesystem scan, optional CodeQL
+#   helm     : chart lint + template (dev/uat/prod x none/aws/gcp/azure) + kubeconform
+#   image    : multi-arch build -> GHCR, Trivy image scan, Syft SBOM, cosign keyless sign (main only)
+name: _java-service
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Service directory name under java/services.
+        type: string
+        required: true
+      publish:
+        description: Push, scan, sign the image (true on main).
+        type: boolean
+        default: false
+      codeql:
+        description: Run CodeQL for this service (the scheduled security.yml covers the whole repo).
+        type: boolean
+        default: false
+    outputs:
+      image:
+        description: Image repository (ghcr.io/<owner>/<repo>/<service>).
+        value: ${{ jobs.image.outputs.image }}
+      tag:
+        description: Immutable image tag (git sha).
+        value: ${{ jobs.image.outputs.tag }}
+      digest:
+        description: Image digest.
+        value: ${{ jobs.image.outputs.digest }}
+      exists:
+        description: Whether the service exists yet.
+        value: ${{ jobs.meta.outputs.exists }}
+
+permissions:
+  contents: read
+
+env:
+  SERVICE: ${{ inputs.service }}
+  SERVICE_DIR: java/services/${{ inputs.service }}
+  PLATFORM_MODULES: platform-parent,libs/platform-web,libs/platform-events,libs/platform-security,libs/platform-test
+
+jobs:
+  meta:
+    name: meta
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: check
+        run: |
+          if [[ -f "$SERVICE_DIR/pom.xml" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$SERVICE_DIR does not exist yet - nothing to build."
+          fi
+
+  verify:
+    name: verify (lint, arch, unit, integration)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: |
+            java/**/pom.xml
+      - name: Install platform libraries
+        working-directory: java
+        run: ./mvnw -B -ntp -pl "$PLATFORM_MODULES" install -DskipTests
+      - name: Verify ${{ inputs.service }}
+        working-directory: java
+        run: ./mvnw -B -ntp -f "services/${SERVICE}/pom.xml" verify
+      - name: Test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ inputs.service }}
+          path: |
+            ${{ env.SERVICE_DIR }}/target/surefire-reports/
+            ${{ env.SERVICE_DIR }}/target/failsafe-reports/
+            ${{ env.SERVICE_DIR }}/target/site/jacoco/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  contract:
+    name: contract (OpenAPI diff)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Breaking changes vs base branch
+        env:
+          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
+        run: |
+          spec="contracts/openapi/${SERVICE}.yaml"
+          if [[ ! -f "$spec" ]]; then
+            echo "::warning::$spec missing - export it from /v3/api-docs.yaml (definition of done #2)."
+            exit 0
+          fi
+          if ! git cat-file -e "origin/${BASE_REF}:${spec}" 2>/dev/null; then
+            echo "::notice::$spec is new on this branch - nothing to diff."
+            exit 0
+          fi
+          git show "origin/${BASE_REF}:${spec}" > "$RUNNER_TEMP/base.yaml"
+          cp "$spec" "$RUNNER_TEMP/head.yaml"
+          docker run --rm -v "$RUNNER_TEMP:/specs" tufin/oasdiff:latest \
+            breaking /specs/base.yaml /specs/head.yaml --fail-on ERR --format githubactions
+
+  security:
+    name: security (gitleaks, trivy fs${{ inputs.codeql && ', codeql' || '' }})
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            dir "/repo/$SERVICE_DIR" --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
+      - name: Trivy filesystem scan (dependencies, IaC, secrets)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          trivy-config: trivy.yaml
+          scan-type: fs
+          scan-ref: ${{ env.SERVICE_DIR }}
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: CodeQL init
+        if: inputs.codeql
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          build-mode: none
+      - name: CodeQL analyze
+        if: inputs.codeql
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: java-${{ inputs.service }}
+
+  helm:
+    name: helm (lint, template, kubeconform)
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/helm-check
+        with:
+          chart: ${{ env.SERVICE_DIR }}/deploy/helm
+
+  image:
+    name: image (build${{ inputs.publish && ', push, SBOM, sign' || '' }})
+    needs: [meta, verify, contract, security, helm]
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+      tag: ${{ steps.publish.outputs.tag }}
+      digest: ${{ steps.publish.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: publish
+        uses: ./.github/actions/publish-image
+        with:
+          service: ${{ inputs.service }}
+          context: java
+          dockerfile: java/Dockerfile
+          build-args: SERVICE=${{ inputs.service }}
+          push: ${{ inputs.publish }}

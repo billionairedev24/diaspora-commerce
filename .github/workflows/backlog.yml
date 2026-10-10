@@ -1,0 +1,66 @@
+# docs/backlog/backlog.csv must stay importable into Jira: parses, expected header, unique ids, valid
+# statuses/types/priorities, stories point at existing epics.
+name: backlog
+
+on:
+  pull_request:
+    paths:
+      - docs/backlog/**
+      - tools/backlog/**
+      - .github/workflows/backlog.yml
+  push:
+    branches: [main]
+    paths:
+      - docs/backlog/**
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Validate backlog.csv
+        shell: python
+        run: |
+          import csv, sys
+          path = "docs/backlog/backlog.csv"
+          expected = ["Issue Id", "Issue Type", "Summary", "Description", "Acceptance Criteria", "Parent Id",
+                      "Epic Name", "Priority", "Story Points", "Labels", "Component", "Status"]
+          statuses = {"To Do", "In Progress", "Done"}
+          types = {"Epic", "Story", "Task", "Bug", "Sub-task"}
+          priorities = {"Highest", "High", "Medium", "Low", "Lowest"}
+          errors = []
+          with open(path, newline="", encoding="utf-8") as f:
+              reader = csv.DictReader(f)
+              if reader.fieldnames != expected:
+                  errors.append(f"header {reader.fieldnames} != {expected}")
+              rows = list(reader)
+          ids = [r["Issue Id"] for r in rows]
+          dupes = sorted({i for i in ids if ids.count(i) > 1})
+          if dupes:
+              errors.append(f"duplicate ids: {dupes}")
+          epics = {r["Issue Id"] for r in rows if r["Issue Type"] == "Epic"}
+          for n, r in enumerate(rows, start=2):
+              where = f"line {n} ({r['Issue Id']})"
+              if r["Status"] not in statuses:
+                  errors.append(f"{where}: status {r['Status']!r} not in {sorted(statuses)}")
+              if r["Issue Type"] not in types:
+                  errors.append(f"{where}: type {r['Issue Type']!r}")
+              if r["Priority"] and r["Priority"] not in priorities:
+                  errors.append(f"{where}: priority {r['Priority']!r}")
+              if r["Story Points"] and not r["Story Points"].isdigit():
+                  errors.append(f"{where}: story points {r['Story Points']!r}")
+              if not r["Summary"].strip():
+                  errors.append(f"{where}: empty summary")
+              if r["Issue Type"] != "Epic" and r["Parent Id"] and r["Parent Id"] not in epics:
+                  errors.append(f"{where}: parent {r['Parent Id']} is not an epic")
+          for e in errors:
+              print(f"::error file={path}::{e}")
+          done = sum(r["Status"] == "Done" for r in rows)
+          print(f"{len(rows)} issues, {len(epics)} epics, {done} done")
+          sys.exit(1 if errors else 0)

@@ -1,0 +1,75 @@
+name: Cloud login (OIDC)
+description: >
+  Federate the workflow's GitHub OIDC token into aws | gcp | azure - no long-lived keys. Values come from
+  GitHub environment variables published by `tofu output github_oidc` (see docs/engineering/ci-cd.md).
+  The job needs `id-token: write`.
+inputs:
+  cloud:
+    description: aws | gcp | azure
+    required: true
+  aws-role-arn:
+    description: IAM role to assume (aws).
+    required: false
+    default: ""
+  aws-region:
+    description: AWS region (aws).
+    required: false
+    default: us-east-1
+  gcp-workload-identity-provider:
+    description: projects/<n>/locations/global/workloadIdentityPools/github/providers/github (gcp).
+    required: false
+    default: ""
+  gcp-service-account:
+    description: Service account to impersonate (gcp).
+    required: false
+    default: ""
+  azure-client-id:
+    description: Managed identity client id (azure).
+    required: false
+    default: ""
+  azure-tenant-id:
+    description: Entra tenant id (azure).
+    required: false
+    default: ""
+  azure-subscription-id:
+    description: Subscription id (azure).
+    required: false
+    default: ""
+outputs:
+  gcp-access-token:
+    description: Short-lived access token (gcp only) for registry logins.
+    value: ${{ steps.gcp.outputs.access_token }}
+runs:
+  using: composite
+  steps:
+    - name: Validate target
+      shell: bash
+      env:
+        CLOUD: ${{ inputs.cloud }}
+      run: |
+        case "$CLOUD" in aws|gcp|azure) ;; *) echo "::error::cloud must be aws, gcp or azure (got '$CLOUD')"; exit 1 ;; esac
+
+    - name: AWS
+      if: inputs.cloud == 'aws'
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-role-arn }}
+        aws-region: ${{ inputs.aws-region }}
+        role-session-name: gha-${{ github.run_id }}
+
+    - name: GCP
+      id: gcp
+      if: inputs.cloud == 'gcp'
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ inputs.gcp-workload-identity-provider }}
+        service_account: ${{ inputs.gcp-service-account }}
+        token_format: access_token
+
+    - name: Azure
+      if: inputs.cloud == 'azure'
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.azure-client-id }}
+        tenant-id: ${{ inputs.azure-tenant-id }}
+        subscription-id: ${{ inputs.azure-subscription-id }}

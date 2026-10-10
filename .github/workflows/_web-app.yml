@@ -1,0 +1,176 @@
+# Reusable pipeline for ONE web app (web/apps/<app>): lint, typecheck, test, Next.js build, OpenNext
+# (Cloudflare adapter) build, then deploy to Cloudflare Workers:
+#   target=preview -> `wrangler versions upload --preview-alias pr-<n>` (preview URL commented on the PR)
+#   target=dev|uat|prod -> `wrangler deploy --name <app>-<env>` (Workers routes from infra/cloudflare)
+# Vercel fallback (input `vercel`): the same app deployed with the Vercel CLI (prebuilt output).
+name: _web-app
+
+on:
+  workflow_call:
+    inputs:
+      app:
+        description: storefront | seller-center | staff-console
+        type: string
+        required: true
+      target:
+        description: "'' (build only) | preview | dev | uat | prod"
+        type: string
+        default: ""
+      vercel:
+        description: Also deploy to Vercel (fallback host).
+        type: boolean
+        default: false
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      VERCEL_TOKEN:
+        required: false
+      VERCEL_ORG_ID:
+        required: false
+      VERCEL_PROJECT_ID:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  APP: ${{ inputs.app }}
+  APP_DIR: web/apps/${{ inputs.app }}
+  NODE_VERSION: "22"
+  PNPM_VERSION: "10"
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: check
+        run: |
+          if [[ -f "$APP_DIR/package.json" ]]; then echo "exists=true" >> "$GITHUB_OUTPUT"
+          else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "::notice::$APP_DIR does not exist yet."; fi
+
+  build:
+    name: lint, typecheck, test, build
+    needs: meta
+    if: needs.meta.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm --filter "./apps/${APP}..." --if-present run lint
+      - name: Typecheck
+        run: pnpm --filter "./apps/${APP}..." --if-present run typecheck
+      - name: Test
+        run: pnpm --filter "./apps/${APP}..." --if-present run test
+      - name: Next.js build
+        run: pnpm --filter "./apps/${APP}" run build
+      - name: OpenNext build (Cloudflare Workers)
+        working-directory: ${{ env.APP_DIR }}
+        run: pnpm exec opennextjs-cloudflare build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-${{ inputs.app }}
+          path: |
+            ${{ env.APP_DIR }}/.open-next
+            ${{ env.APP_DIR }}/wrangler.*
+          include-hidden-files: true
+          retention-days: 7
+
+  cloudflare:
+    name: Cloudflare Workers (${{ inputs.target }})
+    needs: [meta, build]
+    if: needs.meta.outputs.exists == 'true' && inputs.target != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.target == 'preview' && 'dev' || inputs.target }}
+      url: ${{ steps.url.outputs.url }}
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: web-${{ inputs.app }}
+          path: ${{ env.APP_DIR }}
+      - name: Wrangler command
+        id: cmd
+        env:
+          TARGET: ${{ inputs.target }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [[ "$TARGET" == "preview" ]]; then
+            echo "command=versions upload --name ${APP}-dev --preview-alias pr-${PR}" >> "$GITHUB_OUTPUT"
+          else
+            echo "command=deploy --name ${APP}-${TARGET}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy
+        id: deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: ${{ env.APP_DIR }}
+          command: ${{ steps.cmd.outputs.command }}
+      - name: URL
+        id: url
+        env:
+          OUTPUT: ${{ steps.deploy.outputs.command-output }}
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment-url }}
+        run: |
+          url="$(grep -oE 'https://[a-zA-Z0-9.-]+\.workers\.dev' <<<"$OUTPUT" | tail -1 || true)"
+          echo "url=${DEPLOYMENT_URL:-$url}" >> "$GITHUB_OUTPUT"
+      - name: Comment preview URL
+        if: inputs.target == 'preview' && steps.url.outputs.url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.url.outputs.url }}
+        run: |
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "Preview for **${APP}**: ${URL}" --edit-last --create-if-none
+
+  vercel:
+    name: Vercel fallback (${{ inputs.target }})
+    needs: [meta, build]
+    if: needs.meta.outputs.exists == 'true' && inputs.vercel && inputs.target != ''
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.target == 'preview' && 'dev' || inputs.target }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ENV: ${{ inputs.target == 'prod' && 'production' || 'preview' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build and deploy (prebuilt)
+        working-directory: ${{ env.APP_DIR }}
+        run: |
+          prod=()
+          [[ "$VERCEL_ENV" == production ]] && prod=(--prod)
+          npx --yes vercel@latest pull --yes --environment="$VERCEL_ENV" --token="$VERCEL_TOKEN"
+          npx --yes vercel@latest build "${prod[@]}" --token="$VERCEL_TOKEN"
+          npx --yes vercel@latest deploy --prebuilt "${prod[@]}" --token="$VERCEL_TOKEN" | tee -a "$GITHUB_STEP_SUMMARY"

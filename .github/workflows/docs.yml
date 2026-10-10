@@ -1,0 +1,69 @@
+# Developer portal (docs/portal, Docusaurus) -> Cloudflare Pages. PRs get a preview deployment (branch
+# alias), main deploys production. Skips cleanly until docs/portal exists.
+name: docs
+
+on:
+  pull_request:
+    paths:
+      - docs/**
+      - contracts/**
+      - .github/workflows/docs.yml
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - contracts/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PORTAL: docs/portal
+  PAGES_PROJECT: afrotransact-docs
+
+jobs:
+  portal:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+      - id: exists
+        run: |
+          if [[ -f "$PORTAL/package.json" ]]; then echo "exists=true" >> "$GITHUB_OUTPUT"
+          else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "::notice::$PORTAL does not exist yet."; fi
+      - uses: pnpm/action-setup@v4
+        if: steps.exists.outputs.exists == 'true'
+        with:
+          version: "10"
+      - uses: actions/setup-node@v5
+        if: steps.exists.outputs.exists == 'true'
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Build (root pnpm workspace)
+        if: steps.exists.outputs.exists == 'true'
+        run: pnpm install --frozen-lockfile && pnpm --filter @afrotransact/docs-portal build
+      - name: Deploy to Cloudflare Pages
+        id: pages
+        if: steps.exists.outputs.exists == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy docs/portal/build --project-name=${{ env.PAGES_PROJECT }} --branch=${{ github.head_ref || github.ref_name }}
+      - name: Preview URL
+        if: github.event_name == 'pull_request' && steps.pages.outputs.deployment-url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.pages.outputs.deployment-url }}
+        run: |
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "Docs preview: ${URL}" --edit-last --create-if-none

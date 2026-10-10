@@ -1,0 +1,33 @@
+# Code owners. Replace @billionairedev24 with teams as they form, e.g. @billionairedev24/platform,
+# @billionairedev24/commerce, @billionairedev24/web. The last matching pattern wins.
+
+*                                   @billionairedev24
+
+# Platform / infrastructure / delivery
+/infra/                             @billionairedev24
+/infra/terraform/                   @billionairedev24
+/infra/cloudflare/                  @billionairedev24
+/infra/policy/                      @billionairedev24
+/.github/                           @billionairedev24
+/tools/ci/                          @billionairedev24
+
+# Contracts change consumers: require the owning team plus a platform reviewer.
+/contracts/                         @billionairedev24
+
+# Shared libraries used by every service
+/java/platform-parent/              @billionairedev24
+/java/libs/                         @billionairedev24
+/go/pkg/                            @billionairedev24
+/infra/helm/library/                @billionairedev24
+
+# Money and identity paths need a second pair of eyes (enable "Require review from Code Owners").
+/java/services/payments/            @billionairedev24
+/java/services/identity/            @billionairedev24
+/java/services/orders/              @billionairedev24
+
+# Web and mobile
+/web/                               @billionairedev24
+/mobile/                            @billionairedev24
+
+# Backlog and docs
+/docs/                              @billionairedev24

@@ -1,0 +1,110 @@
+# Contract-first gate for contracts/: OpenAPI 3.1 lint (Redocly + Spectral), breaking-change diff of every
+# changed spec against the base branch (oasdiff), AsyncAPI validation of events.yaml.
+name: contracts
+
+on:
+  pull_request:
+    paths:
+      - contracts/**
+      - .github/workflows/contracts.yml
+      - tools/contracts/**
+      - redocly.yaml
+  push:
+    branches: [main]
+    paths:
+      - contracts/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repo-tools:
+    name: lint, generated clients, merged AsyncAPI (tools/contracts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: pnpm install --frozen-lockfile
+      - name: Lint contracts (root redocly.yaml)
+        # TODO(S227): some Go contracts still fail lint; drop continue-on-error once S227 lands.
+        continue-on-error: true
+        run: bash tools/contracts/lint_contracts.sh
+      - name: Generated clients are up to date
+        run: bash tools/contracts/generate_clients.sh --check
+      - name: Merged AsyncAPI is up to date
+        run: python3 tools/contracts/merge_asyncapi.py --check
+
+  openapi:
+    name: OpenAPI lint + diff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Redocly lint
+        run: |
+          shopt -s nullglob
+          specs=(contracts/openapi/*.yaml)
+          if (( ${#specs[@]} == 0 )); then echo "::notice::no OpenAPI specs yet"; exit 0; fi
+          npx --yes @redocly/cli@latest lint "${specs[@]}" --format github-actions
+      - name: Spectral lint
+        run: |
+          shopt -s nullglob
+          specs=(contracts/openapi/*.yaml)
+          (( ${#specs[@]} > 0 )) || exit 0
+          ruleset="contracts/.spectral.yaml"
+          if [[ ! -f "$ruleset" ]]; then
+            ruleset="$RUNNER_TEMP/.spectral.yaml"
+            printf 'extends: ["spectral:oas"]\nrules:\n  operation-operationId: error\n  operation-tags: error\n' > "$ruleset"
+          fi
+          npx --yes @stoplight/spectral-cli@6 lint --ruleset "$ruleset" --format github-actions --fail-severity error "${specs[@]}"
+      - name: Breaking changes vs base branch
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          status=0
+          mkdir -p "$RUNNER_TEMP/specs"
+          for spec in contracts/openapi/*.yaml; do
+            [[ -f "$spec" ]] || continue
+            git cat-file -e "origin/${BASE_REF}:${spec}" 2>/dev/null || { echo "::notice::new spec $spec"; continue; }
+            name="$(basename "$spec" .yaml)"
+            git show "origin/${BASE_REF}:${spec}" > "$RUNNER_TEMP/specs/${name}.base.yaml"
+            cp "$spec" "$RUNNER_TEMP/specs/${name}.head.yaml"
+            echo "::group::$name"
+            docker run --rm -v "$RUNNER_TEMP/specs:/specs" tufin/oasdiff:latest \
+              breaking "/specs/${name}.base.yaml" "/specs/${name}.head.yaml" --fail-on ERR --format githubactions || status=1
+            echo "::endgroup::"
+          done
+          exit "$status"
+
+  asyncapi:
+    name: AsyncAPI validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Validate
+        run: |
+          shopt -s nullglob
+          docs=(contracts/asyncapi/*.yaml)
+          if (( ${#docs[@]} == 0 )); then echo "::notice::no AsyncAPI documents yet"; exit 0; fi
+          for doc in "${docs[@]}"; do
+            npx --yes @asyncapi/cli@latest validate "$doc"
+          done

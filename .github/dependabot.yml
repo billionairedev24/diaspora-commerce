@@ -1,0 +1,82 @@
+# Dependency updates. Globs (`directories`) pick up new services/modules automatically.
+version: 2
+
+updates:
+  - package-ecosystem: maven
+    directory: /java # reactor: platform-parent, libs, every service
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      spring:
+        patterns: ["org.springframework*", "io.micrometer*", "io.projectreactor*"]
+      testing:
+        patterns: ["org.junit*", "org.assertj*", "org.mockito*", "org.testcontainers*", "com.tngtech.archunit*"]
+      build-plugins:
+        patterns: ["org.apache.maven.plugins*", "com.puppycrawl*", "com.diffplug*", "org.jacoco*", "com.google.cloud.tools*"]
+
+  - package-ecosystem: gomod
+    directories:
+      - /go/pkg
+      - /go/services/*
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      go-deps:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm # pnpm workspaces
+    directories:
+      - /web
+      - /docs/portal
+      - /mobile
+    schedule:
+      interval: weekly
+      day: tuesday
+    open-pull-requests-limit: 10
+    groups:
+      react-next:
+        patterns: ["react", "react-dom", "next", "@types/react*", "@opennextjs/*"]
+      tanstack:
+        patterns: ["@tanstack/*"]
+      tooling:
+        patterns: ["eslint*", "@typescript-eslint/*", "typescript", "vitest*", "@vitest/*", "prettier", "wrangler"]
+      expo:
+        patterns: ["expo*", "react-native*", "@expo/*"]
+
+  - package-ecosystem: docker
+    directories:
+      - /java
+      - /go/services/*
+    schedule:
+      interval: weekly
+      day: wednesday
+    groups:
+      base-images:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly
+      day: wednesday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directories:
+      - /infra/terraform/envs/*
+      - /infra/terraform/bootstrap/*
+      - /infra/cloudflare
+    schedule:
+      interval: weekly
+      day: thursday
+    groups:
+      providers:
+        patterns: ["*"]

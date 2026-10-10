@@ -1,0 +1,141 @@
+# Repo-wide security scanning (S201). Per-service pipelines already gate each PR with gitleaks, Trivy fs,
+# Trivy image (CRITICAL fails) and SBOMs; this workflow adds the whole-repo, scheduled view:
+#   CodeQL (java-kotlin, go, javascript-typescript, actions) -> code scanning alerts
+#   Trivy repo scan (vulns, secrets, IaC misconfig) -> SARIF
+#   gitleaks over the full git history
+#   OWASP ZAP baseline against the dev environment (scheduled / manual)
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - .github/workflows/security.yml
+  schedule:
+    - cron: "17 3 * * 1" # weekly, Monday 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: none
+          - language: go
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        if: matrix.language == 'go'
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: go/**/go.sum
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+      - name: Build Go modules
+        if: matrix.language == 'go'
+        working-directory: go
+        run: |
+          for mod in $(go list -m -f '{{.Dir}}'); do
+            (cd "$mod" && go build ./...)
+          done
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  trivy:
+    name: Trivy (repo)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          trivy-config: trivy.yaml
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH,MEDIUM
+          ignore-unfixed: true
+          format: sarif
+          output: trivy.sarif
+          skip-dirs: design
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+      - name: Fail on CRITICAL
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          trivy-config: trivy.yaml
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          skip-dirs: design
+          skip-setup-trivy: true
+
+  gitleaks:
+    name: gitleaks (full history)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 \
+            git /repo --config /repo/.gitleaks.toml --redact --no-banner --exit-code 1
+
+  zap:
+    name: OWASP ZAP baseline (dev)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [storefront, api]
+    steps:
+      - name: Target URL
+        id: url
+        env:
+          BASE: ${{ vars.DEV_BASE_DOMAIN || 'dev.afrotransact.com' }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          if [[ "$TARGET" == storefront ]]; then echo "url=https://${BASE}" >> "$GITHUB_OUTPUT"
+          else echo "url=https://${TARGET}.${BASE}/healthz" >> "$GITHUB_OUTPUT"; fi
+      - uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: ${{ steps.url.outputs.url }}
+          allow_issue_writing: true
+          issue_title: ZAP baseline (${{ matrix.target }}, dev)
+          fail_action: false
+          artifact_name: zap-${{ matrix.target }}

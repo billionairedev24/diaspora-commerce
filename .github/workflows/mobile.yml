@@ -1,0 +1,120 @@
+# Mobile (Expo / EAS) for mobile/apps/{customer,driver}.
+#   tag mobile-v* / mobile-<app>-v*  -> EAS build (production profile) for iOS + Android, auto-submit to stores
+#   push to main (JS-only change)    -> EAS Update (OTA) on the `preview` channel
+#   workflow_dispatch                -> build or OTA update for a chosen app/profile (development | preview | production)
+# Channels map 1:1 to profiles in each app's eas.json: development, preview, production.
+name: mobile
+
+on:
+  push:
+    tags:
+      - "mobile-v*"
+      - "mobile-customer-v*"
+      - "mobile-driver-v*"
+    branches: [main]
+    paths:
+      - mobile/**
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App
+        type: choice
+        options: [customer, driver, both]
+        default: both
+      action:
+        description: build (store binary) or update (OTA, JS-only)
+        type: choice
+        options: [build, update]
+        default: build
+      profile:
+        description: EAS profile / channel
+        type: choice
+        options: [development, preview, production]
+        default: preview
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.p.outputs.apps }}
+      action: ${{ steps.p.outputs.action }}
+      profile: ${{ steps.p.outputs.profile }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: p
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          IN_APP: ${{ inputs.app }}
+          IN_ACTION: ${{ inputs.action }}
+          IN_PROFILE: ${{ inputs.profile }}
+        run: |
+          if [[ "$EVENT" == workflow_dispatch ]]; then
+            app="$IN_APP"; action="$IN_ACTION"; profile="$IN_PROFILE"
+          elif [[ "$REF_TYPE" == tag ]]; then
+            action=build; profile=production
+            case "$REF_NAME" in mobile-customer-v*) app=customer ;; mobile-driver-v*) app=driver ;; *) app=both ;; esac
+          else
+            action=update; profile=preview; app=both
+          fi
+          if [[ "$app" == both ]]; then candidates=(customer driver); else candidates=("$app"); fi
+          apps=()
+          for a in "${candidates[@]}"; do
+            if [[ -f "mobile/apps/$a/package.json" ]]; then apps+=("\"$a\""); else echo "::notice::mobile/apps/$a does not exist yet"; fi
+          done
+          {
+            echo "apps=[$(IFS=,; echo "${apps[*]}")]"
+            echo "action=$action"
+            echo "profile=$profile"
+          } >> "$GITHUB_OUTPUT"
+
+  eas:
+    name: EAS ${{ needs.plan.outputs.action }} ${{ matrix.app }} (${{ needs.plan.outputs.profile }})
+    needs: plan
+    if: needs.plan.outputs.apps != '[]'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.plan.outputs.profile == 'production' && 'prod' || 'dev' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
+    defaults:
+      run:
+        working-directory: mobile/apps/${{ matrix.app }}
+    env:
+      PROFILE: ${{ needs.plan.outputs.profile }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Install
+        working-directory: mobile
+        run: |
+          if [[ -f pnpm-lock.yaml ]]; then pnpm install --frozen-lockfile; else (cd "apps/${{ matrix.app }}" && npm ci); fi
+      - name: Build (iOS + Android)
+        if: needs.plan.outputs.action == 'build'
+        run: |
+          submit=()
+          [[ "$PROFILE" == production ]] && submit=(--auto-submit)
+          eas build --platform all --profile "$PROFILE" --non-interactive --no-wait "${submit[@]}"
+      - name: OTA update (JS-only)
+        if: needs.plan.outputs.action == 'update'
+        env:
+          MESSAGE: ${{ github.event.head_commit.message || 'manual update' }}
+        run: eas update --channel "$PROFILE" --message "${MESSAGE%%$'\n'*}" --non-interactive

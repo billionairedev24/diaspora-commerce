@@ -85,7 +85,7 @@
 - Recovery codes can be regenerated","E02","","Medium","5","identity","identity","Done"
 "S022","Story","Fine-grained authorisation with OpenFGA","Relationship checks seller_org → store → listing so members only touch their org's data.","- OpenFGA model covers org membership, store ownership and listing ownership
 - Catalog/orders services check org relationships for non-staff actors
-- A catalog member cannot access payouts","E02","","Medium","5","identity rbac","identity","In Progress"
+- A catalog member cannot access payouts","E02","","Medium","5","identity rbac","identity","Done"
 "E03","Epic","Catalog & product builder","One product page per item (ATIN/GTIN), category-specific schemas, variants and category requests.","","","Catalog & product builder","High","","catalog","catalog","In Progress"
 "S023","Story","Catalog service skeleton with hexagonal layout and docs","Spring Boot catalog service with Flyway, outbox, security and API reference pages.","- Service starts on 8101 with local profile against docker compose Postgres
 - Swagger UI, /docs and /redoc render the API
@@ -507,10 +507,10 @@
 "S167","Story","Bookings in the app","Book, reschedule and cancel services synced with provider calendars.","- Exact refund shown before cancelling","E26","","Medium","5","mobile bookings","mobile","Done"
 "S168","Story","Push notifications with deep links","FCM/APNs push for orders, deliveries and bookings.","- Tapping a notification opens the right screen
 - Preferences per category respected","E26","","Medium","5","mobile notifications","mobile","Done"
-"E27","Epic","API docs & developer portal","Contract-first APIs with Swagger UI, Scalar, Redoc, Docusaurus portal and AsyncAPI event catalog.","","","API docs & developer portal","High","","docs","docs","In Progress"
+"E27","Epic","API docs & developer portal","Contract-first APIs with Swagger UI, Scalar, Redoc, Docusaurus portal and AsyncAPI event catalog.","","","API docs & developer portal","High","","docs","docs","Done"
 "S169","Story","OpenAPI 3.1 contracts for every service","contracts/openapi/<service>.yaml as source of truth; CI fails on breaking changes.","- Each service has a contract file
 - openapi-diff gate blocks breaking changes without a version bump
-- Java implementations verified against contracts","E27","","Highest","5","docs contracts","docs","To Do"
+- Java implementations verified against contracts","E27","","Highest","5","docs contracts","docs","Done"
 "S170","Story","Swagger UI, Scalar and Redoc on every service","Interactive references in local/dev/uat; off in prod.","- /swagger-ui.html (Java), /docs (Scalar) and /redoc on every service
 - Disabled in prod configuration","E27","","Highest","2","docs","docs","Done"
 "S171","Story","Docusaurus developer portal","developers.afrotransact.com with guides, webhooks, theme schema, ADRs and changelog.","- Portal builds statically and deploys to Cloudflare Pages
@@ -534,29 +534,29 @@
 "S179","Story","Local development stack (docker compose)","Postgres+PostGIS (one DB per service), Kafka, Elasticsearch, Kibana, Redis, Temporal, MinIO, Mailpit, OpenFGA.","- make up starts the full stack
 - Every service database and user is created automatically","E29","","Highest","3","infra local","infra","Done"
 "S180","Story","Terraform modules per cloud with a shared interface","Cluster, Postgres, cache, bucket, secrets and network modules for aws, gcp and azure with identical inputs/outputs.","- envs/<env> choose the provider with a single variable
-- OPA/Conftest blocks public buckets, missing encryption and untagged resources","E29","","High","13","infra terraform","infra","In Progress"
+- OPA/Conftest blocks public buckets, missing encryption and untagged resources","E29","","High","13","infra terraform","infra","Done"
 "S181","Story","Cloudflare edge as code","DNS, WAF rules, rate limits, Turnstile and Workers routes in Terraform.","- WAF managed rules on all hostnames
-- Authenticated Origin Pulls to the cluster ingress","E29","","High","5","infra cloudflare","infra","In Progress"
+- Authenticated Origin Pulls to the cluster ingress","E29","","High","5","infra cloudflare","infra","Done"
 "S182","Story","Cost optimisation baseline","Arm nodes, spot pools, scale-to-zero previews, ILM tiers and tail sampling.","- Preview namespaces scale to zero when idle
 - Elasticsearch ILM hot-warm-frozen policies defined","E29","","Medium","5","infra finops","infra","To Do"
 "S183","Story","Secrets via External Secrets Operator","AWS Secrets Manager, GCP Secret Manager or Azure Key Vault behind ESO.","- No secret values in git
-- Same ExternalSecret manifests work on all three clouds","E29","","High","3","infra security","infra","In Progress"
+- Same ExternalSecret manifests work on all three clouds","E29","","High","3","infra security","infra","Done"
 "E30","Epic","CI/CD, environments & Kubernetes deployment","Each service built, tested, signed and deployed independently to local/dev/uat/prod on the chosen cloud.","","","CI/CD, environments & Kubernetes deployment","High","","cicd","cicd","In Progress"
 "S184","Story","Helm library chart and per-service charts","Shared at-service library chart; every service has its own chart and values per environment.","- helm template works for every service and environment
 - Charts include Deployment, Service, HPA, PDB, ServiceMonitor, NetworkPolicy and ExternalSecret","E30","","Highest","5","cicd k8s","cicd","Done"
 "S185","Story","Per-service GitHub Actions workflows","Path-filtered workflows calling reusable Java/Go pipelines.","- A change to one service builds and tests only that service
-- Pipeline: lint, arch tests, unit, integration, OpenAPI diff, security scans, image, SBOM, cosign","E30","","Highest","5","cicd github-actions","cicd","In Progress"
+- Pipeline: lint, arch tests, unit, integration, OpenAPI diff, security scans, image, SBOM, cosign","E30","","Highest","5","cicd github-actions","cicd","Done"
 "S186","Story","Deploy workflow with cloud target (aws | gcp | azure)","OIDC federation to the chosen cloud; images mirrored to its registry.","- No long-lived cloud keys in GitHub
-- Target cloud is a single input/variable","E30","","High","5","cicd github-actions","cicd","In Progress"
+- Target cloud is a single input/variable","E30","","High","5","cicd github-actions","cicd","Done"
 "S187","Story","Argo CD apps per service and environment","ApplicationSet generates one app per service per environment; Argo Rollouts canary in uat/prod.","- Canary 10% → 50% → 100% with Prometheus analysis
 - Automatic rollback on SLO breach; prod promotion needs approval","E30","","High","8","cicd k8s","cicd","Done"
 "S188","Story","Environment configuration: local, dev, uat, prod","Profile/config per environment for every service and app.","- Spring profiles application-<env>.yml and Go config/<env>.yaml
 - Docs pages on in local/dev/uat, off in prod
 - Trace sampling 100% dev, 50% uat, 10% prod","E30","","Highest","3","cicd config","cicd","In Progress"
 "S189","Story","Web deploys to Cloudflare Workers with PR previews","OpenNext builds for storefront, Seller Center and staff console; Vercel fallback.","- Each PR gets a preview URL
-- Same build output deploys to Vercel if needed","E30","","High","5","cicd web cloudflare","cicd","In Progress"
+- Same build output deploys to Vercel if needed","E30","","High","5","cicd web cloudflare","cicd","Done"
 "S190","Story","Mobile builds with EAS","Expo EAS builds and store submissions per environment.","- Dev, preview and production channels
-- OTA updates for JS-only changes","E30","","Medium","3","cicd mobile","cicd","In Progress"
+- OTA updates for JS-only changes","E30","","Medium","3","cicd mobile","cicd","Done"
 "E31","Epic","Legal, privacy, i18n & accessibility","Policy pages, cookie consent, SMS terms, translations and WCAG 2.2 AA.","","","Legal, privacy, i18n & accessibility","High","","legal","legal","In Progress"
 "S191","Story","Legal center pages","Conditions of Use, Privacy, Cookie Notice, Privacy Choices, Returns, Seller & Provider Terms, Prohibited Items, Accessibility, SMS & Notification Terms.","- Each page shows version, effective date and previous versions
 - Draft-for-counsel banner until legal approves","E31","","High","5","legal web","legal","In Progress"
@@ -746,3 +746,8 @@
 "S248","Story","Relationship checks in catalog, orders, payments; market on role events","Roll ResourceAccessChecker out to catalog, orders and payments (shadow then enforce); identity publishes market on role events so authz-sync writes market-scoped staff grants; authz-sync in docker compose; FGA enforce in uat and prod after shadow review.","- Catalog, orders and payments enforce relationships in dev
 - Market-scoped staff grants come from identity events
 - Shadow-mode denial logs reviewed before enforcing in uat/prod","E02","","High","8","authz openfga","identity","To Do"
+"S249","Story","First real plan and apply per cloud","Run tofu plan/apply for dev on the first chosen cloud with real credentials, create Temporal namespaces, Cloudflare Pages project and developers DNS, origin-pull or Tunnel in k8s, image-signature enforcement, per-PR preview namespaces scaling to zero, and confirm Trivy IaC passes.","- dev environment applied on the chosen cloud and services deployed by Argo CD
+- Temporal namespaces exist per environment
+- Docs portal served at developers.<domain>
+- Signed images enforced in the cluster
+- Trivy IaC scan has no CRITICAL findings","E29","","High","13","infra terraform cloudflare temporal","infra","To Do"

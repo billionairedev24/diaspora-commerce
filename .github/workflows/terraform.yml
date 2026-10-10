@@ -1,0 +1,258 @@
+# Infrastructure as code: infra/terraform (aws | gcp | azure), infra/cloudflare, infra/policy.
+#   static : fmt, interface-drift check, validate (every module, every env x every cloud, Cloudflare),
+#            tflint, conftest policy unit tests - no credentials needed
+#   plan   : per environment on its chosen cloud (TF_TARGETS), OIDC read-only identity, conftest on the
+#            plan JSON, plan posted to the PR
+#   apply  : main -> dev automatically (GitHub environment dev-infra); uat/prod only via workflow_dispatch
+#            in uat-infra / prod-infra (prod-infra has required reviewers)
+name: terraform
+
+on:
+  pull_request:
+    paths:
+      - infra/terraform/**
+      - infra/cloudflare/**
+      - infra/policy/**
+      - .github/workflows/terraform.yml
+      - .github/actions/tofu-init/**
+      - .github/actions/cloud-login/**
+  push:
+    branches: [main]
+    paths:
+      - infra/terraform/**
+      - infra/cloudflare/**
+      - infra/policy/**
+      - .github/workflows/terraform.yml
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to apply
+        type: choice
+        options: [dev, uat, prod]
+        default: uat
+      stack:
+        description: Which root
+        type: choice
+        options: [platform, cloudflare, both]
+        default: both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.ref }}-${{ inputs.environment || 'auto' }}
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  CONFTEST_VERSION: "0.66.0"
+  TFLINT_VERSION: v0.62.0
+
+jobs:
+  static:
+    name: fmt, validate, tflint, policy tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+      - name: tofu fmt
+        run: tofu fmt -check -recursive -diff infra/terraform infra/cloudflare
+      - name: Module interface is identical across clouds
+        run: bash infra/terraform/scripts/sync-interface.sh --check
+      - name: Validate modules and bootstrap roots
+        run: |
+          set -euo pipefail
+          for dir in infra/terraform/modules/{aws,gcp,azure,shared}/*/ infra/terraform/bootstrap/*/ infra/cloudflare/; do
+            echo "::group::$dir"
+            (cd "$dir" && tofu init -backend=false -input=false >/dev/null && tofu validate)
+            echo "::endgroup::"
+          done
+      - name: Validate environments x clouds
+        run: |
+          set -euo pipefail
+          export TF_VAR_cidr_block=10.0.0.0/16 TF_VAR_web_domain=ci.example.com
+          for env in dev uat prod; do
+            for cloud in aws gcp azure; do
+              echo "::group::$env / $cloud"
+              (cd "infra/terraform/envs/$env" && rm -rf .terraform \
+                && TF_VAR_cloud=$cloud TF_VAR_region=ci tofu init -backend=false -input=false >/dev/null \
+                && TF_VAR_cloud=$cloud TF_VAR_region=ci tofu validate)
+              echo "::endgroup::"
+            done
+          done
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+      - name: tflint (modules + bootstrap; env roots use OpenTofu provider for_each which tflint cannot parse)
+        run: |
+          set -euo pipefail
+          cfg="$PWD/infra/terraform/.tflint.hcl"
+          tflint --init --config "$cfg"
+          for dir in infra/terraform/modules/{aws,gcp,azure,shared}/*/ infra/terraform/bootstrap/*/ infra/cloudflare/; do
+            tflint --chdir "$dir" --config "$cfg" --format compact
+          done
+      - name: Install conftest
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSfL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/bin" conftest
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Policy unit tests
+        run: conftest verify --policy infra/policy/terraform
+
+  targets:
+    name: targets
+    runs-on: ubuntu-latest
+    outputs:
+      envs: ${{ steps.t.outputs.envs }}
+      configured: ${{ steps.t.outputs.configured }}
+    steps:
+      - id: t
+        env:
+          TARGETS: ${{ vars.TF_TARGETS }}
+          EVENT: ${{ github.event_name }}
+          CHOSEN: ${{ inputs.environment }}
+        run: |
+          if [[ -z "$TARGETS" ]]; then
+            echo "::notice::TF_TARGETS repository variable not set - plan/apply skipped (see docs/engineering/ci-cd.md)."
+            echo 'configured=false' >> "$GITHUB_OUTPUT"; echo 'envs=[]' >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo 'configured=true' >> "$GITHUB_OUTPUT"
+          case "$EVENT" in
+            pull_request)      envs="$(jq -c 'keys' <<<"$TARGETS")" ;;   # plan every configured env
+            push)              envs='["dev"]' ;;                            # apply dev on main
+            workflow_dispatch) envs="[\"$CHOSEN\"]" ;;
+          esac
+          echo "envs=$envs" >> "$GITHUB_OUTPUT"
+
+  platform:
+    name: platform ${{ matrix.env }} (${{ github.event_name == 'pull_request' && 'plan' || 'apply' }})
+    needs: [static, targets]
+    if: needs.targets.outputs.configured == 'true' && (github.event_name != 'workflow_dispatch' || inputs.stack != 'cloudflare')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: ${{ fromJSON(needs.targets.outputs.envs) }}
+    environment: ${{ github.event_name != 'pull_request' && format('{0}-infra', matrix.env) || '' }}
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      TARGET: ${{ toJSON(fromJSON(vars.TF_TARGETS)[matrix.env]) }}
+      MODE: ${{ github.event_name == 'pull_request' && 'plan' || 'apply' }}
+      EC_API_KEY: ${{ secrets.EC_API_KEY }}
+      CONFLUENT_CLOUD_API_KEY: ${{ secrets.CONFLUENT_CLOUD_API_KEY }}
+      CONFLUENT_CLOUD_API_SECRET: ${{ secrets.CONFLUENT_CLOUD_API_SECRET }}
+    defaults:
+      run:
+        working-directory: infra/terraform/envs/${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Target
+        id: target
+        run: |
+          cloud="$(jq -r '.cloud' <<<"$TARGET")"
+          echo "cloud=$cloud" >> "$GITHUB_OUTPUT"
+          [[ -f terraform.tfvars ]] || { echo "::error::commit infra/terraform/envs/${{ matrix.env }}/terraform.tfvars (non-secret values, see terraform.tfvars.example)"; exit 1; }
+          grep -Eq "^cloud *= *\"$cloud\"" terraform.tfvars || { echo "::error::terraform.tfvars cloud differs from TF_TARGETS.${{ matrix.env }}.cloud ($cloud)"; exit 1; }
+      - name: Cloud login (${{ env.MODE }} identity)
+        uses: ./.github/actions/cloud-login
+        with:
+          cloud: ${{ steps.target.outputs.cloud }}
+          aws-role-arn: ${{ fromJSON(env.TARGET)[env.MODE]['aws-role-arn'] }}
+          aws-region: ${{ fromJSON(env.TARGET).region }}
+          gcp-workload-identity-provider: ${{ fromJSON(env.TARGET)[env.MODE]['gcp-workload-identity-provider'] }}
+          gcp-service-account: ${{ fromJSON(env.TARGET)[env.MODE]['gcp-service-account'] }}
+          azure-client-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-client-id'] }}
+          azure-tenant-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-tenant-id'] }}
+          azure-subscription-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-subscription-id'] }}
+      - uses: ./.github/actions/tofu-init
+        with:
+          working-directory: infra/terraform/envs/${{ matrix.env }}
+          cloud: ${{ steps.target.outputs.cloud }}
+          state-key: envs/${{ matrix.env }}/terraform.tfstate
+          state: ${{ toJSON(fromJSON(env.TARGET).state) }}
+      - name: Plan
+        run: |
+          set -o pipefail
+          tofu plan -lock-timeout=5m -out=plan.out -no-color | tee plan.txt
+          tofu show -json plan.out > plan.json
+      - name: Install conftest
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -sSfL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/bin" conftest
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Policy (public buckets, encryption, tags, world ingress)
+        run: conftest test plan.json --policy "$GITHUB_WORKSPACE/infra/policy/terraform" --no-color
+      - name: Comment plan
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          ENV_NAME: ${{ matrix.env }}
+          CLOUD: ${{ steps.target.outputs.cloud }}
+        run: |
+          {
+            echo "### OpenTofu plan: \`${ENV_NAME}\` on \`${CLOUD}\`"
+            echo '```'
+            grep -E '^(Plan:|No changes|  # )' plan.txt | head -150
+            echo '```'
+          } > comment.md
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body-file comment.md
+      - name: Apply
+        if: env.MODE == 'apply'
+        run: tofu apply -lock-timeout=5m -auto-approve plan.out
+
+  cloudflare:
+    name: cloudflare ${{ matrix.env }} (${{ github.event_name == 'pull_request' && 'plan' || 'apply' }})
+    needs: [static, targets]
+    if: needs.targets.outputs.configured == 'true' && (github.event_name != 'workflow_dispatch' || inputs.stack != 'platform')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: ${{ fromJSON(needs.targets.outputs.envs) }}
+    environment: ${{ github.event_name != 'pull_request' && format('{0}-infra', matrix.env) || '' }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TARGET: ${{ toJSON(fromJSON(vars.TF_TARGETS)[matrix.env]) }}
+      MODE: ${{ github.event_name == 'pull_request' && 'plan' || 'apply' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    defaults:
+      run:
+        working-directory: infra/cloudflare
+    steps:
+      - uses: actions/checkout@v5
+      - name: Target
+        id: target
+        run: echo "cloud=$(jq -r '.cloud' <<<"$TARGET")" >> "$GITHUB_OUTPUT"
+      - name: Cloud login (state access)
+        uses: ./.github/actions/cloud-login
+        with:
+          cloud: ${{ steps.target.outputs.cloud }}
+          aws-role-arn: ${{ fromJSON(env.TARGET)[env.MODE]['aws-role-arn'] }}
+          aws-region: ${{ fromJSON(env.TARGET).region }}
+          gcp-workload-identity-provider: ${{ fromJSON(env.TARGET)[env.MODE]['gcp-workload-identity-provider'] }}
+          gcp-service-account: ${{ fromJSON(env.TARGET)[env.MODE]['gcp-service-account'] }}
+          azure-client-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-client-id'] }}
+          azure-tenant-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-tenant-id'] }}
+          azure-subscription-id: ${{ fromJSON(env.TARGET)[env.MODE]['azure-subscription-id'] }}
+      - uses: ./.github/actions/tofu-init
+        with:
+          working-directory: infra/cloudflare
+          cloud: ${{ steps.target.outputs.cloud }}
+          state-key: cloudflare/${{ matrix.env }}.tfstate
+          state: ${{ toJSON(fromJSON(env.TARGET).state) }}
+      - name: Plan
+        run: tofu plan -lock-timeout=5m -var-file="envs/${{ matrix.env }}.tfvars" -out=plan.out -no-color
+      - name: Apply
+        if: env.MODE == 'apply'
+        run: tofu apply -lock-timeout=5m -auto-approve plan.out

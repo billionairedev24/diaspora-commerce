@@ -1,0 +1,58 @@
+name: OpenTofu init (cloud backend)
+description: >
+  Install OpenTofu, write backend.tf for the selected cloud (s3 | gcs | azurerm) and run `tofu init`.
+  State settings come from the TF_TARGETS repository variable (see docs/engineering/ci-cd.md).
+inputs:
+  working-directory:
+    description: Root module directory.
+    required: true
+  cloud:
+    description: aws | gcp | azure (where the state bucket lives).
+    required: true
+  state-key:
+    description: State object key / prefix, e.g. envs/dev/terraform.tfstate.
+    required: true
+  state:
+    description: JSON object with bucket+region (aws), bucket (gcp) or resource_group+storage_account (azure).
+    required: true
+  tofu-version:
+    description: OpenTofu version constraint (>= 1.9 for provider for_each).
+    required: false
+    default: latest
+runs:
+  using: composite
+  steps:
+    - uses: opentofu/setup-opentofu@v1
+      with:
+        tofu_version: ${{ inputs.tofu-version }}
+        tofu_wrapper: false
+
+    - name: Backend
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        CLOUD: ${{ inputs.cloud }}
+        KEY: ${{ inputs.state-key }}
+        STATE: ${{ inputs.state }}
+      run: |
+        set -euo pipefail
+        get() { jq -r --arg k "$1" '.[$k] // empty' <<<"$STATE"; }
+        case "$CLOUD" in
+          aws)
+            printf 'terraform {\n  backend "s3" {}\n}\n' > backend.tf
+            printf 'bucket = "%s"\nkey = "%s"\nregion = "%s"\nencrypt = true\nuse_lockfile = true\n' \
+              "$(get bucket)" "$KEY" "$(get region)" > backend.hcl ;;
+          gcp)
+            printf 'terraform {\n  backend "gcs" {}\n}\n' > backend.tf
+            printf 'bucket = "%s"\nprefix = "%s"\n' "$(get bucket)" "${KEY%.tfstate}" > backend.hcl ;;
+          azure)
+            printf 'terraform {\n  backend "azurerm" {}\n}\n' > backend.tf
+            printf 'resource_group_name = "%s"\nstorage_account_name = "%s"\ncontainer_name = "tfstate"\nkey = "%s"\nuse_azuread_auth = true\nuse_oidc = true\n' \
+              "$(get resource_group)" "$(get storage_account)" "$KEY" > backend.hcl ;;
+          *) echo "::error::unknown cloud $CLOUD"; exit 1 ;;
+        esac
+
+    - name: tofu init
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: tofu init -input=false -backend-config=backend.hcl

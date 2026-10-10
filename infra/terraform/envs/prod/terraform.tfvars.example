@@ -1,0 +1,29 @@
+# Copy to terraform.tfvars and commit it: non-secret values only (credentials come from OIDC / env vars).
+# ---- the one switch -------------------------------------------------------------------------------
+cloud  = "aws" # aws | gcp | azure
+region = "us-east-1" # aws: us-east-1 | gcp: us-east4 | azure: eastus
+
+# ---- identity of the account/project/subscription (only the selected cloud's line matters) ----------
+# gcp_project_id        = "afrotransact-prod"
+# azure_subscription_id = "00000000-0000-0000-0000-000000000000"
+# azure_tenant_id       = "00000000-0000-0000-0000-000000000000"
+
+# ---- network & access --------------------------------------------------------------------------------
+cidr_block  = "10.40.0.0/16"
+web_domain  = "afrotransact.com"
+admin_cidrs = [] # e.g. ["203.0.113.0/24"] office/VPN egress; empty = API reachable with auth only
+# cluster_admins = ["arn:aws:iam::123456789012:role/platform-admins"]   # aws
+# cluster_admins = ["group:platform@afrotransact.com"]                  # gcp
+# cluster_admins = ["<entra-group-object-id>"]                          # azure
+
+# ---- tags --------------------------------------------------------------------------------------------
+owner       = "platform"
+cost_center = "engineering"
+
+# ---- GitHub OIDC: only one env per AWS account / GCP project creates the shared provider/pool ---------
+create_github_oidc_provider = false
+# github_oidc_provider_ref  = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" # or pool id "github"
+
+# ---- SaaS (same on every cloud) ----------------------------------------------------------------------
+enable_elastic   = true # needs EC_API_KEY
+enable_confluent = true # needs CONFLUENT_CLOUD_API_KEY / CONFLUENT_CLOUD_API_SECRET

@@ -1,0 +1,175 @@
+# Reusable deploy of ONE service to ONE environment on ONE cloud.
+#   1. verify the GHCR image signature (cosign keyless, must come from this repo's service pipelines)
+#   2. OIDC login to the target cloud (aws | gcp | azure) - no long-lived keys
+#   3. mirror the signed image + signatures/attestations from GHCR to ECR / Artifact Registry / ACR
+#   4. GitOps bump: image.tag in <service>/deploy/helm/values-<env>.yaml, committed to the gitops branch;
+#      Argo CD syncs the service's Application, Argo Rollouts runs the canary (uat/prod)
+# The job runs in the GitHub environment named `inputs.environment`: dev/uat need no approval, `prod` has
+# required reviewers (Settings -> Environments), so production waits for a human.
+name: _deploy
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        type: string
+        required: true
+      environment:
+        description: dev | uat | prod
+        type: string
+        required: true
+      cloud:
+        description: aws | gcp | azure. Empty = the `CLOUD` variable of the GitHub environment (the usual case).
+        type: string
+        default: ""
+      tag:
+        description: Image tag in GHCR (git sha).
+        type: string
+        required: true
+    secrets:
+      GITOPS_APP_ID:
+        required: false
+      GITOPS_APP_PRIVATE_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.service }}-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: ${{ inputs.service }} -> ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      contents: write
+      packages: read
+      id-token: write
+    env:
+      SERVICE: ${{ inputs.service }}
+      ENVIRONMENT: ${{ inputs.environment }}
+      CLOUD: ${{ inputs.cloud || vars.CLOUD }}
+      TAG: ${{ inputs.tag }}
+      REGISTRY_URL: ${{ vars.REGISTRY_URL }}
+      GITOPS_BRANCH: ${{ vars.GITOPS_BRANCH || 'main' }}
+      HAS_GITOPS_APP: ${{ secrets.GITOPS_APP_ID != '' }}
+      # Keyless certs from reusable workflows carry the called workflow as identity.
+      SIGNER: ^https://github\.com/${{ github.repository }}/\.github/workflows/_(java|go)-service\.yml@refs/heads/main$
+    steps:
+      - name: Validate inputs
+        run: |
+          case "$ENVIRONMENT" in dev|uat|prod) ;; *) echo "::error::bad environment $ENVIRONMENT"; exit 1 ;; esac
+          case "$CLOUD" in aws|gcp|azure) ;; *) echo "::error::bad cloud $CLOUD"; exit 1 ;; esac
+          [[ -n "$REGISTRY_URL" ]] || { echo "::error::set the REGISTRY_URL variable on the '$ENVIRONMENT' environment (tofu output registry_url)"; exit 1; }
+          [[ "$TAG" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::tag must be a full git sha"; exit 1; }
+
+      - name: GitOps token
+        id: token
+        if: env.HAS_GITOPS_APP == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.GITOPS_APP_ID }}
+          private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.GITOPS_BRANCH }}
+          token: ${{ steps.token.outputs.token || github.token }}
+
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify signature
+        id: src
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          src="ghcr.io/${REPO,,}/${SERVICE}:${TAG}"
+          cosign verify "$src" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$SIGNER" > /dev/null
+          echo "ref=$src" >> "$GITHUB_OUTPUT"
+          echo "::notice::verified $src"
+
+      - name: Cloud login
+        id: login
+        uses: ./.github/actions/cloud-login
+        with:
+          cloud: ${{ env.CLOUD }}
+          aws-role-arn: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          gcp-workload-identity-provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          gcp-service-account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+          azure-client-id: ${{ vars.AZURE_DEPLOY_CLIENT_ID }}
+          azure-tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          azure-subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Registry login (ECR)
+        if: env.CLOUD == 'aws'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Registry login (Artifact Registry)
+        if: env.CLOUD == 'gcp'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ vars.GCP_REGISTRY_HOST }}
+          username: oauth2accesstoken
+          password: ${{ steps.login.outputs.gcp-access-token }}
+
+      - name: Registry login (ACR)
+        if: env.CLOUD == 'azure'
+        run: az acr login --name "${REGISTRY_URL%%.*}"
+
+      - name: Mirror image, signature and SBOM attestation
+        id: mirror
+        run: |
+          dst="${REGISTRY_URL}/${SERVICE}:${TAG}"
+          # cosign copy keeps the multi-arch index digest and copies .sig/.att so Kyverno can verify in-cluster.
+          cosign copy --force "${{ steps.src.outputs.ref }}" "$dst"
+          cosign verify "$dst" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "$SIGNER" > /dev/null
+          echo "image=$dst" >> "$GITHUB_OUTPUT"
+          if [[ "$CLOUD" == "azure" ]]; then
+            # ACR has no registry-wide immutability; lock the tag instead.
+            az acr repository update --name "${REGISTRY_URL%%.*}" \
+              --image "${REGISTRY_URL#*/}/${SERVICE}:${TAG}" --write-enabled false --delete-enabled false
+          fi
+
+      - name: GitOps bump values-${{ inputs.environment }}.yaml
+        run: |
+          set -euo pipefail
+          if [[ -d "java/services/$SERVICE" ]]; then dir="java/services/$SERVICE"; else dir="go/services/$SERVICE"; fi
+          values="$dir/deploy/helm/values-$ENVIRONMENT.yaml"
+          [[ -f "$values" ]] || { echo "::error::$values not found"; exit 1; }
+          git config user.name "afrotransact-deploy[bot]"
+          git config user.email "deploy-bot@users.noreply.github.com"
+          for attempt in 1 2 3 4 5; do
+            git fetch origin "$GITOPS_BRANCH" && git reset --hard "origin/$GITOPS_BRANCH"
+            # Argo CD Image Updater-friendly: a single image.tag key per environment file.
+            TAG="$TAG" yq -i '.image.tag = strenv(TAG)' "$values"
+            if git diff --quiet; then echo "::notice::already at $TAG"; break; fi
+            git commit -am "deploy($SERVICE): $ENVIRONMENT -> ${TAG:0:12} [skip ci]" \
+              -m "cloud=$CLOUD image=${{ steps.mirror.outputs.image }} run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            if git push origin "HEAD:$GITOPS_BRANCH"; then break; fi
+            echo "push raced, retrying ($attempt)"; sleep $((attempt * 3))
+          done
+
+      - name: Summary
+        run: |
+          {
+            echo "### ${SERVICE} -> ${ENVIRONMENT} on ${CLOUD}"
+            echo "- image: \`${{ steps.mirror.outputs.image }}\` (signature verified, mirrored with attestations)"
+            echo "- GitOps: \`values-${ENVIRONMENT}.yaml\` image.tag = \`${TAG:0:12}\` on \`${GITOPS_BRANCH}\`"
+            echo "- Argo CD syncs \`${SERVICE}-${ENVIRONMENT}\`; uat/prod roll out via Argo Rollouts canary 10% -> 50% -> 100% with Prometheus analysis"
+          } >> "$GITHUB_STEP_SUMMARY"

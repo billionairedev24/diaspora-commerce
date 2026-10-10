@@ -1,0 +1,48 @@
+name: Helm chart check
+description: helm dependency build + lint + template for dev/uat/prod (and every cloud) validated with kubeconform.
+inputs:
+  chart:
+    description: Path to the service chart (…/deploy/helm).
+    required: true
+  kubeconform-version:
+    description: kubeconform release.
+    required: false
+    default: v0.7.0
+runs:
+  using: composite
+  steps:
+    - uses: azure/setup-helm@v4
+
+    - name: Install kubeconform
+      shell: bash
+      env:
+        VERSION: ${{ inputs.kubeconform-version }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/bin"
+        curl -sSfL "https://github.com/yannh/kubeconform/releases/download/${VERSION}/kubeconform-linux-amd64.tar.gz" \
+          | tar -xz -C "$RUNNER_TEMP/bin" kubeconform
+        echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+    - name: Lint and render
+      shell: bash
+      env:
+        CHART: ${{ inputs.chart }}
+      run: |
+        set -euo pipefail
+        helm dependency build "$CHART"
+        for env in dev uat prod; do
+          values="$CHART/values-$env.yaml"
+          [[ -f "$values" ]] || { echo "::error::missing $values"; exit 1; }
+          helm lint "$CHART" -f "$values"
+          echo "::group::template $env (cloud=none)"
+          helm template svc "$CHART" -f "$values" | kubeconform -strict -ignore-missing-schemas -summary
+          echo "::endgroup::"
+          # Same chart must render for every target cloud (workload identity annotations differ).
+          for cloud in aws gcp azure; do
+            helm template svc "$CHART" -f "$values" --set cloud="$cloud" \
+              --set workloadIdentity.aws.roleArn=arn:aws:iam::000000000000:role/ci \
+              --set workloadIdentity.gcp.serviceAccount=ci@project.iam.gserviceaccount.com \
+              --set workloadIdentity.azure.clientId=00000000-0000-0000-0000-000000000000 \
+              | kubeconform -strict -ignore-missing-schemas -summary
+          done
+        done

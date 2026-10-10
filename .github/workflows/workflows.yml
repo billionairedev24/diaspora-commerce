@@ -1,0 +1,34 @@
+# CI for the CI: actionlint on every workflow, and the generated per-service workflows must match
+# tools/ci/gen_workflows.py (+ infra/local/PORTS.md, which lists the services).
+name: workflows
+
+on:
+  pull_request:
+    paths:
+      - .github/**
+      - tools/ci/**
+      - infra/local/PORTS.md
+  push:
+    branches: [main]
+    paths:
+      - .github/**
+      - tools/ci/**
+      - infra/local/PORTS.md
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Generated workflows are up to date
+        run: python3 tools/ci/gen_workflows.py --check
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12 "$RUNNER_TEMP"
+          "$RUNNER_TEMP/actionlint" -color
