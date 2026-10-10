@@ -464,7 +464,7 @@
 - About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","Done"
 "S150","Story","Services browsing and provider pages","Find a provider, see their designed page and book.","- Provider page renders the provider's chosen layout and approved links
 - Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","To Do"
-"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","Done"
+"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","In Progress"
 "S151","Story","Seller Center app shell with grouped, fixed sidebar","Fixed sidebar grouped into collapsible sections; collapsed by default except the active group.","- Sidebar doesn't scroll with the page
 - Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","Done"
 "S152","Story","Orders management with labels and status updates","TanStack server-driven table; open rows in a sheet; buy labels; update allowed statuses.","- Sellers can confirm, pack and mark ready only
@@ -611,12 +611,12 @@
 - BFF callback URI registered for gateway-bff client in dev, uat and prod","E02","","High","8","identity bff","identity","In Progress"
 "S210","Story","Reverse geocoding for deliver-to by location","Geo adds GET /v1/reverse (lat/lng to ZIP and address) via Google Places or Nominatim so the deliver-to picker can use the device location.","- GET /v1/reverse returns ZIP, city, state and country
 - Provider fallback Google then Nominatim
-- BFF deliver-to by coordinates uses it","E22","","Medium","3","geo","geo","To Do"
+- BFF deliver-to by coordinates uses it","E22","","Medium","3","geo","geo","In Progress"
 "S211","Story","Back-in-stock alerts","Notifications offers POST /v1/stock-alerts and sends an email/push when inventory publishes a restock for the variant.","- Shopper can subscribe to a variant alert once
 - Alert fires on restock event and is sent once
 - BFF stock-alert route works end to end","E19","","Medium","3","notifications","notifications","Done"
 "S212","Story","Careers form uploads resume via media","The storefront careers form uploads the resume to the media service and sends resumeAssetId to the BFF.","- Resume uploads via signed media URL with type and size limits
-- Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","To Do"
+- Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","In Progress"
 "S213","Story","Durable seller directory for the indexer","Indexer loads seller display names on startup from a seller endpoint instead of relying only on events seen since start.","- Seller exposes a paged org directory endpoint for service clients
 - Indexer warms its directory on start and refreshes on events
 - Restart does not change indexed seller names","E04","","Medium","3","indexer seller","search","To Do"
@@ -645,7 +645,7 @@
 "S222","Story","Storefront and cart use offers service","BFF product detail, search cards and add-to-cart use offers (buy box, other sellers, offer lookup); cart validates offer buyable; orders validates and redeems coupons.","- Product page buy box and Other sellers come from offers
 - Search cards show offer count and min price
 - Cart rejects non-buyable offers
-- Checkout validates, redeems and releases coupons idempotently","E05","","Highest","5","bff offers cart orders","offers","To Do"
+- Checkout validates, redeems and releases coupons idempotently","E05","","Highest","5","bff offers cart orders","offers","In Progress"
 "S223","Story","Seller performance feed for the buy box","A seller-health job computes late shipment, cancellation and defect rates from orders and fulfilment events and updates offers' seller performance.","- Metrics computed daily per seller from order events
 - Offers seller performance updated via API
 - Buy box weights reviewed with product owner","E05","","Medium","5","offers orders","offers","Done"
@@ -679,4 +679,4 @@
 - Offers supports PUT stock for seller-fulfilled SKUs
 - Identity lists org members with names and supports invitations
 - Seller service stores ship-from addresses
-- Payout history visible to seller.owner and seller.finance","E24","","High","8","seller-center bff orders identity","seller-center","To Do"
+- Payout history visible to seller.owner and seller.finance","E24","","High","8","seller-center bff orders identity","seller-center","In Progress"
