@@ -28,6 +28,7 @@ export { fromApiSearchParams, parseSearchUrl, searchHref, toApiSearchParams, toS
 export { createSellerApiClient,type ListingsQuery, type SellerApiClient, type SellerOrdersQuery } from './seller-client';
 export { type SlotQuery } from './shopper-client';
 export { createStaffApiClient, type ResourceQuery, type StaffApiClient } from './staff-client';
+export { createStaffPreordersApi, staffPreorderKeys, staffPreorderQueries, type StaffPreordersApi } from './staff-preorders';
 export { US_STATES } from './us-states';
 export { ALL_CATEGORIES, type FeeDraftRules, normalizeFeeCategory, validateDeliveryDraft, validateFeeDraft } from './validation/fee-draft';
 export { evaluatePassword, isPasswordAcceptable, PASSWORD_MIN_LENGTH, type PasswordContext, type PasswordRule } from './validation/password';

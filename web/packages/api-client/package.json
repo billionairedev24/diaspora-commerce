@@ -20,7 +20,8 @@
     "./mocks/staff": "./src/mocks/staff/index.ts",
     "./mocks/staff-runtime": "./src/mocks/staff-runtime.ts",
     "./mocks/staff-node": "./src/mocks/staff-node.ts",
-    "./generated/gateway-bff-staff": "./src/generated/gateway-bff-staff.ts"
+    "./generated/gateway-bff-staff": "./src/generated/gateway-bff-staff.ts",
+    "./staff-preorders": "./src/staff-preorders.ts"
   },
   "scripts": {
     "generate": "node scripts/generate.mjs",
