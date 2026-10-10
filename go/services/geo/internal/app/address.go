@@ -3,6 +3,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,7 +16,10 @@ import (
 
 // AddressService powers every address field: autocomplete, resolve, validate and ZIP lookup.
 type AddressService interface {
-	Autocomplete(ctx context.Context, input, sessionToken, country string) ([]domain.Suggestion, error)
+	// Autocomplete suggests addresses from the first character. It returns the session token to reuse for the
+	// following keystrokes and the resolve (a new one when the query had none).
+	Autocomplete(ctx context.Context, q domain.AutocompleteQuery) (domain.Autocompletion, error)
+	// Resolve turns a picked suggestion into street, unit, city, state, ZIP, country and coordinates.
 	Resolve(ctx context.Context, id, sessionToken string) (domain.Address, error)
 	Validate(ctx context.Context, a domain.Address) (domain.Validation, error)
 	LookupZip(ctx context.Context, zip string) (domain.Address, error)
@@ -38,29 +43,48 @@ func NewAddressService(providers []port.Autocompleter, validator, fallback port.
 	return &addressServiceImpl{providers: providers, validator: validator, fallback: fallback, log: log}
 }
 
-const maxSuggestions = 5
+func (s *addressServiceImpl) Autocomplete(ctx context.Context, q domain.AutocompleteQuery) (domain.Autocompletion, error) {
+	q, err := q.Normalize()
+	if err != nil {
+		return domain.Autocompletion{}, fmt.Errorf("autocomplete: %w", err)
+	}
+	if q.SessionToken == "" {
+		q.SessionToken = newSessionToken()
+	}
+	out := domain.Autocompletion{Suggestions: []domain.Suggestion{}, Session: q.SessionToken}
+	if q.Input == "" {
+		return out, nil
+	}
+	sugs, err := s.suggest(ctx, q)
+	if err != nil {
+		return domain.Autocompletion{}, err
+	}
+	out.Suggestions = sugs
+	return out, nil
+}
 
-func (s *addressServiceImpl) Autocomplete(ctx context.Context, input, session, country string) ([]domain.Suggestion, error) {
-	input = strings.Join(strings.Fields(input), " ")
-	if input == "" {
-		return []domain.Suggestion{}, nil
-	}
-	if len(input) > 120 {
-		input = input[:120]
-	}
-	if country == "" {
-		country = "US"
-	}
+// suggest asks the providers in order; the first that answers wins.
+func (s *addressServiceImpl) suggest(ctx context.Context, q domain.AutocompleteQuery) ([]domain.Suggestion, error) {
 	var errs []error
 	for _, p := range s.providers {
-		out, err := p.Suggest(ctx, input, session, country, maxSuggestions)
+		out, err := p.Suggest(ctx, q)
 		if err == nil {
+			if out == nil {
+				out = []domain.Suggestion{}
+			}
 			return out, nil
 		}
 		s.log.WarnContext(ctx, "autocomplete provider failed", "provider", p.Name(), "error", err)
 		errs = append(errs, fmt.Errorf("%s: %w", p.Name(), err))
 	}
 	return nil, errors.Join(errs...)
+}
+
+// newSessionToken is a URL-safe random token (22 characters), valid as a Google Places session token.
+func newSessionToken() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 func (s *addressServiceImpl) Resolve(ctx context.Context, id, session string) (domain.Address, error) {
@@ -104,7 +128,8 @@ func (s *addressServiceImpl) LookupZip(ctx context.Context, zip string) (domain.
 	if len(zip) != 5 || strings.Trim(zip, "0123456789") != "" {
 		return domain.Address{}, fmt.Errorf("zip %q: %w", zip, domain.ErrInvalidAddress)
 	}
-	sugs, err := s.Autocomplete(ctx, zip, "", "US")
+	sugs, err := s.suggest(ctx, domain.AutocompleteQuery{Input: zip, Country: "US", Kind: domain.KindPostalCode,
+		Limit: domain.MaxSuggestions})
 	if err != nil {
 		return domain.Address{}, err
 	}

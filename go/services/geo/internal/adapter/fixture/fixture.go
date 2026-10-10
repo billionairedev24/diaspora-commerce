@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -36,7 +37,7 @@ const reverseRadiusKm = 25
 func (f *fixtureImpl) Reverse(_ context.Context, lat, lon float64) (domain.Address, error) {
 	best, bestKm := -1, math.MaxFloat64
 	for i, a := range f.streets {
-		if d := haversineKm(lat, lon, a.Lat, a.Lon); d < bestKm {
+		if d := domain.HaversineMeters(lat, lon, a.Lat, a.Lon) / 1000; d < bestKm {
 			best, bestKm = i, d
 		}
 	}
@@ -46,44 +47,71 @@ func (f *fixtureImpl) Reverse(_ context.Context, lat, lon float64) (domain.Addre
 	return f.streets[best], nil
 }
 
-func haversineKm(lat1, lon1, lat2, lon2 float64) float64 {
-	const earthKm = 6371.0
-	rad := math.Pi / 180
-	dLat, dLon := (lat2-lat1)*rad, (lon2-lon1)*rad
-	h := math.Sin(dLat/2)*math.Sin(dLat/2) + math.Cos(lat1*rad)*math.Cos(lat2*rad)*math.Sin(dLon/2)*math.Sin(dLon/2)
-	return 2 * earthKm * math.Asin(math.Sqrt(h))
-}
-
 func (f *fixtureImpl) Name() string { return "fixture" }
 
-func (f *fixtureImpl) Suggest(_ context.Context, input, _, _ string, limit int) ([]domain.Suggestion, error) {
-	words := strings.Fields(strings.ToLower(input))
+func (f *fixtureImpl) Suggest(_ context.Context, q domain.AutocompleteQuery) ([]domain.Suggestion, error) {
+	words := strings.Fields(strings.ToLower(q.Input))
 	number := ""
-	if len(words) > 0 {
-		if _, err := strconv.Atoi(words[0]); err == nil {
+	if len(words) > 0 && q.Kind != domain.KindPostalCode {
+		if _, err := strconv.Atoi(words[0]); err == nil && len(words[0]) < 5 {
 			number, words = words[0], words[1:]
 		}
 	}
-	var out []domain.Suggestion
+	type match struct {
+		s    domain.Suggestion
+		dist float64
+	}
+	var matches []match
+	seen := map[string]bool{}
 	for i, a := range f.streets {
+		if a.Country != q.Country && q.Country != "" {
+			continue
+		}
 		hay := strings.Fields(strings.ToLower(a.Line1 + " " + a.City + " " + a.State + " " + a.PostalCode))
 		if !allPrefix(words, hay) {
 			continue
 		}
-		line := a.Line1
-		if number != "" {
-			line = number + " " + stripNumber(a.Line1)
+		s := domain.Suggestion{Provider: f.Name()}
+		switch q.Kind {
+		case domain.KindPostalCode:
+			s.ID, s.Kind = fmt.Sprintf("f:%d:", i), domain.KindPostalCode
+			s.MainText, s.SecondaryText = a.PostalCode, fmt.Sprintf("%s, %s", a.City, a.State)
+			s.Text = fmt.Sprintf("%s %s, %s", a.PostalCode, a.City, a.State)
+		case domain.KindLocality:
+			s.ID, s.Kind = fmt.Sprintf("f:%d:", i), domain.KindLocality
+			s.MainText, s.SecondaryText = a.City, a.State
+			s.Text = fmt.Sprintf("%s, %s", a.City, a.State)
+		case domain.KindAny, domain.KindAddress:
+			line := a.Line1
+			if number != "" {
+				line = number + " " + stripNumber(a.Line1)
+			}
+			s.ID, s.Kind = fmt.Sprintf("f:%d:%s", i, number), domain.KindAddress
+			s.MainText, s.SecondaryText = line, fmt.Sprintf("%s, %s %s", a.City, a.State, a.PostalCode)
+			s.Text = fmt.Sprintf("%s, %s, %s %s", line, a.City, a.State, a.PostalCode)
 		}
-		out = append(out, domain.Suggestion{
-			ID:            fmt.Sprintf("f:%d:%s", i, number),
-			Text:          fmt.Sprintf("%s, %s, %s %s", line, a.City, a.State, a.PostalCode),
-			MainText:      line,
-			SecondaryText: fmt.Sprintf("%s, %s %s", a.City, a.State, a.PostalCode),
-			Provider:      f.Name(),
-		})
-		if len(out) == limit {
+		if seen[s.Text] {
+			continue
+		}
+		seen[s.Text] = true
+		m := match{s: s}
+		if q.Near != nil {
+			m.dist = domain.HaversineMeters(q.Near.Lat, q.Near.Lng, a.Lat, a.Lon)
+			d := m.dist
+			m.s.DistanceMeters = &d
+		}
+		matches = append(matches, m)
+	}
+	if q.Near != nil {
+		// The bias ranks nearby places first (the fixture list is small enough to sort).
+		sort.SliceStable(matches, func(i, j int) bool { return matches[i].dist < matches[j].dist })
+	}
+	out := make([]domain.Suggestion, 0, min(len(matches), q.Limit))
+	for _, m := range matches {
+		if len(out) == q.Limit {
 			break
 		}
+		out = append(out, m.s)
 	}
 	return out, nil
 }

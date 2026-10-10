@@ -10,7 +10,8 @@ import (
 // Autocompleter suggests addresses while the user types (Google Places, OSM Nominatim or fixtures).
 type Autocompleter interface {
 	Name() string
-	Suggest(ctx context.Context, input, sessionToken, country string, limit int) ([]domain.Suggestion, error)
+	// Suggest returns up to q.Limit suggestions of q.Kind in q.Country, biased towards q.Near (q is normalised).
+	Suggest(ctx context.Context, q domain.AutocompleteQuery) ([]domain.Suggestion, error)
 	// Resolve turns a suggestion id into a structured address with coordinates.
 	Resolve(ctx context.Context, id, sessionToken string) (domain.Address, error)
 }

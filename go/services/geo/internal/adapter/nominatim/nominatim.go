@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -72,27 +73,61 @@ type result struct {
 	} `json:"address"`
 }
 
-func (n *nominatimImpl) Suggest(ctx context.Context, input, _, country string, limit int) ([]domain.Suggestion, error) {
-	q := url.Values{"q": {input}, "format": {"jsonv2"}, "addressdetails": {"1"},
-		"countrycodes": {strings.ToLower(country)}, "limit": {fmt.Sprint(limit)}}
+func (n *nominatimImpl) Suggest(ctx context.Context, q domain.AutocompleteQuery) ([]domain.Suggestion, error) {
+	params := url.Values{"q": {q.Input}, "format": {"jsonv2"}, "addressdetails": {"1"},
+		"countrycodes": {strings.ToLower(q.Country)}, "limit": {fmt.Sprint(q.Limit * 2)}}
+	if q.Kind == domain.KindLocality {
+		params.Set("featureType", "city")
+	}
+	if q.Language != "" {
+		params.Set("accept-language", q.Language)
+	}
+	if q.Near != nil {
+		// viewbox biases (bounded=0) results towards the box around the point.
+		dLat := q.RadiusMeters / 111_320
+		dLon := dLat / math.Max(0.1, math.Cos(q.Near.Lat*math.Pi/180))
+		params.Set("viewbox", fmt.Sprintf("%.5f,%.5f,%.5f,%.5f", q.Near.Lng-dLon, q.Near.Lat+dLat, q.Near.Lng+dLon,
+			q.Near.Lat-dLat))
+		params.Set("bounded", "0")
+	}
 	var rs []result
-	err := n.get(ctx, "/search?"+q.Encode(), &rs)
+	err := n.get(ctx, "/search?"+params.Encode(), &rs)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]domain.Suggestion, 0, len(rs))
+	seen := map[string]bool{}
 	for _, r := range rs {
 		a := toAddress(r)
-		if a.Line1 == "" && a.PostalCode == "" {
+		var main, kind = firstNonEmpty(a.Line1, a.PostalCode), domain.KindAddress
+		switch {
+		case q.Kind == domain.KindPostalCode:
+			main, kind = a.PostalCode, domain.KindPostalCode
+		case q.Kind == domain.KindLocality:
+			main, kind = a.City, domain.KindLocality
+		case a.Line1 == "":
+			kind = domain.KindPostalCode
+		}
+		if main == "" || (q.Kind == domain.KindAddress && a.Line1 == "") || seen[string(kind)+main+a.City] {
 			continue
 		}
-		out = append(out, domain.Suggestion{
+		seen[string(kind)+main+a.City] = true
+		s := domain.Suggestion{
 			ID:            fmt.Sprintf("o:%s%d", strings.ToUpper(r.OSMType[:1]), r.OSMID),
 			Text:          r.DisplayName,
-			MainText:      firstNonEmpty(a.Line1, a.PostalCode),
+			MainText:      main,
 			SecondaryText: strings.Trim(strings.Join([]string{a.City, a.State, a.PostalCode}, ", "), ", "),
 			Provider:      n.Name(),
-		})
+			Kind:          kind,
+		}
+		if q.Near != nil && (a.Lat != 0 || a.Lon != 0) {
+			d := domain.HaversineMeters(q.Near.Lat, q.Near.Lng, a.Lat, a.Lon)
+			s.DistanceMeters = &d
+		}
+		out = append(out, s)
+		if len(out) == q.Limit {
+			break
+		}
 	}
 	return out, nil
 }

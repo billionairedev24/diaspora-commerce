@@ -28,30 +28,59 @@ paths:
       tags: [Addresses]
       operationId: autocompleteAddress
       summary: Suggestions from the first character
+      description: >-
+        One call per keystroke of any address field (checkout, account addresses, onboarding, warehouses, pickup
+        points, deliver-to ZIP, city fields). Send the `session` returned by the first call with every following
+        keystroke and with `GET /v1/addresses/resolve/{id}` for the picked suggestion: Google Places bills the whole
+        entry as one session. `kind` narrows suggestions to the field (street addresses, ZIP codes or cities), `near`
+        biases them towards a point (the deliver-to location, a warehouse) and `lang` sets the language of the text.
+        Providers fail over in order; responses are never cached (`Cache-Control: no-store`).
       security: []
       parameters:
-        - {name: q, in: query, required: true, schema: {type: string, maxLength: 120}}
-        - {name: session, in: query, schema: {type: string}, description: Places session token (one per address entry)}
-        - {name: country, in: query, schema: {type: string, default: US}}
+        - {name: q, in: query, required: true, description: What the user typed (one character is enough), schema: {type: string, maxLength: 120}}
+        - name: session
+          in: query
+          description: Session token from the previous response (one per address entry); omit on the first keystroke.
+          schema: {type: string, pattern: '^[A-Za-z0-9_-]{8,36}$'}
+        - {name: country, in: query, description: ISO 3166-1 alpha-2 country the suggestions are restricted to, schema: {type: string, default: US, pattern: '^[A-Za-z]{2}$'}}
+        - name: kind
+          in: query
+          description: >-
+            `address` (street level: checkout, account, onboarding, warehouses, pickup points), `postal_code`
+            (deliver-to ZIP) or `locality` (cities); omitted = street addresses and ZIP codes.
+          schema: {type: string, enum: [address, postal_code, locality]}
+        - {name: near, in: query, description: 'Bias point as lat,lng (lat and lng parameters are accepted too)', schema: {type: string, example: '29.7604,-95.3698'}}
+        - {name: lat, in: query, schema: {type: number, minimum: -90, maximum: 90}}
+        - {name: lng, in: query, schema: {type: number, minimum: -180, maximum: 180}}
+        - {name: radiusMiles, in: query, description: 'Bias radius (default and maximum about 31 miles, the Places limit)', schema: {type: number, exclusiveMinimum: 0, maximum: 100}}
+        - {name: lang, in: query, description: BCP 47 language of the suggestion text; defaults to Accept-Language, schema: {type: string, example: fr}}
       responses:
         '200':
-          description: Up to five suggestions
+          description: Up to five suggestions and the session token to reuse
+          headers:
+            Cache-Control: {description: no-store, schema: {type: string}}
           content:
             application/json:
               schema:
                 type: object
+                required: [suggestions, session]
                 properties:
                   suggestions: {type: array, items: {$ref: '#/components/schemas/Suggestion'}}
+                  session: {type: string, description: Send with the next keystroke and with the resolve call}
+        '400': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
   /v1/addresses/resolve/{id}:
     get:
       tags: [Addresses]
       operationId: resolveAddress
       summary: Structured address and coordinates for a suggestion
+      description: >-
+        Fills the form when the user picks a suggestion: street, unit, city, state, ZIP, country and coordinates. A
+        house number the user typed is kept. Pass the autocomplete `session` to close the billing session.
       security: []
       parameters:
         - {name: id, in: path, required: true, schema: {type: string}}
-        - {name: session, in: query, schema: {type: string}}
+        - {name: session, in: query, schema: {type: string, pattern: '^[A-Za-z0-9_-]{8,36}$'}}
       responses:
         '200': {description: Address, content: {application/json: {schema: {$ref: '#/components/schemas/Address'}}}}
         '404': {$ref: '#/components/responses/Problem'}
@@ -217,7 +246,14 @@ components:
       properties: {type: {type: string}, title: {type: string}, status: {type: integer}, detail: {type: string}, code: {type: string}}
     Suggestion:
       type: object
-      properties: {id: {type: string}, text: {type: string}, mainText: {type: string}, secondaryText: {type: string}, provider: {type: string}}
+      properties:
+        id: {type: string, description: Pass to resolve}
+        text: {type: string}
+        mainText: {type: string}
+        secondaryText: {type: string}
+        provider: {type: string, enum: [google-places, osm-nominatim, fixture]}
+        kind: {type: string, enum: [address, postal_code, locality]}
+        distanceMeters: {type: number, description: Straight-line distance from the bias point (when near was given)}
     Address:
       type: object
       required: [line1, city, state, postalCode]

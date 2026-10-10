@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/fixture"
@@ -19,7 +20,7 @@ var quiet = slog.New(slog.NewTextHandler(io.Discard, nil))
 type failing struct{}
 
 func (failing) Name() string { return "google-places" }
-func (failing) Suggest(context.Context, string, string, string, int) ([]domain.Suggestion, error) {
+func (failing) Suggest(context.Context, domain.AutocompleteQuery) ([]domain.Suggestion, error) {
 	return nil, errors.New("quota exceeded")
 }
 func (failing) Resolve(context.Context, string, string) (domain.Address, error) {
@@ -38,18 +39,21 @@ func svc(providers ...port.Autocompleter) app.AddressService {
 }
 
 func TestFallsBackToNextProvider(t *testing.T) {
-	out, err := svc(failing{}, fixture.New()).Autocomplete(context.Background(), "4521 Main", "s1", "US")
+	res, err := svc(failing{}, fixture.New()).Autocomplete(context.Background(),
+		domain.AutocompleteQuery{Input: "4521 Main", SessionToken: "session-1", Country: "US"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out) == 0 || out[0].MainText != "4521 Main St" || out[0].Provider != "fixture" {
-		t.Fatalf("unexpected suggestions %+v", out)
+	out := res.Suggestions
+	if len(out) == 0 || out[0].MainText != "4521 Main St" || out[0].Provider != "fixture" || res.Session != "session-1" {
+		t.Fatalf("unexpected suggestions %+v", res)
 	}
 }
 
 func TestResolveKeepsTypedHouseNumber(t *testing.T) {
 	s := svc(fixture.New())
-	sugs, err := s.Autocomplete(context.Background(), "4521 Main Houston", "", "US")
+	res, err := s.Autocomplete(context.Background(), domain.AutocompleteQuery{Input: "4521 Main Houston", Country: "US"})
+	sugs := res.Suggestions
 	if err != nil || len(sugs) == 0 {
 		t.Fatalf("suggest: %v %v", sugs, err)
 	}
@@ -87,5 +91,60 @@ func TestLookupZip(t *testing.T) {
 	}
 	if a.City != "Edison" || a.State != "NJ" {
 		t.Fatalf("got %+v", a)
+	}
+}
+
+// S139: suggestions from the first character; the service issues a session token when the client has none; ZIP and
+// city fields get only their kind; a bias point ranks nearby places first; picking fills every field.
+func TestAutocompleteFromTheFirstCharacterWithSessionKindAndBias(t *testing.T) {
+	s := svc(fixture.New())
+	ctx := context.Background()
+	res, err := s.Autocomplete(ctx, domain.AutocompleteQuery{Input: "1"})
+	if err != nil || len(res.Suggestions) == 0 {
+		t.Fatalf("one character must suggest: %+v %v", res, err)
+	}
+	if len(res.Session) < 16 {
+		t.Fatalf("a session token must be issued: %q", res.Session)
+	}
+	again, _ := s.Autocomplete(ctx, domain.AutocompleteQuery{Input: "11", SessionToken: res.Session})
+	if again.Session != res.Session {
+		t.Fatal("the client's session token is kept")
+	}
+
+	zips, err := s.Autocomplete(ctx, domain.AutocompleteQuery{Input: "770", Kind: domain.KindPostalCode})
+	if err != nil || len(zips.Suggestions) == 0 {
+		t.Fatalf("zips: %+v %v", zips, err)
+	}
+	for _, z := range zips.Suggestions {
+		if z.Kind != domain.KindPostalCode || !strings.HasPrefix(z.MainText, "770") {
+			t.Fatalf("ZIP field suggestion %+v", z)
+		}
+	}
+
+	brooklyn := &domain.Point{Lat: 40.6527, Lng: -73.9592}
+	near, err := s.Autocomplete(ctx, domain.AutocompleteQuery{Input: "1", Near: brooklyn})
+	if err != nil || len(near.Suggestions) == 0 || near.Suggestions[0].DistanceMeters == nil {
+		t.Fatalf("biased: %+v %v", near, err)
+	}
+	for i := 1; i < len(near.Suggestions); i++ {
+		if *near.Suggestions[i].DistanceMeters < *near.Suggestions[i-1].DistanceMeters {
+			t.Fatalf("nearest first: %+v", near.Suggestions)
+		}
+	}
+	a, err := s.Resolve(ctx, near.Suggestions[0].ID, near.Session)
+	if err != nil || a.Line1 == "" || a.City == "" || a.State == "" || a.PostalCode == "" || a.Lat == 0 || a.Lon == 0 {
+		t.Fatalf("picking a suggestion fills street, city, state, ZIP and coordinates: %+v %v", a, err)
+	}
+
+	for _, bad := range []domain.AutocompleteQuery{
+		{Input: "1", SessionToken: "bad token!"},
+		{Input: "1", Country: "USA"},
+		{Input: "1", Kind: "street"},
+		{Input: "1", Near: &domain.Point{Lat: 123, Lng: 0}},
+		{Input: "1", Language: "en_US!"},
+	} {
+		if _, err := s.Autocomplete(ctx, bad); !errors.Is(err, domain.ErrInvalidQuery) {
+			t.Errorf("%+v must be refused, got %v", bad, err)
+		}
 	}
 }

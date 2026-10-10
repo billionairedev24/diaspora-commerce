@@ -129,11 +129,12 @@ func (s *distanceServiceImpl) Geocode(ctx context.Context, a domain.Address) (do
 	}
 	if line != "" {
 		query := strings.Join(nonEmpty(line, a.City, a.State, zip), " ")
-		sugs, err := s.addresses.Autocomplete(ctx, query, "", a.Country)
+		res, err := s.addresses.Autocomplete(ctx, domain.AutocompleteQuery{Input: query, Country: a.Country,
+			Kind: domain.KindAddress})
 		if err != nil {
 			s.log.WarnContext(ctx, "geocode: address providers failed; trying the ZIP", "error", err)
 		}
-		for _, sg := range sugs {
+		for _, sg := range res.Suggestions {
 			r, err := s.addresses.Resolve(ctx, sg.ID, "")
 			if err != nil || (r.Lat == 0 && r.Lon == 0) {
 				continue

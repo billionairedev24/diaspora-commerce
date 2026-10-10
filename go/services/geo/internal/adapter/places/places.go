@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/port"
@@ -42,6 +43,8 @@ type autocompleteResponse struct {
 			Text    struct {
 				Text string `json:"text"`
 			} `json:"text"`
+			DistanceMeters   *float64 `json:"distanceMeters"`
+			Types            []string `json:"types"`
 			StructuredFormat struct {
 				MainText struct {
 					Text string `json:"text"`
@@ -54,13 +57,40 @@ type autocompleteResponse struct {
 	} `json:"suggestions"`
 }
 
-func (p *placesImpl) Suggest(ctx context.Context, input, session, country string, limit int) ([]domain.Suggestion, error) {
-	body, err := json.Marshal(map[string]any{
-		"input":                input,
-		"sessionToken":         session,
-		"includedRegionCodes":  []string{country},
-		"includedPrimaryTypes": []string{"street_address", "premise", "subpremise", "route", "postal_code"},
-	})
+// primaryTypes are the Places (New) types each kind asks for (at most five).
+func primaryTypes(k domain.AddressKind) []string {
+	switch k {
+	case domain.KindAddress:
+		return []string{"street_address", "premise", "subpremise", "route"}
+	case domain.KindPostalCode:
+		return []string{"postal_code"}
+	case domain.KindLocality:
+		return []string{"locality", "sublocality", "postal_town", "administrative_area_level_3"}
+	default:
+		return []string{"street_address", "premise", "subpremise", "route", "postal_code"}
+	}
+}
+
+func (p *placesImpl) Suggest(ctx context.Context, q domain.AutocompleteQuery) ([]domain.Suggestion, error) {
+	payload := map[string]any{
+		"input":                q.Input,
+		"includedRegionCodes":  []string{q.Country},
+		"regionCode":           strings.ToLower(q.Country),
+		"includedPrimaryTypes": primaryTypes(q.Kind),
+	}
+	if q.SessionToken != "" {
+		payload["sessionToken"] = q.SessionToken
+	}
+	if q.Language != "" {
+		payload["languageCode"] = q.Language
+	}
+	if q.Near != nil {
+		// A bias, not a restriction: nearby places rank first, others still appear. The origin returns distances.
+		center := map[string]float64{"latitude": q.Near.Lat, "longitude": q.Near.Lng}
+		payload["locationBias"] = map[string]any{"circle": map[string]any{"center": center, "radius": q.RadiusMeters}}
+		payload["origin"] = center
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("encode: %w", err)
 	}
@@ -82,12 +112,27 @@ func (p *placesImpl) Suggest(ctx context.Context, input, session, country string
 		}
 		res = append(res, domain.Suggestion{ID: "g:" + pp.PlaceID, Text: pp.Text.Text,
 			MainText: pp.StructuredFormat.MainText.Text, SecondaryText: pp.StructuredFormat.SecondaryText.Text,
-			Provider: p.Name()})
-		if len(res) == limit {
+			Provider: p.Name(), Kind: kindOf(pp.Types), DistanceMeters: pp.DistanceMeters})
+		if len(res) == q.Limit {
 			break
 		}
 	}
 	return res, nil
+}
+
+// kindOf maps Places types to an address kind.
+func kindOf(types []string) domain.AddressKind {
+	for _, t := range types {
+		switch t {
+		case "street_address", "premise", "subpremise", "route":
+			return domain.KindAddress
+		case "postal_code":
+			return domain.KindPostalCode
+		case "locality", "sublocality", "postal_town", "administrative_area_level_3":
+			return domain.KindLocality
+		}
+	}
+	return domain.KindAny
 }
 
 type placeDetails struct {
@@ -107,7 +152,11 @@ func (p *placesImpl) Resolve(ctx context.Context, id, session string) (domain.Ad
 	if len(id) > 2 && id[:2] == "g:" {
 		placeID = id[2:]
 	}
-	u := p.base + "/places/" + url.PathEscape(placeID) + "?sessionToken=" + url.QueryEscape(session)
+	u := p.base + "/places/" + url.PathEscape(placeID)
+	if session != "" {
+		// Closes the autocomplete session: the keystrokes and this details call are billed as one session.
+		u += "?sessionToken=" + url.QueryEscape(session)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return domain.Address{}, fmt.Errorf("request: %w", err)

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/problem"
@@ -50,14 +52,74 @@ func (h *handlersImpl) Register(mux *http.ServeMux, public, authenticated func(h
 	mux.Handle("POST /v1/zones", authenticated(auth.Require(ZonesWrite, h.saveZone)))
 }
 
+// autocomplete answers GET /v1/addresses/autocomplete?q=&session=&country=&kind=&near=lat,lng&radiusMiles=&lang=
+// (lat & lng / lon are accepted instead of near; Accept-Language when lang is absent).
 func (h *handlersImpl) autocomplete(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	out, err := h.addresses.Autocomplete(r.Context(), q.Get("q"), q.Get("session"), q.Get("country"))
+	aq := domain.AutocompleteQuery{Input: q.Get("q"), SessionToken: q.Get("session"), Country: q.Get("country"),
+		Kind: domain.AddressKind(strings.ToLower(q.Get("kind"))), Language: q.Get("lang")}
+	if aq.Language == "" {
+		aq.Language = primaryLanguage(r.Header.Get("Accept-Language"))
+	}
+	near, err := parseNear(q)
+	if err != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.invalid-point", err.Error()))
+		return
+	}
+	aq.Near = near
+	if raw := q.Get("radiusMiles"); raw != "" {
+		miles, err := strconv.ParseFloat(raw, 64)
+		if err != nil || miles <= 0 || miles > 100 {
+			problem.Write(w, r, problem.New(http.StatusBadRequest, "geo.invalid-radius", "radiusMiles must be a number from 0 to 100"))
+			return
+		}
+		aq.RadiusMeters = miles * metersPerMile
+	}
+	out, err := h.addresses.Autocomplete(r.Context(), aq)
 	if err != nil {
 		writeErr(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"suggestions": out})
+	// Session-specific: never cached by browsers or the edge.
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, out)
+}
+
+const metersPerMile = 1609.344
+
+// parseNear reads the bias point from near=lat,lng or lat & lng (lon) parameters.
+func parseNear(q url.Values) (*domain.Point, error) {
+	latRaw, lngRaw := q.Get("lat"), q.Get("lng")
+	if lngRaw == "" {
+		lngRaw = q.Get("lon")
+	}
+	if near := q.Get("near"); near != "" {
+		var ok bool
+		latRaw, lngRaw, ok = strings.Cut(near, ",")
+		if !ok {
+			return nil, errors.New("near must be lat,lng")
+		}
+	}
+	if latRaw == "" && lngRaw == "" {
+		return nil, nil
+	}
+	lat, err1 := strconv.ParseFloat(strings.TrimSpace(latRaw), 64)
+	lng, err2 := strconv.ParseFloat(strings.TrimSpace(lngRaw), 64)
+	if err1 != nil || err2 != nil || domain.CheckPoint(lat, lng) != nil {
+		return nil, errors.New("near must be a valid lat,lng")
+	}
+	return &domain.Point{Lat: lat, Lng: lng}, nil
+}
+
+// primaryLanguage is the first tag of an Accept-Language header ("fr-CA,fr;q=0.8" → "fr-CA").
+func primaryLanguage(header string) string {
+	tag, _, _ := strings.Cut(header, ",")
+	tag, _, _ = strings.Cut(tag, ";")
+	tag = strings.TrimSpace(tag)
+	if tag == "*" {
+		return ""
+	}
+	return tag
 }
 
 func (h *handlersImpl) resolve(w http.ResponseWriter, r *http.Request) {
@@ -264,6 +326,8 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 		problem.Write(w, r, &problem.Error{Status: http.StatusBadRequest, Code: "geo.invalid-point", Detail: "lat must be within ±90 and lng within ±180"})
 	case errors.Is(err, domain.ErrInvalidAddress), errors.Is(err, domain.ErrInvalidZone):
 		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "geo.invalid", Detail: err.Error()})
+	case errors.Is(err, domain.ErrInvalidQuery):
+		problem.Write(w, r, &problem.Error{Status: http.StatusBadRequest, Code: "geo.invalid-query", Detail: err.Error()})
 	case errors.Is(err, app.ErrNotFound):
 		problem.Write(w, r, problem.New(http.StatusNotFound, "geo.not-found", "No matching address"))
 	default:
