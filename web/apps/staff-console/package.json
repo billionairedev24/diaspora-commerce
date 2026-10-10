@@ -2,7 +2,7 @@
   "name": "staff-console",
   "version": "0.1.0",
   "private": true,
-  "description": "AfroTransact staff console (Next.js 16 App Router) — the platform back office, gated by RBAC.",
+  "description": "AfroTransact staff console (Next.js 16 App Router) \u2014 the platform back office, gated by RBAC.",
   "type": "module",
   "scripts": {
     "dev": "next dev --port 3002",
@@ -11,7 +11,9 @@
     "start": "next start --port 3002",
     "lint": "eslint . && stylelint \"src/**/*.css\"",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
   },
   "dependencies": {
     "@afrotransact/api-client": "workspace:*",
@@ -29,7 +31,8 @@
     "react-dom": "19.3.0",
     "recharts": "3.10.1",
     "server-only": "^0.0.1",
-    "zod": "^4.6.5"
+    "zod": "^4.6.5",
+    "@opennextjs/cloudflare": "^1.20.10"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
@@ -44,6 +47,7 @@
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",
     "vite": "^8.3.4",
-    "vitest": "5.0.3"
+    "vitest": "5.0.3",
+    "wrangler": "^4.149.0"
   }
 }

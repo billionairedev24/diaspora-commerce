@@ -371,6 +371,9 @@ importers:
       '@afrotransact/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@opennextjs/cloudflare':
+        specifier: ^1.20.10
+        version: 1.20.10(next@16.4.0(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.56.1)(@types/node@22.20.5)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.149.0(@types/node@22.20.5))
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -444,6 +447,9 @@ importers:
       vitest:
         specifier: 5.0.3
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(@vitest/browser-playwright@5.0.3)(@vitest/coverage-v8@5.0.3)(@vitest/ui@5.0.3)(jsdom@27.4.0(@noble/hashes@1.8.0))(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+      wrangler:
+        specifier: ^4.149.0
+        version: 4.149.0(@types/node@22.20.5)
 
   web/apps/staff-console:
     dependencies:
@@ -462,6 +468,9 @@ importers:
       '@afrotransact/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@opennextjs/cloudflare':
+        specifier: ^1.20.10
+        version: 1.20.10(next@16.4.0(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@playwright/test@1.56.1)(@types/node@22.20.5)(babel-plugin-react-compiler@1.0.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.149.0(@types/node@22.20.5))
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -535,6 +544,9 @@ importers:
       vitest:
         specifier: 5.0.3
         version: 5.0.3(@opentelemetry/api@1.9.1)(@types/node@22.20.5)(@vitest/browser-playwright@5.0.3)(@vitest/coverage-v8@5.0.3)(@vitest/ui@5.0.3)(jsdom@27.4.0(@noble/hashes@1.8.0))(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(vite@8.3.4(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.1))
+      wrangler:
+        specifier: ^4.149.0
+        version: 4.149.0(@types/node@22.20.5)
 
   web/apps/storefront:
     dependencies:
@@ -21925,7 +21937,7 @@ snapshots:
       he: 1.2.0
       param-case: 3.0.4
       relateurl: 0.2.7
-      terser: 5.36.0
+      terser: 5.51.2
 
   html-minifier-terser@7.2.0:
     dependencies:
@@ -21935,7 +21947,7 @@ snapshots:
       entities: 4.5.0
       param-case: 3.0.4
       relateurl: 0.2.7
-      terser: 5.36.0
+      terser: 5.51.2
 
   html-tags@3.3.1: {}
 
@@ -26338,7 +26350,7 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.31
       jest-worker: 27.5.1
       schema-utils: 4.5.0
-      terser: 5.36.0
+      terser: 5.51.2
       webpack: 5.111.1(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.29))(html-minifier-terser@7.2.0)(postcss@8.5.29)
     optionalDependencies:
       clean-css: 5.3.3

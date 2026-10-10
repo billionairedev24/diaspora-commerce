@@ -91,28 +91,43 @@ jobs:
         working-directory: mobile/apps/${{ matrix.app }}
     env:
       PROFILE: ${{ needs.plan.outputs.profile }}
+      # Until EXPO_TOKEN is configured, builds and updates are skipped with a notice instead of failing.
+      HAS_EXPO: ${{ secrets.EXPO_TOKEN != '' }}
     steps:
+      - name: Expo not configured
+        if: env.HAS_EXPO != 'true'
+        working-directory: .
+        run: echo "::notice::EXPO_TOKEN is not set; EAS ${{ needs.plan.outputs.action }} skipped."
       - uses: actions/checkout@v5
+        if: env.HAS_EXPO == 'true'
       - uses: pnpm/action-setup@v4
+        if: env.HAS_EXPO == 'true'
       - uses: actions/setup-node@v5
+        if: env.HAS_EXPO == 'true'
         with:
           node-version: "22"
+          cache: pnpm
       - uses: expo/expo-github-action@v8
+        if: env.HAS_EXPO == 'true'
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
-      - name: Install
-        working-directory: mobile
-        run: |
-          if [[ -f pnpm-lock.yaml ]]; then pnpm install --frozen-lockfile; else (cd "apps/${{ matrix.app }}" && npm ci); fi
+      - name: Install (root pnpm workspace)
+        if: env.HAS_EXPO == 'true'
+        working-directory: .
+        run: pnpm install --frozen-lockfile
       - name: Build (iOS + Android)
-        if: needs.plan.outputs.action == 'build'
+        if: env.HAS_EXPO == 'true' && needs.plan.outputs.action == 'build'
         run: |
           submit=()
           [[ "$PROFILE" == production ]] && submit=(--auto-submit)
           eas build --platform all --profile "$PROFILE" --non-interactive --no-wait "${submit[@]}"
       - name: OTA update (JS-only)
-        if: needs.plan.outputs.action == 'update'
+        if: env.HAS_EXPO == 'true' && needs.plan.outputs.action == 'update'
         env:
           MESSAGE: ${{ github.event.head_commit.message || 'manual update' }}
-        run: eas update --channel "$PROFILE" --message "${MESSAGE%%$'\n'*}" --non-interactive
+        run: |
+          # eas update does not read the build profile's env: export its EXPO_PUBLIC_* URLs so the bundle targets
+          # the profile's environment instead of falling back to the local stack.
+          eval "$(jq -r --arg p "$PROFILE" '.build[$p].env // {} | to_entries[] | "export \(.key)=\(.value|@sh)"' eas.json)"
+          eas update --channel "$PROFILE" --message "${MESSAGE%%$'\n'*}" --non-interactive

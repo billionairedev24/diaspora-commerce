@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // One Worker per environment, named like the Workers routes in infra/cloudflare (staff-console-<env>); routes are owned
+  // by infra/cloudflare. The top level is dev; `wrangler deploy --env uat|prod` selects the others. Every var is
+  // read on the server per request, so one build serves every environment. Hosts: docs/engineering/environments.md.
+  "name": "staff-console-dev",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "observability": { "enabled": true },
+  "vars": {"BFF_ORIGIN": "https://api.dev.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://dev.afrotransact.com"},
+  "env": {
+    // PR previews: a version of staff-console-dev on the in-process mock BFF.
+    "preview": {
+      "name": "staff-console-dev",
+      "vars": { "API_MOCKS": "1", "BFF_ORIGIN": "", "PUBLIC_WEB_URL": "https://dev.afrotransact.com" }
+    },
+    "uat": { "name": "staff-console-uat", "vars": {"BFF_ORIGIN": "https://api.uat.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://uat.afrotransact.com"} },
+    "prod": { "name": "staff-console-prod", "vars": {"BFF_ORIGIN": "https://api.afrotransact.com/bff", "PUBLIC_WEB_URL": "https://afrotransact.com"} }
+  }
+}
