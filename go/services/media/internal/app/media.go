@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,7 +21,9 @@ import (
 type MediaService interface {
 	RequestUpload(ctx context.Context, actor auth.Actor, p domain.Purpose, fileName, contentType string, size int64) (domain.Asset, port.Upload, error)
 	Complete(ctx context.Context, actor auth.Actor, id string) (domain.Asset, error)
-	Get(ctx context.Context, actor auth.Actor, id string) (domain.Asset, error)
+	// Get returns an asset; private assets carry a signed URL valid for linkTTL (0 = the default), bounded by the
+	// purpose's link policy and the store, with its expiry in URLExpiresAt.
+	Get(ctx context.Context, actor auth.Actor, id string, linkTTL time.Duration) (domain.Asset, error)
 	List(ctx context.Context, actor auth.Actor, p domain.Purpose) ([]domain.Asset, error)
 }
 
@@ -34,6 +37,7 @@ type mediaServiceImpl struct {
 	stores    map[domain.Purpose]port.ObjectStore
 	repo      port.AssetRepository
 	inspector port.Inspector
+	links     domain.LinkPolicy
 	now       func() time.Time
 	uploadTTL time.Duration
 }
@@ -41,9 +45,19 @@ type mediaServiceImpl struct {
 var _ MediaService = (*mediaServiceImpl)(nil)
 
 // NewMediaService routes each purpose to its store (UploadThing or R2 for public images, the private cloud bucket
-// for KYC documents and proof photos).
-func NewMediaService(stores map[domain.Purpose]port.ObjectStore, repo port.AssetRepository, inspector port.Inspector) MediaService {
-	return &mediaServiceImpl{stores: stores, repo: repo, inspector: inspector, now: time.Now, uploadTTL: 10 * time.Minute}
+// for KYC documents, proof photos and documents). links bounds signed download links; zero values fall back to
+// domain.DefaultLinkTTL and domain.DefaultMaxLongLinkTTL.
+func NewMediaService(stores map[domain.Purpose]port.ObjectStore, repo port.AssetRepository, inspector port.Inspector,
+	links domain.LinkPolicy,
+) MediaService {
+	if links.Default <= 0 {
+		links.Default = domain.DefaultLinkTTL
+	}
+	if links.MaxLong <= 0 {
+		links.MaxLong = domain.DefaultMaxLongLinkTTL
+	}
+	return &mediaServiceImpl{stores: stores, repo: repo, inspector: inspector, links: links, now: time.Now,
+		uploadTTL: 10 * time.Minute}
 }
 
 // maxInspect caps how much of an object is read for inspection.
@@ -69,6 +83,9 @@ func (s *mediaServiceImpl) RequestUpload(ctx context.Context, actor auth.Actor, 
 ) (domain.Asset, port.Upload, error) {
 	if err := domain.CheckDeclared(p, fileName, contentType, size); err != nil {
 		return domain.Asset{}, port.Upload{}, fmt.Errorf("request upload: %w", err)
+	}
+	if !mayUse(actor, p) {
+		return domain.Asset{}, port.Upload{}, fmt.Errorf("upload %s: %w", p, ErrForbidden)
 	}
 	st, err := s.store(p)
 	if err != nil {
@@ -124,7 +141,7 @@ func (s *mediaServiceImpl) Complete(ctx context.Context, actor auth.Actor, id st
 	return a, nil
 }
 
-func (s *mediaServiceImpl) Get(ctx context.Context, actor auth.Actor, id string) (domain.Asset, error) {
+func (s *mediaServiceImpl) Get(ctx context.Context, actor auth.Actor, id string, linkTTL time.Duration) (domain.Asset, error) {
 	a, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return domain.Asset{}, fmt.Errorf("get asset: %w", err)
@@ -133,7 +150,7 @@ func (s *mediaServiceImpl) Get(ctx context.Context, actor auth.Actor, id string)
 	if rules.Public && a.Status == domain.StatusReady {
 		return a, nil
 	}
-	if !actor.IsStaff() && actor.Subject != a.UploadedBy && ownerOf(actor) != a.OwnerOrg {
+	if !mayRead(actor, a) {
 		return domain.Asset{}, ErrForbidden
 	}
 	if !rules.Public && a.Status != domain.StatusRejected {
@@ -141,11 +158,13 @@ func (s *mediaServiceImpl) Get(ctx context.Context, actor auth.Actor, id string)
 		if err != nil {
 			return domain.Asset{}, err
 		}
-		u, err := st.SignedGetURL(ctx, a.Key, 5*time.Minute)
+		ttl := s.links.TTL(rules, linkTTL, st.MaxSignedURLTTL())
+		u, err := st.SignedGetURL(ctx, a.Key, ttl)
 		if err != nil {
 			return domain.Asset{}, fmt.Errorf("sign url: %w", err)
 		}
-		a.URL = u
+		expires := s.now().UTC().Add(ttl).Truncate(time.Second)
+		a.URL, a.URLExpiresAt = u, &expires
 	}
 	return a, nil
 }
@@ -163,11 +182,45 @@ func (s *mediaServiceImpl) owned(ctx context.Context, actor auth.Actor, id strin
 	if err != nil {
 		return domain.Asset{}, fmt.Errorf("get asset: %w", err)
 	}
-	if !actor.IsStaff() && actor.Subject != a.UploadedBy {
+	if actor.Subject != a.UploadedBy && (!actor.IsStaff() || !mayUse(actor, a.Purpose)) {
 		return domain.Asset{}, ErrForbidden
 	}
 	return a, nil
 }
+
+// mayUse reports whether the actor's kind may work with a purpose at all. Purposes that name their service clients
+// refuse every other service principal (and, when staff-only, every human but staff); the named clients, whose own
+// tokens media accepts for those purposes, are kept to the purposes that name them.
+func mayUse(actor auth.Actor, p domain.Purpose) bool {
+	rules, err := domain.RulesFor(p)
+	if err != nil {
+		return false
+	}
+	if actor.Type == principalService {
+		if rules.Restricted() {
+			return rules.AllowsServiceClient(actor.Subject)
+		}
+		return !slices.Contains(domain.ServiceClients(), actor.Subject)
+	}
+	return !rules.StaffOnly || actor.Type == principalStaff
+}
+
+// mayRead reports whether the actor may read a private (or not yet approved) asset: its uploader, its owner
+// organisation, or staff and service principals allowed for the purpose.
+func mayRead(actor auth.Actor, a domain.Asset) bool {
+	if actor.Subject == a.UploadedBy && actor.Subject != "" {
+		return true
+	}
+	if actor.IsStaff() {
+		return mayUse(actor, a.Purpose)
+	}
+	return ownerOf(actor) == a.OwnerOrg
+}
+
+const (
+	principalService = "SERVICE"
+	principalStaff   = "STAFF"
+)
 
 func sanitize(s string) string {
 	return strings.Map(func(r rune) rune {

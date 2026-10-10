@@ -3,7 +3,7 @@
 Trust & safety for staff: the listing moderation queue, disputes and A-to-z claims, the immutable audit log, seller
 health with suspend / reinstate, and the support-case queue for Lola hand-offs.
 Spring Boot 4.1 · Java 25 · PostgreSQL `trustops` · local port **8110**. Epic E18 (stories S117–S120, plus S223,
-S228 and S237);
+S228, S237 and S243);
 design source `design/AfroTransact Backoffice.dc.html` (Listing moderation, Disputes & returns, Audit log, Sellers &
 providers) and `design/backoffice-data.js`.
 
@@ -26,6 +26,23 @@ providers) and `design/backoffice-data.js`.
   down in catalog (`POST /v1/products/{id}/takedown` with the reason code and note, audited as
   `trustops.listing.taken_down`). If catalog refuses, the item stays open; a takedown made directly in catalog
   (`catalog.product.taken_down`) closes it.
+- **Booking review moderation (S243).** bookings-service keeps every customer review `PENDING` until it is
+  moderated. Its `booking.review.submitted` (on `at.bookings.events`) queues a `SERVICE_REVIEW` item (`?type=`)
+  with the review (booking id = review id, provider organisation, service, rating, text, public reviewer name, and
+  the author's id for conflict-of-interest checks). The item gets the listing SLA and an AI triage hint (subject
+  type `REVIEW`; rating, text and service only, never the author; fail-open). There is one open item per review,
+  and redeliveries are dropped by the inbox (consumer `trust-ops:booking-reviews`). **Allow** publishes the review
+  (bookings `POST /v1/reviews/{bookingId}/approve {note}`) and **remove** rejects it with a review reason code
+  (`POST /v1/reviews/{bookingId}/reject {reasonCode, note}`: `ABUSIVE`, `PERSONAL_INFORMATION`, `SPAM`,
+  `OFF_TOPIC`, `CONFLICT_OF_INTEREST`, or `OTHER` with a note). Both calls use the `trust-ops-service` token. A
+  listing reason code on a review, or a review code on a listing, is `422 trustops.reason-code-not-applicable`.
+  Deciding a review also needs **`bookings:reviews:moderate`** (bookings' own key) on top of `catalog:moderate`, so
+  the queue cannot bypass bookings' check. If bookings refuses (409/422/404) the item stays open
+  (`409 trustops.bookings-refused`). Bookings' own `booking.review.approved|rejected` closes an item decided
+  directly in bookings (`CLOSED`, decided by `bookings`), and is a no-op after a decision made here. Decisions are
+  audited as `trustops.review.approved|rejected|escalated` (entity `REVIEW`, id = booking id). The
+  `trustops.moderation.*` events carry `itemType: SERVICE_REVIEW`, `bookingId`, `serviceId` and `rating` (no
+  `productId`), keyed by booking id. notifications only reacts to the listing item types.
 - **Disputes and A-to-z claims (S118).** A customer opens a claim on an order or a shipment (one open claim per
   order + shipment) with **evidence = media asset ids**. The domain state machine (`ClaimStatus`):
 
@@ -78,8 +95,8 @@ providers) and `design/backoffice-data.js`.
 
 | Method | Path | Permission |
 |---|---|---|
-| GET | `/v1/moderation/items?status&assignee&mine&type`, `/v1/moderation/items/{id}`, `/v1/moderation/reason-codes` | `catalog:moderate` |
-| POST | `/v1/moderation/items/{id}/assign`, `/escalate`, `/approve`, `/reject`, `/triage` | `catalog:moderate` |
+| GET | `/v1/moderation/items?status&assignee&mine&type` (`NEW_LISTING`, `LIVE_LISTING`, `SERVICE_REVIEW`), `/v1/moderation/items/{id}`, `/v1/moderation/reason-codes?type` (listing codes by default, review codes for `SERVICE_REVIEW`) | `catalog:moderate` |
+| POST | `/v1/moderation/items/{id}/assign`, `/escalate`, `/approve`, `/reject`, `/triage` | `catalog:moderate` (`/approve` and `/reject` of a review also `bookings:reviews:moderate`) |
 | POST | `/v1/claims` | customer (own); staff with `disputes:manage` on behalf (`customerId`) |
 | GET | `/v1/claims/mine` | customer |
 | GET | `/v1/claims/seller/{orgId}` | `support:respond` for that org (or staff) |
@@ -96,7 +113,8 @@ providers) and `design/backoffice-data.js`.
 | GET/POST | `/v1/support-cases?status`, `/{id}`, `/{id}/assign`, `/{id}/resolve` | `support:respond` |
 
 Errors are RFC 9457 problems: `trustops.invalid-transition` (409), `trustops.*` rule violations with `fieldErrors`
-(422), `trustops.catalog-refused` / `trustops.refund-refused` / `trustops.claim-already-open` (409),
+(422), `trustops.catalog-refused` / `trustops.bookings-refused` / `trustops.refund-refused` /
+`trustops.claim-already-open` (409),
 `trustops.upstream-unavailable` (502, with `service` and `upstreamStatus`).
 
 Contract: [`contracts/openapi/trust-ops.yaml`](../../../contracts/openapi/trust-ops.yaml).
@@ -104,12 +122,14 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 
 ## Permissions, roles and the service client
 
-Existing identity keys reused: `catalog:moderate`, `disputes:manage`, `support:respond`, `audit:read`, `orgs:read`.
+Existing identity keys reused: `catalog:moderate`, `disputes:manage`, `support:respond`, `audit:read`, `orgs:read`,
+and bookings' `bookings:reviews:moderate` (S243: Trust & Safety staff who decide reviews need it).
 **New key needed:** `sellers:enforce` (module `trust`, "Suspend and reinstate sellers and recompute seller health"),
 suggested for `platform.super_admin`, `platform.trust_safety` and `platform.operations_manager`.
 
 Service-to-service calls use the client-credentials client **`trust-ops-service`** (secret `TRUSTOPS_CLIENT_SECRET`)
-with scopes `catalog:moderate` (catalog approve / reject / takedown), `payments:service` (refunds),
+with scopes `catalog:moderate` (catalog approve / reject / takedown), `bookings:reviews:moderate` (bookings review
+approve / reject, S243), `payments:service` (refunds),
 `sellers:enforce` (seller-service suspend / reinstate), `offers:write` (seller performance) and `ai:triage` (triage
 hints). The token must carry principal type `SERVICE` (payments and offers check it). `compliance:hold` is no longer
 needed.
@@ -126,6 +146,7 @@ Consumed (each listener has its own consumer group and inbox consumer, so they n
 | Group suffix | Topic | Events |
 |---|---|---|
 | `-moderation` | `at.product.events` | `catalog.product.created` (IN_REVIEW), `catalog.product.flagged`, `catalog.product.approved\|rejected\|taken_down` |
+| `-reviews` | `at.bookings.events` | `booking.review.submitted` (PENDING), `booking.review.approved\|rejected` (every other bookings event is ignored) |
 | `-seller-health` | `at.order.events` | `orders.order.placed`, `orders.shipment.delivered\|cancelled\|status_changed` |
 | `-support` | `at.ai-handoff.events` | `ai.handoff.requested` |
 | `-audit` | `TRUSTOPS_AUDIT_TOPICS` (default identity, seller-application, seller-compliance, payout, mcp-tool, order) | `TRUSTOPS_AUDIT_EVENT_TYPES`: role / permission grants and revokes, user disable / enable, seller application decisions, payout holds and listing hides, payout lifecycle, `mcp.tool.invoked`, and shipment status changes / cancellations made by `PLATFORM_ADMIN` or `FULFILMENT_OPS` |
@@ -138,7 +159,7 @@ Consumed (each listener has its own consumer group and inbox consumer, so they n
 | `KAFKA_BOOTSTRAP` | Kafka for the outbox relay and the consumers |
 | `AUTH_ISSUER_URI`, `AUTH_TOKEN_URI` | identity issuer (JWT validation) and token endpoint (client credentials) |
 | `TRUSTOPS_CLIENT_SECRET` (secret), `TRUSTOPS_CLIENT_ID` | the `trust-ops-service` client; blank in `local` = no token |
-| `CATALOG_URL`, `PAYMENTS_URL`, `SELLER_URL`, `OFFERS_URL`, `AI_GATEWAY_URL`, `UPSTREAM_TIMEOUT` | upstream services |
+| `CATALOG_URL`, `BOOKINGS_URL`, `PAYMENTS_URL`, `SELLER_URL`, `OFFERS_URL`, `AI_GATEWAY_URL`, `UPSTREAM_TIMEOUT` | upstream services |
 | `AI_TRIAGE_ENABLED`, `AI_TRIAGE_TIMEOUT` | AI triage hints (default on, 5 s) |
 | `TRUSTOPS_SLA_*` | SLA targets (`MODERATION` 24h, `MODERATION_HIGH_RISK` 4h, `MODERATION_ESCALATED` 8h, `SELLER_RESPONSE` 72h, `SELLER_RESPONSE_REMINDER` 24h before the deadline, `CLAIM_DECISION` 120h, `CLAIM_ESCALATED` 48h, `SUPPORT_FIRST_RESPONSE` 4h) |
 | `TRUSTOPS_AUDIT_TOPICS`, `TRUSTOPS_AUDIT_EVENT_TYPES`, `TRUSTOPS_AUDIT_STREAM`, `TRUSTOPS_AUDIT_EXPORT_MAX_ROWS` | audit ingestion and export |
@@ -175,9 +196,11 @@ cd java && ./mvnw -B -f services/trust-ops/pom.xml verify    # checkstyle, unit,
 ```
 
 Integration tests run against `postgis/postgis:17-3.5` with one WireMock standing in for identity's token endpoint,
-catalog, payments, seller, offers and ai-gateway; Kafka listeners and jobs are called directly. Migrations:
+catalog, bookings, payments, seller, offers and ai-gateway; Kafka listeners and jobs are called directly
+(`ReviewModerationIT` and `ListenersIT` cover S243). Migrations:
 `V1__trustops_schema.sql`, `V2__live_listings_and_seller_suspension.sql` (moderation item type and report fields;
 `seller_enforcement.payouts_held` renamed `seller_suspended`), `V3__claim_response_reminder.sql`
-(`claim.response_reminder_sent_at`).
+(`claim.response_reminder_sent_at`), `V4__seller_shipment_ship_by.sql`, `V5__service_review_moderation.sql`
+(`SERVICE_REVIEW` items: nullable `product_id`, review columns, one open item per `booking_id`).
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

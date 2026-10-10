@@ -91,6 +91,11 @@ func (u *utImpl) Delete(ctx context.Context, key string) error {
 	return u.post(ctx, "/v6/deleteFiles", map[string]any{"fileKeys": []string{key}}, nil)
 }
 
+// maxFileAccessTTL is the longest expiresIn UploadThing accepts for requestFileAccess (7 days).
+const maxFileAccessTTL = 7 * 24 * time.Hour
+
+func (u *utImpl) MaxSignedURLTTL() time.Duration { return maxFileAccessTTL }
+
 func (u *utImpl) SignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	var out struct {
 		URL string `json:"url"`

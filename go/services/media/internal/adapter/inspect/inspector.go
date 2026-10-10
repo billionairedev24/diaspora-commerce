@@ -1,10 +1,12 @@
 // Package inspect implements port.Inspector: it sniffs the real file type from the bytes (never trusting the
 // declared type), decodes image dimensions and samples the border brightness for the white-background check.
+// Plain text declared as CSV is reported as CSV, and ZIP archives that hold an Office Open XML workbook as XLSX.
 package inspect
 
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"image"
 	"image/color"
@@ -12,6 +14,7 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+	"strings"
 
 	"golang.org/x/image/webp"
 
@@ -28,7 +31,7 @@ var _ port.Inspector = (*inspectorImpl)(nil)
 // New returns an Inspector that fully decodes images up to maxDecodePixels (larger images get dimensions only).
 func New(maxDecodePixels int) port.Inspector { return &inspectorImpl{maxDecodePixels: maxDecodePixels} }
 
-func (i *inspectorImpl) Inspect(r io.Reader, size int64, _ string) (domain.Inspection, error) {
+func (i *inspectorImpl) Inspect(r io.Reader, size int64, declaredType string) (domain.Inspection, error) {
 	br := bufio.NewReaderSize(r, 4096)
 	head, _ := br.Peek(512)
 	ct := http.DetectContentType(head)
@@ -36,7 +39,21 @@ func (i *inspectorImpl) Inspect(r io.Reader, size int64, _ string) (domain.Inspe
 		ct = "image/webp"
 	}
 	in := domain.Inspection{ContentType: ct, Bytes: size}
-	if ct == "application/pdf" || (ct != "image/jpeg" && ct != "image/png" && ct != "image/webp") {
+	switch {
+	case strings.HasPrefix(ct, "text/plain") && declaredType == domain.ContentTypeCSV:
+		// Bytes cannot tell CSV from other plain text; the sniffer has ruled out HTML, scripts and binaries.
+		in.ContentType = domain.ContentTypeCSV
+		return in, nil
+	case ct == "application/zip":
+		rest, err := io.ReadAll(br)
+		if err != nil {
+			return in, fmt.Errorf("read archive: %w", err)
+		}
+		if isSpreadsheetML(rest) {
+			in.ContentType = domain.ContentTypeXLSX
+		}
+		return in, nil
+	case ct != "image/jpeg" && ct != "image/png" && ct != "image/webp":
 		return in, nil
 	}
 	data, err := io.ReadAll(br)
@@ -74,6 +91,42 @@ func (i *inspectorImpl) Inspect(r io.Reader, size int64, _ string) (domain.Inspe
 	}
 	in.BorderBrightness = borderBrightness(img)
 	return in, nil
+}
+
+// zipLocalHeader starts every member of a ZIP archive.
+var zipLocalHeader = []byte("PK\x03\x04")
+
+// isSpreadsheetML reports whether a ZIP archive is an Office Open XML workbook: it must carry the package's
+// [Content_Types].xml and the workbook part xl/workbook.xml. Member names are read from the local file headers, so
+// the archive's central directory (at its end, possibly past what was read) is not needed.
+func isSpreadsheetML(data []byte) bool {
+	var contentTypes, workbook bool
+	for off := 0; ; {
+		i := bytes.Index(data[off:], zipLocalHeader)
+		if i < 0 {
+			break
+		}
+		h := off + i
+		const fixed = 30 // local file header size before the name
+		if h+fixed > len(data) {
+			break
+		}
+		nameLen := int(binary.LittleEndian.Uint16(data[h+26 : h+28]))
+		if h+fixed+nameLen > len(data) {
+			break
+		}
+		switch string(data[h+fixed : h+fixed+nameLen]) {
+		case "[Content_Types].xml":
+			contentTypes = true
+		case "xl/workbook.xml":
+			workbook = true
+		}
+		if contentTypes && workbook {
+			return true
+		}
+		off = h + len(zipLocalHeader)
+	}
+	return false
 }
 
 // borderBrightness averages luma over a 3% frame around the image, sampling every few pixels.

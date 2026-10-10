@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 
@@ -162,8 +163,10 @@ class ModerationFlowIT extends TrustOpsIntegrationTest {
         JsonNode page = ok(send("GET", "/v1/moderation/items?size=5", null));
         assertThat(page.path("items").size()).isPositive();
         assertThat(page.path("items").get(0).path("sla").path("state").asString()).isNotEmpty();
+        // Listing codes by default (review codes need ?type=SERVICE_REVIEW).
         assertThat(ok(send("GET", "/v1/moderation/reason-codes", null)).size()).isEqualTo(
-                ModerationReasonCode.values().length);
+                Arrays.stream(ModerationReasonCode.values())
+                        .filter(c -> c.appliesTo(ModerationItemType.NEW_LISTING)).count());
 
         TestSupport.as(TestSupport.marketing());
         problem(send("GET", "/v1/moderation/items", null), 403, "auth.missing-permission");

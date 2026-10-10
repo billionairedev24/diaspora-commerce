@@ -18,6 +18,7 @@ import com.afrotransact.trustops.domain.ModerationPriority;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.domain.ModerationStatus;
 import com.afrotransact.trustops.domain.ProductSubmission;
+import com.afrotransact.trustops.domain.ReviewSubmission;
 import com.afrotransact.trustops.domain.Sla;
 import com.afrotransact.trustops.domain.TriageStatus;
 import com.afrotransact.trustops.port.ModerationRepository;
@@ -44,19 +45,23 @@ class JdbcModerationRepository implements ModerationRepository {
         jdbc.sql("""
                 insert into moderation_item (id, product_id, atin, seller_org_id, owner_kind, title, product_type_code,
                     status, priority, triage_status, triage, enqueued_at, sla_started_at, due_at, item_type, flag_id,
-                    report_source, report_reason, report_details, reporter_id, report_risk, report_count, version)
+                    report_source, report_reason, report_details, reporter_id, report_risk, report_count, booking_id,
+                    service_id, service_name, customer_id, reviewer_name, rating, review_text, review_created_at,
+                    version)
                 values (:id, :productId, :atin, :org, :ownerKind, :title, :type, :status, :priority, :triageStatus,
                     cast(:triage as jsonb), :enqueuedAt, :slaStart, :dueAt, :itemType, :flagId, :reportSource,
-                    :reportReason, :reportDetails, :reporterId, :reportRisk, :reportCount, 0)
+                    :reportReason, :reportDetails, :reporterId, :reportRisk, :reportCount, :bookingId, :serviceId,
+                    :serviceName, :customerId, :reviewerName, :rating, :reviewText, :reviewCreatedAt, 0)
                 """)
                 .params(reportParams(i))
+                .params(reviewParams(i.review()))
                 .param("id", i.id())
-                .param("productId", p.productId())
-                .param("atin", p.atin())
-                .param("org", p.sellerOrgId())
-                .param("ownerKind", p.ownerKind())
-                .param("title", p.title())
-                .param("type", p.productTypeCode())
+                .param("productId", p == null ? null : p.productId())
+                .param("atin", p == null ? null : p.atin())
+                .param("org", i.orgId())
+                .param("ownerKind", p == null ? null : p.ownerKind())
+                .param("title", i.title())
+                .param("type", p == null ? null : p.productTypeCode())
                 .param("status", i.status().name())
                 .param("priority", i.priority().name())
                 .param("triageStatus", i.triageStatus().name())
@@ -116,6 +121,12 @@ class JdbcModerationRepository implements ModerationRepository {
     }
 
     @Override
+    public Optional<ModerationItem> findOpenByReview(UUID bookingId) {
+        return jdbc.sql("select * from moderation_item where booking_id = :b and status in " + OPEN)
+                .param("b", bookingId).query(this::map).optional();
+    }
+
+    @Override
     public Page<ModerationItem> search(ModerationStatus status, String assignee, ModerationItemType type, int page,
                                        int size) {
         String where = (status == null ? " where status in " + OPEN : " where status = :status")
@@ -161,6 +172,36 @@ class JdbcModerationRepository implements ModerationRepository {
         return p;
     }
 
+    private static Map<String, Object> reviewParams(ReviewSubmission r) {
+        Map<String, Object> p = new HashMap<>();
+        p.put("bookingId", r == null ? null : r.bookingId());
+        p.put("serviceId", r == null ? null : r.serviceId());
+        p.put("serviceName", r == null ? null : r.serviceName());
+        p.put("customerId", r == null ? null : r.customerId());
+        p.put("reviewerName", r == null ? null : r.reviewerName());
+        p.put("rating", r == null ? null : r.rating());
+        p.put("reviewText", r == null ? null : r.text());
+        p.put("reviewCreatedAt", r == null ? null : Sql.ts(r.submittedAt()));
+        return p;
+    }
+
+    private static ReviewSubmission review(ResultSet rs) throws SQLException {
+        UUID bookingId = rs.getObject("booking_id", UUID.class);
+        if (bookingId == null) {
+            return null;
+        }
+        return new ReviewSubmission(bookingId, rs.getString("seller_org_id"), rs.getObject("service_id", UUID.class),
+                rs.getString("service_name"), rs.getString("customer_id"), rs.getString("reviewer_name"),
+                rs.getInt("rating"), rs.getString("review_text"), Sql.instant(rs, "review_created_at"));
+    }
+
+    private static ProductSubmission product(ResultSet rs) throws SQLException {
+        UUID productId = rs.getObject("product_id", UUID.class);
+        return productId == null ? null : new ProductSubmission(productId, rs.getString("atin"),
+                rs.getString("seller_org_id"), rs.getString("owner_kind"), rs.getString("title"),
+                rs.getString("product_type_code"));
+    }
+
     private static ListingReport report(ResultSet rs) throws SQLException {
         String source = rs.getString("report_source");
         if (source == null) {
@@ -175,11 +216,8 @@ class JdbcModerationRepository implements ModerationRepository {
 
     private ModerationItem map(ResultSet rs, int row) throws SQLException {
         String reason = rs.getString("reason_code");
-        return new ModerationItem(rs.getObject("id", UUID.class),
-                new ProductSubmission(rs.getObject("product_id", UUID.class), rs.getString("atin"),
-                        rs.getString("seller_org_id"), rs.getString("owner_kind"), rs.getString("title"),
-                        rs.getString("product_type_code")),
-                ModerationItemType.valueOf(rs.getString("item_type")), report(rs),
+        return new ModerationItem(rs.getObject("id", UUID.class), product(rs),
+                ModerationItemType.valueOf(rs.getString("item_type")), report(rs), review(rs),
                 ModerationStatus.valueOf(rs.getString("status")), ModerationPriority.valueOf(rs.getString("priority")),
                 TriageStatus.valueOf(rs.getString("triage_status")), json.triage(rs.getString("triage")),
                 Sql.instant(rs, "enqueued_at"), new Sla(Sql.instant(rs, "sla_started_at"), Sql.instant(rs, "due_at")),

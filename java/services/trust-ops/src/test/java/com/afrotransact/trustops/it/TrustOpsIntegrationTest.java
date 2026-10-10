@@ -32,7 +32,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * One PostgreSQL container (local postgis image), one in-JVM WireMock standing in for identity's token endpoint,
- * catalog, orders, payments, seller, offers and ai-gateway, and one Spring context shared by every integration test.
+ * catalog, bookings, orders, payments, seller, offers and ai-gateway, and one Spring context shared by every
+ * integration test.
  * Kafka, the outbox relay and the jobs are off: listeners and jobs are called directly.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
@@ -71,6 +72,7 @@ public abstract class TrustOpsIntegrationTest {
         registry.add("at.trustops.offers.base-url", UPSTREAM::baseUrl);
         registry.add("at.trustops.ai.base-url", UPSTREAM::baseUrl);
         registry.add("at.trustops.orders.base-url", UPSTREAM::baseUrl);
+        registry.add("at.trustops.bookings.base-url", UPSTREAM::baseUrl);
     }
 
     protected JdbcClient jdbc;
@@ -96,6 +98,8 @@ public abstract class TrustOpsIntegrationTest {
                         + "\"expires_in\":300}")));
         UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/products/[^/]+/(approve|reject|takedown)"))
                 .willReturn(WireMock.okJson("{\"id\":\"{{request.pathSegments.[2]}}\"}")));
+        UPSTREAM.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/reviews/[^/]+/(approve|reject)"))
+                .willReturn(WireMock.okJson("{\"bookingId\":\"{{request.pathSegments.[2]}}\"}")));
         UPSTREAM.stubFor(WireMock.post(WireMock.urlEqualTo("/v1/ai/triage"))
                 .willReturn(WireMock.okJson("""
                         {"subjectType":"LISTING","subjectId":"x","summary":"Title claims to cure diabetes",

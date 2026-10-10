@@ -1,6 +1,8 @@
 // Package config is the media service configuration (config/<APP_ENV>.yaml + env overrides).
 package config
 
+import "time"
+
 // Store configures one object store.
 type Store struct {
 	Kind          string `yaml:"kind"` // uploadthing | s3 | azure-blob
@@ -26,7 +28,14 @@ type Config struct {
 	} `yaml:"uploadthing"`
 	Stores   map[string]Store  `yaml:"stores"`   // named stores
 	Purposes map[string]string `yaml:"purposes"` // purpose → store name
-	Auth     struct {
+	// Links bounds signed download links of private assets.
+	Links struct {
+		DefaultTTL time.Duration `yaml:"defaultTtl" env:"SIGNED_URL_DEFAULT_TTL"`
+		// MaxLongTTL caps the links of purposes with long-lived links (purchase orders, shipping documents,
+		// résumés, exports); every other purpose stays at DefaultTTL.
+		MaxLongTTL time.Duration `yaml:"maxLongTtl" env:"SIGNED_URL_MAX_TTL"`
+	} `yaml:"links"`
+	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
 		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URI"`
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`

@@ -4,10 +4,18 @@ info:
   version: v1
   description: |
     Direct uploads for product images (UploadThing), storefront media, driver proof-of-delivery photos, return
-    photos and KYC documents (private, object-locked bucket on the primary cloud). Flow: `POST /v1/uploads`
+    photos and KYC documents (private, object-locked bucket on the primary cloud), plus private documents:
+    retail purchase orders (PDF ≤ 10 MB), inbound shipping documents (PDF or image ≤ 15 MB), job applicants'
+    résumés (PDF ≤ 5 MB) and staff exports (CSV or XLSX ≤ 50 MB). Flow: `POST /v1/uploads`
     returns a short-lived upload URL; the client PUTs the file straight to storage; `POST /v1/assets/{id}/complete`
     makes the service read the object back, detect its real type, measure it and apply the purpose rules
     (type, size, minimum edge, white background for product main images). Rejected files are deleted.
+
+    The document purposes (`purchase-order`, `shipping-document`, `career-resume`, `export`) accept the
+    client-credentials tokens of `retail-service` and `gateway-bff` and refuse other service clients;
+    `purchase-order`, `shipping-document` and `export` are otherwise staff-only. Their signed download links may
+    last longer than the default 5 minutes (`urlTtlSeconds`, up to 14 days by default, configurable); every other
+    purpose keeps 5-minute links.
 servers:
   - {url: 'http://localhost:8207', description: local}
   - {url: 'https://api.dev.afrotransact.com/media', description: dev}
@@ -33,7 +41,10 @@ paths:
               properties:
                 purpose: {$ref: '#/components/schemas/Purpose'}
                 fileName: {type: string, maxLength: 200}
-                contentType: {type: string, enum: [image/jpeg, image/png, image/webp, application/pdf]}
+                contentType:
+                  type: string
+                  enum: [image/jpeg, image/png, image/webp, application/pdf, text/csv,
+                         application/vnd.openxmlformats-officedocument.spreadsheetml.sheet]
                 size: {type: integer, format: int64, minimum: 1}
       responses:
         '201':
@@ -45,6 +56,7 @@ paths:
                 properties:
                   asset: {$ref: '#/components/schemas/Asset'}
                   upload: {$ref: '#/components/schemas/Upload'}
+        '403': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
   /v1/assets/{id}/complete:
     post:
@@ -54,15 +66,26 @@ paths:
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
         '200': {description: Asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '403': {$ref: '#/components/responses/Problem'}
         '409': {$ref: '#/components/responses/Problem'}
   /v1/assets/{id}:
     get:
       tags: [Assets]
       operationId: getAsset
-      summary: Asset metadata (private assets include a 5-minute signed URL)
-      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      summary: Asset metadata (private assets include a signed URL, 5 minutes unless asked otherwise)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - name: urlTtlSeconds
+          in: query
+          description: >-
+            Lifetime of the signed URL of a private asset. Purposes with long links (`purchase-order`,
+            `shipping-document`, `career-resume`, `export`) get up to the configured maximum (14 days by default);
+            every other purpose is capped at 5 minutes. The store may cap it further (S3-compatible stores and
+            UploadThing sign for at most 7 days). `urlExpiresAt` tells the lifetime granted.
+          schema: {type: integer, format: int64, minimum: 1, maximum: 31622400}
       responses:
         '200': {description: Asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
   /v1/assets:
@@ -84,7 +107,10 @@ components:
       description: RFC 9457 problem
       content: {application/problem+json: {schema: {type: object, properties: {type: {type: string}, title: {type: string}, status: {type: integer}, detail: {type: string}, code: {type: string}}}}}
   schemas:
-    Purpose: {type: string, enum: [product-image, storefront, proof-photo, return-photo, kyc-document]}
+    Purpose:
+      type: string
+      enum: [product-image, storefront, proof-photo, return-photo, kyc-document, purchase-order, shipping-document,
+             career-resume, export]
     Upload:
       type: object
       properties:
@@ -112,3 +138,7 @@ components:
         status: {type: string, enum: [PENDING, READY, FLAGGED, REJECTED]}
         flags: {type: array, items: {type: string}}
         createdAt: {type: string, format: date-time}
+        urlExpiresAt:
+          type: string
+          format: date-time
+          description: When the signed `url` of a private asset stops working (absent for public assets).

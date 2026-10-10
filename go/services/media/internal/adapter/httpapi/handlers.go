@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/problem"
@@ -64,9 +66,22 @@ func (h *handlersImpl) complete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
+// maxURLTTLSeconds bounds urlTtlSeconds before the purpose rules apply (a year; media caps it far lower).
+const maxURLTTLSeconds = 366 * 24 * 3600
+
 func (h *handlersImpl) get(w http.ResponseWriter, r *http.Request) {
 	actor, _ := auth.FromContext(r.Context())
-	a, err := h.media.Get(r.Context(), actor, r.PathValue("id"))
+	var ttl time.Duration
+	if raw := r.URL.Query().Get("urlTtlSeconds"); raw != "" {
+		secs, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || secs < 1 || secs > maxURLTTLSeconds {
+			problem.Write(w, r, problem.New(http.StatusBadRequest, "media.invalid-url-ttl",
+				"urlTtlSeconds must be a whole number of seconds from 1 to "+strconv.Itoa(maxURLTTLSeconds)))
+			return
+		}
+		ttl = time.Duration(secs) * time.Second
+	}
+	a, err := h.media.Get(r.Context(), actor, r.PathValue("id"), ttl)
 	if err != nil {
 		writeErr(w, r, err)
 		return
@@ -89,7 +104,7 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, domain.ErrRejected):
 		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "media.rejected", Detail: err.Error()})
 	case errors.Is(err, app.ErrForbidden):
-		problem.Write(w, r, problem.New(http.StatusForbidden, "media.forbidden", "Not your asset"))
+		problem.Write(w, r, problem.New(http.StatusForbidden, "media.forbidden", "Not your asset or not allowed for this purpose"))
 	case errors.Is(err, pgrepo.ErrNotFound):
 		problem.Write(w, r, problem.New(http.StatusNotFound, "media.not-found", "Asset not found"))
 	case errors.Is(err, app.ErrState):

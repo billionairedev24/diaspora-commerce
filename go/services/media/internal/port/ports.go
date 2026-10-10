@@ -28,6 +28,8 @@ type ObjectStore interface {
 	Delete(ctx context.Context, key string) error
 	// SignedGetURL returns a time-limited download URL for private objects.
 	SignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error)
+	// MaxSignedURLTTL is the longest lifetime the store can sign a download URL for (0 = no limit).
+	MaxSignedURLTTL() time.Duration
 }
 
 // Inspector reads an object and reports its true type, size, dimensions and border brightness.

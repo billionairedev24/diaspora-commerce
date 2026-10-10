@@ -43,17 +43,23 @@ final class TrustOpsPayloads {
 
     /**
      * {@code TrustOpsModerationEvent}. {@code customerId} is the shopper who reported a live listing (null for new
-     * listings and for staff or automated flags).
+     * listings, staff or automated flags and reviews). Review items carry {@code bookingId}, {@code serviceId} and
+     * {@code rating} instead of a product; {@code sellerOrgId} is then the reviewed provider.
      */
     static Map<String, Object> moderation(ModerationItem i) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("itemId", i.id().toString());
-        m.put("productId", i.product().productId().toString());
-        m.put("atin", i.product().atin());
-        m.put("sellerOrgId", i.product().sellerOrgId());
+        m.put("productId", i.product() == null ? null : i.product().productId().toString());
+        m.put("atin", i.product() == null ? null : i.product().atin());
+        m.put("sellerOrgId", i.orgId());
         m.put("customerId", i.report() != null && i.report().source() == ListingFlagSource.CUSTOMER_REPORT
                 ? i.report().reporterId() : null);
-        m.put("title", i.product().title());
+        m.put("title", i.title());
+        if (i.review() != null) {
+            m.put("bookingId", i.review().bookingId().toString());
+            m.put("serviceId", i.review().serviceId() == null ? null : i.review().serviceId().toString());
+            m.put("rating", i.review().rating());
+        }
         m.put("status", i.status().name());
         m.put("priority", i.priority().name());
         m.put("reasonCode", i.reasonCode() == null ? null : i.reasonCode().name());

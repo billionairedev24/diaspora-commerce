@@ -67,11 +67,18 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * S031 GTIN prefill (GS1 then Open Food Facts, both on WireMock, cached in PostgreSQL) and S032 labels over HTTP,
  * including AT-FN unit labels issued per stock owner.
+ *
+ * <p>Provider timeouts are deliberately generous here (S244). The first provider call of the class is the first
+ * HTTP exchange of the JVM with WireMock: client and server classes are still loading (and being instrumented by
+ * JaCoCo in {@code verify}), so on a busy runner it can take well over a second. With a tight timeout that call
+ * timed out, the lookup counted as a provider error, the miss was rightly not cached and the cache assertions
+ * failed. Nothing here tests timeouts (no stub is delayed); timeout handling is covered deterministically by
+ * {@code ProductDataSourcesTest} (2 s delay against an 800 ms timeout).
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.events.relay-enabled=false", "at.consumers.enabled=false", "spring.kafka.bootstrap-servers=localhost:1",
     "at.catalog.product-data.gs1.enabled=true", "at.catalog.product-data.gs1.api-key=it-gs1-key",
-    "at.catalog.product-data.gs1.timeout=1s", "at.catalog.product-data.open-food-facts.timeout=1s"})
+    "at.catalog.product-data.gs1.timeout=30s", "at.catalog.product-data.open-food-facts.timeout=30s"})
 @ActiveProfiles("local")
 @Testcontainers
 @Import(BarcodeIT.Actors.class)

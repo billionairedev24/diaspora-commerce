@@ -4,7 +4,8 @@ channels:
     address: at.trustops.events
     description: >-
       Trust & safety decisions and the audit stream from trust-ops-service (transactional outbox). Key = product id
-      (moderation), claim id (claims), seller org id (seller events), support case id, or
+      (listing moderation), booking id (review moderation), claim id (claims), seller org id (seller events), support
+      case id, or
       "audit-log" for trustops.audit.recorded (one key, so the audit stream keeps its order). Headers event-id,
       event-type, occurred-at.
     messages:
@@ -44,6 +45,17 @@ operations:
       automated flag raises its priority). Removing a LIVE_LISTING item takes the listing down in catalog
       (POST /v1/products/{id}/takedown); allowing it keeps the listing live. catalog.product.approved / rejected /
       taken_down close an item decided directly in catalog.
+  consumeTrustOpsBookingReviewEvents:
+    action: receive
+    channel: {$ref: '#/channels/bookingsEvents'}
+    summary: >-
+      Consumer group trust-ops-service-reviews (inbox consumer trust-ops:booking-reviews; other bookings events are
+      ignored): booking.review.submitted with status PENDING is queued for moderation as a SERVICE_REVIEW item (one
+      open item per review, listing SLA, AI triage hint with subjectType REVIEW when ai-gateway answers; fail-open).
+      Allowing it publishes the review (POST /v1/reviews/{bookingId}/approve), removing it rejects the review with a
+      review reason code (POST /v1/reviews/{bookingId}/reject), both with the trust-ops-service token (scope
+      bookings:reviews:moderate). booking.review.approved / rejected close an item decided directly in bookings (and
+      are no-ops for decisions made in trust-ops).
   consumeTrustOpsOrderEvents:
     action: receive
     channel: {$ref: '#/channels/ordersOrderEvents'}
@@ -99,21 +111,22 @@ components:
   messages:
     trustOpsModerationQueued:
       name: trustops.moderation.queued
-      title: A new submission or a reported / flagged live listing entered the moderation queue (itemType)
+      title: A new submission, a reported / flagged live listing or a booking review entered the moderation queue (itemType)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/TrustOpsModerationEvent'}
     trustOpsModerationEscalated:
       name: trustops.moderation.escalated
       title: >-
-        A listing was escalated (by a reviewer, or automatically when its SLA was breached). Carries sellerOrgId and,
-        for a shopper-reported live listing, the reporting customer's customerId.
+        A listing or review was escalated (by a reviewer, or automatically when its SLA was breached). Carries
+        sellerOrgId and, for a shopper-reported live listing, the reporting customer's customerId.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/TrustOpsModerationEvent'}
     trustOpsModerationDecided:
       name: trustops.moderation.decided
       title: >-
-        A listing was decided through trust-ops (new listing approved / rejected, live listing kept / taken down) or
-        closed because catalog decided it
+        A listing or review was decided through trust-ops (new listing approved / rejected, live listing kept / taken
+        down, review published / rejected) or closed because catalog or bookings decided it. Consumers that act on
+        listings must filter on itemType.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/TrustOpsModerationEvent'}
     trustOpsClaimOpened:
@@ -188,34 +201,46 @@ components:
   schemas:
     TrustOpsModerationEvent:
       type: object
-      required: [itemId, productId, sellerOrgId, status, priority, dueAt]
+      description: >-
+        A moderation queue item. Listing items carry productId; SERVICE_REVIEW items carry bookingId, serviceId and
+        rating instead (productId and atin are null).
+      required: [itemId, sellerOrgId, status, priority, itemType, dueAt]
       properties:
         itemId: {type: string, format: uuid}
-        productId: {type: string, format: uuid}
+        productId: {type: [string, 'null'], format: uuid, description: The listing (null for reviews)}
         atin: {type: [string, 'null']}
-        sellerOrgId: {type: string}
+        bookingId:
+          type: [string, 'null']
+          format: uuid
+          description: The reviewed booking (= review id) of a SERVICE_REVIEW item; absent for listings
+        serviceId: {type: [string, 'null'], format: uuid, description: The reviewed service (reviews only)}
+        rating: {type: [integer, 'null'], minimum: 1, maximum: 5, description: Star rating (reviews only)}
+        sellerOrgId: {type: string, description: The listing's seller, or the reviewed provider organisation}
         customerId:
           type: [string, 'null']
-          description: The shopper who reported a live listing (CUSTOMER_REPORT); null otherwise
-        title: {type: string}
+          description: The shopper who reported a live listing (CUSTOMER_REPORT); null otherwise (also for reviews)
+        title: {type: string, description: 'Listing title, or a review summary such as "★★★★☆ review of Box braids"'}
         status: {type: string, enum: [PENDING, ESCALATED, APPROVED, REJECTED, CLOSED]}
         priority: {type: string, enum: [NORMAL, HIGH]}
         reasonCode:
           type: [string, 'null']
           enum: [PROHIBITED_ITEM, UNAPPROVED_HEALTH_CLAIM, RESTRICTED_INGREDIENT, COUNTERFEIT, IMAGE_POLICY,
-                 MISLEADING_CONTENT, LABELLING, SHIPPING_METHOD, DUPLICATE_LISTING, WRONG_CATEGORY, OTHER, null]
+                 MISLEADING_CONTENT, LABELLING, SHIPPING_METHOD, DUPLICATE_LISTING, WRONG_CATEGORY, ABUSIVE,
+                 PERSONAL_INFORMATION, SPAM, OFF_TOPIC, CONFLICT_OF_INTEREST, OTHER, null]
+          description: Listing codes for listings, review codes (ABUSIVE … CONFLICT_OF_INTEREST) for reviews; OTHER fits both
         note: {type: [string, 'null']}
         escalationReason: {type: [string, 'null']}
         aiRiskLevel: {type: [string, 'null'], description: AI triage risk level when a hint was attached}
         itemType:
           type: string
-          enum: [NEW_LISTING, LIVE_LISTING]
+          enum: [NEW_LISTING, LIVE_LISTING, SERVICE_REVIEW]
           description: >-
             NEW_LISTING = submission (APPROVED / REJECTED in catalog); LIVE_LISTING = reported or flagged live listing
-            (APPROVED = kept live, REJECTED = taken down in catalog)
+            (APPROVED = kept live, REJECTED = taken down in catalog); SERVICE_REVIEW = customer review of a booking
+            (APPROVED = published, REJECTED = rejected in bookings; CLOSED = decided in bookings directly)
         reportSource: {type: [string, 'null'], enum: [CUSTOMER_REPORT, STAFF, AUTOMATED, null]}
         reportReason: {type: [string, 'null'], description: Reason code of the first report or flag (live listings)}
-        reports: {type: integer, description: Reports and flags counted on the item (0 for new listings)}
+        reports: {type: integer, description: Reports and flags counted on the item (0 for new listings and reviews)}
         decidedBy: {type: [string, 'null']}
         dueAt: {type: string, format: date-time}
     TrustOpsClaimEvent:

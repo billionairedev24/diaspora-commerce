@@ -8,11 +8,13 @@ import com.afrotransact.trustops.domain.ModerationItemType;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.domain.ModerationStatus;
 import com.afrotransact.trustops.domain.ProductSubmission;
+import com.afrotransact.trustops.domain.ReviewSubmission;
 import com.afrotransact.trustops.port.Page;
 
 /**
- * S117 listing moderation queue: SLA timers, assignment, approve / reject with reason codes, escalation. Holds new
- * submissions (NEW_LISTING) and, since S228, reported or flagged live listings (LIVE_LISTING).
+ * S117 moderation queue: SLA timers, assignment, approve / reject with reason codes, escalation. Holds new
+ * submissions (NEW_LISTING), since S228 reported or flagged live listings (LIVE_LISTING) and since S243 customer
+ * reviews of bookings (SERVICE_REVIEW).
  */
 public interface ModerationService {
 
@@ -36,8 +38,20 @@ public interface ModerationService {
     void closeFromCatalog(UUID eventId, UUID productId, String catalogStatus);
 
     /**
+     * Queues a customer review of a booking ({@code booking.review.submitted}, status PENDING) with AI triage
+     * (fail-open). A review that already has an open item, and re-deliveries, are ignored.
+     */
+    Optional<ModerationItemView> enqueueReview(UUID eventId, ReviewSubmission review);
+
+    /**
+     * bookings recorded a decision on the review ({@code booking.review.approved|rejected}): closes its open queue
+     * item, if any (nothing to do when the decision was made here).
+     */
+    void closeFromBookings(UUID eventId, UUID bookingId, String bookingsStatus);
+
+    /**
      * Queue, soonest due first. {@code status} null = open items; {@code mine} = assigned to the caller;
-     * {@code type} null = new and live listings.
+     * {@code type} null = every type.
      */
     Page<ModerationItemView> queue(ModerationStatus status, String assignee, boolean mine, ModerationItemType type,
                                    int page, int size);
@@ -50,14 +64,18 @@ public interface ModerationService {
     ModerationItemView escalate(UUID id, String reason);
 
     /**
-     * Allows the listing, then closes the item. Audited. A new submission is approved in catalog
-     * ({@code POST /v1/products/{id}/approve}); a live listing simply stays live (the reports are dismissed).
+     * Allows the item, then closes it. Audited. A new submission is approved in catalog
+     * ({@code POST /v1/products/{id}/approve}); a live listing simply stays live (the reports are dismissed); a review
+     * is published in bookings ({@code POST /v1/reviews/{bookingId}/approve}, which also needs the caller to hold
+     * {@code bookings:reviews:moderate}).
      */
     ModerationItemView approve(UUID id, String note);
 
     /**
-     * Removes the listing with the reason code and note, then closes the item. Audited. A new submission is rejected
-     * in catalog ({@code /reject}); a live listing is taken down ({@code POST /v1/products/{id}/takedown}).
+     * Removes the item with the reason code and note, then closes it. Audited. A new submission is rejected in
+     * catalog ({@code /reject}); a live listing is taken down ({@code POST /v1/products/{id}/takedown}); a review is
+     * rejected in bookings ({@code POST /v1/reviews/{bookingId}/reject}, review reason codes only, caller needs
+     * {@code bookings:reviews:moderate}).
      */
     ModerationItemView reject(UUID id, ModerationReasonCode reasonCode, String note);
 

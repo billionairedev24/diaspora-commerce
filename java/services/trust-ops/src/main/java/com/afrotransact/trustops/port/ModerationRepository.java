@@ -21,12 +21,15 @@ public interface ModerationRepository {
 
     Optional<ModerationItem> findOpenByProduct(UUID productId);
 
+    /** The open item of a booking review (the booking id is the review id). */
+    Optional<ModerationItem> findOpenByReview(UUID bookingId);
+
     /**
      * Queue order: soonest due first.
      *
      * @param status   null = open items (PENDING and ESCALATED)
      * @param assignee null = anyone
-     * @param type     null = new and live listings
+     * @param type     null = every type (new and live listings, service reviews)
      */
     Page<ModerationItem> search(ModerationStatus status, String assignee, ModerationItemType type, int page,
                                 int size);

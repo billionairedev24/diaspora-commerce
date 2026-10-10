@@ -105,6 +105,12 @@ func (s *storeImpl) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// maxPresignTTL is the SigV4 query-signature limit (7 days) on AWS S3, R2, GCS (HMAC) and MinIO. URLs signed with
+// temporary credentials (IRSA, STS) also stop working when those credentials expire.
+const maxPresignTTL = 7 * 24 * time.Hour
+
+func (s *storeImpl) MaxSignedURLTTL() time.Duration { return maxPresignTTL }
+
 func (s *storeImpl) SignedGetURL(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	if key == "" {
 		return "", errors.New("empty key")

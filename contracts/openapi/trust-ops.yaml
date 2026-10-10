@@ -19,11 +19,11 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Listing moderation
+  description: Queue of listings and booking reviews awaiting a human decision, with SLA timers, assignment, AI triage hints,
+    allow / remove with reason codes and escalation (catalog:moderate; deciding a review also needs bookings:reviews:moderate)
 - name: Audit log
   description: Immutable, hash-chained record of every privileged action (audit:read)
-- name: Listing moderation
-  description: Queue of listings awaiting a human decision, with SLA timers, assignment, AI triage hints, allow / remove with
-    reason codes and escalation (catalog:moderate)
 - name: Support cases
   description: Conversations Lola handed to human support (support:respond)
 - name: Disputes & A-to-z claims
@@ -498,7 +498,8 @@ paths:
       tags:
       - Listing moderation
       summary: 'Moderation queue, soonest due first (default: open items of both types)'
-      description: 'type=NEW_LISTING: submissions awaiting review; type=LIVE_LISTING: reported or flagged live listings (catalog.product.flagged).'
+      description: 'type=NEW_LISTING: submissions awaiting review; type=LIVE_LISTING: reported or flagged live listings (catalog.product.flagged);
+        type=SERVICE_REVIEW: customer reviews of bookings (booking.review.submitted).'
       operationId: queue_2
       parameters:
       - name: status
@@ -531,6 +532,7 @@ paths:
           enum:
           - NEW_LISTING
           - LIVE_LISTING
+          - SERVICE_REVIEW
       - name: page
         in: query
         required: false
@@ -576,7 +578,8 @@ paths:
       - Listing moderation
       summary: Allow, then close the item (audited)
       description: 'NEW_LISTING: approves the product in catalog. LIVE_LISTING: keeps the listing live and dismisses the reports
-        (no catalog call).'
+        (no catalog call). SERVICE_REVIEW: publishes the review in bookings (POST /v1/reviews/{bookingId}/approve). If the
+        owning service refuses, the item stays open (409).'
       operationId: approve
       parameters:
       - name: id
@@ -654,7 +657,8 @@ paths:
       - Listing moderation
       summary: Remove with a reason code, then close the item (audited)
       description: 'NEW_LISTING: rejects the product in catalog. LIVE_LISTING: takes the live listing down in catalog (POST
-        /v1/products/{id}/takedown). If catalog refuses, the item stays open (409).'
+        /v1/products/{id}/takedown). SERVICE_REVIEW: rejects the review in bookings (POST /v1/reviews/{bookingId}/reject;
+        review reason codes). If the owning service refuses, the item stays open (409).'
       operationId: reject
       parameters:
       - name: id
@@ -700,8 +704,20 @@ paths:
     get:
       tags:
       - Listing moderation
-      summary: Reason codes for removing a listing
+      summary: Reason codes for removing an item
+      description: Listing codes by default (and for type=NEW_LISTING or LIVE_LISTING); review codes for type=SERVICE_REVIEW.
+        OTHER fits both and needs a note.
       operationId: reasonCodes
+      parameters:
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - NEW_LISTING
+          - LIVE_LISTING
+          - SERVICE_REVIEW
       responses:
         '200':
           description: OK
@@ -1160,7 +1176,8 @@ components:
             type: string
     ModerationItemResponse:
       type: object
-      description: A listing in the moderation queue
+      description: 'An item in the moderation queue: a listing (productId set) or a customer review of a booking (review set,
+        sellerOrgId = the provider, title = a one-line summary)'
       properties:
         id:
           type: string
@@ -1183,8 +1200,11 @@ components:
           enum:
           - NEW_LISTING
           - LIVE_LISTING
+          - SERVICE_REVIEW
         report:
           $ref: '#/components/schemas/ReportResponse'
+        review:
+          $ref: '#/components/schemas/ReviewResponse'
         status:
           type: string
           enum:
@@ -1240,6 +1260,11 @@ components:
           - SHIPPING_METHOD
           - DUPLICATE_LISTING
           - WRONG_CATEGORY
+          - ABUSIVE
+          - PERSONAL_INFORMATION
+          - SPAM
+          - OFF_TOPIC
+          - CONFLICT_OF_INTEREST
           - OTHER
         decisionNote:
           type: string
@@ -1272,6 +1297,11 @@ components:
           - SHIPPING_METHOD
           - DUPLICATE_LISTING
           - WRONG_CATEGORY
+          - ABUSIVE
+          - PERSONAL_INFORMATION
+          - SPAM
+          - OFF_TOPIC
+          - CONFLICT_OF_INTEREST
           - OTHER
         details:
           type: string
@@ -1282,6 +1312,31 @@ components:
         reports:
           type: integer
           format: int32
+    ReviewResponse:
+      type: object
+      description: The customer review a SERVICE_REVIEW item is about (bookings-service)
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        serviceId:
+          type: string
+          format: uuid
+        serviceName:
+          type: string
+        customerId:
+          type: string
+          description: Author (token subject); never public
+        reviewerName:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        text:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
     TriageResponse:
       type: object
       description: AI triage hint (advisory; absent when AI is off or unavailable)
@@ -1298,8 +1353,8 @@ components:
           type: string
     RejectRequest:
       type: object
-      description: 'Remove the listing (reject a submission, take a live listing down): reason code required, note required
-        for OTHER'
+      description: 'Remove the item (reject a submission, take a live listing down, reject a review): reason code for the
+        item''s kind required, note required for OTHER'
       properties:
         reasonCode:
           type: string
@@ -1314,6 +1369,11 @@ components:
           - SHIPPING_METHOD
           - DUPLICATE_LISTING
           - WRONG_CATEGORY
+          - ABUSIVE
+          - PERSONAL_INFORMATION
+          - SPAM
+          - OFF_TOPIC
+          - CONFLICT_OF_INTEREST
           - OTHER
         note:
           type: string
@@ -1341,7 +1401,8 @@ components:
           minLength: 0
     ApproveRequest:
       type: object
-      description: Allow the listing (optional note); for a live listing this dismisses the reports
+      description: 'Allow the item (optional note): approves a submission, keeps a live listing (dismissing the reports) or
+        publishes a review'
       properties:
         note:
           type: string
@@ -1647,6 +1708,11 @@ components:
           - SHIPPING_METHOD
           - DUPLICATE_LISTING
           - WRONG_CATEGORY
+          - ABUSIVE
+          - PERSONAL_INFORMATION
+          - SPAM
+          - OFF_TOPIC
+          - CONFLICT_OF_INTEREST
           - OTHER
         label:
           type: string

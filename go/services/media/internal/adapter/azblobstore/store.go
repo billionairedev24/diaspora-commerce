@@ -107,6 +107,9 @@ func (s *storeImpl) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// MaxSignedURLTTL: service SAS signed with the account key have no maximum lifetime.
+func (s *storeImpl) MaxSignedURLTTL() time.Duration { return 0 }
+
 func (s *storeImpl) SignedGetURL(_ context.Context, key string, ttl time.Duration) (string, error) {
 	return s.sasURL(key, sas.BlobPermissions{Read: true}, ttl)
 }

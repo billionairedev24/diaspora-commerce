@@ -20,6 +20,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media"
+	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/authn"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/azblobstore"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/inspect"
@@ -85,11 +86,13 @@ func run() error {
 		stores[domain.Purpose(purpose)] = st
 	}
 	repo := pgrepo.New(pool)
-	svc := app.NewMediaService(stores, repo, inspect.New(40_000_000))
+	svc := app.NewMediaService(stores, repo, inspect.New(40_000_000),
+		domain.LinkPolicy{Default: cfg.Links.DefaultTTL, MaxLong: cfg.Links.MaxLongTTL})
 
 	var verifier auth.Verifier
 	if cfg.Auth.Enabled {
-		verifier = auth.NewJWKSVerifier(cfg.Auth.Issuer, cfg.Auth.Audience, httpClient)
+		// Tokens for media, plus the own client-credentials tokens of the service clients the purposes name.
+		verifier = authn.NewVerifier(cfg.Auth.Issuer, cfg.Auth.Audience, domain.ServiceClients(), httpClient)
 	}
 	openapi, err := media.Files.ReadFile("api/openapi.yaml")
 	if err != nil {

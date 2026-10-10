@@ -14,6 +14,8 @@ import com.afrotransact.trustops.domain.ModerationItemType;
 import com.afrotransact.trustops.domain.ModerationPriority;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.domain.ModerationStatus;
+import com.afrotransact.trustops.domain.ProductSubmission;
+import com.afrotransact.trustops.domain.ReviewSubmission;
 import com.afrotransact.trustops.domain.TriageHint;
 import com.afrotransact.trustops.domain.TriageStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -45,10 +47,22 @@ final class ModerationDtos {
         }
     }
 
-    @Schema(description = "A listing in the moderation queue")
+    @Schema(description = "The customer review a SERVICE_REVIEW item is about (bookings-service)")
+    record ReviewResponse(UUID bookingId, UUID serviceId, String serviceName,
+                          @Schema(description = "Author (token subject); never public") String customerId,
+                          String reviewerName, int rating, String text, Instant submittedAt) {
+
+        static ReviewResponse of(ReviewSubmission r) {
+            return r == null ? null : new ReviewResponse(r.bookingId(), r.serviceId(), r.serviceName(),
+                    r.customerId(), r.reviewerName(), r.rating(), r.text(), r.submittedAt());
+        }
+    }
+
+    @Schema(description = "An item in the moderation queue: a listing (productId set) or a customer review of a "
+            + "booking (review set, sellerOrgId = the provider, title = a one-line summary)")
     record ModerationItemResponse(UUID id, UUID productId, String atin, String sellerOrgId, String ownerKind,
                                   String title, String productTypeCode, ModerationItemType type,
-                                  ReportResponse report, ModerationStatus status,
+                                  ReportResponse report, ReviewResponse review, ModerationStatus status,
                                   ModerationPriority priority, TriageStatus triageStatus, TriageResponse triage,
                                   Instant enqueuedAt, SlaResponse sla, String assignee, Instant assignedAt,
                                   boolean escalated, String escalationReason, Instant escalatedAt, String decidedBy,
@@ -57,9 +71,10 @@ final class ModerationDtos {
 
         static ModerationItemResponse of(ModerationItemView v) {
             ModerationItem i = v.item();
-            return new ModerationItemResponse(i.id(), i.product().productId(), i.product().atin(),
-                    i.product().sellerOrgId(), i.product().ownerKind(), i.product().title(),
-                    i.product().productTypeCode(), i.type(), ReportResponse.of(i.report()), i.status(), i.priority(),
+            ProductSubmission p = i.product();
+            return new ModerationItemResponse(i.id(), p == null ? null : p.productId(), p == null ? null : p.atin(),
+                    i.orgId(), p == null ? null : p.ownerKind(), i.title(), p == null ? null : p.productTypeCode(),
+                    i.type(), ReportResponse.of(i.report()), ReviewResponse.of(i.review()), i.status(), i.priority(),
                     i.triageStatus(), TriageResponse.of(i.triage()), i.enqueuedAt(),
                     i.open() ? SlaResponse.of(v.sla()) : null,
                     i.assignee(), i.assignedAt(), i.escalated(), i.escalationReason(), i.escalatedAt(),
@@ -79,12 +94,13 @@ final class ModerationDtos {
     record EscalateRequest(@NotBlank @Size(max = 1000) String reason) {
     }
 
-    @Schema(description = "Allow the listing (optional note); for a live listing this dismisses the reports")
+    @Schema(description = "Allow the item (optional note): approves a submission, keeps a live listing (dismissing "
+            + "the reports) or publishes a review")
     record ApproveRequest(@Size(max = 1000) String note) {
     }
 
-    @Schema(description = "Remove the listing (reject a submission, take a live listing down): reason code required, "
-            + "note required for OTHER")
+    @Schema(description = "Remove the item (reject a submission, take a live listing down, reject a review): reason "
+            + "code for the item's kind required, note required for OTHER")
     record RejectRequest(@NotNull ModerationReasonCode reasonCode, @Size(max = 1000) String note) {
     }
 }

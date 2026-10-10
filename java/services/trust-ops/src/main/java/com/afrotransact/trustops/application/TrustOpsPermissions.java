@@ -18,6 +18,11 @@ public final class TrustOpsPermissions {
     public static final String ORGS_READ = "orgs:read";
     /** Suspend and reinstate sellers (new key, see README). */
     public static final String SELLERS_ENFORCE = "sellers:enforce";
+    /**
+     * Publish or reject customer reviews of bookings (bookings-service's key). Deciding a review item here also needs
+     * it, so the queue cannot be used to bypass bookings' own check.
+     */
+    public static final String REVIEWS_MODERATE = "bookings:reviews:moderate";
 
     private TrustOpsPermissions() {
     }

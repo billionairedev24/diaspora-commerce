@@ -94,10 +94,13 @@ at:
       client-id: ${TRUSTOPS_CLIENT_ID:trust-ops-service}
       # Only from the environment (identity's trust-ops-service client secret). Blank = no token (local profile).
       client-secret: ${TRUSTOPS_CLIENT_SECRET}
-      scopes: catalog:moderate payments:service sellers:enforce offers:write ai:triage orders:lookup
+      scopes: catalog:moderate payments:service sellers:enforce offers:write ai:triage orders:lookup bookings:reviews:moderate
       timeout: ${UPSTREAM_TIMEOUT:10s}
     catalog:
       base-url: ${CATALOG_URL:http://localhost:8101}
+    # Review moderation decisions (POST /v1/reviews/{bookingId}/approve|reject, scope bookings:reviews:moderate).
+    bookings:
+      base-url: ${BOOKINGS_URL:http://localhost:8109}
     orders:
       base-url: ${ORDERS_URL:http://localhost:8104}
     # Claims are checked against orders-service's order lookup (claimant owns the order, shipment and seller match).
@@ -136,6 +139,7 @@ at:
       fulfilment-topic: at.fulfilment.events
       order-topic: at.order.events
       handoff-topic: at.ai-handoff.events
+      bookings-topic: at.bookings.events
     jobs:
       enabled: ${TRUSTOPS_JOBS_ENABLED:true}
       sla-interval: ${TRUSTOPS_SLA_SWEEP_INTERVAL:60s}

@@ -21,6 +21,8 @@ import (
 type memStore struct {
 	objects map[string][]byte
 	deleted []string
+	maxTTL  time.Duration
+	signed  []time.Duration
 }
 
 func (m *memStore) Name() string { return "mem" }
@@ -39,9 +41,11 @@ func (m *memStore) Delete(_ context.Context, key string) error {
 	delete(m.objects, key)
 	return nil
 }
-func (m *memStore) SignedGetURL(_ context.Context, key string, _ time.Duration) (string, error) {
+func (m *memStore) SignedGetURL(_ context.Context, key string, ttl time.Duration) (string, error) {
+	m.signed = append(m.signed, ttl)
 	return "https://signed/" + key, nil
 }
+func (m *memStore) MaxSignedURLTTL() time.Duration { return m.maxTTL }
 
 type memRepo struct{ assets map[string]domain.Asset }
 
@@ -79,7 +83,7 @@ func TestUploadCompleteAndPrivateAccess(t *testing.T) {
 	repo := &memRepo{assets: map[string]domain.Asset{}}
 	svc := app.NewMediaService(map[domain.Purpose]port.ObjectStore{
 		domain.PurposeProductImage: pub, domain.PurposeKYCDocument: priv,
-	}, repo, inspect.New(40_000_000))
+	}, repo, inspect.New(40_000_000), domain.LinkPolicy{})
 	seller := auth.Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "org_lagos"}
 	ctx := context.Background()
 
@@ -109,10 +113,10 @@ func TestUploadCompleteAndPrivateAccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := auth.Actor{Subject: "u2", Type: "SELLER_MEMBER", OrgID: "org_other"}
-	if _, err := svc.Get(ctx, other, k.ID); !errors.Is(err, app.ErrForbidden) {
+	if _, err := svc.Get(ctx, other, k.ID, 0); !errors.Is(err, app.ErrForbidden) {
 		t.Fatalf("other org must not read KYC docs, got %v", err)
 	}
-	got, err := svc.Get(ctx, seller, k.ID)
+	got, err := svc.Get(ctx, seller, k.ID, 0)
 	if err != nil || got.URL != "https://signed/"+kup.Key {
 		t.Fatalf("owner should get a signed URL: %+v %v", got, err)
 	}
@@ -121,7 +125,7 @@ func TestUploadCompleteAndPrivateAccess(t *testing.T) {
 func TestDisguisedFileIsRejectedAndDeleted(t *testing.T) {
 	pub := &memStore{objects: map[string][]byte{}}
 	repo := &memRepo{assets: map[string]domain.Asset{}}
-	svc := app.NewMediaService(map[domain.Purpose]port.ObjectStore{domain.PurposeProductImage: pub}, repo, inspect.New(40_000_000))
+	svc := app.NewMediaService(map[domain.Purpose]port.ObjectStore{domain.PurposeProductImage: pub}, repo, inspect.New(40_000_000), domain.LinkPolicy{})
 	seller := auth.Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "org_lagos"}
 	a, up, err := svc.RequestUpload(context.Background(), seller, domain.PurposeProductImage, "x.jpg", "image/jpeg", 40)
 	if err != nil {

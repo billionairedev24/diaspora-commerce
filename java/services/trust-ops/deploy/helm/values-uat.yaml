@@ -19,6 +19,7 @@ extraEnv:
   AUTH_ISSUER_URI: https://auth.uat.afrotransact.com
   AUTH_TOKEN_URI: https://auth.uat.afrotransact.com/oauth2/token
   CATALOG_URL: http://catalog:8080
+  BOOKINGS_URL: http://bookings:8080
   PAYMENTS_URL: http://payments:8080
   SELLER_URL: http://seller:8080
   OFFERS_URL: http://offers:8080

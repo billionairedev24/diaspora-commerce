@@ -19,8 +19,10 @@ import com.afrotransact.trustops.domain.ModerationItemType;
 import com.afrotransact.trustops.domain.ModerationReasonCode;
 import com.afrotransact.trustops.domain.ModerationStatus;
 import com.afrotransact.trustops.domain.ProductSubmission;
+import com.afrotransact.trustops.domain.ReviewSubmission;
 import com.afrotransact.trustops.domain.SlaPolicy;
 import com.afrotransact.trustops.domain.TriageHint;
+import com.afrotransact.trustops.port.BookingsReviewClient;
 import com.afrotransact.trustops.port.CatalogModerationClient;
 import com.afrotransact.trustops.port.ModerationRepository;
 import com.afrotransact.trustops.port.Page;
@@ -38,6 +40,7 @@ class ModerationServiceImpl implements ModerationService {
 
     private final ModerationRepository items;
     private final CatalogModerationClient catalog;
+    private final BookingsReviewClient bookings;
     private final TriageClient triage;
     private final SlaPolicy sla;
     private final PermissionChecker permissions;
@@ -46,11 +49,12 @@ class ModerationServiceImpl implements ModerationService {
     private final AuditTrail audit;
     private final Clock clock;
 
-    ModerationServiceImpl(ModerationRepository items, CatalogModerationClient catalog, TriageClient triage,
-                          SlaPolicy sla, PermissionChecker permissions, InboxDeduplicator inbox,
+    ModerationServiceImpl(ModerationRepository items, CatalogModerationClient catalog, BookingsReviewClient bookings,
+                          TriageClient triage, SlaPolicy sla, PermissionChecker permissions, InboxDeduplicator inbox,
                           DomainEventPublisher events, AuditTrail audit, Clock clock) {
         this.items = items;
         this.catalog = catalog;
+        this.bookings = bookings;
         this.triage = triage;
         this.sla = sla;
         this.permissions = permissions;
@@ -106,6 +110,32 @@ class ModerationServiceImpl implements ModerationService {
     }
 
     @Override
+    @Transactional
+    public Optional<ModerationItemView> enqueueReview(UUID eventId, ReviewSubmission review) {
+        if (!inbox.firstDelivery(TrustOpsEvents.CONSUMER_BOOKING_REVIEWS, eventId)
+                || items.findOpenByReview(review.bookingId()).isPresent()) {
+            return Optional.empty();
+        }
+        Instant now = Instant.now(clock);
+        ModerationItem queued = items.insert(ModerationItem.queueReview(UUID.randomUUID(), review,
+                reviewHint(review).orElse(null), now, sla));
+        publish(TrustOpsEvents.MODERATION_QUEUED, queued);
+        return Optional.of(ModerationItemView.of(queued, now));
+    }
+
+    @Override
+    @Transactional
+    public void closeFromBookings(UUID eventId, UUID bookingId, String bookingsStatus) {
+        if (!inbox.firstDelivery(TrustOpsEvents.CONSUMER_BOOKING_REVIEWS, eventId)) {
+            return;
+        }
+        items.findOpenByReview(bookingId).ifPresent(open -> {
+            ModerationItem closed = items.update(open.closeUpstream(bookingsStatus, Instant.now(clock)));
+            publish(TrustOpsEvents.MODERATION_DECIDED, closed);
+        });
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public Page<ModerationItemView> queue(ModerationStatus status, String assignee, boolean mine,
                                           ModerationItemType type, int page, int size) {
@@ -138,8 +168,9 @@ class ModerationServiceImpl implements ModerationService {
         Actor actor = permissions.require(TrustOpsPermissions.MODERATE);
         Instant now = Instant.now(clock);
         ModerationItem saved = items.update(find(id).escalate(reason, now, sla));
-        audit.action(actor, "trustops.listing.escalated", "LISTING", saved.product().productId().toString(),
-                saved.product().sellerOrgId(), "Escalated: " + saved.escalationReason(), details(saved));
+        audit.action(actor, ModerationSubjects.action(saved, "escalated"), ModerationSubjects.entityType(saved),
+                saved.subjectId().toString(), saved.orgId(), "Escalated: " + saved.escalationReason(),
+                details(saved));
         publish(TrustOpsEvents.MODERATION_ESCALATED, saved);
         return ModerationItemView.of(saved, now);
     }
@@ -149,7 +180,15 @@ class ModerationServiceImpl implements ModerationService {
     public ModerationItemView approve(UUID id, String note) {
         Actor actor = permissions.require(TrustOpsPermissions.MODERATE);
         Instant now = Instant.now(clock);
-        ModerationItem decided = find(id).approve(actor.subject(), note, now);
+        ModerationItem item = find(id);
+        if (item.serviceReview()) {
+            permissions.require(TrustOpsPermissions.REVIEWS_MODERATE);
+        }
+        ModerationItem decided = item.approve(actor.subject(), note, now);
+        if (decided.serviceReview()) {
+            callBookings(() -> bookings.approve(decided.review().bookingId(), decided.decisionNote()));
+            return finish(actor, decided, "trustops.review.approved", now);
+        }
         if (decided.liveListing()) {
             // The listing is already live: allowing it dismisses the reports, nothing changes in catalog.
             return finish(actor, decided, "trustops.listing.kept", now);
@@ -163,7 +202,16 @@ class ModerationServiceImpl implements ModerationService {
     public ModerationItemView reject(UUID id, ModerationReasonCode reasonCode, String note) {
         Actor actor = permissions.require(TrustOpsPermissions.MODERATE);
         Instant now = Instant.now(clock);
-        ModerationItem decided = find(id).reject(actor.subject(), reasonCode, note, now);
+        ModerationItem item = find(id);
+        if (item.serviceReview()) {
+            permissions.require(TrustOpsPermissions.REVIEWS_MODERATE);
+        }
+        ModerationItem decided = item.reject(actor.subject(), reasonCode, note, now);
+        if (decided.serviceReview()) {
+            callBookings(() -> bookings.reject(decided.review().bookingId(), decided.reasonCode(),
+                    decided.decisionNote()));
+            return finish(actor, decided, "trustops.review.rejected", now);
+        }
         if (decided.liveListing()) {
             callCatalog(() -> catalog.takeDown(decided.product().productId(), decided.reasonCode(),
                     decided.decisionNote()));
@@ -179,15 +227,16 @@ class ModerationServiceImpl implements ModerationService {
         permissions.require(TrustOpsPermissions.MODERATE);
         Instant now = Instant.now(clock);
         ModerationItem item = find(id);
-        ModerationItem updated = hint(item.product(), item.report()).map(h -> items.update(item.withTriage(h, sla)))
-                .orElse(item);
+        Optional<TriageHint> hint = item.serviceReview() ? reviewHint(item.review())
+                : hint(item.product(), item.report());
+        ModerationItem updated = hint.map(h -> items.update(item.withTriage(h, sla))).orElse(item);
         return ModerationItemView.of(updated, now);
     }
 
     private ModerationItemView finish(Actor actor, ModerationItem decided, String action, Instant now) {
         ModerationItem saved = items.update(decided);
-        audit.action(actor, action, "LISTING", saved.product().productId().toString(), saved.product().sellerOrgId(),
-                verb(saved) + " \"" + saved.product().title() + "\"" + (saved.reasonCode() == null ? ""
+        audit.action(actor, action, ModerationSubjects.entityType(saved), saved.subjectId().toString(),
+                saved.orgId(), verb(saved) + " \"" + saved.title() + "\"" + (saved.reasonCode() == null ? ""
                         : " — " + saved.reasonCode().name()), details(saved));
         publish(TrustOpsEvents.MODERATION_DECIDED, saved);
         return ModerationItemView.of(saved, now);
@@ -195,6 +244,9 @@ class ModerationServiceImpl implements ModerationService {
 
     private static String verb(ModerationItem i) {
         boolean approved = i.status() == ModerationStatus.APPROVED;
+        if (i.serviceReview()) {
+            return approved ? "Published" : "Rejected";
+        }
         if (i.liveListing()) {
             return approved ? "Kept live" : "Took down";
         }
@@ -226,6 +278,38 @@ class ModerationServiceImpl implements ModerationService {
         }
     }
 
+    /** AI triage of a review: rating, text and service only (the author's id is not sent); fail-open. */
+    private Optional<TriageHint> reviewHint(ReviewSubmission r) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("rating", Integer.toString(r.rating()));
+        if (r.text() != null) {
+            fields.put("text", r.text());
+        }
+        if (r.serviceName() != null) {
+            fields.put("serviceName", r.serviceName());
+        }
+        fields.put("providerOrgId", r.orgId());
+        try {
+            return triage.triage("REVIEW", r.bookingId().toString(), fields);
+        } catch (RuntimeException e) {
+            LOG.warn("AI triage unavailable for review {}; queued without a hint: {}", r.bookingId(), e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /** bookings refusing (409 / 422) or not knowing the review (404) keeps the item open. */
+    private static void callBookings(Runnable call) {
+        try {
+            call.run();
+        } catch (UpstreamException e) {
+            if (e.rejected() || e.status() == 404) {
+                throw new ConflictException("trustops.bookings-refused", "Bookings refused the decision: "
+                        + e.getMessage());
+            }
+            throw e;
+        }
+    }
+
     private static void callCatalog(Runnable call) {
         try {
             call.run();
@@ -246,10 +330,12 @@ class ModerationServiceImpl implements ModerationService {
     private static Map<String, Object> details(ModerationItem i) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("itemId", i.id().toString());
-        m.put("productId", i.product().productId().toString());
-        m.put("atin", i.product().atin());
-        m.put("sellerOrgId", i.product().sellerOrgId());
-        m.put("title", i.product().title());
+        m.put("productId", i.product() == null ? null : i.product().productId().toString());
+        m.put("atin", i.product() == null ? null : i.product().atin());
+        m.put("bookingId", i.review() == null ? null : i.review().bookingId().toString());
+        m.put("rating", i.review() == null ? null : i.review().rating());
+        m.put("sellerOrgId", i.orgId());
+        m.put("title", i.title());
         m.put("status", i.status().name());
         m.put("reasonCode", i.reasonCode() == null ? null : i.reasonCode().name());
         m.put("note", i.decisionNote());
@@ -263,7 +349,6 @@ class ModerationServiceImpl implements ModerationService {
     }
 
     private void publish(String type, ModerationItem i) {
-        events.publish(type, TrustOpsEvents.AGGREGATE, i.product().productId().toString(),
-                TrustOpsPayloads.moderation(i));
+        events.publish(type, TrustOpsEvents.AGGREGATE, i.subjectId().toString(), TrustOpsPayloads.moderation(i));
     }
 }

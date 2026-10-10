@@ -28,6 +28,16 @@ purposes:
   proof-photo: private
   return-photo: private
   kyc-document: private
+  purchase-order: private
+  shipping-document: private
+  career-resume: private
+  export: private
+# Signed download links of private assets: 5 minutes by default; purchase orders, shipping documents, résumés and
+# exports may ask for longer ones (GET /v1/assets/{id}?urlTtlSeconds=) up to maxLongTtl. The store caps them too
+# (S3-compatible stores and UploadThing sign for at most 7 days).
+links:
+  defaultTtl: 5m
+  maxLongTtl: 336h
 auth:
   enabled: true
   issuer: https://auth.dev.afrotransact.com

@@ -152,4 +152,23 @@ test-only ZXing core 3.5.4 (every barcode test decodes the generated symbol, so 
 3.13.2 (providers). The ZPL output is pinned by snapshots in `src/test/resources/labels`.
 Migrations: `V5__barcode_prefill_and_unit_labels.sql` (`product_data_lookup`, `unit_label`, `unit_label_seq`).
 
+### Test notes
+
+- **S244: `BarcodeIT.unknownGtinFallsBackToManualEntryAndTheMissIsCachedButErrorsAreNot` was flaky (timing).**
+  The cause was not WireMock state, the cache TTL or connection reuse. JUnit's method order puts that test first in
+  `BarcodeIT`, and `BarcodeIT` is the first IT failsafe runs, so its first GS1 call is the JVM's first HTTP exchange
+  with WireMock. The JDK `HttpClient`, Spring's `RestClient` and WireMock's Jetty and request-matching classes are
+  still loading then (and `verify` adds the JaCoCo agent, which instruments every class as it loads). The test also
+  set 1 s provider timeouts. On a busy runner that first call took more than a second, so Spring's read timeout
+  cancelled it (logged as `GS1 unavailable: … Request cancelled` or `… : get`). The lookup then counted as a provider
+  error, and errors are never cached (correct behaviour). So the second `prefill` was not served from the cache, and
+  `cached()` (line 208) was false. Reproduced 4/4 with JaCoCo and 8 CPU-bound processes: the test took 4.7 to 5.9 s,
+  against 0.07 s for the same flow once warm.
+  **Fix:** the IT's provider timeouts are now 30 s. The test checks cache semantics, not latency, and no stub in it
+  is delayed. Timeout handling keeps its deterministic coverage in `ProductDataSourcesTest` (2 s delay against an
+  800 ms timeout). No retries or reordering were added. Verified with 20 consecutive runs of the class under
+  JaCoCo and extra CPU load.
+  `ProductDataSourcesTest` (a unit test, run by surefire) uses 800 ms timeouts for its non-delayed calls too, so
+  it carries the same, smaller cold-start risk.
+
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

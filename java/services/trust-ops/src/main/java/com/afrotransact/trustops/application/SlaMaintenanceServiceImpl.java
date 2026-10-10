@@ -48,11 +48,11 @@ class SlaMaintenanceServiceImpl implements SlaMaintenanceService {
         for (ModerationItem item : moderation.findBreachedPending(now, BATCH)) {
             ModerationItem saved = moderation.update(item.escalate("SLA breached: no decision by "
                     + item.sla().dueAt(), now, sla));
-            audit.action(AuditTrail.SYSTEM, "trustops.listing.escalated", "LISTING",
-                    saved.product().productId().toString(), saved.product().sellerOrgId(),
+            audit.action(AuditTrail.SYSTEM, ModerationSubjects.action(saved, "escalated"),
+                    ModerationSubjects.entityType(saved), saved.subjectId().toString(), saved.orgId(),
                     saved.escalationReason(), Map.of("itemId", saved.id().toString()));
             events.publish(TrustOpsEvents.MODERATION_ESCALATED, TrustOpsEvents.AGGREGATE,
-                    saved.product().productId().toString(), TrustOpsPayloads.moderation(saved));
+                    saved.subjectId().toString(), TrustOpsPayloads.moderation(saved));
             listings++;
         }
         int reminded = 0;

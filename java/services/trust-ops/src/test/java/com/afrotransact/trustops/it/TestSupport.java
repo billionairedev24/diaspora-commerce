@@ -39,6 +39,12 @@ public class TestSupport {
                 Set.of("catalog:moderate", "disputes:manage", "audit:read", "orgs:read", "sellers:enforce"));
     }
 
+    /** Trust & Safety staff who may also decide booking reviews (bookings:reviews:moderate). */
+    public static Actor reviewModerator(String subject) {
+        return new Actor(subject, PrincipalType.STAFF, Optional.empty(), Set.of("platform.trust_safety"),
+                Set.of("catalog:moderate", "bookings:reviews:moderate", "audit:read"));
+    }
+
     public static Actor customer(String subject) {
         return new Actor(subject, PrincipalType.CUSTOMER, Optional.empty(), Set.of("account.customer"), Set.of());
     }

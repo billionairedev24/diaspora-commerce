@@ -21,15 +21,105 @@ class ListenersIT extends TrustOpsIntegrationTest {
     private final OrderEventListener orders;
     private final AiHandoffEventListener handoffs;
     private final FulfilmentEventListener fulfilment;
+    private final BookingReviewEventListener reviews;
 
     @Autowired
     ListenersIT(CatalogProductEventListener products, AuditEventListener audit, OrderEventListener orders,
-                AiHandoffEventListener handoffs, FulfilmentEventListener fulfilment) {
+                AiHandoffEventListener handoffs, FulfilmentEventListener fulfilment,
+                BookingReviewEventListener reviews) {
         this.products = products;
         this.audit = audit;
         this.orders = orders;
         this.handoffs = handoffs;
         this.fulfilment = fulfilment;
+        this.reviews = reviews;
+    }
+
+    /** A BookingsReviewEvent as bookings-service's outbox writes it. */
+    private static String reviewEvent(UUID bookingId, String org, String status, int rating, String text) {
+        return """
+                {"contentType":"BOOKING_REVIEW","reviewId":"%s","bookingId":"%s","orgId":"%s",
+                 "serviceId":"7d1f0b8e-0c55-4c8b-9a51-3f7f2b0c1a10","serviceName":"Box braids (medium)",
+                 "customerId":"cust-77","reviewerName":"Kemi A.","rating":%d,"text":%s,"status":"%s",
+                 "createdAt":"2026-10-09T12:00:00Z","moderatedBy":null,"moderatedAt":null,"reasonCode":null,
+                 "moderationNote":null,"replyText":null,"repliedAt":null,
+                 "approvePath":"/v1/reviews/%s/approve","rejectPath":"/v1/reviews/%s/reject"}
+                """.formatted(bookingId, bookingId, org, rating, text == null ? "null" : "\"" + text + "\"",
+                status, bookingId, bookingId);
+    }
+
+    private String reviewItem(UUID bookingId, String column) {
+        return jdbc.sql("select " + column + "::text from moderation_item where booking_id = :b")
+                .param("b", bookingId).query(String.class).single();
+    }
+
+    @Test
+    void submittedReviewIsQueuedOnceAndBookingsDecisionClosesIt() {
+        UUID bookingId = UUID.randomUUID();
+        String org = orgId();
+        UUID eventId = UUID.randomUUID();
+        String submitted = reviewEvent(bookingId, org, "PENDING", 2, "Arrived 40 minutes late");
+
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.review.submitted", eventId,
+                submitted));
+        assertThat(reviewItem(bookingId, "item_type")).isEqualTo("SERVICE_REVIEW");
+        assertThat(reviewItem(bookingId, "status")).isEqualTo("PENDING");
+        assertThat(reviewItem(bookingId, "seller_org_id")).isEqualTo(org);
+        assertThat(reviewItem(bookingId, "rating")).isEqualTo("2");
+        assertThat(reviewItem(bookingId, "review_text")).isEqualTo("Arrived 40 minutes late");
+        assertThat(reviewItem(bookingId, "customer_id")).isEqualTo("cust-77");
+
+        // Redelivery (same event-id) and a second submitted event for the same review add nothing.
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.review.submitted", eventId,
+                submitted));
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.review.submitted",
+                UUID.randomUUID(), submitted));
+        assertThat(jdbc.sql("select count(*) from moderation_item where booking_id = :b").param("b", bookingId)
+                .query(Long.class).single()).isEqualTo(1);
+        assertThat(jdbc.sql("select count(*) from platform_inbox where event_id = :e").param("e", eventId)
+                .query(Long.class).single()).isEqualTo(1);
+
+        // A staff member decided in bookings directly: booking.review.rejected closes the item.
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.review.rejected",
+                UUID.randomUUID(), reviewEvent(bookingId, org, "REJECTED", 2, "Arrived 40 minutes late")));
+        assertThat(reviewItem(bookingId, "status")).isEqualTo("CLOSED");
+        assertThat(reviewItem(bookingId, "decided_by")).isEqualTo("bookings");
+        assertThat(outbox(bookingId.toString())).containsExactly("trustops.moderation.queued",
+                "trustops.moderation.decided");
+    }
+
+    @Test
+    void otherBookingEventsAndUnusableReviewsAreSkipped() {
+        UUID bookingId = UUID.randomUUID();
+        String org = orgId();
+        // Not review events, or reviews already decided, are not queued.
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.confirmed", UUID.randomUUID(),
+                "{\"bookingId\":\"" + bookingId + "\",\"orgId\":\"" + org + "\",\"status\":\"CONFIRMED\"}"));
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.review.replied",
+                UUID.randomUUID(), reviewEvent(bookingId, org, "APPROVED", 5, "Great")));
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.review.submitted",
+                UUID.randomUUID(), reviewEvent(bookingId, org, "APPROVED", 5, "Great")));
+        // Malformed or invalid payloads are logged and skipped.
+        reviews.onMessage(rec("at.bookings.events", "x", "booking.review.submitted", UUID.randomUUID(), "not json"));
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.review.submitted",
+                UUID.randomUUID(), reviewEvent(bookingId, org, "PENDING", 9, null)));
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.review.submitted",
+                UUID.randomUUID(), "{\"bookingId\":\"" + bookingId + "\",\"rating\":4,\"status\":\"PENDING\"}"));
+        // Missing event-id.
+        ConsumerRecord<String, String> noId = new ConsumerRecord<>("at.bookings.events", 0, 0L, bookingId.toString(),
+                reviewEvent(bookingId, org, "PENDING", 4, null));
+        noId.headers().add(EventHeaders.EVENT_TYPE, "booking.review.submitted".getBytes(StandardCharsets.UTF_8));
+        reviews.onMessage(noId);
+
+        assertThat(jdbc.sql("select count(*) from moderation_item where booking_id = :b").param("b", bookingId)
+                .query(Long.class).single()).isZero();
+
+        // A review without text is fine.
+        reviews.onMessage(rec("at.bookings.events", bookingId.toString(), "booking.review.submitted",
+                UUID.randomUUID(), reviewEvent(bookingId, org, "PENDING", 4, null)));
+        assertThat(reviewItem(bookingId, "status")).isEqualTo("PENDING");
+        assertThat(jdbc.sql("select review_text is null from moderation_item where booking_id = :b")
+                .param("b", bookingId).query(Boolean.class).single()).isTrue();
     }
 
     private static ConsumerRecord<String, String> rec(String topic, String key, String type, UUID eventId,

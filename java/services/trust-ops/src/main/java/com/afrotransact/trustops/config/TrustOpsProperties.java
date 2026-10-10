@@ -21,11 +21,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param jobs         SLA sweep
  * @param orders       orders-service (order lookup for claims)
  * @param claims       claim ownership checks
+ * @param bookings     bookings-service (review moderation decisions)
  */
 @ConfigurationProperties(prefix = "at.trustops")
 public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstream payments, Upstream seller,
                                  Upstream offers, Ai ai, Audit audit, SellerHealth sellerHealth, Jobs jobs,
-                                 Upstream orders, Claims claims) {
+                                 Upstream orders, Claims claims, Upstream bookings) {
 
     public TrustOpsProperties {
         sla = sla == null ? new Sla(null, null, null, null, null, null, null, null) : sla;
@@ -40,6 +41,7 @@ public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstr
         jobs = jobs == null ? new Jobs(null) : jobs;
         orders = orders == null ? new Upstream("http://localhost:8104") : orders;
         claims = claims == null ? new Claims(null) : claims;
+        bookings = bookings == null ? new Upstream("http://localhost:8109") : bookings;
     }
 
     /**
@@ -94,7 +96,8 @@ public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstr
             clientId = clientId == null ? "trust-ops-service" : clientId;
             clientSecret = clientSecret == null ? "" : clientSecret;
             scopes = scopes == null
-                    ? "catalog:moderate payments:service sellers:enforce offers:write ai:triage orders:lookup" : scopes;
+                    ? "catalog:moderate payments:service sellers:enforce offers:write ai:triage orders:lookup "
+                    + "bookings:reviews:moderate" : scopes;
             timeout = timeout == null ? Duration.ofSeconds(10) : timeout;
         }
     }
