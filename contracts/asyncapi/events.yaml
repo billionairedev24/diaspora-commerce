@@ -7047,10 +7047,12 @@ operations:
     summary: trustops.claim.opened → claim.opened to the customer (email, push) and, while AWAITING_SELLER, claim.seller_response_due
       to the seller owners (email, sms; deadline = dueAt); trustops.claim.decided → claim.decided to the customer (email,
       push) and claim.decided.seller to the seller owners (email); trustops.claim.withdrawn → claim.withdrawn to the seller
-      owners (email); trustops.moderation.decided with status REJECTED → listing.rejected (NEW_LISTING; email) or listing.taken_down
-      (LIVE_LISTING; email, sms) to the seller owners; trustops.seller.suspended → seller.suspended (email, sms) and trustops.seller.reinstated
-      → seller.reinstated (email) to the seller owners. notification.requested with templateKey claim.opened, claim.decided
-      or claim.withdrawn is ignored (the typed claim events above cover both parties).
+      owners (email); trustops.claim.response_due_soon → claim.seller_response_reminder (email, sms) and trustops.claim.response_lapsed
+      → claim.seller_response_lapsed (email) to the seller owners; trustops.moderation.decided with status REJECTED → listing.rejected
+      (NEW_LISTING; email) or listing.taken_down (LIVE_LISTING; email, sms) to the seller owners; trustops.seller.suspended
+      → seller.suspended (email, sms) and trustops.seller.reinstated → seller.reinstated (email) to the seller owners. notification.requested
+      with templateKey claim.opened, claim.decided or claim.withdrawn is ignored (the typed claim events above cover both
+      parties).
   consumeNotificationsInventoryEvents:
     action: receive
     channel:

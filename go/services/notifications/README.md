@@ -143,6 +143,8 @@ time zone and market, and channels the user switched off in their account are dr
 | … while `status=AWAITING_SELLER` | `sellerOrgId` owners | `claim.seller_response_due` (respond by `dueAt`) | email, sms |
 | `trustops.claim.decided` | `customerId` / `sellerOrgId` owners | `claim.decided` / `claim.decided.seller` (refund or denial) | email, push / email |
 | `trustops.claim.withdrawn` | `sellerOrgId` owners | `claim.withdrawn` | email |
+| `trustops.claim.response_due_soon` | `sellerOrgId` owners | `claim.seller_response_reminder` | email, sms |
+| `trustops.claim.response_lapsed` | `sellerOrgId` owners | `claim.seller_response_lapsed` | email |
 | `trustops.moderation.decided` with `status=REJECTED` | `sellerOrgId` owners | `listing.rejected` (`NEW_LISTING`) / `listing.taken_down` (`LIVE_LISTING`) | email / email, sms |
 | `trustops.seller.suspended` / `reinstated` | `orgId` owners | `seller.suspended` / `seller.reinstated` | email, sms / email |
 | `content.career-application.received` | payload `email` | `careers.application_received` | email |

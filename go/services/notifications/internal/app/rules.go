@@ -250,8 +250,8 @@ var DefaultEventRules = map[string][]EventRule{
 	"trustops.claim.opened": {
 		{Topic: TopicTrustOps, Template: "claim.opened", Channels: chEmailPush, Recipient: RecipientUser,
 			IDField: "customerId", Enrich: enrichClaim},
-		// The seller's response window opens with the claim (dueAt = response deadline); trust-ops publishes no
-		// separate reminder, so this is the "seller response due" message.
+		// The seller's response window opens with the claim (dueAt = response deadline); the reminder before the
+		// deadline comes from trustops.claim.response_due_soon.
 		{Topic: TopicTrustOps, Template: "claim.seller_response_due", Channels: chEmailSMS, Recipient: RecipientOrgOwners,
 			IDField: "sellerOrgId", When: fieldIs("status", "AWAITING_SELLER"), Enrich: enrichClaim},
 	},
@@ -261,6 +261,11 @@ var DefaultEventRules = map[string][]EventRule{
 		{Topic: TopicTrustOps, Template: "claim.decided.seller", Channels: chEmail, Recipient: RecipientOrgOwners,
 			IDField: "sellerOrgId", Enrich: enrichClaim},
 	},
+	// S237: reminder 24h before the seller's response deadline, and notice when the window lapsed.
+	"trustops.claim.response_due_soon": {{Topic: TopicTrustOps, Template: "claim.seller_response_reminder",
+		Channels: chEmailSMS, Recipient: RecipientOrgOwners, IDField: "sellerOrgId", Enrich: enrichClaim}},
+	"trustops.claim.response_lapsed": {{Topic: TopicTrustOps, Template: "claim.seller_response_lapsed",
+		Channels: chEmail, Recipient: RecipientOrgOwners, IDField: "sellerOrgId", Enrich: enrichClaim}},
 	"trustops.claim.withdrawn": {{Topic: TopicTrustOps, Template: "claim.withdrawn", Channels: chEmail,
 		Recipient: RecipientOrgOwners, IDField: "sellerOrgId", Enrich: enrichClaim}},
 	"trustops.moderation.decided": {
