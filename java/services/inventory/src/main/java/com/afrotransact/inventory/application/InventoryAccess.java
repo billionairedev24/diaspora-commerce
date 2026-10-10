@@ -74,6 +74,59 @@ class InventoryAccess {
                 "Only staff or seller organisations can view inventory")));
     }
 
+    /**
+     * FBA inbound plans (S257): {@code inventory:inbound}. Returns the organisation the caller acts for: their own
+     * org for sellers (whatever they asked for), the requested org for staff.
+     */
+    InboundActor inboundWriter(String requestedOrg) {
+        Actor actor = permissions.require(InventoryPermissions.INBOUND);
+        if (isStaff(actor)) {
+            return new InboundActor(actor, requestedOrg == null || requestedOrg.isBlank() ? null
+                    : requestedOrg.trim());
+        }
+        return new InboundActor(actor, actor.orgId().orElseThrow(() -> new ForbiddenActionException(
+                "inventory.no-org", "Only seller organisations send stock to AfroTransact")));
+    }
+
+    /**
+     * Who may see inbound shipments: sellers with {@code inventory:inbound} or {@code inventory:read} (their own
+     * org), staff with either or {@code inventory:receive} (all). Empty scope = all organisations.
+     */
+    Optional<String> inboundReadScope() {
+        Actor actor = actors.current();
+        if (!actor.can(InventoryPermissions.INBOUND) && !actor.can(InventoryPermissions.READ)
+                && !actor.can(InventoryPermissions.RECEIVE)) {
+            permissions.require(InventoryPermissions.INBOUND);
+        }
+        if (isStaff(actor)) {
+            return Optional.empty();
+        }
+        return Optional.of(actor.orgId().orElseThrow(() -> new ForbiddenActionException("inventory.no-org",
+                "Only staff or seller organisations can view inbound shipments")));
+    }
+
+    /** Cancelling a shipment: the seller ({@code inventory:inbound}) or FC staff ({@code inventory:receive}). */
+    Actor actorForCancel() {
+        Actor actor = actors.current();
+        if (isStaff(actor) && actor.can(InventoryPermissions.RECEIVE)) {
+            return actor;
+        }
+        return permissions.require(InventoryPermissions.INBOUND);
+    }
+
+    /** Staff act for any organisation; others only for their own. */
+    boolean mayActFor(Actor actor, String ownerOrg) {
+        return isStaff(actor) || actor.orgId().map(ownerOrg::equals).orElse(false);
+    }
+
+    String currentSubject() {
+        return actors.current().subject();
+    }
+
+    /** The caller of an inbound write and the organisation it acts for (null: staff without one). */
+    record InboundActor(Actor actor, String orgId) {
+    }
+
     /** The owner filter to apply: the caller's own org for sellers (ignoring what they asked for), else the request. */
     String ownerFilter(String requested) {
         return readScope().orElse(requested);

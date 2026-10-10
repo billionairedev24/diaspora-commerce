@@ -296,6 +296,18 @@ components:
         nodeId: {type: string}
         units: {type: integer, description: Units on the ASN}
         note: {type: [string, 'null']}
+        lines:
+          type: array
+          description: >-
+            Units per SKU on the ASN (S226). From DEPARTED on, inventory-service shows them as expected inbound at
+            nodeId ("Coming soon"); the receipt posted with inboundRef = reference consumes them and RECEIVED closes the
+            notice (units that never arrived stop counting as inbound).
+          items:
+            type: object
+            required: [sku, qty]
+            properties:
+              sku: {type: string, examples: [AT-JOL-200061]}
+              qty: {type: integer, minimum: 1}
     RetailReceiptPosted:
       type: object
       required: [receiptId, number, poId, nodeId, currency, landedTotalMinor, lots]

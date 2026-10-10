@@ -32,6 +32,8 @@ class JdbcOfferRepository implements OfferRepository {
             from offer
             """;
     private static final String OPEN = " status <> 'WITHDRAWN' ";
+    /** Fulfilled by AfroTransact vs seller-fulfilled: a seller has at most one open offer per channel (S257). */
+    private static final String CHANNEL = " (fulfilment = 'AFROTRANSACT') = :fba ";
 
     private final JdbcClient jdbc;
     private final JsonCodec json;
@@ -78,7 +80,7 @@ class JdbcOfferRepository implements OfferRepository {
                     .update();
         } catch (DuplicateKeyException ex) {
             throw new ConflictException("offers.offer-exists",
-                    "Another open offer of yours already uses this ATIN and condition");
+                    "Another open offer of yours already uses this ATIN, condition and fulfilment channel (or SKU)");
         }
         if (rows == 0) {
             throw new ConflictException("offers.concurrent-update", "Offer changed; reload and retry");
@@ -144,16 +146,26 @@ class JdbcOfferRepository implements OfferRepository {
     }
 
     @Override
-    public Optional<Offer> findOpen(String sellerOrgId, String atin, OfferCondition condition) {
-        return jdbc.sql(SELECT + " where seller_org = :org and atin = :atin and item_condition = :c and" + OPEN)
+    public Optional<Offer> findOpen(String sellerOrgId, String atin, OfferCondition condition,
+                                   boolean fulfilledByAfroTransact) {
+        return jdbc.sql(SELECT + " where seller_org = :org and atin = :atin and item_condition = :c and"
+                        + CHANNEL + "and" + OPEN)
                 .param("org", sellerOrgId).param("atin", atin).param("c", condition.name())
-                .query(this::map).optional();
+                .param("fba", fulfilledByAfroTransact).query(this::map).optional();
     }
 
     @Override
-    public boolean sellerSkuTaken(String sellerOrgId, String sellerSku) {
-        return jdbc.sql("select count(*) from offer where seller_org = :org and seller_sku = :sku and" + OPEN)
-                .param("org", sellerOrgId).param("sku", sellerSku).query(Long.class).single() > 0;
+    public List<Offer> findOpenBySellerAndAtin(String sellerOrgId, String atin) {
+        return jdbc.sql(SELECT + " where seller_org = :org and atin = :atin and" + OPEN + "order by created_at, id")
+                .param("org", sellerOrgId).param("atin", atin).query(this::map).list();
+    }
+
+    @Override
+    public boolean sellerSkuTaken(String sellerOrgId, String sellerSku, boolean fulfilledByAfroTransact) {
+        return jdbc.sql("select count(*) from offer where seller_org = :org and seller_sku = :sku and" + CHANNEL
+                        + "and" + OPEN)
+                .param("org", sellerOrgId).param("sku", sellerSku).param("fba", fulfilledByAfroTransact)
+                .query(Long.class).single() > 0;
     }
 
     @Override

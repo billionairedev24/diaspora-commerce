@@ -3,7 +3,9 @@
 Shopping carts for the storefront and app (via the BFF). Go 1.27.2 · Valkey/Redis + PostgreSQL · local port **8203**.
 
 - **Packages per seller.** The cart view groups lines by seller and fulfilment (`AFROTRANSACT` first), with a
-  subtotal per package — exactly how checkout splits shipments.
+  subtotal per package — exactly how checkout splits shipments. `AFROTRANSACT_DELIVERY` lines (AfroTransact Delivery
+  from the seller's store, S259) are further split per seller pickup location: the offer's `shipFromLocationId`
+  becomes the package's `pickupLocationId`, one driver pickup per location.
 - **Stock caps everywhere.** Add, the − / + stepper (`PUT /v1/cart/items/{atin}` with an exact quantity, 0 removes),
   move-to-cart and guest merge are all capped by live sellable stock from inventory (and 99 per line).
   Over-asking returns `409 cart.insufficient-stock` with "only N available".

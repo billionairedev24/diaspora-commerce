@@ -47,11 +47,73 @@ class NearestDriverIT extends FulfilmentIntegrationTest {
     }
 
     private PlacedOrder sellerPickupOrder(String orderId, String shipmentId, Double lat, Double lon) {
-        PlacedOrder.PlacedShipment s = new PlacedOrder.PlacedShipment(shipmentId, "org-ama", "Ama's Market",
+        return sellerPickupOrder(orderId, shipmentId, "org-ama", "loc-ama", lat, lon);
+    }
+
+    private PlacedOrder sellerPickupOrder(String orderId, String shipmentId, String org, String locationId, Double lat,
+                                          Double lon) {
+        PlacedOrder.PlacedShipment s = new PlacedOrder.PlacedShipment(shipmentId, org, "Ama's Market",
                 "SELLER_FULFILLED", "AFROTRANSACT_DELIVERY", LocalDate.now().plusDays(1), false, false, null,
                 List.of(new PlacedOrder.PlacedLine(UUID.randomUUID().toString(), "ATDEL00001", "Jollof kit", 1)),
-                null, new PlacedOrder.SellerPickup("loc-ama", lat, lon));
+                null, new PlacedOrder.SellerPickup(locationId, lat, lon));
         return order(orderId, "77042", s);
+    }
+
+    /** S259: pickups carry their location; one pickup stop per location; dispatch lists routed and unrouted ones. */
+    @Test
+    void dispatchListsRoutedAndUnroutedPickupsWithTheirLocation() {
+        String org = id("org-two-stores");
+        String first = UUID.randomUUID().toString();
+        String second = UUID.randomUUID().toString();
+        intake.orderPlaced(UUID.randomUUID(), sellerPickupOrder(UUID.randomUUID().toString(), first, org,
+                "loc-north", null, null));
+        intake.orderPlaced(UUID.randomUUID(), sellerPickupOrder(UUID.randomUUID().toString(), second, org,
+                "loc-south", null, null));
+
+        TestSupport.as(TestSupport.dispatcher());
+        JsonNode waiting = ok(send("GET", "/v1/dispatch/pickups?routed=false&sellerOrgId=" + org, null));
+        assertThat(waiting).hasSize(2);
+        List<String> locations = new ArrayList<>();
+        waiting.forEach(p -> {
+            assertThat(p.path("routed").asBoolean()).isFalse();
+            assertThat(p.path("routeId").isNull()).isTrue();
+            locations.add(p.path("shipment").path("pickupLocationId").asString());
+        });
+        assertThat(locations).containsExactlyInAnyOrder("loc-north", "loc-south");
+        JsonNode pool = ok(send("GET", "/v1/dispatch/shipments", null));
+        List<String> poolLocations = new ArrayList<>();
+        pool.forEach(p -> {
+            if (first.equals(p.path("shipmentId").asString())) {
+                poolLocations.add(p.path("pickupLocationId").asString());
+            }
+        });
+        assertThat(poolLocations).containsExactly("loc-north");
+
+        LocalDate today = LocalDate.now(ZoneId.of("America/Chicago"));
+        String routeId = ok(send("POST", "/v1/dispatch/routes", Map.of("zone", "Houston N", "serviceDate",
+                today.toString(), "depotNodeId", NODE, "shipmentIds", List.of(first, second))), 201)
+                .path("id").asString();
+        List<String> stopLocations = new ArrayList<>();
+        for (JsonNode stop : ok(send("GET", "/v1/dispatch/routes/" + routeId, null)).path("stops")) {
+            if ("PICKUP".equals(stop.path("kind").asString())) {
+                stopLocations.add(stop.path("pickupLocationId").asString());
+            }
+        }
+        assertThat(stopLocations).as("one pickup stop per ship-from location")
+                .containsExactlyInAnyOrder("loc-north", "loc-south");
+
+        JsonNode routed = ok(send("GET", "/v1/dispatch/pickups?sellerOrgId=" + org + "&serviceDate=" + today, null));
+        assertThat(routed).hasSize(2);
+        routed.forEach(p -> {
+            assertThat(p.path("routed").asBoolean()).isTrue();
+            assertThat(p.path("routeId").asString()).isEqualTo(routeId);
+            assertThat(p.path("pickupStopId").asString()).isNotBlank();
+            assertThat(p.path("packageStatus").asString()).isEqualTo("EXPECTED");
+            assertThat(p.path("pickupStopStatus").asString()).isEqualTo("PENDING");
+        });
+        assertThat(ok(send("GET", "/v1/dispatch/pickups?routed=false&sellerOrgId=" + org, null))).isEmpty();
+        assertThat(ok(send("GET", "/v1/dispatch/pickups?sellerOrgId=" + org + "&serviceDate=" + today.plusDays(3),
+                null))).isEmpty();
     }
 
     @Test

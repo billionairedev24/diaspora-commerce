@@ -386,6 +386,7 @@ paths:
       tags:
       - Offers
       summary: Get an offer
+      description: ETag carries the version to send back in If-Match.
       operationId: get
       parameters:
       - name: id
@@ -405,7 +406,9 @@ paths:
       tags:
       - Offers
       summary: Change price, shipping, quantity, handling time, ship-from, condition or fulfilment
-      description: 'Optimistic: 409 offers.concurrent-update when the offer changed meanwhile.'
+      description: 'Optimistic locking (S259): send If-Match with the ETag (or version in the body) of the offer you edited;
+        a newer stored version answers 409 offers.version-mismatch, and a write racing another one answers 409 offers.concurrent-update.
+        A seller may keep one open offer per variant and condition in each channel (Fulfilled by AfroTransact and seller-fulfilled).'
       operationId: update
       parameters:
       - name: id
@@ -414,6 +417,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -432,6 +440,7 @@ paths:
       tags:
       - Offers
       summary: Pause an active offer (it leaves the buy box and the listing)
+      description: If-Match as for PATCH.
       operationId: pause
       parameters:
       - name: id
@@ -440,6 +449,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
       responses:
         '200':
           description: OK
@@ -452,6 +466,7 @@ paths:
       tags:
       - Offers
       summary: Resume a paused offer
+      description: If-Match as for PATCH.
       operationId: resume
       parameters:
       - name: id
@@ -460,6 +475,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
       responses:
         '200':
           description: OK
@@ -472,6 +492,7 @@ paths:
       tags:
       - Offers
       summary: Withdraw an offer for good (frees the SKU and condition slot)
+      description: If-Match as for PATCH.
       operationId: withdraw
       parameters:
       - name: id
@@ -480,6 +501,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
       responses:
         '200':
           description: OK
@@ -1347,6 +1373,11 @@ components:
           type: string
           maxLength: 40
           minLength: 0
+        version:
+          type: integer
+          format: int64
+          description: Version you edited (alternative to If-Match); a newer stored version answers 409 offers.version-mismatch
+          minimum: 0
     BuyBox:
       type: object
       description: Buy box with reasons plus every other listed offer, sorted by landed price. buyBox is null when no offer

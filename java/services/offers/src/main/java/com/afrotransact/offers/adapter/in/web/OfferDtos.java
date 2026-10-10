@@ -87,7 +87,10 @@ final class OfferDtos {
                               @PositiveOrZero Long listPriceMinor, @PositiveOrZero Long shippingMinor,
                               Fulfilment fulfilment, @PositiveOrZero Integer quantity,
                               @Min(0) @Max(30) Integer handlingDays, @Valid ShipFromDto shipFrom,
-                              @Size(max = 40) String inventorySku) {
+                              @Size(max = 40) String inventorySku,
+                              @Schema(description = "Version you edited (alternative to If-Match); a newer stored "
+                                      + "version answers 409 offers.version-mismatch")
+                              @PositiveOrZero Long version) {
 
         UpdateOfferCommand toCommand() {
             return new UpdateOfferCommand(condition, priceMinor, listPriceMinor, shippingMinor, fulfilment, quantity,

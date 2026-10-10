@@ -21,6 +21,10 @@ func TestOfferLookup(t *testing.T) {
 			_, _ = w.Write([]byte(`{"offer":{"offerId":"o-1","atin":"ATJOL00001","productAtin":"ATJOL00000",
 				"seller":{"id":"org_lagos","name":"Lagos Textile Hub","kind":"SELLER"},"priceMinor":799,"currency":"usd",
 				"fulfilment":"SELLER","availableQty":4},"buyable":true}`))
+		case "/v1/public/offers/o-2":
+			_, _ = w.Write([]byte(`{"offer":{"offerId":"o-2","atin":"ATJOL00002","seller":{"id":"org_ama","name":"Ama",
+				"kind":"SELLER"},"priceMinor":500,"currency":"USD","fulfilment":"AFROTRANSACT_DELIVERY","availableQty":3,
+				"shipFromLocationId":"loc-north"},"buyable":true}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -36,6 +40,10 @@ func TestOfferLookup(t *testing.T) {
 	}
 	if _, err := l.Offer(context.Background(), "o-1"); err != nil || calls != 1 {
 		t.Fatalf("expected cache hit, calls=%d err=%v", calls, err)
+	}
+	d, err := l.Offer(context.Background(), "o-2")
+	if err != nil || d.ShipFromLocationID != "loc-north" || d.Fulfilment != "AFROTRANSACT_DELIVERY" {
+		t.Fatalf("pickup location: %+v %v", d, err)
 	}
 	if _, err := l.Offer(context.Background(), "gone"); !errors.Is(err, port.ErrOfferNotFound) {
 		t.Fatalf("expected ErrOfferNotFound, got %v", err)

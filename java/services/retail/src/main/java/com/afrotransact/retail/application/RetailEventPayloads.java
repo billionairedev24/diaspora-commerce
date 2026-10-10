@@ -3,6 +3,7 @@ package com.afrotransact.retail.application;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -57,13 +58,24 @@ public final class RetailEventPayloads {
 
     /** Shipment booking, ASN change or milestone. */
     public record ShipmentEvent(UUID shipmentId, String reference, UUID poId, String poNumber, String stage,
-                                String mode, LocalDate eta, String nodeId, int units, String note) {
+                                String mode, LocalDate eta, String nodeId, int units, String note,
+                                List<ShipmentLine> lines) {
 
         static ShipmentEvent of(InboundShipment s) {
+            Map<String, Integer> bySku = new LinkedHashMap<>();
+            s.lines().forEach(l -> bySku.merge(l.sku(), l.qty(), Integer::sum));
             return new ShipmentEvent(s.id(), s.reference(), s.poId(), s.poNumber(), s.stage().name(),
                     s.mode().name(), s.eta(), s.destinationNodeId(),
-                    s.lines().stream().mapToInt(l -> l.qty()).sum(), s.note());
+                    s.lines().stream().mapToInt(l -> l.qty()).sum(), s.note(),
+                    bySku.entrySet().stream().map(e -> new ShipmentLine(e.getKey(), e.getValue())).toList());
         }
+    }
+
+    /**
+     * Units of one SKU on the shipment's ASN. From departure on, inventory shows them as expected inbound ("Coming
+     * soon") at {@code nodeId} until the receipt is posted (S226).
+     */
+    public record ShipmentLine(String sku, int qty) {
     }
 
     /** One posted batch of a receipt. */

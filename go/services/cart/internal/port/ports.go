@@ -41,6 +41,8 @@ type LiveOffer struct {
 	Currency    string
 	Available   int
 	Buyable     bool
+	// ShipFromLocationID is the seller pickup location of an AFROTRANSACT_DELIVERY offer (empty otherwise).
+	ShipFromLocationID string
 }
 
 // ErrOfferNotFound is returned by OfferLookup when the offer is unknown or withdrawn.

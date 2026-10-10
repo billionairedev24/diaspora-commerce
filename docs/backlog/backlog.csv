@@ -220,7 +220,7 @@
 - Right panel shows recommendations / delivery map / help instead of blank space","E08","","Medium","5","orders web","orders","Done"
 "S061","Story","Driver events update order status live","Driver pickup/delivery scans move shipment statuses in the back office immediately.","- 'Picked up' and 'Delivered' scans update the shipment within 5 seconds
 - Staff console reflects updates without refresh (SSE)","E08","","High","5","orders delivery","orders","Done"
-"E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","In Progress"
+"E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","Done"
 "S062","Story","Inventory positions and append-only ledger","inventory_position(sku, node, on_hand, reserved, inbound, damaged, version) + ledger.","- available = on_hand − reserved is published via events, never computed in clients
 - Every movement writes a ledger row with actor and reason
 - Nightly job reconciles ledger sums to positions and alerts on drift","E09","","Highest","8","inventory java","inventory","Done"
@@ -237,17 +237,17 @@
 - Lots ≤ 30/60 days are flagged for markdown","E09","","High","5","inventory java","inventory","Done"
 "S066","Story","Inventory hub in the staff console","Overview, stock & lots, inbound, POs, suppliers, warehouses, labels, accounting and movements tabs gated by RBAC.","- Visible only to roles with inventory access
 - Lots can be quarantined, released or written off with reasons
-- Movement history traceable per lot for recalls","E09","","High","8","inventory staff-console","inventory","In Progress"
+- Movement history traceable per lot for recalls","E09","","High","8","inventory staff-console","inventory","Done"
 "S067","Story","Seller FBA inventory","Sellers send stock into AfroTransact FCs with seller-specific unit labels.","- Inbound shipment plan with carton labels
-- Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","In Progress"
-"E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","In Progress"
+- Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","Done"
+"E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","Done"
 "S068","Story","Product master for platform products","Category managers create 1P products with supplier, HTS code, duty, shelf life, storage, reorder point and price.","- SKU and GTIN (AfroTransact GS1 prefix, check digit) assigned automatically
 - Listing starts as Draft","E10","","High","3","retail java","retail","Done"
 "S069","Story","Suppliers","Supplier records with lead time, on-time %, defect %, certifications and status.","- Supplier scorecards update from receipts
 - Inactive suppliers cannot receive new POs","E10","","Medium","3","retail java","retail","Done"
 "S070","Story","Purchase orders with approval and FX","Draft → Pending approval → Approved → Sent → Confirmed → Received → Closed; FX captured at PO date.","- Orders over $10k need Finance approval
 - PO PDF + EDI 850 sent to supplier
-- Cancel allowed until a shipment is booked","E10","","High","8","retail java","retail","In Progress"
+- Cancel allowed until a shipment is booked","E10","","High","8","retail java","retail","Done"
 "S071","Story","Inbound shipments, ASN and documents","Shipments with lot/made/expiry from supplier packing list; required customs documents per mode.","- ASN lines editable until departure, then locked
 - Departure blocked while documents are missing
 - Customs clearance blocked by holds","E10","","High","8","retail java","retail","Done"
@@ -659,7 +659,7 @@
 - Receipt lines carry holdReason so no separate quarantine call
 - Inventory reservation events include stockOwnerOrgId
 - Payments schedules supplier payment on retail.payment.released
-- Receipt date rules use the warehouse time zone","E10","","Medium","8","retail catalog inventory payments","retail","In Progress"
+- Receipt date rules use the warehouse time zone","E10","","Medium","8","retail catalog inventory payments","retail","Done"
 "S227","Story","Fix contract lint findings","Make every contract pass tools/contracts/lint_contracts.sh: tags, summaries and explicit security on all operations; fix YAML flow-mapping commas that truncate descriptions; align notifications topic names with producers.","- lint_contracts.sh passes for every contract
 - CI runs the lint on contract changes
 - No consumer subscribes to a topic without a producer","E27","","High","3","contracts docs","docs","Done"
@@ -782,9 +782,9 @@
 "S257","Story","Send stock to AfroTransact (seller FBA inbound)","Sellers create inbound shipments to an AfroTransact fulfilment centre from Seller Center: choose SKUs and quantities, get box and unit labels (AT-FN), track the shipment, and see received quantities and discrepancies; offers switch to Fulfilled by AfroTransact once stock is received.","- Seller creates an inbound plan and prints labels
 - FC receives against the plan with discrepancies reported
 - Received stock becomes available and the offer shows Fulfilled by AfroTransact
-- A seller can sell the same product from their own store and from FBA","E09","","High","8","inventory fulfilment seller-center offers","inventory","To Do"
+- A seller can sell the same product from their own store and from FBA","E09","","High","8","inventory fulfilment seller-center offers","inventory","Done"
 "S258","Story","Fix flaky DriverDayIT handover-code assertion","fulfilment DriverDayIT checks for the handover code anywhere in stored payloads and can match random ids.","- Assertion targets the specific field
-- Test passes 20 consecutive runs","E33","","Low","1","fulfilment test","quality","To Do"
+- Test passes 20 consecutive runs","E33","","Low","1","fulfilment test","quality","Done"
 "S259","Story","Local delivery follow-ups","Shipments carry the pickup location id; fulfilment lists routed pickups; orders split and payments payout balance expose delivery-fee totals; catalog/product creation can choose fulfilment; cart groups packages by pickup location; offers updates use optimistic locking.","- Dispatch sees routed and unrouted pickups
 - Seller earnings show delivery-fee totals from payments
 - Cart shows one package per pickup location

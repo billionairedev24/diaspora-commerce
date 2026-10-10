@@ -65,7 +65,15 @@ product → PO → approval → shipment/ASN → transit & customs → receiving
   quarantine; bin `A-00-00` matching the storage type (chilled → `K-`); QA recorded; more than 2% over the expected
   quantity is blocked until purchasing approves. Completing it allocates landed cost and posts the lots to
   inventory-service (`POST /v1/receipts`, Idempotency-Key `retail-<receipt id>`, client-credentials token); damaged
-  units become inventory's `-DMG` quarantine lot and QA-failed batches are quarantined (`POST /v1/lots/{id}/quarantine`).
+  units become inventory's `-DMG` quarantine lot and QA-failed batches are received straight into quarantine with a
+  receipt-line `holdReason` (S226; no separate quarantine call). Receipts against a shipment send
+  `inboundRef = <shipment reference>`, so inventory consumes exactly that ASN's expected inbound units.
+  **Warehouse-local dates (S226):** made ≤ today, expiry not passed, remaining life and on-time delivery use the
+  receiving warehouse's own date: node time zones come from inventory `GET /v1/nodes` (cached 1 h), falling back to
+  `at.retail.receiving.warehouse-zones`, then `WAREHOUSE_DEFAULT_ZONE` (UTC).
+- **Expected inbound (S226).** `retail.shipment.*` events carry the ASN `lines [{sku, qty}]`. inventory-service
+  consumes `retail.shipment.stage-changed`: at `DEPARTED` the ASN becomes an inbound notice (expected units, "Coming
+  soon" on the storefront), the receipt consumes it, and `RECEIVED` closes it.
   Shortages raise a claim against the supplier, damage a claim against the carrier.
 - **Landed cost and GL (S073).** FOB (PO price × units at the PO rate) + duty + freight, insurance, brokerage,
   drayage, fees and receiving. Each charge is allocated across the receipt lines by **value, weight or quantity**
@@ -141,11 +149,12 @@ de-duplicated) for COGS. See [`contracts/asyncapi/fragments/retail.yaml`](../../
 | Port | Adapter | Call |
 |---|---|---|
 | `CatalogClient` | `HttpCatalogClient` | `GET {CATALOG_BASE_URL}/v1/public/variants/{atin}` (anonymous) |
-| `InventoryClient` | `HttpInventoryClient` | `POST {INVENTORY_BASE_URL}/v1/receipts` (Idempotency-Key), `POST /v1/lots/{id}/quarantine` |
+| `InventoryClient` | `HttpInventoryClient` | `POST {INVENTORY_BASE_URL}/v1/receipts` (Idempotency-Key, `inboundRef`, line `holdReason`) |
+| `WarehouseCalendar` | `InventoryWarehouseCalendar` | `GET {INVENTORY_BASE_URL}/v1/nodes` (node time zones, cached) |
 | `MediaStore` | `HttpMediaStore` | `POST {MEDIA_BASE_URL}/v1/uploads`, `PUT` to the signed storage URL, `POST /v1/assets/{id}/complete`, `GET /v1/assets/{id}` |
 | `EdiTransport` | `RoutingEdiTransport` → `SftpEdiTransport` / `As2EdiTransport` (skeletons, off by default) | SFTP file drop / AS2 POST to the partner |
 | `PurchaseOrderPdfRenderer` | `PdfPurchaseOrderRenderer` | — (PDFBox) |
-| `ServiceTokenProvider` | `ClientCredentialsTokenProvider` | `POST {AUTH_TOKEN_URL}` client credentials as `retail-service`, scopes `inventory:receive inventory:adjust media:write` |
+| `ServiceTokenProvider` | `ClientCredentialsTokenProvider` | `POST {AUTH_TOKEN_URL}` client credentials as `retail-service`, scopes `inventory:receive inventory:read media:write` |
 
 Inventory 4xx answers reopen the receipt with the problem's field errors; 5xx, timeouts and auth failures leave it
 `POSTING` (HTTP 503) and the next `complete` retries with the same Idempotency-Key.
@@ -162,6 +171,7 @@ Inventory 4xx answers reopen the receipt with the problem's field errors; 5xx, t
 | `MEDIA_BASE_URL`, `MEDIA_TIMEOUT` | media-service (PO PDFs, shipment documents) |
 | `PO_DISPATCH_INTERVAL`, `PO_DISPATCH_MAX_ATTEMPTS`, `PO_PDF_LINK_TTL`, `RETAIL_BUYER_ADDRESS` | PO delivery job (30s, 5, 14d) and PDF buyer block |
 | `EDI_ENABLED` (default false), `EDI_SFTP_USERNAME`, `EDI_SFTP_PRIVATE_KEY_PATH`, `EDI_SFTP_KNOWN_HOSTS_PATH`, `EDI_AS2_FROM`, `EDI_AS2_KEYSTORE_PATH` | EDI transport (adapters are skeletons) |
+| `WAREHOUSE_ZONE_CACHE_TTL`, `WAREHOUSE_DEFAULT_ZONE` | warehouse calendar for receipt dates (1h, UTC); zones per node under `at.retail.receiving.warehouse-zones` |
 | `PO_FINANCE_THRESHOLD_MINOR` | Finance approval threshold in base-currency minor units (default 1000000 = USD 10,000.00) |
 | `MATCH_PRICE_TOLERANCE_PERCENT` | three-way match tolerance (default 1.0) |
 | `GS1_COMPANY_PREFIX` | UPC company prefix for issued GTINs (default 86001) |
@@ -195,6 +205,7 @@ buyer retry, a supplier without contact email and shipment documents as media as
   accept the `retail-service` client token (scope `media:write`) and honour `urlTtlSeconds` up to a per-purpose cap
   (≥ 14 days for `purchase-order`) returning `urlExpiresAt` — today signed URLs last 5 minutes, which is too short for
   an email link.
-- **identity**: grant the `retail-service` client the `media:write` scope.
+- **identity**: grant the `retail-service` client the `media:write` and `inventory:read` scopes (`inventory:adjust` is
+  no longer needed: QA holds travel on the receipt lines).
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

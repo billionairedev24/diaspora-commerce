@@ -10,6 +10,7 @@ import com.afrotransact.fulfilment.domain.DeliveryShipment;
 import com.afrotransact.fulfilment.domain.RoutePackage;
 import com.afrotransact.fulfilment.domain.RouteStop;
 import com.afrotransact.fulfilment.domain.SosAlert;
+import com.afrotransact.fulfilment.port.DeliveryShipmentRepository;
 import com.afrotransact.fulfilment.port.DriverEventLog;
 import com.afrotransact.fulfilment.port.InspectionRepository;
 import com.afrotransact.fulfilment.port.OrdersCommandQueue;
@@ -88,7 +89,9 @@ final class DispatchDtos {
                             + "CANCELLED") String status,
                     int reattempts, List<ContactAttempt> contacts, boolean partialAccepted, String handedOverBy,
                     String note, String handoverMethod, Double podDistanceMeters, String reassignedTo,
-                    Instant updatedAt) {
+                    Instant updatedAt,
+                    @Schema(description = "Seller ship-from location of a PICKUP stop (seller-service id; S259)")
+                    String pickupLocationId) {
 
         static StopView of(RouteStop s) {
             return new StopView(s.id(), s.sequence(), s.kind().name(), s.name(), s.sellerOrgId(), s.orderNumber(),
@@ -96,7 +99,7 @@ final class DispatchDtos {
                     s.point() == null ? null : s.point().lon(), s.window(), s.handoverRequired(),
                     s.safePlaceAllowed(), s.status().name(), s.reattempts(), s.contacts(), s.partialAccepted(),
                     s.handedOverBy(), s.note(), s.handoverMethod() == null ? null : s.handoverMethod().name(),
-                    s.podDistanceMeters(), s.reassignedTo(), s.updatedAt());
+                    s.podDistanceMeters(), s.reassignedTo(), s.updatedAt(), s.pickupLocationId());
         }
     }
 
@@ -121,13 +124,32 @@ final class DispatchDtos {
     record ShipmentView(String shipmentId, String orderId, String orderNumber, String sellerOrgId, String sellerName,
                         String fulfilmentType, String origin, String nodeId, String label, String city, String state,
                         String postalCode, boolean perishable, boolean handoverRequired, int units, String status,
-                        String routeId, LocalDate promisedBy, Instant createdAt) {
+                        String routeId, LocalDate promisedBy, Instant createdAt, LocalDate shipBy,
+                        @Schema(description = "Seller ship-from location where the driver collects (SELLER origin)")
+                        String pickupLocationId, Double pickupLat, Double pickupLon) {
 
         static ShipmentView of(DeliveryShipment s) {
             return new ShipmentView(s.shipmentId(), s.orderId(), s.orderNumber(), s.sellerOrgId(), s.sellerName(),
                     s.fulfilmentType(), s.origin().name(), s.nodeId(), s.label(), s.city(), s.state(),
                     s.postalCode(), s.perishable(), s.handoverRequired(), s.units(), s.status().name(), s.routeId(),
-                    s.promisedBy(), s.createdAt());
+                    s.promisedBy(), s.createdAt(), s.shipBy(), s.pickupLocationId(),
+                    s.pickupPoint() == null ? null : s.pickupPoint().lat(),
+                    s.pickupPoint() == null ? null : s.pickupPoint().lon());
+        }
+    }
+
+    @Schema(name = "SellerPickup", description = "A seller pickup (SELLER-origin AfroTransact Delivery shipment), "
+            + "routed or waiting for a route, with its pickup location, route and pickup stop")
+    record PickupView(ShipmentView shipment, boolean routed, String routeId, String routeName,
+                      String driverId, LocalDate serviceDate, String routeStatus, String pickupStopId,
+                      String pickupStopStatus,
+                      @Schema(description = "Package status on the route (EXPECTED, PICKED_UP …); null while unrouted")
+                      String packageStatus) {
+
+        static PickupView of(DeliveryShipmentRepository.PickupListing l) {
+            DeliveryShipment s = l.shipment();
+            return new PickupView(ShipmentView.of(s), s.routeId() != null, s.routeId(), l.routeName(), l.driverId(),
+                    l.serviceDate(), l.routeStatus(), l.pickupStopId(), l.pickupStopStatus(), l.packageStatus());
         }
     }
 

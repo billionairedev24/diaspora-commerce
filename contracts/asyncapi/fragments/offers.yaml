@@ -42,6 +42,16 @@ operations:
       inventory.availability.changed keeps the availability projection (sku, nodeId) used for Fulfilled by AfroTransact
       offers (matched on ownerOrg = seller org and sku = the offer's inventory SKU). Events whose version is not newer
       than the stored one are ignored. Lot events are ignored. Affected buy boxes are recomputed.
+  consumeOffersInventoryInboundEvents:
+    action: receive
+    channel: {$ref: '#/channels/inventoryInboundEvents'}
+    summary: >-
+      S257: inventory.inbound.received with source FBA switches the seller's listing to Fulfilled by AfroTransact. For
+      every received line with good units and no open Fulfilled-by-AfroTransact offer of the seller on the variant, an
+      AFROTRANSACT offer is created from the seller's own-store offer (price, list price, currency, condition and seller
+      SKU; no shipping charge; inventory SKU = the received SKU) and the buy box is recomputed. The own-store offer stays
+      open (one offer per channel). Lines without any offer of the seller stay stranded. Other inbound events are
+      ignored; inbox-deduplicated (consumer offers-inventory-inbound).
   consumeOffersSellerComplianceEvents:
     action: receive
     channel: {$ref: '#/channels/sellerComplianceEvents'}
@@ -125,6 +135,11 @@ components:
             locationId: {type: [string, 'null'], description: seller-service ship-from location (AFROTRANSACT_DELIVERY pickup)}
         status: {type: string, enum: [ACTIVE, PAUSED, WITHDRAWN]}
         productLive: {type: boolean}
+        inventorySku:
+          type: string
+          description: >-
+            Inventory SKU of the offer's stock (Fulfilled by AfroTransact: the FBA stock it sells). Inventory keeps a
+            projection of AFROTRANSACT offers by (sellerOrgId, inventorySku) to flag stranded FBA stock (S067).
     OffersBuyBoxChanged:
       type: object
       required: [atin, currency, offerCount, reasonCodes, trigger, decidedAt]

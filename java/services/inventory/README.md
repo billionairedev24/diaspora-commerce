@@ -3,7 +3,8 @@
 Source of truth for sellable stock: AfroTransact-owned (1P, AfroTransact Retail) products and seller stock held in
 AfroTransact fulfilment centres (FBA). Spring Boot 4.1 · Java 25 · PostgreSQL `inventory` · port **8103**.
 Architecture: §17b/§17c of `design/AfroTransact Architecture.dc.html` (Inventory model, Concurrency, Lifecycle,
-Lots & landed cost, Availability & storefront, Jobs & alerts). Stories S062–S065.
+Lots & landed cost, Availability & storefront, Jobs & alerts). Stories S062–S065, S066 (hub backend), S067 (seller FBA
+inventory), S226 (retail integration), S257 (send stock to AfroTransact).
 
 ## Model
 
@@ -18,6 +19,9 @@ Lots & landed cost, Availability & storefront, Jobs & alerts). Stories S062–S0
 | `reconciliation_run` | Nightly drift reports |
 | `sku_dimension` | Unit dimensions (inches) and derived cubic feet per SKU (S206) |
 | `storage_snapshot` | Per day × owner × fulfilment centre: units physically held (on hand + damaged), units without dimensions, cubic feet |
+| `inbound_shipment` (+ `_line`, `inbound_box`) | Seller FBA plans (`FBA-IN-006600`) and retail ASNs (`RETAIL_ASN`, by retail shipment reference): owner, destination FC and why, status `WORKING → SHIPPED → RECEIVING → CLOSED` (`CANCELLED`), ship-from, carrier / tracking / bought label; lines (SKU, ATIN, AT-FN unit label, expected, received good / damaged, units still inbound); boxes (LPN, contents, weight, dimensions, received at) |
+| `fba_offer_link` | Projection of offers' Fulfilled-by-AfroTransact offers by (owner, inventory SKU): stranded-stock flags |
+| `node` address columns | FC street address (inbound labels and the plan's ship-to; `PUT /v1/nodes/{id}/address`) |
 
 Invariants (checked by reconciliation): `on_hand = Σ SELLABLE lot qty = Σ ledger Δon_hand`, `reserved = Σ lot
 qty_reserved = Σ ledger Δreserved`, `damaged = Σ QUARANTINE/DAMAGED/EXPIRED lot qty = Σ ledger Δdamaged`.
@@ -57,6 +61,55 @@ reason and can **never take on hand below reserved** (`422 inventory.below-reser
 receipt (`422 inventory.lot-rejected`). Staff can quarantine, release, write off (partial or full), cycle-count and
 transfer lots — all with reasons.
 
+## Send stock to AfroTransact (S257, FBA inbound)
+
+Extends the `POST /v1/inbound` ASN (still available for single-SKU expected units) into inbound shipments:
+
+1. **Plan** — `POST /v1/inbound/shipments` (`inventory:inbound`, own org): lines `{atin, sku?, qty}`, optional boxes
+   `{contents[{sku, qty}], weightLb, dimensions}`, ship-from, requested FC, storage zone. Each line's unit label is the
+   seller's **AT-FN code** from catalog (`GET /v1/labels/units/{atin}?orgId=` through the `UnitLabelClient` port,
+   inventory-service token), issued once per seller and variant; it is also the default inventory SKU, so units of
+   different sellers never share a position. **FC assignment** (`DefaultFcAssignmentPolicy`): never an FC where
+   another organisation stocks one of the SKUs; a requested FC must qualify (422 `inventory.fc-unavailable`);
+   otherwise the FC already holding most of the seller's SKUs, then the least loaded, then by id. Boxes get an LPN
+   (`LPN` + 8). `PUT /{id}` replaces lines / boxes while `WORKING` (If-Match → 409 `inventory.version-mismatch`).
+2. **Labels** — `GET /{id}/labels?kind=UNIT|BOX&format=PDF|ZPL&lineNo=`: one AT-FN unit label per planned unit and one
+   carton label per box (LPN, plan number, FC), rendered by catalog `POST /v1/labels/batch`.
+3. **Tracking** — `PUT /{id}/tracking {carrier, trackingNumber}` (registered with carrier-gateway `POST /v1/tracking`
+   when it can: `trackingRegistered`), or `POST /{id}/carrier-label {carrier, service, shipDate}` buys the label from
+   carrier-gateway (`CarrierGateway` port, `POST /v1/labels`, fulfilment `FBA`, Idempotency-Key
+   `inbound-<id>-label`, one parcel per box, ship-to = the FC address).
+4. **Ship** — `POST /{id}/ship`: boxes (if any) must hold every planned unit; expected units become **inbound** at
+   the FC ("Coming soon"), `inventory.inbound.shipped`.
+5. **Receive** — `POST /{id}/receipts` (`inventory:receive`, Idempotency-Key): lines by SKU or **scanned AT-FN label**
+   (another seller's label is refused), `boxesReceived` LPNs. Lots are created for the seller (cost 0: the stock is
+   theirs), damaged units go to `-DMG` quarantine lots, `holdReason` quarantines; exactly the plan's inbound units
+   are consumed; unplanned SKUs are recorded as UNEXPECTED. `inventory.inbound.received` lets offers-service create
+   the seller's **Fulfilled-by-AfroTransact offer** next to their own-store offer.
+6. **Close** — `POST /{id}/close`: units that never arrived stop counting as inbound; discrepancies `SHORT`, `OVER`,
+   `DAMAGED`, `UNEXPECTED` are on the shipment and in `inventory.inbound.closed`. `POST /{id}/cancel` before
+   receiving.
+
+`POST /v1/receipts` takes `inboundRef` (plan number or retail shipment reference): the receipt is booked against that
+shipment instead of taking units off the position's aggregate inbound.
+
+**Retail ASNs (S226).** `retail.shipment.stage-changed` (topic `at.retail.events`): from `DEPARTED` the ASN lines become
+a `RETAIL_ASN` inbound shipment at the PO's node (units inbound); retail's receipt (`inboundRef` = shipment reference)
+consumes them; `RECEIVED` closes the notice. Receipt lines carry `holdReason` (QA holds without a separate call) and
+reservation lines carry `stockOwnerOrgId` (S226, already in place).
+
+## Seller FBA inventory (S067) and the inventory hub (S066)
+
+- `GET /v1/fba/inventory?ownerOrg=&nodeId=&sku=&stranded=&page=&size=` — per SKU × FC: on hand, reserved, available,
+  inbound, unfulfillable (quarantined, damaged, expired), **ageing** since receipt (`D0_90 … D365_PLUS`, node-local),
+  volume (unit dimensions or the default unit volume), offers and **stranded** (`NO_OFFER` / `OFFER_INACTIVE`: no
+  live Fulfilled-by-AfroTransact offer, from the `offers.offer.*` projection), plus totals. Sellers: their own org.
+- `GET /v1/overview?nodeId=&ownerOrg=` — units and landed value per lot status, expiry buckets, per-node figures,
+  open inbound shipments, held reservations and alerts (expired / expiring lots, low stock, inbound discrepancies).
+- `GET /v1/lots/{id}/trace` — recall trace: the lot, its ledger rows, the same batch at other nodes / `-DMG`, and the
+  orders whose reservations took its units. Lot quarantine / release / write-off with reasons and per-lot movements
+  already existed.
+
 ## API
 
 All writes return RFC 9457 problems with `code` `inventory.*`. Reference pages: `/swagger-ui.html`, `/docs`
@@ -74,6 +127,12 @@ All writes return RFC 9457 problems with `code` `inventory.*`. Reference pages: 
 | `POST /v1/returns` | `inventory:adjust` | `Idempotency-Key`; RESTOCK or DAMAGED |
 | `POST /v1/receipts` | `inventory:receive` | `Idempotency-Key`; 201 / 200 replay |
 | `POST /v1/inbound` | `inventory:receive` | expected units (ASN) → "Coming soon" |
+| `POST /v1/inbound/shipments` · `GET …` · `GET/PUT …/{id}` | `inventory:inbound` (own org) · read: inbound, read or receive | FBA plans (S257) |
+| `GET …/{id}/labels` · `PUT …/{id}/tracking` · `POST …/{id}/carrier-label` · `POST …/{id}/ship` · `POST …/{id}/cancel` | `inventory:inbound` (cancel also FC staff) | AT-FN / LPN labels, tracking, ship |
+| `POST /v1/inbound/shipments/{id}/receipts` · `…/close` | `inventory:receive` | FC receiving against the plan, discrepancies |
+| `GET /v1/fba/inventory` | `inventory:read` (sellers: own) | S067 |
+| `GET /v1/overview` · `GET /v1/lots/{id}/trace` | `inventory:read` | S066 |
+| `GET /v1/nodes/{id}/address` · `PUT …` | read · `inventory:adjust` | FC street address |
 | `GET /v1/lots` · `/v1/lots/{id}` · `/v1/lots/markdown?within=WITHIN_30` | `inventory:read` | FEFO order, markdown list |
 | `POST /v1/lots/{id}/quarantine` · `/release` · `/write-off` · `/adjust` · `/transfer` | `inventory:adjust` | reason required; optional `Idempotency-Key` |
 | `POST /v1/lots/expiry-runs` · `/v1/lots/markdown-runs` | `inventory:adjust` | run nightly jobs on demand |
@@ -93,6 +152,10 @@ flash-sale drill; everyone else must be a SERVICE principal.
 | `at.inventory.events` (SKU) | `inventory.availability.changed` {sku, nodeId, ownerOrg, available, onHand, reserved, inbound, damaged, version} — whenever available moves; `inventory.lot.created / quarantined / released / expired / written_off` |
 | `at.inventory-reservation.events` (order id) | `inventory.reservation.held / committed (with cogs) / released (status RELEASED or EXPIRED)` |
 | `at.inventory-reconciliation.events` (run id) | `inventory.reconciliation.drift_detected` |
+| `at.inventory-inbound.events` (shipment id) | `inventory.inbound.created / shipped / received / closed / cancelled` |
+
+Consumed (group `inventory-service`, inbox-deduplicated, `CONSUMERS_ENABLED`): `retail.shipment.stage-changed`
+(`at.retail.events`, S226) and `offers.offer.created|updated|withdrawn` (`at.offers.events`, S067).
 
 ## Jobs (idempotent, safe on several replicas)
 
@@ -107,9 +170,23 @@ flash-sale drill; everyone else must be a SERVICE principal.
 ## Configuration
 
 `application.yml` + `application-{local,dev,uat,prod}.yml`. Secrets only from env: `DB_URL`, `DB_USER`,
-`DB_PASSWORD`, `KAFKA_BOOTSTRAP` (`AUTH_ISSUER_URL` per env). Tunables (`at.inventory.*`): `retail-org-id`
+`DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `INVENTORY_CLIENT_SECRET` (`AUTH_ISSUER_URL` per env). Downstreams (S257):
+`CATALOG_URL` (unit labels), `CARRIER_GATEWAY_URL` (labels, tracking), `AUTH_TOKEN_URL`, `INVENTORY_CLIENT_ID`
+(`inventory-service`, scopes `catalog:read catalog:write shipping:label`). Tunables (`at.inventory.*`): `retail-org-id`
 (`RETAIL_ORG_ID`), `reservation-ttl` (`RESERVATION_TTL`, 15m), `fefo-min-remaining-days` (7),
 `shelf-life.min-days` (90), `shelf-life.min-fraction` (0.5), `jobs.enabled`, `jobs.*-cron`, `jobs.zone`.
+
+## Needed from other services (S257 / S067)
+
+- **catalog**: return the AT-FN code as data (e.g. header `X-Unit-Label-Code` on `GET /v1/labels/units/{atin}`, which
+  inventory already reads; today it parses the SVG `<title>`), and accept service clients with `catalog:read` (or a
+  `catalog:labels` scope) there instead of `catalog:write`.
+- **identity**: client `inventory-service` (secret `INVENTORY_CLIENT_SECRET`) with `catalog:read catalog:write
+  shipping:label`; grant `inventory:inbound` to the Seller Center inventory roles.
+- **carrier-gateway**: inbound FBA labels bought by inventory are billed `PLATFORM_CALLER`; bill them to the seller
+  (e.g. accept `billTo`/`orgId` from trusted services or a fulfilment value `FBA_INBOUND`).
+- **orders**: reserves by variant ATIN; FBA stock is stocked under the offer's inventory SKU (AT-FN by default), so
+  orders should reserve the offer's `inventorySku` with the seller as owner for Fulfilled-by-AfroTransact lines.
 
 ## Run & test
 
@@ -118,7 +195,7 @@ export JAVA_HOME=/usr/lib/jvm/java-25-openjdk-amd64
 cd java && ./mvnw -B -f services/inventory/pom.xml verify     # checkstyle, unit, ArchUnit, Testcontainers ITs
 docker compose -f infra/local/docker-compose.yml up -d postgres kafka   # then:
 java -jar services/inventory/target/inventory-service-0.1.0-SNAPSHOT.jar   # local profile, port 8103, auth off
-tools/contracts/export_java_openapi.sh inventory inventory 8103 --at.inventory.jobs.enabled=false
+tools/contracts/export_java_openapi.sh inventory inventory 8103 --at.inventory.jobs.enabled=false --at.consumers.enabled=false
 ```
 
 Helm: `deploy/helm` (library chart `at-service`); validate with

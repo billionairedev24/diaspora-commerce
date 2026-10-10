@@ -10,12 +10,29 @@ public interface OfferService {
     /** Attaches an offer to an existing live catalog variant (by ATIN or GTIN) for the caller's organisation. */
     OfferView create(CreateOfferCommand command);
 
+    /**
+     * Changes the terms. {@code expectedVersion} (from If-Match or the body) is the version the caller edited: a newer
+     * stored version is refused with 409 {@code offers.version-mismatch} (S259); null skips that check, but the write
+     * is still conditional on the version read (409 {@code offers.concurrent-update}).
+     */
+    OfferView update(UUID id, UpdateOfferCommand command, Long expectedVersion);
+
+    /** Without a version check (the write is still conditional on the version read). */
     OfferView update(UUID id, UpdateOfferCommand command);
 
+    OfferView pause(UUID id, Long expectedVersion);
+
+    /** Without a version check (the write is still conditional on the version read). */
     OfferView pause(UUID id);
 
+    OfferView resume(UUID id, Long expectedVersion);
+
+    /** Without a version check (the write is still conditional on the version read). */
     OfferView resume(UUID id);
 
+    OfferView withdraw(UUID id, Long expectedVersion);
+
+    /** Without a version check (the write is still conditional on the version read). */
     OfferView withdraw(UUID id);
 
     OfferView get(UUID id);

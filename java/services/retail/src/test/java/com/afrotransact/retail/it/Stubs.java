@@ -9,7 +9,7 @@ import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
 
-/** WireMock standing in for identity (token), catalog (public variants) and inventory (receipts, lots). */
+/** WireMock standing in for identity (token), catalog (public variants) and inventory (receipts, nodes). */
 final class Stubs {
 
     static final String TOKEN = "svc-token-retail";
@@ -35,8 +35,10 @@ final class Stubs {
                 .willReturn(json(200, variant(SELLER_ATIN, "SELLER", "Marketplace Jollof"))));
         wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/public/variants/.*")).atPriority(10)
                 .willReturn(json(404, "{\"code\":\"catalog.product-not-found\"}")));
-        wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/lots/[0-9a-f-]+/quarantine"))
-                .willReturn(json(200, "{\"status\":\"QUARANTINE\"}")));
+        // S226: warehouse time zones for receipt date rules.
+        wm.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/nodes")).willReturn(json(200,
+                "[{\"id\":\"HOU-FC\",\"name\":\"Houston FC\",\"kind\":\"FULFILMENT_CENTRE\",\"country\":\"US\","
+                        + "\"timezone\":\"America/Chicago\",\"active\":true}]")));
     }
 
     /** A lot inventory answers with for a receipt line. */

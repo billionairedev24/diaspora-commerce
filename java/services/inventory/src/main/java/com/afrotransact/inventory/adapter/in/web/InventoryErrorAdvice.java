@@ -1,5 +1,6 @@
 package com.afrotransact.inventory.adapter.in.web;
 
+import com.afrotransact.inventory.application.InventoryUpstreamUnavailable;
 import com.afrotransact.inventory.domain.InsufficientStockException;
 import com.afrotransact.inventory.domain.InventoryRuleViolation;
 import com.afrotransact.inventory.domain.InventoryStateConflict;
@@ -37,6 +38,11 @@ class InventoryErrorAdvice {
     @ExceptionHandler(InventoryStateConflict.class)
     ProblemDetail state(InventoryStateConflict ex) {
         return problem(HttpStatus.CONFLICT, ex.code(), "Invalid state", ex.getMessage());
+    }
+
+    @ExceptionHandler(InventoryUpstreamUnavailable.class)
+    ProblemDetail upstream(InventoryUpstreamUnavailable ex) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, ex.code(), "Upstream unavailable", ex.getMessage());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

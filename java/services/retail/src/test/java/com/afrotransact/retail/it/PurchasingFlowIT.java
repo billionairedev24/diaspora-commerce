@@ -159,6 +159,7 @@ class PurchasingFlowIT extends RetailIntegrationTest {
                 .withHeader("Authorization", WireMock.equalTo("Bearer " + Stubs.TOKEN))
                 .withRequestBody(WireMock.matchingJsonPath("$.receiptRef", WireMock.equalTo(r.number())))
                 .withRequestBody(WireMock.matchingJsonPath("$.nodeId", WireMock.equalTo("HOU-FC")))
+                .withRequestBody(WireMock.matchingJsonPath("$.inboundRef", WireMock.equalTo(r.shipmentRef())))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[0].qtyDamaged", WireMock.equalTo("10")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[0].shelfLifeDays", WireMock.equalTo("548")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[1].currency", WireMock.equalTo("USD"))));
@@ -190,6 +191,13 @@ class PurchasingFlowIT extends RetailIntegrationTest {
                 .isEqualTo(done.landedCost().totalMinor());
         assertThat(grn.lines().get(3).creditMinor())
                 .isEqualTo(done.landedCost().dutyMinor() + done.landedCost().chargesMinor());
+        // S226: shipment events carry the ASN lines; inventory turns them into expected inbound at departure.
+        List<String> departedSkus = jdbc.sql("""
+                        select l ->> 'sku' from platform_outbox o, jsonb_array_elements(o.payload -> 'lines') l
+                        where o.type = 'retail.shipment.stage-changed' and o.payload ->> 'stage' = 'DEPARTED'
+                          and o.aggregate_id = :id
+                        """).param("id", r.shipmentId().toString()).query(String.class).list();
+        assertThat(departedSkus).containsExactlyInAnyOrder(jollof.sku(), shito.sku());
         assertThat(outboxTypes(done.id())).contains("retail.receipt.posted", "retail.landed-cost.allocated",
                 "retail.receipt.discrepancy-raised");
         assertThat(outboxTypes(po.id())).contains("retail.po.created", "retail.po.approved", "retail.po.sent",

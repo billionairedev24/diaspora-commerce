@@ -134,10 +134,14 @@ final class InventoryDtos {
     @Schema(name = "ReceiptRequest", description = "Lots of a completed goods receipt")
     record ReceiptRequest(@NotBlank @Size(max = 80) String receiptRef, @NotBlank String nodeId,
                           @Schema(description = "FBA seller org; omit for AfroTransact Retail (1P)") String ownerOrg,
+                          @Schema(description = "Inbound shipment the units arrived on (FBA plan number or retail "
+                                  + "shipment reference): its expected units are consumed and the received "
+                                  + "quantities recorded against it (S226, S257)") @Size(max = 120) String inboundRef,
                           @NotEmpty @Size(max = 500) List<@Valid ReceiptLine> lines) {
 
         ReceiveCommand toCommand() {
-            return new ReceiveCommand(receiptRef, nodeId, ownerOrg, lines.stream().map(ReceiptLine::toDomain).toList());
+            return new ReceiveCommand(receiptRef, nodeId, ownerOrg, inboundRef,
+                    lines.stream().map(ReceiptLine::toDomain).toList());
         }
     }
 

@@ -2,7 +2,9 @@ package com.afrotransact.fulfilment.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import com.afrotransact.fulfilment.domain.DeliveryShipment;
@@ -86,6 +88,46 @@ class JdbcDeliveryShipmentRepository implements DeliveryShipmentRepository {
     public void updateLabel(String shipmentId, String label) {
         jdbc.sql("update delivery_shipment set label = :label, updated_at = now() where shipment_id = :id")
                 .param("label", label).param("id", shipmentId).update();
+    }
+
+    @Override
+    public List<PickupListing> pickups(PickupQuery q) {
+        StringBuilder sql = new StringBuilder("""
+                select s.*, r.name as route_name, r.driver_id as route_driver_id, r.service_date as route_date,
+                       r.status as route_status, p.pickup_stop_id as p_stop_id, st.status as p_stop_status,
+                       p.status as p_status
+                from delivery_shipment s
+                left join delivery_route r on r.id = s.route_id
+                left join route_package p on p.shipment_id = s.shipment_id and p.route_id = s.route_id
+                    and p.status not in ('REASSIGNED', 'CANCELLED')
+                left join route_stop st on st.id = p.pickup_stop_id
+                where s.origin = 'SELLER'
+                """);
+        Map<String, Object> params = new HashMap<>();
+        if (q.routed() == null) {
+            sql.append(" and s.status in ('AWAITING_ROUTE', 'ROUTED')");
+        } else {
+            sql.append(" and s.status = :status");
+            params.put("status", q.routed() ? "ROUTED" : "AWAITING_ROUTE");
+        }
+        if (q.sellerOrgId() != null) {
+            sql.append(" and s.seller_org_id = :seller");
+            params.put("seller", q.sellerOrgId());
+        }
+        if (q.pickupLocationId() != null) {
+            sql.append(" and s.pickup_location_id = :location");
+            params.put("location", q.pickupLocationId());
+        }
+        if (q.serviceDate() != null) {
+            sql.append(" and (s.status = 'AWAITING_ROUTE' or r.service_date = :day)");
+            params.put("day", q.serviceDate());
+        }
+        sql.append(" order by s.status, s.created_at, s.shipment_id limit :limit");
+        params.put("limit", q.limit());
+        return jdbc.sql(sql.toString()).params(params).query((rs, n) -> new PickupListing(map(rs, n),
+                rs.getString("route_name"), rs.getString("route_driver_id"), Rows.localDate(rs, "route_date"),
+                rs.getString("route_status"), rs.getString("p_stop_id"), rs.getString("p_stop_status"),
+                rs.getString("p_status"))).list();
     }
 
     private DeliveryShipment map(ResultSet rs, int n) throws SQLException {

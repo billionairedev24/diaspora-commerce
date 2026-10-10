@@ -55,10 +55,16 @@ type Offer struct {
 	SellerOrgID string            `json:"sellerOrgId"`
 	SellerName  string            `json:"sellerName"`
 	SellerKind  string            `json:"sellerKind"` // PLATFORM | SELLER
-	Fulfilment  string            `json:"fulfilment"` // AFROTRANSACT | SELLER
+	Fulfilment  string            `json:"fulfilment"` // AFROTRANSACT | SELLER | AFROTRANSACT_DELIVERY
 	PriceMinor  int64             `json:"priceMinor"`
 	Currency    string            `json:"currency"`
+	// ShipFromLocationID is the seller's pickup location of an AFROTRANSACT_DELIVERY offer (seller-service id): an
+	// AfroTransact driver collects each location's parcel separately, so it splits packages (S259).
+	ShipFromLocationID string `json:"shipFromLocationId,omitempty"`
 }
+
+// FulfilmentAfroTransactDelivery is AfroTransact Delivery from the seller's store: one pickup per seller location.
+const FulfilmentAfroTransactDelivery = "AFROTRANSACT_DELIVERY"
 
 // Line is one cart row with the price captured when it was added.
 type Line struct {
@@ -213,13 +219,25 @@ type LineView struct {
 	LineTotal    int64 `json:"lineTotalMinor"`
 }
 
-// Package is one shipment group: lines from the same seller and fulfilment type.
+// Package is one shipment group: lines from the same seller and fulfilment type, and for AfroTransact Delivery
+// from the same seller pickup location (one driver pickup per location, S259).
 type Package struct {
-	SellerOrgID   string     `json:"sellerOrgId"`
-	SellerName    string     `json:"sellerName"`
-	Fulfilment    string     `json:"fulfilment"`
-	Lines         []LineView `json:"lines"`
-	SubtotalMinor int64      `json:"subtotalMinor"`
+	SellerOrgID      string     `json:"sellerOrgId"`
+	SellerName       string     `json:"sellerName"`
+	Fulfilment       string     `json:"fulfilment"`
+	PickupLocationID string     `json:"pickupLocationId,omitempty"`
+	Lines            []LineView `json:"lines"`
+	SubtotalMinor    int64      `json:"subtotalMinor"`
+}
+
+// packageKey groups lines into shipments: seller and fulfilment, plus the pickup location for AfroTransact Delivery.
+func packageKey(lv LineView) (key, pickupLocationID string) {
+	key = lv.SellerOrgID + "|" + lv.Fulfilment
+	if lv.Fulfilment == FulfilmentAfroTransactDelivery {
+		pickupLocationID = lv.ShipFromLocationID
+		key += "|" + pickupLocationID
+	}
+	return key, pickupLocationID
 }
 
 // View is the cart page / mini-cart model.
@@ -243,10 +261,11 @@ func (c *Cart) Present(live map[string]Offer, available map[string]int) View {
 	anyAvailable := false
 	for _, l := range c.Lines {
 		lv := view(l, live, available)
-		key := lv.SellerOrgID + "|" + lv.Fulfilment
+		key, location := packageKey(lv)
 		pi, ok := pkgIndex[key]
 		if !ok {
-			v.Packages = append(v.Packages, Package{SellerOrgID: lv.SellerOrgID, SellerName: lv.SellerName, Fulfilment: lv.Fulfilment})
+			v.Packages = append(v.Packages, Package{SellerOrgID: lv.SellerOrgID, SellerName: lv.SellerName,
+				Fulfilment: lv.Fulfilment, PickupLocationID: location})
 			pi = len(v.Packages) - 1
 			pkgIndex[key] = pi
 		}
@@ -260,11 +279,14 @@ func (c *Cart) Present(live map[string]Offer, available map[string]int) View {
 		}
 	}
 	sort.SliceStable(v.Packages, func(i, j int) bool {
-		// AfroTransact-fulfilled packages first, then by seller name, so the page is stable.
+		// AfroTransact-fulfilled packages first, then by seller name and pickup location, so the page is stable.
 		if (v.Packages[i].Fulfilment == "AFROTRANSACT") != (v.Packages[j].Fulfilment == "AFROTRANSACT") {
 			return v.Packages[i].Fulfilment == "AFROTRANSACT"
 		}
-		return v.Packages[i].SellerName < v.Packages[j].SellerName
+		if v.Packages[i].SellerName != v.Packages[j].SellerName {
+			return v.Packages[i].SellerName < v.Packages[j].SellerName
+		}
+		return v.Packages[i].PickupLocationID < v.Packages[j].PickupLocationID
 	})
 	for _, s := range c.Saved {
 		v.Saved = append(v.Saved, view(s, live, available))

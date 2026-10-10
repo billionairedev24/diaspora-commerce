@@ -30,6 +30,7 @@ public final class RouteStop {
     private Double podDistanceMeters;
     private String reassignedTo;
     private Instant updatedAt;
+    private final String pickupLocationId;
 
     public RouteStop(String id, StopKind kind, int sequence, String name, String sellerOrgId, String orderNumber,
                      String addressLine, String city, String postalCode, GeoPoint point, String window,
@@ -37,6 +38,21 @@ public final class RouteStop {
                      List<ContactAttempt> contacts, boolean partialAccepted, String handedOverBy, String note,
                      HandoverMethod handoverMethod, Double podDistanceMeters, String reassignedTo,
                      Instant updatedAt) {
+        this(id, kind, sequence, name, sellerOrgId, orderNumber, addressLine, city, postalCode, point, window,
+                handoverRequired, safePlaceAllowed, status, reattempts, contacts, partialAccepted, handedOverBy, note,
+                handoverMethod, podDistanceMeters, reassignedTo, updatedAt, null);
+    }
+
+    /**
+     * A stop with the seller's pickup location (S259): PICKUP stops are per seller ship-from location, so two
+     * locations of one seller are two stops.
+     */
+    public RouteStop(String id, StopKind kind, int sequence, String name, String sellerOrgId, String orderNumber,
+                     String addressLine, String city, String postalCode, GeoPoint point, String window,
+                     boolean handoverRequired, boolean safePlaceAllowed, StopStatus status, int reattempts,
+                     List<ContactAttempt> contacts, boolean partialAccepted, String handedOverBy, String note,
+                     HandoverMethod handoverMethod, Double podDistanceMeters, String reassignedTo,
+                     Instant updatedAt, String pickupLocationId) {
         this.id = id;
         this.kind = kind;
         this.sequence = sequence;
@@ -60,6 +76,7 @@ public final class RouteStop {
         this.podDistanceMeters = podDistanceMeters;
         this.reassignedTo = reassignedTo;
         this.updatedAt = updatedAt;
+        this.pickupLocationId = pickupLocationId;
     }
 
     /** A new pending stop. */
@@ -70,6 +87,13 @@ public final class RouteStop {
         return new RouteStop(id, kind, sequence, name, sellerOrgId, orderNumber, addressLine, city, postalCode,
                 point, window, handoverRequired, safePlaceAllowed, StopStatus.PENDING, 0, List.of(), false, null,
                 null, null, null, null, at);
+    }
+
+    /** A new pending seller pickup at one of the seller's ship-from locations. */
+    public static RouteStop pendingPickup(String id, String name, String sellerOrgId, String pickupLocationId,
+                                          GeoPoint point, String window, Instant at) {
+        return new RouteStop(id, StopKind.PICKUP, 0, name, sellerOrgId, null, null, null, null, point, window, false,
+                false, StopStatus.PENDING, 0, List.of(), false, null, null, null, null, null, at, pickupLocationId);
     }
 
     public String id() {
@@ -90,6 +114,11 @@ public final class RouteStop {
 
     public String sellerOrgId() {
         return sellerOrgId;
+    }
+
+    /** Seller ship-from location of a PICKUP stop (null for drop-offs and older pickups). */
+    public String pickupLocationId() {
+        return pickupLocationId;
     }
 
     public String orderNumber() {

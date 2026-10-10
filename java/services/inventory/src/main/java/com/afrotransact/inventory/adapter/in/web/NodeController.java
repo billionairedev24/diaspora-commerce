@@ -10,7 +10,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -31,6 +33,19 @@ class NodeController {
     @GetMapping
     List<NodeResponse> list() {
         return nodes.list().stream().map(NodeResponse::of).toList();
+    }
+
+    @Operation(operationId = "nodeAddress", summary = "Street address of a node (where sellers send FBA stock)")
+    @GetMapping("/{id}/address")
+    InboundDtos.AddressDto address(@PathVariable String id) {
+        return InboundDtos.AddressDto.of(nodes.address(id));
+    }
+
+    @Operation(operationId = "updateNodeAddress", summary = "Set a node's street address (inventory:adjust)",
+            description = "Inbound carrier labels need line 1, city and postal code; the country is the node's.")
+    @PutMapping("/{id}/address")
+    InboundDtos.AddressDto updateAddress(@PathVariable String id, @Valid @RequestBody InboundDtos.AddressDto body) {
+        return InboundDtos.AddressDto.of(nodes.updateAddress(id, body.toDomain()));
     }
 
     @Operation(summary = "Create a node (inventory:adjust)")

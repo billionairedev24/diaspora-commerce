@@ -24,14 +24,13 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * inventory-service over HTTP with the retail-service client-credentials token:
- * {@code POST /v1/receipts} (Idempotency-Key) and {@code POST /v1/lots/{id}/quarantine}.
+ * {@code POST /v1/receipts} (Idempotency-Key; QA-failed batches carry {@code holdReason}, inbound shipment
+ * {@code inboundRef}).
  * 4xx answers (other than auth and in-flight) are rejections; 5xx, timeouts and auth failures are retryable.
  */
 public class HttpInventoryClient implements InventoryClient {
 
     static final String IDEMPOTENCY_KEY = "Idempotency-Key";
-    /** Inventory's answer when the lot is no longer SELLABLE (already quarantined): nothing to do. */
-    static final String ALREADY_HELD = "inventory.invalid-lot-state";
 
     private final RestClient api;
     private final ServiceTokenProvider tokens;
@@ -51,6 +50,9 @@ public class HttpInventoryClient implements InventoryClient {
         if (receipt.ownerOrg() != null) {
             body.put("ownerOrg", receipt.ownerOrg());
         }
+        if (receipt.inboundRef() != null) {
+            body.put("inboundRef", receipt.inboundRef());
+        }
         List<Map<String, Object>> lines = new ArrayList<>();
         for (InventoryReceipt.Line l : receipt.lines()) {
             Map<String, Object> line = new LinkedHashMap<>();
@@ -64,6 +66,9 @@ public class HttpInventoryClient implements InventoryClient {
             line.put("unitLandedCostMinor", l.unitLandedCostMinor());
             line.put("currency", l.currency());
             line.put("shelfLifeDays", l.shelfLifeDays());
+            if (l.holdReason() != null) {
+                line.put("holdReason", l.holdReason());
+            }
             lines.add(line);
         }
         body.put("lines", lines);
@@ -79,19 +84,6 @@ public class HttpInventoryClient implements InventoryClient {
         }
         return new InventoryReceiptResult(root.path("receiptRef").asString(receipt.receiptRef()), lots,
                 root.path("replayed").asBoolean(false));
-    }
-
-    @Override
-    public void quarantine(UUID lotId, String reason) {
-        try {
-            call(() -> api.post().uri("/v1/lots/{id}/quarantine", lotId).headers(this::auth)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(json.writeValueAsString(Map.of("reason", reason))).retrieve().body(String.class));
-        } catch (InventoryRejectedException e) {
-            if (!ALREADY_HELD.equals(e.code())) {
-                throw e;
-            }
-        }
     }
 
     private void auth(HttpHeaders headers) {

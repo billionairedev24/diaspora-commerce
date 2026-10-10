@@ -87,6 +87,17 @@ at:
       # Remaining life below max(min-days, min-fraction × shelf life) goes to quarantine.
       min-remaining-days: 90
       min-remaining-fraction: 0.5
+      # S226: receipt date rules use the warehouse's local date. Zones come from inventory-service GET /v1/nodes
+      # (cached); these apply to nodes inventory has not answered for, then default-zone.
+      zone-cache-ttl: ${WAREHOUSE_ZONE_CACHE_TTL:1h}
+      default-zone: ${WAREHOUSE_DEFAULT_ZONE:UTC}
+      warehouse-zones:
+        HOU-FC: America/Chicago
+        EWR-FC: America/New_York
+        ATL-FC: America/New_York
+        LAX-FC: America/Los_Angeles
+        TEM-HUB: Africa/Accra
+        LOS-HUB: Africa/Lagos
     match:
       # Supplier invoice price vs PO price tolerance for the three-way match.
       price-tolerance-percent: ${MATCH_PRICE_TOLERANCE_PERCENT:1.0}
@@ -129,7 +140,7 @@ at:
       token-uri: ${AUTH_TOKEN_URL:${AUTH_ISSUER_URL:http://localhost:8100}/oauth2/token}
       client-id: ${RETAIL_CLIENT_ID:retail-service}
       client-secret: ${RETAIL_CLIENT_SECRET:}
-      scopes: inventory:receive inventory:adjust media:write
+      scopes: inventory:receive inventory:read media:write
     consumers:
       # Posts COGS journals from inventory.reservation.committed for 1P SKUs.
       enabled: ${RETAIL_CONSUMERS_ENABLED:true}

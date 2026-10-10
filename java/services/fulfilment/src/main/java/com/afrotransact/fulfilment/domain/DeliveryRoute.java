@@ -261,9 +261,11 @@ public final class DeliveryRoute {
         }
     }
 
-    public Optional<RouteStop> openPickupFor(String sellerOrgId) {
+    /** The pending pickup of this seller at this ship-from location (one stop per location). */
+    public Optional<RouteStop> openPickupFor(String sellerOrgId, String pickupLocationId) {
         return stops.stream().filter(s -> s.kind() == StopKind.PICKUP && s.status() == StopStatus.PENDING
-                && Objects.equals(s.sellerOrgId(), sellerOrgId)).findFirst();
+                && Objects.equals(s.sellerOrgId(), sellerOrgId)
+                && Objects.equals(s.pickupLocationId(), pickupLocationId)).findFirst();
     }
 
     public void addPackage(RoutePackage p) {

@@ -171,8 +171,14 @@ class DriverDayIT extends FulfilmentIntegrationTest {
         }
         WIREMOCK.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/shipments/" + a + "/courier-events"))
                 .withRequestBody(WireMock.containing("\"handoverCode\":\"4821\"")));
-        assertThat(jdbc.sql("select count(*) from driver_event where route_id = :r and payload::text like '%4821%'")
-                .param("r", routeId).query(Long.class).single()).as("handover codes are never stored").isZero();
+        // S258: look at the stored handover code field itself (a substring match on the payload also hit random ids).
+        List<String> storedCodes = jdbc.sql("""
+                        select payload -> 'delivery' ->> 'handoverCode' from driver_event
+                        where route_id = :r and type = 'delivery.completed'
+                          and payload -> 'delivery' ->> 'handoverCode' is not null
+                        """).param("r", routeId).query(String.class).list();
+        assertThat(storedCodes).as("handover codes are never stored").hasSizeGreaterThanOrEqualTo(2)
+                .containsOnly("****");
         assertThat(outboxTypes(routeId)).containsSubsequence("fulfilment.route.planned", "fulfilment.route.assigned",
                 "fulfilment.vehicle.defect_reported", "fulfilment.route.started", "fulfilment.stop.delivered",
                 "fulfilment.stop.failed", "fulfilment.route.completed");

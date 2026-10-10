@@ -11,6 +11,7 @@ import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.DefectView;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.DriverAccessView;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.EventLogView;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.ForwardFailureView;
+import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.PickupView;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.ReasonRequest;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.ReassignRequest;
 import com.afrotransact.fulfilment.adapter.in.web.DispatchDtos.ResolveDefectRequest;
@@ -22,6 +23,7 @@ import com.afrotransact.fulfilment.application.CreateRouteCommand;
 import com.afrotransact.fulfilment.application.DispatchService;
 import com.afrotransact.fulfilment.domain.DriverAccess;
 import com.afrotransact.fulfilment.domain.RouteStatus;
+import com.afrotransact.fulfilment.port.DeliveryShipmentRepository.PickupQuery;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -131,6 +133,21 @@ class DispatchController {
     List<ShipmentView> pool(@RequestParam(required = false) String nodeId,
                             @RequestParam(defaultValue = "200") int limit) {
         return dispatch.awaitingRoute(nodeId, limit).stream().map(ShipmentView::of).toList();
+    }
+
+    @Operation(operationId = "listSellerPickups", summary = "Seller pickups, routed and waiting for a route (S259)",
+            description = "SELLER-origin AfroTransact Delivery shipments with their pickup location, and for routed ones "
+                    + "the route, driver, pickup stop and package status. routed=true / false narrows the list; "
+                    + "serviceDate limits routed pickups to that day's routes (unrouted ones are always listed).")
+    @GetMapping("/v1/dispatch/pickups")
+    List<PickupView> pickups(@RequestParam(required = false) Boolean routed,
+                             @RequestParam(required = false) String sellerOrgId,
+                             @RequestParam(required = false) String pickupLocationId,
+                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                             LocalDate serviceDate,
+                             @RequestParam(defaultValue = "200") int limit) {
+        return dispatch.pickups(new PickupQuery(routed, sellerOrgId, pickupLocationId, serviceDate, limit)).stream()
+                .map(PickupView::of).toList();
     }
 
     @Operation(operationId = "listSos", summary = "Open SOS alerts")

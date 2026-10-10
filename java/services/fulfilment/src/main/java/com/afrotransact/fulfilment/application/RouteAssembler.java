@@ -10,7 +10,6 @@ import java.util.UUID;
 
 import com.afrotransact.fulfilment.domain.DeliveryRoute;
 import com.afrotransact.fulfilment.domain.DeliveryShipment;
-import com.afrotransact.fulfilment.domain.GeoPoint;
 import com.afrotransact.fulfilment.domain.PackageOrigin;
 import com.afrotransact.fulfilment.domain.PackageStatus;
 import com.afrotransact.fulfilment.domain.RoutePackage;
@@ -21,7 +20,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Turns dispatch-pool shipments into stops and packages: one drop-off per order (same address), one pickup per
- * seller for seller-origin packages (visited before the drop-offs), one package per shipment with its ATS label.
+ * seller ship-from location (S259) for seller-origin packages (visited before the drop-offs), one package per shipment with its ATS label.
  */
 @Component
 class RouteAssembler {
@@ -50,7 +49,7 @@ class RouteAssembler {
             for (DeliveryShipment s : group) {
                 String pickupStopId = null;
                 if (s.origin() == PackageOrigin.SELLER) {
-                    pickupStopId = pickupStop(route, s.sellerOrgId(), s.sellerName(), s.pickupPoint(), now).id();
+                    pickupStopId = pickupStop(route, s, now).id();
                 }
                 pkgs.add(new RoutePackage(UUID.randomUUID().toString(), s.label() == null ? ids.packageLabel()
                         : s.label(), s.shipmentId(), s.orderNumber(), s.origin(), pickupStopId, drop.id(),
@@ -77,8 +76,7 @@ class RouteAssembler {
             if (stillAtSeller) {
                 DeliveryShipment s = shipmentsById.get(p.shipmentId());
                 origin = PackageOrigin.SELLER;
-                pickupStopId = pickupStop(target, s == null ? null : s.sellerOrgId(), s == null ? null
-                        : s.sellerName(), s == null ? null : s.pickupPoint(), now).id();
+                pickupStopId = pickupStop(target, s, now).id();
             }
             pkgs.add(new RoutePackage(UUID.randomUUID().toString(), p.label(), p.shipmentId(), p.orderNumber(),
                     origin, pickupStopId, drop.id(), p.perishable(), PackageStatus.EXPECTED, false, false, false,
@@ -88,15 +86,17 @@ class RouteAssembler {
         return drop;
     }
 
-    private RouteStop pickupStop(DeliveryRoute route, String sellerOrgId, String sellerName, GeoPoint point,
-                                 Instant now) {
-        Optional<RouteStop> open = route.openPickupFor(sellerOrgId);
+    /** The route's pending pickup at the shipment's seller location, created when missing (one per location). */
+    private RouteStop pickupStop(DeliveryRoute route, DeliveryShipment s, Instant now) {
+        String sellerOrgId = s == null ? null : s.sellerOrgId();
+        String locationId = s == null ? null : s.pickupLocationId();
+        Optional<RouteStop> open = route.openPickupFor(sellerOrgId, locationId);
         if (open.isPresent()) {
             return open.get();
         }
-        RouteStop pickup = RouteStop.pending(UUID.randomUUID().toString(), StopKind.PICKUP, 0,
-                sellerName == null ? "Seller " + sellerOrgId : sellerName, sellerOrgId, null, null, null, null, point,
-                route.window(), false, false, now);
+        String name = s == null || s.sellerName() == null ? "Seller " + sellerOrgId : s.sellerName();
+        RouteStop pickup = RouteStop.pendingPickup(UUID.randomUUID().toString(), name, sellerOrgId, locationId,
+                s == null ? null : s.pickupPoint(), route.window(), now);
         route.addPickupStop(pickup);
         return pickup;
     }

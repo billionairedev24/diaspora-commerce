@@ -77,14 +77,16 @@ class OfferServiceImpl implements OfferService {
 
         CatalogVariant variant = resolve(cmd);
         OfferCondition condition = cmd.condition() == null ? OfferCondition.NEW : cmd.condition();
-        offers.findOpen(org, variant.variantAtin(), condition).ifPresent(existing -> {
-            throw new ConflictException("offers.offer-exists", "You already have a " + condition + " offer on "
-                    + variant.variantAtin() + " (" + existing.id() + "); update it instead");
+        boolean fba = cmd.fulfilment().fulfilledByAfroTransact();
+        offers.findOpen(org, variant.variantAtin(), condition, fba).ifPresent(existing -> {
+            throw new ConflictException("offers.offer-exists", "You already have a " + condition + " "
+                    + channel(fba) + " offer on " + variant.variantAtin() + " (" + existing.id()
+                    + "); update it instead");
         });
         String sku = cmd.sellerSku().trim().toUpperCase(Locale.ROOT);
-        if (offers.sellerSkuTaken(org, sku)) {
+        if (offers.sellerSkuTaken(org, sku, fba)) {
             throw new ConflictException("offers.sku-taken",
-                    "SKU " + sku + " is already used by another of your offers");
+                    "SKU " + sku + " is already used by another of your " + channel(fba) + " offers");
         }
         Instant now = Instant.now(clock);
         String inventorySku = cmd.inventorySku() == null || cmd.inventorySku().isBlank() ? sku
@@ -102,8 +104,8 @@ class OfferServiceImpl implements OfferService {
 
     @Override
     @Transactional
-    public OfferView update(UUID id, UpdateOfferCommand cmd) {
-        return change(id, o -> {
+    public OfferView update(UUID id, UpdateOfferCommand cmd, Long expectedVersion) {
+        return change(id, expectedVersion, o -> {
             Offer.Terms t = o.terms();
             Long listPrice = cmd.listPriceMinor() == null ? t.listPriceMinor()
                     : cmd.listPriceMinor() == 0 ? null : cmd.listPriceMinor();
@@ -130,13 +132,19 @@ class OfferServiceImpl implements OfferService {
                         proposed.inventorySku());
             }
             Offer.Terms checked = next;
-            if (checked.condition() != t.condition()) {
-                offers.findOpen(o.sellerOrgId(), o.atin(), checked.condition())
+            boolean fba = checked.fulfilment().fulfilledByAfroTransact();
+            if (checked.condition() != t.condition() || fba != t.fulfilment().fulfilledByAfroTransact()) {
+                offers.findOpen(o.sellerOrgId(), o.atin(), checked.condition(), fba)
                         .filter(other -> !other.id().equals(o.id()))
                         .ifPresent(other -> {
                             throw new ConflictException("offers.offer-exists", "You already have a "
-                                    + checked.condition() + " offer on " + o.atin());
+                                    + checked.condition() + " " + channel(fba) + " offer on " + o.atin());
                         });
+                if (fba != t.fulfilment().fulfilledByAfroTransact()
+                        && offers.sellerSkuTaken(o.sellerOrgId(), o.sellerSku(), fba)) {
+                    throw new ConflictException("offers.sku-taken", "SKU " + o.sellerSku()
+                            + " is already used by another of your " + channel(fba) + " offers");
+                }
             }
             return o.revise(checked, Instant.now(clock));
         }, OffersEvents.OFFER_UPDATED);
@@ -144,20 +152,44 @@ class OfferServiceImpl implements OfferService {
 
     @Override
     @Transactional
+    public OfferView update(UUID id, UpdateOfferCommand cmd) {
+        return update(id, cmd, null);
+    }
+
+    @Override
+    @Transactional
     public OfferView pause(UUID id) {
-        return change(id, o -> o.pause(Instant.now(clock)), OffersEvents.OFFER_UPDATED);
+        return pause(id, null);
     }
 
     @Override
     @Transactional
     public OfferView resume(UUID id) {
-        return change(id, o -> o.resume(Instant.now(clock)), OffersEvents.OFFER_UPDATED);
+        return resume(id, null);
     }
 
     @Override
     @Transactional
     public OfferView withdraw(UUID id) {
-        return change(id, o -> o.withdraw(Instant.now(clock)), OffersEvents.OFFER_WITHDRAWN);
+        return withdraw(id, null);
+    }
+
+    @Override
+    @Transactional
+    public OfferView pause(UUID id, Long expectedVersion) {
+        return change(id, expectedVersion, o -> o.pause(Instant.now(clock)), OffersEvents.OFFER_UPDATED);
+    }
+
+    @Override
+    @Transactional
+    public OfferView resume(UUID id, Long expectedVersion) {
+        return change(id, expectedVersion, o -> o.resume(Instant.now(clock)), OffersEvents.OFFER_UPDATED);
+    }
+
+    @Override
+    @Transactional
+    public OfferView withdraw(UUID id, Long expectedVersion) {
+        return change(id, expectedVersion, o -> o.withdraw(Instant.now(clock)), OffersEvents.OFFER_WITHDRAWN);
     }
 
     @Override
@@ -175,10 +207,12 @@ class OfferServiceImpl implements OfferService {
         if (owned.isEmpty()) {
             throw new NotFoundException("offers.sku-not-found", "None of your open offers uses SKU " + sku);
         }
-        if (owned.stream().anyMatch(o -> !o.fulfilment().sellerStock())) {
+        if (owned.stream().noneMatch(o -> o.fulfilment().sellerStock())) {
             throw new ConflictException("offers.stock-managed-by-inventory", "SKU " + sku
                     + " is Fulfilled by AfroTransact; its stock comes from the fulfilment centre");
         }
+        // The same SKU may also name the seller's Fulfilled-by-AfroTransact offer (S257): its stock is inventory's.
+        owned = owned.stream().filter(o -> o.fulfilment().sellerStock()).toList();
         Instant now = Instant.now(clock);
         List<UUID> ids = new ArrayList<>();
         for (Offer o : owned) {
@@ -221,10 +255,19 @@ class OfferServiceImpl implements OfferService {
         return new PageView<>(evaluator.views(result.items()), result.total(), result.page(), result.size());
     }
 
-    private OfferView change(UUID id, UnaryOperator<Offer> change, String eventType) {
+    /**
+     * Applies a change with optimistic locking (S259): when the caller names the version it edited (If-Match or
+     * {@code version}), a newer stored version is a 409 {@code offers.version-mismatch}; the update itself is
+     * conditional on the version read here, so concurrent writers get 409 {@code offers.concurrent-update}.
+     */
+    private OfferView change(UUID id, Long expectedVersion, UnaryOperator<Offer> change, String eventType) {
         Offer current = offers.findById(id).orElseThrow(() -> notFound(id));
         access.requireOwned(OffersPermissions.WRITE, OffersRelations.CAN_EDIT, OffersRelations.offer(current.id()),
                 current.sellerOrgId());
+        if (expectedVersion != null && expectedVersion != current.version()) {
+            throw new ConflictException("offers.version-mismatch", "Offer " + id + " is at version "
+                    + current.version() + ", not " + expectedVersion + "; reload it and apply your change again");
+        }
         Offer updated = offers.update(change.apply(current));
         publish(eventType, updated);
         buyBox.recompute(List.of(updated.atin()), eventType);
@@ -313,6 +356,10 @@ class OfferServiceImpl implements OfferService {
         String gtin = cmd.gtin().replaceAll("[^0-9]", "");
         return catalog.liveVariantByGtin(gtin).orElseThrow(() -> new NotFoundException("offers.product-not-found",
                 "No live product page carries GTIN " + gtin + "; create the product in the catalog first"));
+    }
+
+    private static String channel(boolean fulfilledByAfroTransact) {
+        return fulfilledByAfroTransact ? "Fulfilled by AfroTransact" : "seller-fulfilled";
     }
 
     private SellerKind kindOf(String org) {

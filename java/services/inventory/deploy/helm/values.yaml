@@ -33,6 +33,7 @@ monitoring:
 #   - DB_USER
 #   - DB_PASSWORD
 #   - KAFKA_BOOTSTRAP
+#   - INVENTORY_CLIENT_SECRET   (client inventory-service: catalog:read catalog:write shipping:label, S257)
 secrets:
   enabled: true
   store: platform-secrets
@@ -40,6 +41,8 @@ workloadIdentity:
   aws: {roleArn: ""}
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
-extraEnv: {}
+extraEnv:
+  CATALOG_URL: http://catalog:8080
+  CARRIER_GATEWAY_URL: http://carrier-gateway:8080
 nodeSelector: {}
 tolerations: []

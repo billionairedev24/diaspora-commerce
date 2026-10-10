@@ -11,6 +11,8 @@ import com.afrotransact.inventory.application.ReceivingService;
 import com.afrotransact.inventory.application.ReconciliationService;
 import com.afrotransact.inventory.domain.ReconciliationReport;
 import com.afrotransact.platform.test.PostgresTestContainer;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +32,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
     "at.events.relay-enabled=false",
     "spring.kafka.bootstrap-servers=localhost:1",
     "at.inventory.jobs.enabled=false",
+    "at.consumers.enabled=false",
     "spring.datasource.hikari.maximum-pool-size=20"
 })
 @ActiveProfiles("local")
@@ -37,11 +40,14 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 abstract class InventoryIntegrationTest {
 
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
+    /** catalog (unit labels) and carrier-gateway (inbound labels, tracking) stand-in (S257). */
+    static final WireMockServer DOWNSTREAM = new WireMockServer(WireMockConfiguration.options().dynamicPort());
     static final String NODE = "HOU-FC";
     static final String RETAIL = "org_afrotransact_retail";
 
     static {
         POSTGRES.start();
+        DOWNSTREAM.start();
     }
 
     @DynamicPropertySource
@@ -49,6 +55,9 @@ abstract class InventoryIntegrationTest {
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
         registry.add("spring.datasource.password", POSTGRES::getPassword);
+        registry.add("at.inventory.catalog.base-url", DOWNSTREAM::baseUrl);
+        registry.add("at.inventory.carrier-gateway.base-url", DOWNSTREAM::baseUrl);
+        registry.add("at.inventory.catalog.timeout", () -> "5s");
     }
 
     ReceivingService receiving;

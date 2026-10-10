@@ -8,6 +8,7 @@ import com.afrotransact.fulfilment.domain.DeliveryShipment;
 import com.afrotransact.fulfilment.domain.DriverAccess;
 import com.afrotransact.fulfilment.domain.RouteStatus;
 import com.afrotransact.fulfilment.domain.SosAlert;
+import com.afrotransact.fulfilment.port.DeliveryShipmentRepository;
 import com.afrotransact.fulfilment.port.DriverEventLog;
 import com.afrotransact.fulfilment.port.InspectionRepository;
 import com.afrotransact.fulfilment.port.OrdersCommandQueue;
@@ -39,6 +40,9 @@ public interface DispatchService {
     DeliveryRoute resolveDefect(String defectId, String routeId, String note);
 
     List<DeliveryShipment> awaitingRoute(String nodeId, int limit);
+
+    /** Seller pickups, routed and unrouted, with their pickup location, route and stop (S259). */
+    List<DeliveryShipmentRepository.PickupListing> pickups(DeliveryShipmentRepository.PickupQuery query);
 
     List<SosAlert> openSos();
 

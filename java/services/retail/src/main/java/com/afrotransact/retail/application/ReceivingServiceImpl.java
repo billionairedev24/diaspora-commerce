@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +56,7 @@ import com.afrotransact.retail.port.ReceiptRepository;
 import com.afrotransact.retail.port.ReferenceIssuer;
 import com.afrotransact.retail.port.ShipmentRepository;
 import com.afrotransact.retail.port.SupplierRepository;
+import com.afrotransact.retail.port.WarehouseCalendar;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionOperations;
@@ -84,6 +84,7 @@ class ReceivingServiceImpl implements ReceivingService {
     private final DomainEventPublisher events;
     private final RetailSettings settings;
     private final TransactionOperations tx;
+    private final WarehouseCalendar calendar;
     private final Clock clock;
 
     ReceivingServiceImpl(ReceiptRepository receipts, PurchaseOrderRepository orders, ShipmentRepository shipments,
@@ -91,7 +92,7 @@ class ReceivingServiceImpl implements ReceivingService {
                          ReceiptValidator validator, LandedCostCalculator landedCost, CostAllocator allocator,
                          GlPostingRules gl, JournalPoster journal, InventoryClient inventory,
                          PermissionChecker permissions, DomainEventPublisher events, RetailSettings settings,
-                         TransactionOperations tx, Clock clock) {
+                         TransactionOperations tx, WarehouseCalendar calendar, Clock clock) {
         this.receipts = receipts;
         this.orders = orders;
         this.shipments = shipments;
@@ -109,6 +110,7 @@ class ReceivingServiceImpl implements ReceivingService {
         this.events = events;
         this.settings = settings;
         this.tx = tx;
+        this.calendar = calendar;
         this.clock = clock;
     }
 
@@ -117,11 +119,11 @@ class ReceivingServiceImpl implements ReceivingService {
     public GoodsReceipt open(OpenReceiptCommand c) {
         Actor actor = permissions.require(RetailPermissions.RECEIVE);
         Instant now = Instant.now(clock);
-        LocalDate today = today();
         GoodsReceipt opened;
         if (c.shipmentId() != null) {
             InboundShipment s = shipments.findById(c.shipmentId()).orElseThrow(() -> new RetailRuleViolation(
                     "retail.shipment-not-found", "Shipment " + c.shipmentId() + " not found"));
+            LocalDate today = calendar.today(s.destinationNodeId());
             receipts.findActiveByShipment(s.id()).ifPresent(existing -> {
                 throw new ConflictException("retail.receipt-exists", "Receipt " + existing.number()
                         + " is already open for " + s.reference());
@@ -132,6 +134,7 @@ class ReceivingServiceImpl implements ReceivingService {
         } else if (c.poId() != null) {
             PurchaseOrder po = orders.findById(c.poId()).orElseThrow(() -> new RetailRuleViolation(
                     "retail.po-not-found", "Purchase order " + c.poId() + " not found"));
+            LocalDate today = calendar.today(po.destinationNodeId());
             opened = GoodsReceipt.forPurchaseOrder(UUID.randomUUID(), refs.nextReceiptNumber(today), po, c.dock(),
                     actor.subject(), now);
         } else {
@@ -196,17 +199,12 @@ class ReceivingServiceImpl implements ReceivingService {
         Map<UUID, RetailItem> byId = itemsOf(prepared);
         InventoryReceiptResult result;
         try {
+            // QA-failed batches carry holdReason and arrive in quarantine: no separate quarantine call (S226).
             result = inventory.receive(inventoryRequest(prepared, byId), "retail-" + prepared.id());
         } catch (InventoryRejectedException e) {
             tx.executeWithoutResult(s -> reopen(id));
             throw new RetailRuleViolation("retail.inventory-rejected", "Inventory rejected the receipt: "
                     + e.getMessage(), e.fieldErrors());
-        }
-        for (ReceiptLine line : prepared.lines()) {
-            if (line.qa() == QaResult.FAIL && line.qtyGood() > 0) {
-                lotOf(result, line).filter(l -> SELLABLE.equals(l.status()))
-                        .ifPresent(l -> inventory.quarantine(l.id(), "QA failed at receipt " + prepared.number()));
-            }
         }
         return Objects.requireNonNull(tx.execute(s -> finish(id, result, actor)));
     }
@@ -325,7 +323,7 @@ class ReceivingServiceImpl implements ReceivingService {
         }
         Supplier supplier = suppliers.findById(po.supplierId()).orElseThrow();
         long units = received.stream().mapToLong(q -> q.good() + q.damaged()).sum();
-        boolean onTime = due == null || !today().isAfter(due);
+        boolean onTime = due == null || !calendar.today(r.nodeId()).isAfter(due);
         suppliers.update(supplier.recordReceipt(onTime, units, defective, now));
 
         GoodsReceipt done = receipts.update(r.complete(posted, entry.id(), by, now));
@@ -344,7 +342,7 @@ class ReceivingServiceImpl implements ReceivingService {
 
     private ReceiptValidation validation(GoodsReceipt r, Map<UUID, RetailItem> byId) {
         Set<String> existing = lots.existing(lotKeys(r), r.id());
-        return validator.validate(r, byId, existing, today());
+        return validator.validate(r, byId, existing, calendar.today(r.nodeId()));
     }
 
     private LandedCost cost(GoodsReceipt r, PurchaseOrder po, Map<UUID, RetailItem> byId) {
@@ -364,9 +362,10 @@ class ReceivingServiceImpl implements ReceivingService {
             RetailItem item = byId.get(l.itemId());
             lines.add(new InventoryReceipt.Line(l.sku(), l.lotNo(), l.mfgDate(), l.expDate(), l.qtyGood(),
                     l.qtyDamaged(), l.bin(), r.landedCost().line(l.lineNo()).unitCostMinor(),
-                    r.landedCost().currency(), item == null ? null : item.shelfLifeDays()));
+                    r.landedCost().currency(), item == null ? null : item.shelfLifeDays(),
+                    l.qa() == QaResult.FAIL && l.qtyGood() > 0 ? "QA failed at receipt " + r.number() : null));
         }
-        return new InventoryReceipt(r.number(), r.nodeId(), settings.retailOwnerOrg(), lines);
+        return new InventoryReceipt(r.number(), r.nodeId(), settings.retailOwnerOrg(), r.shipmentRef(), lines);
     }
 
     private static Optional<InventoryLot> lotOf(InventoryReceiptResult result, ReceiptLine line) {
@@ -382,10 +381,6 @@ class ReceivingServiceImpl implements ReceivingService {
     private Map<UUID, RetailItem> itemsOf(GoodsReceipt r) {
         return items.findByIds(r.lines().stream().map(ReceiptLine::itemId).distinct().toList()).stream()
                 .collect(Collectors.toMap(RetailItem::id, Function.identity()));
-    }
-
-    private LocalDate today() {
-        return LocalDate.ofInstant(Instant.now(clock), ZoneOffset.UTC);
     }
 
     private GoodsReceipt find(UUID id, Long expectedVersion) {

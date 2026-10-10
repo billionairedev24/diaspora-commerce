@@ -33,7 +33,7 @@ public record RetailProperties(String baseCurrency, String gs1CompanyPrefix, Str
         gs1CompanyPrefix = gs1CompanyPrefix == null ? "86001" : gs1CompanyPrefix;
         retailOwnerOrg = retailOwnerOrg == null || retailOwnerOrg.isBlank() ? null : retailOwnerOrg;
         approval = approval == null ? new Approval(null) : approval;
-        receiving = receiving == null ? new Receiving(null, null, null) : receiving;
+        receiving = receiving == null ? new Receiving(null, null, null, null, null, null) : receiving;
         match = match == null ? new Match(null) : match;
         fxRates = fxRates == null ? Map.of() : Map.copyOf(fxRates);
         catalog = catalog == null ? new Endpoint("http://localhost:8101", null) : catalog;
@@ -94,13 +94,21 @@ public record RetailProperties(String baseCurrency, String gs1CompanyPrefix, Str
         }
     }
 
-    /** Over-receipt tolerance and minimum remaining shelf life at the dock. */
-    public record Receiving(BigDecimal overTolerancePercent, Integer minRemainingDays, Double minRemainingFraction) {
+    /**
+     * Over-receipt tolerance and minimum remaining shelf life at the dock, and the warehouse calendar (S226): node
+     * time zones come from inventory-service (cached {@code zoneCacheTtl}); {@code warehouseZones} are used for nodes
+     * inventory has not answered for, then {@code defaultZone}.
+     */
+    public record Receiving(BigDecimal overTolerancePercent, Integer minRemainingDays, Double minRemainingFraction,
+                            Map<String, String> warehouseZones, String defaultZone, Duration zoneCacheTtl) {
 
         public Receiving {
             overTolerancePercent = overTolerancePercent == null ? BigDecimal.valueOf(2) : overTolerancePercent;
             minRemainingDays = minRemainingDays == null ? 90 : minRemainingDays;
             minRemainingFraction = minRemainingFraction == null ? 0.5 : minRemainingFraction;
+            warehouseZones = warehouseZones == null ? Map.of() : Map.copyOf(warehouseZones);
+            defaultZone = defaultZone == null || defaultZone.isBlank() ? "UTC" : defaultZone;
+            zoneCacheTtl = zoneCacheTtl == null ? Duration.ofHours(1) : zoneCacheTtl;
         }
     }
 

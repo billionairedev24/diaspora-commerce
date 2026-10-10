@@ -231,6 +231,53 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ForwardFailure'
+  /v1/dispatch/pickups:
+    get:
+      tags:
+      - Dispatch
+      summary: Seller pickups, routed and waiting for a route (S259)
+      description: SELLER-origin AfroTransact Delivery shipments with their pickup location, and for routed ones the route,
+        driver, pickup stop and package status. routed=true / false narrows the list; serviceDate limits routed pickups to
+        that day's routes (unrouted ones are always listed).
+      operationId: listSellerPickups
+      parameters:
+      - name: routed
+        in: query
+        required: false
+        schema:
+          type: boolean
+      - name: sellerOrgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: pickupLocationId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: serviceDate
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SellerPickup'
   /v1/dispatch/pickups/{id}/assign:
     post:
       tags:
@@ -1882,6 +1929,9 @@ components:
         updatedAt:
           type: string
           format: date-time
+        pickupLocationId:
+          type: string
+          description: Seller ship-from location of a PICKUP stop (seller-service id; S259)
     ReassignRequest:
       type: object
       description: Move the stop to another open route
@@ -2091,6 +2141,45 @@ components:
         createdAt:
           type: string
           format: date-time
+        shipBy:
+          type: string
+          format: date
+        pickupLocationId:
+          type: string
+          description: Seller ship-from location where the driver collects (SELLER origin)
+        pickupLat:
+          type: number
+          format: double
+        pickupLon:
+          type: number
+          format: double
+    SellerPickup:
+      type: object
+      description: A seller pickup (SELLER-origin AfroTransact Delivery shipment), routed or waiting for a route, with its
+        pickup location, route and pickup stop
+      properties:
+        shipment:
+          $ref: '#/components/schemas/DeliveryShipment'
+        routed:
+          type: boolean
+        routeId:
+          type: string
+        routeName:
+          type: string
+        driverId:
+          type: string
+        serviceDate:
+          type: string
+          format: date
+        routeStatus:
+          type: string
+        pickupStopId:
+          type: string
+        pickupStopStatus:
+          type: string
+        packageStatus:
+          type: string
+          description: Package status on the route (EXPECTED, PICKED_UP …); null while unrouted
     DriverSuggestion:
       type: object
       description: An available driver for a seller pickup, nearest first

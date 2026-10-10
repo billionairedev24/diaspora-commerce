@@ -3,7 +3,8 @@ info:
   title: Cart API
   version: v1
   description: |
-    Shopping cart split into packages per seller and fulfilment type, with save-for-later and guest-to-customer
+    Shopping cart split into packages per seller and fulfilment type (AfroTransact Delivery also per seller pickup
+    location), with save-for-later and guest-to-customer
     merge on sign-in. Quantities are always capped by live sellable stock from inventory; prices are snapshotted
     when a line is added and the live price is shown with a `priceChanged` flag. Lines without a live offer or stock
     are marked `unavailable` and excluded from checkout. A line can name an offers-service offer (`offerId`, e.g. a
@@ -146,7 +147,10 @@ components:
         sellerOrgId: {type: string}
         sellerName: {type: string}
         sellerKind: {type: string, enum: [PLATFORM, SELLER]}
-        fulfilment: {type: string, enum: [AFROTRANSACT, SELLER]}
+        fulfilment: {type: string, enum: [AFROTRANSACT, SELLER, AFROTRANSACT_DELIVERY]}
+        shipFromLocationId:
+          type: string
+          description: Seller pickup location of an AFROTRANSACT_DELIVERY offer (seller-service id)
         priceMinor: {type: integer, format: int64}
         currency: {type: string}
         quantity: {type: integer}
@@ -159,10 +163,16 @@ components:
         lineTotalMinor: {type: integer, format: int64}
     Package:
       type: object
+      description: >-
+        One shipment: lines of one seller and fulfilment type; AFROTRANSACT_DELIVERY lines are further split per seller
+        pickup location (one driver pickup each).
       properties:
         sellerOrgId: {type: string}
         sellerName: {type: string}
         fulfilment: {type: string}
+        pickupLocationId:
+          type: string
+          description: Seller pickup location of an AFROTRANSACT_DELIVERY package (absent for other fulfilment)
         lines: {type: array, items: {$ref: '#/components/schemas/LineView'}}
         subtotalMinor: {type: integer, format: int64}
     CartView:

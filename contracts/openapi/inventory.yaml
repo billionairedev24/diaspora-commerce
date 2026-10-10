@@ -20,6 +20,13 @@ servers:
 security:
 - bearer: []
 tags:
+- name: Inbound shipments
+  description: 'Send stock to AfroTransact (S257): seller FBA plans with AT-FN unit labels and carton labels, tracking, FC
+    receiving against the plan with discrepancies; AfroTransact Retail ASNs (S226). Sellers: inventory:inbound (own org);
+    FC staff: inventory:receive.'
+- name: Insights
+  description: Seller FBA inventory (S067) and the staff inventory hub overview and recall traces (S066); inventory:read,
+    sellers see their own organisation
 - name: Stock
   description: Storefront availability, positions and the stock ledger
 - name: Reconciliation
@@ -64,6 +71,59 @@ paths:
                 items:
                   $ref: '#/components/schemas/Availability'
       security: []
+  /v1/fba/inventory:
+    get:
+      tags:
+      - Insights
+      summary: A seller's stock in AfroTransact fulfilment centres
+      description: 'Per SKU × FC: on hand, reserved, available, inbound, unfulfillable (quarantined, damaged, expired), ageing
+        since receipt (D0_90 … D365_PLUS), storage volume and whether the stock is stranded (no live Fulfilled-by-AfroTransact
+        offer: NO_OFFER / OFFER_INACTIVE), with totals over all of the owner''s FBA stock. Sellers see their own; staff name
+        ownerOrg.'
+      operationId: fbaInventory
+      parameters:
+      - name: ownerOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: sku
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: stranded
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FbaInventory'
   /v1/inbound:
     post:
       tags:
@@ -83,6 +143,355 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Position'
+  /v1/inbound/shipments:
+    get:
+      tags:
+      - Inbound shipments
+      summary: 'List inbound shipments (sellers: their own)'
+      operationId: listInboundShipments
+      parameters:
+      - name: ownerOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - WORKING
+          - SHIPPED
+          - RECEIVING
+          - CLOSED
+          - CANCELLED
+      - name: source
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - FBA
+          - RETAIL_ASN
+      - name: sku
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 25
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipmentPage'
+    post:
+      tags:
+      - Inbound shipments
+      summary: 'Create an inbound plan: SKUs and quantities to send'
+      description: Each line names a variant ATIN; its unit label is the seller's AT-FN code from catalog (issued once per
+        seller and variant, so units of different sellers never mix), which is also the default inventory SKU. A destination
+        fulfilment centre is assigned (never one where another seller stocks the SKU) unless nodeId is requested. Boxes get
+        LPN carton labels. Returns the plan in WORKING.
+      operationId: createInboundPlan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboundPlanRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/inbound/shipments/{id}:
+    get:
+      tags:
+      - Inbound shipments
+      summary: One inbound shipment with lines, boxes, received quantities and discrepancies
+      operationId: getInboundShipment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+    put:
+      tags:
+      - Inbound shipments
+      summary: Replace the SKUs and / or boxes of a WORKING plan
+      description: 'If-Match with the ETag: 409 inventory.version-mismatch when the plan changed meanwhile.'
+      operationId: updateInboundPlan
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboundPlanUpdateRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/inbound/shipments/{id}/cancel:
+    post:
+      tags:
+      - Inbound shipments
+      summary: Cancel a plan or a shipment not yet received
+      operationId: cancelInboundShipment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/inbound/shipments/{id}/carrier-label:
+    post:
+      tags:
+      - Inbound shipments
+      summary: Buy the inbound shipping label through carrier-gateway
+      description: One parcel per box (weights required), from the ship-from address to the FC. Stores the carrier, tracking
+        number, cost and document link. 503 inventory.carrier-unavailable, 422 inventory.carrier-rejected.
+      operationId: buyInboundLabel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboundLabelPurchaseRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/inbound/shipments/{id}/close:
+    post:
+      tags:
+      - Inbound shipments
+      summary: Finish receiving (inventory:receive)
+      description: Units that did not arrive stop counting as inbound and are reported SHORT; inventory.inbound.closed carries
+        every discrepancy.
+      operationId: closeInboundShipment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/inbound/shipments/{id}/labels:
+    get:
+      tags:
+      - Inbound shipments
+      summary: Unit (AT-FN) or carton (LPN) labels as PDF or ZPL
+      description: 'UNIT: one label per planned unit with the seller''s AT-FN code (catalog renders it); BOX: one carton label
+        per box with its LPN, the plan number and the FC. lineNo limits unit labels to one line. 503 inventory.catalog-unavailable
+        when catalog cannot render.'
+      operationId: printInboundLabels
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - UNIT
+          - BOX
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PDF
+          - ZPL
+      - name: lineNo
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: byte
+            text/plain:
+              schema:
+                type: string
+                format: byte
+            application/problem+json:
+              schema:
+                type: string
+                format: byte
+  /v1/inbound/shipments/{id}/receipts:
+    post:
+      tags:
+      - Inbound shipments
+      summary: Receive at the FC against the plan (inventory:receive)
+      description: Lines by SKU or scanned AT-FN label; the seller's lots are created (damaged units as -DMG quarantine lots,
+        holdReason for QC holds), the plan's inbound units are consumed and inventory.inbound.received is published (offers
+        switches the listing to Fulfilled by AfroTransact). Unplanned SKUs are UNEXPECTED discrepancies. Idempotent per Idempotency-Key.
+      operationId: receiveInboundShipment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboundReceiveRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundReceiptResult'
+  /v1/inbound/shipments/{id}/ship:
+    post:
+      tags:
+      - Inbound shipments
+      summary: Mark the plan shipped
+      description: 'Expected units become inbound at the FC (storefront: Coming soon). Boxes, when given, must hold every
+        planned unit.'
+      operationId: shipInboundShipment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+  /v1/inbound/shipments/{id}/tracking:
+    put:
+      tags:
+      - Inbound shipments
+      summary: Carrier and tracking number entered by the seller
+      description: Registered with carrier-gateway for scans when it can (trackingRegistered).
+      operationId: setInboundTracking
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboundTrackingRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InboundTrackingResult'
   /v1/lots:
     get:
       tags:
@@ -300,6 +709,28 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Lot'
+  /v1/lots/{id}/trace:
+    get:
+      tags:
+      - Insights
+      summary: Recall trace of a lot
+      description: The lot, its ledger rows, the same batch at other nodes (transfers, -DMG) and the orders whose reservations
+        took its units.
+      operationId: lotTrace
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LotTrace'
   /v1/lots/{id}/transfer:
     post:
       tags:
@@ -471,6 +902,76 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Node'
+  /v1/nodes/{id}/address:
+    get:
+      tags:
+      - Nodes
+      summary: Street address of a node (where sellers send FBA stock)
+      operationId: nodeAddress
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PostalAddress'
+    put:
+      tags:
+      - Nodes
+      summary: Set a node's street address (inventory:adjust)
+      description: Inbound carrier labels need line 1, city and postal code; the country is the node's.
+      operationId: updateNodeAddress
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostalAddress'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PostalAddress'
+  /v1/overview:
+    get:
+      tags:
+      - Insights
+      summary: Inventory hub overview
+      description: Units and landed value per lot status, expiry buckets (node-local days), per-node figures, open inbound
+        shipments, held reservations and alerts (expired and expiring lots, low stock, inbound discrepancies).
+      operationId: inventoryOverview
+      parameters:
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: ownerOrg
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Overview'
   /v1/positions:
     get:
       tags:
@@ -954,6 +1455,318 @@ components:
         updatedAt:
           type: string
           format: date-time
+    PostalAddress:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        line1:
+          type: string
+          maxLength: 200
+          minLength: 0
+        line2:
+          type: string
+          maxLength: 200
+          minLength: 0
+        city:
+          type: string
+          maxLength: 100
+          minLength: 0
+        region:
+          type: string
+          maxLength: 60
+          minLength: 0
+        postalCode:
+          type: string
+          maxLength: 20
+          minLength: 0
+        country:
+          type: string
+          description: ISO 3166-1 alpha-2
+          maxLength: 2
+          minLength: 2
+        phone:
+          type: string
+          maxLength: 40
+          minLength: 0
+    InboundBoxInput:
+      type: object
+      properties:
+        contents:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundBoxItem'
+          maxItems: 200
+          minItems: 0
+        weightLb:
+          type: number
+          maximum: 150
+          minimum: 0.01
+        lengthIn:
+          type: number
+          minimum: 0
+        widthIn:
+          type: number
+          minimum: 0
+        heightIn:
+          type: number
+          minimum: 0
+      required:
+      - contents
+    InboundBoxItem:
+      type: object
+      properties:
+        sku:
+          type: string
+          maxLength: 64
+          minLength: 0
+        qty:
+          type: integer
+          format: int32
+          minimum: 1
+      required:
+      - sku
+    InboundPlanLine:
+      type: object
+      properties:
+        atin:
+          type: string
+          maxLength: 10
+          minLength: 0
+        sku:
+          type: string
+          description: 'Inventory SKU (the FBA offer''s inventory SKU); default: your AT-FN unit label code'
+          maxLength: 64
+          minLength: 0
+        qty:
+          type: integer
+          format: int32
+          maximum: 100000
+          minimum: 1
+      required:
+      - atin
+    InboundPlanUpdateRequest:
+      type: object
+      description: Replaces the lines and / or boxes of a WORKING plan; omitted lists are kept
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundPlanLine'
+          maxItems: 200
+          minItems: 0
+        boxes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundBoxInput'
+          maxItems: 200
+          minItems: 0
+    InboundBox:
+      type: object
+      properties:
+        boxNo:
+          type: integer
+          format: int32
+        lpn:
+          type: string
+          description: Carton license plate (LPN + 8)
+        contents:
+          type: array
+          items:
+            $ref: '#/components/schemas/Item'
+        units:
+          type: integer
+          format: int32
+        weightLb:
+          type: number
+        lengthIn:
+          type: number
+        widthIn:
+          type: number
+        heightIn:
+          type: number
+        receivedAt:
+          type: string
+          format: date-time
+    InboundDiscrepancy:
+      type: object
+      properties:
+        sku:
+          type: string
+        atin:
+          type: string
+        type:
+          type: string
+          enum:
+          - SHORT
+          - OVER
+          - DAMAGED
+          - UNEXPECTED
+        expectedQty:
+          type: integer
+          format: int32
+        receivedQty:
+          type: integer
+          format: int32
+        qty:
+          type: integer
+          format: int32
+    InboundLine:
+      type: object
+      properties:
+        lineNo:
+          type: integer
+          format: int32
+        sku:
+          type: string
+        atin:
+          type: string
+        unitLabel:
+          type: string
+          description: AT-FN unit label code (seller-specific)
+        expectedQty:
+          type: integer
+          format: int32
+        receivedGood:
+          type: integer
+          format: int32
+        receivedDamaged:
+          type: integer
+          format: int32
+        shortQty:
+          type: integer
+          format: int32
+        overQty:
+          type: integer
+          format: int32
+        inboundOpen:
+          type: integer
+          format: int32
+          description: Expected units still counted as inbound
+    InboundShipment:
+      type: object
+      description: An FBA inbound plan or a retail ASN with what was received
+      properties:
+        id:
+          type: string
+          format: uuid
+        number:
+          type: string
+        source:
+          type: string
+          description: FBA | RETAIL_ASN
+        externalRef:
+          type: string
+        ownerOrg:
+          type: string
+        nodeId:
+          type: string
+        requestedNodeId:
+          type: string
+        assignmentReason:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          description: WORKING | SHIPPED | RECEIVING | CLOSED | CANCELLED
+        shipFrom:
+          $ref: '#/components/schemas/PostalAddress'
+        shipTo:
+          $ref: '#/components/schemas/PostalAddress'
+        carrier:
+          type: string
+        trackingNumber:
+          type: string
+        trackingSource:
+          type: string
+          description: SELLER | CARRIER_GATEWAY
+        carrierLabelId:
+          type: string
+        labelCostMinor:
+          type: integer
+          format: int64
+        labelCurrency:
+          type: string
+        labelDocumentUrl:
+          type: string
+        expectedArrival:
+          type: string
+          format: date
+        expectedUnits:
+          type: integer
+          format: int32
+        receivedUnits:
+          type: integer
+          format: int32
+        receiptCount:
+          type: integer
+          format: int32
+        discrepancy:
+          type: boolean
+        discrepancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundDiscrepancy'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundLine'
+        boxes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundBox'
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        shippedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    Item:
+      type: object
+      properties:
+        sku:
+          type: string
+        qty:
+          type: integer
+          format: int32
+    InboundTrackingRequest:
+      type: object
+      description: Carrier and tracking number of a label bought elsewhere
+      properties:
+        carrier:
+          type: string
+          description: usps, ups, fedex, dhl …
+          maxLength: 40
+          minLength: 0
+        trackingNumber:
+          type: string
+          maxLength: 60
+          minLength: 0
+      required:
+      - carrier
+      - trackingNumber
+    InboundTrackingResult:
+      type: object
+      properties:
+        shipment:
+          $ref: '#/components/schemas/InboundShipment'
+        trackingRegistered:
+          type: boolean
+          description: carrier-gateway tracks the number (scans update the shipment)
     StorageSnapshotResult:
       type: object
       properties:
@@ -1383,6 +2196,12 @@ components:
         ownerOrg:
           type: string
           description: FBA seller org; omit for AfroTransact Retail (1P)
+        inboundRef:
+          type: string
+          description: 'Inbound shipment the units arrived on (FBA plan number or retail shipment reference): its expected
+            units are consumed and the received quantities recorded against it (S226, S257)'
+          maxLength: 120
+          minLength: 0
         lines:
           type: array
           items:
@@ -1593,6 +2412,140 @@ components:
         version:
           type: integer
           format: int64
+    InboundPlanRequest:
+      type: object
+      description: 'Send stock to AfroTransact: SKUs and quantities, optional boxes, requested FC and ship-from address'
+      properties:
+        ownerOrg:
+          type: string
+          description: 'Staff only: the seller organisation'
+          maxLength: 80
+          minLength: 0
+        name:
+          type: string
+          maxLength: 120
+          minLength: 0
+        nodeId:
+          type: string
+          description: Requested fulfilment centre; omit to have one assigned
+          maxLength: 20
+          minLength: 0
+        storageZone:
+          type: string
+          description: Storage the units need (Ambient, Chilled …)
+          maxLength: 30
+          minLength: 0
+        shipFrom:
+          $ref: '#/components/schemas/PostalAddress'
+        expectedArrival:
+          type: string
+          format: date
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundPlanLine'
+          maxItems: 200
+          minItems: 0
+        boxes:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundBoxInput'
+          maxItems: 200
+          minItems: 0
+      required:
+      - lines
+    InboundReceiveLine:
+      type: object
+      description: Units of one SKU, by SKU or by the scanned AT-FN unit label
+      properties:
+        sku:
+          type: string
+          maxLength: 64
+          minLength: 0
+        unitLabel:
+          type: string
+          description: Scanned AT-FN unit label (ATF + 7)
+          maxLength: 20
+          minLength: 0
+        qtyGood:
+          type: integer
+          format: int32
+          minimum: 0
+        qtyDamaged:
+          type: integer
+          format: int32
+          minimum: 0
+        lotNo:
+          type: string
+          description: 'Default: one lot per receipt'
+          maxLength: 59
+          minLength: 0
+        mfgDate:
+          type: string
+          format: date
+        expDate:
+          type: string
+          format: date
+        bin:
+          type: string
+          maxLength: 30
+          minLength: 0
+        holdReason:
+          type: string
+          description: Receive the good units into quarantine with this reason
+          maxLength: 500
+          minLength: 0
+    InboundReceiveRequest:
+      type: object
+      description: What the FC counted against the plan
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundReceiveLine'
+          maxItems: 500
+          minItems: 0
+        boxesReceived:
+          type: array
+          description: Carton LPNs scanned at the dock
+          items:
+            type: string
+            maxLength: 20
+            minLength: 0
+          maxItems: 500
+          minItems: 0
+    InboundReceiptResult:
+      type: object
+      description: The shipment after the receipt and the lots it created
+      properties:
+        shipment:
+          $ref: '#/components/schemas/InboundShipment'
+        receiptRef:
+          type: string
+        lots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lot'
+        replayed:
+          type: boolean
+    InboundLabelPurchaseRequest:
+      type: object
+      description: Buy the inbound label through carrier-gateway (carrier and service from a rate quote); one parcel per box
+      properties:
+        carrier:
+          type: string
+          maxLength: 40
+          minLength: 0
+        service:
+          type: string
+          maxLength: 60
+          minLength: 0
+        shipDate:
+          type: string
+          format: date
+      required:
+      - carrier
+      - service
     StorageDay:
       type: object
       description: Storage of one owner organisation on one UTC day (all fulfilment centres)
@@ -1641,6 +2594,147 @@ components:
         size:
           type: integer
           format: int32
+    Alert:
+      type: object
+      properties:
+        type:
+          type: string
+        severity:
+          type: string
+        sku:
+          type: string
+        nodeId:
+          type: string
+        lotId:
+          type: string
+          format: uuid
+        lotNo:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        qty:
+          type: integer
+          format: int64
+        date:
+          type: string
+          format: date
+        message:
+          type: string
+    ExpiryCount:
+      type: object
+      properties:
+        bucket:
+          type: string
+          enum:
+          - EXPIRED
+          - D0_30
+          - D31_60
+          - D61_90
+          - D91_180
+          - D181_PLUS
+          - NO_EXPIRY
+        units:
+          type: integer
+          format: int64
+        lots:
+          type: integer
+          format: int64
+    InboundFigures:
+      type: object
+      properties:
+        openShipments:
+          type: integer
+          format: int64
+        expectedUnits:
+          type: integer
+          format: int64
+        receivedUnits:
+          type: integer
+          format: int64
+        withDiscrepancies:
+          type: integer
+          format: int64
+    NodeFigures:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        name:
+          type: string
+        kind:
+          type: string
+        lots:
+          type: integer
+          format: int64
+        units:
+          type: integer
+          format: int64
+        sellableUnits:
+          type: integer
+          format: int64
+        blockedUnits:
+          type: integer
+          format: int64
+        valueMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        reserved:
+          type: integer
+          format: int64
+        inbound:
+          type: integer
+          format: int64
+    Overview:
+      type: object
+      properties:
+        byStatus:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusValue'
+        expiry:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExpiryCount'
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeFigures'
+        inbound:
+          $ref: '#/components/schemas/InboundFigures'
+        reservations:
+          $ref: '#/components/schemas/ReservationFigures'
+        alerts:
+          type: array
+          items:
+            $ref: '#/components/schemas/Alert'
+    ReservationFigures:
+      type: object
+      properties:
+        held:
+          type: integer
+          format: int64
+        heldUnits:
+          type: integer
+          format: int64
+    StatusValue:
+      type: object
+      properties:
+        status:
+          type: string
+        currency:
+          type: string
+        units:
+          type: integer
+          format: int64
+        lots:
+          type: integer
+          format: int64
+        valueMinor:
+          type: integer
+          format: int64
     Movement:
       type: object
       description: One append-only ledger row with deltas and before/after levels
@@ -1713,6 +2807,184 @@ components:
         size:
           type: integer
           format: int32
+    LotConsumer:
+      type: object
+      properties:
+        orderId:
+          type: string
+        reservationId:
+          type: string
+          format: uuid
+        lineNo:
+          type: integer
+          format: int32
+        group:
+          type: string
+        lineStatus:
+          type: string
+        reservationStatus:
+          type: string
+        qty:
+          type: integer
+          format: int32
+        updatedAt:
+          type: string
+          format: date-time
+    LotTrace:
+      type: object
+      description: 'A lot''s recall trace: ledger, related lots and the orders that took its units'
+      properties:
+        lot:
+          $ref: '#/components/schemas/Lot'
+        movements:
+          type: array
+          items:
+            $ref: '#/components/schemas/Movement'
+        relatedLots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Lot'
+        orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/LotConsumer'
+    InboundShipmentPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundShipment'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    FbaInventory:
+      type: object
+      description: A seller's stock in AfroTransact fulfilment centres
+      properties:
+        ownerOrg:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FbaInventoryItem'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        summary:
+          $ref: '#/components/schemas/FbaSummary'
+    FbaInventoryItem:
+      type: object
+      description: FBA stock of one SKU at one fulfilment centre
+      properties:
+        sku:
+          type: string
+        atin:
+          type: string
+        unitLabel:
+          type: string
+        nodeId:
+          type: string
+        onHand:
+          type: integer
+          format: int32
+        reserved:
+          type: integer
+          format: int32
+        available:
+          type: integer
+          format: int32
+        inbound:
+          type: integer
+          format: int32
+        unfulfillable:
+          type: integer
+          format: int32
+          description: 'Held units: quarantined, damaged and expired'
+        quarantined:
+          type: integer
+          format: int32
+        damaged:
+          type: integer
+          format: int32
+        expired:
+          type: integer
+          format: int32
+        ageing:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+          description: Units per age since receipt (D0_90 … D365_PLUS)
+        oldestReceivedAt:
+          type: string
+          format: date-time
+        unitCubicFeet:
+          type: number
+        cubicFeet:
+          type: number
+        measured:
+          type: boolean
+        openOffers:
+          type: integer
+          format: int32
+        liveOffers:
+          type: integer
+          format: int32
+        stranded:
+          type: boolean
+        strandedReason:
+          type: string
+          description: NO_OFFER | OFFER_INACTIVE
+    FbaSummary:
+      type: object
+      properties:
+        skus:
+          type: integer
+          format: int32
+        onHand:
+          type: integer
+          format: int64
+        reserved:
+          type: integer
+          format: int64
+        available:
+          type: integer
+          format: int64
+        inbound:
+          type: integer
+          format: int64
+        unfulfillable:
+          type: integer
+          format: int64
+        quarantined:
+          type: integer
+          format: int64
+        strandedUnits:
+          type: integer
+          format: int64
+        strandedSkus:
+          type: integer
+          format: int32
+        cubicFeet:
+          type: number
+        ageing:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
     Availability:
       type: object
       properties:

@@ -163,6 +163,7 @@ func withOffer(c domain.Offer, lo port.LiveOffer) domain.Offer {
 		c.SellerName = "Marketplace seller"
 	}
 	c.PriceMinor, c.Currency = lo.PriceMinor, lo.Currency
+	c.ShipFromLocationID = lo.ShipFromLocationID
 	return c
 }
 

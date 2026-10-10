@@ -163,7 +163,7 @@ class JdbcRouteRepository implements RouteRepository {
                 rs.getInt("reattempts"), json.contacts(rs.getString("contacts")), rs.getBoolean("partial_accepted"),
                 rs.getString("handed_over_by"), rs.getString("note"),
                 Rows.enumOf(HandoverMethod.class, rs.getString("handover_method")), Rows.dbl(rs, "pod_distance_m"),
-                rs.getString("reassigned_to"), Rows.instant(rs, "updated_at"));
+                rs.getString("reassigned_to"), Rows.instant(rs, "updated_at"), rs.getString("pickup_location_id"));
     }
 
     private RoutePackage mapPackage(ResultSet rs, int n) throws SQLException {
@@ -182,10 +182,10 @@ class JdbcRouteRepository implements RouteRepository {
                     insert into route_stop (id, route_id, seq, kind, name, seller_org_id, order_number,
                         address_line, city, postal_code, lat, lon, time_window, handover_required,
                         safe_place_allowed, status, reattempts, contacts, partial_accepted, handed_over_by, note,
-                        handover_method, pod_distance_m, reassigned_to, updated_at)
+                        handover_method, pod_distance_m, reassigned_to, updated_at, pickup_location_id)
                     values (:id, :route, :seq, :kind, :name, :seller, :order, :line, :city, :zip, :lat, :lon,
                         :window, :handover, :safe, :status, :reattempts, cast(:contacts as jsonb), :partial,
-                        :handedOverBy, :note, :method, :distance, :reassigned, :at)
+                        :handedOverBy, :note, :method, :distance, :reassigned, :at, :pickupLocation)
                     on conflict (id) do update set seq = excluded.seq, status = excluded.status,
                         reattempts = excluded.reattempts, contacts = excluded.contacts,
                         partial_accepted = excluded.partial_accepted, handed_over_by = excluded.handed_over_by,
@@ -206,6 +206,7 @@ class JdbcRouteRepository implements RouteRepository {
                     .param("distance", s.podDistanceMeters())
                     .param("reassigned", s.reassignedTo() == null ? null : UUID.fromString(s.reassignedTo()))
                     .param("at", Rows.ts(s.updatedAt()))
+                    .param("pickupLocation", s.pickupLocationId())
                     .update();
         }
         for (RoutePackage p : r.packages()) {

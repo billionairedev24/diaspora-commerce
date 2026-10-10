@@ -25,7 +25,19 @@ coupons & promotions. Spring Boot 4.1 · Java 25 · PostgreSQL `offers` · local
   `GET /v1/identifiers/gtin/{code}` with offers' own client-credentials token (client `offers-service`, scope
   `catalog:read`), then the product page. The seller org always
   comes from the token's `org` claim, and `PermissionChecker.requireForOrg` guards every change. There is one open
-  offer per seller, ATIN and condition, and seller SKUs are unique among open offers.
+  offer per seller, ATIN, condition and **channel** — Fulfilled by AfroTransact (`AFROTRANSACT`) or seller-fulfilled
+  (`SELLER` / `AFROTRANSACT_DELIVERY`) — so a seller can sell the same product from their own store and from an
+  AfroTransact fulfilment centre at the same time (S257, V3). Seller SKUs are unique among open offers of a channel, so
+  the FBA offer may reuse the own-store SKU (`PUT /v1/offers/stock/{sku}` then sets only the seller-fulfilled offer).
+- **FBA switch (S257).** `inventory.inbound.received` (FBA stock received at a fulfilment centre, topic
+  `at.inventory-inbound.events`) creates the seller's Fulfilled-by-AfroTransact offer on each received variant that has
+  none yet, copied from their own-store offer (price, list price, condition, seller SKU; no shipping charge; inventory
+  SKU = the received SKU). Its quantity is inventory's availability, so it competes in the buy box as soon as the
+  stock is sellable. Variants without any offer of the seller stay stranded (shown in inventory's FBA view).
+- **Optimistic locking (S259).** Offer responses carry `ETag: "<version>"`. `PATCH /v1/offers/{id}` and
+  `pause` / `resume` / `withdraw` take `If-Match` (or `version` in the PATCH body): a newer stored version answers
+  `409 offers.version-mismatch`; two writers racing on the same version get `409 offers.concurrent-update`. Without
+  `If-Match` the change applies to the current version (backward compatible).
   `catalog.product.created` also creates the creating seller's offers. They stay off sale until
   `catalog.product.approved`.
 - **Buy box.** One winner per (variant ATIN, currency), with reasons. It is recomputed on every offer, price,
@@ -121,6 +133,7 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 | publishes (outbox) | `at.offers.events` | `offers.offer.created\|updated\|withdrawn` (key ATIN), `offers.buybox.changed` (key ATIN), `offers.coupon.created\|updated\|redeemed\|released` (key coupon id) |
 | consumes | `at.product.events` | `catalog.product.created\|approved\|rejected\|paused\|resumed\|taken_down\|reinstated` (takedown hides every offer of the product until reinstated) |
 | consumes | `at.inventory.events` | `inventory.availability.changed` (projection per sku × node; older versions ignored) |
+| consumes | `at.inventory-inbound.events` | `inventory.inbound.received` (S257: FBA stock received → Fulfilled by AfroTransact offer) |
 | consumes | `at.seller-compliance.events` | `seller.listings.hidden\|restored` |
 | consumes | `at.seller-org.events` | `seller.org.approved\|updated` (display name) |
 
@@ -179,6 +192,7 @@ Test coverage:
   - offers and buy box flow, including the audit trail and the HTTP docs pages;
   - coupons: idempotent redeem and release, limits, clip;
   - Kafka listeners, invoked directly with outbox-shaped records;
+  - FBA switch and optimistic locking over HTTP (`FbaInboundOfferIT`);
   - relationship checks against a real OpenFGA (`OfferRelationshipsIT`, local image `openfga/openfga:v1.10.0`, model
     `contracts/openfga/model.json`): forged `org` claim refused, market-scoped staff grants, revocation.
 

@@ -13,6 +13,11 @@ public final class InventoryPermissions {
     public static final String RETURNS = "inventory:returns";
     /** Reserve / confirm / commit / release; only SERVICE principals (orders service) hold it. */
     public static final String RESERVE = "inventory:reserve";
+    /**
+     * Seller FBA inbound (S257): create inbound plans, boxes, labels and tracking for the caller's organisation
+     * (Seller Center inventory roles); staff with it may act for any organisation.
+     */
+    public static final String INBOUND = "inventory:inbound";
     /** Read daily FBA storage volume of every owner; SERVICE principals (seller-service metered billing, S206). */
     public static final String STORAGE_READ = "inventory:storage.read";
 

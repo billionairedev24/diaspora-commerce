@@ -27,6 +27,17 @@ channels:
     description: Nightly reconciliation alerts (key = run id).
     messages:
       inventoryReconciliationDriftDetected: {$ref: '#/components/messages/inventoryReconciliationDriftDetected'}
+  inventoryInboundEvents:
+    address: at.inventory-inbound.events
+    description: >-
+      Inbound shipments (key = inbound shipment id): seller FBA plans ("Send stock to AfroTransact", S257) and
+      AfroTransact Retail ASNs opened from retail shipment events (S226). Headers event-id, event-type, occurred-at.
+    messages:
+      inventoryInboundCreated: {$ref: '#/components/messages/inventoryInboundCreated'}
+      inventoryInboundShipped: {$ref: '#/components/messages/inventoryInboundShipped'}
+      inventoryInboundReceived: {$ref: '#/components/messages/inventoryInboundReceived'}
+      inventoryInboundClosed: {$ref: '#/components/messages/inventoryInboundClosed'}
+      inventoryInboundCancelled: {$ref: '#/components/messages/inventoryInboundCancelled'}
 operations:
   publishInventoryStockEvents:
     action: send
@@ -44,6 +55,29 @@ operations:
     action: send
     channel: {$ref: '#/channels/inventoryReconciliationEvents'}
     summary: Raised when positions differ from the ledger or lots; alerts the inventory channel.
+  publishInventoryInboundEvents:
+    action: send
+    channel: {$ref: '#/channels/inventoryInboundEvents'}
+    summary: >-
+      Inbound lifecycle via the transactional outbox. inventory.inbound.received (one per FC receipt) lets
+      offers-service switch the seller's listing to Fulfilled by AfroTransact; closed carries the discrepancies
+      (SHORT, OVER, DAMAGED, UNEXPECTED) for Seller Center and the FC team.
+  consumeInventoryRetailShipmentEvents:
+    action: receive
+    channel: {$ref: '#/channels/retailEvents'}
+    summary: >-
+      S226: retail.shipment.stage-changed (consumer inventory-retail-shipments, inbox-deduplicated). From DEPARTED
+      (or a later in-transit stage when the notice does not exist yet) the ASN lines become a RETAIL_ASN inbound
+      shipment and its units are inbound at nodeId ("Coming soon"); goods receipts posted with inboundRef = the
+      shipment reference consume exactly those units; RECEIVED closes the notice so units that never arrived stop
+      counting as inbound. Other retail events are ignored.
+  consumeInventoryOffersEvents:
+    action: receive
+    channel: {$ref: '#/channels/offersEvents'}
+    summary: >-
+      S067: offers.offer.created|updated|withdrawn (consumer inventory-offers, inbox-deduplicated) keep a projection
+      of Fulfilled-by-AfroTransact offers by (sellerOrgId, inventorySku); FBA stock without a live one is reported
+      stranded in GET /v1/fba/inventory. Buy box and coupon events are ignored.
 components:
   messages:
     inventoryAvailabilityChanged:
@@ -110,7 +144,93 @@ components:
           runId: {type: string, format: uuid}
           driftUnits: {type: integer, format: int64}
           positions: {type: integer, description: Number of positions with drift}
+    inventoryInboundCreated:
+      name: inventory.inbound.created
+      title: A seller created an FBA inbound plan (WORKING)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/InventoryInboundShipment'}
+    inventoryInboundShipped:
+      name: inventory.inbound.shipped
+      title: Expected units are on their way and count as inbound at the FC
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/InventoryInboundShipment'}
+    inventoryInboundReceived:
+      name: inventory.inbound.received
+      title: Units received at the FC against an inbound shipment (one event per receipt)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/InventoryInboundReceived'}
+    inventoryInboundClosed:
+      name: inventory.inbound.closed
+      title: Receiving finished; remaining expected units cancelled; discrepancies listed
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/InventoryInboundShipment'}
+    inventoryInboundCancelled:
+      name: inventory.inbound.cancelled
+      title: Plan or shipment cancelled before receiving
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/InventoryInboundShipment'}
   schemas:
+    InventoryInboundShipment:
+      type: object
+      required: [shipmentId, number, source, ownerOrg, nodeId, status, lines]
+      properties:
+        shipmentId: {type: string, format: uuid}
+        number: {type: string, examples: [FBA-IN-006600, SHP-2610-GH01]}
+        source: {type: string, enum: [FBA, RETAIL_ASN]}
+        externalRef: {type: [string, 'null'], description: Retail shipment reference (RETAIL_ASN)}
+        ownerOrg: {type: string, description: The seller org (FBA) or AfroTransact Retail}
+        nodeId: {type: string, examples: [ATL-FC]}
+        status: {type: string, enum: [WORKING, SHIPPED, RECEIVING, CLOSED, CANCELLED]}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
+        expectedUnits: {type: integer}
+        receivedUnits: {type: integer}
+        discrepancy: {type: boolean}
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              sku: {type: string, description: Inventory SKU (FBA default = the seller's AT-FN code)}
+              atin: {type: [string, 'null']}
+              unitLabel: {type: [string, 'null'], description: AT-FN unit label code (ATF + 7)}
+              expectedQty: {type: integer}
+              receivedGood: {type: integer}
+              receivedDamaged: {type: integer}
+        discrepancies:
+          type: array
+          items:
+            type: object
+            properties:
+              sku: {type: string}
+              atin: {type: [string, 'null']}
+              type: {type: string, enum: [SHORT, OVER, DAMAGED, UNEXPECTED]}
+              expectedQty: {type: integer}
+              receivedQty: {type: integer}
+              qty: {type: integer}
+        at: {type: string, format: date-time}
+    InventoryInboundReceived:
+      type: object
+      required: [shipmentId, number, source, ownerOrg, nodeId, receiptRef, lines]
+      properties:
+        shipmentId: {type: string, format: uuid}
+        number: {type: string}
+        source: {type: string, enum: [FBA, RETAIL_ASN]}
+        ownerOrg: {type: string}
+        nodeId: {type: string}
+        receiptRef: {type: string}
+        lines:
+          type: array
+          items:
+            type: object
+            required: [sku, qtyGood, qtyDamaged]
+            properties:
+              sku: {type: string}
+              atin: {type: [string, 'null'], description: Variant ATIN from the plan (null for unplanned SKUs)}
+              unitLabel: {type: [string, 'null']}
+              qtyGood: {type: integer}
+              qtyDamaged: {type: integer}
+        at: {type: string, format: date-time}
     InventoryAvailabilityChanged:
       type: object
       required: [sku, nodeId, ownerOrg, available, onHand, reserved, version]

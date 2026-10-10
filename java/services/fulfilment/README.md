@@ -69,7 +69,13 @@ get a `shipment.cancelled` stream alert).
   `route.updated`, `stop.reassigned`, `shipment.cancelled`, `orders.forward_failed`, `session.revoked`,
   `driver.sos_acknowledged`. Pushed right after commit; in-process per replica (consoles reconnect and re-read).
 - **Drivers**: `POST /v1/dispatch/drivers/{id}/suspend|reinstate` (immediate sign-out, see S081).
-- `GET /v1/dispatch/shipments?nodeId` (pool), `GET /v1/dispatch/forward-failures` (orders calls that failed).
+- `GET /v1/dispatch/shipments?nodeId` (pool, with `shipBy`, `pickupLocationId` and the pickup position),
+  `GET /v1/dispatch/forward-failures` (orders calls that failed).
+- **Seller pickups (S259)**: `GET /v1/dispatch/pickups?routed=&sellerOrgId=&pickupLocationId=&serviceDate=&limit=` lists
+  SELLER-origin shipments waiting for a route **and** already routed, each with its pickup location and, once routed,
+  route, driver, day, route status, pickup stop and package status (`routed=true|false` narrows; `serviceDate` keeps
+  routed pickups of that day's routes, unrouted ones always show). Pickup stops are **one per seller ship-from
+  location** (`route_stop.pickup_location_id`, V4) and route stops return `pickupLocationId`.
 
 ## Nearest driver for seller pickups (S255)
 
@@ -238,8 +244,11 @@ Tests: domain rules — inspection (`DefaultInspectionPolicyTest`), proof of del
 reattempt policy (`DefaultReattemptPolicyTest`), sync ordering and access (`DefaultSequencePolicyTest`), the route
 workflow (`DeliveryRouteTest`), zone planner; integration tests with PostgreSQL (PostGIS image) and WireMock for
 identity, orders, inventory and geo: pick/pack ↔ orders (`PickPackIT`), a full driver day through `/v1/driver/sync`
-incl. replay, gap and SOS on the live stream (`DriverDayIT`), access and revocation (`DriverAccessIT`),
+incl. replay, gap and SOS on the live stream (`DriverDayIT`; S258: the "handover codes are never stored" check reads
+`payload -> 'delivery' ->> 'handoverCode'` of the stored delivery events, which must all be `****`, instead of a
+substring match on the whole payload that random ids could hit; 20 consecutive runs green), access and revocation (`DriverAccessIT`),
 reassignment and forwarding while orders is down (`ReassignAndOfflineIT`), positions, KNN availability filters,
-road-distance ranking, auto-assignment, override and builder fallback against PostGIS (`NearestDriverIT`).
+road-distance ranking, auto-assignment, override and builder fallback against PostGIS, plus routed / unrouted pickup
+listing with one stop per pickup location (`NearestDriverIT`).
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

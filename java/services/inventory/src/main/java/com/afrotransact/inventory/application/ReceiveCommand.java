@@ -8,11 +8,19 @@ import java.util.List;
  *
  * @param receiptRef goods receipt number, for example {@code GRN-2610-0042}
  * @param ownerOrg   owner of the stock; null means AfroTransact Retail (1P)
+ * @param inboundRef the inbound shipment the units arrived on (FBA plan number or retail shipment reference): its
+ *                   expected units are consumed and the received quantities recorded against the plan (S226, S257);
+ *                   null or unknown = units are taken off the position's inbound as before
  */
-public record ReceiveCommand(String receiptRef, String nodeId, String ownerOrg, List<Line> lines) {
+public record ReceiveCommand(String receiptRef, String nodeId, String ownerOrg, String inboundRef, List<Line> lines) {
 
     public ReceiveCommand {
         lines = lines == null ? List.of() : List.copyOf(lines);
+    }
+
+    /** A receipt without inbound shipment. */
+    public ReceiveCommand(String receiptRef, String nodeId, String ownerOrg, List<Line> lines) {
+        this(receiptRef, nodeId, ownerOrg, null, lines);
     }
 
     /**

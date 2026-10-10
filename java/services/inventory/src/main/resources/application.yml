@@ -20,6 +20,12 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    consumer:
+      group-id: ${KAFKA_GROUP:inventory-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
   mvc:
     problemdetails:
       enabled: true
@@ -76,6 +82,8 @@ at:
       - /v1/availability
   events:
     relay-enabled: true
+  consumers:
+    enabled: ${CONSUMERS_ENABLED:true}
   inventory:
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
     # Checkout holds are released automatically after this long unless confirmed (payment authorised).
@@ -100,3 +108,20 @@ at:
       # Hourly: retakes today's (UTC) storage snapshot; the last run of the day stands. Idempotent.
       storage-snapshot-cron: ${STORAGE_SNAPSHOT_CRON:0 55 * * * *}
       zone: ${JOBS_ZONE:UTC}
+    # S257: AT-FN unit labels and label rendering (catalog), inbound labels and tracking (carrier-gateway).
+    catalog:
+      base-url: ${CATALOG_URL:http://localhost:8101}
+      timeout: ${CATALOG_TIMEOUT:10s}
+    carrier-gateway:
+      base-url: ${CARRIER_GATEWAY_URL:http://localhost:8209}
+      timeout: ${CARRIER_GATEWAY_TIMEOUT:15s}
+    auth:
+      # Client-credentials token for catalog and carrier-gateway calls. Blank secret = no token (local).
+      token-uri: ${AUTH_TOKEN_URL:${AUTH_ISSUER_URL:http://localhost:8100}/oauth2/token}
+      client-id: ${INVENTORY_CLIENT_ID:inventory-service}
+      client-secret: ${INVENTORY_CLIENT_SECRET:}
+      scopes: catalog:read catalog:write shipping:label
+    consumers:
+      # retail.shipment.stage-changed → inbound notices of 1P ASNs (S226); offers.offer.* → stranded FBA stock (S067)
+      retail-topic: at.retail.events
+      offers-topic: at.offers.events

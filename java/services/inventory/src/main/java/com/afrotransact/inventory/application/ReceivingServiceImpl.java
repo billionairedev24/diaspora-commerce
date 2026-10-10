@@ -1,6 +1,7 @@
 package com.afrotransact.inventory.application;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -14,6 +15,9 @@ import java.util.TreeSet;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import com.afrotransact.inventory.domain.InboundLine;
+import com.afrotransact.inventory.domain.InboundShipment;
+import com.afrotransact.inventory.domain.InboundStatus;
 import com.afrotransact.inventory.domain.InventoryRuleViolation;
 import com.afrotransact.inventory.domain.Lot;
 import com.afrotransact.inventory.domain.LotStatus;
@@ -24,9 +28,11 @@ import com.afrotransact.inventory.domain.ShelfLifeDecision;
 import com.afrotransact.inventory.domain.ShelfLifePolicy;
 import com.afrotransact.inventory.domain.StockPosition;
 import com.afrotransact.inventory.port.IdempotencyStore;
+import com.afrotransact.inventory.port.InboundShipmentRepository;
 import com.afrotransact.inventory.port.LotRepository;
 import com.afrotransact.inventory.port.NodeRepository;
 import com.afrotransact.inventory.port.PositionRepository;
+import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -47,11 +53,14 @@ class ReceivingServiceImpl implements ReceivingService {
     private final IdempotencyStore idempotency;
     private final InventoryAccess access;
     private final InventorySettings settings;
+    private final InboundShipmentRepository inbounds;
+    private final DomainEventPublisher events;
     private final Clock clock;
 
     ReceivingServiceImpl(NodeRepository nodes, PositionRepository positions, LotRepository lots,
                          ShelfLifePolicy shelfLife, StockWriter writer, IdempotencyStore idempotency,
-                         InventoryAccess access, InventorySettings settings, Clock clock) {
+                         InventoryAccess access, InventorySettings settings, InboundShipmentRepository inbounds,
+                         DomainEventPublisher events, Clock clock) {
         this.nodes = nodes;
         this.positions = positions;
         this.lots = lots;
@@ -60,6 +69,8 @@ class ReceivingServiceImpl implements ReceivingService {
         this.idempotency = idempotency;
         this.access = access;
         this.settings = settings;
+        this.inbounds = inbounds;
+        this.events = events;
         this.clock = clock;
     }
 
@@ -76,6 +87,8 @@ class ReceivingServiceImpl implements ReceivingService {
         Node node = activeNode(cmd.nodeId());
         LocalDate today = node.today(clock);
         List<ShelfLifeDecision> decisions = assess(cmd, today);
+        // Lock order: inbound shipment, then positions (sku, node), then lots.
+        Optional<InboundShipment> inbound = receivableInbound(cmd, node);
 
         StockChanges changes = writer.begin(actor.subject());
         TreeSet<String> skus = new TreeSet<>(cmd.lines().stream().map(ReceiveCommand.Line::sku).toList());
@@ -92,11 +105,23 @@ class ReceivingServiceImpl implements ReceivingService {
                         + " belongs to another organisation; FBA stock is never mixed");
             }
             int total = line.qtyGood() + line.qtyDamaged();
-            int inboundConsumed = Math.min(position.inbound(), total);
+            int inboundConsumed;
+            if (inbound.isPresent()) {
+                // Exactly this shipment's expected units become stock (S226, S257).
+                InboundShipment s = inbound.get();
+                int lineOpen = s.line(line.sku()).map(InboundLine::inboundOpen).orElse(0);
+                int fromLine = Math.min(lineOpen, total);
+                inbound = Optional.of(s.receive(line.sku(), null, line.qtyGood(), line.qtyDamaged(), fromLine,
+                        changes.now()));
+                inboundConsumed = Math.min(position.inbound(), fromLine);
+            } else {
+                inboundConsumed = Math.min(position.inbound(), total);
+            }
             if (inboundConsumed > 0) {
                 position = position.adjustInbound(-inboundConsumed);
                 changes.apply(MovementType.INBOUND, position, null, inboundConsumed, cmd.receiptRef(),
-                        "Arrived against inbound notice");
+                        inbound.map(s -> "Arrived on inbound shipment " + s.number())
+                                .orElse("Arrived against inbound notice"));
             }
             ShelfLifeDecision decision = decisions.get(i);
             if (line.qtyGood() > 0) {
@@ -122,9 +147,48 @@ class ReceivingServiceImpl implements ReceivingService {
         finalLots.forEach(l -> writer.publishLot(InventoryEvents.LOT_CREATED, l, l.qtyOnHand()));
         quarantined.forEach(l -> writer.publishLot(InventoryEvents.LOT_QUARANTINED, changes.lot(l.id()),
                 l.qtyOnHand()));
+        inbound.ifPresent(s -> recordInboundReceipt(s, cmd, changes.now()));
         ReceiptResult result = new ReceiptResult(cmd.receiptRef(), node.id(), cmd.ownerOrg(), finalLots, false);
         idempotency.complete(SCOPE, idempotencyKey, result);
         return result;
+    }
+
+    /**
+     * The inbound shipment named by the receipt, locked, when it can take the units: same owner and node, shipped or
+     * receiving. Anything else (unknown, closed, another FC) leaves the receipt unlinked, so a 1P receipt is never
+     * blocked by its notice.
+     */
+    private Optional<InboundShipment> receivableInbound(ReceiveCommand cmd, Node node) {
+        if (cmd.inboundRef() == null) {
+            return Optional.empty();
+        }
+        Optional<InboundShipment> found = inbounds.lockByReference(cmd.inboundRef());
+        if (found.isEmpty()) {
+            return Optional.empty();
+        }
+        InboundShipment s = found.get();
+        if (!s.ownerOrg().equals(cmd.ownerOrg()) || !s.nodeId().equals(node.id())) {
+            throw new InventoryRuleViolation("inventory.inbound-mismatch", "Inbound shipment " + s.number()
+                    + " brings " + s.ownerOrg() + " stock to " + s.nodeId() + ", not " + cmd.ownerOrg() + " stock to "
+                    + node.id(), Map.of("inboundRef", "Belongs to another owner or fulfilment centre"));
+        }
+        if (s.status() != InboundStatus.SHIPPED && s.status() != InboundStatus.RECEIVING) {
+            return Optional.empty();
+        }
+        return found;
+    }
+
+    private void recordInboundReceipt(InboundShipment received, ReceiveCommand cmd, Instant at) {
+        InboundShipment saved = inbounds.update(received.countReceipt(at));
+        List<InboundEventPayloads.ReceivedLine> lines = new ArrayList<>();
+        for (ReceiveCommand.Line l : cmd.lines()) {
+            InboundLine planned = saved.line(l.sku()).orElse(null);
+            lines.add(new InboundEventPayloads.ReceivedLine(l.sku(), planned == null ? null : planned.atin(),
+                    planned == null ? null : planned.unitLabel(), l.qtyGood(), l.qtyDamaged()));
+        }
+        events.publish(InventoryEvents.INBOUND_RECEIVED, InventoryEvents.AGGREGATE_INBOUND, saved.id().toString(),
+                new InboundEventPayloads.InboundReceived(saved.id(), saved.number(), saved.source().name(),
+                        saved.ownerOrg(), saved.nodeId(), cmd.receiptRef(), lines, at));
     }
 
     @Override
@@ -244,7 +308,8 @@ class ReceivingServiceImpl implements ReceivingService {
             throw new InventoryRuleViolation("inventory.invalid-request", "Invalid receipt", errors);
         }
         return new ReceiveCommand(cmd.receiptRef().trim(), cmd.nodeId().trim().toUpperCase(Locale.ROOT),
-                owner(cmd.ownerOrg()), lines);
+                owner(cmd.ownerOrg()), cmd.inboundRef() == null || cmd.inboundRef().isBlank() ? null
+                : cmd.inboundRef().trim(), lines);
     }
 
     private String owner(String requested) {

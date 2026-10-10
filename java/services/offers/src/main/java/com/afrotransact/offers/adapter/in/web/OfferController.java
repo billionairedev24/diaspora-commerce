@@ -59,35 +59,48 @@ class OfferController {
         return OfferPageResponse.of(offers.list(sellerOrgId, atin, status, page, size));
     }
 
-    @Operation(summary = "Get an offer")
+    @Operation(summary = "Get an offer", description = "ETag carries the version to send back in If-Match.")
     @GetMapping("/{id}")
-    OfferResponse get(@PathVariable UUID id) {
-        return OfferResponse.of(offers.get(id));
+    ResponseEntity<OfferResponse> get(@PathVariable UUID id) {
+        return tagged(offers.get(id));
     }
 
     @Operation(summary = "Change price, shipping, quantity, handling time, ship-from, condition or fulfilment",
-            description = "Optimistic: 409 offers.concurrent-update when the offer changed meanwhile.")
+            description = "Optimistic locking (S259): send If-Match with the ETag (or version in the body) of the "
+                    + "offer you edited; a newer stored version answers 409 offers.version-mismatch, and a write "
+                    + "racing another one answers 409 offers.concurrent-update. A seller may keep one open offer "
+                    + "per variant and condition in each channel (Fulfilled by AfroTransact and seller-fulfilled).")
     @PatchMapping("/{id}")
-    OfferResponse update(@PathVariable UUID id, @Valid @RequestBody UpdateOfferRequest body) {
-        return OfferResponse.of(offers.update(id, body.toCommand()));
+    ResponseEntity<OfferResponse> update(@PathVariable UUID id, @Valid @RequestBody UpdateOfferRequest body,
+                                         @RequestHeader(name = Versions.IF_MATCH, required = false) String ifMatch) {
+        return tagged(offers.update(id, body.toCommand(), Versions.expected(ifMatch, body.version())));
     }
 
-    @Operation(summary = "Pause an active offer (it leaves the buy box and the listing)")
+    @Operation(summary = "Pause an active offer (it leaves the buy box and the listing)",
+            description = "If-Match as for PATCH.")
     @PostMapping("/{id}/pause")
-    OfferResponse pause(@PathVariable UUID id) {
-        return OfferResponse.of(offers.pause(id));
+    ResponseEntity<OfferResponse> pause(@PathVariable UUID id,
+                                        @RequestHeader(name = Versions.IF_MATCH, required = false) String ifMatch) {
+        return tagged(offers.pause(id, Versions.expected(ifMatch)));
     }
 
-    @Operation(summary = "Resume a paused offer")
+    @Operation(summary = "Resume a paused offer", description = "If-Match as for PATCH.")
     @PostMapping("/{id}/resume")
-    OfferResponse resume(@PathVariable UUID id) {
-        return OfferResponse.of(offers.resume(id));
+    ResponseEntity<OfferResponse> resume(@PathVariable UUID id,
+                                         @RequestHeader(name = Versions.IF_MATCH, required = false) String ifMatch) {
+        return tagged(offers.resume(id, Versions.expected(ifMatch)));
     }
 
-    @Operation(summary = "Withdraw an offer for good (frees the SKU and condition slot)")
+    @Operation(summary = "Withdraw an offer for good (frees the SKU and condition slot)",
+            description = "If-Match as for PATCH.")
     @PostMapping("/{id}/withdraw")
-    OfferResponse withdraw(@PathVariable UUID id) {
-        return OfferResponse.of(offers.withdraw(id));
+    ResponseEntity<OfferResponse> withdraw(@PathVariable UUID id,
+                                           @RequestHeader(name = Versions.IF_MATCH, required = false) String ifMatch) {
+        return tagged(offers.withdraw(id, Versions.expected(ifMatch)));
+    }
+
+    private static ResponseEntity<OfferResponse> tagged(OfferView view) {
+        return Versions.tagged(OfferResponse.of(view), view.offer().version());
     }
 
     @Operation(summary = "Set the stock of a seller-fulfilled SKU (seller center inventory adjustments)",

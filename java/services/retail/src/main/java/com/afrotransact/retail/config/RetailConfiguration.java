@@ -13,6 +13,7 @@ import com.afrotransact.retail.adapter.out.edi.SftpEdiTransport;
 import com.afrotransact.retail.adapter.out.edi.X12Edi850Writer;
 import com.afrotransact.retail.adapter.out.fx.ConfiguredFxRates;
 import com.afrotransact.retail.adapter.out.inventory.HttpInventoryClient;
+import com.afrotransact.retail.adapter.out.inventory.InventoryWarehouseCalendar;
 import com.afrotransact.retail.adapter.out.media.HttpMediaStore;
 import com.afrotransact.retail.adapter.out.pdf.PdfPurchaseOrderRenderer;
 import com.afrotransact.retail.application.DispatchSettings;
@@ -38,6 +39,7 @@ import com.afrotransact.retail.port.InventoryClient;
 import com.afrotransact.retail.port.MediaStore;
 import com.afrotransact.retail.port.PurchaseOrderDocuments;
 import com.afrotransact.retail.port.PurchaseOrderPdfRenderer;
+import com.afrotransact.retail.port.WarehouseCalendar;
 import com.afrotransact.retail.port.ServiceTokenProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -147,6 +149,15 @@ class RetailConfiguration {
     CatalogClient catalogClient(RestClient.Builder builder, RetailProperties props, JsonMapper json) {
         return new HttpCatalogClient(builder.clone().baseUrl(props.catalog().baseUrl())
                 .requestFactory(factory(props.catalog().timeout())).build(), json);
+    }
+
+    @Bean
+    WarehouseCalendar warehouseCalendar(RestClient.Builder builder, RetailProperties props, ServiceTokenProvider tokens,
+                                        JsonMapper json, Clock clock) {
+        RetailProperties.Receiving r = props.receiving();
+        return new InventoryWarehouseCalendar(builder.clone().baseUrl(props.inventory().baseUrl())
+                .requestFactory(factory(props.inventory().timeout())).build(), tokens, json, r.warehouseZones(),
+                r.defaultZone(), r.zoneCacheTtl(), clock);
     }
 
     @Bean

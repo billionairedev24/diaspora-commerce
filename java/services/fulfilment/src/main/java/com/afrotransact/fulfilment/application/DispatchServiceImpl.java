@@ -289,6 +289,18 @@ class DispatchServiceImpl implements DispatchService {
 
     @Override
     @Transactional(readOnly = true)
+    public List<DeliveryShipmentRepository.PickupListing> pickups(DeliveryShipmentRepository.PickupQuery q) {
+        access.opsReader();
+        return shipments.pickups(new DeliveryShipmentRepository.PickupQuery(q.routed(), blankToNull(q.sellerOrgId()),
+                blankToNull(q.pickupLocationId()), q.serviceDate(), Math.max(1, Math.min(q.limit(), 500))));
+    }
+
+    private static String blankToNull(String v) {
+        return v == null || v.isBlank() ? null : v.trim();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<SosAlert> openSos() {
         access.dispatcher();
         return sos.open();

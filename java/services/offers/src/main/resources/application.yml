@@ -119,6 +119,8 @@ at:
     consumers:
       catalog-topic: at.product.events
       inventory-topic: at.inventory.events
+      # S257: inventory.inbound.received (FBA stock received at a fulfilment centre) → Fulfilled by AfroTransact offer
+      inventory-inbound-topic: at.inventory-inbound.events
       seller-compliance-topic: at.seller-compliance.events
       seller-org-topic: at.seller-org.events
     buy-box:

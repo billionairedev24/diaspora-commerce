@@ -301,6 +301,21 @@ channels:
     messages:
       inventoryReconciliationDriftDetected:
         $ref: '#/components/messages/inventoryReconciliationDriftDetected'
+  inventoryInboundEvents:
+    address: at.inventory-inbound.events
+    description: 'Inbound shipments (key = inbound shipment id): seller FBA plans ("Send stock to AfroTransact", S257) and
+      AfroTransact Retail ASNs opened from retail shipment events (S226). Headers event-id, event-type, occurred-at.'
+    messages:
+      inventoryInboundCreated:
+        $ref: '#/components/messages/inventoryInboundCreated'
+      inventoryInboundShipped:
+        $ref: '#/components/messages/inventoryInboundShipped'
+      inventoryInboundReceived:
+        $ref: '#/components/messages/inventoryInboundReceived'
+      inventoryInboundClosed:
+        $ref: '#/components/messages/inventoryInboundClosed'
+      inventoryInboundCancelled:
+        $ref: '#/components/messages/inventoryInboundCancelled'
   mcpToolEvents:
     address: at.mcp-tool.events
     description: 'Audit trail of MCP tool calls (key = token subject). Headers event-id, event-type, occurred-at. The MCP
@@ -516,7 +531,7 @@ channels:
   paymentsPayoutEvents:
     address: at.payout.events
     description: Payout requests on manual Connect payout schedules and provider fees debited from connected accounts (key
-      = organisation id).
+      = organisation id), and AfroTransact Retail supplier payments (key = supplier id, S226).
     messages:
       paymentsPayoutRequested:
         $ref: '#/components/messages/paymentsPayoutRequested'
@@ -530,6 +545,12 @@ channels:
         $ref: '#/components/messages/paymentsProviderFeeRecorded'
       paymentsProviderFeeCollected:
         $ref: '#/components/messages/paymentsProviderFeeCollected'
+      paymentsSupplierPaymentScheduled:
+        $ref: '#/components/messages/paymentsSupplierPaymentScheduled'
+      paymentsSupplierPaymentPaid:
+        $ref: '#/components/messages/paymentsSupplierPaymentPaid'
+      paymentsSupplierPaymentUpdated:
+        $ref: '#/components/messages/paymentsSupplierPaymentUpdated'
   retailEvents:
     address: at.retail.events
     description: 'AfroTransact Retail (1P) purchasing events from retail-service (key = aggregate id: item, supplier, PO,
@@ -1483,6 +1504,41 @@ components:
           positions:
             type: integer
             description: Number of positions with drift
+    inventoryInboundCreated:
+      name: inventory.inbound.created
+      title: A seller created an FBA inbound plan (WORKING)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryInboundShipment'
+    inventoryInboundShipped:
+      name: inventory.inbound.shipped
+      title: Expected units are on their way and count as inbound at the FC
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryInboundShipment'
+    inventoryInboundReceived:
+      name: inventory.inbound.received
+      title: Units received at the FC against an inbound shipment (one event per receipt)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryInboundReceived'
+    inventoryInboundClosed:
+      name: inventory.inbound.closed
+      title: Receiving finished; remaining expected units cancelled; discrepancies listed
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryInboundShipment'
+    inventoryInboundCancelled:
+      name: inventory.inbound.cancelled
+      title: Plan or shipment cancelled before receiving
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryInboundShipment'
     mcpToolInvoked:
       name: mcp.tool.invoked
       title: An MCP tool was called
@@ -1705,6 +1761,27 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/PaymentsProviderFee'
+    paymentsSupplierPaymentScheduled:
+      name: payments.supplier_payment.scheduled
+      title: AfroTransact Retail supplier payment booked (Dr 1400 / Cr 2500:supplier) and scheduled for dueOn
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsSupplierPayment'
+    paymentsSupplierPaymentPaid:
+      name: payments.supplier_payment.paid
+      title: Finance paid the supplier from the operating bank account (Dr 2500:supplier / Cr 1050)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsSupplierPayment'
+    paymentsSupplierPaymentUpdated:
+      name: payments.supplier_payment.updated
+      title: Supplier payment put on hold (ON_HOLD) or released back to the schedule (SCHEDULED)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsSupplierPayment'
     retailItemCreated:
       name: retail.item.created
       title: 1P item added to the product master (SKU and GTIN issued, listing DRAFT)
@@ -4075,6 +4152,17 @@ components:
         at:
           type: string
           format: date-time
+        market:
+          type:
+          - string
+          - 'null'
+          pattern: ^[A-Z]{2}$
+          examples:
+          - GB
+          - US
+          description: 'S248. Platform (staff) role: the market the grant is scoped to (ISO 3166-1 alpha-2; null = platform-wide),
+            so authz-sync writes market:<code>#<relation> instead of platform:afrotransact#<relation>. A staff role scoped
+            to several markets publishes one event per market. Organisation role: the organisation''s market (informational).'
     IdentityPermissionChanged:
       type: object
       required:
@@ -4405,6 +4493,168 @@ components:
         alreadyMember:
           type: boolean
           description: The user was a member already; their role was left unchanged
+        at:
+          type: string
+          format: date-time
+    InventoryInboundShipment:
+      type: object
+      required:
+      - shipmentId
+      - number
+      - source
+      - ownerOrg
+      - nodeId
+      - status
+      - lines
+      properties:
+        shipmentId:
+          type: string
+          format: uuid
+        number:
+          type: string
+          examples:
+          - FBA-IN-006600
+          - SHP-2610-GH01
+        source:
+          type: string
+          enum:
+          - FBA
+          - RETAIL_ASN
+        externalRef:
+          type:
+          - string
+          - 'null'
+          description: Retail shipment reference (RETAIL_ASN)
+        ownerOrg:
+          type: string
+          description: The seller org (FBA) or AfroTransact Retail
+        nodeId:
+          type: string
+          examples:
+          - ATL-FC
+        status:
+          type: string
+          enum:
+          - WORKING
+          - SHIPPED
+          - RECEIVING
+          - CLOSED
+          - CANCELLED
+        carrier:
+          type:
+          - string
+          - 'null'
+        trackingNumber:
+          type:
+          - string
+          - 'null'
+        expectedUnits:
+          type: integer
+        receivedUnits:
+          type: integer
+        discrepancy:
+          type: boolean
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              sku:
+                type: string
+                description: Inventory SKU (FBA default = the seller's AT-FN code)
+              atin:
+                type:
+                - string
+                - 'null'
+              unitLabel:
+                type:
+                - string
+                - 'null'
+                description: AT-FN unit label code (ATF + 7)
+              expectedQty:
+                type: integer
+              receivedGood:
+                type: integer
+              receivedDamaged:
+                type: integer
+        discrepancies:
+          type: array
+          items:
+            type: object
+            properties:
+              sku:
+                type: string
+              atin:
+                type:
+                - string
+                - 'null'
+              type:
+                type: string
+                enum:
+                - SHORT
+                - OVER
+                - DAMAGED
+                - UNEXPECTED
+              expectedQty:
+                type: integer
+              receivedQty:
+                type: integer
+              qty:
+                type: integer
+        at:
+          type: string
+          format: date-time
+    InventoryInboundReceived:
+      type: object
+      required:
+      - shipmentId
+      - number
+      - source
+      - ownerOrg
+      - nodeId
+      - receiptRef
+      - lines
+      properties:
+        shipmentId:
+          type: string
+          format: uuid
+        number:
+          type: string
+        source:
+          type: string
+          enum:
+          - FBA
+          - RETAIL_ASN
+        ownerOrg:
+          type: string
+        nodeId:
+          type: string
+        receiptRef:
+          type: string
+        lines:
+          type: array
+          items:
+            type: object
+            required:
+            - sku
+            - qtyGood
+            - qtyDamaged
+            properties:
+              sku:
+                type: string
+              atin:
+                type:
+                - string
+                - 'null'
+                description: Variant ATIN from the plan (null for unplanned SKUs)
+              unitLabel:
+                type:
+                - string
+                - 'null'
+              qtyGood:
+                type: integer
+              qtyDamaged:
+                type: integer
         at:
           type: string
           format: date-time
@@ -4867,6 +5117,10 @@ components:
           - WITHDRAWN
         productLive:
           type: boolean
+        inventorySku:
+          type: string
+          description: 'Inventory SKU of the offer''s stock (Fulfilled by AfroTransact: the FBA stock it sells). Inventory
+            keeps a projection of AFROTRANSACT offers by (sellerOrgId, inventorySku) to flag stranded FBA stock (S067).'
     OffersBuyBoxChanged:
       type: object
       required:
@@ -6067,6 +6321,63 @@ components:
           - string
           - 'null'
           description: Why the last collection attempt failed
+    PaymentsSupplierPayment:
+      type: object
+      required:
+      - supplierPaymentId
+      - poId
+      - supplierId
+      - amountMinor
+      - currency
+      - status
+      - dueOn
+      properties:
+        supplierPaymentId:
+          type: string
+          format: uuid
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type:
+          - string
+          - 'null'
+        supplierId:
+          type: string
+          format: uuid
+        supplierCode:
+          type:
+          - string
+          - 'null'
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+          description: Supplier currency
+        status:
+          type: string
+          enum:
+          - SCHEDULED
+          - ON_HOLD
+          - PAID
+        dueOn:
+          type: string
+          format: date
+        paymentReference:
+          type:
+          - string
+          - 'null'
+          description: Bank transfer / ACH reference once paid
+        holdReason:
+          type:
+          - string
+          - 'null'
+        paidAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
     RetailItemEvent:
       type: object
       required:
@@ -6255,6 +6566,24 @@ components:
           type:
           - string
           - 'null'
+        lines:
+          type: array
+          description: Units per SKU on the ASN (S226). From DEPARTED on, inventory-service shows them as expected inbound
+            at nodeId ("Coming soon"); the receipt posted with inboundRef = reference consumes them and RECEIVED closes the
+            notice (units that never arrived stop counting as inbound).
+          items:
+            type: object
+            required:
+            - sku
+            - qty
+            properties:
+              sku:
+                type: string
+                examples:
+                - AT-JOL-200061
+              qty:
+                type: integer
+                minimum: 1
     RetailReceiptPosted:
       type: object
       required:
@@ -6707,7 +7036,8 @@ components:
           type: boolean
         semantic:
           type: boolean
-          description: kNN blended
+          description: Hybrid retrieval was used (BM25 and kNN over product embeddings, fused by reciprocal rank); false when
+            lexical, including fallbacks after an embedder failure or timeout
         tookMs:
           type: integer
           format: int64
@@ -8253,7 +8583,9 @@ operations:
     summary: catalog.product.* upsert the product document (version = occurred-at). Events with sellerHidden = true (catalog.product.hidden,
       and any product event while the owner is hidden) index status SELLER_HIDDEN, which search never returns; catalog.product.restored
       brings back the product's own status. catalog.product.taken_down indexes status TAKEN_DOWN (not returned) and catalog.product.reinstated
-      restores it.
+      restores it. Each document also carries an embedding of its text (title, brand, category path) from ai-gateway's POST
+      /v1/embeddings (purpose search-document, client indexer-service, scope ai:use) for hybrid search (S036); an embedding
+      failure never blocks the event, and a backfill embeds LIVE documents without one.
   consumeIndexerSellerOrgEvents:
     action: receive
     channel:
@@ -8280,6 +8612,29 @@ operations:
     channel:
       $ref: '#/channels/inventoryReconciliationEvents'
     summary: Raised when positions differ from the ledger or lots; alerts the inventory channel.
+  publishInventoryInboundEvents:
+    action: send
+    channel:
+      $ref: '#/channels/inventoryInboundEvents'
+    summary: Inbound lifecycle via the transactional outbox. inventory.inbound.received (one per FC receipt) lets offers-service
+      switch the seller's listing to Fulfilled by AfroTransact; closed carries the discrepancies (SHORT, OVER, DAMAGED, UNEXPECTED)
+      for Seller Center and the FC team.
+  consumeInventoryRetailShipmentEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/retailEvents'
+    summary: 'S226: retail.shipment.stage-changed (consumer inventory-retail-shipments, inbox-deduplicated). From DEPARTED
+      (or a later in-transit stage when the notice does not exist yet) the ASN lines become a RETAIL_ASN inbound shipment
+      and its units are inbound at nodeId ("Coming soon"); goods receipts posted with inboundRef = the shipment reference
+      consume exactly those units; RECEIVED closes the notice so units that never arrived stop counting as inbound. Other
+      retail events are ignored.'
+  consumeInventoryOffersEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/offersEvents'
+    summary: 'S067: offers.offer.created|updated|withdrawn (consumer inventory-offers, inbox-deduplicated) keep a projection
+      of Fulfilled-by-AfroTransact offers by (sellerOrgId, inventorySku); FBA stock without a live one is reported stranded
+      in GET /v1/fba/inventory. Buy box and coupon events are ignored.'
   publishMcpToolEvents:
     action: send
     channel:
@@ -8399,6 +8754,16 @@ operations:
     summary: inventory.availability.changed keeps the availability projection (sku, nodeId) used for Fulfilled by AfroTransact
       offers (matched on ownerOrg = seller org and sku = the offer's inventory SKU). Events whose version is not newer than
       the stored one are ignored. Lot events are ignored. Affected buy boxes are recomputed.
+  consumeOffersInventoryInboundEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/inventoryInboundEvents'
+    summary: 'S257: inventory.inbound.received with source FBA switches the seller''s listing to Fulfilled by AfroTransact.
+      For every received line with good units and no open Fulfilled-by-AfroTransact offer of the seller on the variant, an
+      AFROTRANSACT offer is created from the seller''s own-store offer (price, list price, currency, condition and seller
+      SKU; no shipping charge; inventory SKU = the received SKU) and the buy box is recomputed. The own-store offer stays
+      open (one offer per channel). Lines without any offer of the seller stay stranded. Other inbound events are ignored;
+      inbox-deduplicated (consumer offers-inventory-inbound).'
   consumeOffersSellerComplianceEvents:
     action: receive
     channel:
@@ -8463,6 +8828,17 @@ operations:
       journal; a void that arrives first is remembered so the late purchase charges nothing. AfroTransact Retail (RETAIL_ORG_ID)
       and FBA / AFROTRANSACT_DELIVERY labels are never charged, whatever billTo says. Outstanding charges reserve the payout
       balance and are recovered from the organisation''s next Connect transfer. Tracking and pickup events are ignored.'
+  consumePaymentsRetailEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/retailEvents'
+    summary: 'payments-service (consumer group payments-service, listener payments-retail-events, inbox consumer payments.retail-events)
+      handles retail.payment.released (S226): AfroTransact Retail (merchant of record) owes the supplier the released invoices,
+      so payments books Dr 1400 Retail purchases released / Cr 2500:<supplierId> once per purchase order (inbox on event-id
+      plus a unique PO id) and schedules the supplier payment for dueOn (when sent) or the release date plus SUPPLIER_PAYMENT_TERMS_DAYS
+      (30). Finance pays it from the operating bank account (POST /v1/supplier-payments/{id}/paid: Dr 2500:<supplierId> /
+      Cr 1050). Supplier money never touches a seller payable, a Connect transfer or Retail''s payout balance. Every other
+      retail event is ignored.'
   publishPaymentsPaymentEvents:
     action: send
     channel:
@@ -8475,7 +8851,8 @@ operations:
     action: send
     channel:
       $ref: '#/channels/paymentsPayoutEvents'
-    summary: Seller / provider payouts and provider fees for the portals, notifications and Finance.
+    summary: Seller / provider payouts and provider fees for the portals, notifications and Finance; AfroTransact Retail supplier
+      payments (scheduled, paid, held / released) for retail-service and Finance.
   publishRetailEvents:
     action: send
     channel:

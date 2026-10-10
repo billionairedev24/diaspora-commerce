@@ -28,9 +28,18 @@ public interface OfferRepository {
     /** Open offers on every variant of these product pages. */
     List<Offer> findOpenByProductAtins(Collection<String> productAtins);
 
-    Optional<Offer> findOpen(String sellerOrgId, String atin, OfferCondition condition);
+    /**
+     * The seller's open offer on this variant and condition in one channel: Fulfilled by AfroTransact
+     * ({@code fulfilledByAfroTransact}) or seller-fulfilled (S257: one of each may be open).
+     */
+    Optional<Offer> findOpen(String sellerOrgId, String atin, OfferCondition condition,
+                             boolean fulfilledByAfroTransact);
 
-    boolean sellerSkuTaken(String sellerOrgId, String sellerSku);
+    /** Every open offer of a seller on a variant (both channels, every condition), oldest first. */
+    List<Offer> findOpenBySellerAndAtin(String sellerOrgId, String atin);
+
+    /** Whether another open offer of the seller in the same channel already uses this seller SKU. */
+    boolean sellerSkuTaken(String sellerOrgId, String sellerSku, boolean fulfilledByAfroTransact);
 
     /** Open offers of a seller carrying this seller SKU (any fulfilment). */
     List<Offer> findOpenBySellerSku(String sellerOrgId, String sellerSku);

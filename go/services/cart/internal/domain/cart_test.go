@@ -104,3 +104,35 @@ func TestPresentGroupsPackagesAndFlags(t *testing.T) {
 		t.Fatalf("totals: %+v", v)
 	}
 }
+
+// S259: AfroTransact Delivery lines are collected per seller pickup location, so each location is its own package.
+func TestPresentSplitsAfroTransactDeliveryByPickupLocation(t *testing.T) {
+	delivery := func(atin, location string) domain.Offer {
+		o := offer(atin, "org_ama", domain.FulfilmentAfroTransactDelivery, 500)
+		o.ShipFromLocationID = location
+		return o
+	}
+	var c domain.Cart
+	_ = c.Add(delivery("A", "loc-north"), 1, 10, now)
+	_ = c.Add(delivery("B", "loc-south"), 1, 10, now)
+	_ = c.Add(delivery("C", "loc-north"), 2, 10, now)
+	_ = c.Add(offer("D", "org_ama", "SELLER", 300), 1, 10, now)
+	live := map[string]domain.Offer{"A": delivery("A", "loc-north"), "B": delivery("B", "loc-south"),
+		"C": delivery("C", "loc-north"), "D": offer("D", "org_ama", "SELLER", 300)}
+	v := c.Present(live, map[string]int{"A": 9, "B": 9, "C": 9, "D": 9})
+	if len(v.Packages) != 3 {
+		t.Fatalf("want north, south and seller-shipped packages, got %+v", v.Packages)
+	}
+	byLocation := map[string]domain.Package{}
+	for _, p := range v.Packages {
+		if p.Fulfilment == domain.FulfilmentAfroTransactDelivery {
+			byLocation[p.PickupLocationID] = p
+		} else if p.PickupLocationID != "" {
+			t.Fatalf("only AfroTransact Delivery packages carry a pickup location: %+v", p)
+		}
+	}
+	north, south := byLocation["loc-north"], byLocation["loc-south"]
+	if len(north.Lines) != 2 || north.SubtotalMinor != 1500 || len(south.Lines) != 1 || south.SubtotalMinor != 500 {
+		t.Fatalf("north %+v south %+v", north, south)
+	}
+}

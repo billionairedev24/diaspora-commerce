@@ -56,8 +56,8 @@ class CatalogSyncServiceImpl implements CatalogSyncService {
         Set<String> touched = new TreeSet<>();
         for (ProductSnapshot.VariantSnapshot v : p.variants()) {
             String sku = v.sellerSku() == null ? v.atin() : v.sellerSku().trim().toUpperCase(Locale.ROOT);
-            if (offers.findOpen(p.ownerOrgId(), v.atin(), OfferCondition.NEW).isPresent()
-                    || offers.sellerSkuTaken(p.ownerOrgId(), sku)) {
+            if (offers.findOpen(p.ownerOrgId(), v.atin(), OfferCondition.NEW, platform).isPresent()
+                    || offers.sellerSkuTaken(p.ownerOrgId(), sku, platform)) {
                 LOG.debug("Offer for {} / {} already exists; skipping", p.ownerOrgId(), v.atin());
                 continue;
             }

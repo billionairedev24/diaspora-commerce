@@ -125,7 +125,7 @@ class ReceivingIT extends RetailIntegrationTest {
     }
 
     @Test
-    void qaFailedBatchesAreQuarantinedInInventory() {
+    void qaFailedBatchesAreReceivedIntoQuarantineWithAHoldReason() {
         Setup s = setup(50);
         GoodsReceipt r = counted(s, "LOT-QA-01", 50, 0, QaResult.FAIL);
         Stubs.Lot lot = new Stubs.Lot(s.item().sku(), "LOT-QA-01", 50, "SELLABLE", 846);
@@ -133,8 +133,14 @@ class ReceivingIT extends RetailIntegrationTest {
         GoodsReceipt done = receiving.complete(r.id());
         PostedLot posted = done.postedLots().getFirst();
         assertThat(posted.status()).isEqualTo("QUARANTINE");
-        DOWNSTREAM.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/lots/" + posted.lotId()
-                + "/quarantine")).withHeader("Authorization", WireMock.equalTo("Bearer " + Stubs.TOKEN)));
+        // S226: the hold travels on the receipt line; no separate quarantine call.
+        DOWNSTREAM.verify(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/receipts"))
+                .withRequestBody(WireMock.matchingJsonPath("$.receiptRef", WireMock.equalTo(r.number())))
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[0].holdReason",
+                        WireMock.equalTo("QA failed at receipt " + r.number())))
+                .withHeader("Authorization", WireMock.equalTo("Bearer " + Stubs.TOKEN)));
+        DOWNSTREAM.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/lots/.*/quarantine")));
+        DOWNSTREAM.verify(WireMock.getRequestedFor(WireMock.urlPathEqualTo("/v1/nodes")));
         as(TestActors.FINANCE);
         JournalEntry je = ledger.entry(done.journalEntryId());
         assertThat(je.lines()).extracting(l -> l.account().code()).containsExactly("1320", "2110", "2120");

@@ -48,10 +48,11 @@ type offerDetail struct {
 			Name string `json:"name"`
 			Kind string `json:"kind"`
 		} `json:"seller"`
-		PriceMinor   int64  `json:"priceMinor"`
-		Currency     string `json:"currency"`
-		Fulfilment   string `json:"fulfilment"`
-		AvailableQty int    `json:"availableQty"`
+		PriceMinor         int64  `json:"priceMinor"`
+		Currency           string `json:"currency"`
+		Fulfilment         string `json:"fulfilment"`
+		AvailableQty       int    `json:"availableQty"`
+		ShipFromLocationID string `json:"shipFromLocationId"`
 	} `json:"offer"`
 	Buyable bool `json:"buyable"`
 }
@@ -86,7 +87,7 @@ func (l *lookupImpl) Offer(ctx context.Context, offerID string) (port.LiveOffer,
 		entry = cached{found: true, offer: port.LiveOffer{OfferID: firstNonEmpty(o.OfferID, offerID), VariantATIN: o.ATIN,
 			ProductATIN: o.ProductATIN, SellerOrgID: o.Seller.ID, SellerName: o.Seller.Name, SellerKind: o.Seller.Kind,
 			Fulfilment: o.Fulfilment, PriceMinor: o.PriceMinor, Currency: strings.ToUpper(o.Currency),
-			Available: max(0, o.AvailableQty), Buyable: d.Buyable}}
+			Available: max(0, o.AvailableQty), Buyable: d.Buyable, ShipFromLocationID: o.ShipFromLocationID}}
 	case http.StatusNotFound, http.StatusBadRequest:
 		entry = cached{found: false} // unknown, withdrawn or not an offer id
 	default:
