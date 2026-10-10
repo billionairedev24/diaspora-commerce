@@ -15,6 +15,12 @@
     <name>AfroTransact :: catalog-service</name>
     <description>Products (ATIN/GTIN), variants, category tree, product-type schemas and category requests.</description>
 
+    <properties>
+        <pdfbox.version>3.0.8</pdfbox.version>
+        <zxing.version>3.5.4</zxing.version>
+        <wiremock.version>3.13.2</wiremock.version>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>com.afrotransact</groupId>
@@ -47,7 +53,17 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-restclient</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-kafka</artifactId>
+        </dependency>
+        <!-- S032: PDF labels and label sheets (barcodes are encoded by catalog itself). -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>${pdfbox.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -69,6 +85,19 @@
         <dependency>
             <groupId>com.afrotransact</groupId>
             <artifactId>platform-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Tests decode the generated barcodes to prove they scan. -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>${zxing.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>${wiremock.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

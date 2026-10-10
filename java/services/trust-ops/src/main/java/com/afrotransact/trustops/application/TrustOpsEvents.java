@@ -9,6 +9,10 @@ public final class TrustOpsEvents {
     public static final String MODERATION_ESCALATED = "trustops.moderation.escalated";
     public static final String MODERATION_DECIDED = "trustops.moderation.decided";
     public static final String CLAIM_OPENED = "trustops.claim.opened";
+    /** Sent once per claim, {@code at.trustops.sla.seller-response-reminder} (24 h) before the seller's deadline. */
+    public static final String CLAIM_RESPONSE_DUE_SOON = "trustops.claim.response_due_soon";
+    /** The seller's response window passed without an answer; the claim moved to staff review. */
+    public static final String CLAIM_RESPONSE_LAPSED = "trustops.claim.response_lapsed";
     public static final String CLAIM_SELLER_RESPONDED = "trustops.claim.seller_responded";
     public static final String CLAIM_ESCALATED = "trustops.claim.escalated";
     public static final String CLAIM_DECIDED = "trustops.claim.decided";
@@ -18,8 +22,6 @@ public final class TrustOpsEvents {
     public static final String SELLER_HEALTH_COMPUTED = "trustops.seller.health_computed";
     public static final String SUPPORT_CASE_OPENED = "trustops.support_case.opened";
     public static final String AUDIT_RECORDED = "trustops.audit.recorded";
-    /** Templated notification request for notifications-service. */
-    public static final String NOTIFICATION_REQUESTED = "notification.requested";
 
     /** Inbox consumer names. */
     public static final String CONSUMER_PRODUCTS = "trust-ops:catalog-products";

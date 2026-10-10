@@ -25,6 +25,37 @@ Spring Boot 4.1 · Java 25 · PostgreSQL · local port **8101**.
   the listing to its previous status (`LIVE` or `PAUSED`) and publishes `catalog.product.reinstated`. Both calls are
   idempotent.
 
+- **GTIN prefill (S031)**: when a seller types or scans a GTIN in the product builder,
+  `GET /v1/identifiers/gtin/{code}/prefill` checks the GTIN-8/12/13/14 check digit (422 with a suggested fix), then
+  asks the product-data providers behind the `ProductDataSource` port in order (`PRODUCT_DATA_ORDER`, default
+  GS1 then Open Food Facts) until title, brand, net content and an image are known. Each field comes from the first
+  provider that has it and `importedFrom` names that provider, so the form marks imported fields (they stay
+  editable); `found=false` falls back to manual entry. Provider categories (Open Food Facts tags such as
+  `en:long-grain-rices`, GS1 GPC segments) are mapped onto the seeded taxonomy (`DefaultCategoryHintPolicy`) and
+  returned as up to three `categoryHints` with category id, path and product type. A GTIN that already has a product
+  page returns `existingAtin` without calling any provider. Answers are cached per GTIN-14 in `product_data_lookup`
+  (V5): hits for `PRODUCT_DATA_CACHE_TTL` (7 days), misses for `PRODUCT_DATA_MISS_TTL` (1 day). Provider errors and
+  timeouts (3 s, one retry on a dropped connection) skip to the next provider and are never cached.
+  - *Open Food Facts* (`adapter/out/productdata/OpenFoodFactsSource`): `GET /api/v2/product/{ean}.json`, open data,
+    on by default, sends `OFF_USER_AGENT`.
+  - *Verified by GS1* (`Gs1VerifiedSource`): `POST /grp/v3.2/gtins/verified` with the `APIKey` header. Off unless
+    `GS1_ENABLED=true` and `GS1_API_KEY` is set.
+- **Barcode labels (S032)**: catalog encodes Code 128 (code sets B/C), GS1-128 and EAN-13 itself
+  (`domain/barcode`, written against ISO/IEC 15417 and the GS1 General Specifications; bar widths match
+  `design/at-barcode.js`) and renders them as SVG (vector label), PNG (the bare symbol with quiet zones, no text, so
+  no server fonts are needed), ZPL (203 dpi Zebra, `^BC` mode N with the same codewords, `^BE` for EAN-13, `^PQ`
+  copies) or PDF (Apache PDFBox: one page per label, or Letter / A4 sheets with cut lines). Label kinds and default
+  sizes: `UNIT` 2×1 in, `RETAIL` 2×1.25 in, `SHELF` 3×1 in, `CASE` 4×3 in, `PALLET` 4×6 in, `CUSTOM` 2×1 in.
+  - Retail units carry the manufacturer EAN-13 / UPC-A (GS1-128 (01) for GTIN-8 and GTIN-14).
+  - Case labels carry GS1-128 with (01) GTIN and optional (10) lot, (11) production date, (15) best before,
+    (17) expiry and (21) serial. Pallet labels carry (00) SSCC and optional (02) content GTIN with (37) count.
+    Predefined-length AIs go first, and FNC1 separates variable-length fields (never after the last one). The
+    48-character limit and GS1 pairing rules are checked.
+  - Unit labels (`GET /v1/labels/units/{atin}`): AfroTransact Retail stock with a vendor GTIN keeps the manufacturer
+    barcode. Every other unit gets the stock owner's **AT-FN code** (`ATF` + 7 base-36, Code 128), issued once per
+    owner organisation and variant ATIN in `unit_label` (V5), so units of different sellers never mix and platform
+    stock without a GTIN is labelled at receiving.
+
 Validation of a submission (`DefaultProductDraftPolicy`) returns every failing field at once
 (`fieldErrors` in the RFC 9457 problem): title 10–200 chars, required details, 1–10 JPG/PNG/WebP images ≤ 8 MB
 with a main image ≥ 1000×1000, variation values from the theme, unique SKUs, valid GTIN check digit (with a
@@ -45,6 +76,10 @@ suggested correction) or exemption, ISBN-13 for books, price > 0.
 | POST | `/v1/products/{id}/takedown {reasonCode, note}`, `/v1/products/{id}/restore {note}` | `catalog:moderate` |
 | POST | `/v1/public/products/{atin}/reports {reasonCode, details}` | any signed-in user (201 new, 200 repeated report) |
 | GET | `/v1/identifiers/gtin/{code}?isbn=` | `catalog:read` (service tokens such as offers-service, S224) or `catalog:write` |
+| GET | `/v1/identifiers/gtin/{code}/prefill` (S031) | `catalog:write` or `catalog:read` |
+| POST | `/v1/labels?format=svg\|png\|zpl\|pdf&layout=&paper=` (one label) | `catalog:write` or `catalog:read` |
+| POST | `/v1/labels/batch?format=pdf\|zpl {labels[≤500], layout: LABEL\|SHEET, paper: LETTER\|A4}` | `catalog:write` or `catalog:read` |
+| GET | `/v1/labels/units/{atin}?format=&copies=&orgId=` | `catalog:write` (sellers: own org, own or live pages; staff/services: any `orgId`) |
 
 Contract: [`contracts/openapi/catalog.yaml`](../../../contracts/openapi/catalog.yaml).
 Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
@@ -65,8 +100,14 @@ Listing reason codes (reports, flags, takedowns) match the trust-ops moderation 
 `UNAPPROVED_HEALTH_CLAIM`, `RESTRICTED_INGREDIENT`, `COUNTERFEIT`, `IMAGE_POLICY`, `MISLEADING_CONTENT`, `LABELLING`,
 `SHIPPING_METHOD`, `DUPLICATE_LISTING`, `WRONG_CATEGORY`, `OTHER` (details / note required for `OTHER`).
 
-Known gap: the indexer and offers-service do not consume `catalog.product.taken_down|reinstated` yet, so a taken-down
-listing leaves catalog's public API at once but stays in search and the buy box until they do.
+Known gaps:
+- The indexer and offers-service do not consume `catalog.product.taken_down|reinstated` yet, so a taken-down listing
+  leaves catalog's public API at once but stays in search and the buy box until they do.
+- The GS1 adapter follows the published Verified by GS1 v3.2 shape (language-tagged `productDescription`,
+  `brandName`, `productImageUrl`, `netContent`, `gpcCategoryCode`). It is tested against WireMock only and still
+  needs a check against a live GS1 US subscription key. GS1 GPC codes map to a department only.
+- ZPL targets 203 dpi printers. The PNG is the symbol only, without text; use SVG, PDF or ZPL for full labels.
+- Nothing calls the label endpoints yet (Seller Center inbound shipments, fulfilment receiving).
 
 ## Configuration
 
@@ -76,6 +117,9 @@ listing leaves catalog's public API at once but stays in search and the buy box 
 | `KAFKA_BOOTSTRAP` | Kafka for the outbox relay |
 | `AUTH_ISSUER_URI` | identity service issuer (JWT validation) |
 | `RETAIL_ORG_ID` | organisation id of AfroTransact Retail |
+| `PRODUCT_DATA_ORDER`, `PRODUCT_DATA_CACHE_TTL`, `PRODUCT_DATA_MISS_TTL` | GTIN prefill provider order (`GS1,OPEN_FOOD_FACTS`) and cache (7d / 1d) |
+| `GS1_ENABLED`, `GS1_API_KEY` (secret), `GS1_BASE_URL`, `GS1_TIMEOUT` | Verified by GS1 (off by default; needs a key) |
+| `OFF_ENABLED`, `OFF_BASE_URL`, `OFF_USER_AGENT`, `OFF_TIMEOUT` | Open Food Facts (on by default, 3 s) |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRACE_SAMPLING` | tracing |
 
 Profiles: `local` (security off, debug logs), `dev`, `uat`, `prod` (API reference pages off).
@@ -87,5 +131,10 @@ make up                                           # Postgres, Kafka … from inf
 cd java && ./mvnw -B -f services/catalog/pom.xml verify     # checkstyle, unit, ArchUnit, Testcontainers ITs
 ./mvnw -f services/catalog/pom.xml spring-boot:run          # http://localhost:8101/docs
 ```
+
+Libraries added for S031/S032: `spring-boot-starter-restclient` (provider calls), Apache PDFBox 3.0.8 (PDF labels);
+test-only ZXing core 3.5.4 (every barcode test decodes the generated symbol, so it is known to scan) and WireMock
+3.13.2 (providers). The ZPL output is pinned by snapshots in `src/test/resources/labels`.
+Migrations: `V5__barcode_prefill_and_unit_labels.sql` (`product_data_lookup`, `unit_label`, `unit_label_seq`).
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

@@ -25,7 +25,7 @@ public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstr
                                  Upstream offers, Ai ai, Audit audit, SellerHealth sellerHealth, Jobs jobs) {
 
     public TrustOpsProperties {
-        sla = sla == null ? new Sla(null, null, null, null, null, null, null) : sla;
+        sla = sla == null ? new Sla(null, null, null, null, null, null, null, null) : sla;
         client = client == null ? new Client(null, null, null, null, null) : client;
         catalog = catalog == null ? new Upstream("http://localhost:8101") : catalog;
         payments = payments == null ? new Upstream("http://localhost:8105") : payments;
@@ -37,10 +37,18 @@ public record TrustOpsProperties(Sla sla, Client client, Upstream catalog, Upstr
         jobs = jobs == null ? new Jobs(null) : jobs;
     }
 
-    /** SLA targets; unset values use {@link SlaTargets#defaults()}. */
+    /**
+     * SLA targets; unset values use {@link SlaTargets#defaults()}.
+     *
+     * @param sellerResponseReminder lead time of the seller's claim reminder (default 24 h before the deadline)
+     */
     public record Sla(Duration moderation, Duration moderationHighRisk, Duration moderationEscalated,
                       Duration sellerResponse, Duration claimDecision, Duration claimEscalated,
-                      Duration supportFirstResponse) {
+                      Duration supportFirstResponse, Duration sellerResponseReminder) {
+
+        public Sla {
+            sellerResponseReminder = sellerResponseReminder == null ? Duration.ofHours(24) : sellerResponseReminder;
+        }
 
         public SlaTargets targets() {
             SlaTargets d = SlaTargets.defaults();

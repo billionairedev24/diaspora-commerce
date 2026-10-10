@@ -144,6 +144,13 @@ class ModerationFlowIT extends TrustOpsIntegrationTest {
         assertThat(escalated.item().status()).isEqualTo(ModerationStatus.ESCALATED);
         assertThat(escalated.item().escalationReason()).startsWith("SLA breached");
         assertThat(escalated.sla().state()).isEqualTo(SlaState.ON_TRACK);
+        String event = jdbc.sql("select payload::text from platform_outbox where aggregate_id = :id "
+                        + "and type = 'trustops.moderation.escalated'")
+                .param("id", queued.item().product().productId().toString()).query(String.class).single();
+        JsonNode escalatedEvent = JSON.readTree(event);
+        assertThat(escalatedEvent.path("sellerOrgId").asString()).isEqualTo(queued.item().product().sellerOrgId());
+        assertThat(escalatedEvent.path("status").asString()).isEqualTo("ESCALATED");
+        assertThat(escalatedEvent.path("escalationReason").asString()).startsWith("SLA breached");
         assertThat(jdbc.sql("select actor_id from audit_entry where action = 'trustops.listing.escalated' "
                         + "and entity_id = :id").param("id", queued.item().product().productId().toString())
                 .query(String.class).single()).isEqualTo("system");
@@ -199,6 +206,14 @@ class ModerationFlowIT extends TrustOpsIntegrationTest {
                 .anySatisfy(v -> assertThat(v.item().id()).isEqualTo(queued.item().id()));
         assertThat(moderation.queue(null, null, false, ModerationItemType.NEW_LISTING, 0, 200).items())
                 .noneSatisfy(v -> assertThat(v.item().id()).isEqualTo(queued.item().id()));
+
+        // S237: the escalation names the seller and the shopper who reported the listing.
+        moderation.escalate(queued.item().id(), "Legal review");
+        JsonNode escalatedEvent = JSON.readTree(jdbc.sql("select payload::text from platform_outbox "
+                        + "where aggregate_id = :id and type = 'trustops.moderation.escalated'")
+                .param("id", listing.productId().toString()).query(String.class).single());
+        assertThat(escalatedEvent.path("sellerOrgId").asString()).isEqualTo(listing.sellerOrgId());
+        assertThat(escalatedEvent.path("customerId").asString()).isEqualTo("cust-1");
 
         ModerationItemView removed = moderation.reject(queued.item().id(), ModerationReasonCode.UNAPPROVED_HEALTH_CLAIM,
                 "Medical claims on a cosmetic");

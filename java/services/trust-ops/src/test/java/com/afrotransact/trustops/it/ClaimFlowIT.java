@@ -24,7 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import tools.jackson.databind.JsonNode;
 
-/** S118: claims with a seller response window, staff decisions with refunds through payments, notifications. */
+/** S118 / S237: claims with a seller response window and reminder, staff decisions with refunds through payments. */
 class ClaimFlowIT extends TrustOpsIntegrationTest {
 
     private final ClaimService claims;
@@ -86,13 +86,14 @@ class ClaimFlowIT extends TrustOpsIntegrationTest {
                 .withRequestBody(WireMock.matchingJsonPath("$.reason",
                         WireMock.containing(decided.claim().reference()))));
 
-        List<String> recipients = jdbc.sql("select payload->'recipient'->>'id' from platform_outbox "
-                        + "where aggregate_id = :id and type = 'notification.requested' "
-                        + "and payload->>'templateKey' = 'claim.decided'")
-                .param("id", id.toString()).query(String.class).list();
-        assertThat(recipients).containsExactlyInAnyOrder("cust-ada", seller);
+        // S237: notifications uses the typed events only; the decision carries both parties and the staff note.
         assertThat(outbox(id.toString())).contains("trustops.claim.opened", "trustops.claim.seller_responded",
-                "trustops.claim.decided");
+                "trustops.claim.decided").doesNotContain("notification.requested");
+        JsonNode decidedEvent = payload(id, "trustops.claim.decided").get(0);
+        assertThat(decidedEvent.path("decisionNote").asString()).isEqualTo("Carrier lost the parcel");
+        assertThat(decidedEvent.path("customerId").asString()).isEqualTo("cust-ada");
+        assertThat(decidedEvent.path("sellerOrgId").asString()).isEqualTo(seller);
+        assertThat(decidedEvent.path("outcome").asString()).isEqualTo("REFUND");
         assertThat(jdbc.sql("select summary from audit_entry where action = 'trustops.claim.decided' "
                         + "and entity_id = :ref").param("ref", decided.claim().reference()).query(String.class)
                 .single()).contains("RESOLVED_REFUND 4999 USD");
@@ -152,6 +153,70 @@ class ClaimFlowIT extends TrustOpsIntegrationTest {
         assertThat(denied.claim().status()).isEqualTo(ClaimStatus.RESOLVED_DENIED);
         assertThat(claims.history(id)).extracting(h -> h.action()).containsSubsequence("SELLER_WINDOW_LAPSED",
                 "ESCALATED", "DECIDED");
+    }
+
+    @Test
+    void sellerIsRemindedOnce24HoursBeforeTheDeadlineAndTheLapseIsPublished() {
+        String seller = orgId();
+        ClaimView opened = openAs("cust-ifeoma", seller);
+        UUID id = opened.claim().id();
+
+        // 47 h in: 25 h left, too early for the reminder.
+        TestSupport.CLOCK.advance(Duration.ofHours(47));
+        slaSweep.sweep();
+        assertThat(outbox(id.toString())).doesNotContain("trustops.claim.response_due_soon");
+
+        // 49 h in: 23 h left, reminded once; later sweeps inside the window do not repeat it.
+        TestSupport.CLOCK.advance(Duration.ofHours(2));
+        assertThat(slaSweep.sweep().sellerRemindersSent()).isGreaterThanOrEqualTo(1);
+        TestSupport.CLOCK.advance(Duration.ofHours(1));
+        slaSweep.sweep();
+        List<JsonNode> reminders = payload(id, "trustops.claim.response_due_soon");
+        assertThat(reminders).hasSize(1);
+        assertThat(reminders.get(0).path("status").asString()).isEqualTo("AWAITING_SELLER");
+        assertThat(reminders.get(0).path("sellerOrgId").asString()).isEqualTo(seller);
+        assertThat(reminders.get(0).path("customerId").asString()).isEqualTo("cust-ifeoma");
+        assertThat(reminders.get(0).path("dueAt").asString()).isEqualTo(opened.sla().dueAt().toString());
+
+        // 73 h in: the window lapsed, the claim moves to review and the lapse is published.
+        TestSupport.CLOCK.advance(Duration.ofHours(23));
+        assertThat(slaSweep.sweep().sellerWindowsLapsed()).isGreaterThanOrEqualTo(1);
+        List<JsonNode> lapsed = payload(id, "trustops.claim.response_lapsed");
+        assertThat(lapsed).hasSize(1);
+        assertThat(lapsed.get(0).path("status").asString()).isEqualTo("UNDER_REVIEW");
+        assertThat(lapsed.get(0).path("responseDueAt").asString()).isEqualTo(opened.sla().dueAt().toString());
+        assertThat(lapsed.get(0).path("sellerOrgId").asString()).isEqualTo(seller);
+        assertThat(payload(id, "trustops.claim.response_due_soon")).hasSize(1);
+    }
+
+    @Test
+    void escalationEventsCarryBothParties() {
+        String seller = orgId();
+        ClaimView manual = openAs("cust-gbenga", seller);
+        TestSupport.as(TestSupport.trustSafety("sara"));
+        claims.escalate(manual.claim().id(), "Repeat complaint");
+        JsonNode manualEvent = payload(manual.claim().id(), "trustops.claim.escalated").get(0);
+        assertThat(manualEvent.path("sellerOrgId").asString()).isEqualTo(seller);
+        assertThat(manualEvent.path("customerId").asString()).isEqualTo("cust-gbenga");
+        assertThat(manualEvent.path("escalationReason").asString()).isEqualTo("Repeat complaint");
+
+        ClaimView swept = openAs("cust-halima", seller);
+        TestSupport.CLOCK.advance(Duration.ofHours(73));
+        slaSweep.sweep();
+        TestSupport.CLOCK.advance(Duration.ofDays(6));
+        slaSweep.sweep();
+        JsonNode sweptEvent = payload(swept.claim().id(), "trustops.claim.escalated").get(0);
+        assertThat(sweptEvent.path("sellerOrgId").asString()).isEqualTo(seller);
+        assertThat(sweptEvent.path("customerId").asString()).isEqualTo("cust-halima");
+        assertThat(sweptEvent.path("reason").asString()).startsWith("Decision SLA breached");
+        assertThat(sweptEvent.path("status").asString()).isEqualTo("ESCALATED");
+    }
+
+    private List<JsonNode> payload(UUID claimId, String type) {
+        return jdbc.sql("select payload::text from platform_outbox where aggregate_id = :id and type = :type "
+                        + "order by occurred_at, id")
+                .param("id", claimId.toString()).param("type", type).query(String.class).list().stream()
+                .map(JSON::readTree).toList();
     }
 
     @Test

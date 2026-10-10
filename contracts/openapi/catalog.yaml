@@ -18,14 +18,16 @@ servers:
 security:
 - bearer: []
 tags:
-- name: Identifiers
-  description: GTIN / ISBN checks for the product builder and GTIN lookups by service clients
 - name: Public catalog
   description: Anonymous reads of live products (storefront, cart, search)
 - name: Categories
   description: Browse tree, product-type schemas and new-category requests
+- name: Labels
+  description: 'Barcode labels (S032): Code 128, GS1-128 and EAN-13 as SVG, PNG, ZPL or PDF'
 - name: Products
   description: Product builder, listing moderation and lookup
+- name: Identifiers
+  description: GTIN / ISBN checks and GTIN prefill for the product builder, GTIN lookups by service clients
 - name: Listing reports
   description: Shoppers report a live listing (signed in); reports reach the trust-ops moderation queue through catalog.product.flagged
 paths:
@@ -181,6 +183,186 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/GtinCheck'
+  /v1/identifiers/gtin/{code}/prefill:
+    get:
+      tags:
+      - Identifiers
+      summary: Prefill the product builder from a GTIN (GS1, Open Food Facts)
+      description: Validates the GTIN-8/12/13/14 check digit (422 with a suggested fix), then asks the product-data providers
+        in order (GS1 Verified when configured, then Open Food Facts for groceries) and returns title, brand, net content,
+        images and category hints in our taxonomy. `importedFrom` marks imported fields (they stay editable); `found=false`
+        means manual entry. When a product page already uses the GTIN, `existingAtin` is set and no provider is called. Answers
+        are cached per GTIN. Needs catalog:write or catalog:read.
+      operationId: prefillGtin
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/GtinPrefill'
+  /v1/labels:
+    post:
+      tags:
+      - Labels
+      summary: Render one label
+      description: Needs catalog:write or catalog:read. Invalid data (GTIN / SSCC check digits, GS1 AI rules, too long for
+        the label) is a 422 with fieldErrors.
+      operationId: renderLabel
+      parameters:
+      - name: format
+        in: query
+        description: SVG (vector label), PNG (bare symbol, no text), ZPL (Zebra, 203 dpi), PDF (one page per label, or a sheet)
+        required: false
+        schema:
+          type: string
+          default: SVG
+          enum:
+          - SVG
+          - PNG
+          - ZPL
+          - PDF
+      - name: layout
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - LABEL
+          - SHEET
+      - name: paper
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - LETTER
+          - A4
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LabelRequest'
+        required: true
+      responses:
+        '200':
+          description: The label
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+            image/png:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+                description: ZPL
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+  /v1/labels/batch:
+    post:
+      tags:
+      - Labels
+      summary: Render a batch of labels as one PDF or ZPL
+      description: Up to 500 labels and 2000 printed labels (copies included). Field errors are keyed labels[i].field. Needs
+        catalog:write or catalog:read.
+      operationId: renderLabelBatch
+      parameters:
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+          default: PDF
+          enum:
+          - PDF
+          - ZPL
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LabelBatchRequest'
+        required: true
+      responses:
+        '200':
+          description: The labels
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+                description: ZPL
+  /v1/labels/units/{atin}:
+    get:
+      tags:
+      - Labels
+      summary: Unit label of a product or variant ATIN
+      description: 'Platform (AfroTransact Retail) stock with a vendor GTIN keeps the manufacturer barcode; every other unit
+        gets the stock owner''s AT-FN code (ATF + 7, Code 128), issued once per owner and variant. Sellers print for their
+        own organisation; staff and service clients may pass orgId (default: the product''s owner). Needs catalog:write.'
+      operationId: unitLabel
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: format
+        in: query
+        description: SVG (vector label), PNG (bare symbol, no text), ZPL (Zebra, 203 dpi), PDF (one page per label, or a sheet)
+        required: false
+        schema:
+          type: string
+          default: SVG
+          enum:
+          - SVG
+          - PNG
+          - ZPL
+          - PDF
+      - name: copies
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 1
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: The unit label
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+            image/png:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+                description: ZPL
+            application/pdf:
+              schema:
+                type: string
+                format: binary
   /v1/product-types:
     get:
       tags:
@@ -858,6 +1040,111 @@ components:
           minLength: 0
       required:
       - reasonCode
+    LabelRequest:
+      type: object
+      description: 'One label. UNIT/SHELF/CUSTOM: Code 128 of `data` (or EAN-13 of `gtin`); RETAIL: EAN-13 / UPC-A of `gtin`
+        (GS1-128 (01) for GTIN-8/14); CASE: GS1-128 (01) `gtin` + (10) lot, (11) production, (15) best before, (17) expiry,
+        (21) serial; PALLET: GS1-128 (00) `sscc` + optional (02) `gtin` with (37) `count`. `symbology` overrides the default.'
+      properties:
+        kind:
+          type: string
+          enum:
+          - UNIT
+          - RETAIL
+          - SHELF
+          - CASE
+          - PALLET
+          - CUSTOM
+        symbology:
+          type: string
+          enum:
+          - CODE_128
+          - GS1_128
+          - EAN_13
+        data:
+          type: string
+          examples:
+          - ATF3XK8P2QL
+          maxLength: 48
+          minLength: 0
+        gtin:
+          type: string
+          examples:
+          - 09501101530003
+          maxLength: 20
+          minLength: 0
+        sscc:
+          type: string
+          examples:
+          - '106141411234567897'
+          maxLength: 20
+          minLength: 0
+        lot:
+          type: string
+          maxLength: 20
+          minLength: 0
+        productionDate:
+          type: string
+          format: date
+        bestBefore:
+          type: string
+          format: date
+        expiry:
+          type: string
+          format: date
+        serial:
+          type: string
+          maxLength: 20
+          minLength: 0
+        count:
+          type: integer
+          format: int32
+        caption:
+          type: string
+          maxLength: 60
+          minLength: 0
+        title:
+          type: string
+          maxLength: 200
+          minLength: 0
+        lines:
+          type: array
+          items:
+            type: string
+            maxLength: 120
+            minLength: 0
+          maxItems: 4
+          minItems: 0
+        copies:
+          type: integer
+          format: int32
+          description: 1–1000, default 1
+      required:
+      - kind
+    LabelBatchRequest:
+      type: object
+      description: Up to 500 labels rendered as one PDF (pages or sheets) or one ZPL stream.
+      properties:
+        labels:
+          type: array
+          items:
+            $ref: '#/components/schemas/LabelRequest'
+          maxItems: 500
+          minItems: 0
+        layout:
+          type: string
+          description: 'PDF: LABEL = one page per label (label printers, default), SHEET = tiled on paper'
+          enum:
+          - LABEL
+          - SHEET
+        paper:
+          type: string
+          description: 'PDF sheets: LETTER (default) or A4'
+          enum:
+          - LETTER
+          - A4
+      required:
+      - labels
     CreateCategoryRequest:
       type: object
       properties:
@@ -1051,6 +1338,57 @@ components:
           type: string
         existingAtin:
           type: string
+        message:
+          type: string
+    CategoryHint:
+      type: object
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        path:
+          type: string
+        level:
+          type: string
+        productTypeCode:
+          type: string
+        matchedOn:
+          type: string
+    GtinPrefill:
+      type: object
+      properties:
+        gtin:
+          type: string
+        found:
+          type: boolean
+        existingAtin:
+          type: string
+        title:
+          type: string
+        brand:
+          type: string
+        netContent:
+          type: string
+        description:
+          type: string
+        imageUrls:
+          type: array
+          items:
+            type: string
+        importedFrom:
+          type: object
+          additionalProperties:
+            type: string
+        categoryHints:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryHint'
+        sources:
+          type: array
+          items:
+            type: string
+        cached:
+          type: boolean
         message:
           type: string
     CategoryNode:

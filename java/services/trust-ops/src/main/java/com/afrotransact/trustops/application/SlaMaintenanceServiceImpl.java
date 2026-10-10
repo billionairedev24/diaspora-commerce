@@ -2,7 +2,6 @@ package com.afrotransact.trustops.application;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 import com.afrotransact.platform.events.DomainEventPublisher;
@@ -26,15 +25,18 @@ class SlaMaintenanceServiceImpl implements SlaMaintenanceService {
     private final SlaPolicy sla;
     private final DomainEventPublisher events;
     private final AuditTrail audit;
+    private final TrustOpsSettings settings;
     private final Clock clock;
 
     SlaMaintenanceServiceImpl(ModerationRepository moderation, ClaimRepository claims, SlaPolicy sla,
-                              DomainEventPublisher events, AuditTrail audit, Clock clock) {
+                              DomainEventPublisher events, AuditTrail audit, TrustOpsSettings settings,
+                              Clock clock) {
         this.moderation = moderation;
         this.claims = claims;
         this.sla = sla;
         this.events = events;
         this.audit = audit;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -50,16 +52,29 @@ class SlaMaintenanceServiceImpl implements SlaMaintenanceService {
                     saved.product().productId().toString(), saved.product().sellerOrgId(),
                     saved.escalationReason(), Map.of("itemId", saved.id().toString()));
             events.publish(TrustOpsEvents.MODERATION_ESCALATED, TrustOpsEvents.AGGREGATE,
-                    saved.product().productId().toString(), Map.of("itemId", saved.id().toString(),
-                            "productId", saved.product().productId().toString(), "reason", saved.escalationReason(),
-                            "dueAt", saved.sla().dueAt().toString()));
+                    saved.product().productId().toString(), TrustOpsPayloads.moderation(saved));
             listings++;
+        }
+        int reminded = 0;
+        for (Claim c : claims.findResponseReminderDue(now, now.plus(settings.responseReminder()), BATCH)) {
+            if (claims.markResponseReminderSent(c.id(), now)) {
+                Map<String, Object> payload = TrustOpsPayloads.claim(c);
+                payload.put("remindedAt", now.toString());
+                events.publish(TrustOpsEvents.CLAIM_RESPONSE_DUE_SOON, TrustOpsEvents.AGGREGATE, c.id().toString(),
+                        payload);
+                reminded++;
+            }
         }
         int lapsed = 0;
         for (Claim c : claims.findBreached(ClaimStatus.AWAITING_SELLER, now, BATCH)) {
             Claim saved = claims.update(c.sellerWindowLapsed(now, sla));
             claims.appendHistory(saved.id(), new ClaimHistoryEntry(now, AuditTrail.SYSTEM.subject(),
                     "SELLER_WINDOW_LAPSED", c.status(), saved.status(), "No seller response by " + c.sla().dueAt()));
+            Map<String, Object> payload = TrustOpsPayloads.claim(saved);
+            payload.put("responseDueAt", c.sla().dueAt().toString());
+            payload.put("lapsedAt", now.toString());
+            events.publish(TrustOpsEvents.CLAIM_RESPONSE_LAPSED, TrustOpsEvents.AGGREGATE, saved.id().toString(),
+                    payload);
             lapsed++;
         }
         int escalated = 0;
@@ -67,16 +82,13 @@ class SlaMaintenanceServiceImpl implements SlaMaintenanceService {
             Claim saved = claims.update(c.escalate("Decision SLA breached (due " + c.sla().dueAt() + ")", now, sla));
             claims.appendHistory(saved.id(), new ClaimHistoryEntry(now, AuditTrail.SYSTEM.subject(), "ESCALATED",
                     c.status(), saved.status(), saved.escalationReason()));
-            Map<String, Object> payload = new LinkedHashMap<>();
-            payload.put("claimId", saved.id().toString());
-            payload.put("reference", saved.reference());
+            Map<String, Object> payload = TrustOpsPayloads.claim(saved);
             payload.put("reason", saved.escalationReason());
-            payload.put("dueAt", saved.sla().dueAt().toString());
             audit.action(AuditTrail.SYSTEM, "trustops.claim.escalated", "CLAIM", saved.reference(),
                     saved.sellerOrgId(), saved.escalationReason(), payload);
             events.publish(TrustOpsEvents.CLAIM_ESCALATED, TrustOpsEvents.AGGREGATE, saved.id().toString(), payload);
             escalated++;
         }
-        return new SlaSweepResult(listings, lapsed, escalated);
+        return new SlaSweepResult(listings, reminded, lapsed, escalated);
     }
 }

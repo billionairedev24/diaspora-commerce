@@ -153,6 +153,21 @@ class JdbcClaimRepository implements ClaimRepository {
     }
 
     @Override
+    public List<Claim> findResponseReminderDue(Instant now, Instant until, int limit) {
+        return jdbc.sql("select * from claim where status = 'AWAITING_SELLER' and response_reminder_sent_at is null "
+                        + "and due_at > :now and due_at <= :until order by due_at limit :limit for update skip locked")
+                .param("now", Sql.ts(now)).param("until", Sql.ts(until)).param("limit", limit)
+                .query(this::map).list();
+    }
+
+    @Override
+    public boolean markResponseReminderSent(UUID claimId, Instant at) {
+        return jdbc.sql("update claim set response_reminder_sent_at = :at where id = :id "
+                        + "and response_reminder_sent_at is null")
+                .param("at", Sql.ts(at)).param("id", claimId).update() == 1;
+    }
+
+    @Override
     public void appendHistory(UUID claimId, ClaimHistoryEntry e) {
         jdbc.sql("""
                 insert into claim_history (claim_id, at, actor_id, action, from_status, to_status, note)

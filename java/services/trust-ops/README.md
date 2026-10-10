@@ -2,8 +2,8 @@
 
 Trust & safety for staff: the listing moderation queue, disputes and A-to-z claims, the immutable audit log, seller
 health with suspend / reinstate, and the support-case queue for Lola hand-offs.
-Spring Boot 4.1 · Java 25 · PostgreSQL `trustops` · local port **8110**. Epic E18 (stories S117–S120, plus S223 and
-S228);
+Spring Boot 4.1 · Java 25 · PostgreSQL `trustops` · local port **8110**. Epic E18 (stories S117–S120, plus S223,
+S228 and S237);
 design source `design/AfroTransact Backoffice.dc.html` (Listing moderation, Disputes & returns, Audit log, Sellers &
 providers) and `design/backoffice-data.js`.
 
@@ -37,9 +37,19 @@ providers) and `design/backoffice-data.js`.
 
   Staff decide with **refund** — payments `POST /v1/payments/{paymentId}/refunds` (line-level, `Idempotency-Key:
   trustops-claim-<claimId>`, called *before* the claim is resolved so a failed refund leaves it open and retryable) —
-  or **deny** (reason required). The refund may not exceed the claimed amount. **Both parties are notified**
-  (`notification.requested`, template `claim.decided`, recipient = customer subject and seller org id); the seller
-  is also notified when a claim is opened. Every step is in the claim timeline (`/history`); decisions are audited.
+  or **deny** (reason required). The refund may not exceed the claimed amount. **Both parties are notified** by
+  notifications-service from the typed `trustops.claim.*` events, which carry `sellerOrgId` and `customerId`;
+  `trustops.claim.decided` also carries the staff `decisionNote` (S237). trust-ops no longer publishes its own
+  `notification.requested` for claims, so nobody gets the same notice twice. Every step is in the claim timeline
+  (`/history`); decisions are audited.
+- **Seller reminders and lapses (S237).** The SLA sweep publishes `trustops.claim.response_due_soon` once per claim
+  when the seller's deadline is less than 24 h away (`TRUSTOPS_SLA_SELLER_RESPONSE_REMINDER`) and the claim still
+  awaits the seller. `claim.response_reminder_sent_at` (V3) is set with a conditional update, so overlapping or
+  repeated sweeps never send it twice. When the window passes, the claim moves to staff review and the sweep
+  publishes `trustops.claim.response_lapsed` (`responseDueAt` = the missed deadline, `dueAt` = the decision deadline).
+  Escalations, manual or by the sweep, publish the full claim payload (`trustops.claim.escalated`) and the full
+  moderation payload (`trustops.moderation.escalated`, with `sellerOrgId` and, for a shopper-reported live listing,
+  the reporter's `customerId`).
 - **Immutable audit log (S119).** Audit-worthy events from other services (topics and event types configurable) plus
   every trust-ops decision are appended to `audit_entry` with a **SHA-256 hash chain**: each row stores the previous
   row's hash; `hash = SHA-256(prevHash, seq, content)` with length-prefixed fields. Appends are serialised with a
@@ -107,9 +117,9 @@ needed.
 ## Events
 
 Published (transactional outbox → `at.trustops.events`): `trustops.moderation.queued|escalated|decided`,
-`trustops.claim.opened|seller_responded|escalated|decided|withdrawn`, `trustops.seller.suspended|reinstated`,
-`trustops.seller.health_computed`, `trustops.support_case.opened`, `trustops.audit.recorded` (key `audit-log`) and
-`notification.requested` — see [`contracts/asyncapi/fragments/trust-ops.yaml`](../../../contracts/asyncapi/fragments/trust-ops.yaml).
+`trustops.claim.opened|response_due_soon|response_lapsed|seller_responded|escalated|decided|withdrawn`,
+`trustops.seller.suspended|reinstated`, `trustops.seller.health_computed`, `trustops.support_case.opened` and
+`trustops.audit.recorded` (key `audit-log`) — see [`contracts/asyncapi/fragments/trust-ops.yaml`](../../../contracts/asyncapi/fragments/trust-ops.yaml).
 
 Consumed (each listener has its own consumer group and inbox consumer, so they never compete for partitions):
 
@@ -130,7 +140,7 @@ Consumed (each listener has its own consumer group and inbox consumer, so they n
 | `TRUSTOPS_CLIENT_SECRET` (secret), `TRUSTOPS_CLIENT_ID` | the `trust-ops-service` client; blank in `local` = no token |
 | `CATALOG_URL`, `PAYMENTS_URL`, `SELLER_URL`, `OFFERS_URL`, `AI_GATEWAY_URL`, `UPSTREAM_TIMEOUT` | upstream services |
 | `AI_TRIAGE_ENABLED`, `AI_TRIAGE_TIMEOUT` | AI triage hints (default on, 5 s) |
-| `TRUSTOPS_SLA_*` | SLA targets (`MODERATION` 24h, `MODERATION_HIGH_RISK` 4h, `MODERATION_ESCALATED` 8h, `SELLER_RESPONSE` 72h, `CLAIM_DECISION` 120h, `CLAIM_ESCALATED` 48h, `SUPPORT_FIRST_RESPONSE` 4h) |
+| `TRUSTOPS_SLA_*` | SLA targets (`MODERATION` 24h, `MODERATION_HIGH_RISK` 4h, `MODERATION_ESCALATED` 8h, `SELLER_RESPONSE` 72h, `SELLER_RESPONSE_REMINDER` 24h before the deadline, `CLAIM_DECISION` 120h, `CLAIM_ESCALATED` 48h, `SUPPORT_FIRST_RESPONSE` 4h) |
 | `TRUSTOPS_AUDIT_TOPICS`, `TRUSTOPS_AUDIT_EVENT_TYPES`, `TRUSTOPS_AUDIT_STREAM`, `TRUSTOPS_AUDIT_EXPORT_MAX_ROWS` | audit ingestion and export |
 | `SELLER_HEALTH_WINDOW`, `SELLER_HEALTH_CRON`, `SELLER_HEALTH_PUSH` | seller-health job (90d, `0 15 3 * * *` UTC, push on) |
 | `TRUSTOPS_JOBS_ENABLED`, `TRUSTOPS_SLA_SWEEP_INTERVAL` | SLA sweep (60s) |
@@ -149,8 +159,10 @@ changes even for the owner.
   sweep of live listings); staff flags and shopper reports work.
 - **payments** refunds need the payment id and line ids; there is no "refund by order" endpoint, so staff supply them.
   Claims don't verify order ownership (no orders lookup for services yet).
-- **notifications** consumes `notification.requested` only on identity, orders, seller and bookings topics; it must
-  also subscribe to `at.trustops.events`, and resolve a seller org id to its contacts.
+- **notifications** maps the typed claim events, but has no rule yet for `trustops.claim.response_due_soon`
+  (the seller reminder) or `trustops.claim.response_lapsed`, and still lists the retired `notification.requested`
+  claim templates as superseded; `contracts/asyncapi/events.yaml` must be re-merged
+  (`tools/contracts/merge_asyncapi.py`) to pick up the new events.
 - **fulfilment** publishes no events yet, so seller health uses orders events only; there is no ship-by date, so
   "late" means delivered after `promisedBy`.
 
@@ -165,6 +177,7 @@ cd java && ./mvnw -B -f services/trust-ops/pom.xml verify    # checkstyle, unit,
 Integration tests run against `postgis/postgis:17-3.5` with one WireMock standing in for identity's token endpoint,
 catalog, payments, seller, offers and ai-gateway; Kafka listeners and jobs are called directly. Migrations:
 `V1__trustops_schema.sql`, `V2__live_listings_and_seller_suspension.sql` (moderation item type and report fields;
-`seller_enforcement.payouts_held` renamed `seller_suspended`).
+`seller_enforcement.payouts_held` renamed `seller_suspended`), `V3__claim_response_reminder.sql`
+(`claim.response_reminder_sent_at`).
 
 Deploy: `deploy/helm` (depends on `infra/helm/library/at-service`), one Argo CD Application per environment.

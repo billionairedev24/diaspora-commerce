@@ -84,3 +84,18 @@ at:
     relay-enabled: true
   catalog:
     retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # S031 GTIN prefill: providers in lookup order, cached per GTIN in product_data_lookup.
+    product-data:
+      order: ${PRODUCT_DATA_ORDER:GS1,OPEN_FOOD_FACTS}
+      cache-ttl: ${PRODUCT_DATA_CACHE_TTL:7d}
+      miss-ttl: ${PRODUCT_DATA_MISS_TTL:1d}
+      gs1:
+        enabled: ${GS1_ENABLED:false}
+        base-url: ${GS1_BASE_URL:https://grp.gs1.org}
+        api-key: ${GS1_API_KEY:}
+        timeout: ${GS1_TIMEOUT:3s}
+      open-food-facts:
+        enabled: ${OFF_ENABLED:true}
+        base-url: ${OFF_BASE_URL:https://world.openfoodfacts.org}
+        user-agent: ${OFF_USER_AGENT:AfroTransact-Catalog/1.0 (catalog@afrotransact.com)}
+        timeout: ${OFF_TIMEOUT:3s}

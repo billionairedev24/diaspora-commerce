@@ -84,6 +84,7 @@ at:
       moderation-high-risk: ${TRUSTOPS_SLA_MODERATION_HIGH_RISK:4h}
       moderation-escalated: ${TRUSTOPS_SLA_MODERATION_ESCALATED:8h}
       seller-response: ${TRUSTOPS_SLA_SELLER_RESPONSE:72h}
+      seller-response-reminder: ${TRUSTOPS_SLA_SELLER_RESPONSE_REMINDER:24h}
       claim-decision: ${TRUSTOPS_SLA_CLAIM_DECISION:120h}
       claim-escalated: ${TRUSTOPS_SLA_CLAIM_ESCALATED:48h}
       support-first-response: ${TRUSTOPS_SLA_SUPPORT_FIRST_RESPONSE:4h}

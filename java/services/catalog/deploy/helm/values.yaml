@@ -33,6 +33,7 @@ monitoring:
 #   - DB_USER
 #   - DB_PASSWORD
 #   - KAFKA_BOOTSTRAP
+#   - GS1_API_KEY (optional: Verified by GS1 for the S031 GTIN prefill; also set extraEnv GS1_ENABLED: "true")
 secrets:
   enabled: true
   store: platform-secrets

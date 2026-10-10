@@ -6,6 +6,7 @@ import java.util.Map;
 import com.afrotransact.catalog.domain.AttributeDefinition;
 import com.afrotransact.catalog.domain.ProductImage;
 import com.afrotransact.catalog.domain.VariationTheme;
+import com.afrotransact.catalog.domain.prefill.ProductData;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -18,6 +19,7 @@ class JsonCodec {
     private static final TypeReference<List<ProductImage>> IMAGES = new TypeReference<>() { };
     private static final TypeReference<List<AttributeDefinition>> ATTRIBUTES = new TypeReference<>() { };
     private static final TypeReference<List<VariationTheme>> THEMES = new TypeReference<>() { };
+    private static final TypeReference<List<ProductData>> PRODUCT_DATA = new TypeReference<>() { };
 
     private final JsonMapper mapper;
 
@@ -43,5 +45,9 @@ class JsonCodec {
 
     List<VariationTheme> themes(String json) {
         return json == null ? List.of() : mapper.readValue(json, THEMES);
+    }
+
+    List<ProductData> productData(String json) {
+        return json == null ? List.of() : mapper.readValue(json, PRODUCT_DATA);
     }
 }

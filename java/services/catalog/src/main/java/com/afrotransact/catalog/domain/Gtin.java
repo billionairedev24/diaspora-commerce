@@ -32,6 +32,14 @@ public record Gtin(String value) {
         return expected == digits.charAt(digits.length() - 1) - '0';
     }
 
+    /** True when {@code digits} (any length, e.g. an 18-digit SSCC) ends with a correct GS1 mod-10 check digit. */
+    public static boolean isValidMod10(String digits) {
+        if (digits == null || !digits.matches("\\d{2,}")) {
+            return false;
+        }
+        return checkDigit(digits.substring(0, digits.length() - 1)) == digits.charAt(digits.length() - 1) - '0';
+    }
+
     /** GS1 mod-10 check digit for the given body (all digits except the last). */
     public static int checkDigit(String body) {
         int sum = 0;
@@ -49,6 +57,11 @@ public record Gtin(String value) {
         }
         String body = digits.substring(0, digits.length() - 1);
         return body + checkDigit(body);
+    }
+
+    /** The GTIN left-padded with zeros to 14 digits (AI 01, GS1 data carriers, cache keys). */
+    public String toGtin14() {
+        return "0".repeat(14 - value.length()) + value;
     }
 
     public boolean isIsbn13() {

@@ -2,7 +2,6 @@ package com.afrotransact.trustops.application;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -76,7 +75,6 @@ class ClaimServiceImpl implements ClaimService {
                 c.currency(), c.description(), c.evidenceAssetIds()), now, sla));
         history(opened, actor, "OPENED", null, opened.description());
         publish(TrustOpsEvents.CLAIM_OPENED, opened);
-        notify(opened, "claim.opened", opened.sellerOrgId(), "seller");
         return ClaimView.of(opened, now);
     }
 
@@ -155,7 +153,7 @@ class ClaimServiceImpl implements ClaimService {
         Claim saved = claims.update(c.escalate(reason, now, sla));
         history(saved, actor, "ESCALATED", c.status(), saved.escalationReason());
         audit.action(actor, "trustops.claim.escalated", "CLAIM", saved.reference(), saved.sellerOrgId(),
-                "Escalated: " + saved.escalationReason(), details(saved));
+                "Escalated: " + saved.escalationReason(), TrustOpsPayloads.claim(saved));
         publish(TrustOpsEvents.CLAIM_ESCALATED, saved);
         return ClaimView.of(saved, now);
     }
@@ -172,7 +170,6 @@ class ClaimServiceImpl implements ClaimService {
         Claim saved = claims.update(c.withdraw(actor.subject(), now));
         history(saved, actor, "WITHDRAWN", c.status(), null);
         publish(TrustOpsEvents.CLAIM_WITHDRAWN, saved);
-        notify(saved, "claim.withdrawn", saved.sellerOrgId(), "seller");
         return ClaimView.of(saved, now);
     }
 
@@ -208,10 +205,8 @@ class ClaimServiceImpl implements ClaimService {
         history(saved, actor, "DECIDED", c.status(), saved.decisionNote());
         audit.action(actor, "trustops.claim.decided", "CLAIM", saved.reference(), saved.sellerOrgId(),
                 "Claim " + saved.reference() + " " + saved.status() + (saved.refundMinor() == null ? ""
-                        : " " + saved.refundMinor() + " " + saved.currency()), details(saved));
+                        : " " + saved.refundMinor() + " " + saved.currency()), TrustOpsPayloads.claim(saved));
         publish(TrustOpsEvents.CLAIM_DECIDED, saved);
-        notify(saved, "claim.decided", saved.customerId(), "customer");
-        notify(saved, "claim.decided", saved.sellerOrgId(), "seller");
         return ClaimView.of(saved, now);
     }
 
@@ -265,41 +260,7 @@ class ClaimServiceImpl implements ClaimService {
                 note));
     }
 
-    private static Map<String, Object> details(Claim c) {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("claimId", c.id().toString());
-        m.put("reference", c.reference());
-        m.put("type", c.type().name());
-        m.put("status", c.status().name());
-        m.put("orderId", c.orderId());
-        m.put("orderNumber", c.orderNumber());
-        m.put("shipmentId", c.shipmentId());
-        m.put("sellerOrgId", c.sellerOrgId());
-        m.put("customerId", c.customerId());
-        m.put("amountMinor", c.amountMinor());
-        m.put("currency", c.currency());
-        m.put("outcome", c.outcome() == null ? null : c.outcome().name());
-        m.put("refundMinor", c.refundMinor());
-        m.put("refundId", c.refundId());
-        m.put("dueAt", c.sla().dueAt().toString());
-        m.put("escalated", c.escalated());
-        return m;
-    }
-
     private void publish(String type, Claim c) {
-        events.publish(type, TrustOpsEvents.AGGREGATE, c.id().toString(), details(c));
-    }
-
-    /** {@code notification.requested} for notifications-service (recipient id = customer subject or seller org). */
-    private void notify(Claim c, String template, String recipientId, String role) {
-        Map<String, Object> data = details(c);
-        data.put("recipientRole", role);
-        data.put("decisionNote", c.decisionNote());
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("templateKey", template);
-        payload.put("channels", List.of("email", "push"));
-        payload.put("recipient", Map.of("id", recipientId));
-        payload.put("data", data);
-        events.publish(TrustOpsEvents.NOTIFICATION_REQUESTED, TrustOpsEvents.AGGREGATE, c.id().toString(), payload);
+        events.publish(type, TrustOpsEvents.AGGREGATE, c.id().toString(), TrustOpsPayloads.claim(c));
     }
 }

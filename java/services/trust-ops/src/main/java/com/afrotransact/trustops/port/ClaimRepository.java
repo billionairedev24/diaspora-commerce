@@ -26,6 +26,18 @@ public interface ClaimRepository {
     /** Claims in {@code status} whose SLA is breached at {@code now}. */
     List<Claim> findBreached(ClaimStatus status, Instant now, int limit);
 
+    /**
+     * Claims awaiting the seller whose response deadline falls in {@code (now, until]} and that have not been
+     * reminded yet (locked, skipping rows another sweep holds).
+     */
+    List<Claim> findResponseReminderDue(Instant now, Instant until, int limit);
+
+    /**
+     * Records that the seller was reminded; {@code false} when the claim was already reminded (so the reminder is
+     * published at most once per claim).
+     */
+    boolean markResponseReminderSent(UUID claimId, Instant at);
+
     void appendHistory(UUID claimId, ClaimHistoryEntry entry);
 
     List<ClaimHistoryEntry> history(UUID claimId);

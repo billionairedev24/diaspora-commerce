@@ -263,10 +263,7 @@ class ModerationServiceImpl implements ModerationService {
     }
 
     private void publish(String type, ModerationItem i) {
-        Map<String, Object> m = details(i);
-        m.put("priority", i.priority().name());
-        m.put("dueAt", i.sla().dueAt().toString());
-        m.put("decidedBy", i.decidedBy());
-        events.publish(type, TrustOpsEvents.AGGREGATE, i.product().productId().toString(), m);
+        events.publish(type, TrustOpsEvents.AGGREGATE, i.product().productId().toString(),
+                TrustOpsPayloads.moderation(i));
     }
 }

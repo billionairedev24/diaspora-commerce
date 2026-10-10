@@ -29,9 +29,10 @@ class TrustOpsJobs {
     void slaSweep() {
         try {
             SlaSweepResult r = sla.sweep();
-            if (r.listingsEscalated() + r.sellerWindowsLapsed() + r.claimsEscalated() > 0) {
-                LOG.info("SLA sweep: {} listings escalated, {} seller windows lapsed, {} claims escalated",
-                        r.listingsEscalated(), r.sellerWindowsLapsed(), r.claimsEscalated());
+            if (r.listingsEscalated() + r.sellerRemindersSent() + r.sellerWindowsLapsed() + r.claimsEscalated() > 0) {
+                LOG.info("SLA sweep: {} listings escalated, {} seller reminders, {} seller windows lapsed, "
+                        + "{} claims escalated", r.listingsEscalated(), r.sellerRemindersSent(),
+                        r.sellerWindowsLapsed(), r.claimsEscalated());
             }
         } catch (RuntimeException e) {
             LOG.warn("SLA sweep failed: {}", e.getMessage(), e);
