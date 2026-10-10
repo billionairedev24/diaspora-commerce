@@ -240,25 +240,25 @@
 - Movement history traceable per lot for recalls","E09","","High","8","inventory staff-console","inventory","In Progress"
 "S067","Story","Seller FBA inventory","Sellers send stock into AfroTransact FCs with seller-specific unit labels.","- Inbound shipment plan with carton labels
 - Units labelled per seller so stock never mixes","E09","","Medium","5","inventory seller-center","inventory","In Progress"
-"E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","To Do"
+"E10","Epic","AfroTransact Retail (1P) purchasing & receiving","Nine-step workflow: product master → PO → approval → shipment/ASN → transit & customs → receiving → validation → lots & GL → sale.","","","AfroTransact Retail (1P) purchasing & receiving","High","","retail","retail","In Progress"
 "S068","Story","Product master for platform products","Category managers create 1P products with supplier, HTS code, duty, shelf life, storage, reorder point and price.","- SKU and GTIN (AfroTransact GS1 prefix, check digit) assigned automatically
-- Listing starts as Draft","E10","","High","3","retail java","retail","To Do"
+- Listing starts as Draft","E10","","High","3","retail java","retail","In Progress"
 "S069","Story","Suppliers","Supplier records with lead time, on-time %, defect %, certifications and status.","- Supplier scorecards update from receipts
-- Inactive suppliers cannot receive new POs","E10","","Medium","3","retail java","retail","To Do"
+- Inactive suppliers cannot receive new POs","E10","","Medium","3","retail java","retail","In Progress"
 "S070","Story","Purchase orders with approval and FX","Draft → Pending approval → Approved → Sent → Confirmed → Received → Closed; FX captured at PO date.","- Orders over $10k need Finance approval
 - PO PDF + EDI 850 sent to supplier
-- Cancel allowed until a shipment is booked","E10","","High","8","retail java","retail","To Do"
+- Cancel allowed until a shipment is booked","E10","","High","8","retail java","retail","In Progress"
 "S071","Story","Inbound shipments, ASN and documents","Shipments with lot/made/expiry from supplier packing list; required customs documents per mode.","- ASN lines editable until departure, then locked
 - Departure blocked while documents are missing
-- Customs clearance blocked by holds","E10","","High","8","retail java","retail","To Do"
+- Customs clearance blocked by holds","E10","","High","8","retail java","retail","In Progress"
 "S072","Story","Goods receipt and validation","Receivers scan GS1-128 case labels, count good/damaged, split batches, put away and record QA.","- Lot 4–20 alphanumerics, unique per SKU; made ≤ today; expiry > made and not passed
 - Remaining life ≥ max(90 days, 50% shelf life) or quarantined
-- Shortages raise a claim; >2% over is blocked","E10","","High","8","retail java inventory","retail","To Do"
+- Shortages raise a claim; >2% over is blocked","E10","","High","8","retail java inventory","retail","In Progress"
 "S073","Story","Landed cost and GL postings","Landed cost per unit (FOB + freight, insurance, fees, duty) and journal entries per step.","- Dr 1310 In transit / Cr 2110 GR/IR at title transfer
 - Completing GRN posts Dr 1300/1320 and Cr 1310/2120
-- COGS posted at lot landed cost on shipment","E10","","Medium","5","retail java finance","retail","To Do"
+- COGS posted at lot landed cost on shipment","E10","","Medium","5","retail java finance","retail","In Progress"
 "S074","Story","Three-way match and supplier payment","PO price × received qty vs supplier invoice (±1%) before payment; FX gain/loss posted.","- Variances route to the buyer
-- Closing the PO releases payment","E10","","Medium","5","retail java finance","retail","To Do"
+- Closing the PO releases payment","E10","","Medium","5","retail java finance","retail","In Progress"
 "E11","Epic","Carriers & shipping (USPS, UPS, FedEx, DHL)","Direct carrier integrations behind one Carrier port — no aggregator.","","","Carriers & shipping (USPS, UPS, FedEx, DHL)","High","","carriers","carriers","In Progress"
 "S075","Story","Carrier port and gateway service","rate(), buy_label(), void(), track(), schedule_pickup(), validate_address() behind one interface.","- Each carrier is its own adapter implementing the same Go interface
 - Rate shopping fans out in parallel with a 1.5 s budget and caches per cart","E11","","High","5","carriers go","carriers","Done"
@@ -294,7 +294,7 @@
 - SOS alerts dispatch immediately","E12","","High","8","delivery mobile","delivery","To Do"
 "S088","Story","Dispatch console","Plan routes per zone, assign drivers and reassign failed stops.","- Driver events stream into Delivery dispatch
 - Failed stops can be reassigned to another route","E12","","Medium","8","delivery staff-console","delivery","To Do"
-"E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","Done"
+"E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","In Progress"
 "S089","Story","Resumable application with autosave","Applicants can save, sign out and resume exactly where they left off.","- Draft autosaves after every change
 - Save & sign out returns to 'Welcome back' and resumes on sign-in
 - No sidebar or back-office navigation while applying","E13","","Highest","5","onboarding java web","onboarding","Done"
@@ -341,20 +341,20 @@
 - Metered usage for FBA storage, ads and AI credits","E14","","High","8","billing stripe java","billing","In Progress"
 "S104","Story","Billing page with real card/bank presentation","Payment methods shown as brand cards with last 4 or bank with type and verification.","- Default method cannot be removed until another is default
 - Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","Done"
-"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","To Do"
+"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","In Progress"
 "S105","Story","Provider availability and calendar","Weekly hours with breaks, blocked dates, minimum notice, buffers, daily limit and instant booking.","- Week and month calendar views with booking quick view
-- Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","To Do"
+- Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","In Progress"
 "S106","Story","Services & prices with provider take-home","Duration, price and deposit per service, showing what the provider receives after commission and fees.","- Take-home amount shown per service
-- Price changes don't affect existing bookings","E15","","High","3","bookings java","bookings","To Do"
+- Price changes don't affect existing bookings","E15","","High","3","bookings java","bookings","In Progress"
 "S107","Story","Booking flow: service → day → time → summary","Deposit held on request, charged on confirmation, balance charged on completion.","- Only available slots are offered
-- Summary shows deposit now, balance later and the provider's policy","E15","","High","8","bookings web mobile","bookings","To Do"
+- Summary shows deposit now, balance later and the provider's policy","E15","","High","8","bookings web mobile","bookings","In Progress"
 "S108","Story","Requests: confirm, decline, propose new time","Providers act on requests; unanswered requests expire after 4 hours.","- Customers can accept or decline a proposed time
-- Expired requests release the deposit hold","E15","","High","5","bookings java","bookings","To Do"
+- Expired requests release the deposit hold","E15","","High","5","bookings java","bookings","In Progress"
 "S109","Story","Cancellation policies and refunds","Flexible, Moderate, Strict or Custom; each booking keeps the policy it was made under.","- Customers see the exact refund before cancelling
 - Late provider cancellation costs $15 and a strike
-- Commission taken only on what the customer paid","E15","","High","5","bookings java payments","bookings","To Do"
+- Commission taken only on what the customer paid","E15","","High","5","bookings java payments","bookings","In Progress"
 "S110","Story","Provider team roles","Owner, Manager, Practitioner, Finance with what each can and can't do.","- Practitioners edit only their own calendar and hours
-- View-only roles cannot change data (enforced server-side)","E15","","Medium","3","bookings rbac","bookings","To Do"
+- View-only roles cannot change data (enforced server-side)","E15","","Medium","3","bookings rbac","bookings","In Progress"
 "E16","Epic","Storefront builder & provider public pages","Sellers and providers design their own pages within contrast-vetted themes.","","","Storefront builder & provider public pages","High","","storefront","storefront","Done"
 "S111","Story","Seller storefront builder","Store name, tagline (AI suggestion), accent colour and section order with live preview.","- Sections can be toggled and reordered
 - Checkout, prices and header stay platform-styled","E16","","Medium","5","storefront go web","storefront","Done"
@@ -594,7 +594,7 @@
 "S205","Story","Cross-service org lifecycle wiring","Identity mirrors organisations owned by the seller service: string org ids (org_…), role/org claim granted on seller.org.approved, profile claims in access tokens for prefill.","- Identity accepts org_… string ids everywhere it uses org ids
 - seller.org.approved grants the owner role and org membership; next token carries the org claim
 - Access tokens carry given_name, family_name, email and phone_number for prefill
-- Payments consumes seller.payouts.paused/resumed; catalog/bookings/indexer consume seller.listings.hidden/restored","E13","","Highest","8","onboarding identity events","onboarding","To Do"
+- Payments consumes seller.payouts.paused/resumed; catalog/bookings/indexer consume seller.listings.hidden/restored","E13","","Highest","8","onboarding identity events","onboarding","In Progress"
 "S206","Story","Metered billing usage (FBA storage, ads, AI credits)","Report usage to Stripe Billing meters for plan add-ons.","- Usage events aggregated daily per org
 - Stripe meter events sent idempotently
 - Invoices show metered lines","E14","","Medium","5","billing stripe","billing","To Do"
