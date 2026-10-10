@@ -96,6 +96,13 @@ at:
         secret: ${ORDERS_CLIENT_SECRET}
         grant-types: [client_credentials]
         scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read, "tax:quote", "sellers:ship-from.read", offers:read, delivery-runs:reserve]
+      - client-id: cart-service
+        name: Cart service
+        type: confidential
+        # S272: pre-order eligibility of cart lines (delivery-runs GET /v1/service/preorders/eligibility).
+        secret: ${CART_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [delivery-runs:reserve]
       - client-id: tax-returns-service
         name: Tax returns service
         type: confidential

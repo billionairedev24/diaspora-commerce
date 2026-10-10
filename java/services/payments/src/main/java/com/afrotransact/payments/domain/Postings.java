@@ -14,7 +14,8 @@ public final class Postings {
     /**
      * Capture of a charge: Dr 1000 Stripe clearing (charge − fee) and Dr 5000 Stripe fees (AfroTransact's share) /
      * Cr 2000 seller payable (net), Cr 2100 sales tax payable per jurisdiction, Cr 4000 commission, Cr 4100 FBA fees,
-     * Cr 4200 AfroTransact shipping, Cr 4250 local delivery fees (AfroTransact Delivery from seller stores). Sellers
+     * Cr 4200 AfroTransact shipping, Cr 4250 local delivery fees (AfroTransact Delivery from seller stores, and the
+     * pre-order delivery fees of S272, which are part of the platform's shipping but not of 4200). Sellers
      * bear their fee share through a lower payable. AfroTransact Retail's net
      * (items + shipping − its fee share) is AfroTransact revenue: Cr 4400 Retail sales, never 2000.
      */
@@ -36,7 +37,10 @@ public final class Postings {
             b.credit(LedgerAccount.of(Chart.FBA_FEE_REVENUE), s.fbaFees(), s.recipientId());
             b.credit(LedgerAccount.of(Chart.LOCAL_DELIVERY_FEE_REVENUE), s.deliveryFees(), s.recipientId());
         }
-        b.credit(LedgerAccount.of(Chart.SHIPPING_REVENUE), platform.shipping());
+        Money preorderFees = split.lines().stream().map(LineSplit::preorderDeliveryFee)
+                .reduce(Money.zero(split.currency()), Money::plus);
+        b.credit(LedgerAccount.of(Chart.SHIPPING_REVENUE), platform.shipping().minus(preorderFees));
+        b.credit(LedgerAccount.of(Chart.LOCAL_DELIVERY_FEE_REVENUE), preorderFees);
         return b.build(id, at);
     }
 
@@ -58,7 +62,8 @@ public final class Postings {
             b.debit(LedgerAccount.of(Chart.COMMISSION_REVENUE), l.commissionReversed(), l.sellerOrg());
             b.debit(LedgerAccount.of(Chart.LOCAL_DELIVERY_FEE_REVENUE), l.deliveryFeeReversed(), l.sellerOrg());
             if (l.shippingToPlatform()) {
-                b.debit(LedgerAccount.of(Chart.SHIPPING_REVENUE), l.shipping());
+                b.debit(LedgerAccount.of(l.preorderDeliveryFee() ? Chart.LOCAL_DELIVERY_FEE_REVENUE
+                        : Chart.SHIPPING_REVENUE), l.shipping());
             }
         }
         if (total == null) {

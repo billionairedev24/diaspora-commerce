@@ -96,10 +96,12 @@ class ProductServiceImpl implements ProductService {
         ProductStatus status = placement.request() == null
                 ? ProductStatus.IN_REVIEW
                 : ProductStatus.PENDING_CATEGORY_APPROVAL;
+        boolean preorderEligible = cmd.preorderEligible() != null ? cmd.preorderEligible()
+                : Product.preorderDefault(placement.type().code());
         Product product = products.insert(new Product(UUID.randomUUID(), ids.nextAtin(), owner,
                 placement.categoryId(), placement.request() == null ? null : placement.request().id(),
                 placement.type().code(), cmd.title().trim(), cmd.attributes(), cmd.images(), cmd.variationTheme(),
-                variants, status, null, now, now, 0));
+                variants, status, null, now, now, 0, preorderEligible, Boolean.TRUE.equals(cmd.shipsNow())));
         publish(CatalogEvents.PRODUCT_CREATED, product);
         return product;
     }
@@ -182,6 +184,14 @@ class ProductServiceImpl implements ProductService {
     public Product resume(UUID id) {
         requireEditable(id);
         return transition(id, p -> p.resume(Instant.now(clock)), CatalogEvents.PRODUCT_RESUMED);
+    }
+
+    @Override
+    @Transactional
+    public Product setPreorderFlags(UUID id, boolean preorderEligible, boolean shipsNow) {
+        requireEditable(id);
+        return transition(id, p -> p.withPreorderFlags(preorderEligible, shipsNow, Instant.now(clock)),
+                CatalogEvents.PRODUCT_UPDATED);
     }
 
     private Product transition(UUID id, UnaryOperator<Product> change, String eventType) {

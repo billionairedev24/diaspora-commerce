@@ -52,3 +52,10 @@ var ErrOfferNotFound = errors.New("offer not found")
 type OfferLookup interface {
 	Offer(ctx context.Context, offerID string) (LiveOffer, error)
 }
+
+// PreorderEligibility asks delivery-runs (GET /v1/service/preorders/eligibility, S272) which variants are sold as a
+// pre-order at the shopper's delivery location, in which window and stage, with the window's fees (minor units) and
+// payment methods. Variants it does not answer for are missing (they ship now).
+type PreorderEligibility interface {
+	Eligibility(ctx context.Context, loc domain.Location, variantATINs []string) (map[string]domain.PreorderLine, error)
+}

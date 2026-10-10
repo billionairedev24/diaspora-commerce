@@ -7,6 +7,7 @@ import com.afrotransact.catalog.adapter.in.web.ProductDtos.CreateProductRequest;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.FlagRequest;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.FlagResponse;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.NoteRequest;
+import com.afrotransact.catalog.adapter.in.web.ProductDtos.PreorderFlagsRequest;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.ProductPageResponse;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.ProductResponse;
 import com.afrotransact.catalog.adapter.in.web.ProductDtos.RestoreRequest;
@@ -24,6 +25,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -96,6 +98,15 @@ class ProductController {
     @PostMapping("/{id}/resume")
     ProductResponse resume(@PathVariable UUID id) {
         return ProductResponse.of(products.resume(id));
+    }
+
+    @Operation(summary = "Set the pre-order flags of a product (S272)",
+            description = "preorderEligible: may be sold in a community pre-order window (default true for food). "
+                    + "shipsNow: always ships now by carrier, never as a pre-order. Owner or staff; publishes "
+                    + "catalog.product.updated.")
+    @PutMapping("/{id}/preorder-flags")
+    ProductResponse preorderFlags(@PathVariable UUID id, @Valid @RequestBody PreorderFlagsRequest body) {
+        return ProductResponse.of(products.setPreorderFlags(id, body.preorderEligible(), body.shipsNow()));
     }
 
     @Operation(summary = "Flag a live listing for review (catalog:moderate)",

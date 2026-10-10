@@ -1,10 +1,12 @@
 package com.afrotransact.payments.application;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.payments.domain.Capture;
 import com.afrotransact.payments.domain.Payment;
+import com.afrotransact.payments.domain.PaymentLink;
 import com.afrotransact.payments.domain.Refund;
 
 /**
@@ -20,6 +22,9 @@ public interface PaymentService {
     Payment get(UUID paymentId, boolean refresh);
 
     Payment getByOrder(String orderId);
+
+    /** The hosted payment link of a payment created with one (S272 late pre-order adds). */
+    Optional<PaymentLink> link(UUID paymentId);
 
     /** Captures one shipment and posts its journal. Idempotent per (payment, shipment). */
     CaptureResult capture(UUID paymentId, CaptureCommand command, String idempotencyKey);

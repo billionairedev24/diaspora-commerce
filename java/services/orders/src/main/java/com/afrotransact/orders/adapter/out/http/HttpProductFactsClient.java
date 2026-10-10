@@ -37,6 +37,33 @@ class HttpProductFactsClient implements ProductFactsClient {
     }
 
     @Override
+    public Map<String, Listing> listings(Collection<String> variantAtins) {
+        Map<String, Listing> out = new LinkedHashMap<>();
+        for (String atin : variantAtins) {
+            try {
+                JsonNode v = catalog.call(c -> c.get().uri("/v1/public/variants/{atin}", atin)
+                        .retrieve().body(JsonNode.class));
+                if (v != null && v.path("variant").has("priceMinor")) {
+                    JsonNode product = v.path("product");
+                    JsonNode variant = v.path("variant");
+                    JsonNode images = product.path("images");
+                    out.put(atin, new Listing(atin, product.path("atin").asString(null),
+                            product.path("title").asString(null),
+                            images.isArray() && !images.isEmpty() ? images.get(0).path("url").asString(null) : null,
+                            product.path("sellerOrgId").asString(null), product.path("ownerKind").asString("SELLER"),
+                            variant.path("priceMinor").asLong(), variant.path("currency").asString("USD")));
+                }
+            } catch (UpstreamFailure f) {
+                if (f.retryable()) {
+                    throw f;
+                }
+                LOG.info("catalog has no live variant {} ({})", atin, f.code());
+            }
+        }
+        return out;
+    }
+
+    @Override
     public Map<String, Facts> facts(Collection<String> variantAtins) {
         Map<String, Facts> out = new LinkedHashMap<>();
         for (String atin : variantAtins) {

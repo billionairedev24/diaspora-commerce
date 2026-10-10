@@ -23,12 +23,14 @@ class PaymentEventServiceImpl implements PaymentEventService {
     private final InboxDeduplicator inbox;
     private final CheckoutRequestRepository requests;
     private final CheckoutWorkflows workflows;
+    private final LatePreorderService lateAdds;
 
     PaymentEventServiceImpl(InboxDeduplicator inbox, CheckoutRequestRepository requests,
-                            CheckoutWorkflows workflows) {
+                            CheckoutWorkflows workflows, LatePreorderService lateAdds) {
         this.inbox = inbox;
         this.requests = requests;
         this.workflows = workflows;
+        this.lateAdds = lateAdds;
     }
 
     @Override
@@ -46,6 +48,10 @@ class PaymentEventServiceImpl implements PaymentEventService {
             return false;
         }
         boolean authorized = SUCCEEDED.equals(type);
+        if (request.get().workflowId().startsWith(LatePreorderServiceImpl.WORKFLOW_PREFIX)) {
+            // S272 late pre-order adds have no checkout saga: place or void the order directly.
+            return lateAdds.onPayment(orderId, authorized, CANCELED.equals(type), failureMessage);
+        }
         workflows.signalPayment(request.get().workflowId(), authorized, authorized ? null
                 : failureMessage == null || failureMessage.isBlank() ? "The payment failed" : failureMessage);
         return true;

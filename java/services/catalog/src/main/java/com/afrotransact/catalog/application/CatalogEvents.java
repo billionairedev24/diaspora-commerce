@@ -11,6 +11,8 @@ public final class CatalogEvents {
     public static final String PRODUCT_REJECTED = "catalog.product.rejected";
     public static final String PRODUCT_PAUSED = "catalog.product.paused";
     public static final String PRODUCT_RESUMED = "catalog.product.resumed";
+    /** Listing settings changed without a status change (S272: pre-order flags). */
+    public static final String PRODUCT_UPDATED = "catalog.product.updated";
     /** The owner's listings were hidden by seller-service compliance enforcement (payload sellerHidden=true). */
     public static final String PRODUCT_HIDDEN = "catalog.product.hidden";
     /** The owner's listings were restored (payload sellerHidden=false, status unchanged). */

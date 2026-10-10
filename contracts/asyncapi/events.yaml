@@ -103,6 +103,8 @@ channels:
         $ref: '#/components/messages/catalogProductPaused'
       catalogProductResumed:
         $ref: '#/components/messages/catalogProductResumed'
+      catalogProductUpdated:
+        $ref: '#/components/messages/catalogProductUpdated'
       catalogProductHidden:
         $ref: '#/components/messages/catalogProductHidden'
       catalogProductRestored:
@@ -535,6 +537,10 @@ channels:
         $ref: '#/components/messages/ordersShipmentCancelled'
       ordersPreorderDeliveryMissed:
         $ref: '#/components/messages/ordersPreorderDeliveryMissed'
+      ordersPreorderMissedDeliveryAnswered:
+        $ref: '#/components/messages/ordersPreorderMissedDeliveryAnswered'
+      ordersPreorderPaymentLinkCreated:
+        $ref: '#/components/messages/ordersPreorderPaymentLinkCreated'
   paymentsPaymentEvents:
     address: at.payment.events
     description: Payment lifecycle, captures, refunds, settlement transfers and chargebacks from payments-service (key = order
@@ -980,6 +986,13 @@ components:
         $ref: '#/components/schemas/CatalogProductEvent'
     catalogProductResumed:
       name: catalog.product.resumed
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductEvent'
+    catalogProductUpdated:
+      name: catalog.product.updated
+      title: Listing settings changed without a status change (S272 pre-order flags)
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1782,6 +1795,20 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/OrdersPreorderDeliveryMissed'
+    ordersPreorderMissedDeliveryAnswered:
+      name: orders.preorder.missed_delivery_answered
+      title: The customer answered a missed pre-order delivery (delivery-runs reschedules WAIT answers)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersPreorderMissedDeliveryAnswered'
+    ordersPreorderPaymentLinkCreated:
+      name: orders.preorder.payment_link_created
+      title: A late pre-order add waits for the customer to pay its payment link (send it by SMS)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/OrdersPreorderPaymentLinkCreated'
     paymentsIntentCreated:
       name: payments.intent.created
       title: PaymentIntent created for an order (manual capture)
@@ -3159,6 +3186,12 @@ components:
           type: boolean
           description: The owner's listings are hidden by seller-service compliance enforcement (seller.listings.hidden).
             Keep the product off public surfaces regardless of status; set on every catalog.product.* event while hidden.
+        preorderEligible:
+          type: boolean
+          description: May be sold in a community pre-order window (S272); default true for food product types
+        shipsNow:
+          type: boolean
+          description: Always ships now by carrier, never as a pre-order (delivery-runs eligibility excludes it)
         variants:
           type: array
           items:
@@ -6054,6 +6087,33 @@ components:
           enum:
           - REDEEMED
           - RELEASED
+    OrdersAttribution:
+      type:
+      - object
+      - 'null'
+      description: 'S272 storefront attribution (last touch): ?src=ig|fb|tt|wa|email|sms|app or placement, creative, window
+        code'
+      properties:
+        src:
+          type:
+          - string
+          - 'null'
+          examples:
+          - ig
+          - ribbon
+        cr:
+          type:
+          - string
+          - 'null'
+          examples:
+          - STORY
+          - HERO
+        po:
+          type:
+          - string
+          - 'null'
+          examples:
+          - LBK-7
     OrdersPreorderDeliveryMissed:
       type: object
       required:
@@ -6121,6 +6181,100 @@ components:
           type:
           - string
           - 'null'
+        sellerOrgId:
+          type:
+          - string
+          - 'null'
+        preorder:
+          $ref: '#/components/schemas/OrdersPreorderBlock'
+        choices:
+          type: array
+          description: POST /v1/orders/{orderId}/shipments/{shipmentId}/missed-delivery {choice}
+          items:
+            type: string
+            enum:
+            - REFUND
+            - WAIT
+        missedAt:
+          type: string
+          format: date-time
+    OrdersPreorderMissedDeliveryAnswered:
+      type: object
+      required:
+      - orderId
+      - orderNumber
+      - customerId
+      - shipmentId
+      - windowId
+      - choice
+      - answeredAt
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        customerId:
+          type: string
+        shipmentId:
+          type: string
+          format: uuid
+        windowId:
+          type: string
+        choice:
+          type: string
+          enum:
+          - REFUND
+          - WAIT
+        answeredAt:
+          type: string
+          format: date-time
+    OrdersPreorderPaymentLinkCreated:
+      type: object
+      required:
+      - orderId
+      - orderNumber
+      - customerId
+      - url
+      - expiresAt
+      - amountMinor
+      - currency
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        orderNumber:
+          type: string
+        customerId:
+          type: string
+        windowId:
+          type:
+          - string
+          - 'null'
+        windowCode:
+          type:
+          - string
+          - 'null'
+        url:
+          type: string
+          description: Hosted Stripe payment page
+        expiresAt:
+          type: string
+          format: date-time
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        shipToName:
+          type:
+          - string
+          - 'null'
+        shipToPhone:
+          type:
+          - string
+          - 'null'
+          description: Where to text the link
     OrdersPreorderBlock:
       type:
       - object
@@ -6150,7 +6304,9 @@ components:
           - string
           - 'null'
         closesAt:
-          type: string
+          type:
+          - string
+          - 'null'
           format: date-time
           description: Cancel for a full refund until then
         closesDisplay:
@@ -6270,18 +6426,52 @@ components:
           - string
           - 'null'
           description: payments-service payment of the order
+        shipToPhone:
+          type:
+          - string
+          - 'null'
+          description: Phone of the ship-to address (pre-order dispatch)
         attribution:
+          $ref: '#/components/schemas/OrdersAttribution'
+        channel:
+          type: string
+          enum:
+          - SITE_HERO
+          - SITE_RIBBON
+          - SITE_PDP
+          - SITE_PAGE
+          - SITE_DIRECT
+          - APP
+          - INSTAGRAM
+          - FACEBOOK
+          - TIKTOK
+          - WHATSAPP
+          - EMAIL
+          - SMS
+          - AGENT_LATE
+          description: S272 channel derived from the attribution source (AGENT_LATE for customer-service late adds)
+        tags:
+          type: array
+          items:
+            type: string
+          description: e.g. LATE_ADD
+        onBehalf:
           type:
           - object
           - 'null'
-          description: Last-touch source the storefront sent with checkout (?src=&cr=&po=)
+          description: Set when customer service created the order on the customer's behalf (late pre-order add)
           properties:
-            src:
+            actorId:
               type: string
-            cr:
-              type: string
-            po:
-              type: string
+              description: Staff subject
+            reason:
+              type:
+              - string
+              - 'null'
+            note:
+              type:
+              - string
+              - 'null'
         shipments:
           type: array
           items:
@@ -6327,6 +6517,21 @@ components:
                 - express
                 - local
                 - pickup
+                - preorder_door
+              windowId:
+                type:
+                - string
+                - 'null'
+                description: S272 pre-order window (PREORDER shipments)
+              fulfilment:
+                type:
+                - string
+                - 'null'
+                enum:
+                - DOOR
+                - PICKUP
+                - null
+                description: S272 pre-order fulfilment
               promisedBy:
                 type:
                 - string
@@ -6546,6 +6751,7 @@ components:
           - SELLER_FULFILLED
           - FBA_AFROTRANSACT
           - RETAIL_1P
+          - PREORDER
         deliveryMethod:
           type: string
           enum:
@@ -6684,6 +6890,18 @@ components:
         cancelledAt:
           type: string
           format: date-time
+        fulfilmentType:
+          type: string
+          enum:
+          - SELLER_FULFILLED
+          - FBA_AFROTRANSACT
+          - RETAIL_1P
+          - PREORDER
+        windowId:
+          type:
+          - string
+          - 'null'
+          description: S272 pre-order window of a PREORDER shipment
     PaymentsIntentEvent:
       type: object
       required:
@@ -9610,7 +9828,12 @@ operations:
       map them to templates (order confirmation, shipped, out for delivery, delivered, cancelled), payments and finance follow
       deliveries and cancellations, the indexer keeps sales stats, tax-returns reads delivered lines for RMAs. Pre-orders
       (S270–S275): an orders.order.placed with a PREORDER shipment sends preorder.confirmed ("You''re in"); orders.preorder.delivery_missed
-      sends preorder.delivery_missed (refund / new date links).'
+      sends preorder.delivery_missed (refund / new date links). S272 pre-orders: orders.order.placed carries the attribution
+      {src, cr, po}, channel, tags and per shipment the pre-order window and fulfilment (delivery-runs projects window orders
+      from it); a scheduler publishes orders.preorder.delivery_missed when a PREORDER shipment passes its delivery date undelivered
+      (notifications sends preorder.delivery_missed with refund / new-date links) and the customer''s answer as orders.preorder.missed_delivery_answered;
+      late adds paid by link publish orders.preorder.payment_link_created (notifications texts preorder.late_order.payment_link).
+      orders also routes payments.intent.* of late adds (no saga) to place or void them.'
   receiveOrdersPaymentEvents:
     action: receive
     channel:

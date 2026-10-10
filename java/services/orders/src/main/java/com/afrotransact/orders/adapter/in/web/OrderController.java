@@ -4,13 +4,17 @@ import com.afrotransact.orders.adapter.in.web.OrdersDtos.CancelRequest;
 import com.afrotransact.orders.application.OrderPage;
 import com.afrotransact.orders.application.OrderQueryService;
 import com.afrotransact.orders.application.OrderView;
+import com.afrotransact.orders.application.PreorderDeliveryService;
 import com.afrotransact.orders.application.ShipmentService;
+import com.afrotransact.orders.domain.MissedDeliveryChoice;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.port.PaymentsClient;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,10 +29,12 @@ class OrderController {
 
     private final OrderQueryService queries;
     private final ShipmentService shipments;
+    private final PreorderDeliveryService preorders;
 
-    OrderController(OrderQueryService queries, ShipmentService shipments) {
+    OrderController(OrderQueryService queries, ShipmentService shipments, PreorderDeliveryService preorders) {
         this.queries = queries;
         this.shipments = shipments;
+        this.preorders = preorders;
     }
 
     @Operation(summary = "My orders (newest first)",
@@ -55,12 +61,31 @@ class OrderController {
     }
 
     @Operation(summary = "Cancel one shipment of my order (until it is packed)",
-            description = "Refunds or releases the shipment's amount and stock (captured shipments are refunded).")
+            description = "Refunds or releases the shipment's amount and stock (captured shipments are refunded). "
+                    + "Pre-order shipments (S272) are charged at checkout and can be cancelled until the window "
+                    + "closes, for a full refund including their delivery fee; after the close 409 "
+                    + "orders.preorder-closed.")
     @PostMapping("/v1/orders/{number}/shipments/{shipmentId}/cancel")
     OrderView cancel(@PathVariable String number, @PathVariable String shipmentId,
                      @RequestHeader(value = CheckoutController.IDEMPOTENCY_KEY, required = false) String key,
                      @Valid @RequestBody(required = false) CancelRequest body) {
         return shipments.cancelByCustomer(number, shipmentId, body == null ? null : body.reason(), key);
+    }
+
+    @Operation(summary = "Answer a missed pre-order delivery: refund or wait for a new date (S272)",
+            description = "After orders.preorder.delivery_missed. REFUND cancels the pre-order shipment and refunds "
+                    + "it in full (delivery fee included) unless it is already out for delivery (409); WAIT keeps "
+                    + "it for the new date delivery-runs schedules. Publishes "
+                    + "orders.preorder.missed_delivery_answered. 409 orders.delivery-not-missed before the date "
+                    + "was missed.")
+    @PostMapping("/v1/orders/{id}/shipments/{shipmentId}/missed-delivery")
+    OrderView missedDelivery(@Parameter(description = "Order number or id") @PathVariable String id,
+                             @PathVariable String shipmentId, @Valid @RequestBody MissedDeliveryRequest body) {
+        return preorders.answerMissedDelivery(id, shipmentId, body.choice());
+    }
+
+    @Schema(name = "MissedDeliveryRequest")
+    record MissedDeliveryRequest(@NotNull @Schema(description = "REFUND | WAIT") MissedDeliveryChoice choice) {
     }
 
     @Operation(summary = "Payment split of an order (staff: all recipients; seller: own row)",

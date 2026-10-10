@@ -9,6 +9,12 @@ inventoryUrl: http://inventory
 offersUrl: http://offers
 retailOrgId: org_afrotransact_retail
 sellerNames: {}
+# S272 pre-orders: delivery-runs eligibility with the cart-service client (scope delivery-runs:reserve).
+deliveryRuns:
+  url: http://delivery-runs
+  tokenUrl: http://identity/oauth2/token
+  clientId: cart-service
+  clientSecret: ""
 auth:
   enabled: true
   issuer: https://auth.dev.afrotransact.com

@@ -3,6 +3,7 @@ package com.afrotransact.orders.config;
 import java.util.Set;
 
 import com.afrotransact.orders.application.OrdersSettings;
+import com.afrotransact.orders.application.PreorderSettings;
 import com.afrotransact.orders.application.TaxSettings;
 import com.afrotransact.orders.domain.CourierProofPolicy;
 import com.afrotransact.orders.domain.DefaultCourierProofPolicy;
@@ -18,6 +19,7 @@ import com.afrotransact.orders.domain.ReturnWindowPolicy;
 import com.afrotransact.orders.domain.ShipByPolicy;
 import com.afrotransact.orders.domain.ShipmentTransitionPolicy;
 import com.afrotransact.orders.domain.ShippingPolicy;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -63,6 +65,13 @@ class OrdersConfiguration {
         return new OrdersSettings(props.retailOrgId(), props.paymentTimeout(),
                 props.checkoutResponseTimeout(), Set.copyOf(props.perishableTypes()), props.commissionCategories(),
                 props.jobs().followUpBatch(), props.jobs().followUpMaxAttempts(), props.zone());
+    }
+
+    @Bean
+    PreorderSettings preorderSettings(@Value("${at.orders.preorders.enabled:true}") boolean enabled,
+                                      @Value("${at.orders.preorders.job-batch:100}") int jobBatch,
+                                      @Value("${at.orders.preorders.link-expiry-hours:24}") int linkExpiryHours) {
+        return new PreorderSettings(enabled, jobBatch, linkExpiryHours);
     }
 
     @Bean

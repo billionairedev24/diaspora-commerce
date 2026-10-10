@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.afrotransact.payments.domain.Capture;
 import com.afrotransact.payments.domain.Payment;
+import com.afrotransact.payments.domain.PaymentLink;
 import com.afrotransact.payments.domain.Refund;
 
 /** Payments with their lines, captures and refunds. */
@@ -34,6 +35,11 @@ public interface PaymentRepository {
     Payment update(Payment payment);
 
     void insertCapture(Capture capture);
+
+    /** Stores the hosted payment link of a payment (S272). */
+    void insertLink(PaymentLink link);
+
+    Optional<PaymentLink> findLink(UUID paymentId);
 
     Optional<Capture> findCapture(UUID captureId);
 

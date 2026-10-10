@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,29 @@ type CartService interface {
 	MergeGuest(ctx context.Context, user domain.Owner, guestID string) (domain.View, error)
 	// RemoveOrdered clears lines that were checked out (called when an order is placed).
 	RemoveOrdered(ctx context.Context, owner domain.Owner, variantATINs []string) error
+	// SetPreorderFulfilment records the door / pickup choice for a pre-order window (S272).
+	SetPreorderFulfilment(ctx context.Context, owner domain.Owner, windowID, fulfilment string) (domain.View, error)
+}
+
+// Option configures the cart service.
+type Option func(*cartServiceImpl)
+
+// WithPreorders groups pre-order lines into window packages when the request names a delivery location (S272).
+func WithPreorders(p port.PreorderEligibility) Option {
+	return func(s *cartServiceImpl) { s.preorders = p }
+}
+
+type locationKey struct{}
+
+// WithLocation puts the shopper's delivery location (from the BFF) on the request context; cart views then show the
+// pre-order packages that apply there.
+func WithLocation(ctx context.Context, loc domain.Location) context.Context {
+	return context.WithValue(ctx, locationKey{}, loc)
+}
+
+func locationOf(ctx context.Context) domain.Location {
+	loc, _ := ctx.Value(locationKey{}).(domain.Location)
+	return loc
 }
 
 // Errors of the cart use cases.
@@ -43,13 +67,15 @@ var (
 )
 
 type cartServiceImpl struct {
-	guests  port.CartRepository
-	users   port.CartRepository
-	offers  port.OfferReader // catalog: product facts (title, image, options) and the legacy single seller
-	stock   port.AvailabilityReader
-	lookup  port.OfferLookup // offers service: lines that carry an offerId
-	retries int
-	now     func() time.Time
+	guests port.CartRepository
+	users  port.CartRepository
+	offers port.OfferReader // catalog: product facts (title, image, options) and the legacy single seller
+	stock  port.AvailabilityReader
+	lookup port.OfferLookup // offers service: lines that carry an offerId
+	// preorders is delivery-runs eligibility (nil: no pre-orders, every line ships now).
+	preorders port.PreorderEligibility
+	retries   int
+	now       func() time.Time
 }
 
 var _ CartService = (*cartServiceImpl)(nil)
@@ -57,8 +83,12 @@ var _ CartService = (*cartServiceImpl)(nil)
 // NewCartService stores guest carts and customer carts in separate repositories (Redis TTL vs durable Postgres).
 // Lines with an offerId are priced, stocked and validated by lookup (offers service); the others by the catalog
 // reader and inventory, as before offers existed.
-func NewCartService(guests, users port.CartRepository, offers port.OfferReader, stock port.AvailabilityReader, lookup port.OfferLookup) CartService {
-	return &cartServiceImpl{guests: guests, users: users, offers: offers, stock: stock, lookup: lookup, retries: 3, now: time.Now}
+func NewCartService(guests, users port.CartRepository, offers port.OfferReader, stock port.AvailabilityReader, lookup port.OfferLookup, opts ...Option) CartService {
+	s := &cartServiceImpl{guests: guests, users: users, offers: offers, stock: stock, lookup: lookup, retries: 3, now: time.Now}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func (s *cartServiceImpl) repo(o domain.Owner) port.CartRepository {
@@ -172,7 +202,34 @@ func (s *cartServiceImpl) present(ctx context.Context, c domain.Cart) (domain.Vi
 	if err != nil {
 		return domain.View{}, err
 	}
-	return c.Present(live, avail), nil
+	return c.PresentWithPreorders(live, avail, s.preorderLines(ctx, c.Lines)), nil
+}
+
+// preorderLines asks delivery-runs about the cart's lines at the request's location. The cart degrades to "ships
+// now" (logged) when delivery-runs is unavailable; checkout asks again and decides.
+func (s *cartServiceImpl) preorderLines(ctx context.Context, lines []domain.Line) map[string]domain.PreorderLine {
+	loc := locationOf(ctx)
+	if s.preorders == nil || !loc.Known() || len(lines) == 0 {
+		return nil
+	}
+	atins := make([]string, 0, len(lines))
+	for _, l := range lines {
+		atins = append(atins, l.VariantATIN)
+	}
+	out, err := s.preorders.Eligibility(ctx, loc, atins)
+	if err != nil {
+		slog.WarnContext(ctx, "pre-order eligibility unavailable; showing every line as ships now", "error", err)
+		return nil
+	}
+	return out
+}
+
+func (s *cartServiceImpl) SetPreorderFulfilment(ctx context.Context, owner domain.Owner, windowID, fulfilment string) (domain.View, error) {
+	c, err := s.mutate(ctx, owner, func(c *domain.Cart) error { return c.SetPreorderFulfilment(windowID, fulfilment) })
+	if err != nil {
+		return domain.View{}, err
+	}
+	return s.present(ctx, c)
 }
 
 func (s *cartServiceImpl) View(ctx context.Context, owner domain.Owner) (domain.View, error) {

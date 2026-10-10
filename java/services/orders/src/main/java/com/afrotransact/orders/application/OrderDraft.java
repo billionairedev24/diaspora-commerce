@@ -8,6 +8,8 @@ import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.LocalDelivery;
+import com.afrotransact.orders.domain.OrderOrigin;
+import com.afrotransact.orders.domain.PreorderPackage;
 import com.afrotransact.orders.domain.ShipTo;
 
 /**
@@ -16,15 +18,42 @@ import com.afrotransact.orders.domain.ShipTo;
  *
  * @param reserved true when inventory holds a reservation for this order
  * @param coupon   the redeemed coupon (null: none)
+ * @param origin   attribution, channel and on-behalf details (S272)
+ * @param paymentMethodTypes Stripe payment method types of the PaymentIntent (S272 pre-orders); empty = automatic
  */
 public record OrderDraft(String orderId, String orderNumber, String customerId, String workflowId, String currency,
                          ShipTo shipTo, boolean reserved, List<DraftShipment> shipments, Instant createdAt,
-                         CouponRef coupon) {
+                         CouponRef coupon, OrderOrigin origin, List<String> paymentMethodTypes) {
+
+    public OrderDraft {
+        origin = origin == null ? OrderOrigin.none() : origin;
+        paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
+    }
+
+    /** A draft without origin or payment method restrictions (tests, older workflow histories). */
+    public OrderDraft(String orderId, String orderNumber, String customerId, String workflowId, String currency,
+                      ShipTo shipTo, boolean reserved, List<DraftShipment> shipments, Instant createdAt,
+                      CouponRef coupon) {
+        this(orderId, orderNumber, customerId, workflowId, currency, shipTo, reserved, shipments, createdAt, coupon,
+                null, null);
+    }
 
     /** The draft with a coupon's discounts applied. */
     public OrderDraft withCoupon(List<DraftShipment> discounted, CouponRef ref) {
         return new OrderDraft(orderId, orderNumber, customerId, workflowId, currency, shipTo, reserved, discounted,
-                createdAt, ref);
+                createdAt, ref, origin, paymentMethodTypes);
+    }
+
+    /** The draft with another origin (S272 late adds: channel AGENT_LATE, staff actor). */
+    public OrderDraft withOrigin(OrderOrigin next) {
+        return new OrderDraft(orderId, orderNumber, customerId, workflowId, currency, shipTo, reserved, shipments,
+                createdAt, coupon, next, paymentMethodTypes);
+    }
+
+    /** The draft with other shipments (tax quotes). */
+    public OrderDraft withShipments(List<DraftShipment> next) {
+        return new OrderDraft(orderId, orderNumber, customerId, workflowId, currency, shipTo, reserved, next,
+                createdAt, coupon, origin, paymentMethodTypes);
     }
 
     /** Shipping of every shipment. */
@@ -47,7 +76,20 @@ public record OrderDraft(String orderId, String orderNumber, String customerId, 
                                 String serviceLevel, String pickupLocationId, DeliveryPreferences preferences,
                                 boolean perishable, boolean handoverRequired, String handoverCodeHash,
                                 String handoverCodeSealed, long shippingMinor, LocalDate promisedFrom,
-                                LocalDate promisedBy, List<CheckoutPlan.Line> lines, LocalDelivery localDelivery) {
+                                LocalDate promisedBy, List<CheckoutPlan.Line> lines, LocalDelivery localDelivery,
+                                PreorderPackage preorder) {
+
+        /** A shipment that is not a pre-order. */
+        public DraftShipment(String id, int seq, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
+                             String nodeId, DeliveryMethod method, String serviceLevel, String pickupLocationId,
+                             DeliveryPreferences preferences, boolean perishable, boolean handoverRequired,
+                             String handoverCodeHash, String handoverCodeSealed, long shippingMinor,
+                             LocalDate promisedFrom, LocalDate promisedBy, List<CheckoutPlan.Line> lines,
+                             LocalDelivery localDelivery) {
+            this(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel, pickupLocationId,
+                    preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed, shippingMinor,
+                    promisedFrom, promisedBy, lines, localDelivery, null);
+        }
 
         /** A shipment that is not AfroTransact Delivery from a seller's store (tests, older workflow histories). */
         public DraftShipment(String id, int seq, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
@@ -57,14 +99,14 @@ public record OrderDraft(String orderId, String orderNumber, String customerId, 
                              LocalDate promisedFrom, LocalDate promisedBy, List<CheckoutPlan.Line> lines) {
             this(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel, pickupLocationId,
                     preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed, shippingMinor,
-                    promisedFrom, promisedBy, lines, null);
+                    promisedFrom, promisedBy, lines, null, null);
         }
 
         /** The shipment with other lines and shipping (coupon discounts). */
         public DraftShipment with(List<CheckoutPlan.Line> newLines, long newShippingMinor) {
             return new DraftShipment(id, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, method, serviceLevel,
                     pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
-                    handoverCodeSealed, newShippingMinor, promisedFrom, promisedBy, newLines, localDelivery);
+                    handoverCodeSealed, newShippingMinor, promisedFrom, promisedBy, newLines, localDelivery, preorder);
         }
     }
 }

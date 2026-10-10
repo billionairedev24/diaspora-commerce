@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.UUID;
 
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrderStatus;
@@ -13,6 +14,7 @@ import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.domain.TransitionActor;
 import com.afrotransact.orders.domain.TransitionSource;
 import com.afrotransact.orders.port.CheckoutRequestRepository;
+import com.afrotransact.orders.port.FollowUpRepository;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -31,17 +33,19 @@ class OrderPlacementServiceImpl implements OrderPlacementService {
     private final ShipmentTransitions transitions;
     private final DomainEventPublisher events;
     private final ShipByPolicy shipBy;
+    private final FollowUpRepository followUps;
     private final OrdersSettings settings;
     private final Clock clock;
 
     OrderPlacementServiceImpl(OrderRepository orders, CheckoutRequestRepository requests,
                               ShipmentTransitions transitions, DomainEventPublisher events, ShipByPolicy shipBy,
-                              OrdersSettings settings, Clock clock) {
+                              FollowUpRepository followUps, OrdersSettings settings, Clock clock) {
         this.orders = orders;
         this.requests = requests;
         this.transitions = transitions;
         this.events = events;
         this.shipBy = shipBy;
+        this.followUps = followUps;
         this.settings = settings;
         this.clock = clock;
     }
@@ -72,6 +76,11 @@ class OrderPlacementServiceImpl implements OrderPlacementService {
         Instant now = Instant.now(clock);
         Order placed = current.withHeader(OrderStatus.PLACED, null, now);
         orders.update(placed);
+        // S272: pre-orders are charged at checkout (captured now, refunded in full if cancelled before close).
+        for (Shipment s : placed.preorderShipments()) {
+            followUps.enqueue(new FollowUpRepository.FollowUp(UUID.randomUUID().toString(), "capture:" + s.id(),
+                    FollowUpRepository.Kind.CAPTURE, placed.id(), s.id(), 0, now));
+        }
         events.publish(OrdersEvents.ORDER_PLACED, OrdersEvents.AGGREGATE, placed.id(),
                 OrdersEventPayloads.OrderPlaced.of(placed, s -> placed.placedAt() == null ? null
                         : shipBy.shipBy(LocalDate.ofInstant(placed.placedAt(), ZoneId.of(settings.zone())),

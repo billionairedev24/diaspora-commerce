@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -11,12 +12,34 @@ import java.util.UUID;
  *
  * @param categoryId        resolved category leaf, null while waiting on a category request
  * @param categoryRequestId the pending request the product was built against, if any
+ * @param preorderEligible  may be sold in a community pre-order window (S272); defaults to true for food product
+ *                          types ({@link #FOOD_PRODUCT_TYPES}), false otherwise
+ * @param shipsNow          always ships by carrier, never as a pre-order, even inside a window's categories (shea,
+ *                          fabric …)
  */
 public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, UUID categoryRequestId,
                       String productTypeCode, String title, Map<String, String> attributes,
                       List<ProductImage> images, String variationTheme, List<Variant> variants,
                       ProductStatus status, String moderationNote, Instant createdAt, Instant updatedAt,
-                      long version) {
+                      long version, boolean preorderEligible, boolean shipsNow) {
+
+    /** Product types sold as food: pre-order eligible by default. */
+    public static final Set<String> FOOD_PRODUCT_TYPES = Set.of("grocery", "perishable");
+
+    /** A product with the default pre-order flags of its product type. */
+    public Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, UUID categoryRequestId,
+                   String productTypeCode, String title, Map<String, String> attributes, List<ProductImage> images,
+                   String variationTheme, List<Variant> variants, ProductStatus status, String moderationNote,
+                   Instant createdAt, Instant updatedAt, long version) {
+        this(id, atin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes, images,
+                variationTheme, variants, status, moderationNote, createdAt, updatedAt, version,
+                preorderDefault(productTypeCode), false);
+    }
+
+    /** Default of {@code preorderEligible}: true for food product types. */
+    public static boolean preorderDefault(String productTypeCode) {
+        return productTypeCode != null && FOOD_PRODUCT_TYPES.contains(productTypeCode);
+    }
 
     public Product {
         Objects.requireNonNull(id, "id");
@@ -49,7 +72,8 @@ public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, U
             return this;
         }
         return new Product(id, atin, owner, resolvedCategoryId, categoryRequestId, resolvedProductType, title,
-                attributes, images, variationTheme, variants, ProductStatus.IN_REVIEW, null, createdAt, now, version);
+                attributes, images, variationTheme, variants, ProductStatus.IN_REVIEW, null, createdAt, now, version,
+                preorderEligible || preorderDefault(resolvedProductType), shipsNow);
     }
 
     public Product pause(Instant now) {
@@ -85,8 +109,26 @@ public record Product(UUID id, Atin atin, ListingOwner owner, UUID categoryId, U
         return withStatus(previous, null, now);
     }
 
+    /** Sets the pre-order flags (S272). A product that always ships now is never offered as a pre-order. */
+    public Product withPreorderFlags(boolean eligible, boolean ships, Instant now) {
+        return new Product(id, atin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes,
+                images, variationTheme, variants, status, moderationNote, createdAt, now, version, eligible, ships);
+    }
+
+    /** True when a pre-order window may sell this product (eligible and not flagged ships-now). */
+    public boolean preorderable() {
+        return preorderEligible && !shipsNow;
+    }
+
+    /** The same product with other variants (persistence assembles them separately). */
+    public Product withVariants(List<Variant> newVariants) {
+        return new Product(id, atin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes,
+                images, variationTheme, newVariants, status, moderationNote, createdAt, updatedAt, version,
+                preorderEligible, shipsNow);
+    }
+
     private Product withStatus(ProductStatus next, String note, Instant now) {
         return new Product(id, atin, owner, categoryId, categoryRequestId, productTypeCode, title, attributes,
-                images, variationTheme, variants, next, note, createdAt, now, version);
+                images, variationTheme, variants, next, note, createdAt, now, version, preorderEligible, shipsNow);
     }
 }

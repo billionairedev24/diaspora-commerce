@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.orders.domain.Order;
+import com.afrotransact.orders.domain.OrderLine;
 import com.afrotransact.orders.domain.OrderNumberGenerator;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.ShipTo;
@@ -150,7 +151,8 @@ class CheckoutServiceImpl implements CheckoutService {
         String currency = snapshot.currency() == null || snapshot.currency().isBlank() ? "USD" : snapshot.currency();
         return new CheckoutInput(request.orderId(), request.orderNumber(), request.customerId(),
                 request.idempotencyKey(), request.workflowId(), currency, shipTo, select(snapshot, cmd.lines()),
-                cmd.selections(), settings.paymentTimeout().toSeconds(), Instant.now(clock), cmd.couponCode());
+                cmd.selections(), settings.paymentTimeout().toSeconds(), Instant.now(clock), cmd.couponCode(),
+                cmd.attribution(), snapshot.preorderFulfilment(), null);
     }
 
     /** Every available line, or the requested subset (quantities never above what is in the cart). */
@@ -241,14 +243,32 @@ class CheckoutServiceImpl implements CheckoutService {
         int count = o.shipments().size();
         return new CheckoutView(o.id(), o.number(), status, r.clientSecret(), r.clientSecret(),
                 o.totals().grandTotalMinor(), o.currency(), o.shipments().stream().map(s -> shipment(s, count))
-                .toList());
+                .toList(), preorder(o));
+    }
+
+    /** The "You're in" facts (S272): the first pre-order window of the order and what ships now besides it. */
+    private CheckoutView.Preorder preorder(Order o) {
+        return o.preorderShipments().stream().findFirst().map(s -> {
+            int others = o.shipments().stream().filter(x -> !x.preorderShipment())
+                    .mapToInt(x -> x.lines().stream().mapToInt(OrderLine::quantity).sum()).sum();
+            return new CheckoutView.Preorder(o.number(), s.preorder().windowName(), s.preorder().windowId(),
+                    s.preorder().windowCode(), s.preorder().deliversOn(), s.preorder().closesAt(), settings.zone(),
+                    s.preorder().fulfilment().name(), others);
+        }).orElse(null);
     }
 
     private CheckoutView.Shipment shipment(Shipment s, int count) {
         String code = s.handoverRequired() && s.handoverCodeSealed() != null
                 ? vault.reveal(s.id(), s.handoverCodeSealed()) : null;
         String label = "Shipment " + s.seq() + " of " + count + (s.sellerName() == null ? "" : " · " + s.sellerName());
+        if (s.preorderShipment()) {
+            label = "Pre-order · delivered " + s.preorder().deliversOn() + (s.sellerName() == null ? ""
+                    : " · " + s.sellerName());
+        }
         return new CheckoutView.Shipment(s.id(), label, s.promisedBy() == null ? null : s.promisedBy().toString(),
-                s.promisedBy(), s.deliveryMethod().name(), code);
+                s.promisedBy(), s.deliveryMethod().name(), code, s.fulfilmentType().name(),
+                s.preorderShipment() ? s.preorder().windowId() : null,
+                s.preorderShipment() ? s.preorder().fulfilment().name() : null,
+                s.preorderShipment() ? s.preorder().closesAt() : null);
     }
 }

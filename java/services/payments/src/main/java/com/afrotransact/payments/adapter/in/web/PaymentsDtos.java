@@ -30,6 +30,7 @@ import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.OrderLine;
 import com.afrotransact.payments.domain.Payment;
 import com.afrotransact.payments.domain.PaymentLine;
+import com.afrotransact.payments.domain.PaymentLink;
 import com.afrotransact.payments.domain.PayoutBalance;
 import com.afrotransact.payments.domain.PayoutRequest;
 import com.afrotransact.payments.domain.ProviderFee;
@@ -79,7 +80,13 @@ final class PaymentsDtos {
                     + "with saveForOffSession") String shopperId,
             @Schema(description = "Save the confirmed payment method on the shopper's Stripe Customer "
                     + "(setup_future_usage=off_session) so a later balance can be charged off-session; customerId is "
-                    + "then the shopper's Stripe Customer") Boolean saveForOffSession) {
+                    + "then the shopper's Stripe Customer") Boolean saveForOffSession,
+            @Schema(description = "S272 late pre-order adds: confirm the intent now, off-session, on the shopper's "
+                    + "default saved card (shopperId required); the response status is AUTHORIZED, REQUIRES_ACTION "
+                    + "(the customer must authenticate) or FAILED") Boolean offSession,
+            @Min(1) @Max(24) @Schema(description = "S272 late pre-order adds: create a hosted Stripe payment link "
+                    + "(Checkout, manual capture) that expires after this many hours instead of returning a client "
+                    + "secret; the response carries paymentLinkUrl") Integer paymentLinkHours) {
     }
 
     @Schema(description = "One order line: who sells it and what the shopper pays for it")
@@ -121,14 +128,22 @@ final class PaymentsDtos {
                                    + "charge waits for the customer") String failureMessage,
                            @Schema(description = "Set for an off-session charge: the order's primary payment")
                            UUID parentPaymentId,
-                           boolean offSession, boolean replayed, List<LineResponse> lines) {
+                           boolean offSession, boolean replayed, List<LineResponse> lines,
+                           @Schema(description = "Hosted payment link (created with paymentLinkHours)")
+                           String paymentLinkUrl,
+                           @Schema(description = "When the payment link expires") Instant paymentLinkExpiresAt) {
 
         static PaymentResponse of(Payment p, boolean replayed) {
+            return of(p, replayed, null);
+        }
+
+        static PaymentResponse of(Payment p, boolean replayed, PaymentLink link) {
             return new PaymentResponse(p.id(), p.orderId(), p.status().name(), p.stripePaymentIntentId(),
                     p.clientSecret(), p.amount().minor(), p.captured().minor(), p.refunded().minor(),
                     p.released().minor(), p.currency(), p.feeScheduleId(), p.placedAt(), p.authorizedAt(),
                     p.failureMessage(), p.parentPaymentId(), p.isOffSession(), replayed,
-                    p.lines().stream().map(LineResponse::of).toList());
+                    p.lines().stream().map(LineResponse::of).toList(), link == null ? null : link.url(),
+                    link == null ? null : link.expiresAt());
         }
     }
 

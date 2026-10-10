@@ -2,7 +2,9 @@ package com.afrotransact.orders.application;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
+import com.afrotransact.orders.domain.Attribution;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.port.CartClient;
@@ -23,11 +25,36 @@ import com.afrotransact.orders.port.CartClient;
  * @param paymentTimeoutSeconds how long to wait for the authorisation (reservation TTL)
  * @param requestedAt           request time
  * @param couponCode            coupon to validate and redeem (null: none)
+ * @param attribution           storefront attribution (S272; null when none)
+ * @param preorderFulfilment    door / pickup per pre-order window chosen in the cart (S272; window id → DOOR|PICKUP)
+ * @param lateAdd               set for a customer-service late pre-order add (S272): the window may be CLOSED
  */
 public record CheckoutInput(String orderId, String orderNumber, String customerId, String idempotencyKey,
                             String workflowId, String currency, ShipTo shipTo, List<CartClient.Item> items,
                             List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt,
-                            String couponCode) {
+                            String couponCode, Attribution attribution, Map<String, String> preorderFulfilment,
+                            LateAdd lateAdd) {
+
+    public CheckoutInput {
+        preorderFulfilment = preorderFulfilment == null ? Map.of() : Map.copyOf(preorderFulfilment);
+    }
+
+    /** An input without pre-order details (tests, older workflow histories). */
+    public CheckoutInput(String orderId, String orderNumber, String customerId, String idempotencyKey,
+                         String workflowId, String currency, ShipTo shipTo, List<CartClient.Item> items,
+                         List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt,
+                         String couponCode) {
+        this(orderId, orderNumber, customerId, idempotencyKey, workflowId, currency, shipTo, items, selections,
+                paymentTimeoutSeconds, requestedAt, couponCode, null, Map.of(), null);
+    }
+
+    /**
+     * A late pre-order add: every line must be a pre-order of {@code windowId}, which may be OPEN or CLOSED.
+     *
+     * @param windowId the pre-order window the staff member adds to
+     */
+    public record LateAdd(String windowId) {
+    }
 
     /** True when the shopper entered a coupon. */
     public boolean hasCoupon() {

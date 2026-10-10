@@ -1,6 +1,7 @@
 package com.afrotransact.orders.port;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,6 +45,15 @@ public interface OrderRepository {
     Page<SellerShipment> sellerShipments(String sellerOrgId, ShipmentStatus status, int offset, int limit);
 
     Page<Order> search(Search criteria, int offset, int limit);
+
+    /**
+     * S272: ids of placed PREORDER shipments whose delivery date ({@code promisedBy}) is before {@code today}, not
+     * delivered, returned or cancelled and not yet flagged as missed.
+     */
+    List<String> preorderShipmentsPastDue(LocalDate today, int limit);
+
+    /** S272: ids of late pre-order adds still waiting for their payment (payment link or customer authentication). */
+    List<String> lateAddsAwaitingPayment(int limit);
 
     /** A shipment in a seller's queue with what the seller needs to ship it. */
     record SellerShipment(Shipment shipment, String orderNumber, OrderStatus orderStatus, ShipTo shipTo,

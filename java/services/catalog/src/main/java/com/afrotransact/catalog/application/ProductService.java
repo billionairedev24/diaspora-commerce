@@ -36,4 +36,10 @@ public interface ProductService {
     Product pause(UUID id);
 
     Product resume(UUID id);
+
+    /**
+     * Sets the pre-order flags (S272): owner organisation members with {@code catalog:write} or staff. Publishes
+     * {@code catalog.product.updated}.
+     */
+    Product setPreorderFlags(UUID id, boolean preorderEligible, boolean shipsNow);
 }

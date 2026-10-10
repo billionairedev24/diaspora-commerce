@@ -36,13 +36,14 @@ class PublicProductController {
     @Schema(name = "PublicProduct")
     record PublicProductResponse(UUID id, String atin, String ownerKind, String sellerOrgId, UUID categoryId,
                                  String productType, String title, Map<String, String> attributes,
-                                 List<ImageDto> images, String variationTheme, List<VariantResponse> variants) {
+                                 List<ImageDto> images, String variationTheme, List<VariantResponse> variants,
+                                 boolean preorderEligible, boolean shipsNow) {
 
         static PublicProductResponse of(Product p) {
             return new PublicProductResponse(p.id(), p.atin().value(), p.owner().kind().name(), p.owner().orgId(),
                     p.categoryId(), p.productTypeCode(), p.title(), p.attributes(),
                     p.images().stream().map(ImageDto::of).toList(), p.variationTheme(),
-                    p.variants().stream().map(VariantResponse::of).toList());
+                    p.variants().stream().map(VariantResponse::of).toList(), p.preorderEligible(), p.shipsNow());
         }
     }
 

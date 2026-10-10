@@ -13,7 +13,8 @@ import com.afrotransact.orders.port.PaymentsClient;
  * How an order maps onto payments lines: one payments line per order line, the shipment's shipping charged on its
  * first line, discounts netted from items. Captures and refunds use the same allocation. AfroTransact Delivery from a
  * seller's store (S255) is fulfilment AFROTRANSACT_DELIVERY; its snapshotted seller fee is spread over the shipment's
- * lines by items (largest remainder), so customer-fault refunds return it pro rata.
+ * lines by items (largest remainder), so customer-fault refunds return it pro rata. Community pre-order shipments
+ * (S272) are fulfilment PREORDER: their shipping is the window's delivery fee, booked by payments to 4250.
  */
 final class PaymentLines {
 
@@ -24,7 +25,8 @@ final class PaymentLines {
         List<PaymentsClient.Line> out = new ArrayList<>();
         for (Shipment s : order.shipments()) {
             List<OrderLine> lines = sorted(s);
-            String fulfilment = s.fulfilmentType().afrotransactFulfilled() ? "FBA"
+            String fulfilment = s.preorderShipment() ? "PREORDER"
+                    : s.fulfilmentType().afrotransactFulfilled() ? "FBA"
                     : s.deliveredFromSellerStore() ? "AFROTRANSACT_DELIVERY" : "SELF";
             long[] fees = s.deliveredFromSellerStore() ? spread(s.localDelivery().sellerFeeMinor(), lines)
                     : new long[lines.size()];

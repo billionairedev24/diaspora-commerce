@@ -10,7 +10,9 @@ import java.util.Map;
  * {@code net = shipping + commission + fbaFees + deliveryFees − stripeFee}. Tax is collected and remitted by
  * AfroTransact (never paid out) and only attributed to the seller.
  *
- * @param deliveryFees seller pickup-delivery fees of AfroTransact Delivery lines (S255, 4250 Local delivery fees)
+ * @param deliveryFees seller pickup-delivery fees of AfroTransact Delivery lines (S255, 4250 Local delivery fees); on
+ *                     the platform row everything booked to 4250, pre-order delivery fees (S272, also part of the
+ *                     platform's shipping) included
  */
 public record RecipientShare(String recipientId, RecipientKind kind, Money items, Money shipping, Money tax,
                              Map<String, Money> taxByJurisdiction, Money commission, Money fbaFees,

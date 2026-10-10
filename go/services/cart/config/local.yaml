@@ -9,6 +9,12 @@ inventoryUrl: http://localhost:8103
 offersUrl: http://localhost:8102
 retailOrgId: org_afrotransact_retail
 sellerNames: {}
+# S272 pre-orders: delivery-runs eligibility with the cart-service client (scope delivery-runs:reserve).
+deliveryRuns:
+  url: http://localhost:8115
+  tokenUrl: http://localhost:8100/oauth2/token
+  clientId: cart-service
+  clientSecret: "local-cart-service-secret"
 auth:
   enabled: false
   issuer: http://localhost:8100

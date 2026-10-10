@@ -97,6 +97,33 @@ class CatalogFlowIT {
         List<String> events = jdbc.sql("select type from platform_outbox where aggregate_id = :id order by occurred_at")
                 .param("id", created.id().toString()).query(String.class).list();
         assertThat(events).containsExactly("catalog.product.created", "catalog.product.approved");
+        assertThat(live.preorderEligible()).as("dresses are not food").isFalse();
+        assertThat(live.shipsNow()).isFalse();
+    }
+
+    @Test
+    void foodIsPreorderEligibleByDefaultAndFlagsAreEditable() {
+        CategoryNode spices = leaf("Groceries › Pantry › Spices & seasonings");
+        Product created = products.create(new CreateProductCommand(spices.id(), null,
+                "Suya Pepper Spice Blend from Kano",
+                Map.of("brand", "Mama Kano", "ingredients", "Groundnut, chilli, ginger", "allergens",
+                        "Contains peanuts", "shelf", "365", "storage", "Room temperature", "origin", "Nigeria",
+                        "cert", "None"),
+                List.of(IMAGE), "Net weight",
+                List.of(new VariantDraft(Map.of("Net weight", "8 oz"), "SUYA-8OZ", null, true, 899, 40)), "USD"));
+        assertThat(created.preorderEligible()).isTrue();
+        assertThat(created.shipsNow()).isFalse();
+        assertThat(created.preorderable()).isTrue();
+
+        Product shipsNow = products.setPreorderFlags(created.id(), true, true);
+        assertThat(shipsNow.shipsNow()).isTrue();
+        assertThat(shipsNow.preorderable()).isFalse();
+        assertThat(products.get(created.id()).shipsNow()).isTrue();
+
+        String payload = jdbc.sql("select payload::text from platform_outbox where aggregate_id = :id "
+                        + "and type = 'catalog.product.updated'")
+                .param("id", created.id().toString()).query(String.class).single();
+        assertThat(payload).contains("\"preorderEligible\": true").contains("\"shipsNow\": true");
     }
 
     @Test

@@ -22,6 +22,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/catalog"
+	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/deliveryruns"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/httpapi"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/inventory"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/offers"
@@ -76,9 +77,15 @@ func run() error {
 	httpClient := &http.Client{Timeout: 3 * time.Second}
 	guests := redisrepo.New(rdb, time.Duration(cfg.GuestTTLDays)*24*time.Hour)
 	users := pgrepo.New(pool)
+	var opts []app.Option
+	if cfg.DeliveryRuns.URL != "" {
+		opts = append(opts, app.WithPreorders(deliveryruns.New(deliveryruns.Options{BaseURL: cfg.DeliveryRuns.URL,
+			TokenURL: cfg.DeliveryRuns.TokenURL, ClientID: cfg.DeliveryRuns.ClientID,
+			ClientSecret: cfg.DeliveryRuns.ClientSecret}, httpClient)))
+	}
 	svc := app.NewCartService(guests, users,
 		catalog.New(cfg.CatalogURL, httpClient, 30*time.Second, cfg.RetailOrgID, cfg.SellerNames),
-		inventory.New(cfg.InventoryURL, httpClient), offers.New(cfg.OffersURL, httpClient, 15*time.Second))
+		inventory.New(cfg.InventoryURL, httpClient), offers.New(cfg.OffersURL, httpClient, 15*time.Second), opts...)
 
 	var verifier auth.Verifier
 	if cfg.Auth.Enabled {

@@ -7,6 +7,7 @@ import java.util.Locale;
 import com.afrotransact.orders.application.CheckoutCommand;
 import com.afrotransact.orders.application.CheckoutInput;
 import com.afrotransact.orders.application.CourierEventCommand;
+import com.afrotransact.orders.domain.Attribution;
 import com.afrotransact.orders.domain.ContactPreference;
 import com.afrotransact.orders.domain.CourierProof;
 import com.afrotransact.orders.domain.DeliveryPreferences;
@@ -34,7 +35,9 @@ final class OrdersDtos {
             @Schema(description = "apple_pay | google_pay | link") String wallet,
             Boolean gift,
             @Schema(description = "Coupon code: validated and redeemed with offers-service, released when the order "
-                    + "fails or is cancelled") @Size(max = 20) String couponCode) {
+                    + "fails or is cancelled") @Size(max = 20) String couponCode,
+            @Schema(description = "S272 marketing attribution (last touch): stored on the order and sent in "
+                    + "orders.order.placed") @Valid AttributionDto attribution) {
 
         CheckoutCommand toCommand(String idempotencyKey, String bearer) {
             List<CheckoutInput.Selection> selections = deliverySelections == null ? List.of()
@@ -42,14 +45,23 @@ final class OrdersDtos {
             List<CheckoutCommand.SelectedLine> selected = lines == null ? List.of()
                     : lines.stream().map(l -> new CheckoutCommand.SelectedLine(l.variantAtin(),
                     l.quantity() == null ? 0 : l.quantity())).toList();
-            return new CheckoutCommand(idempotencyKey, bearer, addressId, selections, selected, couponCode);
+            return new CheckoutCommand(idempotencyKey, bearer, addressId, selections, selected, couponCode,
+                    attribution == null ? null : Attribution.ofNullable(attribution.src(), attribution.cr(),
+                            attribution.po()));
         }
+    }
+
+    @Schema(name = "Attribution", description = "Where the shopper came from: ?src=ig|fb|tt|wa|email|sms|app or the "
+            + "on-site placement (hero, ribbon, pdp, page), the creative slot and the pre-order window code")
+    record AttributionDto(@Size(max = 40) String src, @Size(max = 40) String cr, @Size(max = 40) String po) {
     }
 
     @Schema(name = "DeliverySelection")
     record DeliverySelection(
+            @Schema(description = "<sellerOrgId>:<fulfilment>, or preorder:<windowId> for a pre-order package")
             @NotBlank String packageId,
-            @Schema(description = "carrier | express | afrotransact_delivery | pickup") String option,
+            @Schema(description = "carrier | express | afrotransact_delivery | pickup; door | pickup for a pre-order "
+                    + "package") String option,
             @Schema(description = "standard | express | local | pickup; derived from option when omitted")
             String serviceLevel,
             @Schema(description = "Pickup point (pickup only)") String pickupPointId,

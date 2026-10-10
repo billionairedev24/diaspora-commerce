@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import com.afrotransact.payments.domain.Dispute;
 import com.afrotransact.payments.domain.DisputeStatus;
@@ -109,6 +110,9 @@ class StripeEventHandlers {
     private void intent(JsonNode pi, PaymentStatus reported, String failure) {
         Optional<Payment> payment = payments.lockByIntentId(text(pi, "id"));
         if (payment.isEmpty()) {
+            payment = paidLink(pi);
+        }
+        if (payment.isEmpty()) {
             LOG.info("PaymentIntent {} is not an AfroTransact order payment; ignored", text(pi, "id"));
             return;
         }
@@ -118,6 +122,28 @@ class StripeEventHandlers {
             return;
         }
         statuses.apply(payment.get(), reported, failure);
+    }
+
+    /**
+     * S272: the PaymentIntent of a paid hosted link is created by Stripe; its metadata names our payment, which waits
+     * without an intent. The intent is attached on its first event.
+     */
+    private Optional<Payment> paidLink(JsonNode pi) {
+        String paymentId = text(pi.path("metadata"), "payment_id");
+        if (paymentId == null) {
+            return Optional.empty();
+        }
+        UUID id;
+        try {
+            id = UUID.fromString(paymentId);
+        } catch (IllegalArgumentException e) {
+            return Optional.empty();
+        }
+        if (payments.findLink(id).isEmpty()) {
+            return Optional.empty();
+        }
+        return payments.lockById(id).filter(p -> p.stripePaymentIntentId() == null)
+                .map(p -> payments.update(p.withIntent(text(pi, "id"), null, p.status(), Instant.now(clock))));
     }
 
     private static String failure(JsonNode pi) {

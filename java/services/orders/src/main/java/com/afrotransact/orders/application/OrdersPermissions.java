@@ -17,6 +17,10 @@ public final class OrdersPermissions {
     public static final String DELIVERY = "delivery:operate";
     /** fulfilment-service relaying driver events on behalf of a driver (queued courier events). */
     public static final String RELAY = "delivery:relay";
+    /**
+     * S272: create orders on a customer's behalf (delivery-runs-service late pre-order adds; service clients only).
+     */
+    public static final String ON_BEHALF = "orders:on-behalf";
     /** Dispatch (staff or fulfilment-service): read delivery briefs to plan routes. */
     public static final String DISPATCH = "delivery:dispatch";
 

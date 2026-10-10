@@ -1,6 +1,7 @@
 package com.afrotransact.payments.application;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -20,6 +21,8 @@ import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.OrderLine;
 import com.afrotransact.payments.domain.Payment;
 import com.afrotransact.payments.domain.PaymentLine;
+import com.afrotransact.payments.domain.PaymentLink;
+import com.afrotransact.payments.domain.PaymentMethodType;
 import com.afrotransact.payments.domain.PaymentSplit;
 import com.afrotransact.payments.domain.PaymentSplitter;
 import com.afrotransact.payments.domain.PaymentStatus;
@@ -29,6 +32,7 @@ import com.afrotransact.payments.domain.Postings;
 import com.afrotransact.payments.domain.Refund;
 import com.afrotransact.payments.domain.RefundLine;
 import com.afrotransact.payments.domain.RefundStatus;
+import com.afrotransact.payments.domain.SavedPaymentMethod;
 import com.afrotransact.payments.domain.SettlementTransfer;
 import com.afrotransact.payments.port.FeeScheduleRepository;
 import com.afrotransact.payments.port.IdempotencyStore;
@@ -37,6 +41,9 @@ import com.afrotransact.payments.port.SettlementRepository;
 import com.afrotransact.payments.port.StripeGateway;
 import com.afrotransact.payments.port.StripeGateway.BalanceTxn;
 import com.afrotransact.payments.port.StripeGateway.IntentSnapshot;
+import com.afrotransact.payments.port.StripeGateway.OffSessionAttempt;
+import com.afrotransact.payments.port.WalletRepository;
+import com.afrotransact.payments.port.WalletRepository.StripeCustomer;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PrincipalType;
@@ -54,6 +61,7 @@ import org.springframework.stereotype.Service;
 class PaymentServiceImpl implements PaymentService {
 
     private static final int MAX_LINES = 200;
+    private static final int MAX_LINK_HOURS = 24;
 
     private final PaymentRepository payments;
     private final FeeScheduleRepository feeSchedules;
@@ -64,6 +72,7 @@ class PaymentServiceImpl implements PaymentService {
     private final IdempotencyStore idempotency;
     private final PaymentStatusUpdater statuses;
     private final WalletSync wallet;
+    private final WalletRepository savedMethods;
     private final MoneyTransactions tx;
     private final PaymentsAccess access;
     private final DomainEventPublisher events;
@@ -73,8 +82,8 @@ class PaymentServiceImpl implements PaymentService {
     PaymentServiceImpl(PaymentRepository payments, FeeScheduleRepository feeSchedules,
                        SettlementRepository settlements, StripeGateway stripe, PaymentSplitter splitter,
                        LedgerPoster ledger, IdempotencyStore idempotency, PaymentStatusUpdater statuses,
-                       WalletSync wallet, MoneyTransactions tx, PaymentsAccess access, DomainEventPublisher events,
-                       PaymentsSettings settings, Clock clock) {
+                       WalletSync wallet, WalletRepository savedMethods, MoneyTransactions tx, PaymentsAccess access,
+                       DomainEventPublisher events, PaymentsSettings settings, Clock clock) {
         this.payments = payments;
         this.feeSchedules = feeSchedules;
         this.settlements = settlements;
@@ -84,6 +93,7 @@ class PaymentServiceImpl implements PaymentService {
         this.idempotency = idempotency;
         this.statuses = statuses;
         this.wallet = wallet;
+        this.savedMethods = savedMethods;
         this.tx = tx;
         this.access = access;
         this.events = events;
@@ -112,7 +122,8 @@ class PaymentServiceImpl implements PaymentService {
                     new PaymentsStateConflict("payments.no-fee-schedule", "No fee schedule is in force at "
                             + placedAt));
             UUID paymentId = Fingerprint.id("payment", cmd.orderId());
-            String stripeCustomer = stripeCustomerFor(cmd);
+            StripeCustomer saved = cmd.offSession() ? savedCustomer(cmd.shopperId()) : null;
+            String stripeCustomer = saved != null ? saved.stripeCustomerId() : stripeCustomerFor(cmd);
             Payment payment = Payment.create(paymentId, cmd.orderId(), stripeCustomer, cmd.amount(), schedule.id(),
                     placedAt, cmd.metadata(), cmd.lines(), now);
             if (!payments.claim(payment)) {
@@ -125,6 +136,12 @@ class PaymentServiceImpl implements PaymentService {
             if (cmd.shopperId() != null && !cmd.shopperId().isBlank()) {
                 metadata.put("afrotransact_customer_id", cmd.shopperId());
             }
+            if (saved != null) {
+                return offSessionCreate(payment, saved, metadata, idempotencyKey, now);
+            }
+            if (cmd.paymentLink()) {
+                return linkCreate(payment, cmd, metadata, idempotencyKey, now);
+            }
             IntentSnapshot intent = stripe.createIntent(new StripeGateway.CreateIntent(cmd.amount(),
                     payment.customerId(), cmd.paymentMethodTypes(), "AfroTransact order " + cmd.orderId(), metadata,
                     cmd.orderId(), cmd.saveForOffSession()), cmd.orderId() + ":create-intent");
@@ -134,6 +151,84 @@ class PaymentServiceImpl implements PaymentService {
             idempotency.complete("payment-create", idempotencyKey, new StoredRef(stored.id()));
             return new PaymentResult(stored, false);
         });
+    }
+
+    /**
+     * S272 late pre-order add, saved card: the intent is created and confirmed off-session on the shopper's default
+     * saved card (manual capture), exactly like an off-session follow-up charge but as the order's primary payment.
+     */
+    private PaymentResult offSessionCreate(Payment payment, StripeCustomer customer, Map<String, String> metadata,
+                                           String idempotencyKey, Instant now) {
+        SavedPaymentMethod method = defaultCard(customer);
+        metadata.put("off_session", "true");
+        OffSessionAttempt attempt = stripe.createOffSessionIntent(new StripeGateway.OffSessionIntent(
+                payment.amount(), customer.stripeCustomerId(), method.id(), "AfroTransact order " + payment.orderId()
+                + " (off-session)", metadata, payment.orderId()), payment.orderId() + ":create-intent");
+        IntentSnapshot intent = attempt.intent();
+        Payment stored = payments.update(payment.withIntent(intent.id(), intent.clientSecret(),
+                PaymentStatus.REQUIRES_PAYMENT_METHOD, now));
+        statuses.publish(PaymentsEvents.INTENT_CREATED, stored);
+        if (attempt.authenticationRequired()) {
+            stored = payments.update(stored.awaitingCustomer(OffSessionAttempt.AUTHENTICATION_REQUIRED, now));
+            events.publish(PaymentsEvents.INTENT_ACTION_REQUIRED, PaymentsEvents.AGGREGATE_PAYMENT, stored.orderId(),
+                    PaymentsEventPayloads.ActionRequiredPayload.of(stored, customer.customerId(),
+                            OffSessionAttempt.AUTHENTICATION_REQUIRED));
+        } else if (attempt.errorCode() != null) {
+            String message = attempt.errorMessage() == null ? attempt.errorCode() : attempt.errorMessage();
+            stored = statuses.apply(stored, PaymentStatus.FAILED, attempt.declineCode() == null ? message
+                    : message + " (" + attempt.declineCode() + ")");
+        } else {
+            stored = statuses.apply(stored, PaymentStatus.fromStripe(intent.status()), intent.failureMessage());
+        }
+        idempotency.complete("payment-create", idempotencyKey, new StoredRef(stored.id()));
+        return new PaymentResult(stored, false);
+    }
+
+    /**
+     * S272 late pre-order add, payment link: a hosted Stripe page instead of a client secret. The payment waits in
+     * REQUIRES_PAYMENT_METHOD without an intent; the paid link's intent is attached by its first webhook.
+     */
+    private PaymentResult linkCreate(Payment payment, CreatePaymentCommand cmd, Map<String, String> metadata,
+                                     String idempotencyKey, Instant now) {
+        metadata.put("payment_link", "true");
+        Instant expiresAt = now.plus(Duration.ofHours(Math.clamp(cmd.paymentLinkHours(), 1,
+                MAX_LINK_HOURS)));
+        StripeGateway.PaymentLinkSnapshot link = stripe.createPaymentLink(new StripeGateway.PaymentLinkRequest(
+                payment.amount(), payment.customerId(), "AfroTransact order " + payment.orderId(), metadata,
+                payment.orderId(), cmd.paymentMethodTypes(), expiresAt), payment.orderId() + ":payment-link");
+        payments.insertLink(new PaymentLink(payment.id(), link.id(), link.url(),
+                link.expiresAt() == null ? expiresAt : link.expiresAt(), now));
+        statuses.publish(PaymentsEvents.INTENT_CREATED, payment);
+        idempotency.complete("payment-create", idempotencyKey, new StoredRef(payment.id()));
+        return new PaymentResult(payment, false);
+    }
+
+    private StripeCustomer savedCustomer(String shopperId) {
+        return savedMethods.findCustomer(shopperId).orElseThrow(() -> new PaymentsRuleViolation(
+                "payments.no-saved-method", "Customer " + shopperId + " has no saved payment method"));
+    }
+
+    private SavedPaymentMethod defaultCard(StripeCustomer customer) {
+        String methodId = customer.defaultPaymentMethodId();
+        if (methodId == null) {
+            throw new PaymentsRuleViolation("payments.no-saved-method", "Customer " + customer.customerId()
+                    + " has no default payment method");
+        }
+        SavedPaymentMethod method = savedMethods.findMethod(methodId)
+                .filter(m -> m.customerId().equals(customer.customerId()))
+                .orElseThrow(() -> new NotFoundException("payments.payment-method-not-found",
+                        "No saved payment method " + methodId));
+        if (method.type() != PaymentMethodType.CARD) {
+            throw new PaymentsRuleViolation("payments.method-not-chargeable-off-session", "Only saved cards can be "
+                    + "charged off-session", Map.of("paymentMethodId", "Must be a card"));
+        }
+        return method;
+    }
+
+    @Override
+    public Optional<PaymentLink> link(UUID paymentId) {
+        access.reader();
+        return payments.findLink(paymentId);
     }
 
     private PaymentResult replayCreate(Payment existing, CreatePaymentCommand cmd, String idempotencyKey) {
@@ -519,15 +614,23 @@ class PaymentServiceImpl implements PaymentService {
                 errors.put("lines", "Every line must be in " + cmd.amount().currency());
             }
         }
-        if (cmd.saveForOffSession() && (cmd.shopperId() == null || cmd.shopperId().isBlank())) {
-            errors.put("shopperId", "Required to save the payment method for off-session charges");
+        if ((cmd.saveForOffSession() || cmd.offSession()) && (cmd.shopperId() == null
+                || cmd.shopperId().isBlank())) {
+            errors.put("shopperId", "Required to save or charge the payment method off-session");
+        }
+        if (cmd.offSession() && cmd.paymentLink()) {
+            errors.put("paymentLinkHours", "A payment is either charged off-session or paid with a link");
+        }
+        if (cmd.paymentLink() && (cmd.paymentLinkHours() < 1 || cmd.paymentLinkHours() > MAX_LINK_HOURS)) {
+            errors.put("paymentLinkHours", "1 to " + MAX_LINK_HOURS + " hours");
         }
         if (!errors.isEmpty()) {
             throw new PaymentsRuleViolation("payments.invalid-request", "Invalid payment request", errors);
         }
         return new CreatePaymentCommand(cmd.orderId().trim(), cmd.customerId(), cmd.amount(),
                 cmd.paymentMethodTypes(), cmd.placedAt(), cmd.metadata(), cmd.lines(),
-                cmd.shopperId() == null ? null : cmd.shopperId().trim(), cmd.saveForOffSession());
+                cmd.shopperId() == null ? null : cmd.shopperId().trim(), cmd.saveForOffSession(), cmd.offSession(),
+                cmd.paymentLinkHours());
     }
 
     private static NotFoundException notFound(String what) {

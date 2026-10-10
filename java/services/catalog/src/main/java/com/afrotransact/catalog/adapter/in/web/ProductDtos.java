@@ -36,13 +36,21 @@ final class ProductDtos {
             @NotEmpty @Size(max = 10) List<@Valid ImageDto> images,
             @NotBlank String variationTheme,
             @NotEmpty @Size(max = 200) List<@Valid VariantRequest> variants,
-            @Size(min = 3, max = 3) String currency) {
+            @Size(min = 3, max = 3) String currency,
+            @Schema(description = "May be sold in a pre-order window; default true for food product types")
+            Boolean preorderEligible,
+            @Schema(description = "Always ships now by carrier (never a pre-order); default false")
+            Boolean shipsNow) {
 
         CreateProductCommand toCommand() {
             return new CreateProductCommand(categoryId, categoryRequestId, title, attributes,
                     images.stream().map(ImageDto::toDomain).toList(), variationTheme,
-                    variants.stream().map(VariantRequest::toDomain).toList(), currency);
+                    variants.stream().map(VariantRequest::toDomain).toList(), currency, preorderEligible, shipsNow);
         }
+    }
+
+    @Schema(name = "PreorderFlagsRequest", description = "Pre-order flags of a product (S272)")
+    record PreorderFlagsRequest(@NotNull Boolean preorderEligible, @NotNull Boolean shipsNow) {
     }
 
     @Schema(name = "ProductImage")
@@ -81,14 +89,15 @@ final class ProductDtos {
     record ProductResponse(UUID id, String atin, String ownerKind, String ownerOrgId, UUID categoryId,
                            UUID categoryRequestId, String productType, String title, Map<String, String> attributes,
                            List<ImageDto> images, String variationTheme, List<VariantResponse> variants, String status,
-                           String moderationNote, Instant createdAt, Instant updatedAt, long version) {
+                           String moderationNote, Instant createdAt, Instant updatedAt, long version,
+                           boolean preorderEligible, boolean shipsNow) {
 
         static ProductResponse of(Product p) {
             return new ProductResponse(p.id(), p.atin().value(), p.owner().kind().name(), p.owner().orgId(),
                     p.categoryId(), p.categoryRequestId(), p.productTypeCode(), p.title(), p.attributes(),
                     p.images().stream().map(ImageDto::of).toList(), p.variationTheme(),
                     p.variants().stream().map(VariantResponse::of).toList(), p.status().name(), p.moderationNote(),
-                    p.createdAt(), p.updatedAt(), p.version());
+                    p.createdAt(), p.updatedAt(), p.version(), p.preorderEligible(), p.shipsNow());
         }
     }
 

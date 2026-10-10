@@ -8,18 +8,28 @@ import java.util.Map;
  * @param commissionReversed  commission returned to the seller (0 when the fee policy retains commission)
  * @param deliveryFeeReversed AfroTransact Delivery pickup-delivery fee returned to the seller (customer-fault refunds
  *                            only, see {@link RefundFault}); 0 otherwise
+ * @param preorderDeliveryFee the refunded shipping is a pre-order delivery fee (S272): debited from 4250, not 4200
  */
 public record RefundLine(String lineId, String sellerOrg, String taxJurisdiction, boolean shippingToPlatform,
-                         Money items, Money shipping, Money tax, Money commissionReversed, Money deliveryFeeReversed) {
+                         Money items, Money shipping, Money tax, Money commissionReversed, Money deliveryFeeReversed,
+                         boolean preorderDeliveryFee) {
 
     public RefundLine {
         deliveryFeeReversed = deliveryFeeReversed == null ? Money.zero(items.currency()) : deliveryFeeReversed;
     }
 
+    /** A refund line of a line that is not a pre-order. */
+    public RefundLine(String lineId, String sellerOrg, String taxJurisdiction, boolean shippingToPlatform,
+                      Money items, Money shipping, Money tax, Money commissionReversed, Money deliveryFeeReversed) {
+        this(lineId, sellerOrg, taxJurisdiction, shippingToPlatform, items, shipping, tax, commissionReversed,
+                deliveryFeeReversed, false);
+    }
+
     /** A refund line that returns no delivery fee. */
     public RefundLine(String lineId, String sellerOrg, String taxJurisdiction, boolean shippingToPlatform,
                       Money items, Money shipping, Money tax, Money commissionReversed) {
-        this(lineId, sellerOrg, taxJurisdiction, shippingToPlatform, items, shipping, tax, commissionReversed, null);
+        this(lineId, sellerOrg, taxJurisdiction, shippingToPlatform, items, shipping, tax, commissionReversed, null,
+                false);
     }
 
     public Money total() {
@@ -83,7 +93,7 @@ public record RefundLine(String lineId, String sellerOrg, String taxJurisdiction
                     .minus(pl.deliveryFeeReversed());
         }
         return new RefundLine(pl.lineId(), l.sellerOrg(), l.taxJurisdiction(), pl.shippingToPlatform(), items,
-                shipping, tax, reversed, feeBack);
+                shipping, tax, reversed, feeBack, l.fulfilment().shippingIsLocalDeliveryFee());
     }
 
     /** round_half_up(amount × part / whole), 0 when nothing to share. */

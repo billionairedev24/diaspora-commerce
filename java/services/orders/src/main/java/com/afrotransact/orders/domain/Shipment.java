@@ -39,6 +39,7 @@ import java.util.Objects;
  * @param version             optimistic lock version
  * @param localDelivery       AfroTransact Delivery from the seller's store (S255): pickup, distance and quote
  *                            snapshot; null for every other shipment
+ * @param preorder            the pre-order window of a PREORDER shipment (S272); null for every other shipment
  */
 public record Shipment(String id, String orderId, int seq, String sellerOrgId, String sellerName,
                        FulfilmentType fulfilmentType, String nodeId, DeliveryMethod deliveryMethod,
@@ -47,7 +48,22 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                        String handoverCodeSealed, ShipmentStatus status, long shippingMinor, String carrier,
                        String trackingNumber, LocalDate promisedFrom, LocalDate promisedBy, String captureId,
                        Instant capturedAt, Instant deliveredAt, Instant lastExternalEventAt, Instant statusChangedAt,
-                       List<OrderLine> lines, long version, LocalDelivery localDelivery) {
+                       List<OrderLine> lines, long version, LocalDelivery localDelivery, PreorderPackage preorder) {
+
+    /** A shipment that is not a pre-order. */
+    public Shipment(String id, String orderId, int seq, String sellerOrgId, String sellerName,
+                    FulfilmentType fulfilmentType, String nodeId, DeliveryMethod deliveryMethod, String serviceLevel,
+                    String pickupLocationId, DeliveryPreferences preferences, boolean perishable,
+                    boolean handoverRequired, String handoverCodeHash, String handoverCodeSealed,
+                    ShipmentStatus status, long shippingMinor, String carrier, String trackingNumber,
+                    LocalDate promisedFrom, LocalDate promisedBy, String captureId, Instant capturedAt,
+                    Instant deliveredAt, Instant lastExternalEventAt, Instant statusChangedAt, List<OrderLine> lines,
+                    long version, LocalDelivery localDelivery) {
+        this(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, deliveryMethod, serviceLevel,
+                pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed,
+                status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy, captureId, capturedAt,
+                deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery, null);
+    }
 
     /** A shipment that is not AfroTransact Delivery from a seller's store. */
     public Shipment(String id, String orderId, int seq, String sellerOrgId, String sellerName,
@@ -61,7 +77,7 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         this(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, deliveryMethod, serviceLevel,
                 pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash, handoverCodeSealed,
                 status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy, captureId, capturedAt,
-                deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, null);
+                deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, null, null);
     }
 
     public Shipment {
@@ -89,6 +105,26 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                 || fulfilmentType != FulfilmentType.SELLER_FULFILLED)) {
             throw new IllegalArgumentException("local delivery snapshots belong to seller-packed AfroTransact Delivery");
         }
+        if ((preorder != null) != (fulfilmentType == FulfilmentType.PREORDER)) {
+            throw new IllegalArgumentException("PREORDER shipments, and only they, carry their pre-order window");
+        }
+    }
+
+    /** A community pre-order shipment (S272). */
+    public boolean preorderShipment() {
+        return preorder != null;
+    }
+
+    /** The shipment with an updated pre-order snapshot (missed delivery, customer's answer). */
+    public Shipment withPreorder(PreorderPackage updated) {
+        if (preorder == null) {
+            throw new OrdersRuleViolation("orders.not-a-preorder", "Shipment " + id + " is not a pre-order");
+        }
+        return new Shipment(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, deliveryMethod,
+                serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
+                handoverCodeSealed, status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy,
+                captureId, capturedAt, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version,
+                localDelivery, updated);
     }
 
     /** AfroTransact Delivery from the seller's store (S255): seller-packed, collected by an AfroTransact driver. */
@@ -151,7 +187,7 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                 deliveryMethod, serviceLevel, pickupLocationId, preferences, perishable, handoverRequired,
                 handoverCodeHash, handoverCodeSealed, to, shippingMinor, carrier, trackingNumber, promisedFrom,
                 promisedBy, captureId, capturedAt, to == ShipmentStatus.DELIVERED ? eventTime : deliveredAt,
-                external ? eventTime : lastExternalEventAt, at, lines, version, localDelivery);
+                external ? eventTime : lastExternalEventAt, at, lines, version, localDelivery, preorder);
         StatusChange change = new StatusChange(id, eventId, status, to, actor.kind(), actor.id(), actor.orgId(),
                 reason == null || reason.isBlank() ? null : reason.trim(), source, eventTime);
         return new TransitionResult(next, change, TransitionDecision.Kind.ALLOW, null);
@@ -169,7 +205,7 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
                 serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
                 handoverCodeSealed, status, shippingMinor, newCarrier, newTrackingNumber, promisedFrom, promisedBy,
                 captureId, capturedAt, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version,
-                localDelivery);
+                localDelivery, preorder);
     }
 
     /** Marks this shipment's amount captured by payments. */
@@ -177,6 +213,7 @@ public record Shipment(String id, String orderId, int seq, String sellerOrgId, S
         return new Shipment(id, orderId, seq, sellerOrgId, sellerName, fulfilmentType, nodeId, deliveryMethod,
                 serviceLevel, pickupLocationId, preferences, perishable, handoverRequired, handoverCodeHash,
                 handoverCodeSealed, status, shippingMinor, carrier, trackingNumber, promisedFrom, promisedBy,
-                newCaptureId, at, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery);
+                newCaptureId, at, deliveredAt, lastExternalEventAt, statusChangedAt, lines, version, localDelivery,
+                preorder);
     }
 }

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -23,6 +24,10 @@ import com.afrotransact.orders.domain.LocalDelivery;
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.OrdersStateConflict;
+import com.afrotransact.orders.domain.OrderOrigin;
+import com.afrotransact.orders.domain.PreorderFulfilment;
+import com.afrotransact.orders.domain.PreorderPackage;
+import com.afrotransact.orders.domain.PreorderStage;
 import com.afrotransact.orders.domain.ShipTo;
 import com.afrotransact.orders.domain.ShippingPolicy;
 import com.afrotransact.orders.port.CartClient;
@@ -35,6 +40,7 @@ import com.afrotransact.orders.port.OrderCouponRepository;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.PickupLocations;
+import com.afrotransact.orders.port.PreorderEligibility;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.PromiseClient;
 import com.afrotransact.orders.port.TaxCalculator;
@@ -69,6 +75,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final OrderRepository orderRepository;
     private final OrderPlacementService placement;
     private final LocalDeliveryQuotes localDelivery;
+    private final PreorderEligibility preorders;
+    private final PreorderSettings preorderSettings;
     private final OrdersSettings settings;
     private final Clock clock;
 
@@ -78,6 +86,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                            OfferInventory offerInventory, PaymentsClient payments, CartClient cart, CouponsClient coupons,
                            OrderCouponRepository orderCoupons, OrderRepository orderRepository,
                            OrderPlacementService placement, LocalDeliveryQuotes localDelivery,
+                           PreorderEligibility preorders, PreorderSettings preorderSettings,
                            OrdersSettings settings, Clock clock) {
         this.markets = markets;
         this.catalog = catalog;
@@ -96,6 +105,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.orderRepository = orderRepository;
         this.placement = placement;
         this.localDelivery = localDelivery;
+        this.preorders = preorders;
+        this.preorderSettings = preorderSettings;
         this.settings = settings;
         this.clock = clock;
     }
@@ -132,18 +143,42 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         Map<String, ProductFactsClient.Facts> facts = catalog.facts(items.stream()
                 .map(CartClient.Item::variantAtin).distinct().toList());
         TaxCalculator.Rate rate = tax.rateFor(to.country(), to.state(), to.postalCode());
-        Map<String, Integer> promised = promises.days(to.postalCode(), items.stream()
-                .map(i -> new PromiseClient.Item(i.variantAtin(), i.fulfilment(), i.sellerOrgId())).toList());
+        // S272: lines delivery-runs sells as a pre-order where the customer is go into one package per open window.
+        Map<String, PreorderEligibility.Line> eligibility = preorderLines(in, to, items);
+        Map<String, List<CartClient.Item>> byWindow = new LinkedHashMap<>();
+        List<CartClient.Item> shipsNow = new ArrayList<>();
+        List<String> notOpen = new ArrayList<>();
+        for (CartClient.Item i : items) {
+            PreorderEligibility.Line e = eligibility.get(i.variantAtin());
+            if (e != null && e.preorder()) {
+                if (orderable(in, e)) {
+                    byWindow.computeIfAbsent(e.windowId(), k -> new ArrayList<>()).add(i);
+                } else {
+                    notOpen.add(i.variantAtin());
+                }
+            } else if (in.lateAdd() != null) {
+                throw new OrdersRuleViolation(CheckoutCodes.PREORDER_NOT_ELIGIBLE, i.variantAtin()
+                        + " is not sold in pre-order " + in.lateAdd().windowId() + " at this address");
+            } else {
+                shipsNow.add(i);
+            }
+        }
+        if (!notOpen.isEmpty()) {
+            throw ApplicationFailure.newNonRetryableFailure("Some items are pre-orders whose window is not open: "
+                    + String.join(", ", notOpen), CheckoutCodes.PREORDER_NOT_OPEN, String.join("\n", notOpen));
+        }
+        Map<String, Integer> promised = shipsNow.isEmpty() ? Map.of() : promises.days(to.postalCode(), shipsNow
+                .stream().map(i -> new PromiseClient.Item(i.variantAtin(), i.fulfilment(), i.sellerOrgId())).toList());
 
         // S255: AfroTransact Delivery offers are collected at the seller's pickup location; one package per location.
         Map<String, PickupLocations.PickupLocation> pickups = new HashMap<>();
-        for (CartClient.Item i : items) {
+        for (CartClient.Item i : shipsNow) {
             if (fromSellerStore(i)) {
                 pickups.computeIfAbsent(offerKey(i), k -> localDelivery.pickupFor(i));
             }
         }
         Map<String, List<CartClient.Item>> byPackage = new LinkedHashMap<>();
-        for (CartClient.Item i : items) {
+        for (CartClient.Item i : shipsNow) {
             String key = fromSellerStore(i) ? packageId(i) + ":" + pickups.get(offerKey(i)).locationId()
                     : packageId(i);
             byPackage.computeIfAbsent(key, k -> new ArrayList<>()).add(i);
@@ -204,7 +239,101 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                     fulfilmentType(first), method, level, method == DeliveryMethod.PICKUP ? pickup.trim() : null,
                     prefs, days, lines, quoted));
         }
-        return new CheckoutPlan(in.currency(), packages);
+        List<Set<String>> allowedMethods = new ArrayList<>();
+        for (Map.Entry<String, List<CartClient.Item>> w : byWindow.entrySet()) {
+            PreorderEligibility.Line window = eligibility.get(w.getValue().getFirst().variantAtin());
+            allowedMethods.add(window.allowedMethods());
+            List<CheckoutPlan.Line> lines = new ArrayList<>();
+            for (CartClient.Item i : w.getValue()) {
+                lineNo++;
+                lines.add(planLine(i, lineNo, facts, rate, 0));
+            }
+            packages.add(preorderPackage(in, window, selections.get(PREORDER_PACKAGE + w.getKey()), lines));
+        }
+        return new CheckoutPlan(in.currency(), packages,
+                PreorderPayments.stripeTypes(PreorderPayments.allowed(allowedMethods)));
+    }
+
+    /** Package id prefix of a pre-order window's package (also the delivery selection key). */
+    static final String PREORDER_PACKAGE = "preorder:";
+
+    /** Late adds may add to a CLOSED window (not delivered yet); shoppers only to an OPEN one. */
+    private static boolean orderable(CheckoutInput in, PreorderEligibility.Line e) {
+        if (e.stage() == PreorderStage.OPEN) {
+            return in.lateAdd() == null || e.windowId().equals(in.lateAdd().windowId());
+        }
+        return in.lateAdd() != null && e.stage() == PreorderStage.CLOSED
+                && e.windowId().equals(in.lateAdd().windowId());
+    }
+
+    /**
+     * Asks delivery-runs which lines are pre-orders here. A shopper's checkout degrades to "ships now" when
+     * delivery-runs is unavailable (logged); a late add needs the answer.
+     */
+    private Map<String, PreorderEligibility.Line> preorderLines(CheckoutInput in, ShipTo to,
+                                                                List<CartClient.Item> items) {
+        if (!preorderSettings.enabled() && in.lateAdd() == null) {
+            return Map.of();
+        }
+        try {
+            return preorders.eligibility(to.country(), to.state(), to.city(),
+                    items.stream().map(CartClient.Item::variantAtin).distinct().toList());
+        } catch (UpstreamFailure f) {
+            if (in.lateAdd() != null) {
+                throw f;
+            }
+            LOG.warn("delivery-runs pre-order eligibility unavailable for order {} ({}); every line ships now",
+                    in.orderNumber(), f.code());
+            return Map.of();
+        }
+    }
+
+    /**
+     * One package for a pre-order window: door or pickup (delivery selection {@code preorder:<windowId>}, else the
+     * cart's choice, else door when offered), the window's fee, delivered on the window's date.
+     */
+    private CheckoutPlan.Package preorderPackage(CheckoutInput in, PreorderEligibility.Line w,
+                                                 CheckoutInput.Selection sel, List<CheckoutPlan.Line> lines) {
+        String chosen = sel != null && sel.option() != null && !sel.option().isBlank() ? sel.option()
+                : in.preorderFulfilment().get(w.windowId());
+        PreorderFulfilment fulfilment = chosen == null || chosen.isBlank() ? w.defaultFulfilment()
+                : PreorderFulfilment.parse(chosen);
+        if (!w.offers(fulfilment)) {
+            throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION, (w.windowName() == null ? "This pre-order"
+                    : w.windowName()) + " does not offer " + fulfilment.name().toLowerCase(Locale.ROOT));
+        }
+        long fee = w.feeMinor(fulfilment);
+        if (fee > 0 && !w.currency().equalsIgnoreCase(in.currency())) {
+            throw new OrdersRuleViolation(CheckoutCodes.CURRENCY_MISMATCH, "The pre-order delivery fee is in "
+                    + w.currency() + ", the cart in " + in.currency());
+        }
+        String pickupPoint = fulfilment == PreorderFulfilment.PICKUP ? (w.pickupPointId() != null
+                ? w.pickupPointId() : PREORDER_PACKAGE + w.windowId()) : null;
+        DeliveryPreferences prefs = sel == null || sel.preferences() == null ? DeliveryPreferences.defaults()
+                : sel.preferences();
+        PreorderPackage preorder = PreorderPackage.placed(w.windowId(), w.windowCode(), w.windowName(),
+                w.deliversOn(), w.closesAt(), fulfilment);
+        return new CheckoutPlan.Package(PREORDER_PACKAGE + w.windowId(), lines.isEmpty() ? null
+                : sellerOf(in, lines.getFirst()), w.windowName(), FulfilmentType.PREORDER, fulfilment.method(),
+                "preorder_" + fulfilment.name().toLowerCase(Locale.ROOT), pickupPoint, prefs, 0, lines, null,
+                preorder, fee);
+    }
+
+    private static String sellerOf(CheckoutInput in, CheckoutPlan.Line line) {
+        return in.items().stream().filter(i -> i.variantAtin().equals(line.variantAtin()))
+                .map(CartClient.Item::sellerOrgId).findFirst().orElse(null);
+    }
+
+    private static CheckoutPlan.Line planLine(CartClient.Item i, int lineNo,
+                                              Map<String, ProductFactsClient.Facts> facts, TaxCalculator.Rate rate,
+                                              int lineDays) {
+        Optional<ProductFactsClient.Facts> f = Optional.ofNullable(facts.get(i.variantAtin()));
+        long itemsMinor = Math.multiplyExact(i.priceMinor(), (long) i.quantity());
+        return new CheckoutPlan.Line(UUID.randomUUID().toString(), lineNo, i.variantAtin(), i.productAtin(),
+                i.title(), i.imageUrl(), i.quantity(), i.priceMinor(), rate.taxOf(itemsMinor),
+                f.map(ProductFactsClient.Facts::category).orElse(null),
+                f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
+                i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0);
     }
 
     // ------------------------------------------------------------------ reserve + split
@@ -250,6 +379,13 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         List<OrderDraft.DraftShipment> shipments = new ArrayList<>();
         int seq = 0;
         for (CheckoutPlan.Package p : plan.packages()) {
+            if (p.preorder() != null) {
+                for (OrderDraft.DraftShipment s : preorderShipments(in, p, seq)) {
+                    shipments.add(s);
+                    seq = s.seq();
+                }
+                continue;
+            }
             Map<String, List<CheckoutPlan.Line>> byNode = new LinkedHashMap<>();
             for (CheckoutPlan.Line l : p.lines()) {
                 String node = p.fulfilmentType().inventoryTracked() ? nodeByLine.getOrDefault(l.lineId(),
@@ -280,8 +416,88 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                         lines, p.localDelivery()));
             }
         }
+        OrderOrigin origin = in.lateAdd() != null ? null : OrderOrigin.checkout(in.attribution());
         return checkoutTax.tax(new OrderDraft(in.orderId(), in.orderNumber(), in.customerId(), in.workflowId(),
-                plan.currency(), in.shipTo(), reserved, shipments, Instant.now(clock), null));
+                plan.currency(), in.shipTo(), reserved, shipments, Instant.now(clock), null, origin,
+                plan.paymentMethodTypes()));
+    }
+
+    /**
+     * A pre-order window's package becomes one shipment per seller (sellers hand their part over at the window's
+     * batched pickup); the window's fee is spread over them by items (largest remainder), so cancelling every
+     * shipment refunds the whole fee. Promised for the window's delivery date.
+     */
+    private List<OrderDraft.DraftShipment> preorderShipments(CheckoutInput in, CheckoutPlan.Package p, int seqBefore) {
+        Map<String, List<CheckoutPlan.Line>> bySeller = new LinkedHashMap<>();
+        Map<String, String> sellerNames = new HashMap<>();
+        for (CheckoutPlan.Line l : p.lines()) {
+            CartClient.Item item = in.items().stream().filter(i -> i.variantAtin().equals(l.variantAtin()))
+                    .findFirst().orElseThrow();
+            bySeller.computeIfAbsent(item.sellerOrgId(), k -> new ArrayList<>()).add(l);
+            sellerNames.putIfAbsent(item.sellerOrgId(), item.sellerName());
+        }
+        List<List<CheckoutPlan.Line>> groups = new ArrayList<>(bySeller.values());
+        long[] weights = groups.stream().mapToLong(g -> g.stream().mapToLong(CheckoutPlan.Line::itemsMinor).sum())
+                .toArray();
+        long[] fees = spread(p.preorderFeeMinor(), weights);
+        List<OrderDraft.DraftShipment> out = new ArrayList<>();
+        int seq = seqBefore;
+        int g = 0;
+        for (Map.Entry<String, List<CheckoutPlan.Line>> e : bySeller.entrySet()) {
+            seq++;
+            String id = UUID.randomUUID().toString();
+            List<CheckoutPlan.Line> lines = e.getValue();
+            boolean perishable = lines.stream().anyMatch(CheckoutPlan.Line::perishable);
+            boolean codeNeeded = handover.required(perishable, p.method(), p.preferences());
+            String hash = null;
+            String sealed = null;
+            if (codeNeeded) {
+                String code = handover.newCode();
+                hash = handover.hash(id, code);
+                sealed = vault.seal(id, code);
+            }
+            LocalDate deliversOn = p.preorder().deliversOn();
+            out.add(new OrderDraft.DraftShipment(id, seq, e.getKey(), sellerNames.get(e.getKey()),
+                    FulfilmentType.PREORDER, null, p.method(), p.serviceLevel(), p.pickupLocationId(),
+                    p.preferences(), perishable, codeNeeded, hash, sealed, fees[g++], deliversOn, deliversOn, lines,
+                    null, p.preorder()));
+        }
+        return out;
+    }
+
+    /** Largest-remainder split of {@code total} by weights (all on the first part when every weight is 0). */
+    static long[] spread(long total, long[] weights) {
+        long[] out = new long[weights.length];
+        if (total <= 0 || weights.length == 0) {
+            return out;
+        }
+        long sum = 0;
+        for (long w : weights) {
+            sum += Math.max(0, w);
+        }
+        if (sum == 0) {
+            out[0] = total;
+            return out;
+        }
+        long given = 0;
+        double[] remainders = new double[weights.length];
+        for (int i = 0; i < weights.length; i++) {
+            double exact = (double) total * Math.max(0, weights[i]) / sum;
+            out[i] = (long) Math.floor(exact);
+            remainders[i] = exact - out[i];
+            given += out[i];
+        }
+        for (long left = total - given; left > 0; left--) {
+            int best = 0;
+            for (int i = 1; i < remainders.length; i++) {
+                if (remainders[i] > remainders[best]) {
+                    best = i;
+                }
+            }
+            out[best]++;
+            remainders[best] = -1;
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------ coupons (offers-service)
@@ -396,7 +612,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             PaymentsClient.Intent intent = payments.createIntent(new PaymentsClient.NewIntent(order.id(),
                     order.totals().grandTotalMinor(), order.currency(), Instant.now(clock),
                     Map.of("order_number", order.number(), "customer_id", order.customerId()),
-                    PaymentLines.of(order), order.customerId()));
+                    PaymentLines.of(order), order.customerId(), draft.paymentMethodTypes(), false, null));
             return new PaymentRef(intent.paymentId(), intent.clientSecret(), intent.status());
         });
     }
@@ -481,8 +697,14 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
 
     // ------------------------------------------------------------------ helpers
 
-    /** The quoted AfroTransact Delivery charge for a seller's store (S255), else the shipping policy's fee. */
+    /**
+     * The quoted AfroTransact Delivery charge for a seller's store (S255), the pre-order window's fee (S272), else the
+     * shipping policy's fee.
+     */
     private long shippingOf(CheckoutPlan.Package p, long itemsMinor) {
+        if (p.preorder() != null) {
+            return p.preorderFeeMinor();
+        }
         return p.localDelivery() != null ? p.localDelivery().customerChargeMinor()
                 : shipping.fee(p.method(), p.serviceLevel(), itemsMinor);
     }

@@ -26,7 +26,17 @@ paths:
       tags: [Cart]
       operationId: getCart
       summary: View the cart (packages per seller, saved lines, totals)
-      parameters: [{$ref: '#/components/parameters/Guest'}]
+      description: |
+        With the shopper's delivery location (query `country`/`region`/`city` or the `X-Delivery-*` headers, sent by
+        the BFF from the delivery address) lines delivery-runs sells as a pre-order there (S272) are grouped into one
+        package per window (`packageId` `preorder:<windowId>`, `fulfilment` PREORDER) with `preorder{windowId, name,
+        deliversOn, stage, closesAt, fulfilment, options[]}`. A window that is not open locks its package
+        (`preorder.locked`) and the cart is not checkoutable. The same applies to every cart response.
+      parameters:
+        - {$ref: '#/components/parameters/Guest'}
+        - {$ref: '#/components/parameters/Country'}
+        - {$ref: '#/components/parameters/Region'}
+        - {$ref: '#/components/parameters/City'}
       responses:
         '200': {$ref: '#/components/responses/Cart'}
         '400': {$ref: '#/components/responses/Problem'}
@@ -94,6 +104,32 @@ paths:
       responses:
         '200': {$ref: '#/components/responses/Cart'}
         '409': {$ref: '#/components/responses/Problem'}
+  /v1/cart/preorder-fulfilment:
+    put:
+      tags: [Cart]
+      operationId: setPreorderFulfilment
+      summary: Choose door delivery or pickup for a pre-order window (S272)
+      description: |
+        Stored on the cart and used at checkout (the checkout's `preorder:<windowId>` delivery selection wins). The
+        fee of each option comes from the window's payment setup (minor units).
+      parameters:
+        - {$ref: '#/components/parameters/Guest'}
+        - {$ref: '#/components/parameters/Country'}
+        - {$ref: '#/components/parameters/Region'}
+        - {$ref: '#/components/parameters/City'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [windowId, fulfilment]
+              properties:
+                windowId: {type: string}
+                fulfilment: {type: string, enum: [DOOR, PICKUP]}
+      responses:
+        '200': {$ref: '#/components/responses/Cart'}
+        '422': {$ref: '#/components/responses/Problem'}
   /v1/cart/merge:
     post:
       tags: [Cart]
@@ -125,6 +161,21 @@ components:
   parameters:
     Guest: {name: X-Guest-Cart, in: header, schema: {type: string, format: uuid}}
     Atin: {name: atin, in: path, required: true, schema: {type: string}}
+    Country:
+      name: country
+      in: query
+      description: Delivery country (ISO 3166 alpha-2); also X-Delivery-Country
+      schema: {type: string}
+    Region:
+      name: region
+      in: query
+      description: Delivery region / state code; also X-Delivery-Region
+      schema: {type: string}
+    City:
+      name: city
+      in: query
+      description: Delivery city; also X-Delivery-City
+      schema: {type: string}
   responses:
     Cart:
       description: The cart
@@ -175,6 +226,43 @@ components:
           description: Seller pickup location of an AFROTRANSACT_DELIVERY package (absent for other fulfilment)
         lines: {type: array, items: {$ref: '#/components/schemas/LineView'}}
         subtotalMinor: {type: integer, format: int64}
+        packageId:
+          type: string
+          description: Checkout delivery-selection key, <sellerOrgId>:<fulfilment> or preorder:<windowId>
+        preorder: {$ref: '#/components/schemas/PackagePreorder'}
+    PackagePreorder:
+      type: object
+      description: S272 pre-order window of a package (lines of several sellers delivered together)
+      properties:
+        windowId: {type: string}
+        code: {type: string, description: 'Window code, e.g. LBK-7'}
+        name: {type: string}
+        deliversOn: {type: string, format: date}
+        stage: {type: string, enum: [UPCOMING, OPEN, CLOSED, DELIVERED]}
+        opensAt: {type: string, format: date-time}
+        closesAt: {type: string, format: date-time}
+        timeZone: {type: string, description: 'Market time zone of the window, e.g. America/Chicago'}
+        door: {type: boolean}
+        pickup: {type: boolean}
+        doorFeeMinor: {type: integer, format: int64, description: Effective door fee (minor units)}
+        pickupFeeMinor: {type: integer, format: int64, description: Effective pickup fee (minor units)}
+        currency: {type: string}
+        pickupWindow: {type: string, description: 'Pickup hours on delivery day, e.g. 10am–2pm'}
+        fulfilment: {type: string, enum: [DOOR, PICKUP]}
+        feeMinor: {type: integer, format: int64, description: Fee of the chosen fulfilment}
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              fulfilment: {type: string, enum: [DOOR, PICKUP]}
+              feeMinor: {type: integer, format: int64}
+              currency: {type: string}
+        allowedMethods:
+          type: array
+          description: Payment methods the window allows (all when its setup names none)
+          items: {type: string, enum: [CARD, WALLET, ACH]}
+        locked: {type: boolean, description: The window is not open; its lines cannot be checked out}
     CartView:
       type: object
       properties:
@@ -185,3 +273,7 @@ components:
         currency: {type: string}
         checkoutable: {type: boolean}
         version: {type: integer, format: int64}
+        preorderFulfilment:
+          type: object
+          description: Door / pickup choice per pre-order window (window id → DOOR | PICKUP)
+          additionalProperties: {type: string}

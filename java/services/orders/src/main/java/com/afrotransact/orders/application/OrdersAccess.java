@@ -111,6 +111,16 @@ class OrdersAccess {
         return org;
     }
 
+    /** S272 on-behalf orders (late pre-order adds): SERVICE principals with orders:on-behalf, or a super admin. */
+    Actor onBehalfCaller() {
+        Actor actor = actors.current();
+        if (actor.type() == PrincipalType.SERVICE && actor.can(OrdersPermissions.ON_BEHALF) || superAdmin(actor)) {
+            return actor;
+        }
+        throw new ForbiddenActionException("orders.on-behalf-forbidden", "Orders on a customer's behalf are created "
+                + "by delivery-runs-service (orders:on-behalf)");
+    }
+
     /** The order lookup: SERVICE principals with orders:lookup, or staff with orders:read. */
     Actor lookupCaller() {
         Actor actor = actors.current();

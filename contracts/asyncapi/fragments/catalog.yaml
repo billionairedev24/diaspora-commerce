@@ -9,6 +9,7 @@ channels:
       catalogProductRejected: {$ref: '#/components/messages/catalogProductRejected'}
       catalogProductPaused: {$ref: '#/components/messages/catalogProductPaused'}
       catalogProductResumed: {$ref: '#/components/messages/catalogProductResumed'}
+      catalogProductUpdated: {$ref: '#/components/messages/catalogProductUpdated'}
       catalogProductHidden: {$ref: '#/components/messages/catalogProductHidden'}
       catalogProductRestored: {$ref: '#/components/messages/catalogProductRestored'}
       catalogProductFlagged: {$ref: '#/components/messages/catalogProductFlagged'}
@@ -71,6 +72,11 @@ components:
       name: catalog.product.resumed
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogProductEvent'}
+    catalogProductUpdated:
+      name: catalog.product.updated
+      title: Listing settings changed without a status change (S272 pre-order flags)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogProductEvent'}
     catalogProductHidden:
       name: catalog.product.hidden
       title: The owner's listings were hidden by seller-service compliance enforcement (sellerHidden = true)
@@ -130,6 +136,12 @@ components:
           description: >-
             The owner's listings are hidden by seller-service compliance enforcement (seller.listings.hidden). Keep
             the product off public surfaces regardless of status; set on every catalog.product.* event while hidden.
+        preorderEligible:
+          type: boolean
+          description: May be sold in a community pre-order window (S272); default true for food product types
+        shipsNow:
+          type: boolean
+          description: Always ships now by carrier, never as a pre-order (delivery-runs eligibility excludes it)
         variants:
           type: array
           items:

@@ -21,10 +21,10 @@ final class OrderDrafts {
                 s.pickupLocationId(), s.preferences(), s.perishable(), s.handoverRequired(), s.handoverCodeHash(),
                 s.handoverCodeSealed(), ShipmentStatus.PENDING_PAYMENT, s.shippingMinor(), null, null,
                 s.promisedFrom(), s.promisedBy(), null, null, null, null, d.createdAt(),
-                s.lines().stream().map(OrderDrafts::line).toList(), 0, s.localDelivery())).toList();
+                s.lines().stream().map(OrderDrafts::line).toList(), 0, s.localDelivery(), s.preorder())).toList();
         return new Order(d.orderId(), d.orderNumber(), d.customerId(), d.currency(), OrderStatus.PENDING_PAYMENT,
                 OrderTotals.ofShipments(shipments), d.shipTo(), paymentId, d.workflowId(), null, null, d.createdAt(),
-                shipments, 0);
+                shipments, 0, d.origin());
     }
 
     private static OrderLine line(CheckoutPlan.Line l) {

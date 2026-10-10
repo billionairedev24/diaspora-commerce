@@ -38,6 +38,10 @@ final class Upstreams {
                 "{\"status\":\"HELD\"}");
         json(WireMock.get(WireMock.urlPathEqualTo("/v1/markets/eligibility")), 200,
                 "{\"country\":\"US\",\"deliveryAllowed\":true}");
+        // S272: nothing is a pre-order unless a test says so.
+        server.stubFor(WireMock.get(WireMock.urlPathEqualTo("/v1/service/preorders/eligibility")).atPriority(100)
+                .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
+                        .withBody("{\"items\":[]}")));
     }
 
     /** A cart for one customer token. Lines: {atin, sellerOrg, fulfilment AFROTRANSACT|SELLER, price, qty}. */

@@ -54,7 +54,8 @@ class OrderViews {
                 o.currency(), totals.itemsMinor(), totals.shippingMinor(), totals.taxMinor(), totals.discountMinor(),
                 totals.grandTotalMinor(), o.shipTo() == null ? null : o.shipTo().summary(), o.shipTo(),
                 o.cancelReason(), staff ? o.paymentId() : null, visible.size() != count,
-                visible.stream().map(shipmentView).toList());
+                visible.stream().map(shipmentView).toList(), o.origin().channel().name(), o.origin().tags(),
+                viewer.kind() == Viewer.Kind.SELLER ? null : o.origin().attribution());
     }
 
     OrderView.ShipmentView shipment(Shipment s, int count, Viewer viewer, List<StatusChange> history) {
@@ -67,7 +68,12 @@ class OrderViews {
                 && !s.status().terminal() ? vault.reveal(s.id(), s.handoverCodeSealed()) : null;
         int units = s.lines().stream().mapToInt(OrderLine::quantity).sum();
         String label = "Shipment " + s.seq() + " of " + count + (s.sellerName() == null ? "" : " · " + s.sellerName());
-        boolean cancellable = s.status() == ShipmentStatus.PLACED || s.status() == ShipmentStatus.CONFIRMED;
+        boolean cancellable = (s.status() == ShipmentStatus.PLACED || s.status() == ShipmentStatus.CONFIRMED)
+                && (!s.preorderShipment() || s.preorder().cancellableAt(Instant.now(clock)));
+        if (s.preorderShipment()) {
+            label = "Pre-order · delivered " + s.preorder().deliversOn()
+                    + (s.sellerName() == null ? "" : " · " + s.sellerName());
+        }
         Instant windowEnds = returnWindows.windowEndsAt(s).orElse(null);
         boolean returnable = windowEnds != null && Instant.now(clock).isBefore(windowEnds);
         OrderView.ReturnLinks links = viewer.kind() == Viewer.Kind.SELLER || s.status() != ShipmentStatus.DELIVERED
@@ -89,7 +95,11 @@ class OrderViews {
                         s.localDelivery().shipFromLocationId(), s.localDelivery().distanceMiles(),
                         s.localDelivery().durationMinutes(), s.localDelivery().distanceMethod(),
                         s.localDelivery().customerChargeMinor(), viewer.kind() == Viewer.Kind.CUSTOMER ? null
-                        : s.localDelivery().sellerFeeMinor(), s.localDelivery().pricingVersion()));
+                        : s.localDelivery().sellerFeeMinor(), s.localDelivery().pricingVersion()),
+                s.preorder() == null ? null : new OrderView.PreorderView(s.preorder().windowId(),
+                        s.preorder().windowCode(), s.preorder().windowName(), s.preorder().deliversOn(),
+                        s.preorder().fulfilment().name(), s.preorder().closesAt(), s.preorder().deliveryMissed(),
+                        s.preorder().missedChoice() == null ? null : s.preorder().missedChoice().name()));
     }
 
     private static OrderView.LineView line(OrderLine l) {

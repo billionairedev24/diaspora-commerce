@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -33,13 +34,14 @@ var _ Handlers = (*handlersImpl)(nil)
 func New(carts app.CartService) Handlers { return &handlersImpl{carts: carts} }
 
 func (h *handlersImpl) Register(mux *http.ServeMux, optionalAuth, requiredAuth func(http.Handler) http.Handler) {
-	mux.Handle("GET /v1/cart", optionalAuth(http.HandlerFunc(h.view)))
-	mux.Handle("POST /v1/cart/items", optionalAuth(http.HandlerFunc(h.add)))
-	mux.Handle("PUT /v1/cart/items/{atin}", optionalAuth(http.HandlerFunc(h.setQty)))
-	mux.Handle("DELETE /v1/cart/items/{atin}", optionalAuth(http.HandlerFunc(h.remove)))
-	mux.Handle("POST /v1/cart/items/{atin}/save-for-later", optionalAuth(http.HandlerFunc(h.save)))
-	mux.Handle("POST /v1/cart/saved/{atin}/move-to-cart", optionalAuth(http.HandlerFunc(h.move)))
-	mux.Handle("POST /v1/cart/merge", requiredAuth(http.HandlerFunc(h.merge)))
+	mux.Handle("GET /v1/cart", optionalAuth(located(h.view)))
+	mux.Handle("POST /v1/cart/items", optionalAuth(located(h.add)))
+	mux.Handle("PUT /v1/cart/items/{atin}", optionalAuth(located(h.setQty)))
+	mux.Handle("DELETE /v1/cart/items/{atin}", optionalAuth(located(h.remove)))
+	mux.Handle("POST /v1/cart/items/{atin}/save-for-later", optionalAuth(located(h.save)))
+	mux.Handle("POST /v1/cart/saved/{atin}/move-to-cart", optionalAuth(located(h.move)))
+	mux.Handle("PUT /v1/cart/preorder-fulfilment", optionalAuth(located(h.preorderFulfilment)))
+	mux.Handle("POST /v1/cart/merge", requiredAuth(located(h.merge)))
 	mux.Handle("POST /v1/carts/{customerId}/ordered", requiredAuth(auth.Require("cart:service", h.ordered)))
 }
 
@@ -57,6 +59,51 @@ func owner(w http.ResponseWriter, r *http.Request) (domain.Owner, bool) {
 	}
 	w.Header().Set(GuestHeader, id)
 	return domain.Owner{Kind: domain.OwnerGuest, ID: id}, true
+}
+
+// Delivery location headers (or ?country=&region=&city=) the BFF sends from the shopper's delivery address; cart
+// views then group pre-order lines into window packages (S272).
+const (
+	CountryHeader = "X-Delivery-Country"
+	RegionHeader  = "X-Delivery-Region"
+	CityHeader    = "X-Delivery-City"
+)
+
+// located puts the request's delivery location on the context.
+func located(next http.HandlerFunc) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		pick := func(param, header string) string {
+			if v := strings.TrimSpace(q.Get(param)); v != "" {
+				return v
+			}
+			return strings.TrimSpace(r.Header.Get(header))
+		}
+		loc := domain.Location{Country: strings.ToUpper(pick("country", CountryHeader)),
+			Region: pick("region", RegionHeader), City: pick("city", CityHeader)}
+		if loc.Known() {
+			r = r.WithContext(app.WithLocation(r.Context(), loc))
+		}
+		next(w, r)
+	})
+}
+
+type preorderBody struct {
+	WindowID   string `json:"windowId"`
+	Fulfilment string `json:"fulfilment"`
+}
+
+func (h *handlersImpl) preorderFulfilment(w http.ResponseWriter, r *http.Request) {
+	o, ok := owner(w, r)
+	if !ok {
+		return
+	}
+	var b preorderBody
+	if !decode(w, r, &b) {
+		return
+	}
+	v, err := h.carts.SetPreorderFulfilment(r.Context(), o, b.WindowID, b.Fulfilment)
+	respond(w, r, v, err)
 }
 
 func (h *handlersImpl) view(w http.ResponseWriter, r *http.Request) {
@@ -190,6 +237,9 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, app.ErrOfferMismatch):
 		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "cart.invalid", Detail: err.Error(),
 			Fields: map[string]string{"offerId": "Not an offer of this variant"}})
+	case errors.Is(err, domain.ErrInvalidFulfilment):
+		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "cart.invalid", Detail: err.Error(),
+			Fields: map[string]string{"fulfilment": "DOOR or PICKUP", "windowId": "Required"}})
 	case errors.Is(err, domain.ErrInvalidQuantity), errors.Is(err, domain.ErrCartFull):
 		problem.Write(w, r, &problem.Error{Status: http.StatusUnprocessableEntity, Code: "cart.invalid", Detail: err.Error()})
 	case errors.Is(err, domain.ErrUnknownLine):

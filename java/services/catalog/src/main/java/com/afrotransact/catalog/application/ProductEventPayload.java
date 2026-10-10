@@ -11,11 +11,13 @@ import com.afrotransact.catalog.domain.Product;
  * @param sellerHidden the owner's listings are hidden by seller-service compliance enforcement: keep the product out
  *                     of public surfaces regardless of {@code status}
  * @param reasonCode   takedown reason code on {@code catalog.product.taken_down}; null otherwise
+ * @param preorderEligible may be sold in a pre-order window (S272)
+ * @param shipsNow     always ships now by carrier, never as a pre-order
  */
 public record ProductEventPayload(UUID productId, String atin, String ownerKind, String ownerOrgId, String status,
                                   String title, UUID categoryId, String productTypeCode,
                                   List<VariantPayload> variants, String note, boolean sellerHidden,
-                                  String reasonCode) {
+                                  String reasonCode, boolean preorderEligible, boolean shipsNow) {
 
     /** Variant part of the payload. */
     public record VariantPayload(String atin, String sellerSku, String gtin, long priceMinor, String currency,
@@ -33,6 +35,6 @@ public record ProductEventPayload(UUID productId, String atin, String ownerKind,
                         .map(v -> new VariantPayload(v.atin().value(), v.sellerSku(), v.gtin(), v.priceMinor(),
                                 v.currency(), v.quantity()))
                         .toList(),
-                p.moderationNote(), sellerHidden, reasonCode);
+                p.moderationNote(), sellerHidden, reasonCode, p.preorderEligible(), p.shipsNow());
     }
 }

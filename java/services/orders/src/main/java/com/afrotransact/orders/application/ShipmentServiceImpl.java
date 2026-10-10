@@ -1,5 +1,7 @@
 package com.afrotransact.orders.application;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Locale;
 
 import com.afrotransact.orders.domain.ActorKind;
@@ -11,6 +13,7 @@ import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.Shipment;
 import com.afrotransact.orders.domain.ShipmentStatus;
 import com.afrotransact.orders.domain.TransitionActor;
+import com.afrotransact.orders.domain.TransitionRefused;
 import com.afrotransact.orders.domain.TransitionSource;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.platform.security.Actor;
@@ -27,14 +30,16 @@ class ShipmentServiceImpl implements ShipmentService {
     private final ShipmentTransitions transitions;
     private final CourierProofPolicy proofs;
     private final OrderViews views;
+    private final Clock clock;
 
     ShipmentServiceImpl(OrdersAccess access, OrderRepository orders, ShipmentTransitions transitions,
-                        CourierProofPolicy proofs, OrderViews views) {
+                        CourierProofPolicy proofs, OrderViews views, Clock clock) {
         this.access = access;
         this.orders = orders;
         this.transitions = transitions;
         this.proofs = proofs;
         this.views = views;
+        this.clock = clock;
     }
 
     @Override
@@ -56,7 +61,7 @@ class ShipmentServiceImpl implements ShipmentService {
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId,
                 ShipmentStatus.CANCELLED, (o, s) -> new TransitionActor(ActorKind.CUSTOMER, customer.subject(), null),
                 reason == null || reason.isBlank() ? "Cancelled by the customer" : reason, TransitionSource.API,
-                idempotencyKey, null, null, null));
+                idempotencyKey, null, null, this::preorderStillOpen));
         return views.of(outcome.order(), new Viewer(Viewer.Kind.CUSTOMER, null),
                 orders.history(outcome.order().id()));
     }
@@ -109,6 +114,13 @@ class ShipmentServiceImpl implements ShipmentService {
         return new DeliveryBrief(s.id(), order.number(), s.status().wire(), order.shipTo(), s.preferences(),
                 s.perishable(), s.handoverRequired(), !s.perishable() && !s.preferences().handToCustomer(),
                 s.lines().stream().mapToInt(OrderLine::quantity).sum(), s.sellerName(), s.nodeId());
+    }
+
+    /** S272: a pre-order is cancelled by the customer (full refund incl. delivery fee) only until its window closes. */
+    private void preorderStillOpen(Shipment s) {
+        if (s.preorderShipment() && !s.preorder().cancellableAt(Instant.now(clock))) {
+            throw TransitionRefused.preorderClosed(s.preorder().closesAt());
+        }
     }
 
     private ShipmentActionResult result(ShipmentTransitions.Outcome outcome) {

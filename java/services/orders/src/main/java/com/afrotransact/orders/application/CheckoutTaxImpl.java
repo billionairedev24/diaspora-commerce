@@ -89,8 +89,7 @@ class CheckoutTaxImpl implements CheckoutTax {
     private static OrderDraft withLines(OrderDraft draft, Function<CheckoutPlan.Line, CheckoutPlan.Line> taxed) {
         List<OrderDraft.DraftShipment> shipments = draft.shipments().stream()
                 .map(s -> s.with(s.lines().stream().map(taxed).toList(), s.shippingMinor())).toList();
-        return new OrderDraft(draft.orderId(), draft.orderNumber(), draft.customerId(), draft.workflowId(),
-                draft.currency(), draft.shipTo(), draft.reserved(), shipments, draft.createdAt(), draft.coupon());
+        return draft.withShipments(shipments);
     }
 
     private static List<CheckoutPlan.Line> sorted(OrderDraft.DraftShipment s) {

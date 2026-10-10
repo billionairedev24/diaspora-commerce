@@ -14,6 +14,7 @@ import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.OrderLine;
 import com.afrotransact.payments.domain.Payment;
 import com.afrotransact.payments.domain.PaymentLine;
+import com.afrotransact.payments.domain.PaymentLink;
 import com.afrotransact.payments.domain.PaymentStatus;
 import com.afrotransact.payments.domain.Refund;
 import com.afrotransact.payments.domain.RefundLine;
@@ -225,6 +226,27 @@ class JdbcPaymentRepository implements PaymentRepository {
             """;
 
     @Override
+    public void insertLink(PaymentLink link) {
+        jdbc.sql("""
+                insert into payment_link (payment_id, stripe_session_id, url, expires_at, created_at)
+                values (:pid, :session, :url, :expiresAt, :createdAt)
+                on conflict (payment_id) do nothing
+                """)
+                .param("pid", link.paymentId()).param("session", link.stripeSessionId()).param("url", link.url())
+                .param("expiresAt", Sql.ts(link.expiresAt())).param("createdAt", Sql.ts(link.createdAt()))
+                .update();
+    }
+
+    @Override
+    public Optional<PaymentLink> findLink(UUID paymentId) {
+        return jdbc.sql("select * from payment_link where payment_id = :pid").param("pid", paymentId)
+                .query((rs, n) -> new PaymentLink(rs.getObject("payment_id", UUID.class),
+                        rs.getString("stripe_session_id"), rs.getString("url"), Sql.instant(rs, "expires_at"),
+                        Sql.instant(rs, "created_at")))
+                .optional();
+    }
+
+    @Override
     public Optional<Capture> findCapture(UUID captureId) {
         return jdbc.sql(CAPTURE_SELECT + " where c.id = :id").param("id", captureId).query(this::capture).optional();
     }
@@ -301,18 +323,19 @@ class JdbcPaymentRepository implements PaymentRepository {
     /** Stored form of a refund line (plain numbers). */
     record RefundLineRow(String lineId, String sellerOrg, String taxJurisdiction, boolean shippingToPlatform,
                          long itemsMinor, long shippingMinor, long taxMinor, long commissionReversedMinor,
-                         long deliveryFeeReversedMinor) {
+                         long deliveryFeeReversedMinor, Boolean preorderDeliveryFee) {
 
         static RefundLineRow of(RefundLine l) {
             return new RefundLineRow(l.lineId(), l.sellerOrg(), l.taxJurisdiction(), l.shippingToPlatform(),
                     l.items().minor(), l.shipping().minor(), l.tax().minor(), l.commissionReversed().minor(),
-                    l.deliveryFeeReversed().minor());
+                    l.deliveryFeeReversed().minor(), l.preorderDeliveryFee());
         }
 
         RefundLine toLine(String currency) {
             return new RefundLine(lineId, sellerOrg, taxJurisdiction, shippingToPlatform,
                     Money.of(itemsMinor, currency), Money.of(shippingMinor, currency), Money.of(taxMinor, currency),
-                    Money.of(commissionReversedMinor, currency), Money.of(deliveryFeeReversedMinor, currency));
+                    Money.of(commissionReversedMinor, currency), Money.of(deliveryFeeReversedMinor, currency),
+                    Boolean.TRUE.equals(preorderDeliveryFee));
         }
     }
 

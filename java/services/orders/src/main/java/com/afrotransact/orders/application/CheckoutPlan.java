@@ -6,20 +6,48 @@ import com.afrotransact.orders.domain.DeliveryMethod;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.FulfilmentType;
 import com.afrotransact.orders.domain.LocalDelivery;
+import com.afrotransact.orders.domain.PreorderPackage;
 
-/** Validated, priced and taxed checkout, one package per seller and fulfilment type (before node split). */
-public record CheckoutPlan(String currency, List<Package> packages) {
+/**
+ * Validated, priced and taxed checkout, one package per seller and fulfilment type (before node split), plus one
+ * package per open pre-order window (S272).
+ *
+ * @param paymentMethodTypes Stripe payment method types the PaymentIntent is restricted to (S272: the windows'
+ *                           allowed methods); empty = automatic payment methods
+ */
+public record CheckoutPlan(String currency, List<Package> packages, List<String> paymentMethodTypes) {
+
+    public CheckoutPlan {
+        paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
+    }
+
+    /** A plan without payment method restrictions. */
+    public CheckoutPlan(String currency, List<Package> packages) {
+        this(currency, packages, List.of());
+    }
 
     /**
      * One package with its delivery choice.
      *
      * @param localDelivery AfroTransact Delivery from the seller's store (S255): pickup, distance and quote; null
      *                      otherwise
+     * @param preorder      the pre-order window of a PREORDER package (S272); null otherwise
+     * @param preorderFeeMinor the window's delivery fee for the chosen fulfilment (door / pickup), spread over the
+     *                      package's shipments
      */
     public record Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
                           DeliveryMethod method, String serviceLevel, String pickupLocationId,
                           DeliveryPreferences preferences, int promiseDays, List<Line> lines,
-                          LocalDelivery localDelivery) {
+                          LocalDelivery localDelivery, PreorderPackage preorder, long preorderFeeMinor) {
+
+        /** A package that is not a pre-order. */
+        public Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,
+                       DeliveryMethod method, String serviceLevel, String pickupLocationId,
+                       DeliveryPreferences preferences, int promiseDays, List<Line> lines,
+                       LocalDelivery localDelivery) {
+            this(packageId, sellerOrgId, sellerName, fulfilmentType, method, serviceLevel, pickupLocationId,
+                    preferences, promiseDays, lines, localDelivery, null, 0);
+        }
 
         /** A package that is not AfroTransact Delivery from a seller's store. */
         public Package(String packageId, String sellerOrgId, String sellerName, FulfilmentType fulfilmentType,

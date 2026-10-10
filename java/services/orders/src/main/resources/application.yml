@@ -180,7 +180,7 @@ at:
       token-path: /oauth2/token
       client-id: ${ORDERS_CLIENT_ID:orders-service}
       client-secret: ${ORDERS_CLIENT_SECRET:local-orders-service-secret}
-      scopes: payments:service inventory:reserve cart:service tax:quote sellers:ship-from.read offers:read
+      scopes: payments:service inventory:reserve cart:service tax:quote sellers:ship-from.read offers:read delivery-runs:reserve
     upstreams:
       timeout: ${UPSTREAM_TIMEOUT:5s}
       promise-timeout: ${PROMISE_TIMEOUT:800ms}
@@ -197,12 +197,22 @@ at:
       seller-url: ${SELLER_URL:http://localhost:8106}
       geo-url: ${GEO_URL:http://localhost:8205}
       tax-returns-url: ${TAX_RETURNS_URL:http://localhost:8111}
+      # S272 pre-orders: eligibility of cart lines (delivery-runs-service, scope delivery-runs:reserve).
+      delivery-runs-url: ${DELIVERY_RUNS_URL:http://localhost:8115}
       tax-timeout: ${TAX_QUOTE_TIMEOUT:2s}
     topics:
       payment-events: at.payment.events
       carrier-events: at.carrier-shipment.events
     consumers:
       enabled: ${ORDERS_CONSUMERS_ENABLED:true}
+    # S272 community pre-orders: cart lines in an open window become a PREORDER package (door or pickup, charged at
+    # checkout); off = every line ships now. Jobs flag missed delivery dates and void unpaid late-add payment links.
+    preorders:
+      enabled: ${PREORDERS_ENABLED:true}
+      job-batch: 100
+      link-expiry-hours: 24
+      missed-delivery-interval: ${PREORDER_MISSED_DELIVERY_INTERVAL:15m}
+      link-expiry-interval: ${PREORDER_LINK_EXPIRY_INTERVAL:5m}
     jobs:
       enabled: ${ORDERS_JOBS_ENABLED:true}
       follow-up-interval: ${FOLLOW_UP_INTERVAL:5s}

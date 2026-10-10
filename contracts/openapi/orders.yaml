@@ -32,6 +32,8 @@ tags:
   description: Service-to-service order lookup (tax-returns, trust-ops)
 - name: Seller analytics
   description: Seller Center dashboard figures (orders:read)
+- name: Pre-orders
+  description: 'Community pre-orders (S272): late adds on a customer''s behalf, missed deliveries'
 paths:
   /v1/admin/orders:
     get:
@@ -339,7 +341,9 @@ paths:
       tags:
       - Orders
       summary: Cancel one shipment of my order (until it is packed)
-      description: Refunds or releases the shipment's amount and stock (captured shipments are refunded).
+      description: Refunds or releases the shipment's amount and stock (captured shipments are refunded). Pre-order shipments
+        (S272) are charged at checkout and can be cancelled until the window closes, for a full refund including their
+        delivery fee; after the close 409 orders.preorder-closed.
       operationId: cancel
       parameters:
       - name: number
@@ -369,6 +373,53 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrderView'
+        '409':
+          description: orders.cancel-window-closed / orders.preorder-closed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /v1/orders/{id}/shipments/{shipmentId}/missed-delivery:
+    post:
+      tags:
+      - Pre-orders
+      summary: 'Answer a missed pre-order delivery: refund or wait for a new date (S272)'
+      description: After orders.preorder.delivery_missed. REFUND cancels the pre-order shipment and refunds it in full (delivery
+        fee included) unless it is already out for delivery (409); WAIT keeps it for the new date delivery-runs schedules.
+        Publishes orders.preorder.missed_delivery_answered. 409 orders.delivery-not-missed before the date was missed,
+        orders.missed-delivery-answered after a refund was chosen.
+      operationId: missedDelivery
+      parameters:
+      - name: id
+        in: path
+        description: Order number or id
+        required: true
+        schema:
+          type: string
+      - name: shipmentId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissedDeliveryRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrderView'
+        '409':
+          description: orders.delivery-not-missed / orders.missed-delivery-answered / orders.invalid-transition
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /v1/seller/analytics:
     get:
       tags:
@@ -442,6 +493,58 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/OrderPageSellerShipmentView'
+  /v1/service/orders/late-preorder:
+    post:
+      tags:
+      - Pre-orders
+      summary: Create a late pre-order on a customer's behalf (delivery-runs-service, orders:on-behalf)
+      description: Customer service adds an order to a pre-order window that is OPEN (assisted order) or CLOSED and not delivered.
+        Items are priced from the catalog and must be pre-orders of the window at the address. SAVED_CARD charges the customer's
+        default saved card off-session (status PLACED, or AWAITING_PAYMENT when the bank asks the customer to authenticate);
+        PAYMENT_LINK creates a hosted Stripe payment link (status AWAITING_PAYMENT, orders.preorder.payment_link_created
+        for the SMS; voided when the link expires unpaid). lateAdd carries the window's back-office late-add settings
+        (savedCard / paymentLink switches, linkExpiryHours, default 24). The order has channel AGENT_LATE and tag LATE_ADD
+        and records the staff actor, reason and note. The same Idempotency-Key returns the same order.
+      operationId: create
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        description: Required; the same key returns the same order
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LatePreorderRequest'
+        required: true
+      responses:
+        '200':
+          description: Replay of the same Idempotency-Key
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LatePreorderView'
+        '201':
+          description: Created (placed or awaiting payment)
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LatePreorderView'
+        '403':
+          description: orders.on-behalf-forbidden
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: orders.preorder-not-open, orders.preorder-not-eligible, orders.payment-failed, orders.late-add-payment-disabled,
+            orders.phone-not-confirmed
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
   /v1/shipments/stream:
     get:
       tags:
@@ -710,6 +813,237 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ShipmentView'
+        channel:
+          type: string
+          description: 'S272 attribution channel: SITE_HERO, SITE_RIBBON, SITE_PDP, SITE_PAGE, SITE_DIRECT, APP, INSTAGRAM,
+            FACEBOOK, TIKTOK, WHATSAPP, EMAIL, SMS, AGENT_LATE'
+        tags:
+          type: array
+          description: e.g. LATE_ADD
+          items:
+            type: string
+        attribution:
+          $ref: '#/components/schemas/Attribution'
+    Attribution:
+      type: object
+      description: 'Where the shopper came from: ?src=ig|fb|tt|wa|email|sms|app or the on-site placement (hero, ribbon, pdp,
+        page), the creative slot and the pre-order window code'
+      properties:
+        src:
+          type: string
+          maxLength: 40
+          minLength: 0
+        cr:
+          type: string
+          maxLength: 40
+          minLength: 0
+        po:
+          type: string
+          maxLength: 40
+          minLength: 0
+    PreorderView:
+      type: object
+      description: The pre-order window of a PREORDER shipment (S272)
+      properties:
+        windowId:
+          type: string
+        windowCode:
+          type: string
+        windowName:
+          type: string
+        deliversOn:
+          type: string
+          format: date
+        fulfilment:
+          type: string
+          description: DOOR | PICKUP
+        cancellableUntil:
+          type: string
+          format: date-time
+          description: The customer may cancel for a full refund (delivery fee included) until then
+        deliveryMissed:
+          type: boolean
+        missedChoice:
+          type: string
+          description: REFUND | WAIT (null until answered)
+    MissedDeliveryRequest:
+      type: object
+      properties:
+        choice:
+          type: string
+          description: REFUND | WAIT
+          enum:
+          - REFUND
+          - WAIT
+      required:
+      - choice
+    LatePreorderRequest:
+      type: object
+      description: A late pre-order add taken by customer service
+      properties:
+        customerId:
+          type: string
+          maxLength: 80
+          minLength: 1
+        windowId:
+          type: string
+          maxLength: 80
+          minLength: 1
+        address:
+          $ref: '#/components/schemas/LatePreorderAddress'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LatePreorderItem'
+          maxItems: 50
+          minItems: 1
+        fulfilment:
+          type: string
+          description: DOOR | PICKUP; default door when the window offers it
+        payment:
+          type: string
+          description: SAVED_CARD | PAYMENT_LINK
+          enum:
+          - SAVED_CARD
+          - PAYMENT_LINK
+        reason:
+          type: string
+          description: Customer called | Chat | Driver report | Other
+          maxLength: 80
+          minLength: 1
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+        actorId:
+          type: string
+          description: Staff subject who took the order
+          maxLength: 120
+          minLength: 1
+        phoneConfirmed:
+          type: boolean
+          description: Staff confirmed the customer's phone number
+        lateAdd:
+          $ref: '#/components/schemas/LatePreorderSettings'
+      required:
+      - actorId
+      - address
+      - customerId
+      - items
+      - payment
+      - reason
+      - windowId
+    LatePreorderItem:
+      type: object
+      properties:
+        atin:
+          type: string
+          maxLength: 64
+          minLength: 1
+        qty:
+          type: integer
+          format: int32
+          maximum: 99
+          minimum: 1
+      required:
+      - atin
+    LatePreorderAddress:
+      type: object
+      description: Saved or new (verified) delivery address snapshot
+      properties:
+        addressId:
+          type: string
+        fullName:
+          type: string
+        phone:
+          type: string
+        line1:
+          type: string
+          minLength: 1
+        line2:
+          type: string
+        city:
+          type: string
+          minLength: 1
+        state:
+          type: string
+          description: State / region code
+          minLength: 1
+        postalCode:
+          type: string
+          minLength: 1
+        country:
+          type: string
+          maxLength: 2
+          minLength: 2
+        instructions:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+      required:
+      - city
+      - line1
+      - postalCode
+      - state
+    LatePreorderSettings:
+      type: object
+      description: Back-office late-add payment setup (settings.lateAdd)
+      properties:
+        savedCard:
+          type: boolean
+        paymentLink:
+          type: boolean
+        linkExpiryHours:
+          type: integer
+          format: int32
+          maximum: 24
+          minimum: 1
+    LatePreorderView:
+      type: object
+      properties:
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        status:
+          type: string
+          description: PLACED | AWAITING_PAYMENT
+        payment:
+          type: string
+          description: SAVED_CARD | PAYMENT_LINK
+        paymentLinkUrl:
+          type: string
+        paymentLinkExpiresAt:
+          type: string
+          format: date-time
+        totalMinor:
+          type: integer
+          format: int64
+        deliveryFeeMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        windowId:
+          type: string
+        fulfilment:
+          type: string
+        channel:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        shipmentIds:
+          type: array
+          items:
+            type: string
+        replayed:
+          type: boolean
     ReturnLinks:
       type: object
       properties:
@@ -845,6 +1179,8 @@ components:
           $ref: '#/components/schemas/ReturnLinks'
         localDelivery:
           $ref: '#/components/schemas/LocalDeliveryView'
+        preorder:
+          $ref: '#/components/schemas/PreorderView'
     TimelineEntry:
       type: object
       properties:
@@ -962,6 +1298,37 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Shipment'
+        preorder:
+          $ref: '#/components/schemas/PreorderConfirmation'
+    PreorderConfirmation:
+      type: object
+      description: S272 "You're in" facts of an order with a pre-order package (absent otherwise)
+      properties:
+        number:
+          type: string
+          description: Order number
+        windowName:
+          type: string
+        windowId:
+          type: string
+        windowCode:
+          type: string
+        deliversOn:
+          type: string
+          format: date
+        closesAt:
+          type: string
+          format: date-time
+          description: Cancel for a full refund until then
+        timeZone:
+          type: string
+        fulfilment:
+          type: string
+          description: DOOR | PICKUP
+        otherItemCount:
+          type: integer
+          format: int32
+          description: Units of the same order that ship now
     Shipment:
       type: object
       properties:
@@ -978,6 +1345,17 @@ components:
           type: string
         deliveryCode:
           type: string
+        fulfilmentType:
+          type: string
+          description: PREORDER for a community pre-order shipment (S272)
+        preorderWindowId:
+          type: string
+        preorderFulfilment:
+          type: string
+          description: DOOR | PICKUP
+        cancellableUntil:
+          type: string
+          format: date-time
     CheckoutLine:
       type: object
       properties:
@@ -1022,6 +1400,9 @@ components:
           description: 'Coupon code: validated and redeemed with offers-service, released when the order fails or is cancelled'
           maxLength: 20
           minLength: 0
+        attribution:
+          $ref: '#/components/schemas/Attribution'
+          description: S272 marketing attribution (last touch), stored on the order and sent in orders.order.placed
       required:
       - addressId
     DeliverySelection:
@@ -1029,10 +1410,11 @@ components:
       properties:
         packageId:
           type: string
+          description: <sellerOrgId>:<fulfilment>, or preorder:<windowId> for a pre-order package
           minLength: 1
         option:
           type: string
-          description: carrier | express | afrotransact_delivery | pickup
+          description: carrier | express | afrotransact_delivery | pickup; door | pickup for a pre-order package
         serviceLevel:
           type: string
           description: standard | express | local | pickup; derived from option when omitted

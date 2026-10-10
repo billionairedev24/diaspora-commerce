@@ -28,7 +28,7 @@ class JdbcProductRepository implements ProductRepository {
     private static final String SELECT = """
             select id, atin, owner_kind, owner_org, category_id, category_request_id, product_type, title,
                    attributes::text as attributes, images::text as images, variation_theme, status, moderation_note,
-                   created_at, updated_at, version
+                   created_at, updated_at, version, preorder_eligible, ships_now
             from product
             """;
 
@@ -45,10 +45,10 @@ class JdbcProductRepository implements ProductRepository {
         jdbc.sql("""
                 insert into product (id, atin, owner_kind, owner_org, category_id, category_request_id, product_type,
                                      title, attributes, images, variation_theme, status, moderation_note,
-                                     created_at, updated_at, version)
+                                     created_at, updated_at, version, preorder_eligible, ships_now)
                 values (:id, :atin, :ownerKind, :ownerOrg, :categoryId, :categoryRequestId, :productType, :title,
                         cast(:attributes as jsonb), cast(:images as jsonb), :theme, :status, :note,
-                        :createdAt, :updatedAt, 0)
+                        :createdAt, :updatedAt, 0, :preorderEligible, :shipsNow)
                 """)
                 .params(params(p))
                 .update();
@@ -64,6 +64,7 @@ class JdbcProductRepository implements ProductRepository {
                 update product set category_id = :categoryId, product_type = :productType, title = :title,
                        attributes = cast(:attributes as jsonb), images = cast(:images as jsonb),
                        variation_theme = :theme, status = :status, moderation_note = :note,
+                       preorder_eligible = :preorderEligible, ships_now = :shipsNow,
                        updated_at = :updatedAt, version = version + 1
                 where id = :id and version = :version
                 """)
@@ -172,6 +173,8 @@ class JdbcProductRepository implements ProductRepository {
         m.put("note", p.moderationNote());
         m.put("createdAt", Timestamp.from(p.createdAt()));
         m.put("updatedAt", Timestamp.from(p.updatedAt()));
+        m.put("preorderEligible", p.preorderEligible());
+        m.put("shipsNow", p.shipsNow());
         return m;
     }
 
@@ -221,10 +224,7 @@ class JdbcProductRepository implements ProductRepository {
                 })
                 .list();
         return products.stream()
-                .map(p -> new Product(p.id(), p.atin(), p.owner(), p.categoryId(), p.categoryRequestId(),
-                        p.productTypeCode(), p.title(), p.attributes(), p.images(), p.variationTheme(),
-                        byProduct.getOrDefault(p.id(), List.of()), p.status(), p.moderationNote(), p.createdAt(),
-                        p.updatedAt(), p.version()))
+                .map(p -> p.withVariants(byProduct.getOrDefault(p.id(), List.of())))
                 .toList();
     }
 
@@ -245,6 +245,8 @@ class JdbcProductRepository implements ProductRepository {
                 rs.getString("moderation_note"),
                 rs.getTimestamp("created_at").toInstant(),
                 rs.getTimestamp("updated_at").toInstant(),
-                rs.getLong("version"));
+                rs.getLong("version"),
+                rs.getBoolean("preorder_eligible"),
+                rs.getBoolean("ships_now"));
     }
 }

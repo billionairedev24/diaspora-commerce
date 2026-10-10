@@ -81,6 +81,8 @@ type Cart struct {
 	Saved     []Line    `json:"saved"`
 	Version   int64     `json:"version"`
 	UpdatedAt time.Time `json:"updatedAt"`
+	// PreorderFulfilment is the door / pickup choice per pre-order window (S272): window id → DOOR | PICKUP.
+	PreorderFulfilment map[string]string `json:"preorderFulfilment,omitempty"`
 }
 
 func (c *Cart) index(lines []Line, atin string) int {
@@ -228,6 +230,10 @@ type Package struct {
 	PickupLocationID string     `json:"pickupLocationId,omitempty"`
 	Lines            []LineView `json:"lines"`
 	SubtotalMinor    int64      `json:"subtotalMinor"`
+	// PackageID is the checkout delivery-selection key: <sellerOrgId>:<fulfilment>, or preorder:<windowId>.
+	PackageID string `json:"packageId"`
+	// Preorder is set for a pre-order window's package (S272); lines of several sellers share it.
+	Preorder *PackagePreorder `json:"preorder,omitempty"`
 }
 
 // packageKey groups lines into shipments: seller and fulfilment, plus the pickup location for AfroTransact Delivery.
@@ -249,6 +255,8 @@ type View struct {
 	Currency      string     `json:"currency"`
 	Checkoutable  bool       `json:"checkoutable"`
 	Version       int64      `json:"version"`
+	// PreorderFulfilment echoes the door / pickup choices per window (S272).
+	PreorderFulfilment map[string]string `json:"preorderFulfilment,omitempty"`
 }
 
 // LowStockThreshold matches search and the product page.
@@ -256,16 +264,35 @@ const LowStockThreshold = 5
 
 // Present builds the view with live offers and stock; lines without a live offer are unavailable.
 func (c *Cart) Present(live map[string]Offer, available map[string]int) View {
-	v := View{Packages: []Package{}, Saved: []LineView{}, Currency: "USD", Version: c.Version}
+	return c.PresentWithPreorders(live, available, nil)
+}
+
+// PresentWithPreorders also groups the lines delivery-runs sells as a pre-order at the shopper's location into one
+// package per window (S272), with its stage, delivery date and door / pickup options. A window that is not open
+// locks its package and makes the cart not checkoutable.
+func (c *Cart) PresentWithPreorders(live map[string]Offer, available map[string]int, preorders map[string]PreorderLine) View {
+	v := View{Packages: []Package{}, Saved: []LineView{}, Currency: "USD", Version: c.Version,
+		PreorderFulfilment: c.PreorderFulfilment}
 	pkgIndex := map[string]int{}
 	anyAvailable := false
+	locked := false
 	for _, l := range c.Lines {
 		lv := view(l, live, available)
 		key, location := packageKey(lv)
+		pre, isPre := preorders[lv.VariantATIN]
+		isPre = isPre && pre.Preorder && pre.WindowID != ""
+		if isPre {
+			key = PreorderPackagePrefix + pre.WindowID
+		}
 		pi, ok := pkgIndex[key]
 		if !ok {
-			v.Packages = append(v.Packages, Package{SellerOrgID: lv.SellerOrgID, SellerName: lv.SellerName,
-				Fulfilment: lv.Fulfilment, PickupLocationID: location})
+			pkg := Package{SellerOrgID: lv.SellerOrgID, SellerName: lv.SellerName, Fulfilment: lv.Fulfilment,
+				PickupLocationID: location, PackageID: lv.SellerOrgID + ":" + lv.Fulfilment}
+			if isPre {
+				pkg = Package{Fulfilment: FulfilmentPreorder, PackageID: key, SellerName: pre.WindowName,
+					Preorder: preorderOf(pre, c.PreorderFulfilment[pre.WindowID])}
+			}
+			v.Packages = append(v.Packages, pkg)
 			pi = len(v.Packages) - 1
 			pkgIndex[key] = pi
 		}
@@ -276,9 +303,16 @@ func (c *Cart) Present(live map[string]Offer, available map[string]int) View {
 			v.SubtotalMinor += lv.LineTotal
 			v.ItemCount += lv.Quantity
 			v.Currency = lv.Currency
+			if isPre && v.Packages[pi].Preorder.Locked {
+				locked = true
+			}
 		}
 	}
 	sort.SliceStable(v.Packages, func(i, j int) bool {
+		// Pre-order packages first (the design's "Pre-order · delivered …" group), then the ships-now packages.
+		if (v.Packages[i].Preorder != nil) != (v.Packages[j].Preorder != nil) {
+			return v.Packages[i].Preorder != nil
+		}
 		// AfroTransact-fulfilled packages first, then by seller name and pickup location, so the page is stable.
 		if (v.Packages[i].Fulfilment == "AFROTRANSACT") != (v.Packages[j].Fulfilment == "AFROTRANSACT") {
 			return v.Packages[i].Fulfilment == "AFROTRANSACT"
@@ -291,7 +325,7 @@ func (c *Cart) Present(live map[string]Offer, available map[string]int) View {
 	for _, s := range c.Saved {
 		v.Saved = append(v.Saved, view(s, live, available))
 	}
-	v.Checkoutable = anyAvailable
+	v.Checkoutable = anyAvailable && !locked
 	return v
 }
 

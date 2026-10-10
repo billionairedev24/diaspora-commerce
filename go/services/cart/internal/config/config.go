@@ -13,7 +13,14 @@ type Config struct {
 	OffersURL    string            `yaml:"offersUrl" env:"OFFERS_URL"`
 	RetailOrgID  string            `yaml:"retailOrgId" env:"RETAIL_ORG_ID"`
 	SellerNames  map[string]string `yaml:"sellerNames"`
-	Auth         struct {
+	// DeliveryRuns: pre-order eligibility (S272); empty URL = no pre-orders (every line ships now).
+	DeliveryRuns struct {
+		URL          string `yaml:"url" env:"DELIVERY_RUNS_URL"`
+		TokenURL     string `yaml:"tokenUrl" env:"AUTH_TOKEN_URL"`
+		ClientID     string `yaml:"clientId" env:"CART_CLIENT_ID"`
+		ClientSecret string `yaml:"clientSecret" env:"CART_CLIENT_SECRET"`
+	} `yaml:"deliveryRuns"`
+	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
 		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`

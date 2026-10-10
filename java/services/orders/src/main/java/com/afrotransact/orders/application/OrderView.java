@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
+import com.afrotransact.orders.domain.Attribution;
 import com.afrotransact.orders.domain.DeliveryPreferences;
 import com.afrotransact.orders.domain.ShipTo;
 
@@ -33,7 +34,8 @@ import com.afrotransact.orders.domain.ShipTo;
 public record OrderView(String id, String orderNumber, String status, String customerId, Instant placedAt,
                         Instant createdAt, String currency, long itemsMinor, long shippingMinor, long taxMinor,
                         long discountMinor, long totalMinor, String shipTo, ShipTo shippingAddress,
-                        String cancelReason, String paymentId, boolean partial, List<ShipmentView> shipments) {
+                        String cancelReason, String paymentId, boolean partial, List<ShipmentView> shipments,
+                        String channel, List<String> tags, Attribution attribution) {
 
     /**
      * One shipment.
@@ -60,7 +62,20 @@ public record OrderView(String id, String orderNumber, String status, String cus
                                Instant deliveredAt, boolean captured, boolean cancellable, List<String> nextActions,
                                List<LineView> lines, List<TimelineEntry> timeline, boolean returnable,
                                Instant returnWindowEndsAt, boolean problemReportOnly, ReturnLinks returns,
-                               LocalDeliveryView localDelivery) {
+                               LocalDeliveryView localDelivery, PreorderView preorder) {
+    }
+
+    /**
+     * The pre-order window of a PREORDER shipment (S272).
+     *
+     * @param fulfilment       DOOR | PICKUP
+     * @param cancellableUntil the customer may cancel for a full refund (delivery fee included) until then
+     * @param deliveryMissed   the delivery date passed undelivered: the customer may choose REFUND or WAIT
+     * @param missedChoice     the customer's answer (null until answered)
+     */
+    public record PreorderView(String windowId, String windowCode, String windowName, LocalDate deliversOn,
+                               String fulfilment, Instant cancellableUntil, boolean deliveryMissed,
+                               String missedChoice) {
     }
 
     /**

@@ -31,6 +31,7 @@ monitoring:
 # Secret keys expected at afrotransact/<env>/cart in the cloud secret store:
 #   - DB_URL
 #   - REDIS_URL
+#   - CART_CLIENT_SECRET (cart-service client credentials: S272 pre-order eligibility from delivery-runs)
 secrets:
   enabled: true
   store: platform-secrets

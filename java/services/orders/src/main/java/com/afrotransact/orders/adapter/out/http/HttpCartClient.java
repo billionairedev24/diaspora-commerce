@@ -2,6 +2,7 @@ package com.afrotransact.orders.adapter.out.http;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -52,8 +53,19 @@ class HttpCartClient implements CartClient {
                         l.path("offerId").asString(null)));
             }
         }
+        Map<String, String> preorder = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonNode> e : view.path("preorderFulfilment").properties()) {
+            preorder.put(e.getKey(), e.getValue().asString(""));
+        }
+        for (JsonNode pkg : view.path("packages")) {
+            JsonNode p = pkg.path("preorder");
+            if (p.isObject() && !p.path("windowId").asString("").isEmpty()
+                    && !p.path("fulfilment").asString("").isEmpty()) {
+                preorder.putIfAbsent(p.path("windowId").asString(), p.path("fulfilment").asString());
+            }
+        }
         return new Snapshot(currency, view.path("checkoutable").asBoolean(false), view.path("version").asLong(0),
-                items);
+                items, preorder);
     }
 
     @Override

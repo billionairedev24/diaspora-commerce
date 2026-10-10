@@ -1,5 +1,7 @@
 package com.afrotransact.orders.domain;
 
+import java.time.Instant;
+
 /**
  * A shipment transition was refused by the state machine: either the actor never owns that step for this
  * fulfilment type ({@link #forbidden()}, HTTP 403) or the step is not reachable from the current status (HTTP 409).
@@ -9,6 +11,8 @@ public class TransitionRefused extends RuntimeException {
     public static final String FORBIDDEN = "orders.transition-forbidden";
     public static final String INVALID = "orders.invalid-transition";
     public static final String CANCEL_WINDOW_CLOSED = "orders.cancel-window-closed";
+    /** S272: pre-order shipments are cancellable by the customer only until the window closes. */
+    public static final String PREORDER_CLOSED = "orders.preorder-closed";
 
     private static final long serialVersionUID = 1L;
 
@@ -40,6 +44,11 @@ public class TransitionRefused extends RuntimeException {
                 + "; it can only be cancelled before it is packed", false);
     }
 
+    public static TransitionRefused preorderClosed(Instant closesAt) {
+        return new TransitionRefused(PREORDER_CLOSED, "The pre-order closed at " + closesAt
+                + "; pre-order items can only be cancelled while the window is open", false);
+    }
+
     public String code() {
         return code;
     }
@@ -66,6 +75,7 @@ public class TransitionRefused extends RuntimeException {
             case SELLER_FULFILLED -> "seller-fulfilled";
             case FBA_AFROTRANSACT -> "Fulfilled-by-AfroTransact";
             case RETAIL_1P -> "AfroTransact Retail";
+            case PREORDER -> "pre-order";
         };
     }
 }

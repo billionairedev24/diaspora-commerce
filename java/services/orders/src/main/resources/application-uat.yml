@@ -38,6 +38,7 @@ at:
       offers-url: ${OFFERS_URL:http://offers}
       seller-url: ${SELLER_URL:http://seller}
       geo-url: ${GEO_URL:http://geo}
+      delivery-runs-url: ${DELIVERY_RUNS_URL:http://delivery-runs}
 management:
   tracing:
     sampling:
