@@ -12,6 +12,12 @@ at:
       sender: ${VERIFICATION_SENDER:log}
     mfa:
       secure-cookies: false
+    data-protection:
+      # LOCAL DEVELOPMENT KEY, NOT A SECRET: committed so a local database survives restarts. Every other environment
+      # reads IDENTITY_DATA_KEY from the secret store (afrotransact/<env>/identity).
+      key-id: ${IDENTITY_DATA_KEY_ID:local-dev-1}
+      key: ${IDENTITY_DATA_KEY:sshryzvJNZkej8pi+fHGy3bSux3JTUPQbYBooxVpSN0=}
+      previous-keys: ${IDENTITY_DATA_KEYS_PREVIOUS:}
     webauthn:
       rp-id: localhost
       rp-name: AfroTransact (local)
@@ -132,6 +138,12 @@ at:
         secret: ${SEARCH_CLIENT_SECRET:local-search-service-secret}
         grant-types: [client_credentials]
         scopes: [ai:use]
+      - client-id: offers-service
+        name: Offers service
+        type: confidential
+        secret: ${OFFERS_CLIENT_SECRET:local-offers-service-secret}
+        grant-types: [client_credentials]
+        scopes: [catalog:read]
       - client-id: retail-service
         name: AfroTransact Retail service
         type: confidential

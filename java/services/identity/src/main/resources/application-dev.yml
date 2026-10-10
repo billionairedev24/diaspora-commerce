@@ -9,6 +9,15 @@ at:
       accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:https://seller.dev.afrotransact.com}/invitations/accept}
     signing:
       generate-if-missing: false
+    data-protection:
+      # IDENTITY_DATA_KEY (secret store afrotransact/dev/identity): base64 AES-256 key-encryption key for MFA
+      # secrets at rest, required with provider local. During a rotation the old key moves to
+      # IDENTITY_DATA_KEYS_PREVIOUS ([keyId:]base64, comma-separated) until POST /v1/admin/data-protection/rotate
+      # reports nothing left on it. IDENTITY_DATA_PROVIDER switches to a cloud KMS adapter when one is deployed.
+      provider: ${IDENTITY_DATA_PROVIDER:local}
+      key-id: ${IDENTITY_DATA_KEY_ID:}
+      key: ${IDENTITY_DATA_KEY:}
+      previous-keys: ${IDENTITY_DATA_KEYS_PREVIOUS:}
     webauthn:
       rp-id: dev.afrotransact.com
       rp-name: AfroTransact (dev)
@@ -125,6 +134,12 @@ at:
         secret: ${SEARCH_CLIENT_SECRET}
         grant-types: [client_credentials]
         scopes: [ai:use]
+      - client-id: offers-service
+        name: Offers service
+        type: confidential
+        secret: ${OFFERS_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [catalog:read]
       - client-id: retail-service
         name: AfroTransact Retail service
         type: confidential

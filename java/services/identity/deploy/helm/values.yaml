@@ -34,6 +34,10 @@ monitoring:
 #   - DB_PASSWORD
 #   - KAFKA_BOOTSTRAP
 #   - SIGNING_KEY_PEM
+#   - IDENTITY_DATA_KEY (S202 data key: base64 AES-256 key-encryption key sealing TOTP secrets at rest;
+#     generate with `openssl rand -base64 32`, one per environment, never reused)
+#   - IDENTITY_DATA_KEY_ID (optional; id stored with every ciphertext, derived from the key when unset)
+#   - IDENTITY_DATA_KEYS_PREVIOUS (optional, only during a rotation: "[keyId:]base64,..." of retired keys)
 #   - GOOGLE_CLIENT_SECRET
 #   - GOOGLE_CLIENT_ID
 #   - APPLE_CLIENT_ID

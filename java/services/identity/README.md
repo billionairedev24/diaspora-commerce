@@ -17,8 +17,8 @@ claims with `JwtActorResolver` (java/libs/platform-security) or `auth.Require` (
 | Email verification | 6-digit code (hashed), 10-minute expiry, 5 wrong attempts, resend ≤ 1 per 30 s and ≤ 5 per hour (HTTP 429 + `Retry-After`). Signing up again with an unconfirmed email restarts the registration. |
 | Landing | `GET /v1/me` → `landing` = `shop` / `seller-onboarding` / `seller-center` / `provider-onboarding` / `provider-hub` / `staff-console` / `driver-app`, from roles and org approval status. |
 | RBAC | Permissions, roles per portal (account, platform, seller, provider), multiple roles + direct grants per user, enable/disable, module access matrix (none/view/edit/approve/full), append-only change log (DB trigger rejects UPDATE/DELETE). |
-| MFA | TOTP (RFC 6238, otpauth URI for the QR code, replay-protected), SMS codes (outbox event), 10 hashed recovery codes, "trust this browser" for 30 days. Staff always need a second factor (SMS to the phone on file if nothing is enrolled) and cannot turn MFA off. Passkey sign-ins skip the prompt (phishing-resistant). |
-| Passkeys | Spring Security 7 `webAuthn()` with JDBC repositories (`user_entities`, `user_credentials`): `/webauthn/register/options`, `/webauthn/register`, `/webauthn/authenticate/options`, `/login/webauthn`, management page `/webauthn/register`. `PasskeyService` lists/removes them over the API and refuses to remove the last sign-in method. |
+| MFA | TOTP (RFC 6238, otpauth URI for the QR code, replay-protected; secrets encrypted at rest, see [Data protection](#data-protection-s202)), SMS codes (outbox event), 10 hashed recovery codes, "trust this browser" for 30 days. Staff always need a second factor (SMS to the phone on file if nothing is enrolled) and cannot turn MFA off. Passkey sign-ins skip the prompt (phishing-resistant). |
+| Passkeys | Spring Security 7 `webAuthn()` with JDBC repositories (`user_entities`, `user_credentials`): `/webauthn/register/options`, `/webauthn/register`, `/webauthn/authenticate/options`, `/login/webauthn`, management page `/webauthn/register`. `PasskeyService` lists/removes them over the API and refuses to remove the last sign-in method. The signature counter is enforced (a counter that does not increase is rejected as a cloned authenticator). |
 | Social login | Google (OIDC) via its own consent page; Apple (OIDC, form_post) and Facebook registrations exist but are disabled by default. A provider is offered only when it has client credentials **and** is enabled in `identity_provider` (`PUT /v1/admin/identity-providers/{id}`). Accounts created from provider-verified emails skip email verification; a verified email matching an existing account links to it; signing in with a provider while already signed in links it. |
 | First-party sign-in | `gateway-bff` only: password, TOTP/SMS/recovery-code and passkey steps as JSON (`/v1/auth/*`), ending in a one-time **login ticket** that the BFF redeems on the normal authorization-code flow (`/oauth2/authorize?…&login_ticket=…`). See [First-party sign-in](#first-party-sign-in-s209). |
 | Brute-force protection | Per account (normalised email, also for unknown emails) and per IP: 5 / 30 failures within 15 min lock for 15 min, doubling per consecutive lockout up to 4 h (`at.identity.sign-in-protection`). Applies to the first-party API **and** the hosted `/login` and `/login/mfa` pages. 429 `identity.sign-in-locked` + `Retry-After`; append-only `sign_in_audit`; `identity.sign-in.locked` events. |
@@ -63,6 +63,88 @@ invitation and publish `identity.role.granted` + `identity.invitation.accepted`.
 `invitationToken`: `identity.invitation-invalid`, `-expired`, `-used`, `-revoked`; a different email is 422
 `identity.invitation-email-mismatch`. `POST /v1/invitations/lookup {token}` (public) lets the accept / sign-up page
 show the organisation, role, email and status first.
+
+## Data protection (S202)
+
+TOTP seeds are the only reversible MFA secret identity holds, and they are **encrypted at rest**: a database dump (or
+backup, or replica) without the key cannot generate codes.
+
+**What is protected, and how**
+
+| Material | Table / column | At rest |
+|---|---|---|
+| TOTP secret (authenticator-app seed) | `mfa_totp.secret_ciphertext` + `secret_key_id` | **Envelope-encrypted** (below). The legacy `mfa_totp.secret` column is never written and is emptied at start-up. |
+| Recovery codes | `mfa_recovery_code.code_hash` | SHA-256 hash only (codes are shown once; nothing to decrypt) |
+| Trusted-browser tokens | `trusted_browser.token_hash` | SHA-256 of a 256-bit random token |
+| SMS sign-in / enrolment codes | `verification_code.code_hash` | SHA-256 hash, 10-minute expiry, 5 attempts |
+| SMS factor | `mfa_sms.phone_e164` | Phone number only (also on `user_account`); no secret material |
+| Passkeys | `user_credentials.public_key` | Public keys only |
+| Login tickets, invitation tokens | `login_ticket`, `org_invitation` | SHA-256 only |
+
+**Envelope encryption** sits behind the `SecretCipher` port (`port/SecretCipher`), implemented by
+`adapter/out/crypto/EnvelopeSecretCipher`; `JdbcMfaRepository` seals on write and opens on read, so the domain and use
+cases only ever see the plain secret in memory. For every record:
+
+1. a fresh random 256-bit **data key** and 96-bit **nonce** are drawn; the secret is encrypted with **AES-256-GCM**;
+2. the data key is **wrapped** by the key-encryption key (KEK) through the `DataKeyWrapper` seam (AES-256-GCM with its
+   own random nonce for the local key ring);
+3. the stored envelope is `0x01 | kidLen | kid | wrappedLen | wrapped data key | nonce | ciphertext+tag`; the key id is
+   also stored in `secret_key_id` so rotation can find rows on older keys.
+
+The header (version, key id, wrapped key) and a record context (`mfa_totp.secret:<userId>`) are authenticated data:
+changing any byte, the key id, or copying a ciphertext onto another user's row fails the GCM tag check
+(`SecretCipherException`).
+
+**Keys.** `at.identity.data-protection.provider=local` (default) builds a key ring from the secret store:
+
+| Env var | Purpose |
+|---|---|
+| `IDENTITY_DATA_KEY` | Current KEK: base64 of 32 random bytes (`openssl rand -base64 32`), one per environment, never reused. Required outside `local` (start-up fails without it). |
+| `IDENTITY_DATA_KEY_ID` | Optional id written with every ciphertext. When unset it is derived from the key (`k-` + 16 hex chars of a SHA-256 fingerprint), so a key swap can never reuse an id. |
+| `IDENTITY_DATA_KEYS_PREVIOUS` | Only during a rotation: retired KEKs that may still open existing envelopes, comma-separated `[keyId:]base64`. |
+| `IDENTITY_DATA_PROVIDER` | `local` (default), or `aws-kms` / `gcp-kms` / `azure-key-vault` once a KMS adapter is deployed. |
+
+The `local` profile ships a fixed, committed **development** key (`local-dev-1`) so a local database survives restarts;
+it protects nothing and must never be used elsewhere. Key material is never logged (`toString()` is redacted).
+
+**Cloud KMS (prepared, off by default).** A KMS adapter implements `adapter/out/crypto/DataKeyWrapper`
+(`currentKeyId()`, `wrap(dataKey, context)`, `unwrap(keyId, wrapped, context)`) as a Spring bean active for its
+`provider` value: AWS KMS `Encrypt`/`Decrypt` with `EncryptionContext={context}` (key id = key ARN), GCP KMS
+`encrypt`/`decrypt` with `additionalAuthenticatedData` (key id = CryptoKeyVersion name), Azure Key Vault
+`wrapKey`/`unwrapKey` (RSA-OAEP-256 or AES-KW; key id = key version URL). The KEK then never leaves the KMS, the pod
+reaches it through workload identity (`workloadIdentity.*` in the Helm values) and `IDENTITY_DATA_KEY` is not needed.
+The envelope format, the `SecretCipher` port and rotation stay the same; local and KMS key ids can coexist in one
+key ring during a migration. No KMS SDK is bundled today; selecting a cloud provider without an adapter fails
+start-up.
+
+**Migration (V13 + start-up migrator).** `V13__encrypt_totp_secrets.sql` adds `secret_ciphertext` / `secret_key_id`,
+makes `secret` nullable and requires one of them. On every start, `DataProtectionService.sealPlaintextSecrets()` (an
+`ApplicationRunner`) seals any row still in plain text and empties `secret`, one row at a time with a
+compare-and-set update: idempotent, safe with several replicas starting together and with concurrent sign-ins
+(`at.identity.data-protection.seal-on-startup`, default true). Until that has run, the repository can still read a
+legacy plaintext row. The empty `secret` column is dropped by a later migration once every environment runs this
+release.
+
+**Key rotation (no downtime).**
+
+1. Generate a new key. Add it to the secret store as `IDENTITY_DATA_KEY` and move the old value to
+   `IDENTITY_DATA_KEYS_PREVIOUS` (`<oldKeyId>:<oldBase64>`; set `IDENTITY_DATA_KEY_ID` too if you name keys).
+   For a strictly zero-error rollout across replicas, first deploy with the **new** key only in
+   `IDENTITY_DATA_KEYS_PREVIOUS` (every pod can read it), then swap.
+2. Roll the deployment. New and updated secrets (every TOTP sign-in re-seals its row) use the new key; old rows still
+   open with the previous key.
+3. As a staff user with `platform.super_admin` (MFA-protected staff token), call
+   `POST /v1/admin/data-protection/rotate`. It re-encrypts every row that is plain text or on another key, in batches
+   of 200 with optimistic updates (no locks, sign-ins continue), and answers
+   `{keyId, resealed, skipped, failed, remaining: {keyId: count}}`. It is audited (`access_change_log`
+   `data-protection.rotated`) and idempotent — run it again until `remaining` lists only the new key.
+   `GET /v1/admin/data-protection` shows `{currentKeyId, secretsByKey}` at any time.
+4. `failed > 0` means rows sealed under a key that is no longer in the ring; they are left untouched (add the key back
+   to `IDENTITY_DATA_KEYS_PREVIOUS` and rerun). When nothing remains on the old key, remove
+   `IDENTITY_DATA_KEYS_PREVIOUS` and roll again; destroy the old key after the backup retention period (older backups
+   still need it).
+
+Other callers get 403 `identity.super-admin-required` (staff without the role, services and customers alike).
 
 ## Sign-in flow (browser)
 
@@ -223,6 +305,7 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `GET /v1/admin/module-access?portal=`, `PUT /v1/admin/module-access/{portal}/{module}/{role}` | read / admin | Module access matrix |
 | `GET /v1/admin/access-log?userId=` | `access:read` | Append-only change log |
 | `GET /v1/admin/identity-providers`, `PUT /v1/admin/identity-providers/{id}` | read / admin | Identity provider switches |
+| `GET /v1/admin/data-protection`, `POST /v1/admin/data-protection/rotate` | STAFF + `platform.super_admin` | Encryption-key status, re-encrypt MFA secrets under the current key ([Data protection](#data-protection-s202)) |
 | `PUT /v1/orgs/{orgId}` | `orgs:manage` (seller service) | Mirror seller/provider orgs and approval status |
 | `GET /v1/orgs/{orgId}/members` | team reader (below) | Member directory `{orgId, items: [{userId, firstName, lastName, name, email, roleKey, roleLabel, status ACTIVE/DISABLED, joinedAt}]}` |
 | `PUT /v1/orgs/{orgId}/members/{userId}` `{roleKey}`, `DELETE …` | team manager, staff/service `orgs:manage` | Change a member's role / remove a member (204). The seller service and staff may also add members directly |
@@ -291,6 +374,9 @@ name, status APPROVED, market = country) and makes `applicantUserId` and every `
   `seller.fulfilment`; `shipping:rate` also dispatcher and customer support) and `shipping:admin` (every role with
   `shipping:manage`); table `org_invitation` (token SHA-256 only, PENDING/ACCEPTED/REVOKED, one open invitation per
   org and email) and `phone_verification` (verified E.164 per account, backfilled from confirmed SMS sign-in phones).
+- `V13__encrypt_totp_secrets.sql`: `mfa_totp.secret_ciphertext` (AES-256-GCM envelope) and `secret_key_id`; the
+  plaintext `secret` column becomes nullable, is no longer written and is emptied by the start-up migrator
+  ([Data protection](#data-protection-s202)).
 
 ## Permission catalogue
 
@@ -408,6 +494,7 @@ Module access matrix: 27 platform modules × 15 platform roles, 10 Seller Center
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL `identity` |
 | `KAFKA_BOOTSTRAP` | outbox relay |
 | `SIGNING_KEY_PEM`, `SIGNING_KEY_ID` | RS256 private key (PKCS#8 PEM) and `kid`; required outside `local` |
+| `IDENTITY_DATA_KEY` (+ optional `IDENTITY_DATA_KEY_ID`, `IDENTITY_DATA_KEYS_PREVIOUS`, `IDENTITY_DATA_PROVIDER`) | AES-256 key-encryption key for MFA secrets at rest; required outside `local` ([Data protection](#data-protection-s202)) |
 | `AUTH_ISSUER`, `HOME_URL` | issuer URL (`http://localhost:8100` locally), post-login fallback |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (+ `APPLE_*`, `FACEBOOK_*`) | social sign-in; unset → provider not registered |
 | `GATEWAY_BFF_CLIENT_SECRET` (or `BFF_CLIENT_SECRET`), `SELLER_SERVICE_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET`, `TAX_RETURNS_CLIENT_SECRET`, … | confidential client secrets (hashed with BCrypt before storage) |
@@ -415,6 +502,7 @@ Module access matrix: 27 platform modules × 15 platform roles, 10 Seller Center
 | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_PHONE` | first super administrator (skipped when unset) |
 
 Other settings (`at.identity.*`): `staff-email-domains`, `verification.sender` (`outbox` | `log`), `mfa.*`,
+`data-protection.{provider,key-id,key,previous-keys,seal-on-startup}`,
 `invitations.accept-url`,
 `webauthn.{rp-id,rp-name,allowed-origins}`, `cors-allowed-origins`, and `clients` — the OAuth clients seeded (upserted by
 client id) at start-up per environment: `storefront`, `seller-center`, `staff-console`, `customer-app`, `driver-app`
@@ -467,11 +555,54 @@ use, `phoneVerified` in `/v1/me` and the contact lookup, reset on phone change).
 `OrgTeamServiceImpl`, `OrgInvitationServiceImpl` and `PhoneVerificationServiceImpl` (Mockito). Unit tests cover the throttle policy, challenge/ticket
 rules, the first-party service (Mockito), the login-ticket filter and WebAuthn assertion verification.
 
+**Data protection (S202).** `EnvelopeSecretCipherTest`: round trip (ciphertext never contains the secret), a fresh
+data key and nonce per record, tamper detection (every single-bit flip anywhere in the envelope, truncation), binding
+to the record, wrong key material and unknown key ids, previous keys during rotation, derived key ids, rejected weak
+or missing keys, redacted settings. `DataProtectionServiceImplTest`: super-admin only, paging, resealed / skipped /
+failed counts, audit. `DataProtectionIT` (Testcontainers): migrates the schema to **V12** and inserts a plaintext
+TOTP row *before* the application starts, then proves start-up applied V13 and sealed it (the authenticator app still
+signs in); TOTP enrolment and sign-in never leave the secret in **any** table (every row of every table is scanned
+as text, including the hex form of byte columns); super-admin rotation from a retired key (403 for others), a row on a
+missing key reported as `failed`, idempotent re-runs, audit row.
+
+**Passkeys end to end (S203).** `PasskeyCeremonyIT` runs the real WebAuthn ceremonies against the running service with
+`testsupport/VirtualAuthenticator`, a pure-Java platform authenticator (EC P-256 key pair, attestation object with
+`fmt: none` and authenticator data built by hand with a small CBOR encoder, ES256 assertion signatures over
+`authenticatorData || SHA-256(clientDataJSON)`). It registers through the hosted ceremony
+(`/webauthn/register/options` → `/webauthn/register`, as the passkey page's script does), then signs in on the
+**hosted page** (`/oauth2/authorize` → `/webauthn/authenticate/options` → `/login/webauthn` → `redirectUrl` → code →
+`/oauth2/token`) and through the **first-party API** (`/v1/auth/passkey/options` → `/verify` → login ticket → code →
+tokens), checking the stored signature counter rises 1, 2, 3. Negative cases: registration and assertions from a
+foreign origin, a replayed registration response, a replayed assertion (same browser, another browser, old challenge
+after fresh options, API challenge reuse and cross-challenge), a cloned authenticator with a lower counter, and a
+removed passkey (both sign-in paths reject it; the password still works).
+
+Why not Playwright + Chromium's CDP virtual authenticator: the pure-Java authenticator runs in plain `mvn verify` with
+no browser binary, display or CDP version coupling (the pre-installed Chromium and Playwright's CDP protocol must
+match), it is deterministic and fast, and it can do what a browser deliberately forbids — claim a foreign origin,
+replay a challenge, roll back the counter — which are exactly the attacks the relying party must reject. Browsers set
+`origin` and `challenge` themselves, so with Playwright those cases would need extra phishing-origin servers or could
+not be expressed at all. The IT drives the same JSON the hosted page's `webauthn.js` and `PublicKeyCredential.toJSON()`
+send. What it does not cover is the page's JavaScript itself (button wiring, base64url decoding in the browser).
+
+The ceremony test found two defects, fixed here: a hosted passkey sign-in could not finish the authorization-code flow
+(`/oauth2/token` answered 500 because the stored authorization's `WebAuthnAuthentication` principal was not
+deserialisable; the authorization service now registers Spring Security's WebAuthn Jackson module), and the signature
+counter was never enforced (Spring Security 7.1 verifies against the registration-time counter;
+`SignCountVerifyingRelyingParty` now rejects a counter that does not increase).
+
 ## Not covered here
 
 - Fine-grained object checks (seller_org → store → listing) belong to OpenFGA (backlog S022), not this service.
-- TOTP secrets are stored unencrypted in `mfa_totp` (protected by database access controls); envelope encryption with
-  a KMS key is a follow-up.
+- The KMS `DataKeyWrapper` adapters (AWS / GCP / Azure) are designed for but not implemented; the local key ring from
+  the secret store is used everywhere today. The empty legacy `mfa_totp.secret` column is dropped in a later release.
+- Recovery codes are unsalted SHA-256 hashes of ~50-bit codes and SMS codes are SHA-256 of 6 digits: hashing is kept
+  (nothing is reversible), but an offline brute force of a dump could recover unused recovery codes. A keyed hash
+  (HMAC with a pepper from the secret store) would close that; it needs a re-generation of existing codes.
+- Spring Authorization Server stores access / refresh token values in `oauth2_authorization` as issued; encrypting or
+  hashing them needs a custom `OAuth2AuthorizationService` (separate story).
+- Spring Security's WebAuthn registration filter lets verification errors (e.g. a foreign origin) surface as a 5xx
+  instead of a 400; the ceremony is still rejected.
 - Token Exchange (RFC 8693), DPoP for mobile and the device-code grant from the architecture document are not enabled yet.
 - Team changes made here are not pushed to the seller service's own member list; it should consume
   `identity.role.granted` / `identity.role.revoked` with `orgId` (or Seller Center should read identity's directory).

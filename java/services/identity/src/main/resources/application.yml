@@ -102,6 +102,14 @@ at:
     mfa:
       issuer-name: AfroTransact
       secure-cookies: true
+    # S202: envelope encryption of TOTP secrets at rest (README "Data protection"). Provider local = key ring from the
+    # secret store; aws-kms / gcp-kms / azure-key-vault need a KMS DataKeyWrapper adapter (not bundled, off by default).
+    data-protection:
+      provider: ${IDENTITY_DATA_PROVIDER:local}
+      key-id: ${IDENTITY_DATA_KEY_ID:}
+      key: ${IDENTITY_DATA_KEY:}
+      previous-keys: ${IDENTITY_DATA_KEYS_PREVIOUS:}
+      seal-on-startup: true
     social:
       google:
         client-id: ${GOOGLE_CLIENT_ID:}

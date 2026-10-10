@@ -18,6 +18,7 @@ import com.afrotransact.identity.adapter.in.security.MfaChallengeAccessDeniedHan
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationConverter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationProvider;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
+import com.afrotransact.identity.adapter.out.passkey.SignCountVerifyingRelyingParty;
 import com.afrotransact.identity.adapter.out.passkey.WebAuthnPasskeyAssertions;
 import com.afrotransact.identity.application.FederatedLoginService;
 import com.afrotransact.identity.application.FirstPartySignInService;
@@ -199,15 +200,16 @@ class SecurityConfiguration {
 
     /**
      * One WebAuthn relying party for the hosted pages ({@code webAuthn()} picks this bean up) and the first-party
-     * passkey API. Allowed origins include the storefront origins whose own forms run the ceremony.
+     * passkey API. Allowed origins include the storefront origins whose own forms run the ceremony. The signature
+     * counter is enforced on top of Spring Security's relying party (see {@link SignCountVerifyingRelyingParty}).
      */
     @Bean
     WebAuthnRelyingPartyOperations webAuthnRelyingPartyOperations(PublicKeyCredentialUserEntityRepository userEntities,
                                                                    UserCredentialRepository credentials,
                                                                    IdentityProperties props) {
-        return new Webauthn4JRelyingPartyOperations(userEntities, credentials, PublicKeyCredentialRpEntity.builder()
-                .id(props.webauthn().rpId()).name(props.webauthn().rpName()).build(),
-                new HashSet<>(props.webauthn().allowedOrigins()));
+        return new SignCountVerifyingRelyingParty(new Webauthn4JRelyingPartyOperations(userEntities, credentials,
+                PublicKeyCredentialRpEntity.builder().id(props.webauthn().rpId()).name(props.webauthn().rpName())
+                        .build(), new HashSet<>(props.webauthn().allowedOrigins())), credentials);
     }
 
     @Bean

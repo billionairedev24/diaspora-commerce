@@ -23,6 +23,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param firstParty        first-party sign-in API (clients allowed to call it and redeem login tickets)
  * @param signInProtection  brute-force protection limits (per account and per IP)
  * @param invitations       organisation invitations (Seller Center accept page)
+ * @param dataProtection    encryption at rest of MFA secrets (key-encryption key provider and keys)
  */
 @ConfigurationProperties(prefix = "at.identity")
 public record IdentityProperties(
@@ -39,7 +40,8 @@ public record IdentityProperties(
         List<Client> clients,
         FirstParty firstParty,
         SignInProtection signInProtection,
-        Invitations invitations) {
+        Invitations invitations,
+        DataProtection dataProtection) {
 
     public IdentityProperties {
         homeUrl = homeUrl == null ? "/" : homeUrl;
@@ -55,6 +57,35 @@ public record IdentityProperties(
         firstParty = firstParty == null ? new FirstParty(null) : firstParty;
         signInProtection = signInProtection == null ? new SignInProtection(null, null) : signInProtection;
         invitations = invitations == null ? new Invitations(null) : invitations;
+        dataProtection = dataProtection == null ? new DataProtection(null, null, null, null, null) : dataProtection;
+    }
+
+    /**
+     * Envelope encryption of MFA secrets at rest.
+     *
+     * @param provider         {@code local} (default: key ring from the secret store) or a cloud KMS adapter
+     *                         ({@code aws-kms}, {@code gcp-kms}, {@code azure-key-vault}) that provides its own
+     *                         key wrapper
+     * @param keyId            id of the current local key (blank → derived from the key)
+     * @param key              current local AES-256 key, base64 ({@code IDENTITY_DATA_KEY})
+     * @param previousKeys     retired local keys kept for decryption during a rotation, comma-separated
+     *                         {@code [keyId:]base64} ({@code IDENTITY_DATA_KEYS_PREVIOUS})
+     * @param sealOnStartup    encrypt legacy plaintext TOTP secrets at start-up (default true)
+     */
+    public record DataProtection(String provider, String keyId, String key, String previousKeys,
+                                 Boolean sealOnStartup) {
+
+        public DataProtection {
+            provider = provider == null || provider.isBlank() ? "local" : provider.trim();
+            sealOnStartup = sealOnStartup == null ? Boolean.TRUE : sealOnStartup;
+        }
+
+        /** Never prints key material. */
+        @Override
+        public String toString() {
+            return "DataProtection[provider=" + provider + ", keyId=" + keyId + ", sealOnStartup=" + sealOnStartup
+                    + "]";
+        }
     }
 
     /** @param acceptUrl Seller Center page that accepts an invitation ({@code ?token=} is appended) */

@@ -21,6 +21,8 @@ security:
 tags:
 - name: Two-step verification
   description: Authenticator app, SMS codes and recovery codes
+- name: Data protection
+  description: 'Encryption at rest of MFA secrets: key status and key rotation (staff with platform.super_admin only)'
 - name: Notification preferences
   description: Account-level email, SMS and push switches and marketing opt-in, read by notifications-service (security messages
     such as one-time codes always go out)
@@ -145,6 +147,34 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AccessChangePage'
+  /v1/admin/data-protection:
+    get:
+      tags:
+      - Data protection
+      summary: Current data-protection key and TOTP secrets per key (platform.super_admin)
+      operationId: dataProtectionStatus
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataProtectionStatus'
+  /v1/admin/data-protection/rotate:
+    post:
+      tags:
+      - Data protection
+      summary: Re-encrypt every TOTP secret under the current key (platform.super_admin)
+      description: Run after deploying a new IDENTITY_DATA_KEY with the old key in IDENTITY_DATA_KEYS_PREVIOUS. Online and
+        idempotent; audited in the access change log.
+      operationId: rotateDataProtectionKey
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DataProtectionRotation'
   /v1/admin/identity-providers:
     get:
       tags:
@@ -2317,6 +2347,26 @@ components:
           type: string
           maxLength: 300
           minLength: 0
+    DataProtectionRotation:
+      type: object
+      description: remaining counts TOTP secrets per key id after the run; rotation is complete when it lists only keyId
+      properties:
+        keyId:
+          type: string
+        resealed:
+          type: integer
+          format: int32
+        skipped:
+          type: integer
+          format: int32
+        failed:
+          type: integer
+          format: int32
+        remaining:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
     SignUpRequest:
       type: object
       description: 'Unified sign-up. The role is never a form field: intent decides it.'
@@ -2711,6 +2761,17 @@ components:
           type: object
           additionalProperties:
             type: string
+    DataProtectionStatus:
+      type: object
+      description: secretsByKey counts TOTP secrets per key id; 'plaintext' counts legacy rows not sealed yet
+      properties:
+        currentKeyId:
+          type: string
+        secretsByKey:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
     AccessChange:
       type: object
       properties:

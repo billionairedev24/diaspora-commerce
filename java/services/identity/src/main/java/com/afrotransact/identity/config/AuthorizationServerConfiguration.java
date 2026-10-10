@@ -19,7 +19,10 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationConsentService;
+import org.springframework.security.jackson.SecurityJacksonModules;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
+import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService.JsonMapperOAuth2AuthorizationParametersMapper;
+import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService.JsonMapperOAuth2AuthorizationRowMapper;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationConsentService;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.client.JdbcRegisteredClientRepository;
@@ -29,6 +32,9 @@ import org.springframework.security.oauth2.server.authorization.token.Delegating
 import org.springframework.security.oauth2.server.authorization.token.JwtGenerator;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2AccessTokenGenerator;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
+import org.springframework.security.web.webauthn.jackson.WebauthnJacksonModule;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 /** Spring Authorization Server: JDBC stores on PostgreSQL, RS256 keys, token generation with platform claims. */
 @Configuration(proxyBeanMethods = false)
@@ -39,9 +45,25 @@ class AuthorizationServerConfiguration {
         return new JdbcRegisteredClientRepository(jdbc);
     }
 
+    /**
+     * Authorizations store the authenticated principal as JSON. The default mapper only knows the core, web, OAuth2
+     * client and authorization-server types, so an authorization started by a hosted passkey sign-in
+     * ({@code WebAuthnAuthentication}) could be saved but not read back at {@code /oauth2/token} (500). The WebAuthn
+     * Jackson module adds its mix-ins and allow-lists exactly those principal types (found by PasskeyCeremonyIT, S203).
+     */
     @Bean
     OAuth2AuthorizationService authorizationService(JdbcTemplate jdbc, RegisteredClientRepository clients) {
-        return new JdbcOAuth2AuthorizationService(jdbc, clients);
+        BasicPolymorphicTypeValidator.Builder allowedTypes = BasicPolymorphicTypeValidator.builder();
+        WebauthnJacksonModule webauthn = new WebauthnJacksonModule();
+        webauthn.configurePolymorphicTypeValidator(allowedTypes);
+        JsonMapper json = JsonMapper.builder()
+                .addModules(SecurityJacksonModules.getModules(getClass().getClassLoader(), allowedTypes))
+                .addModule(webauthn)
+                .build();
+        JdbcOAuth2AuthorizationService service = new JdbcOAuth2AuthorizationService(jdbc, clients);
+        service.setAuthorizationRowMapper(new JsonMapperOAuth2AuthorizationRowMapper(clients, json));
+        service.setAuthorizationParametersMapper(new JsonMapperOAuth2AuthorizationParametersMapper(json));
+        return service;
     }
 
     @Bean

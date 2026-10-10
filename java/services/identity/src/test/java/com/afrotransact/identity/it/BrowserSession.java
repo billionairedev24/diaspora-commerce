@@ -81,6 +81,31 @@ final class BrowserSession {
         return new AuthorizeResult(code(location(resumed)), false, verifier);
     }
 
+    /**
+     * Starts the authorization-code + PKCE flow and stops on the hosted sign-in page (the authorization request is
+     * saved in the session, as for a browser about to run the passkey ceremony). Returns the PKCE verifier.
+     */
+    String beginAuthorize(String clientId, String redirectUri) {
+        String verifier = randomVerifier();
+        HttpResponse<String> start = get(base + "/oauth2/authorize?response_type=code&client_id=" + enc(clientId)
+                + "&redirect_uri=" + enc(redirectUri) + "&scope=" + enc("openid profile email offline_access")
+                + "&state=st-123&code_challenge=" + challenge(verifier) + "&code_challenge_method=S256");
+        expect(start, 302);
+        String login = location(start);
+        if (!login.contains("/login")) {
+            throw new IllegalStateException("Expected the sign-in page, got " + login);
+        }
+        expect(get(absolute(login)), 200);
+        return verifier;
+    }
+
+    /** Follows a post-sign-in redirect (e.g. WebAuthn's {@code redirectUrl}) to the authorization endpoint. */
+    String resumeAuthorize(String url) {
+        HttpResponse<String> resumed = get(absolute(url));
+        expect(resumed, 302);
+        return code(location(resumed));
+    }
+
     /** Completes the second factor; returns the authorization code. */
     String completeMfa(String factor, String code, boolean trust) {
         HttpResponse<String> page = get(base + "/login/mfa");
