@@ -1,0 +1,1565 @@
+openapi: 3.1.0
+info:
+  title: Identity API
+  description: Accounts, sign-up and verification, role-based landing, access control administration, MFA, passkeys and social
+    sign-in. OAuth 2.1 / OIDC endpoints are described by /.well-known/openid-configuration.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8100
+  description: local
+- url: https://api.dev.afrotransact.com/identity
+  description: dev
+- url: https://api.uat.afrotransact.com/identity
+  description: uat
+- url: https://api.afrotransact.com/identity
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Two-step verification
+  description: Authenticator app, SMS codes and recovery codes
+- name: Login & security
+  description: Password, active sessions, linked social accounts and passkeys
+- name: Access control
+  description: Module matrix, capabilities, people and change log (access:read to view, access:admin to change)
+- name: Organisations
+  description: Seller/provider organisations mirrored from the seller service (orgs:manage)
+- name: Accounts
+  description: Unified sign-up and email verification (public)
+- name: Identity providers
+  description: Which social sign-in buttons appear (Developers › Identity providers)
+- name: Me
+  description: 'The signed-in user: profile, roles, permissions and role-based landing'
+paths:
+  /v1/accounts:
+    post:
+      tags:
+      - Accounts
+      summary: Create an account (customers, sellers and providers use the same form)
+      description: Adds account.customer, plus the seller/provider applicant role when intent is sell/provide. A 6-digit code
+        is emailed (10-minute expiry).
+      operationId: signUp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SignUpResponse'
+      security: []
+  /v1/accounts/verification:
+    post:
+      tags:
+      - Accounts
+      summary: Confirm the email address with the 6-digit code
+      operationId: verify
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyEmailRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
+      security: []
+  /v1/accounts/verification/resend:
+    post:
+      tags:
+      - Accounts
+      summary: Send a new code (at most 1 per 30 seconds and 5 per hour; 429 with Retry-After otherwise)
+      operationId: resend
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendCodeRequest'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CodeSentResponse'
+      security: []
+  /v1/admin/access-log:
+    get:
+      tags:
+      - Access control
+      summary: Append-only access change log (who changed what and when)
+      operationId: log
+      parameters:
+      - name: userId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AccessChangePage'
+  /v1/admin/identity-providers:
+    get:
+      tags:
+      - Identity providers
+      summary: All providers with their switch and configuration state (access:read)
+      operationId: all
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IdentityProviderAdmin'
+  /v1/admin/identity-providers/{providerId}:
+    put:
+      tags:
+      - Identity providers
+      summary: Enable or disable a provider (access:admin)
+      operationId: set
+      parameters:
+      - name: providerId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetProviderEnabledRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/IdentityProviderAdmin'
+  /v1/admin/module-access:
+    get:
+      tags:
+      - Access control
+      summary: Module access matrix of a portal
+      operationId: matrix
+      parameters:
+      - name: portal
+        in: query
+        required: false
+        schema:
+          type: string
+          default: platform
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ModuleMatrix'
+  /v1/admin/module-access/{portal}/{moduleKey}/{roleKey}:
+    put:
+      tags:
+      - Access control
+      summary: Set one cell of the module access matrix
+      operationId: setModuleAccess
+      parameters:
+      - name: portal
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: moduleKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: roleKey
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetModuleAccessRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ModuleAccess'
+  /v1/admin/permissions:
+    get:
+      tags:
+      - Access control
+      summary: Permission catalogue
+      operationId: permissions
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Permission'
+  /v1/admin/roles:
+    get:
+      tags:
+      - Access control
+      summary: Roles of a portal with their permissions (capabilities tab)
+      operationId: roles
+      parameters:
+      - name: portal
+        in: query
+        required: false
+        schema:
+          type: string
+          default: platform
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+  /v1/admin/roles/{roleKey}/permissions/{permissionKey}:
+    put:
+      tags:
+      - Access control
+      summary: Add a permission to a role
+      operationId: addRolePermission
+      parameters:
+      - name: roleKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: permissionKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: reason
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Role'
+    delete:
+      tags:
+      - Access control
+      summary: Remove a permission from a role (holders lose it on their next token)
+      operationId: removeRolePermission
+      parameters:
+      - name: roleKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: permissionKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: reason
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Role'
+  /v1/admin/users:
+    get:
+      tags:
+      - Access control
+      summary: 'People: search users by name or email'
+      operationId: users
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 50
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserPage'
+    post:
+      tags:
+      - Access control
+      summary: Provision a staff or driver account with initial roles
+      operationId: create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStaffUserRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserAccess'
+  /v1/admin/users/{userId}:
+    get:
+      tags:
+      - Access control
+      summary: A user's roles, direct grants and effective permissions
+      operationId: user
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserAccess'
+  /v1/admin/users/{userId}/disable:
+    post:
+      tags:
+      - Access control
+      summary: Disable an account; all its sessions end immediately
+      operationId: disable
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserAccess'
+  /v1/admin/users/{userId}/enable:
+    post:
+      tags:
+      - Access control
+      summary: Re-enable an account
+      operationId: enable
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserAccess'
+  /v1/admin/users/{userId}/permissions/{permissionKey}:
+    put:
+      tags:
+      - Access control
+      summary: Grant a permission directly (for example delivery:operate)
+      operationId: grant
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: permissionKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: reason
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserAccess'
+    delete:
+      tags:
+      - Access control
+      summary: Revoke a direct permission grant (takes effect on the user's next token)
+      operationId: revoke
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: permissionKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: reason
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserAccess'
+  /v1/admin/users/{userId}/roles/{roleKey}:
+    put:
+      tags:
+      - Access control
+      summary: Assign an account or platform role
+      operationId: assignRole
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: roleKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: reason
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserAccess'
+    delete:
+      tags:
+      - Access control
+      summary: Remove a role (takes effect on the user's next token)
+      operationId: removeRole
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: roleKey
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: reason
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/UserAccess'
+  /v1/identity-providers:
+    get:
+      tags:
+      - Identity providers
+      summary: Enabled social providers for sign-in screens (public)
+      operationId: enabled
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IdentityProvider'
+      security: []
+  /v1/me:
+    get:
+      tags:
+      - Me
+      summary: Profile, roles, effective permissions, organisations and landing
+      operationId: me
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Me'
+    patch:
+      tags:
+      - Me
+      summary: Complete or edit the profile (social sign-ups add their phone and accept terms here)
+      operationId: update
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Me'
+  /v1/me/active-org:
+    put:
+      tags:
+      - Me
+      summary: Choose the organisation to act for (token org claim from the next token)
+      operationId: selectOrg
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectOrgRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Me'
+  /v1/me/linked-accounts:
+    get:
+      tags:
+      - Login & security
+      summary: Linked Google / Apple / Facebook accounts
+      operationId: linked
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LinkedAccounts'
+  /v1/me/linked-accounts/{provider}:
+    delete:
+      tags:
+      - Login & security
+      summary: Unlink a social account (refused for the last sign-in method)
+      operationId: unlink
+      parameters:
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/LinkedAccounts'
+  /v1/me/mfa:
+    get:
+      tags:
+      - Two-step verification
+      summary: Enrolled factors and whether MFA is required / may be turned off (never for staff)
+      operationId: status
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/MfaStatus'
+  /v1/me/mfa/recovery-codes:
+    post:
+      tags:
+      - Two-step verification
+      summary: Regenerate recovery codes (old ones stop working)
+      operationId: regenerate
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RecoveryCodes'
+  /v1/me/mfa/sms:
+    post:
+      tags:
+      - Two-step verification
+      summary: Text a code to the account phone to turn on SMS sign-in codes
+      operationId: startSms
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CodeSent'
+    delete:
+      tags:
+      - Two-step verification
+      summary: Turn off SMS sign-in codes (403 for staff)
+      operationId: disableSms
+      responses:
+        '204':
+          description: No Content
+  /v1/me/mfa/sms/confirm:
+    post:
+      tags:
+      - Two-step verification
+      summary: Confirm SMS sign-in codes; returns recovery codes the first time
+      operationId: confirmSms
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RecoveryCodes'
+  /v1/me/mfa/totp:
+    post:
+      tags:
+      - Two-step verification
+      summary: Start authenticator-app enrolment (QR otpauth URI)
+      operationId: startTotp
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/TotpSetup'
+    delete:
+      tags:
+      - Two-step verification
+      summary: Turn off the authenticator app (403 for staff)
+      operationId: disableTotp
+      responses:
+        '204':
+          description: No Content
+  /v1/me/mfa/totp/confirm:
+    post:
+      tags:
+      - Two-step verification
+      summary: Confirm the authenticator app with a code; returns recovery codes the first time
+      operationId: confirmTotp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RecoveryCodes'
+  /v1/me/passkeys:
+    get:
+      tags:
+      - Login & security
+      summary: Registered passkeys (register at /webauthn/register on the authorization server)
+      operationId: passkeys
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Passkey'
+  /v1/me/passkeys/{credentialId}:
+    delete:
+      tags:
+      - Login & security
+      summary: Remove a passkey (refused for the last sign-in method)
+      operationId: removePasskey
+      parameters:
+      - name: credentialId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
+  /v1/me/password:
+    put:
+      tags:
+      - Login & security
+      summary: Change password (requires the current password)
+      operationId: changePassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
+  /v1/me/roles/provider-applicant:
+    post:
+      tags:
+      - Me
+      summary: 'Offer services: adds account.provider_applicant to this account (no second sign-up)'
+      operationId: startProviding
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Me'
+  /v1/me/roles/seller-applicant:
+    post:
+      tags:
+      - Me
+      summary: 'Start selling: adds account.seller_applicant to this account (no second sign-up)'
+      operationId: startSelling
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Me'
+  /v1/me/sessions:
+    get:
+      tags:
+      - Login & security
+      summary: Active sessions (one per signed-in app or device); current marks this device
+      operationId: sessions
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+  /v1/me/sessions/revoke-others:
+    post:
+      tags:
+      - Login & security
+      summary: Sign out other devices
+      operationId: revokeOthers
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RevokedSessions'
+  /v1/me/sessions/{sessionId}:
+    delete:
+      tags:
+      - Login & security
+      summary: Sign out one session (its refresh token stops working immediately)
+      operationId: revoke_1
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
+  /v1/orgs/{orgId}:
+    put:
+      tags:
+      - Organisations
+      summary: Create or update an organisation and its approval status
+      operationId: upsert
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertOrgRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Organization'
+  /v1/orgs/{orgId}/members/{userId}:
+    put:
+      tags:
+      - Organisations
+      summary: Add a member or change their organisation role (seller.* / provider.*)
+      operationId: setMember
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetMemberRequest'
+        required: true
+      responses:
+        '204':
+          description: No Content
+    delete:
+      tags:
+      - Organisations
+      summary: Remove a member
+      operationId: removeMember
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+components:
+  schemas:
+    UpsertOrgRequest:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+          minLength: 1
+        name:
+          type: string
+          maxLength: 200
+          minLength: 0
+        status:
+          type: string
+          enum:
+          - PENDING
+          - APPROVED
+          - SUSPENDED
+          - REJECTED
+          minLength: 1
+      required:
+      - kind
+      - name
+      - status
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    SetMemberRequest:
+      type: object
+      properties:
+        roleKey:
+          type: string
+          minLength: 1
+      required:
+      - roleKey
+    ChangePasswordRequest:
+      type: object
+      description: currentPassword is required when the account has one
+      properties:
+        currentPassword:
+          type: string
+          maxLength: 128
+          minLength: 0
+        newPassword:
+          type: string
+          maxLength: 128
+          minLength: 0
+        confirmPassword:
+          type: string
+          maxLength: 128
+          minLength: 0
+      required:
+      - confirmPassword
+      - newPassword
+    SelectOrgRequest:
+      type: object
+      properties:
+        orgId:
+          type: string
+          format: uuid
+      required:
+      - orgId
+    Me:
+      type: object
+      description: Profile, roles, effective permissions, organisations and where to land
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        phone:
+          type: string
+        smsConsent:
+          type: boolean
+        termsAcceptedAt:
+          type: string
+          format: date-time
+        principalType:
+          type: string
+        orgId:
+          type: string
+          format: uuid
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        orgs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Org'
+        landing:
+          type: string
+          enum:
+          - shop
+          - seller-onboarding
+          - seller-center
+          - provider-onboarding
+          - provider-hub
+          - staff-console
+          - driver-app
+        profileComplete:
+          type: boolean
+    Org:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        role:
+          type: string
+    UserAccess:
+      type: object
+      description: 'People tab row: roles, direct grants, effective access'
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+        enabled:
+          type: boolean
+        emailVerified:
+          type: boolean
+        principalType:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        directGrants:
+          type: array
+          items:
+            type: string
+        orgs:
+          type: array
+          items:
+            $ref: '#/components/schemas/Org'
+        effectivePermissions:
+          type: array
+          items:
+            type: string
+        driverAppAccess:
+          type: boolean
+    Role:
+      type: object
+      properties:
+        key:
+          type: string
+        portal:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    SetModuleAccessRequest:
+      type: object
+      properties:
+        level:
+          type: string
+          enum:
+          - none
+          - view
+          - edit
+          - approve
+          - full
+          minLength: 1
+      required:
+      - level
+    ModuleAccess:
+      type: object
+      properties:
+        portal:
+          type: string
+        module:
+          type: string
+        role:
+          type: string
+        level:
+          type: string
+    SetProviderEnabledRequest:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+      required:
+      - enabled
+    IdentityProviderAdmin:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        enabled:
+          type: boolean
+        configured:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+        updatedBy:
+          type: string
+    RevokedSessions:
+      type: object
+      properties:
+        revoked:
+          type: integer
+          format: int32
+    TotpSetup:
+      type: object
+      description: Render otpauthUri as a QR code; secret is for manual entry
+      properties:
+        secret:
+          type: string
+        otpauthUri:
+          type: string
+    CodeRequest:
+      type: object
+      properties:
+        code:
+          type: string
+          maxLength: 6
+          minLength: 6
+      required:
+      - code
+    RecoveryCodes:
+      type: object
+      description: Shown once; empty when existing recovery codes were kept
+      properties:
+        recoveryCodes:
+          type: array
+          items:
+            type: string
+    CodeSent:
+      type: object
+      properties:
+        codeExpiresAt:
+          type: string
+          format: date-time
+    CreateStaffUserRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        lastName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        email:
+          type: string
+          format: email
+          minLength: 1
+        phone:
+          type: string
+          minLength: 1
+        phoneRegion:
+          type: string
+        password:
+          type: string
+          maxLength: 128
+          minLength: 0
+        roles:
+          type: array
+          items:
+            type: string
+      required:
+      - email
+      - firstName
+      - lastName
+      - password
+      - phone
+      - roles
+    ReasonRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 300
+          minLength: 0
+    SignUpRequest:
+      type: object
+      description: 'Unified sign-up. The role is never a form field: intent decides it.'
+      properties:
+        firstName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        lastName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          minLength: 0
+        phone:
+          type: string
+          description: Mobile number, E.164 (+17132490142) or national with phoneRegion
+          example: '+17132490142'
+          maxLength: 32
+          minLength: 0
+        phoneRegion:
+          type: string
+          description: ISO 3166 region from the country picker, used for national-format numbers
+          example: US
+        password:
+          type: string
+          maxLength: 128
+          minLength: 0
+        confirmPassword:
+          type: string
+          maxLength: 128
+          minLength: 0
+        termsAccepted:
+          type: boolean
+        smsConsent:
+          type: boolean
+          description: Separate, optional, unticked SMS marketing/notification consent
+        intent:
+          type: string
+          description: 'Entry point: shop (default), sell or provide'
+          enum:
+          - shop
+          - sell
+          - provide
+      required:
+      - confirmPassword
+      - email
+      - firstName
+      - lastName
+      - password
+      - phone
+      - termsAccepted
+    SignUpResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+        verificationRequired:
+          type: boolean
+        codeExpiresAt:
+          type: string
+          format: date-time
+    VerifyEmailRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+        code:
+          type: string
+          maxLength: 6
+          minLength: 6
+      required:
+      - code
+      - email
+    ResendCodeRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+      required:
+      - email
+    CodeSentResponse:
+      type: object
+      properties:
+        codeExpiresAt:
+          type: string
+          format: date-time
+    UpdateProfileRequest:
+      type: object
+      description: Null fields are left unchanged
+      properties:
+        firstName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        lastName:
+          type: string
+          maxLength: 80
+          minLength: 0
+        phone:
+          type: string
+          maxLength: 32
+          minLength: 0
+        phoneRegion:
+          type: string
+        termsAccepted:
+          type: boolean
+        smsConsent:
+          type: boolean
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        clientId:
+          type: string
+        clientName:
+          type: string
+        signedInAt:
+          type: string
+          format: date-time
+        lastActiveAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+    Passkey:
+      type: object
+      properties:
+        credentialId:
+          type: string
+        label:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+    MfaStatus:
+      type: object
+      properties:
+        totp:
+          type: boolean
+        sms:
+          type: boolean
+        smsPhone:
+          type: string
+        recoveryCodesLeft:
+          type: integer
+          format: int32
+        passkeys:
+          type: integer
+          format: int32
+        required:
+          type: boolean
+        mayDisable:
+          type: boolean
+    LinkedAccount:
+      type: object
+      properties:
+        provider:
+          type: string
+        email:
+          type: string
+        linkedAt:
+          type: string
+          format: date-time
+        canUnlink:
+          type: boolean
+    LinkedAccounts:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/LinkedAccount'
+        hasPassword:
+          type: boolean
+        passkeys:
+          type: integer
+          format: int32
+        linkPathTemplate:
+          type: string
+          description: 'Start linking by visiting this path on the authorization server while signed in: /oauth2/authorization/{provider}'
+    IdentityProvider:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        authorizationPath:
+          type: string
+    UserPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserAccess'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    Permission:
+      type: object
+      properties:
+        key:
+          type: string
+        module:
+          type: string
+        description:
+          type: string
+    ModuleMatrix:
+      type: object
+      description: 'Rows: modules; columns: roles; cells: none/view/edit/approve/full'
+      properties:
+        portal:
+          type: string
+        modules:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuleRow'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+    ModuleRow:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        levels:
+          type: object
+          additionalProperties:
+            type: string
+    AccessChange:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        at:
+          type: string
+          format: date-time
+        actorId:
+          type: string
+        action:
+          type: string
+        targetUserId:
+          type: string
+          format: uuid
+        targetRole:
+          type: string
+        subject:
+          type: string
+        detail:
+          type: string
+    AccessChangePage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessChange'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,0 +1,147 @@
+# AsyncAPI 3.0 fragment for identity-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+# All identity events are written to the transactional outbox and relayed to one topic, at.identity.events.
+channels:
+  identityEvents:
+    address: at.identity.events
+    description: >-
+      Accounts, one-time codes and access changes from identity-service. Key = user id (role key for
+      role-permission changes). Headers event-id, event-type, occurred-at. Consumers: notifications-service
+      (identity.verification.requested), audit/trust-ops (access changes), BFF caches (role and permission changes).
+    messages:
+      identityUserRegistered: {$ref: '#/components/messages/identityUserRegistered'}
+      identityUserEmailVerified: {$ref: '#/components/messages/identityUserEmailVerified'}
+      identityVerificationRequested: {$ref: '#/components/messages/identityVerificationRequested'}
+      identityRoleGranted: {$ref: '#/components/messages/identityRoleGranted'}
+      identityRoleRevoked: {$ref: '#/components/messages/identityRoleRevoked'}
+      identityPermissionGranted: {$ref: '#/components/messages/identityPermissionGranted'}
+      identityPermissionRevoked: {$ref: '#/components/messages/identityPermissionRevoked'}
+      identityUserDisabled: {$ref: '#/components/messages/identityUserDisabled'}
+      identityUserEnabled: {$ref: '#/components/messages/identityUserEnabled'}
+operations:
+  publishIdentityEvents:
+    action: send
+    channel: {$ref: '#/channels/identityEvents'}
+    summary: identity-service publishes account, verification and access-change events via its transactional outbox.
+components:
+  messages:
+    identityUserRegistered:
+      name: identity.user.registered
+      title: Account created (sign-up form, social sign-in or staff provisioning)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityUserRegistered'}
+    identityUserEmailVerified:
+      name: identity.user.email-verified
+      title: Email confirmed with the 6-digit code
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityUserEmailVerified'}
+    identityVerificationRequested:
+      name: identity.verification.requested
+      title: Deliver a one-time code (email verification, SMS sign-in code, SMS enrolment)
+      description: >-
+        Contains the plain one-time code so notifications-service can render template identity.verification.
+        Security message: always sent, quiet hours do not apply. Never log the payload.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityVerificationRequested'}
+    identityRoleGranted:
+      name: identity.role.granted
+      title: Role added to a user (sign-up intent, start selling, admin, org membership)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityRoleChanged'}
+    identityRoleRevoked:
+      name: identity.role.revoked
+      title: Role removed from a user; effective on the user's next token (≤ 5 minutes)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityRoleChanged'}
+    identityPermissionGranted:
+      name: identity.permission.granted
+      title: Permission granted directly to a user, or added to a role
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityPermissionChanged'}
+    identityPermissionRevoked:
+      name: identity.permission.revoked
+      title: Direct grant revoked, or permission removed from a role; effective on the next token
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityPermissionChanged'}
+    identityUserDisabled:
+      name: identity.user.disabled
+      title: Account disabled; every session and refresh token was revoked
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityUserStatusChanged'}
+    identityUserEnabled:
+      name: identity.user.enabled
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityUserStatusChanged'}
+  schemas:
+    IdentityUserRegistered:
+      type: object
+      required: [userId, email, firstName, lastName, intent, roles, method, emailVerified, smsConsent, registeredAt]
+      properties:
+        userId: {type: string, format: uuid}
+        email: {type: string, format: email}
+        firstName: {type: string}
+        lastName: {type: string}
+        phone: {type: [string, 'null'], description: E.164 mobile number}
+        intent: {type: string, enum: [SHOP, SELL, PROVIDE, STAFF]}
+        roles:
+          type: array
+          items: {type: string, examples: [account.customer, account.seller_applicant]}
+        method: {type: string, enum: [PASSWORD, GOOGLE, APPLE, FACEBOOK, ADMIN]}
+        emailVerified: {type: boolean, description: true for social sign-ups and staff provisioning}
+        smsConsent: {type: boolean, description: Separate, optional SMS opt-in from the sign-up form}
+        registeredAt: {type: string, format: date-time}
+    IdentityUserEmailVerified:
+      type: object
+      required: [userId, email, verifiedAt]
+      properties:
+        userId: {type: string, format: uuid}
+        email: {type: string, format: email}
+        verifiedAt: {type: string, format: date-time}
+    IdentityVerificationRequested:
+      type: object
+      description: Follows the notifications-service payload convention (recipient block, channel override).
+      required: [recipient, channel, code, expiresInMinutes, expiresAt, purpose, userId, transactional]
+      properties:
+        recipient:
+          type: object
+          required: [id]
+          properties:
+            id: {type: string, format: uuid}
+            email: {type: [string, 'null'], format: email}
+            phone: {type: [string, 'null'], description: E.164}
+        channel: {type: string, enum: [email, sms]}
+        code: {type: string, pattern: '^[0-9]{6}$'}
+        expiresInMinutes: {type: integer, examples: [10]}
+        expiresAt: {type: string, format: date-time}
+        purpose: {type: string, enum: [EMAIL_VERIFICATION, SIGN_IN_SMS, SMS_ENROLMENT]}
+        userId: {type: string, format: uuid}
+        firstName: {type: string}
+        transactional: {type: boolean, const: true}
+    IdentityRoleChanged:
+      type: object
+      required: [userId, roleKey, actorId, at]
+      properties:
+        userId: {type: string, format: uuid}
+        roleKey: {type: string, examples: [platform.driver, seller.owner, account.seller_applicant]}
+        orgId: {type: [string, 'null'], format: uuid, description: Set for seller/provider organisation roles}
+        actorId: {type: string, description: User id of the administrator, the user themself, or a client id}
+        reason: {type: [string, 'null']}
+        at: {type: string, format: date-time}
+    IdentityPermissionChanged:
+      type: object
+      required: [permissionKey, actorId, at]
+      description: Exactly one of userId (direct grant) or roleKey (role capability change) is set.
+      properties:
+        userId: {type: [string, 'null'], format: uuid}
+        roleKey: {type: [string, 'null']}
+        permissionKey: {type: string, examples: [delivery:operate]}
+        actorId: {type: string}
+        reason: {type: [string, 'null']}
+        at: {type: string, format: date-time}
+    IdentityUserStatusChanged:
+      type: object
+      required: [userId, actorId, at]
+      properties:
+        userId: {type: string, format: uuid}
+        actorId: {type: string}
+        reason: {type: [string, 'null']}
+        at: {type: string, format: date-time}

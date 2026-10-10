@@ -41,48 +41,48 @@
 "S011","Story","Backlog CSV with Jira import format","Maintain this backlog as a Jira-importable CSV and mark stories Done as they are completed.","- docs/backlog/backlog.csv imports into Jira with epics, parent links, priority, points, labels and status
 - tools/backlog/mark.py sets a story status by issue id
 - Every completed story is marked Done in the same commit as the work","E01","","High","2","foundation process","foundation","Done"
-"E02","Epic","Identity, accounts & access control","Spring Authorization Server (OAuth 2.1 / OIDC): one account for customers, sellers, providers, staff and drivers; roles decided server-side; social login, MFA, passkeys and RBAC.","","","Identity, accounts & access control","High","","identity","identity","To Do"
+"E02","Epic","Identity, accounts & access control","Spring Authorization Server (OAuth 2.1 / OIDC): one account for customers, sellers, providers, staff and drivers; roles decided server-side; social login, MFA, passkeys and RBAC.","","","Identity, accounts & access control","High","","identity","identity","In Progress"
 "S012","Story","Spring Authorization Server with OIDC discovery and JWKS","Identity service issues access/ID/refresh tokens for web, mobile and services.","- /.well-known/openid-configuration and /oauth2/jwks are served
 - Authorization Code + PKCE works for the storefront and mobile clients
 - Client Credentials works for service-to-service calls
-- Access tokens live 5 minutes and carry pt, org, roles and perms claims","E02","","Highest","8","identity java","identity","To Do"
+- Access tokens live 5 minutes and carry pt, org, roles and perms claims","E02","","Highest","8","identity java","identity","Done"
 "S013","Story","Unified sign-up for customers, sellers and providers","Same form for every account: first name, last name, email, mobile with country code, password, confirm, terms; role decided server-side.","- First/last name accept letters, spaces, hyphens, apostrophes and accents
 - Phone is validated per country and stored in E.164
 - Password needs 12+ chars, upper, lower, digit and must not contain the name or email
 - Seller/provider entry points add the role server-side; the form never asks for a role
-- Duplicate email returns a clear error","E02","","Highest","5","identity java","identity","To Do"
+- Duplicate email returns a clear error","E02","","Highest","5","identity java","identity","Done"
 "S014","Story","Email verification with 6-digit code","Accounts created with email/password verify their email before continuing.","- A 6-digit code is emailed and expires after 10 minutes
 - Resend is rate limited to 1 per 30 seconds and 5 per hour
 - 'Use a different email' restarts sign-up
-- Social sign-ups skip the code because the provider verified the email","E02","","High","3","identity java notifications","identity","To Do"
+- Social sign-ups skip the code because the provider verified the email","E02","","High","3","identity java notifications","identity","Done"
 "S015","Story","Social login via OIDC (Google first, Apple and Facebook configurable)","Federated login through the providers' real OAuth flows; providers appear only when enabled by the platform.","- Google sign-in uses the provider's consent page, never a form we fill
 - Accounts are created from verified claims (name, email)
 - Only providers enabled in Developers › Identity providers appear in the UI
-- Official brand logos are used on buttons","E02","","High","5","identity java","identity","To Do"
+- Official brand logos are used on buttons","E02","","High","5","identity java","identity","Done"
 "S016","Story","Passkeys (WebAuthn) and biometrics","Passkey registration and sign-in; 'Sign in with a passkey' only on the sign-in screen.","- Users can register, list and remove passkeys in Login & security
 - Passkey sign-in works on Chrome, Safari and Firefox
 - Create-account screen does not offer passkey sign-in
-- Mobile app supports Face ID / fingerprint through platform passkeys","E02","","High","8","identity java security","identity","To Do"
+- Mobile app supports Face ID / fingerprint through platform passkeys","E02","","High","8","identity java security","identity","In Progress"
 "S017","Story","Multi-factor authentication (TOTP, SMS, passkey)","Second factor at sign-in with trusted-browser option; mandatory phishing-resistant MFA for staff.","- TOTP enrolment shows QR + recovery codes
 - SMS codes respect consent and quiet hours do not apply to OTP
 - 'Trust this browser' skips MFA for 30 days
-- Staff accounts cannot disable MFA","E02","","High","8","identity security","identity","To Do"
+- Staff accounts cannot disable MFA","E02","","High","8","identity security","identity","Done"
 "S018","Story","Role-based redirect after login","Users land where their role belongs: shop, Seller Center, Provider Hub, staff console or driver app.","- Customers stay in the shop
 - Approved sellers/providers land on their dashboard; pending ones on onboarding
 - @afrotransact.com staff land in the staff console
-- A customer who starts selling gets the seller role on the same account, no second sign-up","E02","","High","3","identity","identity","To Do"
+- A customer who starts selling gets the seller role on the same account, no second sign-up","E02","","High","3","identity","identity","Done"
 "S019","Story","Permission model: permissions, roles, direct grants","Permissions are abilities, roles bundle them, users can hold several roles plus direct grants.","- Effective permissions = union of role permissions and direct grants
 - Driver app requires delivery:operate; admins can be granted it directly
 - Removing a permission revokes it on the next token refresh (≤5 min)
-- Every change is written to the audit log","E02","","Highest","5","identity rbac","identity","To Do"
+- Every change is written to the audit log","E02","","Highest","5","identity rbac","identity","Done"
 "S020","Story","Access control administration (module matrix, capabilities, people, change log)","Developers and Super Admins manage access in the staff console; Product Owner and Auditor can view.","- Module access matrix cycles none → view → edit → approve → full
 - Capabilities tab maps roles to permissions
 - People tab toggles roles, direct grants and enable/disable
-- Change log lists who changed what and when","E02","","High","8","identity rbac staff-console","identity","To Do"
+- Change log lists who changed what and when","E02","","High","8","identity rbac staff-console","identity","Done"
 "S021","Story","Login & security page (password, linked accounts, passkeys, sessions, recovery codes)","Self-service security settings for every account.","- Change password requires the current password
 - Link/unlink Google, Apple, Facebook (cannot unlink the last sign-in method)
 - Active sessions listed with 'sign out other devices'
-- Recovery codes can be regenerated","E02","","Medium","5","identity","identity","To Do"
+- Recovery codes can be regenerated","E02","","Medium","5","identity","identity","Done"
 "S022","Story","Fine-grained authorisation with OpenFGA","Relationship checks seller_org → store → listing so members only touch their org's data.","- OpenFGA model covers org membership, store ownership and listing ownership
 - Catalog/orders services check org relationships for non-staff actors
 - A catalog member cannot access payouts","E02","","Medium","5","identity rbac","identity","To Do"
@@ -355,14 +355,14 @@
 - Commission taken only on what the customer paid","E15","","High","5","bookings java payments","bookings","To Do"
 "S110","Story","Provider team roles","Owner, Manager, Practitioner, Finance with what each can and can't do.","- Practitioners edit only their own calendar and hours
 - View-only roles cannot change data (enforced server-side)","E15","","Medium","3","bookings rbac","bookings","To Do"
-"E16","Epic","Storefront builder & provider public pages","Sellers and providers design their own pages within contrast-vetted themes.","","","Storefront builder & provider public pages","High","","storefront","storefront","To Do"
+"E16","Epic","Storefront builder & provider public pages","Sellers and providers design their own pages within contrast-vetted themes.","","","Storefront builder & provider public pages","High","","storefront","storefront","Done"
 "S111","Story","Seller storefront builder","Store name, tagline (AI suggestion), accent colour and section order with live preview.","- Sections can be toggled and reordered
-- Checkout, prices and header stay platform-styled","E16","","Medium","5","storefront go web","storefront","To Do"
+- Checkout, prices and header stay platform-styled","E16","","Medium","5","storefront go web","storefront","Done"
 "S112","Story","Theme contrast vetting (WCAG 2.2 AA)","Seller colours generate OKLCH ramps; publishing blocked if button labels would be unreadable.","- Contrast computed server-side as well as in the UI
-- Too-light colours are auto-fixed with a suggestion","E16","","Medium","3","storefront","storefront","To Do"
+- Too-light colours are auto-fixed with a suggestion","E16","","Medium","3","storefront","storefront","Done"
 "S113","Story","Provider public page design","Layouts, accent, cover, gallery (plan-limited), featured work and social links pending approval.","- Gallery size limited by plan (6/12/24)
 - Social links validated per network and shown only after approval
-- Featured posts can link to a bookable service","E16","","Medium","5","storefront bookings","storefront","To Do"
+- Featured posts can link to a bookable service","E16","","Medium","5","storefront bookings","storefront","Done"
 "E17","Epic","Returns, refunds & tax","RMAs, refunds orchestration and marketplace-facilitator sales tax.","","","Returns, refunds & tax","High","","returns","returns","To Do"
 "S114","Story","Start a return on delivered items","Pick items, reason and method; get return number, drop-off instructions and refund amount.","- Food items show 'report a problem' instead of return
 - Return can be cancelled before drop-off
@@ -583,3 +583,8 @@
 - Exactly N of N+25 concurrent orders succeed for N units","E33","","High","5","quality performance","quality","To Do"
 "S201","Story","Security scanning","CodeQL, Trivy, gitleaks, OWASP dependency check and ZAP baseline on previews.","- Critical findings fail the build
 - SBOMs attached to every image","E33","","High","3","quality security","quality","To Do"
+"S202","Story","Encrypt TOTP secrets and MFA material at rest","TOTP seeds are currently stored in plain text in the identity database; encrypt them with an envelope key from the cloud KMS / secret store.","- TOTP secrets are encrypted with AES-GCM using a key from the secret store
+- Key rotation re-encrypts existing secrets without downtime
+- A database dump alone cannot generate valid codes","E02","","Highest","3","identity security","identity","To Do"
+"S203","Story","Passkey ceremony end-to-end test with a virtual authenticator","Prove passkey registration and sign-in complete end to end.","- Playwright test registers a passkey with Chromium's virtual authenticator and signs in with it
+- Removing the passkey prevents sign-in with it","E02","","High","3","identity e2e","identity","To Do"

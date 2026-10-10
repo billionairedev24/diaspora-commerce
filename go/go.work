@@ -10,4 +10,5 @@ use (
 	./services/media
 	./services/notifications
 	./services/search
+	./services/storefront
 )

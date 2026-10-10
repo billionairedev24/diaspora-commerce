@@ -1,0 +1,108 @@
+spring:
+  application:
+    name: identity-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/identity}
+    username: ${DB_USER:identity}
+    password: ${DB_PASSWORD:identity}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  session:
+    timeout: 30m
+    jdbc:
+      initialize-schema: never
+      table-name: SPRING_SESSION
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+
+server:
+  port: ${PORT:8100}
+  shutdown: graceful
+  forward-headers-strategy: framework
+  servlet:
+    session:
+      cookie:
+        http-only: true
+        same-site: lax
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: identity-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  paths-to-match: /v1/**
+
+at:
+  api-docs:
+    title: Identity API
+    description: Accounts, sign-up and verification, role-based landing, access control administration, MFA, passkeys and social sign-in. OAuth 2.1 / OIDC endpoints are described by /.well-known/openid-configuration.
+    version: v1
+  security:
+    enabled: true
+  events:
+    relay-enabled: true
+  identity:
+    issuer: ${AUTH_ISSUER:http://localhost:8100}
+    home-url: ${HOME_URL:http://localhost:3000}
+    staff-email-domains:
+      - afrotransact.com
+    signing:
+      key-id: ${SIGNING_KEY_ID:identity-1}
+      private-key-pem: ${SIGNING_KEY_PEM:}
+      generate-if-missing: false
+    verification:
+      sender: outbox
+    mfa:
+      issuer-name: AfroTransact
+      secure-cookies: true
+    social:
+      google:
+        client-id: ${GOOGLE_CLIENT_ID:}
+        client-secret: ${GOOGLE_CLIENT_SECRET:}
+      apple:
+        client-id: ${APPLE_CLIENT_ID:}
+        client-secret: ${APPLE_CLIENT_SECRET:}
+      facebook:
+        client-id: ${FACEBOOK_CLIENT_ID:}
+        client-secret: ${FACEBOOK_CLIENT_SECRET:}
+    bootstrap-admin:
+      email: ${BOOTSTRAP_ADMIN_EMAIL:}
+      password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+      first-name: Platform
+      last-name: Administrator
+      phone: ${BOOTSTRAP_ADMIN_PHONE:}

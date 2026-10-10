@@ -1,0 +1,19 @@
+# storefront · dev. Limits mirror Backoffice › Storefront settings; plan codes come from the seller service.
+port: 8080
+docsEnabled: true
+databaseUrl: ""
+publicBaseUrl: https://dev.afrotransact.com
+maxSections: 10
+maxFeatured: 6
+maxTagline: 120
+plans:
+  starter: {maxGallery: 6}
+  growth: {maxGallery: 12}
+  pro: {maxGallery: 24}
+auth:
+  enabled: true
+  issuer: https://auth.dev.afrotransact.com
+  audience: storefront
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampleRatio: 1.0

@@ -1,0 +1,126 @@
+openapi: 3.1.0
+info:
+  title: Storefront API
+  version: v1
+  description: |
+    Seller storefronts and service-provider public pages. Sellers choose a name, tagline, colours and which sections
+    show in which order; providers also choose a layout (Classic, Gallery first, Story), header, button shape, a
+    plan-limited gallery, featured-work posts linked to bookable services, and social/catalogue links that appear only
+    after staff approval. Every save and publish runs the same WCAG 2.2 AA contrast engine as the Theme Studio:
+    a theme whose body text or button labels would be unreadable cannot be published. Checkout, prices and the header
+    always stay platform-styled.
+servers:
+  - {url: 'http://localhost:8206', description: local}
+  - {url: 'https://api.dev.afrotransact.com/storefront', description: dev}
+  - {url: 'https://api.uat.afrotransact.com/storefront', description: uat}
+  - {url: 'https://api.afrotransact.com/storefront', description: prod}
+paths:
+  /v1/themes/vet:
+    post:
+      operationId: vetTheme
+      summary: Contrast checks, OKLCH ramp and CSS tokens for a colour choice
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeInput'}}}}
+      responses:
+        '200': {description: Vetting, content: {application/json: {schema: {$ref: '#/components/schemas/Vetting'}}}}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/storefronts/{slug}:
+    get:
+      operationId: publicStorefront
+      summary: Published page (approved links, published posts, enabled sections only)
+      parameters: [{name: slug, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Storefront, content: {application/json: {schema: {$ref: '#/components/schemas/Storefront'}}}}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/storefronts/me/draft:
+    get:
+      operationId: getDraft
+      security: [{bearer: []}]
+      responses:
+        '200': {description: Draft, content: {application/json: {schema: {$ref: '#/components/schemas/Storefront'}}}}
+    put:
+      operationId: saveDraft
+      summary: Save the draft (storefront:edit); edited social links go back to pending approval
+      security: [{bearer: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/Storefront'}}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/Storefront'}}}}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/storefronts/me/publish:
+    post:
+      operationId: publish
+      summary: Publish the draft; blocked with the failing checks when contrast fails
+      security: [{bearer: []}]
+      responses:
+        '200': {description: Published}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/moderation/social-links:
+    get:
+      operationId: pendingSocialLinks
+      summary: Storefronts with links awaiting approval (storefront:moderate)
+      security: [{bearer: []}]
+      responses:
+        '200': {description: Queue}
+  /v1/moderation/social-links/{orgId}/{network}:
+    post:
+      operationId: decideSocialLink
+      security: [{bearer: []}]
+      parameters:
+        - {name: orgId, in: path, required: true, schema: {type: string}}
+        - {name: network, in: path, required: true, schema: {type: string}}
+      requestBody: {required: true, content: {application/json: {schema: {type: object, properties: {approve: {type: boolean}}}}}}
+      responses:
+        '200': {description: Updated}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content: {application/problem+json: {schema: {type: object, properties: {type: {type: string}, status: {type: integer}, detail: {type: string}, code: {type: string}}}}}
+  schemas:
+    ThemeInput:
+      type: object
+      required: [primary, accent]
+      properties:
+        primary: {type: string, pattern: '^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$'}
+        accent: {type: string}
+        surface: {type: string, default: '#FFFFFF'}
+        text: {type: string, default: '#191816'}
+    Vetting:
+      type: object
+      properties:
+        ok: {type: boolean}
+        checks:
+          type: array
+          items:
+            type: object
+            properties: {id: {type: string}, label: {type: string}, fg: {type: string}, bg: {type: string}, need: {type: number}, ratio: {type: number}, pass: {type: boolean}, fix: {type: string}, blocking: {type: boolean}}
+        ramp: {type: array, items: {type: object, properties: {step: {type: integer}, hex: {type: string}}}}
+        tokens: {type: object, additionalProperties: {type: string}}
+    Storefront:
+      type: object
+      properties:
+        orgId: {type: string}
+        kind: {type: string, enum: [SELLER, PROVIDER]}
+        slug: {type: string}
+        name: {type: string}
+        tagline: {type: string}
+        theme: {$ref: '#/components/schemas/ThemeInput'}
+        tokens: {type: object, additionalProperties: {type: string}}
+        sections: {type: array, items: {type: object, properties: {type: {type: string}, enabled: {type: boolean}, settings: {type: object, additionalProperties: {type: string}}}}}
+        provider:
+          type: object
+          properties:
+            layout: {type: string, enum: [CLASSIC, GALLERY_FIRST, STORY]}
+            header: {type: string, enum: [COVER, BAND]}
+            coverAssetId: {type: string}
+            buttonShape: {type: string, enum: [ROUNDED, SQUARE]}
+            gallerySize: {type: integer}
+        gallery: {type: array, items: {type: object, properties: {assetId: {type: string}, url: {type: string}, caption: {type: string}}}}
+        featured: {type: array, items: {type: object, properties: {id: {type: string}, headline: {type: string}, body: {type: string}, assetId: {type: string}, url: {type: string}, serviceId: {type: string}, published: {type: boolean}}}}
+        social: {type: array, items: {type: object, properties: {network: {type: string, enum: [instagram, tiktok, facebook, youtube, whatsapp, x, linkedin, website]}, url: {type: string}, status: {type: string, enum: [PENDING, APPROVED, REJECTED]}}}}
+        planCode: {type: string}
+        status: {type: string, enum: [DRAFT, PUBLISHED]}
+        version: {type: integer, format: int64}
+        publishedAt: {type: string, format: date-time}

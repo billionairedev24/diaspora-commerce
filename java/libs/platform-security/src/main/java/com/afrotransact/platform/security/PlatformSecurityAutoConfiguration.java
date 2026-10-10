@@ -25,7 +25,7 @@ public class PlatformSecurityAutoConfiguration {
 
     private static final String[] ALWAYS_PUBLIC = {
         "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
-        "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc", "/error"
+        "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc", "/error"
     };
 
     @Bean

@@ -1,0 +1,85 @@
+# Production: reference pages off (published on developers.afrotransact.com), sampled traces, keys from KMS-backed secrets.
+at:
+  api-docs:
+    enabled: false
+  identity:
+    issuer: ${AUTH_ISSUER:https://auth.afrotransact.com}
+    home-url: ${HOME_URL:https://afrotransact.com}
+    signing:
+      generate-if-missing: false
+    webauthn:
+      rp-id: afrotransact.com
+      rp-name: AfroTransact
+      allowed-origins:
+        - https://auth.afrotransact.com
+    cors-allowed-origins:
+      - https://afrotransact.com
+      - https://seller.afrotransact.com
+      - https://staff.afrotransact.com
+    clients:
+      - client-id: storefront
+        name: Storefront (web)
+        type: public
+        grant-types: [authorization_code, refresh_token]
+        public-refresh-tokens: true
+        redirect-uris: ["${STOREFRONT_URL:https://afrotransact.com}/auth/callback"]
+        post-logout-redirect-uris: ["${STOREFRONT_URL:https://afrotransact.com}/"]
+        scopes: [openid, profile, email, phone, offline_access]
+      - client-id: seller-center
+        name: Seller Center & Provider Hub
+        type: public
+        grant-types: [authorization_code, refresh_token]
+        public-refresh-tokens: true
+        redirect-uris: ["${SELLER_CENTER_URL:https://seller.afrotransact.com}/auth/callback"]
+        post-logout-redirect-uris: ["${SELLER_CENTER_URL:https://seller.afrotransact.com}/"]
+        scopes: [openid, profile, email, phone, offline_access]
+      - client-id: staff-console
+        name: Staff console
+        type: public
+        grant-types: [authorization_code, refresh_token]
+        public-refresh-tokens: true
+        refresh-token-ttl: 12h
+        redirect-uris: ["${STAFF_CONSOLE_URL:https://staff.afrotransact.com}/auth/callback"]
+        post-logout-redirect-uris: ["${STAFF_CONSOLE_URL:https://staff.afrotransact.com}/"]
+        scopes: [openid, profile, email, offline_access]
+      - client-id: customer-app
+        name: AfroTransact app
+        type: public
+        grant-types: [authorization_code, refresh_token]
+        public-refresh-tokens: true
+        redirect-uris: [com.afrotransact.customer:/oauth2redirect]
+        scopes: [openid, profile, email, phone, offline_access]
+      - client-id: driver-app
+        name: AfroTransact Driver
+        type: public
+        grant-types: [authorization_code, refresh_token]
+        public-refresh-tokens: true
+        refresh-token-ttl: 14h
+        redirect-uris: [com.afrotransact.driver:/oauth2redirect]
+        scopes: [openid, profile, email, offline_access]
+      - client-id: gateway-bff
+        name: Gateway BFF
+        type: confidential
+        secret: ${BFF_CLIENT_SECRET:}
+        grant-types: [authorization_code, refresh_token, client_credentials]
+        redirect-uris: ["${BFF_URL:https://api.afrotransact.com}/login/oauth2/code/afrotransact"]
+        scopes: [openid, profile, email, phone, offline_access]
+      - client-id: seller-service
+        name: Seller service
+        type: confidential
+        secret: ${SELLER_SERVICE_CLIENT_SECRET:}
+        grant-types: [client_credentials]
+        scopes: [orgs:manage, users:read]
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:30}
+management:
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:0.1}

@@ -1,0 +1,63 @@
+package com.afrotransact.identity.adapter.in.web;
+
+import java.net.URI;
+
+import com.afrotransact.identity.domain.IdentityRuleViolation;
+import com.afrotransact.identity.domain.RateLimitExceeded;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
+import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+/** Maps identity rule violations (422 with field errors), rate limits (429 + Retry-After) and lost updates (409). */
+@RestControllerAdvice
+@Order(Ordered.HIGHEST_PRECEDENCE)
+class IdentityErrorAdvice {
+
+    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
+
+    @ExceptionHandler(IdentityRuleViolation.class)
+    ProblemDetail ruleViolation(IdentityRuleViolation ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
+        pd.setType(URI.create(TYPE_BASE + ex.code()));
+        pd.setTitle("Identity rule violated");
+        pd.setProperty("code", ex.code());
+        pd.setProperty("fieldErrors", ex.fieldErrors());
+        return pd;
+    }
+
+    @ExceptionHandler(RateLimitExceeded.class)
+    ResponseEntity<ProblemDetail> rateLimited(RateLimitExceeded ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
+        pd.setType(URI.create(TYPE_BASE + ex.code()));
+        pd.setTitle("Too many requests");
+        pd.setProperty("code", ex.code());
+        long seconds = Math.max(1, ex.retryAfter().toSeconds());
+        pd.setProperty("retryAfterSeconds", seconds);
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(seconds))
+                .body(pd);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    ProblemDetail badRequest(IllegalArgumentException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        pd.setType(URI.create(TYPE_BASE + "identity.invalid-input"));
+        pd.setProperty("code", "identity.invalid-input");
+        return pd;
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ProblemDetail conflict(OptimisticLockingFailureException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "The record was changed by someone else; reload and try again");
+        pd.setType(URI.create(TYPE_BASE + "identity.concurrent-update"));
+        pd.setProperty("code", "identity.concurrent-update");
+        return pd;
+    }
+}
