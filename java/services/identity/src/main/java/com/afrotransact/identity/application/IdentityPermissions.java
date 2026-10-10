@@ -9,6 +9,10 @@ public final class IdentityPermissions {
     public static final String ACCESS_READ = "access:read";
     /** Create/update seller and provider organisations and their members (seller service). */
     public static final String ORGS_MANAGE = "orgs:manage";
+    /** View sellers, providers and their teams (staff, and services such as payments). */
+    public static final String ORGS_READ = "orgs:read";
+    /** Invite organisation members and change their organisation roles (seller.owner/admin, provider.owner/manager). */
+    public static final String TEAM_MANAGE = "team:manage";
     /** Service lookups of contact details and organisation owners (notifications, seller, orders, bookings). */
     public static final String USERS_READ = "users:read";
     /** The first-party sign-in API (client credentials of gateway-bff). */

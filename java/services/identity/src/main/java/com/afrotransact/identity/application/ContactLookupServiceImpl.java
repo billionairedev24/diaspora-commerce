@@ -10,9 +10,9 @@ import com.afrotransact.identity.domain.PostalAddress;
 import com.afrotransact.identity.domain.PushApp;
 import com.afrotransact.identity.domain.UserAccount;
 import com.afrotransact.identity.port.AddressRepository;
-import com.afrotransact.identity.port.MfaRepository;
 import com.afrotransact.identity.port.NotificationPreferencesRepository;
 import com.afrotransact.identity.port.OrganizationRepository;
+import com.afrotransact.identity.port.PhoneVerificationRepository;
 import com.afrotransact.identity.port.PushDeviceRepository;
 import com.afrotransact.identity.port.UserAccountRepository;
 import com.afrotransact.platform.security.Actor;
@@ -29,18 +29,19 @@ class ContactLookupServiceImpl implements ContactLookupService {
     private final UserAccountRepository users;
     private final NotificationPreferencesRepository preferences;
     private final PushDeviceRepository devices;
-    private final MfaRepository mfa;
+    private final PhoneVerificationRepository phoneVerifications;
     private final AddressRepository addresses;
     private final OrganizationRepository orgs;
 
     ContactLookupServiceImpl(CurrentUser current, UserAccountRepository users,
                              NotificationPreferencesRepository preferences, PushDeviceRepository devices,
-                             MfaRepository mfa, AddressRepository addresses, OrganizationRepository orgs) {
+                             PhoneVerificationRepository phoneVerifications, AddressRepository addresses,
+                             OrganizationRepository orgs) {
         this.current = current;
         this.users = users;
         this.preferences = preferences;
         this.devices = devices;
-        this.mfa = mfa;
+        this.phoneVerifications = phoneVerifications;
         this.addresses = addresses;
         this.orgs = orgs;
     }
@@ -57,7 +58,8 @@ class ContactLookupServiceImpl implements ContactLookupService {
                 .map(d -> new ContactView.PushTarget(d.token(), d.provider().wire(), lower(d.app().name()),
                         lower(d.platform().name())))
                 .toList();
-        boolean phoneVerified = u.phone() != null && mfa.smsPhone(userId).map(u.phone()::equals).orElse(false);
+        boolean phoneVerified = u.phone() != null
+                && phoneVerifications.verifiedPhone(userId).map(u.phone()::equals).orElse(false);
         return new ContactView(u.id().toString(), u.firstName(), u.email(), u.emailVerified(), u.phone(),
                 phoneVerified, p.locale(), p.timeZone(), market(u), tokens,
                 new ContactView.ChannelPreferences(p.email(), p.sms(), p.push()), p.marketingOptIn());

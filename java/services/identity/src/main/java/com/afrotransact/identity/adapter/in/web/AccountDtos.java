@@ -29,11 +29,16 @@ final class AccountDtos {
             @NotNull Boolean termsAccepted,
             @Schema(description = "Separate, optional, unticked SMS marketing/notification consent") Boolean smsConsent,
             @Schema(description = "Entry point: shop (default), sell or provide", allowableValues = {"shop", "sell", "provide"})
-            String intent) {
+            String intent,
+            @Schema(description = "Organisation invitation token from the invite link (token query parameter). The email "
+                    + "must be the invited one; the account starts verified and joins the organisation.")
+            @Size(max = 200) String invitationToken) {
     }
 
     @Schema(name = "SignUpResponse")
-    record SignUpResponse(UUID userId, String email, boolean verificationRequired, Instant codeExpiresAt) {
+    record SignUpResponse(UUID userId, String email,
+                          @Schema(description = "false when the sign-up came from an invitation link") boolean verificationRequired,
+                          @Schema(description = "null when no code was sent") Instant codeExpiresAt) {
     }
 
     @Schema(name = "VerifyEmailRequest")

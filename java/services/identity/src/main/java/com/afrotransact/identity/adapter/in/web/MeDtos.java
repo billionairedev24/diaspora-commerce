@@ -28,7 +28,8 @@ final class MeDtos {
 
     @Schema(name = "Me", description = "Profile, roles, effective permissions, organisations and where to land")
     record MeResponse(UUID id, String firstName, String lastName, String email, boolean emailVerified, String phone,
-                      boolean smsConsent, Instant termsAcceptedAt, String principalType, String orgId,
+                      @Schema(description = "The phone was confirmed with an SMS code; reset when it changes")
+                      boolean phoneVerified, boolean smsConsent, Instant termsAcceptedAt, String principalType, String orgId,
                       List<String> roles, List<String> permissions, List<OrgResponse> orgs,
                       @Schema(allowableValues = {"shop", "seller-onboarding", "seller-center", "provider-onboarding",
                           "provider-hub", "staff-console", "driver-app"}) String landing,
@@ -37,7 +38,7 @@ final class MeDtos {
         static MeResponse of(MeView v) {
             UserAccount u = v.user();
             return new MeResponse(u.id(), u.firstName(), u.lastName(), u.email(), u.emailVerified(), u.phone(),
-                    u.smsConsent(), u.termsAcceptedAt(), v.access().principalType().name(),
+                    v.phoneVerified(), u.smsConsent(), u.termsAcceptedAt(), v.access().principalType().name(),
                     v.access().orgId().orElse(null), List.copyOf(new TreeSet<>(v.access().roles())),
                     List.copyOf(new TreeSet<>(v.access().permissions())),
                     v.orgs().stream().map(OrgResponse::of).toList(), v.landing().wire(), v.profileComplete());
@@ -48,6 +49,16 @@ final class MeDtos {
     record UpdateProfileRequest(@Size(max = 80) String firstName, @Size(max = 80) String lastName,
                                 @Size(max = 32) String phone, String phoneRegion, Boolean termsAccepted,
                                 Boolean smsConsent) {
+    }
+
+    @Schema(name = "PhoneCodeSent")
+    record PhoneCodeSentResponse(@Schema(description = "Masked phone, e.g. •••• 0142") String sentTo,
+                                 Instant expiresAt) {
+    }
+
+    @Schema(name = "PhoneVerification")
+    record PhoneVerificationResponse(@Schema(description = "E.164") String phone, boolean phoneVerified,
+                                     Instant verifiedAt) {
     }
 
     @Schema(name = "SelectOrgRequest")

@@ -12,6 +12,7 @@ import com.afrotransact.identity.application.IdentityEventPayloads.UserEmailVeri
 import com.afrotransact.identity.application.IdentityEventPayloads.UserRegistered;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
 import com.afrotransact.identity.domain.LandingPolicy;
+import com.afrotransact.identity.domain.OrgInvitation;
 import com.afrotransact.identity.domain.SignUpDetails;
 import com.afrotransact.identity.domain.SignUpIntent;
 import com.afrotransact.identity.domain.SignUpPolicy;
@@ -40,12 +41,14 @@ class AccountServiceImpl implements AccountService {
     private final LandingPolicy landing;
     private final PasswordHasher hasher;
     private final CodeIssuer codes;
+    private final InvitationRedeemer invitations;
     private final DomainEventPublisher events;
     private final Clock clock;
 
     AccountServiceImpl(UserAccountRepository users, UserAccessRepository access, AccessChangeLog changeLog,
                        SignUpPolicy signUpPolicy, LandingPolicy landing, PasswordHasher hasher,
-                       CodeIssuer codes, DomainEventPublisher events, Clock clock) {
+                       CodeIssuer codes, InvitationRedeemer invitations, DomainEventPublisher events,
+                       Clock clock) {
         this.users = users;
         this.access = access;
         this.changeLog = changeLog;
@@ -53,6 +56,7 @@ class AccountServiceImpl implements AccountService {
         this.landing = landing;
         this.hasher = hasher;
         this.codes = codes;
+        this.invitations = invitations;
         this.events = events;
         this.clock = clock;
     }
@@ -68,6 +72,9 @@ class AccountServiceImpl implements AccountService {
                     "Staff accounts are created by an access administrator",
                     Map.of("email", "Use your personal email, or ask your manager for staff access"));
         }
+        // Checked before anything is written (this transaction does not roll back on rule violations).
+        OrgInvitation invitation = c.invited() ? invitations.requirePending(c.invitationToken(), v.email()) : null;
+        boolean invited = invitation != null;
         Instant now = Instant.now(clock);
         String hash = hasher.hash(c.password());
         Optional<UserAccount> existing = users.findByEmail(v.email());
@@ -78,10 +85,11 @@ class AccountServiceImpl implements AccountService {
                         "An account with this email already exists. Sign in instead");
             }
             // Pending registration: the person started again ("use a different email" or a fresh attempt).
-            user = users.update(existing.get().restartedWith(v.firstName(), v.lastName(), v.phoneE164(), hash,
-                    c.smsConsent(), now));
+            UserAccount restarted = existing.get().restartedWith(v.firstName(), v.lastName(), v.phoneE164(), hash,
+                    c.smsConsent(), now);
+            user = users.update(invited ? restarted.verified(now) : restarted);
         } else {
-            user = users.insert(new UserAccount(UUID.randomUUID(), v.firstName(), v.lastName(), v.email(), false,
+            user = users.insert(new UserAccount(UUID.randomUUID(), v.firstName(), v.lastName(), v.email(), invited,
                     v.phoneE164(), hash, true, c.smsConsent(), now, null, now, now, 0));
         }
         List<String> granted = new ArrayList<>();
@@ -94,7 +102,12 @@ class AccountServiceImpl implements AccountService {
         if (existing.isEmpty()) {
             events.publish(IdentityEvents.USER_REGISTERED, IdentityEvents.AGGREGATE, user.id().toString(),
                     new UserRegistered(user.id().toString(), user.email(), user.firstName(), user.lastName(),
-                            user.phone(), intent.name(), granted, "PASSWORD", false, user.smsConsent(), now));
+                            user.phone(), intent.name(), granted, "PASSWORD", invited, user.smsConsent(), now));
+        }
+        if (invited) {
+            // The invitation link was emailed to this address, which proves the mailbox: no code needed.
+            invitations.redeem(invitation, user);
+            return new SignUpResult(user.id(), user.email(), false, null);
         }
         Instant expires = codes.issue(user, VerificationPurpose.EMAIL_VERIFICATION, "EMAIL", user.email());
         return new SignUpResult(user.id(), user.email(), true, expires);

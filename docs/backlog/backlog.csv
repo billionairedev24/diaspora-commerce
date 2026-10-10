@@ -691,10 +691,14 @@
 - 150 m proof-of-delivery check applies to all stops","E12","","High","5","orders fulfilment identity","delivery","In Progress"
 "S234","Story","Phone number verification","Identity verifies phone numbers by SMS code independently of MFA so notifications can text verified numbers.","- User can verify a phone with a 6-digit SMS code
 - phoneVerified is true after verification
-- Changing the phone resets verification","E02","","Medium","2","identity notifications","identity","In Progress"
+- Changing the phone resets verification","E02","","Medium","2","identity notifications","identity","Done"
 "S235","Story","Returns and tax integration across services","Orders calls the tax quote at checkout and links returns; order placed events carry product type, perishable, discount, jurisdiction, shipping amount and street; payments exposes refunded amounts per line; inventory returns accept a service scope and receiving warehouse; carrier-gateway supports box-free QR drop-off and return rate choice; fulfilment schedules return pickups; storefront and mobile return screens.","- Checkout tax comes from tax-returns quote
 - Return eligibility uses order event data without customer-entered address
 - Payments reports refunded amount per line
 - Return pickups are scheduled with fulfilment
 - Customers start returns from web and mobile order pages
 - Finance confirms seeded tax rates before production","E17","","High","13","tax-returns orders payments inventory carrier-gateway fulfilment","returns","To Do"
+"S236","Story","Team management end to end","BFF and Seller Center use identity's member directory and invitations (list, invite, revoke, accept page, remove, role change with error mapping); notifications sends invitation emails; seller service mirrors identity role events or stops keeping its own member list.","- Team page shows real names, roles and pending invitations
+- Invitation email arrives with an accept link that works for new and existing users
+- Last-owner and owner-only rules surface clear errors
+- Seller service member list stays consistent with identity","E24","","High","5","seller-center bff identity notifications","seller-center","To Do"

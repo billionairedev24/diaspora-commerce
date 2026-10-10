@@ -129,7 +129,7 @@ class SecurityConfiguration {
                 .cors(Customizer.withDefaults())
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(HttpMethod.POST, "/v1/accounts", "/v1/accounts/verification",
-                                "/v1/accounts/verification/resend").permitAll()
+                                "/v1/accounts/verification/resend", "/v1/invitations/lookup").permitAll()
                         .requestMatchers(HttpMethod.GET, "/v1/identity-providers").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(rs -> rs.jwt(j -> j.jwtAuthenticationConverter(jwtConverter())));

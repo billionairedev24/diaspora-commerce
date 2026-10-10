@@ -32,7 +32,9 @@ operations:
       offers-service (consumer group offers-service, inbox-deduplicated) handles catalog.product.created by creating the
       creating seller's NEW offer per variant (price, quantity and SKU from the event; AfroTransact Retail products get
       Fulfilled by AfroTransact offers), not live until approved. approved / resumed make every offer on the page live;
-      rejected / paused take them off sale. The buy box of every affected ATIN is recomputed.
+      rejected / paused take them off sale. taken_down (Trust and Safety) suppresses every offer on the page: none can
+      win the buy box or appear in public reads; reinstated restores them when the listing's status is LIVE again (a
+      listing reinstated as PAUSED stays off sale). The buy box of every affected ATIN is recomputed.
   consumeOffersInventoryStockEvents:
     action: receive
     channel: {$ref: '#/channels/inventoryStockEvents'}

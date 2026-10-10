@@ -5,6 +5,8 @@ at:
   identity:
     issuer: ${AUTH_ISSUER:https://auth.dev.afrotransact.com}
     home-url: ${HOME_URL:https://dev.afrotransact.com}
+    invitations:
+      accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:https://seller.dev.afrotransact.com}/invitations/accept}
     signing:
       generate-if-missing: false
     webauthn:
@@ -80,7 +82,13 @@ at:
         type: confidential
         secret: ${ORDERS_CLIENT_SECRET}
         grant-types: [client_credentials]
-        scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read]
+        scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read, "tax:quote"]
+      - client-id: tax-returns-service
+        name: Tax returns service
+        type: confidential
+        secret: ${TAX_RETURNS_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [payments:service, inventory:adjust, "shipping:label", users:read]
       - client-id: bookings-service
         name: Bookings service
         type: confidential

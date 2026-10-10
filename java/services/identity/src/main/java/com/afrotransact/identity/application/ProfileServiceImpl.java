@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import com.afrotransact.identity.application.IdentityEventPayloads.RoleChanged;
@@ -19,6 +20,7 @@ import com.afrotransact.identity.domain.RoleKeys;
 import com.afrotransact.identity.domain.SignUpPolicy;
 import com.afrotransact.identity.domain.UserAccount;
 import com.afrotransact.identity.port.AccessChangeLog;
+import com.afrotransact.identity.port.PhoneVerificationRepository;
 import com.afrotransact.identity.port.UserAccessRepository;
 import com.afrotransact.identity.port.UserAccountRepository;
 import com.afrotransact.platform.events.DomainEventPublisher;
@@ -38,13 +40,14 @@ class ProfileServiceImpl implements ProfileService {
     private final SignUpPolicy signUpPolicy;
     private final PhoneNumberPolicy phones;
     private final AccessChangeLog changeLog;
+    private final PhoneVerificationRepository phoneVerifications;
     private final DomainEventPublisher events;
     private final Clock clock;
 
     ProfileServiceImpl(CurrentUser current, UserAccountRepository users, UserAccessRepository access,
                        AccessProfileLoader profiles, AccessPolicy accessPolicy, LandingPolicy landingPolicy,
                        SignUpPolicy signUpPolicy, PhoneNumberPolicy phones, AccessChangeLog changeLog,
-                       DomainEventPublisher events, Clock clock) {
+                       PhoneVerificationRepository phoneVerifications, DomainEventPublisher events, Clock clock) {
         this.current = current;
         this.users = users;
         this.access = access;
@@ -54,6 +57,7 @@ class ProfileServiceImpl implements ProfileService {
         this.signUpPolicy = signUpPolicy;
         this.phones = phones;
         this.changeLog = changeLog;
+        this.phoneVerifications = phoneVerifications;
         this.events = events;
         this.clock = clock;
     }
@@ -96,6 +100,10 @@ class ProfileServiceImpl implements ProfileService {
         Instant terms = u.termsAcceptedAt() == null && Boolean.TRUE.equals(c.termsAccepted()) ? now
                 : u.termsAcceptedAt();
         boolean sms = c.smsConsent() == null ? u.smsConsent() : c.smsConsent();
+        if (!Objects.equals(phone, u.phone())) {
+            // A new number must be confirmed again before notifications text it (S234).
+            phoneVerifications.clear(u.id());
+        }
         UserAccount updated = users.update(new UserAccount(u.id(), first, last, u.email(), u.emailVerified(), phone,
                 u.passwordHash(), u.enabled(), sms, terms, u.activeOrgId(), u.createdAt(), now, u.version()));
         return view(updated);
@@ -137,6 +145,9 @@ class ProfileServiceImpl implements ProfileService {
         AccessProfile profile = profiles.load(u);
         EffectiveAccess resolved = accessPolicy.resolve(profile);
         boolean complete = u.phone() != null && u.termsAcceptedAt() != null;
-        return new MeView(u, resolved, profile.memberships(), landingPolicy.landing(profile, resolved), complete);
+        boolean phoneVerified = u.phone() != null
+                && phoneVerifications.verifiedPhone(u.id()).map(u.phone()::equals).orElse(false);
+        return new MeView(u, resolved, profile.memberships(), landingPolicy.landing(profile, resolved), complete,
+                phoneVerified);
     }
 }

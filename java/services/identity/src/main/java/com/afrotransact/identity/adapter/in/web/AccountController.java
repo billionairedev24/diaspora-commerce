@@ -31,13 +31,15 @@ class AccountController {
 
     @Operation(summary = "Create an account (customers, sellers and providers use the same form)",
             description = "Adds account.customer, plus the seller/provider applicant role when intent is sell/provide. "
-                    + "A 6-digit code is emailed (10-minute expiry).")
+                    + "A 6-digit code is emailed (10-minute expiry). With invitationToken (organisation invite link, "
+                    + "same email) the account starts verified, joins the organisation and no code is sent.")
     @PostMapping("/v1/accounts")
     @ResponseStatus(HttpStatus.CREATED)
     SignUpResponse signUp(@Valid @RequestBody SignUpRequest body) {
         SignUpResult r = accounts.signUp(new SignUpCommand(body.firstName(), body.lastName(), body.email(),
                 body.phone(), body.phoneRegion(), body.password(), body.confirmPassword(),
-                Boolean.TRUE.equals(body.termsAccepted()), Boolean.TRUE.equals(body.smsConsent()), body.intent()));
+                Boolean.TRUE.equals(body.termsAccepted()), Boolean.TRUE.equals(body.smsConsent()), body.intent(),
+                body.invitationToken()));
         return new SignUpResponse(r.userId(), r.email(), r.verificationRequired(), r.codeExpiresAt());
     }
 

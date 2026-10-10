@@ -350,6 +350,37 @@ class FirstPartySignInIT {
                 "local-fulfilment-service-secret", "payments:service").status()).isEqualTo(400);
     }
 
+    @Test
+    void taxReturnsServiceClientAndTaxAndShippingPermissions() {
+        Tokens taxReturns = new BrowserSession(base()).clientCredentials("tax-returns-service",
+                "local-tax-returns-service-secret", "payments:service inventory:adjust shipping:label users:read");
+        assertThat(taxReturns.status()).as(taxReturns.body()).isEqualTo(200);
+        assertThat(taxReturns.accessClaims().get("pt").asString()).isEqualTo("SERVICE");
+        assertThat(taxReturns.accessClaims().get("perms").toString()).contains("payments:service",
+                "inventory:adjust", "shipping:label", "users:read");
+        assertThat(new BrowserSession(base()).clientCredentials("tax-returns-service",
+                "local-tax-returns-service-secret", "orgs:manage").status()).isEqualTo(400);
+        Tokens orders = new BrowserSession(base()).clientCredentials("orders-service", "local-orders-service-secret",
+                "tax:quote");
+        assertThat(orders.status()).as(orders.body()).isEqualTo(200);
+        assertThat(orders.accessClaims().get("perms").toString()).contains("tax:quote");
+
+        assertThat(grants("tax:quote")).containsExactly("platform.super_admin");
+        assertThat(grants("tax:read")).containsExactlyInAnyOrder("platform.super_admin", "platform.finance",
+                "platform.auditor");
+        assertThat(grants("tax:configure")).containsExactlyInAnyOrder("platform.super_admin", "platform.finance");
+        assertThat(grants("shipping:label")).contains("platform.super_admin", "platform.fulfilment_ops",
+                "seller.owner", "seller.admin", "seller.fulfilment").doesNotContain("seller.catalog");
+        assertThat(grants("shipping:rate")).contains("seller.fulfilment", "platform.dispatcher");
+        assertThat(grants("shipping:void")).contains("seller.owner", "platform.operations_manager");
+        assertThat(grants("shipping:admin")).containsExactlyInAnyOrderElementsOf(grants("shipping:manage"));
+    }
+
+    private List<String> grants(String permission) {
+        return jdbc.sql("select role_key from role_permission where permission_key = :p").param("p", permission)
+                .query(String.class).list();
+    }
+
     private Tokens redeem(String ticket) {
         String verifier = BrowserSession.randomVerifier();
         HttpResponse<String> r = authorize(ticket, verifier);

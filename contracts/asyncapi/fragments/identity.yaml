@@ -4,9 +4,12 @@ channels:
   identityEvents:
     address: at.identity.events
     description: >-
-      Accounts, one-time codes, access changes, sign-in lockouts, push devices and notification preferences from
-      identity-service. Key = user id (role key for role-permission changes, ip:<address> for IP lockouts). Headers event-id, event-type, occurred-at. Consumers: notifications-service
-      (identity.verification.requested), audit/trust-ops (access changes), BFF caches (role and permission changes).
+      Accounts, one-time codes, phone verification, access changes, organisation invitations, sign-in lockouts, push
+      devices and notification preferences from identity-service. Key = user id (role key for role-permission changes,
+      ip:<address> for IP lockouts, organisation id for identity.invitation.created / revoked). Headers event-id,
+      event-type, occurred-at. Consumers: notifications-service (identity.verification.requested,
+      identity.invitation.created), seller-service (organisation role changes, identity.role.granted / revoked with
+      orgId), audit/trust-ops (access changes), BFF caches (role and permission changes).
     messages:
       identityUserRegistered: {$ref: '#/components/messages/identityUserRegistered'}
       identityUserEmailVerified: {$ref: '#/components/messages/identityUserEmailVerified'}
@@ -21,6 +24,10 @@ channels:
       identityDeviceRegistered: {$ref: '#/components/messages/identityDeviceRegistered'}
       identityDeviceUnregistered: {$ref: '#/components/messages/identityDeviceUnregistered'}
       identityNotificationPreferencesUpdated: {$ref: '#/components/messages/identityNotificationPreferencesUpdated'}
+      identityUserPhoneVerified: {$ref: '#/components/messages/identityUserPhoneVerified'}
+      identityInvitationCreated: {$ref: '#/components/messages/identityInvitationCreated'}
+      identityInvitationRevoked: {$ref: '#/components/messages/identityInvitationRevoked'}
+      identityInvitationAccepted: {$ref: '#/components/messages/identityInvitationAccepted'}
 operations:
   publishIdentityEvents:
     action: send
@@ -49,20 +56,24 @@ components:
       payload: {$ref: '#/components/schemas/IdentityUserEmailVerified'}
     identityVerificationRequested:
       name: identity.verification.requested
-      title: Deliver a one-time code (email verification, SMS sign-in code, SMS enrolment)
+      title: Deliver a one-time code (email verification, SMS sign-in code, SMS enrolment, phone verification)
       description: >-
-        Contains the plain one-time code so notifications-service can render template identity.verification.
-        Security message: always sent, quiet hours do not apply. Never log the payload.
+        Contains the plain one-time code so notifications-service can render template identity.verification on the
+        payload channel (email or sms; phone verification, S234, is purpose PHONE_VERIFICATION with channel sms and
+        recipient.phone). Security message: always sent, quiet hours do not apply. Never log the payload.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/IdentityVerificationRequested'}
     identityRoleGranted:
       name: identity.role.granted
-      title: Role added to a user (sign-up intent, start selling, admin, org membership)
+      title: Role added to a user (sign-up intent, start selling, admin, org membership, accepted invitation)
+      description: >-
+        For organisation roles orgId is set. An organisation role change publishes identity.role.revoked for the old
+        role followed by identity.role.granted for the new one.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/IdentityRoleChanged'}
     identityRoleRevoked:
       name: identity.role.revoked
-      title: Role removed from a user; effective on the user's next token (≤ 5 minutes)
+      title: Role removed from a user (or member removed from an organisation); effective on the next token (≤ 5 minutes)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/IdentityRoleChanged'}
     identityPermissionGranted:
@@ -111,6 +122,35 @@ components:
       description: Consumers caching contact lookups (notifications-service) should drop the user's entry.
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/IdentityNotificationPreferencesUpdated'}
+    identityUserPhoneVerified:
+      name: identity.user.phone-verified
+      title: The account's phone number was confirmed with an SMS code (S234)
+      description: >-
+        GET /v1/internal/users/{id}/contact now returns phoneVerified true for this number. Changing the phone resets
+        it (no event); consumers caching contact lookups should drop the user's entry.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityUserPhoneVerified'}
+    identityInvitationCreated:
+      name: identity.invitation.created
+      title: Someone was invited to join a seller or provider organisation (S231)
+      description: >-
+        Key = organisation id. Contains the plain single-use token (valid 7 days) and the Seller Center acceptUrl so
+        notifications-service can email recipient.email (template e.g. org.invitation). Security-style message: the
+        recipient usually has no account yet, so resolve nothing through identity. Inviting the same email again
+        revokes the previous invitation (identity.invitation.revoked) and publishes a new one. Never log the payload.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityInvitationCreated'}
+    identityInvitationRevoked:
+      name: identity.invitation.revoked
+      title: An open invitation was withdrawn or replaced by a new one (key = organisation id)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityInvitationRevoked'}
+    identityInvitationAccepted:
+      name: identity.invitation.accepted
+      title: The invitee joined the organisation, signed in or by signing up from the link (key = user id)
+      description: identity.role.granted (with orgId) is published for the new membership unless alreadyMember.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/IdentityInvitationAccepted'}
   schemas:
     IdentityUserRegistered:
       type: object
@@ -152,7 +192,7 @@ components:
         code: {type: string, pattern: '^[0-9]{6}$'}
         expiresInMinutes: {type: integer, examples: [10]}
         expiresAt: {type: string, format: date-time}
-        purpose: {type: string, enum: [EMAIL_VERIFICATION, SIGN_IN_SMS, SMS_ENROLMENT]}
+        purpose: {type: string, enum: [EMAIL_VERIFICATION, SIGN_IN_SMS, SMS_ENROLMENT, PHONE_VERIFICATION]}
         userId: {type: string, format: uuid}
         firstName: {type: string}
         transactional: {type: boolean, const: true}
@@ -162,7 +202,7 @@ components:
       properties:
         userId: {type: string, format: uuid}
         roleKey: {type: string, examples: [platform.driver, seller.owner, account.seller_applicant]}
-        orgId: {type: [string, 'null'], format: uuid, description: Set for seller/provider organisation roles}
+        orgId: {type: [string, 'null'], examples: [org_3k2j9x8q7w6e5r4t3y2u], description: Seller-service organisation id; set for seller/provider organisation roles}
         actorId: {type: string, description: User id of the administrator, the user themself, or a client id}
         reason: {type: [string, 'null']}
         at: {type: string, format: date-time}
@@ -218,4 +258,60 @@ components:
         marketingOptIn: {type: boolean}
         locale: {type: [string, 'null'], examples: [fr-CA]}
         timeZone: {type: [string, 'null'], examples: [America/Chicago]}
+        at: {type: string, format: date-time}
+    IdentityUserPhoneVerified:
+      type: object
+      required: [userId, phone, verifiedAt]
+      properties:
+        userId: {type: string, format: uuid}
+        phone: {type: string, description: E.164}
+        verifiedAt: {type: string, format: date-time}
+    IdentityInvitationCreated:
+      type: object
+      description: Follows the notifications-service payload convention (recipient block).
+      required: [invitationId, orgId, orgName, orgKind, email, roleKey, roleName, token, acceptUrl, expiresAt,
+                 expiresInDays, invitedBy, recipient, transactional]
+      properties:
+        invitationId: {type: string, format: uuid}
+        orgId: {type: string, examples: [org_3k2j9x8q7w6e5r4t3y2u]}
+        orgName: {type: string, examples: [Mama Put]}
+        orgKind: {type: string, enum: [SELLER, PROVIDER]}
+        email: {type: string, format: email}
+        roleKey: {type: string, examples: [seller.catalog, provider.practitioner]}
+        roleName: {type: string, examples: [Catalog manager]}
+        token: {type: string, description: Single-use base64url token (256 bits); identity stores only its SHA-256}
+        acceptUrl: {type: string, format: uri, examples: ['https://seller.afrotransact.com/invitations/accept?token=…']}
+        expiresAt: {type: string, format: date-time}
+        expiresInDays: {type: integer, examples: [7]}
+        invitedBy: {type: string, description: User id of the inviter, or a client id}
+        inviterName: {type: [string, 'null'], examples: [Adaeze Okafor]}
+        recipient:
+          type: object
+          required: [email]
+          properties:
+            id: {type: 'null', description: The invitee may not have an account}
+            email: {type: string, format: email}
+            phone: {type: 'null'}
+        transactional: {type: boolean, const: true}
+    IdentityInvitationRevoked:
+      type: object
+      required: [invitationId, orgId, email, roleKey, actorId, at]
+      properties:
+        invitationId: {type: string, format: uuid}
+        orgId: {type: string}
+        email: {type: string, format: email}
+        roleKey: {type: string}
+        actorId: {type: string}
+        reason: {type: [string, 'null'], examples: [revoked, replaced by a new invitation]}
+        at: {type: string, format: date-time}
+    IdentityInvitationAccepted:
+      type: object
+      required: [invitationId, orgId, email, roleKey, userId, alreadyMember, at]
+      properties:
+        invitationId: {type: string, format: uuid}
+        orgId: {type: string}
+        email: {type: string, format: email}
+        roleKey: {type: string, description: The invited role}
+        userId: {type: string, format: uuid}
+        alreadyMember: {type: boolean, description: The user was a member already; their role was left unchanged}
         at: {type: string, format: date-time}

@@ -7,6 +7,7 @@ import java.util.Set;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
 import com.afrotransact.identity.adapter.in.web.LoginPageSettings;
 import com.afrotransact.identity.application.FirstPartySignInSettings;
+import com.afrotransact.identity.application.InvitationSettings;
 import com.afrotransact.identity.adapter.out.notification.LoggingVerificationCodeSender;
 import com.afrotransact.identity.adapter.out.notification.OutboxVerificationCodeSender;
 import com.afrotransact.identity.domain.AccessPolicy;
@@ -18,6 +19,7 @@ import com.afrotransact.identity.domain.DefaultMfaPolicy;
 import com.afrotransact.identity.domain.DefaultPasswordPolicy;
 import com.afrotransact.identity.domain.DefaultSignInThrottlePolicy;
 import com.afrotransact.identity.domain.DefaultSignUpPolicy;
+import com.afrotransact.identity.domain.DefaultTeamPolicy;
 import com.afrotransact.identity.domain.DefaultTotpAuthenticator;
 import com.afrotransact.identity.domain.DefaultVerificationPolicy;
 import com.afrotransact.identity.domain.LandingPolicy;
@@ -27,6 +29,7 @@ import com.afrotransact.identity.domain.PasswordPolicy;
 import com.afrotransact.identity.domain.PhoneNumberPolicy;
 import com.afrotransact.identity.domain.SignInThrottlePolicy;
 import com.afrotransact.identity.domain.SignUpPolicy;
+import com.afrotransact.identity.domain.TeamPolicy;
 import com.afrotransact.identity.domain.TotpAuthenticator;
 import com.afrotransact.identity.domain.VerificationPolicy;
 import com.afrotransact.identity.port.VerificationCodeSender;
@@ -115,6 +118,16 @@ class IdentityConfiguration {
     SignInThrottlePolicy signInThrottlePolicy(IdentityProperties props) {
         return new DefaultSignInThrottlePolicy(limits(props.signInProtection().account()),
                 limits(props.signInProtection().ip()));
+    }
+
+    @Bean
+    TeamPolicy teamPolicy() {
+        return new DefaultTeamPolicy();
+    }
+
+    @Bean
+    InvitationSettings invitationSettings(IdentityProperties props) {
+        return new InvitationSettings(props.invitations().acceptUrl());
     }
 
     @Bean

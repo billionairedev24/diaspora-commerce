@@ -7,5 +7,7 @@ public enum VerificationPurpose {
     /** Second factor at sign-in (SMS). */
     SIGN_IN_SMS,
     /** Confirm a phone number before enabling SMS codes (SMS). */
-    SMS_ENROLMENT
+    SMS_ENROLMENT,
+    /** Confirm the account's phone number so notifications may text it (SMS, independent of MFA). */
+    PHONE_VERIFICATION
 }

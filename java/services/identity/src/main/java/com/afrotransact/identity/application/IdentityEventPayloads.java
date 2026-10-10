@@ -80,4 +80,31 @@ public final class IdentityEventPayloads {
     public record NotificationPreferencesUpdated(String userId, boolean email, boolean sms, boolean push,
                                                  boolean marketingOptIn, String locale, String timeZone, Instant at) {
     }
+
+    /** {@code identity.user.phone-verified}: the account's phone number was confirmed with an SMS code (S234). */
+    public record UserPhoneVerified(String userId, String phone, Instant verifiedAt) {
+    }
+
+    /**
+     * {@code identity.invitation.created}: notifications-service emails {@code recipient.email} a link to join the
+     * organisation. Contains the plain single-use token (7 days); never log the payload.
+     *
+     * @param acceptUrl  Seller Center link carrying the token
+     * @param invitedBy  subject of the inviter (user id or client id)
+     */
+    public record InvitationCreated(String invitationId, String orgId, String orgName, String orgKind, String email,
+                                    String roleKey, String roleName, String token, String acceptUrl,
+                                    Instant expiresAt, long expiresInDays, String invitedBy, String inviterName,
+                                    Recipient recipient, boolean transactional) {
+    }
+
+    /** {@code identity.invitation.revoked}: an open invitation was withdrawn (or replaced by a new one). */
+    public record InvitationRevoked(String invitationId, String orgId, String email, String roleKey, String actorId,
+                                    String reason, Instant at) {
+    }
+
+    /** {@code identity.invitation.accepted}: the invitee joined (signed in, or signed up from the link). */
+    public record InvitationAccepted(String invitationId, String orgId, String email, String roleKey, String userId,
+                                     boolean alreadyMember, Instant at) {
+    }
 }

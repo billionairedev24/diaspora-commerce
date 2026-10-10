@@ -28,26 +28,29 @@ tags:
   description: The signed-in customer's saved delivery addresses
 - name: Login & security
   description: Password, active sessions, linked social accounts and passkeys
-- name: Access control
-  description: Module matrix, capabilities, people and change log (access:read to view, access:admin to change)
+- name: Organisations
+  description: Seller/provider organisations mirrored from the seller service (orgs:manage), their member directory, role
+    changes and invitations (team:manage members, staff, seller service)
 - name: Devices
   description: Push notification devices of the signed-in shopper (customer app, web) or driver (driver app)
-- name: Organisations
-  description: Seller/provider organisations mirrored from the seller service (orgs:manage)
 - name: Internal lookups
   description: 'Service-to-service lookups for notifications-service: SERVICE principals (client credentials) with users:read.
     404 = unknown user or organisation.'
 - name: Accounts
   description: Unified sign-up and email verification (public)
+- name: Invitations
+  description: The invitee's side of organisation invitations (token from the invite link)
+- name: Identity providers
+  description: Which social sign-in buttons appear (Developers › Identity providers)
+- name: Me
+  description: 'The signed-in user: profile, roles, permissions and role-based landing'
+- name: Access control
+  description: Module matrix, capabilities, people and change log (access:read to view, access:admin to change)
 - name: First-party sign-in
   description: Password, two-step and passkey sign-in for the storefront's own forms, called by gateway-bff only (client-credentials
     token, scope auth:first-party). A completed sign-in returns a one-time loginTicket that the BFF redeems on GET /oauth2/authorize?…&login_ticket=…
     (authorization code + PKCE), then exchanges the code at /oauth2/token. Failed attempts count towards per-account and per-IP
     lockouts (429 identity.sign-in-locked with Retry-After).
-- name: Identity providers
-  description: Which social sign-in buttons appear (Developers › Identity providers)
-- name: Me
-  description: 'The signed-in user: profile, roles, permissions and role-based landing'
 paths:
   /v1/accounts:
     post:
@@ -55,7 +58,8 @@ paths:
       - Accounts
       summary: Create an account (customers, sellers and providers use the same form)
       description: Adds account.customer, plus the seller/provider applicant role when intent is sell/provide. A 6-digit code
-        is emailed (10-minute expiry).
+        is emailed (10-minute expiry). With invitationToken (organisation invite link, same email) the account starts verified,
+        joins the organisation and no code is sent.
       operationId: signUp
       requestBody:
         content:
@@ -727,6 +731,50 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/UserContact'
+  /v1/invitations/accept:
+    post:
+      tags:
+      - Invitations
+      summary: Accept an invitation as the signed-in user
+      description: 'The account email must be the invited one (422 identity.invitation-email-mismatch). Expired, used or revoked
+        tokens: 422 identity.invitation-expired / -used / -revoked. People without an account sign up with POST /v1/accounts
+        and invitationToken instead. Publishes identity.role.granted and identity.invitation.accepted.'
+      operationId: accept
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AcceptedInvitation'
+  /v1/invitations/lookup:
+    post:
+      tags:
+      - Invitations
+      summary: Look up an invitation link (public)
+      description: Organisation, role, invited email and status for the accept / sign-up page. 404 for unknown tokens. The
+        token is sent in the body so it stays out of access logs.
+      operationId: lookup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationTokenRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/InvitationPreview'
+      security: []
   /v1/me:
     get:
       tags:
@@ -1148,6 +1196,43 @@ paths:
       responses:
         '204':
           description: No Content
+  /v1/me/phone/verification:
+    post:
+      tags:
+      - Me
+      summary: Text a 6-digit code to the account's phone number (S234)
+      description: Independent of MFA. 10-minute expiry, 5 wrong attempts, at most 1 code per 30 seconds and 5 per hour (429
+        + Retry-After). 422 identity.phone-missing without a phone; 409 identity.phone-already-verified. Published as identity.verification.requested
+        (channel sms, purpose PHONE_VERIFICATION).
+      operationId: startPhoneVerification
+      responses:
+        '202':
+          description: Accepted
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PhoneCodeSent'
+  /v1/me/phone/verification/confirm:
+    post:
+      tags:
+      - Me
+      summary: Confirm the phone number with the SMS code
+      description: 422 identity.invalid-code / code-expired / too-many-attempts / code-used / phone-changed. Changing the
+        phone with PATCH /v1/me resets phoneVerified. Publishes identity.user.phone-verified.
+      operationId: confirmPhoneVerification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PhoneVerification'
   /v1/me/roles/provider-applicant:
     post:
       tags:
@@ -1242,11 +1327,102 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Organization'
+  /v1/orgs/{orgId}/invitations:
+    get:
+      tags:
+      - Organisations
+      summary: Pending (unexpired) invitations
+      operationId: pendingInvitations
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgInvitationList'
+    post:
+      tags:
+      - Organisations
+      summary: Invite someone by email with an organisation role
+      description: Publishes identity.invitation.created with a single-use token (7 days) for notifications-service to email.
+        Inviting the same email again replaces the open invitation. 409 identity.already-member when the email already belongs
+        to a member.
+      operationId: invite
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteMemberRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgInvitation'
+  /v1/orgs/{orgId}/invitations/{invitationId}:
+    delete:
+      tags:
+      - Organisations
+      summary: Revoke a pending invitation (publishes identity.invitation.revoked)
+      operationId: revokeInvitation
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: invitationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: No Content
+  /v1/orgs/{orgId}/members:
+    get:
+      tags:
+      - Organisations
+      summary: 'Member directory: names, email, role, status and join date'
+      description: Members of the (approved) organisation whose role has team:manage or at least VIEW on the Team & roles
+        module; staff and services with orgs:read or orgs:manage.
+      operationId: members
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgMemberList'
   /v1/orgs/{orgId}/members/{userId}:
     put:
       tags:
       - Organisations
-      summary: Add a member or change their organisation role (seller.* / provider.*)
+      summary: Change a member's organisation role (seller.* / provider.*)
+      description: team:manage members change other members' roles (not their own; only owners grant or change the owner role).
+        The seller service and staff (orgs:manage) may also add a member. The last owner can't be demoted (422 identity.last-owner).
+        Publishes identity.role.revoked for the old role and identity.role.granted for the new one.
       operationId: setMember
       parameters:
       - name: orgId
@@ -1273,6 +1449,7 @@ paths:
       tags:
       - Organisations
       summary: Remove a member
+      description: The last owner can't be removed (422 identity.last-owner); only owners remove owners. Publishes identity.role.revoked.
       operationId: removeMember
       parameters:
       - name: orgId
@@ -1339,6 +1516,8 @@ components:
       properties:
         roleKey:
           type: string
+          examples:
+          - seller.fulfilment
           minLength: 1
       required:
       - roleKey
@@ -1436,6 +1615,9 @@ components:
           type: boolean
         phone:
           type: string
+        phoneVerified:
+          type: boolean
+          description: The phone was confirmed with an SMS code; reset when it changes
         smsConsent:
           type: boolean
         termsAcceptedAt:
@@ -1580,20 +1762,75 @@ components:
           format: date-time
         updatedBy:
           type: string
+    InviteMemberRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          minLength: 0
+        roleKey:
+          type: string
+          examples:
+          - seller.catalog
+          minLength: 1
+      required:
+      - email
+      - roleKey
+    OrgInvitation:
+      type: object
+      description: An invitation to join an organisation
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        orgName:
+          type: string
+        orgKind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        email:
+          type: string
+        roleKey:
+          type: string
+        roleLabel:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - ACCEPTED
+          - REVOKED
+          - EXPIRED
+        invitedBy:
+          type: string
+          description: User id (or client id) of the inviter
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
     RevokedSessions:
       type: object
       properties:
         revoked:
           type: integer
           format: int32
-    TotpSetup:
+    PhoneCodeSent:
       type: object
-      description: Render otpauthUri as a QR code; secret is for manual entry
       properties:
-        secret:
+        sentTo:
           type: string
-        otpauthUri:
+          description: Masked phone, e.g. •••• 0142
+        expiresAt:
           type: string
+          format: date-time
     CodeRequest:
       type: object
       properties:
@@ -1603,6 +1840,25 @@ components:
           minLength: 6
       required:
       - code
+    PhoneVerification:
+      type: object
+      properties:
+        phone:
+          type: string
+          description: E.164
+        phoneVerified:
+          type: boolean
+        verifiedAt:
+          type: string
+          format: date-time
+    TotpSetup:
+      type: object
+      description: Render otpauthUri as a QR code; secret is for manual entry
+      properties:
+        secret:
+          type: string
+        otpauthUri:
+          type: string
     RecoveryCodes:
       type: object
       description: Shown once; empty when existing recovery codes were kept
@@ -1778,6 +2034,66 @@ components:
           type: boolean
         isDefault:
           type: boolean
+    InvitationTokenRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          maxLength: 200
+          minLength: 0
+      required:
+      - token
+    InvitationPreview:
+      type: object
+      description: What an invite link is for; shown before signing in or up
+      properties:
+        orgName:
+          type: string
+        orgKind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        email:
+          type: string
+        roleKey:
+          type: string
+        roleLabel:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - ACCEPTED
+          - REVOKED
+          - EXPIRED
+        expiresAt:
+          type: string
+          format: date-time
+    AcceptedInvitation:
+      type: object
+      properties:
+        invitationId:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        orgName:
+          type: string
+        orgKind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+        roleKey:
+          type: string
+          description: The member's role now
+        userId:
+          type: string
+          format: uuid
+        alreadyMember:
+          type: boolean
+          description: Was already a member; the role was left unchanged
     PasswordSignInRequest:
       type: object
       properties:
@@ -2048,6 +2364,12 @@ components:
           - shop
           - sell
           - provide
+        invitationToken:
+          type: string
+          description: Organisation invitation token from the invite link (token query parameter). The email must be the invited
+            one; the account starts verified and joins the organisation.
+          maxLength: 200
+          minLength: 0
       required:
       - confirmPassword
       - email
@@ -2066,9 +2388,11 @@ components:
           type: string
         verificationRequired:
           type: boolean
+          description: false when the sign-up came from an invitation link
         codeExpiresAt:
           type: string
           format: date-time
+          description: null when no code was sent
     VerifyEmailRequest:
       type: object
       properties:
@@ -2120,6 +2444,60 @@ components:
           type: boolean
         smsConsent:
           type: boolean
+    OrgMember:
+      type: object
+      description: One member of the organisation's team
+      properties:
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        name:
+          type: string
+          description: First and last name
+          examples:
+          - Adaeze Okafor
+        email:
+          type: string
+        roleKey:
+          type: string
+          examples:
+          - seller.admin
+        roleLabel:
+          type: string
+          description: Role display name
+          examples:
+          - Admin
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - DISABLED
+        joinedAt:
+          type: string
+          format: date-time
+          description: When the membership was created
+    OrgMemberList:
+      type: object
+      properties:
+        orgId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgMember'
+    OrgInvitationList:
+      type: object
+      properties:
+        orgId:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgInvitation'
     Session:
       type: object
       properties:

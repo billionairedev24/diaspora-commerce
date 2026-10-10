@@ -89,7 +89,13 @@ at:
         type: confidential
         secret: ${ORDERS_CLIENT_SECRET:local-orders-service-secret}
         grant-types: [client_credentials]
-        scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read]
+        scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read, "tax:quote"]
+      - client-id: tax-returns-service
+        name: Tax returns service
+        type: confidential
+        secret: ${TAX_RETURNS_CLIENT_SECRET:local-tax-returns-service-secret}
+        grant-types: [client_credentials]
+        scopes: [payments:service, inventory:adjust, "shipping:label", users:read]
       - client-id: bookings-service
         name: Bookings service
         type: confidential

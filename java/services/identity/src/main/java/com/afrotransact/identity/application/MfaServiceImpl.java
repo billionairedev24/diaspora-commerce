@@ -17,6 +17,7 @@ import com.afrotransact.identity.domain.UserAccount;
 import com.afrotransact.identity.domain.VerificationPurpose;
 import com.afrotransact.identity.port.AccessChangeLog;
 import com.afrotransact.identity.port.MfaRepository;
+import com.afrotransact.identity.port.PhoneVerificationRepository;
 import com.afrotransact.identity.port.UserAccountRepository;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.ForbiddenActionException;
@@ -38,12 +39,14 @@ class MfaServiceImpl implements MfaService {
     private final TotpAuthenticator totp;
     private final CodeIssuer codes;
     private final AccessChangeLog changeLog;
+    private final PhoneVerificationRepository phoneVerifications;
     private final Clock clock;
     private final String issuerName;
 
     MfaServiceImpl(CurrentUser current, UserAccountRepository users, AccessProfileLoader profiles,
                    AccessPolicy accessPolicy, MfaRepository mfa, MfaSupport support, MfaPolicy policy,
-                   TotpAuthenticator totp, CodeIssuer codes, AccessChangeLog changeLog, Clock clock,
+                   TotpAuthenticator totp, CodeIssuer codes, AccessChangeLog changeLog,
+                   PhoneVerificationRepository phoneVerifications, Clock clock,
                    @Value("${at.identity.mfa.issuer-name:AfroTransact}") String issuerName) {
         this.current = current;
         this.users = users;
@@ -55,6 +58,7 @@ class MfaServiceImpl implements MfaService {
         this.totp = totp;
         this.codes = codes;
         this.changeLog = changeLog;
+        this.phoneVerifications = phoneVerifications;
         this.clock = clock;
         this.issuerName = issuerName;
     }
@@ -122,6 +126,8 @@ class MfaServiceImpl implements MfaService {
         codes.consume(u.id(), VerificationPurpose.SMS_ENROLMENT, code);
         Instant now = Instant.now(clock);
         mfa.enableSms(u.id(), u.phone(), now);
+        // The SMS enrolment code also proves the account's phone number (S234).
+        phoneVerifications.markVerified(u.id(), u.phone(), now);
         changeLog.append(u.id().toString(), "mfa.sms.enabled", u.id(), null, "sms", null);
         return firstRecoveryCodes(u.id(), now);
     }

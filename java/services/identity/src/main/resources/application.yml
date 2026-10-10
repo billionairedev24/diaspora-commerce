@@ -88,6 +88,9 @@ at:
   identity:
     issuer: ${AUTH_ISSUER:http://localhost:8100}
     home-url: ${HOME_URL:http://localhost:3000}
+    invitations:
+      # Seller Center page that accepts organisation invitations; ?token=… is appended (identity.invitation.created)
+      accept-url: ${INVITATION_ACCEPT_URL:http://localhost:3001/invitations/accept}
     staff-email-domains:
       - afrotransact.com
     signing:

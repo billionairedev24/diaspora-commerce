@@ -22,6 +22,12 @@ public final class IdentityEvents {
     public static final String DEVICE_REGISTERED = "identity.device.registered";
     public static final String DEVICE_UNREGISTERED = "identity.device.unregistered";
     public static final String NOTIFICATION_PREFERENCES_UPDATED = "identity.notification-preferences.updated";
+    public static final String USER_PHONE_VERIFIED = "identity.user.phone-verified";
+    /** Key = organisation id. Carries the plain single-use token for the invitation email. */
+    public static final String INVITATION_CREATED = "identity.invitation.created";
+    public static final String INVITATION_REVOKED = "identity.invitation.revoked";
+    /** Key = the accepting user's id. */
+    public static final String INVITATION_ACCEPTED = "identity.invitation.accepted";
 
     private IdentityEvents() {
     }

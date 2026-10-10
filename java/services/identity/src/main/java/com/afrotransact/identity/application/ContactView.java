@@ -5,8 +5,9 @@ import java.util.List;
 /**
  * How to reach a user, for notifications-service ({@code GET /v1/internal/users/{id}/contact}).
  *
- * @param phoneVerified true only when the phone was confirmed with a one-time code (SMS sign-in factor); callers
- *                      must not text an unverified number
+ * @param phoneVerified true only when the account's current phone was confirmed with an SMS code (phone
+ *                      verification or SMS sign-in enrolment); reset when the number changes. Callers must not
+ *                      text an unverified number
  * @param market        ISO country of the default delivery address (else of the active organisation), or null
  */
 public record ContactView(String userId, String firstName, String email, boolean emailVerified, String phone,

@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.identity.domain.OrgKind;
+import com.afrotransact.identity.domain.OrgMember;
 import com.afrotransact.identity.domain.OrgMembership;
 import com.afrotransact.identity.domain.OrgStatus;
 import com.afrotransact.identity.domain.Organization;
@@ -76,6 +77,30 @@ class JdbcOrganizationRepository implements OrganizationRepository {
     public boolean removeMember(String orgId, UUID userId) {
         return jdbc.sql("delete from org_membership where org_id = :o and user_id = :u")
                 .param("o", orgId).param("u", userId).update() == 1;
+    }
+
+    @Override
+    public Optional<String> memberRole(String orgId, UUID userId) {
+        return jdbc.sql("select role_key from org_membership where org_id = :o and user_id = :u")
+                .param("o", orgId).param("u", userId).query(String.class).optional();
+    }
+
+    @Override
+    public List<OrgMember> members(String orgId) {
+        return jdbc.sql("""
+                select u.id, u.first_name, u.last_name, u.email, u.enabled, m.role_key, r.name as role_name,
+                    m.created_at
+                from org_membership m
+                join user_account u on u.id = m.user_id
+                join role r on r.key = m.role_key
+                where m.org_id = :o
+                order by lower(u.first_name), lower(u.last_name), u.id
+                """)
+                .param("o", orgId)
+                .query((rs, n) -> new OrgMember(rs.getObject("id", UUID.class), rs.getString("first_name"),
+                        rs.getString("last_name"), rs.getString("email"), rs.getString("role_key"),
+                        rs.getString("role_name"), rs.getBoolean("enabled"), Jdbc.instant(rs, "created_at")))
+                .list();
     }
 
     @Override

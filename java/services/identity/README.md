@@ -22,8 +22,47 @@ claims with `JwtActorResolver` (java/libs/platform-security) or `auth.Require` (
 | Social login | Google (OIDC) via its own consent page; Apple (OIDC, form_post) and Facebook registrations exist but are disabled by default. A provider is offered only when it has client credentials **and** is enabled in `identity_provider` (`PUT /v1/admin/identity-providers/{id}`). Accounts created from provider-verified emails skip email verification; a verified email matching an existing account links to it; signing in with a provider while already signed in links it. |
 | First-party sign-in | `gateway-bff` only: password, TOTP/SMS/recovery-code and passkey steps as JSON (`/v1/auth/*`), ending in a one-time **login ticket** that the BFF redeems on the normal authorization-code flow (`/oauth2/authorize?…&login_ticket=…`). See [First-party sign-in](#first-party-sign-in-s209). |
 | Brute-force protection | Per account (normalised email, also for unknown emails) and per IP: 5 / 30 failures within 15 min lock for 15 min, doubling per consecutive lockout up to 4 h (`at.identity.sign-in-protection`). Applies to the first-party API **and** the hosted `/login` and `/login/mfa` pages. 429 `identity.sign-in-locked` + `Retry-After`; append-only `sign_in_audit`; `identity.sign-in.locked` events. |
+| Organisation teams (S231) | Member directory (names, email, role, status, joined date), role changes, removals and email invitations for seller and provider organisations. See [Organisation teams and invitations](#organisation-teams-and-invitations-s231). |
+| Phone verification (S234) | `POST /v1/me/phone/verification` texts a 6-digit code (hashed, 10 minutes, 5 wrong attempts, 1 per 30 s / 5 per hour); `…/confirm` marks the account phone verified. Independent of MFA (confirming SMS sign-in enrolment also verifies the number). Changing the phone resets it. `GET /v1/me` and the contact lookup return the real `phoneVerified`. |
 | Push devices & preferences | Shoppers and drivers register push tokens (`/v1/me/devices`) and set email/SMS/push switches and marketing opt-in (`/v1/me/notification-preferences`); notifications-service reads both through `GET /v1/internal/users/{id}/contact`. |
 | Sessions | Login sessions live in Spring Session JDBC (works with several replicas). "Sessions" in Login & security are OAuth authorizations with a live refresh/access token; revoking deletes them. |
+
+## Organisation teams and invitations (S231)
+
+Seller Center's team page reads identity's member directory instead of showing bare user ids. Identity's
+organisations and memberships are the ones that drive the token `org` claim and org-role permissions.
+
+**Who may call.** Staff and services: `orgs:read` or `orgs:manage` read, `orgs:manage` changes. Members are judged by
+their role in *that* organisation (looked up in `org_membership`, not the token's active org) and the organisation
+must be APPROVED: roles with `team:manage` (`seller.owner`, `seller.admin`, `provider.owner`, `provider.manager`)
+read and change; other roles read only with at least VIEW on the Team & roles module (`sTeam` / `pTeam`) in the
+module access matrix (none by default). Everyone else gets 403 (`identity.not-org-member`, `identity.org-not-approved`,
+`identity.team-manage-required`, `identity.team-read-denied`).
+
+**Rules.** Roles must fit the organisation kind: `seller.*` for SELLER, `provider.*` for PROVIDER (422
+`identity.wrong-portal`; unknown roles 422 `identity.invalid-role`). Only owners (or staff/services) grant, change or
+remove the owner role, and invite owners (403 `identity.owner-only`). Members cannot change their own role (403
+`identity.own-role`) and can only change existing members (404 `identity.member-not-found`; invite instead). An
+organisation never loses its last enabled owner: demoting or removing them is 422 `identity.last-owner` (the seller
+service's `orgs:manage` mirror is exempt, it owns its own rules). A role change publishes `identity.role.revoked`
+(old role) then `identity.role.granted` (new role); removal publishes `identity.role.revoked`; both carry `orgId`.
+
+**Invitations.** `POST /v1/orgs/{orgId}/invitations {email, roleKey}` stores the invitation with the SHA-256 of a
+256-bit single-use token, valid **7 days**, and publishes `identity.invitation.created` (key = org id) carrying the
+plain `token` and `acceptUrl` (`at.identity.invitations.accept-url` + `?token=`) for notifications-service to email.
+Inviting the same email again revokes the open invitation and sends a new one; inviting a member is 409
+`identity.already-member`. `DELETE …/invitations/{id}` revokes a pending one (409 `identity.invitation-not-pending`
+otherwise; `identity.invitation.revoked`). The invitee either:
+
+- signs in with the invited email and calls `POST /v1/invitations/accept {token}`, or
+- signs up from the link: `POST /v1/accounts` with `invitationToken` and the invited email. The link proved the
+  mailbox, so the account starts verified (`verificationRequired: false`, no code) and joins at once.
+
+Both add the membership with the invited role (a user without an active organisation gets this one), close the
+invitation and publish `identity.role.granted` + `identity.invitation.accepted`. Token problems are 422 with field
+`invitationToken`: `identity.invitation-invalid`, `-expired`, `-used`, `-revoked`; a different email is 422
+`identity.invitation-email-mismatch`. `POST /v1/invitations/lookup {token}` (public) lets the accept / sign-up page
+show the organisation, role, email and status first.
 
 ## Sign-in flow (browser)
 
@@ -144,7 +183,8 @@ filters push tokens):
 ```
 
 `pushTokens[].platform` is the **transport** (`fcm` / `apns`) that notifications-service routes on; the device OS is
-`os`. `phoneVerified` is true only for a phone confirmed with a code (SMS sign-in factor). `market` is the default
+`os`. `phoneVerified` is true only when the account's current phone was confirmed with an SMS code (S234 phone
+verification or SMS sign-in enrolment; stored in `phone_verification`, cleared when the number changes). `market` is the default
 delivery address's country, else the active organisation's. `GET /v1/internal/orgs/{orgId}/owners` →
 `{orgId, ownerUserIds}`. Mobile apps register tokens with `POST /v1/me/devices` on every start and token refresh, and
 call `DELETE /v1/me/devices {token}` on sign-out.
@@ -183,7 +223,13 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `GET /v1/admin/module-access?portal=`, `PUT /v1/admin/module-access/{portal}/{module}/{role}` | read / admin | Module access matrix |
 | `GET /v1/admin/access-log?userId=` | `access:read` | Append-only change log |
 | `GET /v1/admin/identity-providers`, `PUT /v1/admin/identity-providers/{id}` | read / admin | Identity provider switches |
-| `PUT /v1/orgs/{orgId}`, `PUT/DELETE /v1/orgs/{orgId}/members/{userId}` | `orgs:manage` (seller service) | Mirror seller/provider orgs, approval status and members |
+| `PUT /v1/orgs/{orgId}` | `orgs:manage` (seller service) | Mirror seller/provider orgs and approval status |
+| `GET /v1/orgs/{orgId}/members` | team reader (below) | Member directory `{orgId, items: [{userId, firstName, lastName, name, email, roleKey, roleLabel, status ACTIVE/DISABLED, joinedAt}]}` |
+| `PUT /v1/orgs/{orgId}/members/{userId}` `{roleKey}`, `DELETE …` | team manager, staff/service `orgs:manage` | Change a member's role / remove a member (204). The seller service and staff may also add members directly |
+| `POST /v1/orgs/{orgId}/invitations` `{email, roleKey}` → 201, `GET …/invitations`, `DELETE …/invitations/{id}` | team manager (list: team reader) | Invite by email, pending invitations `{orgId, items}`, revoke |
+| `POST /v1/invitations/lookup` `{token}` | public | What an invite link is for (org, role, email, status) |
+| `POST /v1/invitations/accept` `{token}` | user (same email) | Join the organisation |
+| `POST /v1/me/phone/verification`, `POST /v1/me/phone/verification/confirm` `{code}` | user | S234 phone verification (202 `{sentTo, expiresAt}`; 200 `{phone, phoneVerified, verifiedAt}`) |
 
 ### Token claims
 
@@ -205,7 +251,11 @@ notifications service: `recipient`, `channel` email/sms, `code`, `expiresInMinut
 `identity.user.enabled`, `identity.sign-in.locked` (key = user id, or `ip:<address>` for IP lockouts; `scope`,
 `channel` first-party/hosted, `lockouts`, `lockoutSeconds`, `lockedUntil`), `identity.device.registered` /
 `identity.device.unregistered` (`deviceId`, `app`, `platform`, `provider`; never the token),
-`identity.notification-preferences.updated` (the switches, `locale`, `timeZone`). Schemas: [`contracts/asyncapi/fragments/identity.yaml`](../../../contracts/asyncapi/fragments/identity.yaml).
+`identity.notification-preferences.updated` (the switches, `locale`, `timeZone`), `identity.user.phone-verified`
+(`userId`, `phone`, `verifiedAt`), `identity.invitation.created` (key = org id; `token`, `acceptUrl`, `email`,
+`recipient.email`, org and role names, `expiresAt`, `inviterName`; never log it), `identity.invitation.revoked` (key =
+org id) and `identity.invitation.accepted` (key = user id). Phone verification codes go out as
+`identity.verification.requested` with `channel: sms` and `purpose: PHONE_VERIFICATION`. Schemas: [`contracts/asyncapi/fragments/identity.yaml`](../../../contracts/asyncapi/fragments/identity.yaml).
 
 ### Consumed (consumer group `identity-service`, inbox-deduplicated, `CONSUMERS_ENABLED`)
 
@@ -234,6 +284,13 @@ name, status APPROVED, market = country) and makes `applicantUserId` and every `
   `notification_preference`, `sign_in_challenge` (MFA / passkey, client-bound, 5 attempts), `login_ticket` (SHA-256
   only, 60 s, single use), `sign_in_throttle` (scope ACCOUNT/IP, failures, window, `locked_until`, `lockouts`) and the
   append-only `sign_in_audit` (trigger rejects UPDATE/DELETE).
+
+- `V12__org_team_invitations_phone_verification.sql`: permissions `tax:quote` (super admin), `tax:read` (super admin,
+  finance, auditor), `tax:configure` (super admin, finance) and carrier-gateway's `shipping:rate`, `shipping:label`,
+  `shipping:void` (super admin, operations manager, fulfilment ops, `seller.owner`, `seller.admin`,
+  `seller.fulfilment`; `shipping:rate` also dispatcher and customer support) and `shipping:admin` (every role with
+  `shipping:manage`); table `org_invitation` (token SHA-256 only, PENDING/ACCEPTED/REVOKED, one open invitation per
+  org and email) and `phone_verification` (verified E.164 per account, backfilled from confirmed SMS sign-in phones).
 
 ## Permission catalogue
 
@@ -286,6 +343,13 @@ name, status APPROVED, market = country) and makes `applicantUserId` and every `
 | `billing:manage` | team | Plan, subscription and billing |
 | `support:respond` | support | Answer customer messages and tickets |
 | `users:read` | support | Look up customer accounts; services: contact details and organisation owners |
+| `tax:quote` | tax | Calculate sales tax for a cart or order (service access; orders-service) |
+| `tax:read` | tax | View tax transactions, liabilities and returns |
+| `tax:configure` | tax | Configure tax registrations, nexus and filing settings |
+| `shipping:rate` | delivery | Rate shopping, tracking look-ups and address validation (carrier gateway) |
+| `shipping:label` | delivery | Buy shipping labels, register tracking and book carrier pickups |
+| `shipping:void` | delivery | Void unused shipping labels |
+| `shipping:admin` | delivery | Manage every pickup location and carrier-gateway settings |
 | `auth:first-party` | access | Service access to the first-party sign-in API (gateway-bff only) |
 | `sellers:enforce` | trust | Suspend, reinstate and recompute seller health (super admin, trust & safety, operations manager) |
 | `delivery:dispatch:read` | delivery | View dispatch boards, routes and driver assignments (read-only; customer support) |
@@ -346,17 +410,21 @@ Module access matrix: 27 platform modules × 15 platform roles, 10 Seller Center
 | `SIGNING_KEY_PEM`, `SIGNING_KEY_ID` | RS256 private key (PKCS#8 PEM) and `kid`; required outside `local` |
 | `AUTH_ISSUER`, `HOME_URL` | issuer URL (`http://localhost:8100` locally), post-login fallback |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (+ `APPLE_*`, `FACEBOOK_*`) | social sign-in; unset → provider not registered |
-| `GATEWAY_BFF_CLIENT_SECRET` (or `BFF_CLIENT_SECRET`), `SELLER_SERVICE_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET`, … | confidential client secrets (hashed with BCrypt before storage) |
+| `GATEWAY_BFF_CLIENT_SECRET` (or `BFF_CLIENT_SECRET`), `SELLER_SERVICE_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET`, `TAX_RETURNS_CLIENT_SECRET`, … | confidential client secrets (hashed with BCrypt before storage) |
+| `INVITATION_ACCEPT_URL` | Seller Center invitation page (default `${SELLER_CENTER_URL}/invitations/accept`; locally `http://localhost:3001/invitations/accept`) |
 | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_PHONE` | first super administrator (skipped when unset) |
 
 Other settings (`at.identity.*`): `staff-email-domains`, `verification.sender` (`outbox` | `log`), `mfa.*`,
+`invitations.accept-url`,
 `webauthn.{rp-id,rp-name,allowed-origins}`, `cors-allowed-origins`, and `clients` — the OAuth clients seeded (upserted by
 client id) at start-up per environment: `storefront`, `seller-center`, `staff-console`, `customer-app`, `driver-app`
 (public, PKCE, rotating refresh tokens), `gateway-bff` (confidential: authorization code + PKCE + refresh tokens, and
 client credentials with `auth:first-party` for the first-party sign-in API), and service clients with client
 credentials, e.g. `seller-service` (`orgs:manage users:read`), `notifications-service` (`users:read`) and
 `trust-ops-service` (`catalog:moderate payments:service compliance:hold offers:write ai:triage users:read`, secret
-`TRUSTOPS_CLIENT_SECRET`), `fulfilment-service` (`orders:update-status inventory:reserve delivery:relay`).
+`TRUSTOPS_CLIENT_SECRET`), `fulfilment-service` (`orders:update-status inventory:reserve delivery:relay`),
+`orders-service` (`… users:read tax:quote`) and `tax-returns-service` (`payments:service inventory:adjust
+shipping:label users:read`, secret `TAX_RETURNS_CLIENT_SECRET`, local default only in the `local` profile).
 Client-credentials tokens always carry `pt=SERVICE` and their granted scopes in `perms`.
 `webauthn.allowed-origins` lists identity's own origin and the storefront origins (their forms run the passkey
 ceremony for the first-party API); `first-party.client-ids` (default `[gateway-bff]`) and
@@ -389,7 +457,14 @@ TOTP (attempts left) → TOTP with trust-device → login ticket → `/oauth2/au
 (client secret + PKCE) → claims, ID-token nonce, refresh; ticket and challenge replay rejected; trusted device skips
 MFA; passkey assertion (software ES256 authenticator) → ticket → tokens; only `gateway-bff` may call; account lockout
 (also blocks the hosted form) and IP lockout with audit rows and events; devices, preferences, contact and org-owner
-lookups; `trust-ops-service` tokens are SERVICE principals. Unit tests cover the throttle policy, challenge/ticket
+lookups; `trust-ops-service` tokens are SERVICE principals; `tax-returns-service` and `orders-service` (`tax:quote`)
+client credentials and the V12 tax/shipping grants. `OrgTeamAndPhoneVerificationIT` covers S231 and S234:
+member directory, invitation token (hash only, replaced on re-invite, public lookup, email mismatch, single use),
+accepting signed in and signing up from the link (no email code, `org` claim on the first token), readers and
+managers (catalog manager 403, `orgs:read` service 200), role change events, owner-only and own-role rules, revoke,
+removal and the last owner; phone verification (SMS event, hashed code, resend limit, 5 wrong attempts, expiry, single
+use, `phoneVerified` in `/v1/me` and the contact lookup, reset on phone change). Unit tests cover the team policy,
+`OrgTeamServiceImpl`, `OrgInvitationServiceImpl` and `PhoneVerificationServiceImpl` (Mockito). Unit tests cover the throttle policy, challenge/ticket
 rules, the first-party service (Mockito), the login-ticket filter and WebAuthn assertion verification.
 
 ## Not covered here
@@ -398,8 +473,9 @@ rules, the first-party service (Mockito), the login-ticket filter and WebAuthn a
 - TOTP secrets are stored unencrypted in `mfa_totp` (protected by database access controls); envelope encryption with
   a KMS key is a follow-up.
 - Token Exchange (RFC 8693), DPoP for mobile and the device-code grant from the architecture document are not enabled yet.
-- `phoneVerified` in the contact lookup is true only when the account phone was confirmed as an SMS sign-in factor;
-  there is no separate phone-verification step at sign-up yet, so notifications-service will not text other numbers.
+- Team changes made here are not pushed to the seller service's own member list; it should consume
+  `identity.role.granted` / `identity.role.revoked` with `orgId` (or Seller Center should read identity's directory).
+- Phone verification is not part of the sign-up form; apps prompt for it from the account page.
 - Lockout notices to the account owner (security email on `identity.sign-in.locked`) need a notifications rule.
 
 ## Address book

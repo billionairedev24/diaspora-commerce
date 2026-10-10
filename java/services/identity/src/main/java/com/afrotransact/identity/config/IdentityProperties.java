@@ -22,6 +22,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param clients           OAuth clients seeded at start-up (upserted by client id)
  * @param firstParty        first-party sign-in API (clients allowed to call it and redeem login tickets)
  * @param signInProtection  brute-force protection limits (per account and per IP)
+ * @param invitations       organisation invitations (Seller Center accept page)
  */
 @ConfigurationProperties(prefix = "at.identity")
 public record IdentityProperties(
@@ -37,7 +38,8 @@ public record IdentityProperties(
         BootstrapAdmin bootstrapAdmin,
         List<Client> clients,
         FirstParty firstParty,
-        SignInProtection signInProtection) {
+        SignInProtection signInProtection,
+        Invitations invitations) {
 
     public IdentityProperties {
         homeUrl = homeUrl == null ? "/" : homeUrl;
@@ -52,6 +54,11 @@ public record IdentityProperties(
         clients = clients == null ? List.of() : List.copyOf(clients);
         firstParty = firstParty == null ? new FirstParty(null) : firstParty;
         signInProtection = signInProtection == null ? new SignInProtection(null, null) : signInProtection;
+        invitations = invitations == null ? new Invitations(null) : invitations;
+    }
+
+    /** @param acceptUrl Seller Center page that accepts an invitation ({@code ?token=} is appended) */
+    public record Invitations(String acceptUrl) {
     }
 
     /** @param clientIds confidential clients allowed to use the first-party sign-in API (default gateway-bff) */
