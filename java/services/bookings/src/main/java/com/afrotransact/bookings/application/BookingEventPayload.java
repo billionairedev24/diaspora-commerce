@@ -18,7 +18,8 @@ public record BookingEventPayload(Recipient recipient, String firstName, String 
                                   UUID bookingId, String orgId, UUID memberId, UUID serviceId, String status,
                                   String previousStatus, Instant startAt, Instant endAt, Instant proposedStartAt,
                                   long priceMinor, long depositMinor, String currency, String policy,
-                                  long refundedMinor, long providerFeeMinor, String reason, String cancelledBy) {
+                                  long refundedMinor, long providerFeeMinor, String reason, String cancelledBy,
+                                  long balanceMinor, String balanceState, String balanceFailure) {
 
     private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("EEE, MMM d · h:mm a", Locale.US);
 
@@ -40,6 +41,7 @@ public record BookingEventPayload(Recipient recipient, String firstName, String 
                 b.id(), b.orgId(), b.memberId(), b.service().serviceId(), b.status().name(), previousStatus,
                 b.startAt(), b.endAt(), b.proposedStartAt(), b.service().priceMinor(), b.service().depositMinor(),
                 b.service().currency(), b.policy().kind().name(), b.refundedMinor(), b.providerFeeMinor(), b.reason(),
-                b.cancelledBy() == null ? null : b.cancelledBy().name());
+                b.cancelledBy() == null ? null : b.cancelledBy().name(), b.service().balanceMinor(),
+                b.balance().state().name(), b.balance().failure());
     }
 }

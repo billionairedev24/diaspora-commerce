@@ -35,9 +35,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * One PostgreSQL container, one in-JVM WireMock standing in for payments-service and identity's token endpoint, and
- * one Spring context shared by every integration test. Kafka and jobs are off (the payment-event ingest and the
- * maintenance use cases are called directly); each test uses its own provider organisation.
+ * One PostgreSQL container, in-JVM WireMocks standing in for payments-service (with identity's token endpoint) and
+ * geo-service, and one Spring context shared by every integration test. Kafka and jobs are off (the payment-event
+ * ingest, the maintenance and the balance-charge use cases are called directly); each test uses its own provider
+ * organisation. The card authorisation window is 7 days, so bookings on {@link #day()} keep their authorisation.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.events.relay-enabled=false",
@@ -45,6 +46,7 @@ import tools.jackson.databind.json.JsonMapper;
     "spring.kafka.listener.auto-startup=false",
     "at.bookings.jobs.enabled=false",
     "at.bookings.payments.client-secret=it-secret",
+    "at.bookings.balance.authorisation-window=7d",
     "spring.datasource.hikari.maximum-pool-size=20"
 })
 @ActiveProfiles("local")
@@ -55,12 +57,14 @@ abstract class BookingsIntegrationTest {
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
     static final WireMockServer PAYMENTS = new WireMockServer(WireMockConfiguration.options().dynamicPort()
             .globalTemplating(true));
+    static final WireMockServer GEO = new WireMockServer(WireMockConfiguration.options().dynamicPort());
     static final JsonMapper JSON = JsonMapper.builder().build();
     private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 
     static {
         POSTGRES.start();
         PAYMENTS.start();
+        GEO.start();
     }
 
     @DynamicPropertySource
@@ -70,6 +74,7 @@ abstract class BookingsIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("at.bookings.payments.base-url", PAYMENTS::baseUrl);
         registry.add("at.bookings.payments.token-uri", () -> PAYMENTS.baseUrl() + "/oauth2/token");
+        registry.add("at.bookings.geo.base-url", GEO::baseUrl);
     }
 
     JdbcClient jdbc;
@@ -80,6 +85,7 @@ abstract class BookingsIntegrationTest {
         this.jdbc = jdbcClient;
         this.port = serverPort;
         stubPayments();
+        GEO.resetAll();
     }
 
     @AfterEach
@@ -104,6 +110,9 @@ abstract class BookingsIntegrationTest {
         PAYMENTS.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/payments/[^/]+/(capture|cancel|refunds)"))
                 .willReturn(WireMock.aResponse().withStatus(201).withHeader("Content-Type", "application/json")
                         .withBody("{}")));
+        PAYMENTS.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/payments/[^/]+/release"))
+                .willReturn(WireMock.okJson("{\"id\":\"{{request.pathSegments.[2]}}\",\"status\":\"CAPTURED\","
+                        + "\"releasedMinor\":9000}")));
         PAYMENTS.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/settlements/[^/]+/delivered"))
                 .willReturn(WireMock.okJson("{\"kind\":\"SERVICE\"}")));
     }
@@ -195,7 +204,12 @@ abstract class BookingsIntegrationTest {
 
     /** First free start time of the service on {@link #day()}. */
     String firstSlot(UUID serviceId) {
-        JsonNode slots = ok(send("GET", "/v1/public/services/" + serviceId + "/slots?date=" + day(), null, null));
+        return firstSlot(serviceId, day());
+    }
+
+    /** First free start time of the service on {@code date}. */
+    String firstSlot(UUID serviceId, LocalDate date) {
+        JsonNode slots = ok(send("GET", "/v1/public/services/" + serviceId + "/slots?date=" + date, null, null));
         assertThat(slots.size()).isGreaterThan(0);
         return slots.get(0).path("start").asString();
     }

@@ -8,18 +8,23 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 
 import com.afrotransact.bookings.domain.AddOn;
 import com.afrotransact.bookings.domain.BookedService;
 import com.afrotransact.bookings.domain.BookingsRuleViolation;
 import com.afrotransact.bookings.domain.Provider;
+import com.afrotransact.bookings.domain.RatingSummary;
 import com.afrotransact.bookings.domain.ServiceMode;
 import com.afrotransact.bookings.domain.ServiceOffering;
 import com.afrotransact.bookings.domain.TeamMember;
+import com.afrotransact.bookings.port.GeoClient;
 import com.afrotransact.bookings.port.OfferingRepository;
 import com.afrotransact.bookings.port.OrgVisibilityRepository;
 import com.afrotransact.bookings.port.ProviderRepository;
+import com.afrotransact.bookings.port.ReviewRepository;
 import com.afrotransact.bookings.port.TeamRepository;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
@@ -30,18 +35,23 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
 
     private static final int SEARCH_LOOKAHEAD_DAYS = 14;
     private static final int MAX_DAYS = 62;
+    private static final Pattern ZIP = Pattern.compile("^\\d{5}$");
 
     private final OfferingRepository offerings;
     private final ProviderRepository providers;
     private final TeamRepository team;
     private final SlotFinder slots;
     private final OrgVisibilityRepository visibility;
+    private final ReviewRepository reviews;
+    private final GeoClient geo;
     private final BookingsSettings settings;
     private final Clock clock;
 
     PublicBookingsServiceImpl(OfferingRepository offerings, ProviderRepository providers, TeamRepository team,
-                              SlotFinder slots, OrgVisibilityRepository visibility, BookingsSettings settings,
-                              Clock clock) {
+                              SlotFinder slots, OrgVisibilityRepository visibility, ReviewRepository reviews,
+                              GeoClient geo, BookingsSettings settings, Clock clock) {
+        this.reviews = reviews;
+        this.geo = geo;
         this.offerings = offerings;
         this.visibility = visibility;
         this.providers = providers;
@@ -53,12 +63,24 @@ class PublicBookingsServiceImpl implements PublicBookingsService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<Listing> search(String text, String category, int size) {
+    public List<Listing> search(String text, String category, String zip, int size) {
+        Set<String> serving = null;
+        if (zip != null && !zip.isBlank()) {
+            String z = zip.trim();
+            if (!ZIP.matcher(z).matches()) {
+                throw new BookingsRuleViolation("bookings.invalid-zip", "Enter a 5-digit ZIP code",
+                        Map.of("zip", "5 digits"));
+            }
+            serving = geo.serviceAreaOwners(z).orElse(Set.of());
+        }
         Instant now = Instant.now(clock);
+        List<ServiceOffering> found = offerings.search(text, category, serving, Math.clamp(size, 1, 50));
+        Map<UUID, RatingSummary> ratings = reviews.summaries(found.stream().map(ServiceOffering::id).toList());
         List<Listing> out = new ArrayList<>();
-        for (ServiceOffering o : offerings.search(text, category, Math.clamp(size, 1, 50))) {
+        for (ServiceOffering o : found) {
             Optional<Provider> p = providers.find(o.orgId());
-            p.ifPresent(provider -> out.add(new Listing(o, provider, nextAvailable(provider, o, now))));
+            p.ifPresent(provider -> out.add(new Listing(o, provider, nextAvailable(provider, o, now),
+                    ratings.getOrDefault(o.id(), RatingSummary.NONE))));
         }
         return out;
     }

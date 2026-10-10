@@ -87,10 +87,20 @@ at:
     auto-complete-after: ${BOOKING_AUTO_COMPLETE_AFTER:48h}
     late-provider-fee-minor: ${LATE_PROVIDER_FEE_MINOR:1500}
     manage-url-base: ${BOOKINGS_MANAGE_URL_BASE:https://afrotransact.com/account/appointments/}
+    # Fees come from payments (GET /v1/fee-schedules/effective, cached per organisation); these values are only the
+    # fallback while payments cannot answer.
     fees:
       commission-bps: ${SERVICES_COMMISSION_BPS:1000}
       card-pct-bps: ${CARD_PCT_BPS:290}
       card-fixed-minor: ${CARD_FIXED_MINOR:30}
+      cache-ttl: ${FEES_CACHE_TTL:5m}
+    # Long-dated bookings: release the balance hold after the deposit capture when the appointment is beyond the
+    # card authorisation window, then charge the balance off-session on the saved card before the appointment.
+    balance:
+      authorisation-window: ${BOOKING_AUTH_WINDOW:5d}
+      charge-before: ${BOOKING_BALANCE_CHARGE_BEFORE:2d}
+      max-attempts: ${BOOKING_BALANCE_MAX_ATTEMPTS:3}
+      retry-delay: ${BOOKING_BALANCE_RETRY_DELAY:6h}
     payments:
       base-url: ${PAYMENTS_URL:http://localhost:8105}
       token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
@@ -98,6 +108,9 @@ at:
       # Only from the environment (identity's bookings-service client secret).
       client-secret: ${BOOKINGS_CLIENT_SECRET}
       timeout: ${PAYMENTS_TIMEOUT:10s}
+    geo:
+      base-url: ${GEO_URL:http://localhost:8205}
+      timeout: ${GEO_TIMEOUT:5s}
     payment-events:
       enabled: ${PAYMENT_EVENTS_ENABLED:true}
       topic: at.payment.events
@@ -107,3 +120,4 @@ at:
     jobs:
       enabled: ${BOOKINGS_JOBS_ENABLED:true}
       interval: ${BOOKINGS_JOBS_INTERVAL:60s}
+      balance-interval: ${BOOKINGS_BALANCE_JOB_INTERVAL:5m}

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.bookings.domain.Activity;
+import com.afrotransact.bookings.domain.BalanceState;
 import com.afrotransact.bookings.domain.Booking;
 import com.afrotransact.bookings.domain.BookingStatus;
 import com.afrotransact.bookings.domain.CancellationQuote;
@@ -27,8 +28,17 @@ public interface BookingService {
     /** The signed-in customer's bookings, active first. */
     List<Booking> mine();
 
-    /** Re-reads the PaymentIntent from payments (the customer just confirmed the card) and applies it. */
+    /**
+     * Re-reads the PaymentIntent from payments (the customer just confirmed the card) and applies it; also the
+     * off-session balance charge while it waits for the customer's authentication.
+     */
     Booking syncPayment(UUID id);
+
+    /**
+     * The balance of a long-dated booking and its off-session charge. The customer gets the charge's client secret
+     * while their bank asks them to authenticate (Stripe.js / PaymentSheet), then calls {@link #syncPayment}.
+     */
+    BalancePayment balancePayment(UUID id);
 
     /** What cancelling now refunds, keeps or releases, for whoever is asking. */
     CancellationQuote cancellationQuote(UUID id);
@@ -82,5 +92,15 @@ public interface BookingService {
 
     /** A cancelled booking and the refund applied. */
     record Cancelled(Booking booking, CancellationQuote quote) {
+    }
+
+    /**
+     * The balance and its off-session charge.
+     *
+     * @param clientSecret only for the booking's customer, only while {@link BalanceState#ACTION_REQUIRED}
+     */
+    record BalancePayment(UUID bookingId, String reference, BalanceState state, UUID paymentId, long amountMinor,
+                          String currency, String clientSecret, String failureMessage, int attempts,
+                          Instant nextAttemptAt) {
     }
 }

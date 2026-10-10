@@ -4,6 +4,7 @@ import java.net.URI;
 
 import com.afrotransact.bookings.domain.BookingsRuleViolation;
 import com.afrotransact.bookings.domain.BookingsStateConflict;
+import com.afrotransact.bookings.port.GeoClientException;
 import com.afrotransact.bookings.port.PaymentsClientException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +49,13 @@ class BookingsErrorAdvice {
         LOG.warn("payments-service unavailable: {}", ex.getMessage());
         return problem(HttpStatus.BAD_GATEWAY, "bookings.payments-unavailable", "Payments unavailable",
                 "Payments are temporarily unavailable; nothing was changed. Retry with the same Idempotency-Key.");
+    }
+
+    @ExceptionHandler(GeoClientException.class)
+    ProblemDetail geo(GeoClientException ex) {
+        LOG.warn("geo-service unavailable: {}", ex.getMessage());
+        return problem(HttpStatus.BAD_GATEWAY, "bookings.geo-unavailable", "Location search unavailable",
+                "Searching by ZIP is temporarily unavailable; try again or search without a ZIP.");
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

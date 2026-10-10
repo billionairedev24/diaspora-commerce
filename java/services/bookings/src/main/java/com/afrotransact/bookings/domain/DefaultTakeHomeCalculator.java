@@ -3,23 +3,17 @@ package com.afrotransact.bookings.domain;
 /** {@link TakeHomeCalculator} over a {@link FeeSchedule} (the design's {@code settle}). */
 public class DefaultTakeHomeCalculator implements TakeHomeCalculator {
 
-    private final FeeSchedule fees;
-
-    public DefaultTakeHomeCalculator(FeeSchedule fees) {
-        this.fees = fees;
-    }
-
     @Override
-    public TakeHome takeHome(long priceMinor, long depositMinor, String currency) {
+    public TakeHome takeHome(FeeSchedule fees, long priceMinor, long depositMinor, String currency) {
         long balance = priceMinor - depositMinor;
         long commission = fees.commissionOn(priceMinor);
         long card = fees.cardFeeOn(depositMinor) + fees.cardFeeOn(balance);
         return new TakeHome(priceMinor, depositMinor, balance, fees.commissionBps(), commission, card,
-                priceMinor - commission - card, currency);
+                priceMinor - commission - card, currency, fees.source(), fees.version());
     }
 
     @Override
-    public BookingEarnings earnings(Booking b) {
+    public BookingEarnings earnings(FeeSchedule fees, Booking b) {
         long deposit = b.depositCapturedMinor();
         long balance = b.balanceCapturedMinor();
         long refunded = b.refundedMinor();

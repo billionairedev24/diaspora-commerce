@@ -22,11 +22,15 @@ final class Fixtures {
     }
 
     static Booking hold(CancellationPolicy policy, boolean instant) {
+        return hold(policy, instant, START);
+    }
+
+    static Booking hold(CancellationPolicy policy, boolean instant, Instant start) {
         BookingRules rules = new BookingRules(720, 30, 30, 30, 3, instant, false);
         Booking b = Booking.hold(UUID.randomUUID(), "BK-24018", "org_aminata", UUID.randomUUID(), "cust-1",
                 new CustomerContact("Adaeze Nwosu", "adaeze@example.com", "+17135550142"),
                 BookedService.of(braids(), List.of(), ServiceMode.IN_PERSON, "Aminata's Braids", "Aminata"), null,
-                null, "web", START, rules, policy, NOW.plus(Duration.ofMinutes(15)), NOW);
+                null, "web", start, rules, policy, NOW.plus(Duration.ofMinutes(15)), NOW);
         b.attachPayment(UUID.randomUUID(), "pi_secret");
         return b;
     }
@@ -39,6 +43,14 @@ final class Fixtures {
 
     static Booking confirmed(CancellationPolicy policy) {
         Booking b = requested(policy);
+        b.confirm(NOW.plusSeconds(60));
+        return b;
+    }
+
+    /** A confirmed booking {@code start} away, deposit captured, balance still on the original authorisation. */
+    static Booking confirmedAt(CancellationPolicy policy, Instant start) {
+        Booking b = hold(policy, false, start);
+        b.paymentAuthorized(NOW, Duration.ofHours(4));
         b.confirm(NOW.plusSeconds(60));
         return b;
     }

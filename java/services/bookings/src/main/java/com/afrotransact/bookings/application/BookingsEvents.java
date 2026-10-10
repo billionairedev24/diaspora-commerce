@@ -19,6 +19,11 @@ public final class BookingsEvents {
     public static final String RESCHEDULED = "booking.rescheduled";
     public static final String COMPLETED = "booking.completed";
     public static final String NO_SHOW = "booking.no_show";
+    /**
+     * The balance of a long-dated booking could not be collected off-session (declined after every attempt, or not
+     * authorised by completion): provider and customer need to settle it.
+     */
+    public static final String BALANCE_UNPAID = "booking.balance_unpaid";
     /** A service was created or changed (key = service id) — search indexing. */
     public static final String SERVICE_UPSERTED = "booking.service.upserted";
 

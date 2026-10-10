@@ -25,6 +25,10 @@ class BookingEventPublisher {
             events.publish(type, BookingsEvents.AGGREGATE, b.id().toString(),
                     BookingEventPayload.of(b, p, t.from().name(), settings.manageUrlBase()));
         }
+        if (t.balanceUnpaid()) {
+            events.publish(BookingsEvents.BALANCE_UNPAID, BookingsEvents.AGGREGATE, b.id().toString(),
+                    BookingEventPayload.of(b, p, t.from().name(), settings.manageUrlBase()));
+        }
     }
 
     static String typeOf(Transition t) {

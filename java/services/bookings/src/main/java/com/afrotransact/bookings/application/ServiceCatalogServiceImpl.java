@@ -26,13 +26,15 @@ class ServiceCatalogServiceImpl implements ServiceCatalogService {
     private final ProviderRepository providers;
     private final TeamRepository team;
     private final TakeHomeCalculator takeHome;
+    private final ProviderFees fees;
     private final BookingsAccess access;
     private final DomainEventPublisher events;
     private final Clock clock;
 
     ServiceCatalogServiceImpl(OfferingRepository offerings, ProviderRepository providers, TeamRepository team,
-                              TakeHomeCalculator takeHome, BookingsAccess access, DomainEventPublisher events,
-                              Clock clock) {
+                              TakeHomeCalculator takeHome, ProviderFees fees, BookingsAccess access,
+                              DomainEventPublisher events, Clock clock) {
+        this.fees = fees;
         this.offerings = offerings;
         this.providers = providers;
         this.team = team;
@@ -113,6 +115,7 @@ class ServiceCatalogServiceImpl implements ServiceCatalogService {
     }
 
     private ServiceView view(ServiceOffering o) {
-        return new ServiceView(o, takeHome.takeHome(o.priceMinor(), o.depositMinor(), o.currency()));
+        return new ServiceView(o, takeHome.takeHome(fees.forOrg(o.orgId()), o.priceMinor(), o.depositMinor(),
+                o.currency()));
     }
 }

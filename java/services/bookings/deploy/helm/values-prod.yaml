@@ -18,6 +18,7 @@ extraEnv:
   AUTH_ISSUER_URI: https://auth.afrotransact.com
   AUTH_TOKEN_URI: https://auth.afrotransact.com/oauth2/token
   PAYMENTS_URL: http://payments:8080
+  GEO_URL: http://geo:8080
   BOOKINGS_REQUEST_SLA: 4h
   BOOKING_HOLD_TTL: 15m
   BOOKINGS_MANAGE_URL_BASE: https://afrotransact.com/account/appointments/

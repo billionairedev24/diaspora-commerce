@@ -8,6 +8,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.afrotransact.bookings.domain.Activity;
+import com.afrotransact.bookings.domain.BalanceCharge;
+import com.afrotransact.bookings.domain.BalanceState;
 import com.afrotransact.bookings.domain.BookedService;
 import com.afrotransact.bookings.domain.Booking;
 import com.afrotransact.bookings.domain.BookingStatus;
@@ -58,14 +60,16 @@ class JdbcBookingRepository implements BookingRepository {
                         notes, channel, start_at, end_at, buffer_minutes, proposed_start_at, previous_status, status,
                         policy, instant, reschedules, payment_id, payment_state, client_secret, payment_failure,
                         hold_expires_at, request_expires_at, authorized_minor, deposit_captured_minor,
-                        balance_captured_minor, refunded_minor, released_minor, provider_fee_minor, reason,
-                        cancelled_by, created_at, updated_at, version)
+                        balance_captured_minor, refunded_minor, released_minor, provider_fee_minor, balance_state,
+                        balance_payment_id, balance_attempts, balance_client_secret, balance_failure,
+                        balance_next_attempt_at, reason, cancelled_by, created_at, updated_at, version)
                     values (:id, :reference, :org, :member, :customerId, cast(:customer as jsonb),
                         cast(:service as jsonb), :location, :notes, :channel, :startAt, :endAt, :buffer, :proposed,
                         :previousStatus, :status, cast(:policy as jsonb), :instant, :reschedules, :paymentId,
                         :paymentState, :clientSecret, :paymentFailure, :holdExpiresAt, :requestExpiresAt,
                         :authorized, :depositCaptured, :balanceCaptured, :refunded, :released, :providerFee,
-                        :reason, :cancelledBy, :createdAt, :updatedAt, 0)
+                        :balanceState, :balancePaymentId, :balanceAttempts, :balanceSecret, :balanceFailure,
+                        :balanceNextAttempt, :reason, :cancelledBy, :createdAt, :updatedAt, 0)
                     """)
                     .param("id", b.id())
                     .param("reference", b.reference())
@@ -98,6 +102,12 @@ class JdbcBookingRepository implements BookingRepository {
                     .param("refunded", b.refundedMinor())
                     .param("released", b.releasedMinor())
                     .param("providerFee", b.providerFeeMinor())
+                    .param("balanceState", b.balance().state().name())
+                    .param("balancePaymentId", b.balance().paymentId())
+                    .param("balanceAttempts", b.balance().attempts())
+                    .param("balanceSecret", b.balance().clientSecret())
+                    .param("balanceFailure", b.balance().failure())
+                    .param("balanceNextAttempt", Sql.ts(b.balance().nextAttemptAt()))
                     .param("reason", b.reason())
                     .param("cancelledBy", b.cancelledBy() == null ? null : b.cancelledBy().name())
                     .param("createdAt", Sql.ts(b.createdAt()))
@@ -121,7 +131,11 @@ class JdbcBookingRepository implements BookingRepository {
                         payment_failure = :paymentFailure, request_expires_at = :requestExpiresAt,
                         authorized_minor = :authorized, deposit_captured_minor = :depositCaptured,
                         balance_captured_minor = :balanceCaptured, refunded_minor = :refunded,
-                        released_minor = :released, provider_fee_minor = :providerFee, reason = :reason,
+                        released_minor = :released, provider_fee_minor = :providerFee,
+                        balance_state = :balanceState, balance_payment_id = :balancePaymentId,
+                        balance_attempts = :balanceAttempts, balance_client_secret = :balanceSecret,
+                        balance_failure = :balanceFailure, balance_next_attempt_at = :balanceNextAttempt,
+                        reason = :reason,
                         cancelled_by = :cancelledBy, updated_at = :updatedAt, version = version + 1
                     where id = :id and version = :version
                     """)
@@ -142,6 +156,12 @@ class JdbcBookingRepository implements BookingRepository {
                     .param("refunded", b.refundedMinor())
                     .param("released", b.releasedMinor())
                     .param("providerFee", b.providerFeeMinor())
+                    .param("balanceState", b.balance().state().name())
+                    .param("balancePaymentId", b.balance().paymentId())
+                    .param("balanceAttempts", b.balance().attempts())
+                    .param("balanceSecret", b.balance().clientSecret())
+                    .param("balanceFailure", b.balance().failure())
+                    .param("balanceNextAttempt", Sql.ts(b.balance().nextAttemptAt()))
                     .param("reason", b.reason())
                     .param("cancelledBy", b.cancelledBy() == null ? null : b.cancelledBy().name())
                     .param("updatedAt", Sql.ts(b.updatedAt()))
@@ -211,6 +231,12 @@ class JdbcBookingRepository implements BookingRepository {
     public Optional<Booking> lock(UUID id) {
         return jdbc.sql("select * from booking where id = :id for update").param("id", id).query(this::map)
                 .optional();
+    }
+
+    @Override
+    public Optional<Booking> tryLock(UUID id) {
+        return jdbc.sql("select * from booking where id = :id for update skip locked").param("id", id)
+                .query(this::map).optional();
     }
 
     @Override
@@ -293,6 +319,14 @@ class JdbcBookingRepository implements BookingRepository {
     }
 
     @Override
+    public List<UUID> dueForBalanceCharge(Instant startsBefore, int limit) {
+        return jdbc.sql("select id from booking where balance_state in ('DUE', 'FAILED') and status in (:active) "
+                        + "and start_at <= :before order by start_at limit :limit")
+                .param("active", ACTIVE).param("before", Sql.ts(startsBefore)).param("limit", limit)
+                .query(UUID.class).list();
+    }
+
+    @Override
     public List<Activity> history(UUID bookingId) {
         return jdbc.sql("select * from booking_activity where booking_id = :id order by id")
                 .param("id", bookingId)
@@ -320,6 +354,10 @@ class JdbcBookingRepository implements BookingRepository {
                 Sql.instant(rs.getTimestamp("request_expires_at")), rs.getLong("authorized_minor"),
                 rs.getLong("deposit_captured_minor"), rs.getLong("balance_captured_minor"),
                 rs.getLong("refunded_minor"), rs.getLong("released_minor"), rs.getLong("provider_fee_minor"),
+                new BalanceCharge(BalanceState.valueOf(rs.getString("balance_state")),
+                        rs.getObject("balance_payment_id", UUID.class), rs.getInt("balance_attempts"),
+                        rs.getString("balance_client_secret"), rs.getString("balance_failure"),
+                        Sql.instant(rs.getTimestamp("balance_next_attempt_at"))),
                 rs.getString("reason"), cancelledBy == null ? null : Party.valueOf(cancelledBy),
                 Sql.instant(rs.getTimestamp("created_at")), Sql.instant(rs.getTimestamp("updated_at")),
                 rs.getLong("version"));

@@ -42,13 +42,18 @@ class PublicBookingsController {
     @Schema(name = "PublicServiceListing")
     record ListingDto(UUID serviceId, String orgId, String name, String providerName, String description,
                       String category, int durationMinutes, long priceFromMinor, long depositMinor, String currency,
-                      Set<ServiceMode> modes, double rating, String nextAvailable, String location) {
+                      Set<ServiceMode> modes,
+                      @Schema(description = "Average customer rating (1–5, one decimal); 0 without reviews")
+                      double rating,
+                      @Schema(description = "Number of reviews") int ratingCount,
+                      String nextAvailable, String location) {
 
         static ListingDto of(Listing l) {
             ServiceOffering o = l.service();
             Provider p = l.provider();
             return new ListingDto(o.id(), o.orgId(), o.name(), p.displayName(), o.description(), o.category(),
-                    o.durationMinutes(), o.priceMinor(), o.depositMinor(), o.currency(), o.modes(), 0,
+                    o.durationMinutes(), o.priceMinor(), o.depositMinor(), o.currency(), o.modes(),
+                    l.rating().average(), l.rating().count(),
                     l.nextAvailable() == null ? null : l.nextAvailable().toString(), p.location());
         }
     }
@@ -112,14 +117,19 @@ class PublicBookingsController {
         }
     }
 
-    @Operation(summary = "Search services (name, description, category, provider) with the next free time")
+    @Operation(summary = "Search services (name, description, category, provider) with the next free time",
+            description = "zip (5 digits) keeps providers whose service area (geo-service SERVICE_AREA zones) covers "
+                    + "the ZIP, plus virtual services; an unknown ZIP finds nothing. rating / ratingCount come from "
+                    + "customers' reviews of completed bookings. 422 bookings.invalid-zip, 502 "
+                    + "bookings.geo-unavailable.")
     @GetMapping("/v1/public/services/search")
     ResponseEntity<SearchResponse> search(@RequestParam(required = false) String q,
                                           @RequestParam(required = false) String category,
                                           @RequestParam(required = false) String zip,
                                           @RequestParam(defaultValue = "10") int size) {
         return ResponseEntity.ok().cacheControl(CacheControl.maxAge(Duration.ofSeconds(30)).cachePublic())
-                .body(new SearchResponse(catalog.search(q, category, size).stream().map(ListingDto::of).toList()));
+                .body(new SearchResponse(catalog.search(q, category, zip, size).stream().map(ListingDto::of)
+                        .toList()));
     }
 
     @Operation(summary = "Search services (alias used by ai-gateway and mcp-server)", deprecated = true)

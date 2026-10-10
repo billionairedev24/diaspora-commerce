@@ -6,7 +6,11 @@ import java.util.Objects;
  * A money instruction produced by a booking transition and carried out against payments-service in the same
  * database transaction (so a failed payment call rolls the transition back).
  *
- * @param lineId       PaymentIntent line: {@link #DEPOSIT} or {@link #BALANCE} (null for RELEASE / SETTLE)
+ * <p>Once the balance was charged off-session, a CAPTURE or RELEASE of line {@link #BALANCE} targets that
+ * off-session charge instead of the booking's original PaymentIntent.
+ *
+ * @param lineId       PaymentIntent line: {@link #DEPOSIT} or {@link #BALANCE} (null for RELEASE of the original
+ *                     intent, RELEASE_REMAINING and SETTLE)
  * @param finalCapture release the rest of the authorisation after this capture
  */
 public record MoneyMove(MoneyKind kind, String lineId, long amountMinor, boolean finalCapture) {
@@ -27,6 +31,14 @@ public record MoneyMove(MoneyKind kind, String lineId, long amountMinor, boolean
 
     static MoneyMove release() {
         return new MoneyMove(MoneyKind.RELEASE, null, 0, false);
+    }
+
+    static MoneyMove releaseRemaining() {
+        return new MoneyMove(MoneyKind.RELEASE_REMAINING, null, 0, false);
+    }
+
+    static MoneyMove cancelBalanceCharge() {
+        return new MoneyMove(MoneyKind.RELEASE, BALANCE, 0, false);
     }
 
     static MoneyMove refund(long amount) {

@@ -29,6 +29,9 @@ public interface BookingRepository {
     /** Locks the booking row (SELECT … FOR UPDATE). */
     Optional<Booking> lock(UUID id);
 
+    /** Locks the booking row unless another worker holds it (SELECT … FOR UPDATE SKIP LOCKED); empty then. */
+    Optional<Booking> tryLock(UUID id);
+
     Optional<Booking> findByReference(String reference);
 
     /** Time the member's active bookings block between {@code from} and {@code to}, except {@code excludeId}. */
@@ -47,6 +50,12 @@ public interface BookingRepository {
 
     /** Confirmed bookings that ended before {@code endedBefore} (auto-complete job). */
     List<UUID> dueForCompletion(Instant endedBefore, int limit);
+
+    /**
+     * Bookings whose balance is due off-session (released or declined) and that start before {@code startsBefore}
+     * (off-session balance job), soonest first.
+     */
+    List<UUID> dueForBalanceCharge(Instant startsBefore, int limit);
 
     List<Activity> history(UUID bookingId);
 }

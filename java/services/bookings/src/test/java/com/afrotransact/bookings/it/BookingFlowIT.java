@@ -59,7 +59,9 @@ class BookingFlowIT extends BookingsIntegrationTest {
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[0].lineId", WireMock.equalTo("deposit")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[0].itemsMinor", WireMock.equalTo("3000")))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[1].lineId", WireMock.equalTo("balance")))
-                .withRequestBody(WireMock.matchingJsonPath("$.lines[1].sellerOrg", WireMock.equalTo(s.org()))));
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[1].sellerOrg", WireMock.equalTo(s.org())))
+                .withRequestBody(WireMock.matchingJsonPath("$.shopperId", WireMock.equalTo("cust-adaeze")))
+                .withRequestBody(WireMock.matchingJsonPath("$.saveForOffSession", WireMock.equalTo("true"))));
 
         // Replay with the same key returns the same booking.
         JsonNode replay = ok(send("POST", "/v1/bookings", bookingBody(s.serviceId(), start), "book-1-" + s.org()), 200);

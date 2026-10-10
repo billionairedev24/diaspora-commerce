@@ -185,7 +185,7 @@
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
 - Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","Done"
-"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","In Progress"
+"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","Done"
 "S051","Story","Payments service with Stripe PaymentIntents","Create, confirm (3-D Secure), capture per shipment and refund through Stripe.","- Manual capture per shipment on carrier acceptance
 - 3-D Secure test card triggers authentication
 - Declined test card returns a clear error
@@ -341,7 +341,7 @@
 - Metered usage for FBA storage, ads and AI credits","E14","","High","8","billing stripe java","billing","In Progress"
 "S104","Story","Billing page with real card/bank presentation","Payment methods shown as brand cards with last 4 or bank with type and verification.","- Default method cannot be removed until another is default
 - Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","Done"
-"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","In Progress"
+"E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","Done"
 "S105","Story","Provider availability and calendar","Weekly hours with breaks, blocked dates, minimum notice, buffers, daily limit and instant booking.","- Week and month calendar views with booking quick view
 - Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","Done"
 "S106","Story","Services & prices with provider take-home","Duration, price and deposit per service, showing what the provider receives after commission and fees.","- Take-home amount shown per service
@@ -639,9 +639,9 @@
 "S220","Story","Payments support for long-dated bookings","Payments adds release of remaining authorisation after partial capture, off-session charges on saved cards for balances beyond the auth window, and debiting provider late-cancellation fees.","- Remaining authorisation can be released after a deposit capture
 - Balance can be charged off-session on a saved card with SCA fallback
 - Provider late-cancellation fee is debited from the provider balance
-- Bookings reads fees from the payments fee schedule instead of config","E07","","High","8","payments bookings","payments","In Progress"
+- Bookings reads fees from the payments fee schedule instead of config","E07","","High","8","payments bookings","payments","Done"
 "S221","Story","Service search by ZIP and ratings","Bookings service search honours ZIP/service area (via geo zones) and returns real ratings from reviews.","- Search filters by provider service area for the ZIP
-- Ratings come from reviews instead of 0","E15","","Medium","3","bookings geo","bookings","To Do"
+- Ratings come from reviews instead of 0","E15","","Medium","3","bookings geo","bookings","Done"
 "S222","Story","Storefront and cart use offers service","BFF product detail, search cards and add-to-cart use offers (buy box, other sellers, offer lookup); cart validates offer buyable; orders validates and redeems coupons.","- Product page buy box and Other sellers come from offers
 - Search cards show offer count and min price
 - Cart rejects non-buyable offers
@@ -680,3 +680,8 @@
 - Identity lists org members with names and supports invitations
 - Seller service stores ship-from addresses
 - Payout history visible to seller.owner and seller.finance","E24","","High","8","seller-center bff orders identity","seller-center","In Progress"
+"S232","Story","Booking reviews moderation and no-deposit balance flow","Reviews get moderation, provider replies and a public list; services without a deposit can still charge the balance off-session; notifications map booking.balance_unpaid.","- Reviews pass moderation before public display
+- Providers can reply once
+- Public review list per provider and service
+- No-deposit services charge balance via off-session flow
+- Customers are notified when the balance is unpaid","E15","","Medium","5","bookings notifications","bookings","To Do"

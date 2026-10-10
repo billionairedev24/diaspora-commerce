@@ -96,11 +96,36 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/balance-payment:
+    get:
+      tags:
+      - Bookings
+      summary: The balance and its off-session charge (long-dated bookings)
+      description: When the customer's bank asks for authentication (state ACTION_REQUIRED) the customer gets the charge's
+        clientSecret to confirm with Stripe.js / PaymentSheet, then calls POST /payment/sync. Providers see the state without
+        the secret.
+      operationId: balancePayment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/BookingBalancePayment'
   /v1/bookings/{id}/cancel:
     post:
       tags:
       - Bookings
       summary: 'Cancel (customer: policy refund; provider: full refund, fee + strike under 24 h)'
+      description: After the deposit capture the uncaptured balance hold is released (or the open off-session balance charge
+        cancelled).
       operationId: cancel
       parameters:
       - name: id
@@ -155,6 +180,8 @@ paths:
       tags:
       - Bookings
       summary: 'Mark complete (provider): the balance is charged and the settlement hold starts'
+      description: The balance is captured on the original authorisation, or on the off-session charge of a long-dated booking;
+        a balance that could not be collected flags the booking (balance.state NEEDS_ATTENTION, event booking.balance_unpaid).
       operationId: complete
       parameters:
       - name: id
@@ -319,6 +346,7 @@ paths:
       tags:
       - Bookings
       summary: 'Mark no-show (provider, after the start time): deposit kept, or full price per policy'
+      description: Without full price the uncaptured balance hold is released.
       operationId: noShow
       parameters:
       - name: id
@@ -345,8 +373,9 @@ paths:
     post:
       tags:
       - Bookings
-      summary: Refresh the deposit authorisation from payments
-      description: Call after Stripe.js confirmed the card; payments' intent.succeeded event does the same asynchronously.
+      summary: Refresh the deposit authorisation (and an off-session balance charge) from payments
+      description: Call after Stripe.js confirmed the card, or after the customer authenticated the off-session balance charge;
+        payments' intent events do the same asynchronously.
       operationId: syncPayment
       parameters:
       - name: id
@@ -431,6 +460,34 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Booking'
+  /v1/bookings/{id}/review:
+    post:
+      tags:
+      - Bookings
+      summary: 'Rate a completed booking (customer, once): 1–5 stars and an optional text'
+      description: Ratings are averaged per service in search. 409 bookings.not-reviewable before completion, 409 bookings.already-reviewed
+        the second time.
+      operationId: review
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Review'
   /v1/providers/{orgId}/bookings:
     get:
       tags:
@@ -1039,6 +1096,9 @@ paths:
       tags:
       - Public bookings
       summary: Search services (name, description, category, provider) with the next free time
+      description: zip (5 digits) keeps providers whose service area (geo-service SERVICE_AREA zones) covers the ZIP, plus
+        virtual services; an unknown ZIP finds nothing. rating / ratingCount come from customers' reviews of completed bookings.
+        422 bookings.invalid-zip, 502 bookings.geo-unavailable.
       operationId: search
       parameters:
       - name: q
@@ -1639,6 +1699,14 @@ components:
           format: int64
         currency:
           type: string
+        feeSource:
+          type: string
+          description: 'Where the commission comes from: payments'' OVERRIDE, CATEGORY, DEFAULT, RETAIL, or CONFIG (configured
+            fallback while payments is unavailable)'
+        feeVersion:
+          type: integer
+          format: int32
+          description: payments' fee-schedule version (null for the fallback)
     AssignMembersRequest:
       type: object
       properties:
@@ -1863,6 +1931,32 @@ components:
         version:
           type: integer
           format: int64
+    BookingBalance:
+      type: object
+      description: 'The balance (price − deposit). Long-dated bookings: the balance hold is released after the deposit capture
+        and the balance is charged off-session on the saved card before the appointment. The client secret for authentication
+        is served by GET /v1/bookings/{id}/balance-payment to the customer only.'
+      properties:
+        state:
+          type: string
+          description: ON_AUTHORISATION, DUE, PROCESSING, ACTION_REQUIRED (the customer must authenticate), FAILED (retried),
+            AUTHORIZED, CAPTURED, NEEDS_ATTENTION (not collected automatically), RELEASED
+        paymentId:
+          type: string
+          format: uuid
+          description: payments' id of the off-session charge
+        attempts:
+          type: integer
+          format: int32
+        failureMessage:
+          type: string
+        nextAttemptAt:
+          type: string
+          format: date-time
+        needsCustomerAction:
+          type: boolean
+        needsAttention:
+          type: boolean
     BookingPayment:
       type: object
       properties:
@@ -1894,6 +1988,8 @@ components:
         providerFeeMinor:
           type: integer
           format: int64
+        balance:
+          $ref: '#/components/schemas/BookingBalance'
     BookingPolicy:
       type: object
       description: The cancellation policy this booking was made under
@@ -1911,6 +2007,38 @@ components:
           $ref: '#/components/schemas/Booking'
         replayed:
           type: boolean
+    ReviewRequest:
+      type: object
+      description: Rate a completed booking once
+      properties:
+        rating:
+          type: integer
+          format: int32
+          maximum: 5
+          minimum: 1
+        text:
+          type: string
+          maxLength: 2000
+          minLength: 0
+    Review:
+      type: object
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        serviceId:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        rating:
+          type: integer
+          format: int32
+        text:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
     NewTimeRequest:
       type: object
       properties:
@@ -2005,6 +2133,11 @@ components:
         rating:
           type: number
           format: double
+          description: Average customer rating (1–5, one decimal); 0 without reviews
+        ratingCount:
+          type: integer
+          format: int32
+          description: Number of reviews
         nextAvailable:
           type: string
         location:
@@ -2307,6 +2440,36 @@ components:
         amountMinor:
           type: integer
           format: int64
+    BookingBalancePayment:
+      type: object
+      description: The off-session balance charge; clientSecret only for the customer while their bank asks them to authenticate
+        (confirm with Stripe.js / PaymentSheet, then POST /v1/bookings/{id}/payment/sync)
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        state:
+          type: string
+        paymentId:
+          type: string
+          format: uuid
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        clientSecret:
+          type: string
+        failureMessage:
+          type: string
+        attempts:
+          type: integer
+          format: int32
+        nextAttemptAt:
+          type: string
+          format: date-time
   securitySchemes:
     bearer:
       type: http

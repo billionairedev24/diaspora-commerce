@@ -24,7 +24,8 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * {@link PaymentsClient} over payments-service's REST API (contracts/openapi/payments.yaml):
  * {@code POST /v1/payments}, {@code GET /v1/payments/{id}?refresh=}, {@code POST /v1/payments/{id}/capture},
- * {@code /cancel}, {@code /refunds} and {@code POST /v1/settlements/{orderId}/delivered} (kind SERVICE).
+ * {@code /cancel}, {@code /release}, {@code /off-session-charges}, {@code /refunds},
+ * {@code POST /v1/settlements/{orderId}/delivered} (kind SERVICE) and {@code GET /v1/fee-schedules/effective}.
  */
 @Component
 class HttpPaymentsClient implements PaymentsClient {
@@ -55,6 +56,10 @@ class HttpPaymentsClient implements PaymentsClient {
         body.put("currency", r.currency());
         body.put("placedAt", r.placedAt());
         body.put("metadata", r.metadata());
+        if (r.shopperId() != null) {
+            body.put("shopperId", r.shopperId());
+        }
+        body.put("saveForOffSession", r.saveForOffSession());
         body.put("lines", r.lines().stream().map(l -> Map.<String, Object>of("lineId", l.lineId(),
                 "sellerOrg", r.sellerOrg(), "category", "services", "fulfilment", "SELF", "quantity", 1,
                 "itemsMinor", l.amountMinor(), "shippingMinor", 0, "taxMinor", 0)).toList());
@@ -82,6 +87,40 @@ class HttpPaymentsClient implements PaymentsClient {
         Map<String, Object> body = Map.of("reason", reason == null ? "Booking cancelled" : truncate(reason));
         call(c -> c.post().uri("/v1/payments/{id}/cancel", paymentId).headers(h -> headers(h, idempotencyKey))
                 .body(body).retrieve().body(JsonNode.class), n -> n);
+    }
+
+    @Override
+    public Intent release(UUID paymentId, String reason, String idempotencyKey) {
+        Map<String, Object> body = Map.of("reason", reason == null ? "Booking ended" : truncate(reason));
+        return call(c -> c.post().uri("/v1/payments/{id}/release", paymentId).headers(h -> headers(h, idempotencyKey))
+                .body(body).retrieve().body(JsonNode.class), HttpPaymentsClient::intent);
+    }
+
+    @Override
+    public Intent chargeOffSession(UUID paymentId, OffSessionCharge r, String idempotencyKey) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("customerId", r.customerId());
+        if (r.paymentMethodId() != null) {
+            body.put("paymentMethodId", r.paymentMethodId());
+        }
+        body.put("lineIds", r.lineIds());
+        return call(c -> c.post().uri("/v1/payments/{id}/off-session-charges", paymentId)
+                .headers(h -> headers(h, idempotencyKey)).body(body).retrieve().body(JsonNode.class),
+                HttpPaymentsClient::intent);
+    }
+
+    @Override
+    public EffectiveFees effectiveFees(String category, String orgId) {
+        return call(c -> c.get().uri("/v1/fee-schedules/effective?category={c}&orgId={o}", category, orgId)
+                .headers(h -> headers(h, null)).retrieve().body(JsonNode.class), n -> {
+                    if (!n.has("commissionBps")) {
+                        throw new PaymentsClientException(0, null, "Payments returned no effective fees", null);
+                    }
+                    return new EffectiveFees(n.path("commissionBps").asInt(), n.path("commissionSource").asString(null),
+                            n.path("cardPctBps").asInt(), n.path("cardFixedMinor").asLong(),
+                            n.hasNonNull("version") ? n.path("version").asInt() : null,
+                            n.path("currency").asString(null));
+                });
     }
 
     @Override
@@ -130,9 +169,11 @@ class HttpPaymentsClient implements PaymentsClient {
 
     private static Intent intent(JsonNode n) {
         String id = n.path("id").asString("");
+        String parent = n.path("parentPaymentId").asString("");
         return new Intent(id.isEmpty() ? null : UUID.fromString(id), n.path("orderId").asString(null),
                 n.path("status").asString(null), n.path("clientSecret").asString(null),
-                n.path("failureMessage").asString(null));
+                n.path("failureMessage").asString(null), n.path("releasedMinor").asLong(0),
+                parent.isEmpty() ? null : UUID.fromString(parent));
     }
 
     private static String truncate(String s) {

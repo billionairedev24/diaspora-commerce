@@ -4,18 +4,24 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.bookings.application.BookingService.BalancePayment;
 import com.afrotransact.bookings.application.BookingService.CreateBooking;
 import com.afrotransact.bookings.application.EarningsView;
 import com.afrotransact.bookings.domain.Activity;
+import com.afrotransact.bookings.domain.BalanceCharge;
+import com.afrotransact.bookings.domain.BalanceState;
 import com.afrotransact.bookings.domain.BookedService;
 import com.afrotransact.bookings.domain.Booking;
 import com.afrotransact.bookings.domain.BookingEarnings;
 import com.afrotransact.bookings.domain.CancellationQuote;
 import com.afrotransact.bookings.domain.CustomerContact;
+import com.afrotransact.bookings.domain.Review;
 import com.afrotransact.bookings.domain.ServiceMode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -73,7 +79,50 @@ final class BookingDtos {
     record PaymentDto(UUID paymentId, String state, @Schema(description = "Only in the create response, for "
             + "Stripe.js / PaymentSheet confirmation") String clientSecret, String failureMessage,
                       long authorizedMinor, long depositCapturedMinor, long balanceCapturedMinor, long refundedMinor,
-                      long releasedMinor, long providerFeeMinor) {
+                      long releasedMinor, long providerFeeMinor, BalanceDto balance) {
+    }
+
+    @Schema(name = "BookingBalance", description = "The balance (price − deposit). Long-dated bookings: the balance "
+            + "hold is released after the deposit capture and the balance is charged off-session on the saved card "
+            + "before the appointment. The client secret for authentication is served by GET "
+            + "/v1/bookings/{id}/balance-payment to the customer only.")
+    record BalanceDto(
+            @Schema(description = "ON_AUTHORISATION, DUE, PROCESSING, ACTION_REQUIRED (the customer must "
+                    + "authenticate), FAILED (retried), AUTHORIZED, CAPTURED, NEEDS_ATTENTION (not collected "
+                    + "automatically), RELEASED") String state,
+            @Schema(description = "payments' id of the off-session charge") UUID paymentId, int attempts,
+            String failureMessage, Instant nextAttemptAt, boolean needsCustomerAction, boolean needsAttention) {
+
+        static BalanceDto of(BalanceCharge b) {
+            return new BalanceDto(b.state().name(), b.paymentId(), b.attempts(), b.failure(), b.nextAttemptAt(),
+                    b.state() == BalanceState.ACTION_REQUIRED, b.state() == BalanceState.NEEDS_ATTENTION);
+        }
+    }
+
+    @Schema(name = "BookingBalancePayment", description = "The off-session balance charge; clientSecret only for "
+            + "the customer while their bank asks them to authenticate (confirm with Stripe.js / PaymentSheet, then "
+            + "POST /v1/bookings/{id}/payment/sync)")
+    record BalancePaymentResponse(UUID bookingId, String reference, String state, UUID paymentId, long amountMinor,
+                                  String currency, String clientSecret, String failureMessage, int attempts,
+                                  Instant nextAttemptAt) {
+
+        static BalancePaymentResponse of(BalancePayment p) {
+            return new BalancePaymentResponse(p.bookingId(), p.reference(), p.state().name(), p.paymentId(),
+                    p.amountMinor(), p.currency(), p.clientSecret(), p.failureMessage(), p.attempts(),
+                    p.nextAttemptAt());
+        }
+    }
+
+    @Schema(name = "ReviewRequest", description = "Rate a completed booking once")
+    record ReviewRequest(@Min(1) @Max(5) int rating, @Size(max = Review.MAX_TEXT) String text) {
+    }
+
+    @Schema(name = "Review")
+    record ReviewResponse(UUID bookingId, UUID serviceId, String orgId, int rating, String text, Instant createdAt) {
+
+        static ReviewResponse of(Review r) {
+            return new ReviewResponse(r.bookingId(), r.serviceId(), r.orgId(), r.rating(), r.text(), r.createdAt());
+        }
     }
 
     @Schema(name = "BookingPolicy", description = "The cancellation policy this booking was made under")
@@ -100,7 +149,7 @@ final class BookingDtos {
                     b.reschedules(), new PaymentDto(b.paymentId(), b.paymentState().name(),
                     withSecret ? b.clientSecret() : null, b.paymentFailure(), b.authorizedMinor(),
                     b.depositCapturedMinor(), b.balanceCapturedMinor(), b.refundedMinor(), b.releasedMinor(),
-                    b.providerFeeMinor()), b.holdExpiresAt(), b.requestExpiresAt(), b.reason(),
+                    b.providerFeeMinor(), BalanceDto.of(b.balance())), b.holdExpiresAt(), b.requestExpiresAt(), b.reason(),
                     b.cancelledBy() == null ? null : b.cancelledBy().name(), b.createdAt(), b.updatedAt(),
                     b.version());
         }

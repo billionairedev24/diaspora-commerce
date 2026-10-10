@@ -225,7 +225,7 @@ components:
       type: object
       required: [seq, id, eventType, actorId, action, entityType, entityId, occurredAt, hash, prevHash]
       properties:
-        seq: {type: integer, format: int64, description: Position in the chain (1, 2, 3 …)}
+        seq: {type: integer, format: int64, description: 'Position in the chain (1, 2, 3 …)'}
         id: {type: string, format: uuid}
         eventType: {type: string}
         actorId: {type: string}

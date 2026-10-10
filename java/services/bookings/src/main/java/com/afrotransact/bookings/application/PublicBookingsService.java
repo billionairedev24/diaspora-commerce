@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.bookings.domain.Provider;
+import com.afrotransact.bookings.domain.RatingSummary;
 import com.afrotransact.bookings.domain.ServiceMode;
 import com.afrotransact.bookings.domain.ServiceOffering;
 import com.afrotransact.bookings.domain.TeamMember;
@@ -13,8 +14,14 @@ import com.afrotransact.bookings.domain.TeamMember;
 /** Anonymous shopper reads: find services, see a provider, pick a day and a time, read the summary. */
 public interface PublicBookingsService {
 
-    /** Active services matching a text (name, description, category, provider) with the next free time. */
-    List<Listing> search(String text, String category, int size);
+    /**
+     * Active services matching a text (name, description, category, provider) with the next free time and their
+     * rating.
+     *
+     * @param zip 5-digit US ZIP: only providers whose service area (geo zones) covers it, plus virtual services
+     *            (null = anywhere)
+     */
+    List<Listing> search(String text, String category, String zip, int size);
 
     ProviderPage provider(String orgId);
 
@@ -30,7 +37,7 @@ public interface PublicBookingsService {
     Summary summary(UUID serviceId, List<String> addOnIds, ServiceMode mode);
 
     /** A search hit. */
-    record Listing(ServiceOffering service, Provider provider, Instant nextAvailable) {
+    record Listing(ServiceOffering service, Provider provider, Instant nextAvailable, RatingSummary rating) {
     }
 
     /** A provider's public booking page. */

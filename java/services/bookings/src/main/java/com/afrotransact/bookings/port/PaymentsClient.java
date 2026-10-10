@@ -8,7 +8,8 @@ import java.util.UUID;
 /**
  * payments-service as bookings uses it (client-credentials client {@code bookings-service}, scope
  * {@code payments:service}). One manual-capture PaymentIntent per booking, keyed by the booking reference, with a
- * {@code deposit} line and a {@code balance} line. Every call carries an idempotency key derived from the booking,
+ * {@code deposit} line and a {@code balance} line; for long-dated bookings the balance is charged later as an
+ * off-session child payment of the same order. Every call carries an idempotency key derived from the booking,
  * so retries never move money twice.
  */
 public interface PaymentsClient {
@@ -24,19 +25,36 @@ public interface PaymentsClient {
     /** Cancels the uncaptured intent: the authorisation is released. */
     void cancel(UUID paymentId, String reason, String idempotencyKey);
 
+    /**
+     * Releases the uncaptured rest of the authorisation after the deposit capture ({@code POST …/release}). The
+     * payment ends CAPTURED (or CANCELED without captures) with {@link Intent#releasedMinor()}.
+     */
+    Intent release(UUID paymentId, String reason, String idempotencyKey);
+
+    /**
+     * Charges lines of the booking off-session on the customer's saved card ({@code POST …/off-session-charges});
+     * returns the new child payment: AUTHORIZED, REQUIRES_ACTION (with its client secret) or FAILED.
+     */
+    Intent chargeOffSession(UUID paymentId, OffSessionCharge request, String idempotencyKey);
+
     void refund(UUID paymentId, String lineId, long amountMinor, String reason, String idempotencyKey);
 
     /** Service completed (or deposit forfeited): starts the settlement hold (kind SERVICE). Idempotent. */
     void serviceCompleted(String orderId, Instant completedAt);
 
+    /** Fees payments applies to the organisation for a category ({@code GET /v1/fee-schedules/effective}). */
+    EffectiveFees effectiveFees(String category, String orgId);
+
     /**
      * New PaymentIntent.
      *
-     * @param orderId   the booking reference (payments keys everything by it)
-     * @param sellerOrg the provider organisation receiving the net
+     * @param orderId           the booking reference (payments keys everything by it)
+     * @param sellerOrg         the provider organisation receiving the net
+     * @param shopperId         the customer's token subject (owner of the saved card)
+     * @param saveForOffSession save the confirmed card for a later off-session balance charge
      */
     record CreateIntent(String orderId, String sellerOrg, long amountMinor, String currency, List<Line> lines,
-                        Map<String, String> metadata, Instant placedAt) {
+                        Map<String, String> metadata, Instant placedAt, String shopperId, boolean saveForOffSession) {
 
         public CreateIntent {
             lines = List.copyOf(lines);
@@ -49,11 +67,37 @@ public interface PaymentsClient {
     }
 
     /**
+     * An off-session charge.
+     *
+     * @param customerId      the customer's token subject
+     * @param paymentMethodId saved card {@code pm_…}, or null for the customer's default method
+     */
+    record OffSessionCharge(String customerId, String paymentMethodId, List<String> lineIds) {
+
+        public OffSessionCharge {
+            lineIds = List.copyOf(lineIds);
+        }
+    }
+
+    /**
      * The intent as payments reports it.
      *
-     * @param status payments' status: REQUIRES_PAYMENT_METHOD … AUTHORIZED, PARTIALLY_CAPTURED, CAPTURED, CANCELED,
-     *               FAILED
+     * @param status          payments' status: REQUIRES_PAYMENT_METHOD … REQUIRES_ACTION, AUTHORIZED,
+     *                        PARTIALLY_CAPTURED, CAPTURED, CANCELED, FAILED
+     * @param releasedMinor   authorised but released without capture
+     * @param parentPaymentId set for an off-session charge: the booking's original payment
      */
-    record Intent(UUID id, String orderId, String status, String clientSecret, String failureMessage) {
+    record Intent(UUID id, String orderId, String status, String clientSecret, String failureMessage,
+                  long releasedMinor, UUID parentPaymentId) {
+    }
+
+    /**
+     * Effective fees of an organisation and category.
+     *
+     * @param commissionSource OVERRIDE, CATEGORY, DEFAULT or RETAIL
+     * @param version          fee-schedule version in force
+     */
+    record EffectiveFees(int commissionBps, String commissionSource, int cardPctBps, long cardFixedMinor,
+                         Integer version, String currency) {
     }
 }

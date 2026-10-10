@@ -109,7 +109,7 @@ class JdbcOfferingRepository implements OfferingRepository {
     }
 
     @Override
-    public List<ServiceOffering> search(String text, String category, int limit) {
+    public List<ServiceOffering> search(String text, String category, Set<String> orgIds, int limit) {
         StringBuilder sql = new StringBuilder(SELECT)
                 .append(" join provider p on p.org_id = o.org_id where o.active and not exists (select 1 from "
                         + "org_visibility v where v.org_id = o.org_id and v.hidden)");
@@ -122,6 +122,10 @@ class JdbcOfferingRepository implements OfferingRepository {
         if (hasCategory) {
             sql.append(" and o.category = :category");
         }
+        if (orgIds != null) {
+            sql.append(orgIds.isEmpty() ? " and o.modes @> cast(:virtual as jsonb)"
+                    : " and (o.org_id in (:orgs) or o.modes @> cast(:virtual as jsonb))");
+        }
         sql.append(" order by o.name, o.id limit :limit");
         JdbcClient.StatementSpec spec = jdbc.sql(sql.toString()).param("limit", limit);
         if (hasText) {
@@ -129,6 +133,12 @@ class JdbcOfferingRepository implements OfferingRepository {
         }
         if (hasCategory) {
             spec = spec.param("category", category.trim().toLowerCase(Locale.ROOT));
+        }
+        if (orgIds != null) {
+            spec = spec.param("virtual", "[\"VIRTUAL\"]");
+            if (!orgIds.isEmpty()) {
+                spec = spec.param("orgs", List.copyOf(orgIds));
+            }
         }
         return spec.query(this::map).list();
     }

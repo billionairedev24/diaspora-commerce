@@ -15,9 +15,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Kafka adapter for payments-service events ({@code at.payment.events}; headers event-id, event-type). Parsing and
- * transport live here; the inbox de-duplication and booking changes are in {@link PaymentEventIngest}, so the
- * behaviour is testable without Kafka. Disabled with {@code at.bookings.payment-events.enabled=false}.
+ * Kafka adapter for payments-service events ({@code at.payment.events}; headers event-id, event-type): intent events
+ * of bookings' payments, including off-session balance charges ({@code parentPaymentId}, {@code offSession}).
+ * Parsing and transport live here; the inbox de-duplication and booking changes are in {@link PaymentEventIngest},
+ * so the behaviour is testable without Kafka. Disabled with {@code at.bookings.payment-events.enabled=false}.
  */
 @Component
 @ConditionalOnProperty(prefix = "at.bookings.payment-events", name = "enabled", havingValue = "true",
@@ -49,8 +50,15 @@ public class PaymentEventsListener {
             LOG.warn("Unreadable payment event {} skipped: {}", eventId, e.getMessage());
             return;
         }
-        ingest.handle(UUID.fromString(eventId), type, payload.path("orderId").asString(record.key()),
-                payload.path("status").asString(null), payload.path("failureMessage").asString(null));
+        ingest.handle(UUID.fromString(eventId), type, new PaymentEventIngest.IntentEvent(
+                payload.path("orderId").asString(record.key()), uuid(payload, "paymentId"),
+                payload.path("status").asString(null), payload.path("failureMessage").asString(null),
+                uuid(payload, "parentPaymentId"), payload.path("offSession").asBoolean(false)));
+    }
+
+    private static UUID uuid(JsonNode payload, String field) {
+        String value = payload.path(field).asString("");
+        return value.isEmpty() ? null : UUID.fromString(value);
     }
 
     private static String header(ConsumerRecord<String, String> record, String name) {

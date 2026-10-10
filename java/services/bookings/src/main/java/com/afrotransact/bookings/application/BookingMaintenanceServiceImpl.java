@@ -75,8 +75,7 @@ class BookingMaintenanceServiceImpl implements BookingMaintenanceService {
                         return false;
                     }
                     Instant now = Instant.now(clock);
-                    Transition t = change.apply(b, now);
-                    money.execute(b, t.moves(), now);
+                    Transition t = money.apply(b, change.apply(b, now), now);
                     Booking saved = bookings.update(b);
                     events.publish(t, saved, providers.find(saved.orgId()).orElseThrow());
                     return true;

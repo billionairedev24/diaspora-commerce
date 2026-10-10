@@ -5,16 +5,20 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.bookings.adapter.in.web.BookingDtos.ActivityResponse;
+import com.afrotransact.bookings.adapter.in.web.BookingDtos.BalancePaymentResponse;
 import com.afrotransact.bookings.adapter.in.web.BookingDtos.BookingResponse;
 import com.afrotransact.bookings.adapter.in.web.BookingDtos.CancelResponse;
 import com.afrotransact.bookings.adapter.in.web.BookingDtos.CreateBookingRequest;
 import com.afrotransact.bookings.adapter.in.web.BookingDtos.CreateBookingResponse;
 import com.afrotransact.bookings.adapter.in.web.BookingDtos.QuoteResponse;
 import com.afrotransact.bookings.adapter.in.web.BookingDtos.ReasonRequest;
+import com.afrotransact.bookings.adapter.in.web.BookingDtos.ReviewRequest;
+import com.afrotransact.bookings.adapter.in.web.BookingDtos.ReviewResponse;
 import com.afrotransact.bookings.adapter.in.web.BookingDtos.TimeRequest;
 import com.afrotransact.bookings.application.BookingService;
 import com.afrotransact.bookings.application.BookingService.BookingResult;
 import com.afrotransact.bookings.application.BookingService.Cancelled;
+import com.afrotransact.bookings.application.ReviewService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -39,9 +43,11 @@ class BookingController {
     static final String IDEMPOTENCY_KEY = "Idempotency-Key";
 
     private final BookingService bookings;
+    private final ReviewService reviews;
 
-    BookingController(BookingService bookings) {
+    BookingController(BookingService bookings, ReviewService reviews) {
         this.bookings = bookings;
+        this.reviews = reviews;
     }
 
     @Operation(summary = "Book a slot (customer)", description = "Holds the slot (a database exclusion constraint "
@@ -77,12 +83,30 @@ class BookingController {
         return bookings.history(id).stream().map(ActivityResponse::of).toList();
     }
 
-    @Operation(summary = "Refresh the deposit authorisation from payments",
-            description = "Call after Stripe.js confirmed the card; payments' intent.succeeded event does the same "
-                    + "asynchronously.")
+    @Operation(summary = "Refresh the deposit authorisation (and an off-session balance charge) from payments",
+            description = "Call after Stripe.js confirmed the card, or after the customer authenticated the "
+                    + "off-session balance charge; payments' intent events do the same asynchronously.")
     @PostMapping("/{id}/payment/sync")
     BookingResponse syncPayment(@PathVariable UUID id) {
         return BookingResponse.of(bookings.syncPayment(id));
+    }
+
+    @Operation(summary = "The balance and its off-session charge (long-dated bookings)",
+            description = "When the customer's bank asks for authentication (state ACTION_REQUIRED) the customer "
+                    + "gets the charge's clientSecret to confirm with Stripe.js / PaymentSheet, then calls "
+                    + "POST /payment/sync. Providers see the state without the secret.")
+    @GetMapping("/{id}/balance-payment")
+    BalancePaymentResponse balancePayment(@PathVariable UUID id) {
+        return BalancePaymentResponse.of(bookings.balancePayment(id));
+    }
+
+    @Operation(summary = "Rate a completed booking (customer, once): 1–5 stars and an optional text",
+            description = "Ratings are averaged per service in search. 409 bookings.not-reviewable before "
+                    + "completion, 409 bookings.already-reviewed the second time.")
+    @PostMapping("/{id}/review")
+    ResponseEntity<ReviewResponse> review(@PathVariable UUID id, @Valid @RequestBody ReviewRequest body) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ReviewResponse.of(reviews.rate(id, body.rating(), body.text())));
     }
 
     @Operation(summary = "What cancelling now refunds, keeps or releases",
@@ -93,7 +117,9 @@ class BookingController {
         return QuoteResponse.of(bookings.cancellationQuote(id));
     }
 
-    @Operation(summary = "Cancel (customer: policy refund; provider: full refund, fee + strike under 24 h)")
+    @Operation(summary = "Cancel (customer: policy refund; provider: full refund, fee + strike under 24 h)",
+            description = "After the deposit capture the uncaptured balance hold is released (or the open "
+                    + "off-session balance charge cancelled).")
     @PostMapping("/{id}/cancel")
     CancelResponse cancel(@PathVariable UUID id,
                           @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
@@ -153,14 +179,18 @@ class BookingController {
         return BookingResponse.of(bookings.proposeTime(id, body.startAt(), idempotencyKey));
     }
 
-    @Operation(summary = "Mark complete (provider): the balance is charged and the settlement hold starts")
+    @Operation(summary = "Mark complete (provider): the balance is charged and the settlement hold starts",
+            description = "The balance is captured on the original authorisation, or on the off-session charge "
+                    + "of a long-dated booking; a balance that could not be collected flags the booking "
+                    + "(balance.state NEEDS_ATTENTION, event booking.balance_unpaid).")
     @PostMapping("/{id}/complete")
     BookingResponse complete(@PathVariable UUID id,
                              @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey) {
         return BookingResponse.of(bookings.complete(id, idempotencyKey));
     }
 
-    @Operation(summary = "Mark no-show (provider, after the start time): deposit kept, or full price per policy")
+    @Operation(summary = "Mark no-show (provider, after the start time): deposit kept, or full price per policy",
+            description = "Without full price the uncaptured balance hold is released.")
     @PostMapping("/{id}/no-show")
     ResponseEntity<BookingResponse> noShow(@PathVariable UUID id,
                                            @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160)

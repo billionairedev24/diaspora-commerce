@@ -152,11 +152,17 @@ final class ProviderDtos {
 
     @Schema(name = "TakeHome", description = "What the provider receives at the listed price")
     record TakeHomeDto(long priceMinor, long depositMinor, long balanceMinor, int commissionBps, long commissionMinor,
-                       long cardFeesMinor, long takeHomeMinor, String currency) {
+                       long cardFeesMinor, long takeHomeMinor, String currency,
+                       @Schema(description = "Where the commission comes from: payments' OVERRIDE, CATEGORY, DEFAULT, "
+                               + "RETAIL, or CONFIG (configured fallback while payments is unavailable)")
+                       String feeSource,
+                       @Schema(description = "payments' fee-schedule version (null for the fallback)")
+                       Integer feeVersion) {
 
         static TakeHomeDto of(TakeHome t) {
             return new TakeHomeDto(t.priceMinor(), t.depositMinor(), t.balanceMinor(), t.commissionBps(),
-                    t.commissionMinor(), t.cardFeesMinor(), t.takeHomeMinor(), t.currency());
+                    t.commissionMinor(), t.cardFeesMinor(), t.takeHomeMinor(), t.currency(), t.feeSource(),
+                    t.feeVersion());
         }
     }
 

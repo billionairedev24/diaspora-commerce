@@ -11,6 +11,8 @@ import java.util.UUID;
 import java.util.function.BiFunction;
 
 import com.afrotransact.bookings.domain.Activity;
+import com.afrotransact.bookings.domain.BalanceCharge;
+import com.afrotransact.bookings.domain.BalanceState;
 import com.afrotransact.bookings.domain.AddOn;
 import com.afrotransact.bookings.domain.BookedService;
 import com.afrotransact.bookings.domain.Booking;
@@ -19,6 +21,7 @@ import com.afrotransact.bookings.domain.BookingStatus;
 import com.afrotransact.bookings.domain.BookingsRuleViolation;
 import com.afrotransact.bookings.domain.BookingsStateConflict;
 import com.afrotransact.bookings.domain.CancellationQuote;
+import com.afrotransact.bookings.domain.FeeSchedule;
 import com.afrotransact.bookings.domain.MoneyMove;
 import com.afrotransact.bookings.domain.Party;
 import com.afrotransact.bookings.domain.Provider;
@@ -53,6 +56,7 @@ class BookingServiceImpl implements BookingService {
     private final BookingEventPublisher events;
     private final PaymentOutcomes outcomes;
     private final TakeHomeCalculator takeHome;
+    private final ProviderFees fees;
     private final OrgVisibilityRepository visibility;
     private final BookingsAccess access;
     private final BookingsSettings settings;
@@ -61,8 +65,9 @@ class BookingServiceImpl implements BookingService {
     BookingServiceImpl(BookingRepository bookings, OfferingRepository offerings, ProviderRepository providers,
                        TeamRepository team, IdempotencyStore idempotency, PaymentsClient payments, SlotFinder slots,
                        BookingMoney money, BookingEventPublisher events, PaymentOutcomes outcomes,
-                       TakeHomeCalculator takeHome, OrgVisibilityRepository visibility, BookingsAccess access,
-                       BookingsSettings settings, Clock clock) {
+                       TakeHomeCalculator takeHome, ProviderFees fees, OrgVisibilityRepository visibility,
+                       BookingsAccess access, BookingsSettings settings, Clock clock) {
+        this.fees = fees;
         this.visibility = visibility;
         this.bookings = bookings;
         this.offerings = offerings;
@@ -123,7 +128,8 @@ class BookingServiceImpl implements BookingService {
         PaymentsClient.Intent intent = payments.createIntent(new PaymentsClient.CreateIntent(stored.reference(),
                 provider.orgId(), snapshot.priceMinor(), snapshot.currency(), intentLines(snapshot),
                 Map.of("bookingId", stored.id().toString(), "kind", "booking", "serviceId",
-                        offering.id().toString()), now), stored.reference() + ":create-intent");
+                        offering.id().toString()), now, customer.subject(), true),
+                stored.reference() + ":create-intent");
         stored.attachPayment(intent.id(), intent.clientSecret());
         Booking saved = bookings.update(stored);
         if ("AUTHORIZED".equals(intent.status())) {
@@ -179,7 +185,31 @@ class BookingServiceImpl implements BookingService {
             return b;
         }
         PaymentsClient.Intent intent = payments.get(b.paymentId(), true);
-        return outcomes.apply(id, intent.status(), intent.failureMessage());
+        Booking synced = outcomes.apply(id, intent.status(), intent.failureMessage());
+        BalanceCharge balance = synced.balance();
+        if (balance.paymentId() != null && (balance.state() == BalanceState.ACTION_REQUIRED
+                || balance.state() == BalanceState.PROCESSING)) {
+            PaymentsClient.Intent charge = payments.get(balance.paymentId(), true);
+            synced = outcomes.applyBalance(id, balance.paymentId(), charge.status(), charge.clientSecret(),
+                    charge.failureMessage());
+        }
+        return synced;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public BalancePayment balancePayment(UUID id) {
+        Booking b = require(id);
+        Party party = access.partyFor(b, BookingsPermissions.READ, assignee(b));
+        BalanceCharge balance = b.balance();
+        String secret = null;
+        if (party == Party.CUSTOMER && balance.state() == BalanceState.ACTION_REQUIRED) {
+            secret = balance.clientSecret() != null ? balance.clientSecret()
+                    : payments.get(balance.paymentId(), false).clientSecret();
+        }
+        return new BalancePayment(b.id(), b.reference(), balance.state(), balance.paymentId(),
+                b.service().balanceMinor(), b.service().currency(), secret, balance.failure(), balance.attempts(),
+                balance.nextAttemptAt());
     }
 
     @Override
@@ -202,9 +232,10 @@ class BookingServiceImpl implements BookingService {
     public EarningsView earnings(String orgId, Instant from, Instant to) {
         ProviderScope scope = access.provider(orgId, BookingsPermissions.READ);
         Provider p = providers.find(orgId).orElseThrow(() -> ProviderSetupServiceImpl.notFound(orgId));
+        FeeSchedule schedule = fees.forOrg(orgId);
         List<EarningsView.Row> rows = scoped(scope, bookings.forProvider(orgId, from, to, null, null)).stream()
                 .filter(b -> b.status() != BookingStatus.PENDING_PAYMENT)
-                .map(b -> new EarningsView.Row(b, takeHome.earnings(b)))
+                .map(b -> new EarningsView.Row(b, takeHome.earnings(schedule, b)))
                 .toList();
         long collected = 0;
         long commission = 0;
@@ -340,8 +371,7 @@ class BookingServiceImpl implements BookingService {
             team.lock(assignee.id());
         }
         Instant now = Instant.now(clock);
-        Transition t = change.apply(b, party);
-        money.execute(b, t.moves(), now);
+        Transition t = money.apply(b, change.apply(b, party), now);
         Booking saved = bookings.update(b);
         events.publish(t, saved, providers.find(saved.orgId()).orElseThrow());
         idempotency.complete(scope, key, id);

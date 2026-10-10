@@ -22,6 +22,12 @@ import java.util.UUID;
  * REQUESTED|CONFIRMED ─customer asks─▶ RESCHEDULE_REQUESTED ─provider accepts─▶ CONFIRMED / keeps time ─▶ previous
  * any active ─cancel─▶ CANCELLED_CUSTOMER | CANCELLED_PROVIDER
  * </pre>
+ *
+ * <p>Long-dated bookings: card authorisations last about 7 days, so when the appointment is further away the balance
+ * hold is released right after the deposit capture ({@link #releaseBalanceAhead}) and the balance is charged
+ * off-session on the customer's saved card shortly before the appointment ({@link #balanceChargeSubmitted}); the
+ * off-session charge is captured on completion. Cancellations and no-shows after the deposit capture release the
+ * balance hold (or cancel the open off-session charge).
  */
 public final class Booking {
 
@@ -59,6 +65,8 @@ public final class Booking {
     private long refundedMinor;
     private long releasedMinor;
     private long providerFeeMinor;
+    private BalanceCharge balance;
+    private boolean balanceFlagged;
     private String reason;
     private Party cancelledBy;
     private final Instant createdAt;
@@ -74,8 +82,8 @@ public final class Booking {
                    int reschedules, UUID paymentId, PaymentState paymentState, String clientSecret,
                    String paymentFailure, Instant holdExpiresAt, Instant requestExpiresAt, long authorizedMinor,
                    long depositCapturedMinor, long balanceCapturedMinor, long refundedMinor, long releasedMinor,
-                   long providerFeeMinor, String reason, Party cancelledBy, Instant createdAt, Instant updatedAt,
-                   long version) {
+                   long providerFeeMinor, BalanceCharge balance, String reason, Party cancelledBy, Instant createdAt,
+                   Instant updatedAt, long version) {
         this.id = Objects.requireNonNull(id, "id");
         this.reference = Objects.requireNonNull(reference, "reference");
         this.orgId = Objects.requireNonNull(orgId, "orgId");
@@ -107,6 +115,7 @@ public final class Booking {
         this.refundedMinor = refundedMinor;
         this.releasedMinor = releasedMinor;
         this.providerFeeMinor = providerFeeMinor;
+        this.balance = balance == null ? BalanceCharge.onAuthorisation() : balance;
         this.reason = reason;
         this.cancelledBy = cancelledBy;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
@@ -131,7 +140,7 @@ public final class Booking {
                 notes == null || notes.isBlank() ? null : notes.trim(), channel, start,
                 start.plus(Duration.ofMinutes(service.durationMinutes())), rules.bufferMinutes(), null, null,
                 BookingStatus.PENDING_PAYMENT, policy, rules.instantBooking(), 0, null, PaymentState.PENDING, null,
-                null, holdExpiresAt, null, 0, 0, 0, 0, 0, 0, null, null, now, now, 0);
+                null, holdExpiresAt, null, 0, 0, 0, 0, 0, 0, BalanceCharge.onAuthorisation(), null, null, now, now, 0);
         b.log(now, Party.CUSTOMER, "Requested via " + ("app".equals(b.channel) ? "app" : "web")
                 + " · slot held while the deposit is authorised");
         return b;
@@ -375,6 +384,7 @@ public final class Booking {
             }
             paymentState = PaymentState.RELEASED;
         } else {
+            releaseBalance(now, moves);
             if (quote.refundMinor() > 0) {
                 moves.add(MoneyMove.refund(quote.refundMinor()));
                 refundedMinor += quote.refundMinor();
@@ -407,13 +417,9 @@ public final class Booking {
         BookingStatus from = status;
         List<MoneyMove> moves = new ArrayList<>();
         captureDeposit(now, moves);
-        long balance = service.balanceMinor();
-        if (balance > 0) {
-            moves.add(MoneyMove.capture(MoneyMove.BALANCE, balance, true));
-            balanceCapturedMinor = balance;
-            log(now, Party.SYSTEM, "Balance " + money(balance) + " charged", MoneyKind.CAPTURE, balance);
+        if (service.balanceMinor() <= 0 || captureBalance(now, moves)) {
+            paymentState = PaymentState.CAPTURED;
         }
-        paymentState = PaymentState.CAPTURED;
         moves.add(MoneyMove.settle());
         status = BookingStatus.COMPLETED;
         log(now, by, by == Party.SYSTEM ? "Auto-completed after the appointment" : "Marked complete");
@@ -431,19 +437,147 @@ public final class Booking {
         List<MoneyMove> moves = new ArrayList<>();
         captureDeposit(now, moves);
         if (policy.noShow() == NoShowRule.FULL && service.balanceMinor() > 0) {
-            long balance = service.balanceMinor();
-            moves.add(MoneyMove.capture(MoneyMove.BALANCE, balance, true));
-            balanceCapturedMinor = balance;
-            paymentState = PaymentState.CAPTURED;
-            log(now, Party.PROVIDER, "Marked no-show · full price charged per policy", MoneyKind.CAPTURE, balance);
+            log(now, Party.PROVIDER, "Marked no-show · full price due per policy");
+            if (captureBalance(now, moves)) {
+                paymentState = PaymentState.CAPTURED;
+            }
         } else {
             log(now, Party.PROVIDER, "Marked no-show · deposit kept, no balance charged");
+            releaseBalance(now, moves);
         }
         if (depositCapturedMinor + balanceCapturedMinor > 0) {
             moves.add(MoneyMove.settle());
         }
         status = BookingStatus.NO_SHOW;
         return touch(now, from, moves, false);
+    }
+
+    // ------------------------------------------------------------------ long-dated bookings: off-session balance
+
+    /**
+     * Right after the deposit capture: when the appointment is beyond the card authorisation window, the balance
+     * hold is released and the balance becomes due off-session (charged {@code chargeBefore} the appointment).
+     *
+     * @return the release instruction, or nothing when the authorisation still covers the appointment
+     */
+    public List<MoneyMove> releaseBalanceAhead(BalanceChargePolicy chargePolicy, Instant now) {
+        long amount = service.balanceMinor();
+        if (balance.state() != BalanceState.ON_AUTHORISATION || paymentId == null || amount <= 0
+                || depositCapturedMinor == 0 || balanceCapturedMinor > 0 || !status.isActive()
+                || status == BookingStatus.PENDING_PAYMENT || status == BookingStatus.REQUESTED
+                || !chargePolicy.beyondAuthorisation(startAt, now)) {
+            return List.of();
+        }
+        releasedMinor += amount;
+        balance = new BalanceCharge(BalanceState.DUE, null, 0, null, null, null);
+        updatedAt = now;
+        log(now, Party.SYSTEM, "Appointment is more than " + chargePolicy.authorisationWindow().toDays()
+                + " days away · " + money(amount) + " balance hold released; the balance is charged on the saved card "
+                + chargePolicy.chargeBefore().toDays() + " days before", MoneyKind.RELEASE_REMAINING, amount);
+        return List.of(MoneyMove.releaseRemaining());
+    }
+
+    /**
+     * payments answered an off-session balance charge (attempt {@code attempt}, key {@code BK-…:offsession:n}).
+     *
+     * @param paymentStatus AUTHORIZED, REQUIRES_ACTION, FAILED, PROCESSING …
+     */
+    public Transition balanceChargeSubmitted(int attempt, UUID chargePaymentId, String paymentStatus,
+                                             String chargeClientSecret, String failureMessage,
+                                             BalanceChargePolicy chargePolicy, Instant now) {
+        if (!balance.state().chargeable()) {
+            return unchanged();
+        }
+        balance = new BalanceCharge(balance.state(), chargePaymentId, attempt, null, null, null);
+        log(now, Party.SYSTEM, "Balance " + money(service.balanceMinor()) + " charged off-session on the saved card"
+                + " (attempt " + attempt + ")");
+        return applyBalanceStatus(paymentStatus, chargeClientSecret, failureMessage, chargePolicy, now);
+    }
+
+    /** payments refused off-session attempt {@code attempt} (no saved card, …): counts as a declined attempt. */
+    public Transition balanceChargeRefused(int attempt, String message, BalanceChargePolicy chargePolicy,
+                                           Instant now) {
+        if (!balance.state().chargeable()) {
+            return unchanged();
+        }
+        balance = new BalanceCharge(balance.state(), balance.paymentId(), attempt, null, null, null);
+        return balanceDeclined(message == null ? "Payment refused" : message, chargePolicy, now);
+    }
+
+    /**
+     * A later status of the off-session charge (payments event or refresh): authorised after the customer
+     * authenticated, declined, waiting for action. Statuses of other (older) charges are ignored.
+     */
+    public Transition balanceChargeUpdated(UUID chargePaymentId, String paymentStatus, String chargeClientSecret,
+                                           String failureMessage, BalanceChargePolicy chargePolicy, Instant now) {
+        if (chargePaymentId == null || !chargePaymentId.equals(balance.paymentId())) {
+            return unchanged();
+        }
+        BalanceState state = balance.state();
+        boolean authorised = "AUTHORIZED".equals(paymentStatus);
+        if (state == BalanceState.RELEASED || state == BalanceState.CAPTURED || state == BalanceState.AUTHORIZED
+                || state == BalanceState.NEEDS_ATTENTION && !authorised
+                || state == BalanceState.ACTION_REQUIRED && "REQUIRES_ACTION".equals(paymentStatus)
+                && chargeClientSecret == null) {
+            return unchanged();
+        }
+        return applyBalanceStatus(paymentStatus, chargeClientSecret, failureMessage, chargePolicy, now);
+    }
+
+    /** The job's attempt limit is used up without a declined answer to count (e.g. the limit was lowered). */
+    public Transition balanceGiveUp(Instant now) {
+        if (!balance.state().chargeable()) {
+            return unchanged();
+        }
+        flagBalance(now, "Balance " + money(service.balanceMinor()) + " not collected after "
+                + balance.attempts() + " attempts");
+        return touch(now, status, List.of(), false);
+    }
+
+    private Transition applyBalanceStatus(String paymentStatus, String chargeClientSecret, String failureMessage,
+                                          BalanceChargePolicy chargePolicy, Instant now) {
+        long amount = service.balanceMinor();
+        List<MoneyMove> moves = new ArrayList<>();
+        switch (paymentStatus == null ? "" : paymentStatus) {
+            case "AUTHORIZED" -> {
+                balance = new BalanceCharge(BalanceState.AUTHORIZED, balance.paymentId(), balance.attempts(), null,
+                        null, null);
+                log(now, Party.SYSTEM, "Balance " + money(amount) + " authorised on the saved card",
+                        MoneyKind.AUTHORIZE, amount);
+                if (status == BookingStatus.COMPLETED
+                        || status == BookingStatus.NO_SHOW && policy.noShow() == NoShowRule.FULL) {
+                    captureBalance(now, moves);
+                    paymentState = PaymentState.CAPTURED;
+                }
+            }
+            case "REQUIRES_ACTION" -> {
+                balance = new BalanceCharge(BalanceState.ACTION_REQUIRED, balance.paymentId(), balance.attempts(),
+                        chargeClientSecret != null ? chargeClientSecret : balance.clientSecret(),
+                        failureMessage == null ? "authentication_required" : failureMessage, null);
+                log(now, Party.SYSTEM, "The customer’s bank asks them to confirm the " + money(amount)
+                        + " balance payment");
+            }
+            case "FAILED", "CANCELED" -> {
+                return balanceDeclined(failureMessage == null ? "Card declined" : failureMessage, chargePolicy, now);
+            }
+            default -> balance = new BalanceCharge(BalanceState.PROCESSING, balance.paymentId(), balance.attempts(),
+                    null, null, null);
+        }
+        return touch(now, status, moves, false);
+    }
+
+    private Transition balanceDeclined(String message, BalanceChargePolicy chargePolicy, Instant now) {
+        int attempts = balance.attempts();
+        if (attempts >= chargePolicy.maxAttempts() || !status.isActive()) {
+            balance = new BalanceCharge(balance.state(), balance.paymentId(), attempts, null, message, null);
+            flagBalance(now, "Balance " + money(service.balanceMinor()) + " declined (" + message + ") after "
+                    + attempts + (attempts == 1 ? " attempt" : " attempts"));
+        } else {
+            Instant retryAt = now.plus(chargePolicy.retryDelay());
+            balance = new BalanceCharge(BalanceState.FAILED, balance.paymentId(), attempts, null, message, retryAt);
+            log(now, Party.SYSTEM, "Balance charge declined (" + message + ") · retried at " + retryAt);
+        }
+        return touch(now, status, List.of(), false);
     }
 
     // ------------------------------------------------------------------ helpers
@@ -477,14 +611,85 @@ public final class Booking {
         if (depositCapturedMinor == 0 && balanceCapturedMinor == 0) {
             return releaseAll(now, why);
         }
+        List<MoneyMove> moves = new ArrayList<>();
+        releaseBalance(now, moves);
         long refund = depositCapturedMinor - refundedMinor;
         if (refund <= 0) {
-            return List.of();
+            return moves;
         }
         refundedMinor += refund;
         log(now, Party.SYSTEM, "Refunded " + money(refund) + (why == null ? "" : " · " + why), MoneyKind.REFUND,
                 refund);
-        return List.of(MoneyMove.refund(refund));
+        moves.add(MoneyMove.refund(refund));
+        return moves;
+    }
+
+    /**
+     * Captures the balance on completion (or a full-price no-show): on the original authorisation, or on the
+     * authorised off-session charge. Without either (released and not charged yet, declined) nothing is captured
+     * and the booking is flagged; a charge still waiting for the customer's authentication stays open and is
+     * captured as soon as it is authorised.
+     *
+     * @return true when the balance was captured
+     */
+    private boolean captureBalance(Instant now, List<MoneyMove> moves) {
+        long amount = service.balanceMinor();
+        BalanceState state = balance.state();
+        if (state == BalanceState.ON_AUTHORISATION || state == BalanceState.AUTHORIZED) {
+            moves.add(MoneyMove.capture(MoneyMove.BALANCE, amount, true));
+            balanceCapturedMinor = amount;
+            balance = balance.withState(BalanceState.CAPTURED);
+            log(now, Party.SYSTEM, "Balance " + money(amount) + " charged"
+                    + (state == BalanceState.AUTHORIZED ? " (saved card)" : ""), MoneyKind.CAPTURE, amount);
+            return true;
+        }
+        if (state == BalanceState.ACTION_REQUIRED || state == BalanceState.PROCESSING) {
+            log(now, Party.SYSTEM, "Balance " + money(amount) + " not collected yet · waiting for the customer to "
+                    + "confirm the payment");
+            return false;
+        }
+        if (state == BalanceState.DUE || state == BalanceState.FAILED) {
+            flagBalance(now, "Balance " + money(amount) + " not collected · the saved card couldn’t be charged");
+        }
+        return false;
+    }
+
+    /**
+     * Nothing more will be charged (cancellation or no-show after the deposit capture): releases the uncaptured
+     * balance hold, or cancels the open off-session charge.
+     */
+    private void releaseBalance(Instant now, List<MoneyMove> moves) {
+        long amount = service.balanceMinor();
+        if (amount <= 0 || paymentId == null) {
+            return;
+        }
+        switch (balance.state()) {
+            case ON_AUTHORISATION -> {
+                if (depositCapturedMinor > 0 && balanceCapturedMinor == 0) {
+                    moves.add(MoneyMove.releaseRemaining());
+                    releasedMinor += amount;
+                    balance = balance.withState(BalanceState.RELEASED);
+                    log(now, Party.SYSTEM, "Released the " + money(amount) + " balance hold on the card",
+                            MoneyKind.RELEASE_REMAINING, amount);
+                }
+            }
+            case PROCESSING, ACTION_REQUIRED, AUTHORIZED -> {
+                moves.add(MoneyMove.cancelBalanceCharge());
+                balance = balance.withState(BalanceState.RELEASED);
+                log(now, Party.SYSTEM, "Cancelled the " + money(amount) + " balance charge on the saved card",
+                        MoneyKind.RELEASE, amount);
+            }
+            case DUE, FAILED, NEEDS_ATTENTION -> balance = balance.withState(BalanceState.RELEASED);
+            default -> {
+                // CAPTURED or already RELEASED: nothing to release
+            }
+        }
+    }
+
+    private void flagBalance(Instant now, String why) {
+        balance = balance.withState(BalanceState.NEEDS_ATTENTION);
+        balanceFlagged = true;
+        log(now, Party.SYSTEM, why + " · provider and customer need to settle the balance");
     }
 
     private void moveTo(Instant newStart) {
@@ -501,7 +706,9 @@ public final class Booking {
 
     private Transition touch(Instant now, BookingStatus from, List<MoneyMove> moves, boolean moved) {
         updatedAt = now;
-        return new Transition(from, status, moves, moved);
+        boolean flagged = balanceFlagged;
+        balanceFlagged = false;
+        return new Transition(from, status, moves, moved, flagged);
     }
 
     private Transition unchanged() {
@@ -667,6 +874,15 @@ public final class Booking {
 
     public long providerFeeMinor() {
         return providerFeeMinor;
+    }
+
+    public BalanceCharge balance() {
+        return balance;
+    }
+
+    /** True for a completed booking the customer may review. */
+    public boolean reviewable() {
+        return status == BookingStatus.COMPLETED;
     }
 
     public String reason() {

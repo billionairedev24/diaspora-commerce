@@ -98,9 +98,12 @@ class BookingTest {
         Booking.Cancellation c = b.cancel(Party.CUSTOMER, "Travelling", thirtyHoursBefore, 1500);
         assertThat(c.quote()).isEqualTo(quote);
         assertThat(c.transition().to()).isEqualTo(BookingStatus.CANCELLED_CUSTOMER);
-        assertThat(c.transition().moves()).containsExactly(new MoneyMove(MoneyKind.REFUND, MoneyMove.DEPOSIT, 2_000,
-                false), new MoneyMove(MoneyKind.SETTLE, null, 0, false));
+        assertThat(c.transition().moves()).containsExactly(new MoneyMove(MoneyKind.RELEASE_REMAINING, null, 0, false),
+                new MoneyMove(MoneyKind.REFUND, MoneyMove.DEPOSIT, 2_000, false),
+                new MoneyMove(MoneyKind.SETTLE, null, 0, false));
         assertThat(b.refundedMinor()).isEqualTo(2_000);
+        assertThat(b.releasedMinor()).isEqualTo(14_000);
+        assertThat(b.balance().state()).isEqualTo(BalanceState.RELEASED);
     }
 
     @Test
@@ -121,7 +124,8 @@ class BookingTest {
         assertThat(c.quote().providerFeeMinor()).isEqualTo(1_500);
         assertThat(c.transition().to()).isEqualTo(BookingStatus.CANCELLED_PROVIDER);
         assertThat(b.providerFeeMinor()).isEqualTo(1_500);
-        assertThat(c.transition().moves()).extracting(MoneyMove::kind).containsExactly(MoneyKind.REFUND);
+        assertThat(c.transition().moves()).extracting(MoneyMove::kind)
+                .containsExactly(MoneyKind.RELEASE_REMAINING, MoneyKind.REFUND);
     }
 
     @Test
@@ -177,8 +181,8 @@ class BookingTest {
 
         Transition declined = b.declineNewTime(Party.CUSTOMER, NOW);
         assertThat(declined.to()).isEqualTo(BookingStatus.CANCELLED_PROVIDER);
-        assertThat(declined.moves()).containsExactly(new MoneyMove(MoneyKind.REFUND, MoneyMove.DEPOSIT, 4_000,
-                false));
+        assertThat(declined.moves()).containsExactly(new MoneyMove(MoneyKind.RELEASE_REMAINING, null, 0, false),
+                new MoneyMove(MoneyKind.REFUND, MoneyMove.DEPOSIT, 4_000, false));
     }
 
     @Test
@@ -200,7 +204,9 @@ class BookingTest {
         Booking depositOnly = Fixtures.confirmed(CancellationPolicy.moderate());
         Transition kept = depositOnly.markNoShow(Fixtures.START.plusSeconds(60));
         assertThat(kept.to()).isEqualTo(BookingStatus.NO_SHOW);
-        assertThat(kept.moves()).extracting(MoneyMove::kind).containsExactly(MoneyKind.SETTLE);
+        assertThat(kept.moves()).extracting(MoneyMove::kind)
+                .containsExactly(MoneyKind.RELEASE_REMAINING, MoneyKind.SETTLE);
+        assertThat(depositOnly.releasedMinor()).isEqualTo(14_000);
 
         Booking full = Fixtures.confirmed(CancellationPolicy.custom(new CustomPolicySettings(48, false, 0, 0,
                 NoShowRule.FULL, 24, 2)));

@@ -17,15 +17,19 @@ channels:
       bookingsRescheduled: {$ref: '#/components/messages/bookingsRescheduled'}
       bookingsCompleted: {$ref: '#/components/messages/bookingsCompleted'}
       bookingsNoShow: {$ref: '#/components/messages/bookingsNoShow'}
+      bookingsBalanceUnpaid: {$ref: '#/components/messages/bookingsBalanceUnpaid'}
       bookingsServiceUpserted: {$ref: '#/components/messages/bookingsServiceUpserted'}
   bookingsPaymentEvents:
     address: at.payment.events
     description: >-
       payments-service intent events bookings consumes (consumer group bookings-service, inbox consumer
-      bookings.payment-events). Only orders whose id is a booking reference (BK-…) are used.
+      bookings.payment-events). Only orders whose id is a booking reference (BK-…) are used. Events with
+      parentPaymentId (offSession = true) are about the off-session balance charge of a long-dated booking, not the
+      booking's original deposit authorisation.
     messages:
       bookingsPaymentIntentSucceeded: {$ref: '#/components/messages/paymentsIntentSucceeded'}
       bookingsPaymentIntentFailed: {$ref: '#/components/messages/paymentsIntentFailed'}
+      bookingsPaymentIntentActionRequired: {$ref: '#/components/messages/paymentsIntentActionRequired'}
   bookingsSellerComplianceEvents:
     address: at.seller-compliance.events
     description: >-
@@ -41,13 +45,21 @@ operations:
     channel: {$ref: '#/channels/bookingsEvents'}
     summary: >-
       bookings-service publishes via its transactional outbox. notifications sends booking.confirmed to the customer;
-      search indexes booking.service.upserted.
+      search indexes booking.service.upserted. booking.balance_unpaid flags a long-dated booking whose balance could
+      not be charged off-session on the saved card (declined after every attempt, or not authorised by completion)
+      so the provider and the customer can settle it; customers asked to authenticate an off-session charge are
+      reached through payments' payments.intent.action_required.
   consumeBookingsPaymentEvents:
     action: receive
     channel: {$ref: '#/channels/bookingsPaymentEvents'}
     summary: >-
-      payments.intent.succeeded → the deposit is authorised: PENDING_PAYMENT becomes REQUESTED (or CONFIRMED with the
-      deposit captured for instant-booking providers); payments.intent.failed records the failure (slot stays held).
+      Without parentPaymentId: payments.intent.succeeded → the deposit is authorised: PENDING_PAYMENT becomes
+      REQUESTED (or CONFIRMED with the deposit captured for instant-booking providers); payments.intent.failed records
+      the failure (slot stays held). With parentPaymentId (the booking's off-session balance charge; events of older
+      charges are ignored): intent.succeeded → balance AUTHORIZED (captured on completion, or straight away when the
+      booking is already completed); intent.action_required → ACTION_REQUIRED (the customer confirms with the
+      charge's client secret from GET /v1/bookings/{id}/balance-payment); intent.failed → a declined attempt, retried
+      with a new Idempotency-Key until the attempt limit, then booking.balance_unpaid.
   consumeBookingsSellerComplianceEvents:
     action: receive
     channel: {$ref: '#/channels/bookingsSellerComplianceEvents'}
@@ -76,7 +88,9 @@ components:
       payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
     bookingsCancelled:
       name: booking.cancelled
-      title: Cancelled by the customer (policy refund) or the provider (full refund, late fee under 24 h)
+      title: >-
+        Cancelled by the customer (policy refund) or the provider (full refund, late fee under 24 h); after the
+        deposit capture the rest of the authorisation is released (or the off-session balance charge cancelled)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
     bookingsRescheduleRequested:
@@ -96,12 +110,21 @@ components:
       payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
     bookingsCompleted:
       name: booking.completed
-      title: Appointment completed (by the provider or automatically 48 h after); balance charged, settlement hold started
+      title: >-
+        Appointment completed (by the provider or automatically 48 h after); balance charged (on the original
+        authorisation or the off-session charge), settlement hold started
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
     bookingsNoShow:
       name: booking.no_show
-      title: Customer didn't show; deposit kept (or full price per policy)
+      title: Customer didn't show; deposit kept and the rest of the authorisation released (or full price per policy)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsBalanceUnpaid:
+      name: booking.balance_unpaid
+      title: >-
+        Long-dated booking whose balance could not be charged off-session on the saved card (declined after every
+        attempt, or not authorised by completion): the provider and the customer need to settle it
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
     bookingsServiceUpserted:
@@ -150,6 +173,15 @@ components:
         providerFeeMinor: {type: integer, format: int64, description: Late provider-cancellation fee}
         reason: {type: [string, 'null']}
         cancelledBy: {type: [string, 'null'], enum: [CUSTOMER, PROVIDER, SYSTEM, null]}
+        balanceMinor: {type: integer, format: int64, description: Price minus deposit}
+        balanceState:
+          type: string
+          description: >-
+            Where the balance stands. Long-dated bookings release the balance hold after the deposit capture (DUE)
+            and charge it off-session on the saved card before the appointment.
+          enum: [ON_AUTHORISATION, DUE, PROCESSING, ACTION_REQUIRED, FAILED, AUTHORIZED, CAPTURED, NEEDS_ATTENTION,
+                 RELEASED]
+        balanceFailure: {type: [string, 'null'], description: Why the last off-session attempt failed}
     BookingsServiceEvent:
       type: object
       required: [serviceId, orgId, name, category, durationMinutes, priceMinor, depositMinor, currency, modes, active]
