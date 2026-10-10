@@ -37,7 +37,7 @@
 - Unwrapped errors from interfaces and external packages fail lint","E01","","High","2","foundation go quality","foundation","Done"
 "S010","Story","Container images for Java and Go services","Distroless Go images and layered Spring Boot images, non-root, with Jib as CI alternative.","- Go images are built FROM distroless/static:nonroot and are under 60 MB
 - Java images use layered jars on eclipse-temurin:25-jre and run as uid 1000
-- Images default to APP_ENV/SPRING_PROFILES_ACTIVE=prod and port 8080","E01","","High","3","foundation docker","foundation","In Progress"
+- Images default to APP_ENV/SPRING_PROFILES_ACTIVE=prod and port 8080","E01","","High","3","foundation docker","foundation","Done"
 "S011","Story","Backlog CSV with Jira import format","Maintain this backlog as a Jira-importable CSV and mark stories Done as they are completed.","- docs/backlog/backlog.csv imports into Jira with epics, parent links, priority, points, labels and status
 - tools/backlog/mark.py sets a story status by issue id
 - Every completed story is marked Done in the same commit as the work","E01","","High","2","foundation process","foundation","Done"
@@ -538,10 +538,10 @@
 "S181","Story","Cloudflare edge as code","DNS, WAF rules, rate limits, Turnstile and Workers routes in Terraform.","- WAF managed rules on all hostnames
 - Authenticated Origin Pulls to the cluster ingress","E29","","High","5","infra cloudflare","infra","Done"
 "S182","Story","Cost optimisation baseline","Arm nodes, spot pools, scale-to-zero previews, ILM tiers and tail sampling.","- Preview namespaces scale to zero when idle
-- Elasticsearch ILM hot-warm-frozen policies defined","E29","","Medium","5","infra finops","infra","To Do"
+- Elasticsearch ILM hot-warm-frozen policies defined","E29","","Medium","5","infra finops","infra","Done"
 "S183","Story","Secrets via External Secrets Operator","AWS Secrets Manager, GCP Secret Manager or Azure Key Vault behind ESO.","- No secret values in git
 - Same ExternalSecret manifests work on all three clouds","E29","","High","3","infra security","infra","Done"
-"E30","Epic","CI/CD, environments & Kubernetes deployment","Each service built, tested, signed and deployed independently to local/dev/uat/prod on the chosen cloud.","","","CI/CD, environments & Kubernetes deployment","High","","cicd","cicd","In Progress"
+"E30","Epic","CI/CD, environments & Kubernetes deployment","Each service built, tested, signed and deployed independently to local/dev/uat/prod on the chosen cloud.","","","CI/CD, environments & Kubernetes deployment","High","","cicd","cicd","Done"
 "S184","Story","Helm library chart and per-service charts","Shared at-service library chart; every service has its own chart and values per environment.","- helm template works for every service and environment
 - Charts include Deployment, Service, HPA, PDB, ServiceMonitor, NetworkPolicy and ExternalSecret","E30","","Highest","5","cicd k8s","cicd","Done"
 "S185","Story","Per-service GitHub Actions workflows","Path-filtered workflows calling reusable Java/Go pipelines.","- A change to one service builds and tests only that service
@@ -552,7 +552,7 @@
 - Automatic rollback on SLO breach; prod promotion needs approval","E30","","High","8","cicd k8s","cicd","Done"
 "S188","Story","Environment configuration: local, dev, uat, prod","Profile/config per environment for every service and app.","- Spring profiles application-<env>.yml and Go config/<env>.yaml
 - Docs pages on in local/dev/uat, off in prod
-- Trace sampling 100% dev, 50% uat, 10% prod","E30","","Highest","3","cicd config","cicd","In Progress"
+- Trace sampling 100% dev, 50% uat, 10% prod","E30","","Highest","3","cicd config","cicd","Done"
 "S189","Story","Web deploys to Cloudflare Workers with PR previews","OpenNext builds for storefront, Seller Center and staff console; Vercel fallback.","- Each PR gets a preview URL
 - Same build output deploys to Vercel if needed","E30","","High","5","cicd web cloudflare","cicd","Done"
 "S190","Story","Mobile builds with EAS","Expo EAS builds and store submissions per environment.","- Dev, preview and production channels
@@ -817,3 +817,6 @@
 "S267","Story","Spike: how pre-order delivery runs work end to end","Decision document with flows per actor, sequence and state diagrams, payment (authorise vs saved card + charge at cutoff), WhatsApp community and Business API options and costs, preorder inventory, batched routing, Bastrop economics with a break-even calculator, data model, risks, open questions and a phased rollout.","- Report in docs/spikes/preorder-delivery-runs.md with diagrams and cited sources
 - Economics calculator in tools/spikes with a Bastrop example
 - Product owner decisions recorded before S261-S264 are finalised","E34","","Highest","5","delivery-runs spike","delivery-runs","In Progress"
+"S268","Story","Remaining Java HIGH findings and Semgrep registry triage","Pin jackson-core/databind and json-smart to fixed versions across Java modules, triage Semgrep registry packs and make them blocking, and apply the S010 change requests (fixed build timestamp for reproducible Java jars, base images pinned by digest).","- Trivy fs reports no HIGH in Java Maven files
+- Semgrep registry rules are blocking after triage
+- Two clean Java image builds produce the same digest","E33","","High","3","security","quality","To Do"
