@@ -16,7 +16,7 @@
     <description>Placements, markets &amp; locations, site and legal config, cookie consent, feature flags (OFREP), newsletter and careers.</description>
 
     <properties>
-        <json-schema-validator.version>3.0.1</json-schema-validator.version>
+        <json-schema-validator.version>3.0.8</json-schema-validator.version>
     </properties>
 
     <dependencies>
