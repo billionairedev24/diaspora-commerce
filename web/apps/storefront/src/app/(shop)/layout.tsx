@@ -1,3 +1,4 @@
+import { preorderQueries } from '@afrotransact/api-client';
 import { dehydrate, HydrationBoundary } from '@tanstack/react-query';
 import { type ReactNode, Suspense } from 'react';
 
@@ -16,7 +17,9 @@ export default async function ShopLayout({ children }: { children: ReactNode }) 
     qc.prefetchQuery(siteQueries.home(api)),
     qc.prefetchQuery(siteQueries.deliveryLocation(api)),
     qc.prefetchQuery(accountQueries.me(api)),
-    qc.prefetchQuery(cartQueries.current(api))
+    qc.prefetchQuery(cartQueries.current(api)),
+    qc.prefetchQuery(preorderQueries.resolution(api)),
+    qc.prefetchQuery(preorderQueries.open(api))
   ]);
   return (
     <HydrationBoundary state={dehydrate(qc)}>

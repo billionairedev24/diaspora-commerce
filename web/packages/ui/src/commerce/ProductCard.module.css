@@ -29,3 +29,23 @@
 }
 
 .imageLink { display: block; border-radius: var(--at-radius-xs); }
+
+/* Pre-order availability (S273): badge on the image, tag line instead of the delivery promise. */
+.withBadge { position: relative; }
+.preBadge {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  padding: 1px 6px;
+  border-radius: var(--at-radius-xs);
+  background: var(--at-ink-1000);
+  color: var(--at-gold-500);
+  font-size: var(--at-text-2xs);
+  font-weight: var(--at-weight-black);
+  letter-spacing: var(--at-tracking-caps);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.availability { font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); }
+.availabilityGold { color: var(--at-gold-800); }
+.availabilityMuted { color: var(--at-ink-600); }

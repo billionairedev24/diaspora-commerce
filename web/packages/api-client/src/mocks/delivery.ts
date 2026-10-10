@@ -3,7 +3,7 @@
 import { type DeliveryOption } from '../schemas/cart';
 import { type DeliveryPromise } from '../schemas/catalog';
 import { type DeliveryLocation } from '../schemas/location';
-import { ADDRESSES, FULFILMENT_CENTRES, GEO, PICKUP_POINTS, ZIP_PREFIXES } from './fixtures/geo';
+import { ADDRESSES, FULFILMENT_CENTRES, GEO, PICKUP_POINTS, ZIP_PREFIXES, ZIP_PREFIXES_LONG } from './fixtures/geo';
 
 export const DEFAULT_ZIP = '77042';
 export const SELLER_SHIPPING_MINOR = 599;
@@ -44,7 +44,7 @@ const geoOf = (metro: string): [number, number] => GEO[metro] ?? GEO['Houston, T
 
 export function locationForZip(zip: string): DeliveryLocation | null {
   if (!/^\d{5}$/.test(zip)) return null;
-  const metro = ZIP_PREFIXES[zip.slice(0, 2)];
+  const metro = ZIP_PREFIXES_LONG[zip] ?? ZIP_PREFIXES_LONG[zip.slice(0, 3)] ?? ZIP_PREFIXES[zip.slice(0, 2)];
   if (!metro) return null;
   const [city = '', state = ''] = metro.split(', ');
   return { zip, city, state, label: `${city} ${zip}`, serviceable: true };

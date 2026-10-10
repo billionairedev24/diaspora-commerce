@@ -6,9 +6,13 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
+import { AttributionCapture } from '@/components/preorder/AttributionCapture';
+import { PREORDER_PATH, PreorderBanners } from '@/components/preorder/PreorderBanners';
 import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries, cartQueries, DEPARTMENTS_LIST, searchHref, siteQueries } from '@/lib/api/queries';
+import { setAttribution } from '@/lib/preorder/attribution';
+import { useOpenPreorders, usePreorderResolution } from '@/lib/preorder/usePreorder';
 
 import { AccountMenu } from './AccountMenu';
 import { AnnouncementBar } from './AnnouncementBar';
@@ -30,6 +34,9 @@ export function Header() {
   const count = cart?.itemCount ?? 0;
   const label = location?.label ?? '';
   const activeDept = pathname === '/s' ? params.get('dept') : null;
+  const { data: preorder } = usePreorderResolution();
+  const { data: openPreorders } = useOpenPreorders();
+  const showPreorderNav = !!preorder?.on || (openPreorders?.windows.length ?? 0) > 0;
 
   return (
     <>
@@ -75,6 +82,19 @@ export function Header() {
                 {t('nav.all')}
               </Link>
             </li>
+            {showPreorderNav && (
+              <li>
+                <Link
+                  href={PREORDER_PATH}
+                  className={`${styles.navItem} ${styles.navBold}`}
+                  aria-current={pathname === PREORDER_PATH ? 'page' : undefined}
+                  onClick={() => setAttribution('page', { po: preorder?.window?.code })}
+                >
+                  <CalendarCheck weight="fill" aria-hidden />
+                  {t('nav.preorder')}
+                </Link>
+              </li>
+            )}
             <li>
               <button type="button" className={styles.navItem} onClick={() => lola.open()} aria-haspopup="dialog">
                 <Sparkle weight="fill" className={styles.gold} aria-hidden />
@@ -122,6 +142,8 @@ export function Header() {
         </nav>
       </header>
       <AnnouncementBar />
+      <PreorderBanners />
+      <AttributionCapture />
       <DeliverToDialog open={locOpen} onOpenChange={setLocOpen} />
     </>
   );

@@ -8,6 +8,7 @@ import { useMemo } from 'react';
 import { useT } from '@/i18n/t';
 import { lineForOffer, useCart, useCartMutation } from '@/lib/cart/useCart';
 import { productHref } from '@/lib/links';
+import { useAvailability } from '@/lib/preorder/useAvailability';
 
 import { ProductLink } from './ProductLink';
 
@@ -31,18 +32,20 @@ export function useCardLabels() {
   );
 }
 
-/** Product card wired to the cart: "Add to cart" becomes a −/+ stepper capped by stock. */
+/** Product card wired to the cart: "Add to cart" becomes a −/+ stepper capped by stock; pre-order badge and lock (S273). */
 export function CartAwareProductCard({ product, variant = 'grid' }: { product: ProductSummary; variant?: 'grid' | 'rail' }) {
   const cardLabels = useCardLabels();
   const fmt = useFormatters();
   const { data: cart } = useCart();
   const m = useCartMutation();
   const line = lineForOffer(cart, product.offerId);
+  const availability = useAvailability(product.preorderEligible);
   return (
     <ProductCard
       product={product}
       href={productHref(product.atin)}
       variant={variant}
+      availability={availability.card}
       linkAs={ProductLink}
       labels={cardLabels}
       locale={fmt.tag}

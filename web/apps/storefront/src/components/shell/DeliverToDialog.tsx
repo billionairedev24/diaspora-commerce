@@ -1,6 +1,6 @@
 'use client';
 
-import { cartKeys, isApiError, productKeys, searchKeys, siteKeys, ZipSchema } from '@afrotransact/api-client';
+import { cartKeys, isApiError, preorderKeys, productKeys, searchKeys, siteKeys, ZipSchema } from '@afrotransact/api-client';
 import { AddressAutocomplete, type AddressSuggestionItem, Button, Crosshair, Dialog, type SearchAddresses, useToast } from '@afrotransact/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
@@ -30,7 +30,7 @@ export function DeliverToDialog({ open, onOpenChange }: { open: boolean; onOpenC
       try {
         const loc = await browserApi().setDeliveryLocation(input);
         qc.setQueryData(siteKeys.deliveryLocation(), loc);
-        await Promise.all([siteKeys.home(), searchKeys.all, productKeys.all, cartKeys.all].map((queryKey) => qc.invalidateQueries({ queryKey })));
+        await Promise.all([siteKeys.home(), searchKeys.all, productKeys.all, cartKeys.all, preorderKeys.all].map((queryKey) => qc.invalidateQueries({ queryKey })));
         onOpenChange(false);
         setValue('');
         setError(null);

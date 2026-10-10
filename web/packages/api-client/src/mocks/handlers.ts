@@ -17,6 +17,7 @@ import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
+import { preorderHandlers } from './preorder-handlers';
 import {
   addToCart,
   buildCart,
@@ -284,6 +285,7 @@ export const handlers = [
   })),
 
   /* Addresses, payments, orders, returns, security, checkout, services & bookings, Lola */
-  ...shopperHandlers
+  ...shopperHandlers,
+  ...preorderHandlers
 ];
 

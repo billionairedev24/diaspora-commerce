@@ -32,6 +32,7 @@ import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, me
 import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
+import { nextPreorderNumber, preorderCheckoutPackage } from './preorders';
 import { buildCart, MockProblem, sessionLocation } from './service';
 import { account, type AccountState, bookingFor, MOCK_REFUND_QUOTE, type MockOrder, PROVIDERS, seq, SERVICES } from './shopper-state';
 
@@ -116,6 +117,8 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
     })
     .filter((p) => p.lines.length > 0)
     .map((p) => {
+      // Pre-order package (S273): delivered on the window's date, door or the window's pickup point.
+      if (p.preorder) return preorderCheckoutPackage(p);
       const isAT = p.fulfilment === 'AFROTRANSACT';
       const days = (o: DeliveryOption) => (o.key === 'express' || o.key === 'afrotransact_delivery' ? 1 : o.key === 'pickup' ? 0 : Math.max(1, p.delivery.days));
       if (p.fulfilment === 'AFROTRANSACT_DELIVERY') {
@@ -153,9 +156,9 @@ function summary(ctx: Ctx, addressId: string | null): CheckoutSummary {
     sellerCount: new Set(packages.map((p) => p.seller.id)).size, publishableKey: MOCK_PUBLISHABLE_KEY };
 }
 
-function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string; totalMinor: number; order: MockOrder }): OrderConfirmation {
+function confirmation(c: { orderNumber: string; status: OrderConfirmation['status']; clientSecret: string; totalMinor: number; order: MockOrder; preorder?: OrderConfirmation['preorder'] }): OrderConfirmation {
   return { orderNumber: c.orderNumber, status: c.status, paymentClientSecret: c.clientSecret, totalMinor: c.totalMinor, currency: 'USD',
-    shipments: c.order.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, eta: s.promisedBy ?? '', deliveryCode: s.deliveryCode })) };
+    shipments: c.order.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, eta: s.promisedBy ?? '', deliveryCode: s.deliveryCode })), preorder: c.preorder ?? null };
 }
 
 /* ── Returns ───────────────────────────────────────────────────── */
@@ -513,6 +516,11 @@ export const shopperHandlers = [
     if (!req.paymentMethodId && !req.wallet) errors.paymentMethodId = 'Choose a payment method';
     if (req.paymentMethodId && !a.paymentMethods.some((x) => x.id === req.paymentMethodId)) errors.paymentMethodId = 'Unknown payment method';
     const s = summary(ctx, req.addressId);
+    const locked = s.packages.find((p) => p.preorder && p.preorder.stage !== 'OPEN');
+    if (locked?.preorder)
+      throw new MockProblem(422, 'PREORDER_NOT_OPEN', 'Pre-order not open', locked.preorder.stage === 'UPCOMING'
+        ? `${locked.preorder.name} hasn’t opened yet. Pre-order items stay in your cart until then.`
+        : `${locked.preorder.name} has closed. Remove those items to check out, or call us about a late add.`, { errors: { deliverySelections: 'Pre-order not open' } });
     const far = s.packages.find((p) => p.localDelivery && !p.localDelivery.available);
     if (far?.localDelivery)
       throw new MockProblem(422, 'DELIVERY_OUT_OF_RANGE', 'Too far for AfroTransact Delivery', far.localDelivery.message ?? 'A seller’s store is too far from this address.', {
@@ -552,8 +560,14 @@ export const shopperHandlers = [
       discountMinor: 0, totalMinor: s.subtotalMinor + shipping + tax, shipTo: `${addr?.line1}, ${addr?.city}`,
       shippingAddress: addr ? { name: addr.name, line1: addr.line1, line2: addr.line2, city: addr.city, state: addr.state, zip: addr.zip } : null, shipments,
       perishable: new Set(s.packages.flatMap((p) => p.lines.filter((l) => l.perishable).map((l) => l.lineId))) };
+    const pre = s.packages.find((p) => p.preorder)?.preorder;
     const pending = { orderNumber, clientSecret: `pi_mock_${n}_secret_mock`, totalMinor: order.totalMinor, status: 'awaiting_payment' as const, order,
-      lineIds: s.packages.flatMap((p) => p.lines.map((l) => l.lineId)) };
+      lineIds: s.packages.flatMap((p) => p.lines.map((l) => l.lineId)),
+      attribution: req.attribution ?? null,
+      preorder: pre
+        ? { number: nextPreorderNumber(pre.code, pre.windowId), windowName: pre.name, deliversOn: pre.deliversOn, closesAt: pre.closesAt, timeZone: pre.timeZone,
+            otherItemCount: s.packages.filter((p) => !p.preorder).reduce((a, p) => a + p.itemCount, 0) }
+        : null };
     a.checkouts.set(key, pending);
     return json(confirmation(pending), 201);
   })),

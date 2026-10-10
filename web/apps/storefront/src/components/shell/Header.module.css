@@ -47,7 +47,7 @@
 .cartLabel { font-size: var(--at-text-md); font-weight: var(--at-weight-bold); }
 
 .nav { background: var(--at-color-subheader-bg); }
-.navList { display: flex; align-items: center; gap: var(--at-space-1); margin: 0; padding: var(--at-space-1) var(--at-page-gutter); list-style: none; flex-wrap: wrap; font-size: var(--at-text-md); }
+.navList { display: flex; align-items: center; gap: var(--at-space-1); margin: 0; padding: var(--at-space-1) var(--at-page-gutter); list-style: none; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; font-size: var(--at-text-md); }
 
 .navItem {
   flex: none;
@@ -77,12 +77,12 @@
   .locText, .lolaLabel { display: none; }
 }
 
-/* <900px: the search box moves to its own full-width row; the department bar scrolls sideways (no scrollbar). */
+/* <900px: the search box moves to its own full-width row. The department bar never wraps: it scrolls sideways at every
+   width (no visible scrollbar, global rule in tokens.css). */
 @media (max-width: 899px) {
   .bar { flex-wrap: wrap; }
   .search { order: 10; flex-basis: 100%; min-width: 0; }
   .spacer { flex: 1; }
-  .navList { flex-wrap: nowrap; overflow-x: auto; }
   .cartLabel { display: none; }
 }
 

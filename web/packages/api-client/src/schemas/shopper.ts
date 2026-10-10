@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { PreorderAttributionSchema, PreorderConfirmationSchema } from '../preorders';
 import { AddressSchema, PaymentMethodSchema, ReturnSummarySchema } from './account';
 import { CartPackageSchema } from './cart';
 import { MinorSchema } from './common';
@@ -282,7 +283,9 @@ export const PlaceOrderRequestSchema = z.object({
   wallet: WalletSchema.optional(),
   gift: z.boolean().optional(),
   couponCode: z.string().max(20).optional(),
-  deliverySelections: z.array(DeliverySelectionSchema)
+  deliverySelections: z.array(DeliverySelectionSchema),
+  /** Last-touch channel (?src=&cr=&po= or the on-site pre-order placement), stored on the order (S273). */
+  attribution: PreorderAttributionSchema.optional()
 });
 export type PlaceOrderRequest = z.infer<typeof PlaceOrderRequestSchema>;
 
@@ -292,7 +295,9 @@ export const OrderConfirmationSchema = z.object({
   paymentClientSecret: nullableString.optional(),
   totalMinor: MinorSchema,
   currency: z.string(),
-  shipments: z.array(z.object({ shipmentId: z.string(), label: z.string(), eta: z.string(), deliveryCode: nullableString.optional() }))
+  shipments: z.array(z.object({ shipmentId: z.string(), label: z.string(), eta: z.string(), deliveryCode: nullableString.optional() })),
+  /** Present when the order holds a pre-order package (the "You're in" confirmation). */
+  preorder: PreorderConfirmationSchema.nullable().optional()
 });
 export type OrderConfirmation = z.infer<typeof OrderConfirmationSchema>;
 

@@ -72,8 +72,22 @@ export const defaultProductCardLabels: ProductCardLabels = {
   reviews: (c) => c
 };
 
+/** Pre-order / delivery availability for the shopper's place (storefront pre-orders, S273). */
+export interface ProductCardAvailability {
+  /** Badge on the image, e.g. "Pre-order" (omit when the item is not a pre-order or the badge placement is off). */
+  badge?: string;
+  /** Line under the price that replaces the delivery promise: "Pre-order · delivered Oct 25", "Ships now · UPS Ground 3–5 days". */
+  tag: string;
+  /** gold while a pre-order is open, muted otherwise. */
+  tone?: 'gold' | 'muted';
+  /** When set, adding is blocked and the add button shows this label ("Opens Oct 15", "Closed", "Unavailable"). */
+  lockedLabel?: string | null;
+}
+
 export interface ProductCardProps {
   product: ProductCardData;
+  /** Pre-order badge, tag line and add-to-cart lock. */
+  availability?: ProductCardAvailability;
   href: string;
   variant?: 'grid' | 'rail';
   /** Units of the buy-box offer already in the cart (turns "Add to cart" into a stepper). */
@@ -101,20 +115,31 @@ function DefaultLink({ href, className, children, ...rest }: LinkLikeProps) {
 const moneyIn = (locale: string) => (m: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(m / 100);
 
 /** Product card for search results (grid) and home rows (rail), with the fulfilment badge and cart controls. */
-export function ProductCard({ product: p, href, variant = 'grid', quantityInCart = 0, onAdd, onQuantityChange, onRemove, busy, linkAs: Link = DefaultLink, labels, locale = 'en-US', className }: ProductCardProps) {
+export function ProductCard({ product: p, href, variant = 'grid', availability: av, quantityInCart = 0, onAdd, onQuantityChange, onRemove, busy, linkAs: Link = DefaultLink, labels, locale = 'en-US', className }: ProductCardProps) {
   const money = moneyIn(locale);
   const L = { ...defaultProductCardLabels, ...labels };
   const isPlatform = p.sellerKind === 'PLATFORM';
-  const delivery = (
+  const delivery = av ? (
+    <span className={cx(styles.availability, av.tone === 'gold' ? styles.availabilityGold : styles.availabilityMuted)} data-testid="card-availability">
+      {av.tag}
+    </span>
+  ) : (
     <span className={styles.eta}>
       {p.delivery.prefix} <strong>{p.delivery.label}</strong>
     </span>
   );
+  const badge = av?.badge ? (
+    <span className={styles.preBadge} data-testid="preorder-badge">
+      {av.badge}
+    </span>
+  ) : null;
+  const locked = !!av?.lockedLabel;
   if (variant === 'rail') {
     return (
       <article className={cx(styles.rail, className)}>
-        <Link href={href} className={styles.imageLink} tabIndex={-1} aria-label={p.title}>
+        <Link href={href} className={cx(styles.imageLink, styles.withBadge)} tabIndex={-1} aria-label={p.title}>
           <ImagePlaceholder src={p.imageUrl} alt={p.title} />
+          {badge}
         </Link>
         <Link href={href} className={styles.title}>
           {p.title}
@@ -128,8 +153,9 @@ export function ProductCard({ product: p, href, variant = 'grid', quantityInCart
   }
   return (
     <article className={cx(styles.card, className)} aria-label={p.title}>
-      <Link href={href} className={styles.media} tabIndex={-1} aria-label={p.title}>
+      <Link href={href} className={cx(styles.media, styles.withBadge)} tabIndex={-1} aria-label={p.title}>
         <ImagePlaceholder src={p.imageUrl} alt={p.title} />
+        {badge}
       </Link>
       <div className={styles.body}>
         {p.sponsor && <span className={styles.sponsored}>{L.sponsored(p.sponsor.advertiser)}</span>}
@@ -161,13 +187,17 @@ export function ProductCard({ product: p, href, variant = 'grid', quantityInCart
             <QuantityStepper
               block
               value={quantityInCart}
-              max={Math.min(p.availableQty, 99)}
+              max={locked ? quantityInCart : Math.min(p.availableQty, 99)}
               onChange={(q) => onQuantityChange?.(q)}
               onRemove={onRemove}
               busy={busy}
               format={L.inCart}
               itemLabel={p.title}
             />
+          ) : locked ? (
+            <Button size="sm" block disabled aria-label={`${av?.lockedLabel}: ${p.title}`}>
+              {av?.lockedLabel}
+            </Button>
           ) : (
             <Button size="sm" block onClick={onAdd} loading={busy} aria-label={`${L.addToCart}: ${p.title}`}>
               {L.addToCart}

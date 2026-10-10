@@ -1,7 +1,7 @@
 /* Locations, fulfilment centres and addresses from the prototype (GEO, FCS, ZIPS, ADDRS, STREETS, STATES). */
 
 export const GEO: Record<string, [number, number]> = {
-  'Houston, TX': [29.76, -95.37], 'Bronx, NY': [40.84, -73.87], 'Brooklyn, NY': [40.68, -73.94], 'Silver Spring, MD': [38.99, -77.03], 'Atlanta, GA': [33.75, -84.39],
+  'Houston, TX': [29.76, -95.37], 'Lubbock, TX': [33.58, -101.86], 'Amarillo, TX': [35.22, -101.83], 'El Paso, TX': [31.76, -106.49], 'Midland, TX': [32.0, -102.08], 'Odessa, TX': [31.85, -102.37], 'Laredo, TX': [27.51, -99.51], 'Bronx, NY': [40.84, -73.87], 'Brooklyn, NY': [40.68, -73.94], 'Silver Spring, MD': [38.99, -77.03], 'Atlanta, GA': [33.75, -84.39],
   'Columbus, OH': [39.96, -83.0], 'Minneapolis, MN': [44.98, -93.27], 'Edison, NJ': [40.52, -74.41], 'Miami, FL': [25.76, -80.19], 'Daly City, CA': [37.69, -122.47],
   'Los Angeles, CA': [34.05, -118.24], 'Charlotte, NC': [35.23, -80.84], 'Dallas, TX': [32.78, -96.8], 'Newark, NJ': [40.74, -74.17], 'Chicago, IL': [41.88, -87.63], 'Seattle, WA': [47.61, -122.33]
 };
@@ -9,6 +9,11 @@ export const GEO: Record<string, [number, number]> = {
 export const FULFILMENT_CENTRES: ReadonlyArray<[name: string, city: string]> = [
   ['Houston FC', 'Houston, TX'], ['Edison FC', 'Edison, NJ'], ['Atlanta FC', 'Atlanta, GA'], ['Los Angeles FC', 'Los Angeles, CA']
 ];
+
+/** Longer ZIP prefixes checked before ZIP_PREFIXES: West Texas pre-order cities (S273; not next-day metros). */
+export const ZIP_PREFIXES_LONG: Record<string, string> = {
+  '79761': 'Odessa, TX', '794': 'Lubbock, TX', '791': 'Amarillo, TX', '799': 'El Paso, TX', '797': 'Midland, TX', '780': 'Laredo, TX'
+};
 
 /** First two ZIP digits → serviceable metro. */
 export const ZIP_PREFIXES: Record<string, string> = {

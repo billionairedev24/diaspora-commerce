@@ -52,6 +52,23 @@ export const Unavailable: Story = {
 };
 export const Sponsored: Story = { args: { product: { ...jollof, sponsor: { advertiser: 'Kingston Kitchen' } } } };
 export const Rail: Story = { args: { variant: 'rail' } };
+/** Pre-order open in the shopper's city (S273): badge on the image, delivery day instead of the promise. */
+export const PreOrder: Story = {
+  args: { product: jollof, availability: { badge: 'Pre-order', tag: 'Pre-order · delivered Oct 25', tone: 'gold' } },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByTestId('preorder-badge')).toHaveTextContent('Pre-order');
+    await expect(canvas.getByText('Pre-order · delivered Oct 25')).toBeVisible();
+    await expect(canvas.getByRole('button', { name: `Add to cart: ${jollof.title}` })).toBeEnabled();
+  }
+};
+/** Window not open yet: adding is blocked with the opening date. */
+export const PreOrderLocked: Story = {
+  args: { product: jollof, availability: { badge: 'Pre-order', tag: 'Pre-order opens Oct 15', tone: 'muted', lockedLabel: 'Opens Oct 15' } },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole('button', { name: `Opens Oct 15: ${jollof.title}` })).toBeDisabled();
+    await expect(canvas.queryByRole('button', { name: /Add to cart/ })).toBeNull();
+  }
+};
 export const Loading: Story = { render: () => <div style={{ display: 'grid', gap: 8 }}><Skeleton height={220} /><Skeleton width="90%" /><Skeleton width="60%" /><Skeleton height={32} radius="999px" /></div> };
 export const RTL: Story = { ...rtl };
 export const Mobile: Story = { ...mobile };
