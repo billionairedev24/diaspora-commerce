@@ -176,11 +176,11 @@
 - Add address opens a dialog with address autocomplete
 - Add payment method supports card and US bank (ACH) via Stripe Elements
 - Apple Pay, Google Pay and Link quick-pay buttons
-- No 'use my current location' in checkout","E06","","Highest","8","checkout web","checkout","To Do"
+- No 'use my current location' in checkout","E06","","Highest","8","checkout web","checkout","In Progress"
 "S048","Story","Delivery choices per package","Carrier shipping, AfroTransact Delivery or pickup chosen per package with dates.","- Carrier options come from carrier-gateway rate shopping
 - AfroTransact Delivery offered only in served zones from nearby origins
 - Pickup locations show address, hours and ready time
-- Delivery instructions and preference captured; handover code required for perishables or hand delivery","E06","","High","8","checkout web delivery","checkout","To Do"
+- Delivery instructions and preference captured; handover code required for perishables or hand delivery","E06","","High","8","checkout web delivery","checkout","In Progress"
 "S049","Story","Delivery promise service","Delivery dates per ZIP from FC cutoffs, carrier SLAs and seller handling time.","- Promise shown on cards, PDP, cart and checkout
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
@@ -423,7 +423,7 @@
 - Every tool call is audited","E21","","High","8","ai java mcp","ai","Done"
 "S135","Story","Lola chat UI on web and mobile","Real chat with typing indicator, product cards, add-all-to-cart and suggestion chips.","- Opening greeting persists after first message
 - Messages stream token by token
-- Hand-off to human support with context","E21","","High","5","ai web mobile","ai","To Do"
+- Hand-off to human support with context","E21","","High","5","ai web mobile","ai","In Progress"
 "S136","Story","Seller and staff AI assistants","Listing writer/translator, tagline suggestions and trust-team triage summaries.","- AI drafts are editable and never auto-published
 - Triage summaries show sources","E21","","Medium","5","ai","ai","Done"
 "E22","Epic","Geo & address autocomplete","Every address field uses autocomplete (Google Places when keyed, OpenStreetMap Nominatim otherwise) with validation.","","","Geo & address autocomplete","High","","geo","geo","In Progress"
@@ -459,11 +459,11 @@
 - Create account uses the unified form","E23","","High","5","storefront-web web identity","storefront-web","Done"
 "S148","Story","Account pages: addresses, payments, orders, returns, login & security","Self-service account management.","- Addresses add/edit/remove/default with autocomplete
 - Payments add card or bank, remove, default
-- Returns flow with reason and refund amount","E23","","High","8","storefront-web web","storefront-web","To Do"
+- Returns flow with reason and refund amount","E23","","High","8","storefront-web web","storefront-web","In Progress"
 "S149","Story","Footer with configurable social links, about and careers","Beautiful footer with social icons from config, link columns, newsletter, app badges and language picker.","- Social links and phone come from site config (no deploy to change)
 - About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","Done"
 "S150","Story","Services browsing and provider pages","Find a provider, see their designed page and book.","- Provider page renders the provider's chosen layout and approved links
-- Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","To Do"
+- Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","In Progress"
 "E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","In Progress"
 "S151","Story","Seller Center app shell with grouped, fixed sidebar","Fixed sidebar grouped into collapsible sections; collapsed by default except the active group.","- Sidebar doesn't scroll with the page
 - Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","Done"
@@ -479,21 +479,21 @@
 - Seller roles: owner, admin, catalog, fulfilment, finance, ads, support","E24","","Medium","3","seller-center web rbac","seller-center","Done"
 "S156","Story","Provider Hub: calendar, hours, services, policy, public page, earnings","Provider tools inside the portal without a second sidebar.","- Calendar shows quick views and day summaries
 - Earnings show commission, Stripe fees and late-cancel fees","E24","","High","8","seller-center web bookings","seller-center","Done"
-"E25","Epic","Staff console (platform back office)","All platform tools gated by RBAC: applications, sellers, moderation, orders, payouts, inventory, dispatch, config.","","","Staff console (platform back office)","High","","staff-console","staff-console","To Do"
+"E25","Epic","Staff console (platform back office)","All platform tools gated by RBAC: applications, sellers, moderation, orders, payouts, inventory, dispatch, config.","","","Staff console (platform back office)","High","","staff-console","staff-console","In Progress"
 "S157","Story","Staff console shell with RBAC-filtered navigation","Grouped sidebar (Overview, Commerce, Partners, Finance, Growth, Trust & compliance, Settings) filtered by permissions.","- Menu items hidden when the role has no access
-- Dashboard opens by default","E25","","High","5","staff-console web","staff-console","To Do"
+- Dashboard opens by default","E25","","High","5","staff-console web","staff-console","In Progress"
 "S158","Story","Detail sheets with RBAC actions on every table","Clicking a row opens a sheet with all fields, activity and notes; actions follow permissions.","- Edit/New with validation where records are editable
-- Actions hidden or disabled when not permitted (and enforced server-side)","E25","","High","5","staff-console web","staff-console","To Do"
+- Actions hidden or disabled when not permitted (and enforced server-side)","E25","","High","5","staff-console web","staff-console","In Progress"
 "S159","Story","Platform configuration modules","Plans, coupons, pickup & delivery, markets, storefront settings, feature flags, fees, developers (API keys, webhooks, AI routing, identity providers).","- Each module gated by its own permission
 - Developers can create, revoke and rotate API keys
-- Identity provider toggles control which social logins appear","E25","","High","8","staff-console web","staff-console","To Do"
+- Identity provider toggles control which social logins appear","E25","","High","8","staff-console web","staff-console","In Progress"
 "S160","Story","Platform dashboard charts","Sales and net revenue, orders by department, applications by status, payouts vs refunds.","- Charts export PDF, Excel and CSV
-- Figures come from one dashboard feed","E25","","Medium","5","staff-console web exports","staff-console","To Do"
+- Figures come from one dashboard feed","E25","","Medium","5","staff-console web exports","staff-console","In Progress"
 "S161","Story","Server-side large exports","Background jobs build CSV/XLSX/PDF for thousands of rows and send a download link.","- Exports over 5k rows run asynchronously
 - Excel files contain native charts
-- Links expire after 24 hours","E25","","Medium","8","staff-console exports","staff-console","To Do"
+- Links expire after 24 hours","E25","","Medium","8","staff-console exports","staff-console","In Progress"
 "S162","Story","Customer support console","Order, payment and delivery timeline with refunds within role limits; Zendesk/Freshdesk integration.","- Refund limits per role enforced
-- Ticket links back to the order","E25","","Medium","5","staff-console support","staff-console","To Do"
+- Ticket links back to the order","E25","","Medium","5","staff-console support","staff-console","In Progress"
 "E26","Epic","Customer mobile app","Expo / React Native customer app: sign-in first, Face ID, shopping, tracking, returns, bookings and Lola.","","","Customer mobile app","High","","mobile","mobile","In Progress"
 "S163","Story","App shell with sign-in, Face ID and passcode","App opens on sign-in; Face ID and passcode set up after first sign-in; unlock on reopen.","- Five wrong passcodes force full sign-in
 - Sign out removes Face ID and passcode from the device
