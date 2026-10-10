@@ -7,3 +7,5 @@
 1821159fa5889654ebb56ae3f5356071fc45b479:java/services/identity/src/test/java/com/afrotransact/identity/it/DataProtectionIT.java:generic-api-key:58
 1821159fa5889654ebb56ae3f5356071fc45b479:java/services/identity/src/test/java/com/afrotransact/identity/it/DataProtectionIT.java:generic-api-key:60
 1821159fa5889654ebb56ae3f5356071fc45b479:java/services/identity/src/test/java/com/afrotransact/identity/it/DataProtectionIT.java:generic-api-key:61
+# Fake Android app origin (apk-key-hash) in the passkey ceremony test.
+bdd0f451e2ddf86e83988f3487c9219537227078:java/services/identity/src/test/java/com/afrotransact/identity/it/PasskeyCeremonyIT.java:generic-api-key:64
