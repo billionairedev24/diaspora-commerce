@@ -806,8 +806,8 @@ components:
     AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
     StaffModuleKey:
       type: string
-      description: Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived).
-      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications]
+      description: Sidebar modules; keys follow identity's platform module matrix (support, exports and notifications are derived; preorders follows the Pre-orders matrix column).
+      enum: [dash, exports, orders, catalog, inventory, retail, dispatch, apps, support, rbac, payouts, fees, marketing, disputes, audit, markets, siteCfg, dev, notifications, preorders]
     StaffUser:
       type: object
       required: [id, firstName, lastName, email, initials]

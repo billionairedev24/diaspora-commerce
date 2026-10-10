@@ -4,6 +4,7 @@ import { type ActivityEntry, type ExportJob, type ResourceKey } from '../../sche
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
+import { type MockPreorderState, seedPreorders } from './preorders';
 
 export type Scalar = string | number | boolean | null;
 
@@ -39,6 +40,8 @@ export interface MockStaffDb {
   dispatch: MockDispatch;
   /** notifications' versioned templates and their sample data (S268). */
   templates: { rows: MockTemplateRow[]; samples: Record<string, MockTemplateSample> };
+  /** delivery-runs' pre-order windows, orders, coverage and settings (S274). */
+  preorders: MockPreorderState;
   seq: number;
 }
 
@@ -402,6 +405,7 @@ function seed(now: Date): MockStaffDb {
     feeSchedules,
     dispatch: seedDispatch(now),
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
+    preorders: seedPreorders(now),
     seq: 1
   };
 }
@@ -409,6 +413,8 @@ function seed(now: Date): MockStaffDb {
 export function getStaffDb(): MockStaffDb {
   const g = globalThis as G;
   g[KEY] ??= seed(new Date());
+  // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
+  g[KEY].preorders ??= seedPreorders(g[KEY].now);
   return g[KEY];
 }
 

@@ -44,6 +44,12 @@ closes, it hands its orders to a **run** (the existing dispatch aggregate) for b
   `placements: {ribbon, hero, badge, pdp, cart, family}` (all default on),
   `areas: List<CoverageArea{key, on}>`. A city row overrides its region row; a region row covers every city in it.
 - `areaOn(country, region, city)` exactly as `at-preorder.js#areaOn`.
+- `payment` (back office › Pre-orders › Settings › Payment & fees, Full access only):
+  `doorFee` per currency (default USD 7.99), `pickupFee` (default 0), `pickupWindow` ("10am–2pm"),
+  `allowedMethods` {CARD, WALLET (Apple Pay / Google Pay / Link), ACH}, refund rule (cancel for a full refund incl.
+  the delivery fee until close), `lateAdd` {savedCard, paymentLink, linkExpiryHours = 24},
+  `missedDelivery` {offerRefund, offerNewDate}. Windows may override `doorFee` / `pickupFee` and set a pickup point.
+  Effective fees and methods flow through eligibility, resolve and the cart; nothing hard-codes $7.99.
 
 ### Resolution (`PreorderResolver`, domain service)
 `resolve(country, region, city, now)`: windows that are not drafts and cover the place; pick the first of
