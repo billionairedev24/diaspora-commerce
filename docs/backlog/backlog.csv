@@ -85,7 +85,7 @@
 - Recovery codes can be regenerated","E02","","Medium","5","identity","identity","Done"
 "S022","Story","Fine-grained authorisation with OpenFGA","Relationship checks seller_org → store → listing so members only touch their org's data.","- OpenFGA model covers org membership, store ownership and listing ownership
 - Catalog/orders services check org relationships for non-staff actors
-- A catalog member cannot access payouts","E02","","Medium","5","identity rbac","identity","To Do"
+- A catalog member cannot access payouts","E02","","Medium","5","identity rbac","identity","In Progress"
 "E03","Epic","Catalog & product builder","One product page per item (ATIN/GTIN), category-specific schemas, variants and category requests.","","","Catalog & product builder","High","","catalog","catalog","In Progress"
 "S023","Story","Catalog service skeleton with hexagonal layout and docs","Spring Boot catalog service with Flyway, outbox, security and API reference pages.","- Service starts on 8101 with local profile against docker compose Postgres
 - Swagger UI, /docs and /redoc render the API
@@ -464,7 +464,7 @@
 - About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","Done"
 "S150","Story","Services browsing and provider pages","Find a provider, see their designed page and book.","- Provider page renders the provider's chosen layout and approved links
 - Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","Done"
-"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","Done"
+"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","In Progress"
 "S151","Story","Seller Center app shell with grouped, fixed sidebar","Fixed sidebar grouped into collapsible sections; collapsed by default except the active group.","- Sidebar doesn't scroll with the page
 - Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","Done"
 "S152","Story","Orders management with labels and status updates","TanStack server-driven table; open rows in a sheet; buy labels; update allowed statuses.","- Sellers can confirm, pack and mark ready only
