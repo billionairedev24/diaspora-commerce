@@ -1,0 +1,21 @@
+# Shared dev cluster: per-PR preview namespaces; API reference pages on; cheaper models for chat to save credits.
+at:
+  api-docs:
+    enabled: true
+  ai:
+    routes:
+      planning:
+        models: [openai/gpt-5-mini, anthropic/claude-haiku-4.5]
+        timeout: 30s
+      chat:
+        models: [openai/gpt-5-mini, google/gemini-2.5-flash]
+        timeout: 30s
+      triage:
+        models: [anthropic/claude-haiku-4.5, openai/gpt-5-mini]
+        timeout: 45s
+    budgets:
+      lola: {user-daily-tokens: 200000, user-daily-cost-usd: 0.25, feature-daily-cost-usd: 20, degrade-on-exceed: true}
+management:
+  tracing:
+    sampling:
+      probability: 1.0

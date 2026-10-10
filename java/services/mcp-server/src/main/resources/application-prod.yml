@@ -1,0 +1,18 @@
+# Production: reference pages off (published on developers.afrotransact.com), sampled traces, tighter rate limits.
+at:
+  api-docs:
+    enabled: false
+  mcp:
+    allowed-origins: ${MCP_ALLOWED_ORIGINS:https://afrotransact.com,https://developers.afrotransact.com}
+    rate-limit:
+      capacity: ${MCP_RATE_CAPACITY:30}
+      refill-per-minute: ${MCP_RATE_PER_MINUTE:30}
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+management:
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:0.1}

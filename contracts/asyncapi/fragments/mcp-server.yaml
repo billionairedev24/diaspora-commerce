@@ -1,0 +1,37 @@
+# AsyncAPI 3.0 fragment for mcp-server. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  mcpToolEvents:
+    address: at.mcp-tool.events
+    description: >-
+      Audit trail of MCP tool calls (key = token subject). Headers event-id, event-type, occurred-at. The MCP server
+      has no database, so events are sent directly (not via an outbox) and also written to the
+      com.afrotransact.mcp.audit log; consumers must tolerate gaps during broker outages and reconcile from logs.
+    messages:
+      mcpToolInvoked: {$ref: '#/components/messages/mcpToolInvoked'}
+operations:
+  publishMcpToolEvents:
+    action: send
+    channel: {$ref: '#/channels/mcpToolEvents'}
+    summary: mcp-server publishes one event per tool call, allowed or refused. trust-ops keeps it in the audit log.
+components:
+  messages:
+    mcpToolInvoked:
+      name: mcp.tool.invoked
+      title: An MCP tool was called
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/McpToolInvoked'}
+  schemas:
+    McpToolInvoked:
+      type: object
+      required: [eventId, tool, toolset, subject, clientId, argumentsHash, outcome, durationMs, at]
+      properties:
+        eventId: {type: string, format: uuid}
+        tool: {type: string, description: Tool name, for example search_products}
+        toolset: {type: string, enum: [shopper, seller, staff]}
+        subject: {type: string, description: Token subject (user id) or client id for service tokens}
+        clientId: {type: string, description: OAuth client that made the call}
+        orgId: {type: [string, 'null'], description: Active org of the caller, when any}
+        argumentsHash: {type: string, description: SHA-256 of the canonical JSON arguments (arguments are never stored)}
+        outcome: {type: string, description: 'ok, denied, rate_limited or error'}
+        durationMs: {type: integer, format: int64}
+        at: {type: string, format: date-time}

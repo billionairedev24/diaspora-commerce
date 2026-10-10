@@ -1,0 +1,8 @@
+# Local developer profile: security off (every call runs as the local super admin), human-readable logs.
+# Simulate different MCP clients for rate limiting with the X-MCP-Client header.
+at:
+  security:
+    enabled: false
+logging:
+  level:
+    com.afrotransact: DEBUG

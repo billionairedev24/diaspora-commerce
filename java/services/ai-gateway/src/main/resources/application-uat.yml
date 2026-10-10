@@ -1,0 +1,15 @@
+# UAT / staging: production-like, anonymised data, API reference pages on for testers.
+at:
+  api-docs:
+    enabled: true
+  ai:
+    budgets:
+      lola: {user-daily-tokens: 300000, user-daily-cost-usd: 0.50, feature-daily-cost-usd: 50, degrade-on-exceed: true}
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+management:
+  tracing:
+    sampling:
+      probability: 0.5

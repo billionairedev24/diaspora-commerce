@@ -1,0 +1,10 @@
+# Shared dev cluster: API reference pages on; MCP Inspector and the dev storefront may call /mcp from a browser.
+at:
+  api-docs:
+    enabled: true
+  mcp:
+    allowed-origins: ${MCP_ALLOWED_ORIGINS:https://dev.afrotransact.com,https://developers.dev.afrotransact.com}
+management:
+  tracing:
+    sampling:
+      probability: 1.0

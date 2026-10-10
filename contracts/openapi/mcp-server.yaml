@@ -1,0 +1,88 @@
+openapi: 3.1.0
+info:
+  title: MCP Server API
+  description: Model Context Protocol server for AfroTransact (Streamable HTTP at POST /mcp, JSON-RPC 2.0) with shopper, seller
+    and staff toolsets over the platform's public APIs, OAuth 2.1 bearer tokens from the identity service, per-client rate
+    limits and an audit event for every tool call. This REST document covers the tool catalogue used by the developer portal;
+    MCP clients discover the authorization server at /.well-known/oauth-protected-resource (RFC 9728) and use Authorization
+    Code + PKCE against the identity service.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8114
+  description: local
+- url: https://api.dev.afrotransact.com/mcp-server
+  description: dev
+- url: https://api.uat.afrotransact.com/mcp-server
+  description: uat
+- url: https://api.afrotransact.com/mcp-server
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Tools
+  description: 'MCP tool catalogue: names, descriptions, JSON schemas and required scopes'
+paths:
+  /v1/tools:
+    get:
+      tags:
+      - Tools
+      summary: List MCP tools
+      description: Every tool of the shopper, seller and staff toolsets with its JSON input schema and the scope / permission
+        needed to call it. With `mine=true` (authenticated) only the tools the caller's token allows — the same filter `tools/list`
+        applies on the MCP endpoint.
+      operationId: tools
+      parameters:
+      - name: mine
+        in: query
+        description: Only tools callable with my token
+        required: false
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ToolView'
+      security: []
+components:
+  schemas:
+    ToolView:
+      type: object
+      description: One MCP tool
+      properties:
+        name:
+          type: string
+          example: search_products
+        title:
+          type: string
+          example: Search products
+        description:
+          type: string
+        toolset:
+          type: string
+          example: SHOPPER
+        requiredScope:
+          type: string
+          example: mcp:shopper
+        requiredPermission:
+          type: string
+          example: orders:update-status
+        readOnly:
+          type: boolean
+        inputSchema:
+          type: object
+          additionalProperties: {}
+          description: JSON schema of the arguments
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

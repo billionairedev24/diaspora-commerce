@@ -1,0 +1,191 @@
+spring:
+  application:
+    name: ai-gateway-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/ai}
+    username: ${DB_USER:ai}
+    password: ${DB_PASSWORD:ai}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+  mvc:
+    problemdetails:
+      enabled: true
+    async:
+      request-timeout: ${LOLA_SSE_TIMEOUT:120s}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+  ai:
+    # OpenRouter speaks the OpenAI API. The OpenAI Java SDK appends /chat/completions and /embeddings to this URL.
+    openai:
+      base-url: ${OPENROUTER_BASE_URL:https://openrouter.ai/api/v1}
+      # Only from the environment (Kubernetes secret). Empty = no Authorization header (local stubs).
+      api-key: ${OPENROUTER_API_KEY:}
+      # Retries and fallbacks are done by our ModelRouter (per task, provider-agnostic), not by the SDK.
+      max-retries: 0
+      timeout: 60s
+      custom-headers:
+        "[HTTP-Referer]": ${OPENROUTER_REFERER:https://afrotransact.com}
+        "[X-Title]": ${OPENROUTER_TITLE:AfroTransact}
+      chat:
+        options:
+          # Default only; every call sets the model chosen by the routing table below.
+          model: anthropic/claude-sonnet-4.5
+      embedding:
+        options:
+          model: openai/text-embedding-3-small
+    model:
+      image: none
+      moderation: none
+      audio:
+        speech: none
+        transcription: none
+    chat:
+      observations:
+        # Prompts and completions may contain shopper data: never put them on spans or logs.
+        log-prompt: false
+        log-completion: false
+
+server:
+  port: ${PORT:8113}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: ai-gateway-service
+      env: ${APP_ENV:local}
+    distribution:
+      percentiles-histogram:
+        ai.model.latency: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  api-docs:
+    title: AI Gateway API
+    description: >-
+      Lola, the AfroTransact shopping agent (streaming chat with visible tool calls, grounded product cards and
+      action proposals that always need the shopper's tap), plus AI utilities: embeddings for search, listing writer,
+      translation, storefront taglines and trust-team triage. Models are served through OpenRouter with per-task
+      routing, fallbacks and per-user / per-feature budgets.
+    version: v1
+  events:
+    relay-enabled: true
+  ai:
+    max-input-chars: 4000
+    lola:
+      max-tool-rounds: 4
+      memory-turns: 12
+      search-results: 6
+      max-recipe-items: 25
+      max-completion-tokens: 1200
+      sse-timeout: ${LOLA_SSE_TIMEOUT:120s}
+    embeddings:
+      # Must match the dense_vector dims of the search index.
+      dimensions: ${EMBEDDING_DIMENSIONS:1536}
+    # Task → OpenRouter models in fallback order. INTENT uses a fast, cheap model; PLANNING / CHAT a strong one.
+    routes:
+      intent:
+        models: [google/gemini-2.5-flash-lite, openai/gpt-5-nano]
+        timeout: 8s
+        max-retries: 1
+        backoff: 250ms
+      planning:
+        models: [anthropic/claude-sonnet-4.5, openai/gpt-5, google/gemini-2.5-pro]
+        timeout: 30s
+        max-retries: 1
+        backoff: 500ms
+      chat:
+        models: [anthropic/claude-sonnet-4.5, openai/gpt-5-mini, google/gemini-2.5-flash]
+        timeout: 30s
+        max-retries: 1
+        backoff: 500ms
+      listing-writer:
+        models: [anthropic/claude-haiku-4.5, openai/gpt-5-mini]
+        timeout: 30s
+        max-retries: 1
+        backoff: 500ms
+      translation:
+        models: [google/gemini-2.5-flash, openai/gpt-5-mini]
+        timeout: 20s
+        max-retries: 1
+        backoff: 500ms
+      triage:
+        models: [anthropic/claude-sonnet-4.5, openai/gpt-5]
+        timeout: 45s
+        max-retries: 1
+        backoff: 500ms
+      embedding:
+        models: [openai/text-embedding-3-small]
+        timeout: 5s
+        max-retries: 2
+        backoff: 200ms
+    # USD per million tokens (input / output), from OpenRouter's model pages. Unknown models use default-price.
+    default-price: {input: 15, output: 75}
+    prices:
+      - {model: anthropic/claude-sonnet-4.5, input: 3.00, output: 15.00}
+      - {model: anthropic/claude-haiku-4.5, input: 1.00, output: 5.00}
+      - {model: openai/gpt-5, input: 1.25, output: 10.00}
+      - {model: openai/gpt-5-mini, input: 0.25, output: 2.00}
+      - {model: openai/gpt-5-nano, input: 0.05, output: 0.40}
+      - {model: google/gemini-2.5-pro, input: 1.25, output: 10.00}
+      - {model: google/gemini-2.5-flash, input: 0.30, output: 2.50}
+      - {model: google/gemini-2.5-flash-lite, input: 0.10, output: 0.40}
+      - {model: openai/text-embedding-3-small, input: 0.02, output: 0}
+    # Daily budgets per feature (UTC day). 0 = unlimited. Above a limit: degrade to the cheapest model of the route
+    # while usage < hard-limit-factor × limit (when degrade-on-exceed), then 429 ai.budget-exceeded.
+    budgets:
+      lola: {user-daily-tokens: 400000, user-daily-cost-usd: 1.00, feature-daily-cost-usd: 500, degrade-on-exceed: true, hard-limit-factor: 1.5}
+      embeddings: {feature-daily-cost-usd: 50}
+      listing-writer: {user-daily-tokens: 200000, user-daily-cost-usd: 0.50, feature-daily-cost-usd: 100, degrade-on-exceed: true}
+      translate: {user-daily-tokens: 300000, user-daily-cost-usd: 0.50, feature-daily-cost-usd: 100, degrade-on-exceed: true}
+      tagline: {user-daily-tokens: 50000, user-daily-cost-usd: 0.10, feature-daily-cost-usd: 20}
+      triage: {user-daily-cost-usd: 5.00, feature-daily-cost-usd: 100}
+      handoff-summary: {user-daily-tokens: 50000, feature-daily-cost-usd: 20}
+    # Platform APIs Lola calls with the shopper's relayed token (see infra/local/PORTS.md).
+    downstream:
+      timeout: ${DOWNSTREAM_TIMEOUT:5s}
+      search-url: ${SEARCH_URL:http://localhost:8201}
+      catalog-url: ${CATALOG_URL:http://localhost:8101}
+      offers-url: ${OFFERS_URL:http://localhost:8102}
+      promise-url: ${PROMISE_URL:http://localhost:8204}
+      orders-url: ${ORDERS_URL:http://localhost:8104}
+      bookings-url: ${BOOKINGS_URL:http://localhost:8109}

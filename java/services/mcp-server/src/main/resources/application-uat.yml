@@ -1,0 +1,10 @@
+# UAT / staging: production-like, anonymised data, API reference pages on for testers.
+at:
+  api-docs:
+    enabled: true
+  mcp:
+    allowed-origins: ${MCP_ALLOWED_ORIGINS:https://uat.afrotransact.com,https://developers.uat.afrotransact.com}
+management:
+  tracing:
+    sampling:
+      probability: 0.5

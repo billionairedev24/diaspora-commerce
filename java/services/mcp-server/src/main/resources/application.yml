@@ -1,0 +1,117 @@
+spring:
+  application:
+    name: mcp-server-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        # Audit events must never block a tool call for long when the broker is down.
+        max.block.ms: 2000
+        delivery.timeout.ms: 30000
+        request.timeout.ms: 10000
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+  ai:
+    mcp:
+      server:
+        name: afrotransact
+        version: 1.0.0
+        type: SYNC
+        # Streamable HTTP in stateless mode: POST /mcp per JSON-RPC message, no server sessions, any pod can serve.
+        protocol: STATELESS
+        instructions: >-
+          AfroTransact marketplace tools. Only present products, prices and delivery promises returned by tools.
+          Tools never spend money or change carts, orders or returns on their own: PROPOSED results must be shown to
+          the user, whose confirmation performs them. Tools are filtered by the scopes of your token
+          (mcp:shopper, mcp:seller, mcp:staff).
+        streamable-http:
+          mcp-endpoint: /mcp
+        capabilities:
+          tool: true
+          resource: false
+          prompt: false
+          completion: false
+
+server:
+  port: ${PORT:8114}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    kafka:
+      enabled: false
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: mcp-server-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  api-docs:
+    title: MCP Server API
+    description: >-
+      Model Context Protocol server for AfroTransact (Streamable HTTP at POST /mcp, JSON-RPC 2.0) with shopper, seller
+      and staff toolsets over the platform's public APIs, OAuth 2.1 bearer tokens from the identity service, per-client
+      rate limits and an audit event for every tool call. This REST document covers the tool catalogue used by the
+      developer portal; MCP clients discover the authorization server at /.well-known/oauth-protected-resource
+      (RFC 9728) and use Authorization Code + PKCE against the identity service.
+    version: v1
+  security:
+    public-paths:
+      - /v1/tools
+  mcp:
+    public-url: ${MCP_PUBLIC_URL:http://localhost:8114}
+    scopes-supported: mcp:shopper,mcp:seller,mcp:staff
+    # Browser-based MCP clients must be listed (Origin check against DNS rebinding); server-side agents send no Origin.
+    allowed-origins: ${MCP_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:6274}
+    rate-limit:
+      capacity: ${MCP_RATE_CAPACITY:60}
+      refill-per-minute: ${MCP_RATE_PER_MINUTE:60}
+    downstream:
+      timeout: ${DOWNSTREAM_TIMEOUT:5s}
+      search-url: ${SEARCH_URL:http://localhost:8201}
+      catalog-url: ${CATALOG_URL:http://localhost:8101}
+      cart-url: ${CART_URL:http://localhost:8203}
+      inventory-url: ${INVENTORY_URL:http://localhost:8103}
+      geo-url: ${GEO_URL:http://localhost:8205}
+      promise-url: ${PROMISE_URL:http://localhost:8204}
+      orders-url: ${ORDERS_URL:http://localhost:8104}
+      seller-url: ${SELLER_URL:http://localhost:8106}
+      payments-url: ${PAYMENTS_URL:http://localhost:8105}
+      bookings-url: ${BOOKINGS_URL:http://localhost:8109}

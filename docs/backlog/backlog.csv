@@ -408,24 +408,24 @@
 - Changes appear in shop, app and legal pages immediately","E20","","High","3","content legal","content","Done"
 "S130","Story","Feature flags (OpenFeature + Unleash)","Rollout percentages and kill switches.","- Flags evaluated server-side and in web/mobile
 - Kill switch takes effect within 30 seconds","E20","","Medium","3","content platform","content","Done"
-"E21","Epic","Lola AI (Spring AI + OpenRouter) & MCP server","Lola is an agent calling the same APIs as the apps, via Spring AI with OpenRouter; MCP tools for shoppers, sellers and staff.","","","Lola AI (Spring AI + OpenRouter) & MCP server","High","","ai","ai","To Do"
+"E21","Epic","Lola AI (Spring AI + OpenRouter) & MCP server","Lola is an agent calling the same APIs as the apps, via Spring AI with OpenRouter; MCP tools for shoppers, sellers and staff.","","","Lola AI (Spring AI + OpenRouter) & MCP server","High","","ai","ai","In Progress"
 "S131","Story","AI gateway on Spring AI with OpenRouter","Spring AI ChatClient against OpenRouter's OpenAI-compatible API with model routing per task.","- Fast model for intent, strong model for planning, configurable per environment
 - Per-user and per-feature budgets enforced
 - Provider fallback on errors
-- Embeddings endpoint used by search","E21","","Highest","8","ai java spring-ai","ai","To Do"
+- Embeddings endpoint used by search","E21","","Highest","8","ai java spring-ai","ai","Done"
 "S132","Story","Lola tools and grounding","Tools: search_products, compare_offers, add_to_cart, build_cart_from_recipe, check_delivery, track_order, start_return, find_service, book_service.","- Lola shows only products and prices returned by tools
 - Spending money (checkout/booking) always needs the user's tap
-- Actions are visible in the chat as they happen","E21","","Highest","8","ai java spring-ai","ai","To Do"
+- Actions are visible in the chat as they happen","E21","","Highest","8","ai java spring-ai","ai","Done"
 "S133","Story","Guardrails: PII redaction, prompt-injection filtering","Redact PII before prompts; filter injections from seller content; no medical/legal advice.","- Emails, phones, card numbers redacted before model calls
-- Seller content is quoted and filtered for instructions","E21","","High","5","ai security","ai","To Do"
+- Seller content is quoted and filtered for instructions","E21","","High","5","ai security","ai","Done"
 "S134","Story","MCP server on Spring AI MCP","Shopper, seller and staff toolsets over public APIs with OAuth scopes, rate limits and audit.","- Streamable HTTP transport with OAuth 2.1 bearer tokens
 - Tools are filtered by the caller's scopes
-- Every tool call is audited","E21","","High","8","ai java mcp","ai","To Do"
+- Every tool call is audited","E21","","High","8","ai java mcp","ai","Done"
 "S135","Story","Lola chat UI on web and mobile","Real chat with typing indicator, product cards, add-all-to-cart and suggestion chips.","- Opening greeting persists after first message
 - Messages stream token by token
 - Hand-off to human support with context","E21","","High","5","ai web mobile","ai","To Do"
 "S136","Story","Seller and staff AI assistants","Listing writer/translator, tagline suggestions and trust-team triage summaries.","- AI drafts are editable and never auto-published
-- Triage summaries show sources","E21","","Medium","5","ai","ai","To Do"
+- Triage summaries show sources","E21","","Medium","5","ai","ai","Done"
 "E22","Epic","Geo & address autocomplete","Every address field uses autocomplete (Google Places when keyed, OpenStreetMap Nominatim otherwise) with validation.","","","Geo & address autocomplete","High","","geo","geo","In Progress"
 "S137","Story","Geo service: autocomplete proxy","Google Places Autocomplete (New) with session tokens; OSM Nominatim fallback; keys never shipped to clients.","- Provider chosen by configuration; both implement the same interface
 - Session tokens used for Places cost control
@@ -598,3 +598,6 @@
 "S206","Story","Metered billing usage (FBA storage, ads, AI credits)","Report usage to Stripe Billing meters for plan add-ons.","- Usage events aggregated daily per org
 - Stripe meter events sent idempotently
 - Invoices show metered lines","E14","","Medium","5","billing stripe","billing","To Do"
+"S207","Story","Global MCP rate limits and durable audit","Move per-pod MCP rate-limit buckets to Valkey and give mcp.tool.invoked a durable path (outbox or local spool) so audit events survive broker outages.","- Rate limits are enforced across all replicas using Valkey token buckets
+- Audit events are spooled and replayed when Kafka is unavailable
+- Load test shows limits hold with 3 replicas","E21","","Medium","5","mcp ai","ai","To Do"

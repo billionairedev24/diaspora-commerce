@@ -1,0 +1,58 @@
+# Base values for ai-gateway. Environment files override; Argo CD adds platform-values.yaml (cloud, identity, store).
+service:
+  name: ai-gateway
+  runtime: java
+  port: 8080
+env: dev
+cloud: none            # aws | gcp | azure | none (kind / local clusters)
+image:
+  registry: ghcr.io/billionairedev24/diaspora-commerce
+  repository: ai-gateway-service
+  tag: latest
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 3
+  cpu: 70
+rollout:
+  enabled: false
+  pause: 2m
+  maxErrorRate: "0.01"
+resources:
+  requests: {cpu: 100m, memory: 512Mi}
+  limits: {memory: 1Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+monitoring:
+  serviceMonitor: true
+  prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
+# Secret keys expected at afrotransact/<env>/ai-gateway in the cloud secret store:
+#   - DB_URL
+#   - DB_USER
+#   - DB_PASSWORD
+#   - KAFKA_BOOTSTRAP
+#   - OPENROUTER_API_KEY
+secrets:
+  enabled: true
+  store: platform-secrets
+  keySeparator: "/"     # "-" on GCP Secret Manager and Azure Key Vault (set in platform-values.yaml)
+workloadIdentity:
+  aws: {roleArn: ""}
+  gcp: {serviceAccount: ""}
+  azure: {clientId: ""}
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
+  # Platform APIs Lola calls (in-cluster service names; every service listens on 8080 in Kubernetes).
+  SEARCH_URL: http://search:8080
+  CATALOG_URL: http://catalog:8080
+  OFFERS_URL: http://offers:8080
+  PROMISE_URL: http://promise:8080
+  ORDERS_URL: http://orders:8080
+  BOOKINGS_URL: http://bookings:8080
+  OPENROUTER_REFERER: https://dev.afrotransact.com
+  # Lola streams answers; keep proxies from buffering or timing out the event stream.
+  LOLA_SSE_TIMEOUT: 120s
+nodeSelector: {}
+tolerations: []

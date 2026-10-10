@@ -1,0 +1,11 @@
+# Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
+# OPENROUTER_API_KEY may be exported in your shell; without it model calls fail and Lola answers 503.
+at:
+  security:
+    enabled: false
+  ai:
+    budgets:
+      lola: {user-daily-tokens: 2000000, user-daily-cost-usd: 5.00, degrade-on-exceed: true}
+logging:
+  level:
+    com.afrotransact: DEBUG

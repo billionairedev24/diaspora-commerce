@@ -1,0 +1,31 @@
+env: uat
+replicas: 2
+autoscaling:
+  enabled: true
+  min: 2
+  max: 4
+  cpu: 70
+rollout:
+  enabled: true
+resources:
+  requests: {cpu: 250m, memory: 768Mi}
+  limits: {memory: 1536Mi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.5"
+tolerations:
+  - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.uat.afrotransact.com
+  # External URL MCP clients use (resource indicator in the OAuth protected-resource metadata).
+  MCP_PUBLIC_URL: https://mcp.uat.afrotransact.com
+  SEARCH_URL: http://search:8080
+  CATALOG_URL: http://catalog:8080
+  CART_URL: http://cart:8080
+  INVENTORY_URL: http://inventory:8080
+  GEO_URL: http://geo:8080
+  PROMISE_URL: http://promise:8080
+  ORDERS_URL: http://orders:8080
+  SELLER_URL: http://seller:8080
+  PAYMENTS_URL: http://payments:8080
+  BOOKINGS_URL: http://bookings:8080

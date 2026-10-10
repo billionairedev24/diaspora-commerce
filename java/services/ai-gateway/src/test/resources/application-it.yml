@@ -1,0 +1,32 @@
+# Integration tests: WireMock plays OpenRouter (OpenAI-compatible API) and the downstream platform services.
+spring:
+  ai:
+    openai:
+      api-key: test-openrouter-key
+at:
+  ai:
+    lola:
+      max-tool-rounds: 3
+    embeddings:
+      dimensions: 0
+    routes:
+      intent: {models: [test/fast], timeout: 3s, max-retries: 0, backoff: 10ms}
+      planning: {models: [test/strong, test/backup], timeout: 5s, max-retries: 0, backoff: 10ms}
+      chat: {models: [test/strong, test/backup], timeout: 5s, max-retries: 0, backoff: 10ms}
+      listing-writer: {models: [test/strong, test/cheap], timeout: 5s, max-retries: 0, backoff: 10ms}
+      translation: {models: [test/primary, test/secondary], timeout: 5s, max-retries: 1, backoff: 10ms}
+      triage: {models: [test/strong], timeout: 5s, max-retries: 0, backoff: 10ms}
+      embedding: {models: [test/embed], timeout: 5s, max-retries: 0, backoff: 10ms}
+    prices:
+      - {model: test/strong, input: 3, output: 15}
+      - {model: test/backup, input: 1, output: 5}
+      - {model: test/cheap, input: 0.1, output: 0.4}
+      - {model: test/primary, input: 1, output: 2}
+      - {model: test/secondary, input: 1, output: 2}
+      - {model: test/embed, input: 0.02, output: 0}
+      - {model: test/fast, input: 0.1, output: 0.4}
+    budgets:
+      lola: {user-daily-tokens: 1000000, user-daily-cost-usd: 10, feature-daily-cost-usd: 0, degrade-on-exceed: false}
+      embeddings: {user-daily-tokens: 1000, feature-daily-cost-usd: 0, degrade-on-exceed: false}
+      listing-writer: {user-daily-tokens: 1000, degrade-on-exceed: true, hard-limit-factor: 3}
+      translate: {user-daily-tokens: 0}
