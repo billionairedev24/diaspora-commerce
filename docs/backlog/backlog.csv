@@ -778,7 +778,7 @@
 - Driver pickup stops are created for these orders","E12","","High","8","fulfilment payments offers seller-center","delivery","To Do"
 "S256","Story","Shipping labels bought through AfroTransact are charged to the seller","When a seller buys a carrier label through Seller Center, the label cost is debited from the seller's balance in the ledger, voids are credited back, and statements show label charges.","- Label purchase posts a seller debit at the label cost
 - Void credits it back
-- Seller statement lists label charges","E11","","High","3","carrier-gateway payments","carriers","To Do"
+- Seller statement lists label charges","E11","","High","3","carrier-gateway payments","carriers","In Progress"
 "S257","Story","Send stock to AfroTransact (seller FBA inbound)","Sellers create inbound shipments to an AfroTransact fulfilment centre from Seller Center: choose SKUs and quantities, get box and unit labels (AT-FN), track the shipment, and see received quantities and discrepancies; offers switch to Fulfilled by AfroTransact once stock is received.","- Seller creates an inbound plan and prints labels
 - FC receives against the plan with discrepancies reported
 - Received stock becomes available and the offer shows Fulfilled by AfroTransact
