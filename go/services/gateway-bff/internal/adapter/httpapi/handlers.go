@@ -24,6 +24,14 @@ type Services struct {
 	Cart     app.CartService
 	Account  app.AccountService
 	Checkout app.CheckoutService
+	// Seller Center & Provider Hub (contracts/openapi/gateway-bff-seller.yaml); routes are registered when set.
+	SellerShell     app.SellerShellService
+	SellerDashboard app.SellerDashboardService
+	SellerOrders    app.SellerOrdersService
+	SellerCatalog   app.SellerCatalogService
+	SellerMoney     app.SellerMoneyService
+	SellerTeam      app.SellerTeamService
+	ProviderHub     app.ProviderHubService
 }
 
 // Handlers registers the BFF API.
@@ -120,6 +128,8 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	// Careers
 	route("GET /v1/careers/jobs", h.jobs)
 	route("POST /v1/careers/jobs/{jobId}/applications", lookup(h.applyToJob))
+	// Seller Center & Provider Hub
+	h.registerSeller(route)
 }
 
 // finish issues, rotates or clears the session cookie and echoes an issued guest cart id to app callers.

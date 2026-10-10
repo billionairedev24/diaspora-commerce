@@ -32,6 +32,13 @@ type Upstreams struct {
 	Promise       Upstream `yaml:"promise"`
 	Orders        Upstream `yaml:"orders"`
 	Notifications Upstream `yaml:"notifications"`
+	// Seller Center & Provider Hub upstreams.
+	Seller     Upstream `yaml:"seller"`
+	Offers     Upstream `yaml:"offers"`
+	Bookings   Upstream `yaml:"bookings"`
+	Storefront Upstream `yaml:"storefront"`
+	Media      Upstream `yaml:"media"`
+	Carrier    Upstream `yaml:"carrier"`
 }
 
 // Named returns the upstreams keyed by their metric/log name.
@@ -39,7 +46,8 @@ func (u *Upstreams) Named() map[string]*Upstream {
 	return map[string]*Upstream{
 		"search": &u.Search, "catalog": &u.Catalog, "inventory": &u.Inventory, "cart": &u.Cart, "geo": &u.Geo,
 		"identity": &u.Identity, "content": &u.Content, "payments": &u.Payments, "promise": &u.Promise,
-		"orders": &u.Orders, "notifications": &u.Notifications,
+		"orders": &u.Orders, "notifications": &u.Notifications, "seller": &u.Seller, "offers": &u.Offers, "bookings": &u.Bookings,
+		"storefront": &u.Storefront, "media": &u.Media, "carrier": &u.Carrier,
 	}
 }
 

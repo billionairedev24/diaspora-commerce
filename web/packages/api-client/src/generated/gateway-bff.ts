@@ -514,6 +514,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Saved delivery addresses of the signed-in customer */
         get: operations["listAddresses"];
         put?: never;
         /** Add an address (validated and standardised by the geo service) */
@@ -536,9 +537,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
+        /** Remove a saved address */
         delete: operations["deleteAddress"];
         options?: never;
         head?: never;
+        /** Edit a saved address (re-validated by geo) */
         patch: operations["updateAddress"];
         trace?: never;
     };
@@ -551,6 +554,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Make an address the default for checkout */
         post: operations["setDefaultAddress"];
         delete?: never;
         options?: never;
@@ -616,6 +620,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Orders of the signed-in customer, newest first */
         get: operations["listOrders"];
         put?: never;
         post?: never;
@@ -649,6 +654,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Returns of the signed-in customer */
         get: operations["listReturns"];
         put?: never;
         /** Start a return for a delivered, returnable item */
@@ -705,6 +711,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** Open roles (careers page) */
         get: operations["listJobs"];
         put?: never;
         post?: never;

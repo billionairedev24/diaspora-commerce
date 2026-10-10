@@ -37,3 +37,4 @@ storybook-static/
 **/deploy/helm/Chart.lock
 __pycache__/
 *.pyc
+*.tsbuildinfo

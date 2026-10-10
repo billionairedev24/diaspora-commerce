@@ -1,0 +1,280 @@
+package app
+
+import (
+	"context"
+	"net/http"
+	"slices"
+	"strings"
+
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
+)
+
+// SellerOrdersService serves the orders table and sheet: the shipment queue, order detail, seller status updates
+// (confirm, pack, ready only) and shipping labels bought through carrier-gateway.
+type SellerOrdersService interface {
+	List(ctx context.Context, c *domain.Caller, status, cursor string, limit int) (domain.SellerOrderPage, error)
+	Get(ctx context.Context, c *domain.Caller, orderNumber string) (domain.SellerOrderDetail, error)
+	UpdateStatus(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error)
+	Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress) (domain.RateQuotes, error)
+	BuyLabel(ctx context.Context, c *domain.Caller, idempotencyKey, orderNumber, shipmentID, carrier, service string, parcel domain.Parcel, from domain.SellerAddress) (domain.LabelPurchase, error)
+}
+
+type sellerOrdersImpl struct{ r *orgResolver }
+
+var _ SellerOrdersService = (*sellerOrdersImpl)(nil)
+
+// NewSellerOrdersService returns the SellerOrdersService.
+func NewSellerOrdersService(d SellerDeps) SellerOrdersService {
+	return &sellerOrdersImpl{r: newResolver(d)}
+}
+
+func fulfilmentOf(t string) string {
+	if strings.EqualFold(t, "SELLER_FULFILLED") || strings.EqualFold(t, domain.ShipsFromSeller) || t == "" {
+		return domain.ShipsFromSeller
+	}
+	return domain.FulfilledByAfroTransact
+}
+
+func shipmentOf(s port.OrderShipmentView) domain.SellerShipment {
+	status := strings.ToUpper(s.Status)
+	ff := fulfilmentOf(s.FulfilmentType)
+	out := domain.SellerShipment{ShipmentID: s.ID, Label: s.Label, Status: status, StatusLabel: domain.ShipmentStatusLabel(status),
+		Fulfilment: ff, Perishable: s.Perishable, Lines: []domain.SellerShipmentLine{}, ItemsMinor: s.ItemsMinor,
+		ShippingMinor: s.ShippingMinor, TotalMinor: s.TotalMinor, Carrier: strPtr(s.Carrier), TrackingNumber: strPtr(s.TrackingNumber),
+		NextActions: domain.SellerNextActions(s.NextActions), CanBuyLabel: domain.CanBuyLabel(ff, s.DeliveryMethod, status, s.TrackingNumber),
+		Timeline: []domain.TimelineEntry{}}
+	if ff != domain.ShipsFromSeller {
+		out.NextActions = []string{} // AfroTransact owns every step of FBA and 1P shipments
+	}
+	for _, l := range s.Lines {
+		out.Lines = append(out.Lines, domain.SellerShipmentLine{Title: l.Title, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor,
+			ItemsMinor: l.ItemsMinor, VariantATIN: l.VariantATIN, ImageURL: strPtr(l.ImageURL)})
+	}
+	for _, t := range s.Timeline {
+		out.Timeline = append(out.Timeline, domain.TimelineEntry{Status: strings.ToUpper(t.To), At: t.At, Actor: strings.ToLower(t.ActorType)})
+	}
+	return out
+}
+
+func addressOf(a *port.ShipTo) *domain.SellerAddress {
+	if a == nil || a.Line1 == "" {
+		return nil
+	}
+	country := a.Country
+	if country == "" {
+		country = "US"
+	}
+	return &domain.SellerAddress{Name: a.FullName, Phone: strPtr(a.Phone), Line1: a.Line1, Line2: strPtr(a.Line2), City: a.City,
+		State: a.State, PostalCode: a.PostalCode, Country: country}
+}
+
+func orderOf(o port.OrderView) domain.SellerOrderDetail {
+	out := domain.SellerOrderDetail{OrderNumber: o.OrderNumber, Status: strings.ToUpper(o.Status), PlacedAt: o.PlacedAt, Currency: o.Currency,
+		ShippingAddress: addressOf(o.ShippingAddress), Shipments: []domain.SellerShipment{}, TotalMinor: o.TotalMinor}
+	if out.Currency == "" {
+		out.Currency = domain.Currency
+	}
+	if o.ShippingAddress != nil {
+		out.BuyerName = o.ShippingAddress.FullName
+	}
+	for _, s := range o.Shipments {
+		out.Shipments = append(out.Shipments, shipmentOf(s))
+	}
+	return out
+}
+
+func (s *sellerOrdersImpl) List(ctx context.Context, c *domain.Caller, status, cursor string, limit int) (domain.SellerOrderPage, error) {
+	if status != "" && !domain.IsShipmentStatus(status) {
+		return domain.SellerOrderPage{}, domain.ValidationProblem(map[string]string{"status": "Unknown status"})
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		return domain.SellerOrderPage{}, domain.ValidationProblem(map[string]string{"limit": "At most 100"})
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelView); err != nil {
+		return domain.SellerOrderPage{}, err
+	}
+	q, err := s.r.d.Orders.Queue(ctx, c.BearerToken, strings.ToLower(status), cursor, limit)
+	if err != nil {
+		return domain.SellerOrderPage{}, mapErr("orders", err)
+	}
+	out := domain.SellerOrderPage{Items: []domain.SellerOrderRow{}, NextCursor: q.NextCursor, Total: q.Total}
+	for _, it := range q.Items {
+		sh := shipmentOf(it.Shipment)
+		count := 0
+		for _, l := range sh.Lines {
+			count += l.Quantity
+		}
+		row := domain.SellerOrderRow{OrderNumber: it.OrderNumber, ShipmentID: sh.ShipmentID, PlacedAt: it.PlacedAt, ItemsSummary: it.Shipment.Items,
+			ItemCount: max(count, 1), TotalMinor: sh.TotalMinor, Currency: domain.Currency, Fulfilment: sh.Fulfilment, Status: sh.Status,
+			StatusLabel: sh.StatusLabel, Carrier: sh.Carrier, TrackingNumber: sh.TrackingNumber, NextActions: sh.NextActions, CanBuyLabel: sh.CanBuyLabel}
+		if it.ShipTo != nil {
+			row.BuyerName = it.ShipTo.FullName
+			row.ShipTo = strings.TrimSuffix(it.ShipTo.City+", "+it.ShipTo.State, ", ")
+		}
+		if row.ItemsSummary == "" && len(sh.Lines) > 0 {
+			row.ItemsSummary = sh.Lines[0].Title
+		}
+		out.Items = append(out.Items, row)
+	}
+	return out, nil
+}
+
+func (s *sellerOrdersImpl) Get(ctx context.Context, c *domain.Caller, orderNumber string) (domain.SellerOrderDetail, error) {
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelView); err != nil {
+		return domain.SellerOrderDetail{}, err
+	}
+	o, err := s.r.d.Orders.Order(ctx, c.BearerToken, orderNumber)
+	if err != nil {
+		return domain.SellerOrderDetail{}, mapErr("orders", err)
+	}
+	return orderOf(o), nil
+}
+
+func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, key, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error) {
+	if !domain.IsSellerStatus(status) {
+		return domain.SellerOrderDetail{}, domain.ValidationProblem(map[string]string{"status": "Sellers can confirm, pack and mark ready only"})
+	}
+	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelEdit); err != nil {
+		return domain.SellerOrderDetail{}, err
+	}
+	o, err := s.r.d.Orders.Transition(ctx, c.BearerToken, key, shipmentID, strings.ToLower(status))
+	if err != nil {
+		return domain.SellerOrderDetail{}, mapErr("orders", err)
+	}
+	if o.OrderNumber == "" {
+		if o, err = s.r.d.Orders.Order(ctx, c.BearerToken, orderNumber); err != nil {
+			return domain.SellerOrderDetail{}, mapErr("orders", err)
+		}
+	}
+	return orderOf(o), nil
+}
+
+func validateParcel(p domain.Parcel, from domain.SellerAddress) map[string]string {
+	errs := map[string]string{}
+	if p.WeightLb <= 0 || p.WeightLb > 150 {
+		errs["parcel.weightLb"] = "Enter a weight between 0 and 150 lb"
+	}
+	if p.LengthIn < 0 || p.WidthIn < 0 || p.HeightIn < 0 {
+		errs["parcel"] = "Dimensions can't be negative"
+	}
+	for k, v := range map[string]string{"shipFrom.name": from.Name, "shipFrom.line1": from.Line1, "shipFrom.city": from.City,
+		"shipFrom.state": from.State, "shipFrom.postalCode": from.PostalCode} {
+		if strings.TrimSpace(v) == "" {
+			errs[k] = "Required"
+		}
+	}
+	return errs
+}
+
+func carrierAddress(a domain.SellerAddress) port.CarrierAddress {
+	country := a.Country
+	if country == "" {
+		country = "US"
+	}
+	out := port.CarrierAddress{Name: a.Name, Line1: a.Line1, City: a.City, State: a.State, PostalCode: a.PostalCode, Country: country}
+	if a.Phone != nil {
+		out.Phone = *a.Phone
+	}
+	if a.Line2 != nil {
+		out.Line2 = *a.Line2
+	}
+	return out
+}
+
+// labelShipment loads the order and checks that the shipment can get a label; it returns the carrier shipment.
+func (s *sellerOrdersImpl) labelShipment(ctx context.Context, c *domain.Caller, orgID, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress) (port.CarrierShipment, error) {
+	o, err := s.r.d.Orders.Order(ctx, c.BearerToken, orderNumber)
+	if err != nil {
+		return port.CarrierShipment{}, mapErr("orders", err)
+	}
+	detail := orderOf(o)
+	sh, ok := detail.Shipment(shipmentID)
+	if !ok {
+		return port.CarrierShipment{}, domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "That shipment isn't part of this order.")
+	}
+	if !sh.CanBuyLabel || detail.ShippingAddress == nil {
+		return port.CarrierShipment{}, domain.NewProblem(http.StatusConflict, domain.CodeConflict, "Label not possible",
+			"Labels can be bought for confirmed seller-shipped orders without tracking.")
+	}
+	return port.CarrierShipment{Reference: shipmentID, OriginNode: orgID, From: carrierAddress(from), To: carrierAddress(*detail.ShippingAddress),
+		Parcels: []domain.Parcel{parcel}}, nil
+}
+
+func (s *sellerOrdersImpl) Rates(ctx context.Context, c *domain.Caller, orderNumber, shipmentID string, parcel domain.Parcel, from domain.SellerAddress) (domain.RateQuotes, error) {
+	if errs := validateParcel(parcel, from); len(errs) > 0 {
+		return domain.RateQuotes{}, domain.ValidationProblem(errs)
+	}
+	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelEdit)
+	if err != nil {
+		return domain.RateQuotes{}, err
+	}
+	shipment, err := s.labelShipment(ctx, c, sc.org.ID, orderNumber, shipmentID, parcel, from)
+	if err != nil {
+		return domain.RateQuotes{}, err
+	}
+	res, err := s.r.d.Carrier.Rates(ctx, c.BearerToken, shipment)
+	if err != nil {
+		return domain.RateQuotes{}, mapErr("carrier-gateway", err)
+	}
+	out := domain.RateQuotes{Quotes: []domain.RateQuote{}, Partial: res.Partial}
+	for _, q := range res.Quotes {
+		cur := q.Currency
+		if cur == "" {
+			cur = domain.Currency
+		}
+		out.Quotes = append(out.Quotes, domain.RateQuote{Carrier: q.Carrier, Service: q.Service, ServiceName: firstNonEmpty(q.ServiceName, q.Service),
+			AmountMinor: q.AmountMinor, Currency: cur, TransitDays: q.TransitDays, EstimatedDelivery: q.EstimatedDelivery})
+	}
+	slices.SortStableFunc(out.Quotes, func(a, b domain.RateQuote) int { return int(a.AmountMinor - b.AmountMinor) })
+	return out, nil
+}
+
+var carriers = []string{"usps", "ups", "fedex", "dhl"}
+
+func (s *sellerOrdersImpl) BuyLabel(ctx context.Context, c *domain.Caller, key, orderNumber, shipmentID, carrier, service string, parcel domain.Parcel, from domain.SellerAddress) (domain.LabelPurchase, error) {
+	errs := validateParcel(parcel, from)
+	if !slices.Contains(carriers, carrier) {
+		errs["carrier"] = "Choose USPS, UPS, FedEx or DHL"
+	}
+	if strings.TrimSpace(service) == "" {
+		errs["service"] = "Choose a rate"
+	}
+	if l := len(key); l < 8 || l > 128 {
+		errs["Idempotency-Key"] = "Send an 8–128 character Idempotency-Key header"
+	}
+	if len(errs) > 0 {
+		return domain.LabelPurchase{}, domain.ValidationProblem(errs)
+	}
+	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelEdit)
+	if err != nil {
+		return domain.LabelPurchase{}, err
+	}
+	shipment, err := s.labelShipment(ctx, c, sc.org.ID, orderNumber, shipmentID, parcel, from)
+	if err != nil {
+		return domain.LabelPurchase{}, err
+	}
+	label, err := s.r.d.Carrier.BuyLabel(ctx, c.BearerToken, key, carrier, service, shipment)
+	if err != nil {
+		return domain.LabelPurchase{}, mapErr("carrier-gateway", err)
+	}
+	// Retrying with the same Idempotency-Key returns the same label, so a failed attach can simply be retried.
+	o, err := s.r.d.Orders.AttachTracking(ctx, c.BearerToken, shipmentID, label.Carrier, label.TrackingNumber)
+	if err != nil {
+		return domain.LabelPurchase{}, mapErr("orders", err)
+	}
+	if o.OrderNumber == "" {
+		if o, err = s.r.d.Orders.Order(ctx, c.BearerToken, orderNumber); err != nil {
+			return domain.LabelPurchase{}, mapErr("orders", err)
+		}
+	}
+	cur := label.Currency
+	if cur == "" {
+		cur = domain.Currency
+	}
+	return domain.LabelPurchase{Carrier: firstNonEmpty(label.Carrier, carrier), Service: firstNonEmpty(label.Service, service), TrackingNumber: label.TrackingNumber,
+		CostMinor: label.CostMinor, Currency: cur, DocumentURL: strPtr(label.DocumentURL), Order: orderOf(o)}, nil
+}

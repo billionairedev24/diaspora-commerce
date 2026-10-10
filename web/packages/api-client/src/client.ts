@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ApiError, problemFrom } from './errors';
+import { type ApiClientOptions, createRequester, joinUrl } from './http';
 import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema, type ReturnSummary, ReturnSummarySchema } from './schemas/account';
 import {
   type AuthResult,
@@ -26,63 +26,11 @@ import { toApiSearchParams } from './search-params';
 
 const AuthVoid = z.undefined();
 
-export type FetchLike = (input: Request) => Promise<Response>;
-
-export interface ApiClientOptions {
-  /** Gateway BFF base URL, e.g. "/api/bff" in the browser or "https://bff.internal" on the server. */
-  baseUrl: string;
-  /** Custom fetch (server-side cookie relay, in-process mocks, tests). Defaults to global fetch. */
-  fetch?: FetchLike;
-  /** Extra headers on every request (e.g. forwarded Cookie, Accept-Language). */
-  headers?: Record<string, string>;
-}
-
-interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
-  body?: unknown;
-  query?: URLSearchParams | Record<string, string | undefined>;
-  headers?: Record<string, string>;
-  signal?: AbortSignal;
-}
-
-function joinUrl(base: string, path: string, query?: RequestOptions['query']): string {
-  const b = base.endsWith('/') ? base.slice(0, -1) : base;
-  let qs = '';
-  if (query instanceof URLSearchParams) qs = query.toString();
-  else if (query) {
-    const p = new URLSearchParams();
-    Object.entries(query).forEach(([k, v]) => { if (v !== undefined && v !== '') p.set(k, v); });
-    qs = p.toString();
-  }
-  return `${b}${path}${qs ? `?${qs}` : ''}`;
-}
-
-/** Absolute URL for Request construction (relative base URLs resolve against the page origin). */
-function absolute(url: string): string {
-  if (/^https?:\/\//.test(url)) return url;
-  const origin = typeof window !== 'undefined' && window.location ? window.location.origin : 'http://localhost';
-  return origin + url;
-}
+export type { ApiClientOptions, FetchLike } from './http';
 
 /** Creates a typed client for the gateway BFF (contracts/openapi/gateway-bff.yaml). Every response is validated with Zod. */
 export function createApiClient(options: ApiClientOptions) {
-  const doFetch: FetchLike = options.fetch ?? ((req) => fetch(req));
-
-  async function request<S extends z.ZodType>(path: string, schema: S, opts: RequestOptions = {}): Promise<z.infer<S>> {
-    const headers: Record<string, string> = { Accept: 'application/json', ...options.headers, ...opts.headers };
-    if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
-    const req = new Request(absolute(joinUrl(options.baseUrl, path, opts.query)), {
-      method: opts.method ?? 'GET',
-      headers,
-      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-      credentials: 'include',
-      signal: opts.signal
-    });
-    const res = await doFetch(req);
-    if (!res.ok) throw new ApiError(await problemFrom(res));
-    if (res.status === 204) return schema.parse(undefined);
-    return schema.parse(await res.json());
-  }
+  const request = createRequester(options);
 
   const pageOf = <T extends z.ZodType>(item: T) => PageOfSchema(item);
 

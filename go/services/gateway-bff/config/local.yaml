@@ -7,6 +7,7 @@ market: us
 web:
   origins:
     - http://localhost:3000
+    - http://localhost:3001
   publicOrigin: http://localhost:3000
   bffPath: /api/bff
 session:
@@ -76,6 +77,36 @@ upstreams:
   notifications:
     url: http://localhost:8208
     timeout: 2s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  seller:
+    url: http://localhost:8106
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  offers:
+    url: http://localhost:8102
+    timeout: 2s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  bookings:
+    url: http://localhost:8109
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  storefront:
+    url: http://localhost:8206
+    timeout: 2s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  media:
+    url: http://localhost:8207
+    timeout: 3s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  carrier:
+    url: http://localhost:8209
+    timeout: 10s
     retries: 0
     breaker: {failures: 5, cooldown: 15s}
 rateLimit:

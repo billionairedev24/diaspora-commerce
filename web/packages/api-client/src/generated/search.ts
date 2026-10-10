@@ -129,7 +129,7 @@ export interface operations {
                 q?: string;
                 market?: string;
                 department?: string;
-                /** @description Comma-separated communities (Nigerian */
+                /** @description Comma-separated communities (Nigerian, Ghanaian…) */
                 community?: string;
                 fulfilment?: "AFROTRANSACT" | "SELLER";
                 sellerKind?: "PLATFORM" | "SELLER";

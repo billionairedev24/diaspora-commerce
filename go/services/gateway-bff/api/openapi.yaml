@@ -71,6 +71,7 @@ paths:
     get:
       tags: [Site]
       operationId: getSiteConfig
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Site configuration (social links, contacts, legal versions, identity providers, locales)
       description: Published from Backoffice → Site content & legal; changes need no deployment. Cached with ETag.
       responses:
@@ -87,6 +88,7 @@ paths:
     get:
       tags: [Site]
       operationId: getHome
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Home page placements for the session's deliver-to location
       description: Announcement bar, hero carousel, tiles, sponsored banners and product rails. Nothing is hard-coded in clients.
       responses:
@@ -99,6 +101,7 @@ paths:
     post:
       tags: [Site]
       operationId: subscribeNewsletter
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Subscribe to the weekly newsletter (double opt-in)
       requestBody:
         required: true
@@ -117,6 +120,7 @@ paths:
     get:
       tags: [Location]
       operationId: getDeliveryLocation
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Current deliver-to location of the session
       responses:
         '200':
@@ -127,6 +131,7 @@ paths:
     put:
       tags: [Location]
       operationId: setDeliveryLocation
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Change the deliver-to location by ZIP or device coordinates (updates every delivery promise)
       description: Coordinates come from "Use my current location" and are reverse-geocoded to a ZIP by the geo service; they are not stored.
       requestBody:
@@ -155,6 +160,7 @@ paths:
     get:
       tags: [Location]
       operationId: suggestAddresses
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Address autocomplete (geo service — Google Places or OpenStreetMap Nominatim)
       parameters:
         - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 120}}
@@ -171,6 +177,7 @@ paths:
     get:
       tags: [Search]
       operationId: search
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Search products with filters, facet counts and delivery promises
       description: |
         Every typed word must match (prefix, synonym or typo tolerance). Facet counts for a dimension are computed
@@ -200,6 +207,7 @@ paths:
     get:
       tags: [Search]
       operationId: suggest
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Typeahead — completed phrases (first scoped to a department) and up to five products
       parameters:
         - {name: q, in: query, required: true, schema: {type: string, maxLength: 100}}
@@ -213,6 +221,7 @@ paths:
     get:
       tags: [Catalog]
       operationId: getProduct
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Product detail with buy box, other offers, availability and delivery promise
       parameters:
         - $ref: '#/components/parameters/Atin'
@@ -227,6 +236,7 @@ paths:
     post:
       tags: [Catalog]
       operationId: createStockAlert
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: '"Email me when available" for an out-of-stock product'
       description: Signed-in customers may omit the email; guests must provide one.
       parameters:
@@ -248,6 +258,7 @@ paths:
     get:
       tags: [Cart]
       operationId: getCart
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Current cart (guest or customer), one package per seller and fulfilment method
       responses:
         '200': {$ref: '#/components/responses/Cart'}
@@ -255,6 +266,7 @@ paths:
     post:
       tags: [Cart]
       operationId: addToCart
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Add an offer to the cart (merged into an existing line for the same offer)
       requestBody:
         required: true
@@ -272,6 +284,7 @@ paths:
     patch:
       tags: [Cart]
       operationId: updateCartLine
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Change a line's quantity and/or whether it is selected for checkout
       requestBody:
         required: true
@@ -286,6 +299,7 @@ paths:
     delete:
       tags: [Cart]
       operationId: removeCartLine
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Remove a line
       responses:
         '200': {$ref: '#/components/responses/Cart'}
@@ -294,6 +308,7 @@ paths:
     put:
       tags: [Cart]
       operationId: selectAllCartLines
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Select or deselect every line for checkout
       requestBody:
         required: true
@@ -310,6 +325,7 @@ paths:
     post:
       tags: [Cart]
       operationId: saveForLater
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Move a line to "Saved for later"
       parameters:
         - $ref: '#/components/parameters/LineId'
@@ -320,6 +336,7 @@ paths:
     post:
       tags: [Cart]
       operationId: moveToCart
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Move a saved item back to the cart (quantity 1, subject to stock)
       parameters:
         - $ref: '#/components/parameters/SavedId'
@@ -331,6 +348,7 @@ paths:
     delete:
       tags: [Cart]
       operationId: removeSaved
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Delete a saved item
       parameters:
         - $ref: '#/components/parameters/SavedId'
@@ -341,6 +359,7 @@ paths:
     get:
       tags: [Auth]
       operationId: getMe
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Who is signed in (guest sessions return authenticated=false)
       responses:
         '200':
@@ -352,6 +371,7 @@ paths:
     get:
       tags: [Auth]
       operationId: startHostedLogin
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Redirect to identity's hosted login (authorization code + PKCE)
       parameters:
         - $ref: '#/components/parameters/ReturnTo'
@@ -362,6 +382,7 @@ paths:
     get:
       tags: [Auth]
       operationId: startSocialLogin
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Start sign-in with an external identity provider (only providers enabled in site config)
       description: |
         Generates `code_verifier`, `state` and `nonce`, stores them in the session and redirects to
@@ -395,6 +416,7 @@ paths:
     post:
       tags: [Auth]
       operationId: signIn
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Email + password sign-in (step 1); usually continues with two-step verification
       requestBody:
         required: true
@@ -410,6 +432,7 @@ paths:
     post:
       tags: [Auth]
       operationId: verifyMfa
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Two-step verification code (authenticator app or SMS)
       requestBody:
         required: true
@@ -425,6 +448,7 @@ paths:
     post:
       tags: [Auth]
       operationId: signUp
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Create an account (same fields for customers, sellers and providers — role is decided server-side)
       description: Sends a 6-digit code to the email address; the account is created when the code is verified.
       requestBody:
@@ -441,6 +465,7 @@ paths:
     post:
       tags: [Auth]
       operationId: verifyEmail
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Verify the sign-up email code; signs the new customer in
       requestBody:
         required: true
@@ -455,6 +480,7 @@ paths:
     post:
       tags: [Auth]
       operationId: resendEmailCode
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Resend the sign-up code
       requestBody:
         required: true
@@ -477,6 +503,7 @@ paths:
     post:
       tags: [Auth]
       operationId: passkeyOptions
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: WebAuthn assertion options for "Sign in with a passkey" (discoverable credentials)
       requestBody:
         content:
@@ -492,6 +519,7 @@ paths:
     post:
       tags: [Auth]
       operationId: passkeyVerify
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Verify a WebAuthn assertion and sign in
       requestBody:
         required: true
@@ -506,6 +534,7 @@ paths:
     post:
       tags: [Auth]
       operationId: signOut
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: End the session (revokes refresh tokens at identity)
       responses:
         '204':
@@ -516,6 +545,7 @@ paths:
     get:
       tags: [Account]
       operationId: listAddresses
+      summary: Saved delivery addresses of the signed-in customer
       security: [{sessionCookie: []}, {bearer: []}]
       responses:
         '200':
@@ -548,6 +578,7 @@ paths:
     patch:
       tags: [Account]
       operationId: updateAddress
+      summary: Edit a saved address (re-validated by geo)
       security: [{sessionCookie: []}, {bearer: []}]
       requestBody:
         required: true
@@ -566,6 +597,7 @@ paths:
     delete:
       tags: [Account]
       operationId: deleteAddress
+      summary: Remove a saved address
       security: [{sessionCookie: []}, {bearer: []}]
       responses:
         '204': {description: Deleted}
@@ -575,6 +607,7 @@ paths:
     post:
       tags: [Account]
       operationId: setDefaultAddress
+      summary: Make an address the default for checkout
       security: [{sessionCookie: []}, {bearer: []}]
       parameters:
         - {name: addressId, in: path, required: true, schema: {type: string}}
@@ -633,6 +666,7 @@ paths:
     get:
       tags: [Account]
       operationId: listOrders
+      summary: Orders of the signed-in customer, newest first
       security: [{sessionCookie: []}, {bearer: []}]
       parameters:
         - {name: cursor, in: query, schema: {type: string}}
@@ -666,6 +700,7 @@ paths:
     get:
       tags: [Account]
       operationId: listReturns
+      summary: Returns of the signed-in customer
       security: [{sessionCookie: []}, {bearer: []}]
       responses:
         '200':
@@ -754,6 +789,8 @@ paths:
     get:
       tags: [Careers]
       operationId: listJobs
+      summary: Open roles (careers page)
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       responses:
         '200':
           description: Open roles
@@ -768,6 +805,7 @@ paths:
     post:
       tags: [Careers]
       operationId: applyToJob
+      security: [{}, {sessionCookie: []}, {bearer: []}]
       summary: Apply for a role (résumé uploaded beforehand through the media service)
       parameters:
         - {name: jobId, in: path, required: true, schema: {type: string}}

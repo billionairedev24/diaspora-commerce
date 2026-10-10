@@ -86,18 +86,30 @@ func run() error {
 			BreakerFailures: u.Breaker.Failures, BreakerCooldown: u.Breaker.Cooldown, Metrics: metrics})
 	}
 	up := cfg.Upstreams
+	// One client (and circuit breaker) per upstream, shared by the storefront and seller routes.
+	catalogClient, inventoryClient, identityClient := client("catalog", up.Catalog), client("inventory", up.Inventory), client("identity", up.Identity)
+	paymentsClient, ordersClient := client("payments", up.Payments), client("orders", up.Orders)
 	search := upstreams.NewSearch(client("search", up.Search))
-	catalog := upstreams.NewCatalog(client("catalog", up.Catalog), cache, cfg.Cache.CatalogTTL, cfg.Cache.ReferenceTTL)
-	inventory := upstreams.NewInventory(client("inventory", up.Inventory))
+	catalog := upstreams.NewCatalog(catalogClient, cache, cfg.Cache.CatalogTTL, cfg.Cache.ReferenceTTL)
+	inventory := upstreams.NewInventory(inventoryClient)
 	cart := upstreams.NewCart(client("cart", up.Cart))
 	geo := upstreams.NewGeo(client("geo", up.Geo), cache, cfg.Cache.ReferenceTTL)
-	identity := upstreams.NewIdentity(client("identity", up.Identity), cache, upstreams.IdentityOptions{
+	identity := upstreams.NewIdentity(identityClient, cache, upstreams.IdentityOptions{
 		ClientID: cfg.OIDC.ClientID, ClientSecret: cfg.OIDC.ClientSecret, ProvidersTTL: cfg.Cache.DefaultTTL})
 	content := upstreams.NewContent(client("content", up.Content), cache, cfg.Cache.DefaultTTL)
-	payments := upstreams.NewPayments(client("payments", up.Payments))
+	payments := upstreams.NewPayments(paymentsClient)
 	promise := upstreams.NewPromise(client("promise", up.Promise))
-	orders := upstreams.NewOrders(client("orders", up.Orders))
+	orders := upstreams.NewOrders(ordersClient)
 	notifications := upstreams.NewNotifications(client("notifications", up.Notifications))
+	sellerDeps := app.SellerDeps{
+		Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", up.Seller)),
+		Catalog: upstreams.NewSellerCatalog(catalogClient, cache, cfg.Cache.ReferenceTTL),
+		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(client("offers", up.Offers)),
+		Media: upstreams.NewMedia(client("media", up.Media)), Orders: upstreams.NewSellerOrders(ordersClient),
+		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient),
+		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings)),
+		Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL, Log: log,
+	}
 	verifier := upstreams.NewTokenVerifier(cfg.OIDC.Issuer, cfg.OIDC.Audience, cfg.OIDC.ClientID,
 		&http.Client{Timeout: up.Identity.Timeout, Transport: otelhttp.NewTransport(http.DefaultTransport)})
 
@@ -106,6 +118,7 @@ func run() error {
 	if err != nil {
 		tz = time.UTC
 	}
+	sellerDeps.Location = tz
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: cfg.Commerce.SellerShippingMinor,
 		FreeShippingThresholdMinor: cfg.Commerce.FreeShippingThresholdMinor, Location: tz})
 	sellers := app.SellerDirectory{RetailOrgID: cfg.Commerce.RetailOrgID, Names: cfg.Commerce.SellerNames}
@@ -129,6 +142,14 @@ func run() error {
 		Cart:     carts,
 		Account:  app.NewAccountService(identity, geo, payments, orders),
 		Checkout: app.NewCheckoutService(carts, identity, payments, orders),
+		// Seller Center & Provider Hub
+		SellerShell:     app.NewSellerShellService(sellerDeps),
+		SellerDashboard: app.NewSellerDashboardService(sellerDeps),
+		SellerOrders:    app.NewSellerOrdersService(sellerDeps),
+		SellerCatalog:   app.NewSellerCatalogService(sellerDeps),
+		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
+		SellerTeam:      app.NewSellerTeamService(sellerDeps),
+		ProviderHub:     app.NewProviderHubService(sellerDeps),
 	}
 
 	openapi, err := gatewaybff.Files.ReadFile("api/openapi.yaml")
@@ -144,6 +165,14 @@ func run() error {
 		CookieDomain: cfg.Session.CookieDomain, TrustForwarded: cfg.RateLimit.TrustForwarded, MaxBodyBytes: int64(cfg.RateLimit.MaxBodyBytes),
 		AuthPerMinute: cfg.RateLimit.AuthPerMinute, LookupPerMinute: cfg.RateLimit.LookupPerMinute,
 	}, log).Register(srv.Mux())
+	sellerSpec, err := gatewaybff.Files.ReadFile("api/openapi-seller.yaml")
+	if err != nil {
+		return fmt.Errorf("read seller openapi: %w", err)
+	}
+	srv.Mux().HandleFunc("GET /openapi-seller.yaml", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write(sellerSpec)
+	})
 	if err := srv.Run(ctx); err != nil {
 		return fmt.Errorf("serve: %w", err)
 	}

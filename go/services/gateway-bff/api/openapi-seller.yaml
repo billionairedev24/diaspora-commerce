@@ -1,0 +1,1851 @@
+openapi: 3.1.0
+info:
+  title: Gateway BFF API (Seller Center & Provider Hub)
+  version: v1
+  summary: Screen-shaped API for the Seller Center and Provider Hub back offices (web/apps/seller-center).
+  description: |
+    The same gateway BFF (Go, port 8200) that serves the storefront also serves the seller and service-provider
+    back offices under `/v1/seller/...`. Browsers never talk to the domain services: the Seller Center's same-origin
+    `/api/bff` proxy forwards to the BFF, which relays the signed-in member's access token (token relay) to
+    identity, seller, catalog, inventory, offers, orders, payments, bookings, storefront, media and carrier-gateway.
+
+    **Sessions.** The HttpOnly `at_session` cookie issued by the BFF (shared cookie domain with the storefront, so a
+    member who signs in once reaches both). Every operation needs a signed-in member (401 `UNAUTHENTICATED`).
+
+    **Active organisation.** Members can belong to several seller and provider organisations. The active one comes
+    from identity (`GET /v1/me` → `orgId`) and is switched with `PUT /v1/seller/session/active-org`. Seller Center
+    screens act on the active organisation; Provider Hub screens need a PROVIDER organisation.
+
+    **Role-aware navigation.** `GET /v1/seller/session` returns the sidebar already filtered for the member's
+    organisation role (module access levels VIEW, EDIT, APPROVE, FULL from identity's module matrix). Until the
+    organisation is APPROVED only the Onboarding entry is returned; it disappears after approval.
+
+    **Errors** are RFC 9457 `application/problem+json` with a stable `code`. Services that are still being built
+    (orders, bookings, offers) or that are unreachable answer 503 `UPSTREAM_UNAVAILABLE`
+    (`type https://errors.afrotransact.com/bff.upstream-unavailable`) with `Retry-After`.
+
+    **Money** is always an integer amount in minor units (`*Minor`, cents for USD) plus an ISO 4217 `currency`.
+
+    **CSRF.** Unsafe methods require an `Origin` header matching an allowed web origin (storefront or Seller Center).
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+servers:
+  - url: http://localhost:8200
+    description: local
+  - url: https://api.dev.afrotransact.com/bff
+    description: dev
+  - url: https://api.uat.afrotransact.com/bff
+    description: uat
+  - url: https://api.afrotransact.com/bff
+    description: prod
+tags:
+  - name: Shell
+    description: Session, organisation switcher, role-aware navigation, onboarding status and compliance banner
+  - name: Dashboard
+    description: KPIs and charts for the seller or provider home
+  - name: Orders
+    description: Seller shipment queue, order detail, status updates and shipping labels
+  - name: Listings
+    description: Listings table, 4-step product builder, category requests, uploads and stock
+  - name: Money
+    description: Payouts, plan and billing
+  - name: Team
+    description: Members, invitations and role capability cards
+  - name: Provider Hub
+    description: Calendar, booking requests, working hours, services, cancellation policy, public page and earnings
+security:
+  - sessionCookie: []
+paths:
+  # ───────────────────────────────────────────────────────────── shell
+  /v1/seller/session:
+    get:
+      tags: [Shell]
+      operationId: getSellerSession
+      security: [{sessionCookie: []}]
+      summary: Signed-in member, organisations, active organisation and role-aware navigation
+      description: |
+        Composes identity `GET /v1/me` (profile, organisations with the member's role, active org), seller
+        `GET /v1/orgs/{id}` (approval status) and identity's module matrix for the portal (falls back to the
+        platform default matrix when the member may not read it).
+      responses:
+        '200': {description: Session, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSession'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/session/active-org:
+    put:
+      tags: [Shell]
+      operationId: setActiveOrg
+      security: [{sessionCookie: []}]
+      summary: Switch the organisation to act for (org switcher)
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ActiveOrgRequest'}}}
+      responses:
+        '200': {description: Session for the new organisation, content: {application/json: {schema: {$ref: '#/components/schemas/SellerSession'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/onboarding:
+    get:
+      tags: [Shell]
+      operationId: getOnboarding
+      security: [{sessionCookie: []}]
+      summary: Onboarding application status (the only screen before approval)
+      description: seller `GET /v1/applications/me`.
+      responses:
+        '200': {description: Application status, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/compliance:
+    get:
+      tags: [Shell]
+      operationId: getCompliance
+      security: [{sessionCookie: []}]
+      summary: Stripe compliance status for the banner shown on every page while something is outstanding
+      description: seller `GET /v1/orgs/{orgId}/account-health`.
+      responses:
+        '200': {description: Compliance summary, content: {application/json: {schema: {$ref: '#/components/schemas/ComplianceSummary'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── dashboard
+  /v1/seller/dashboard:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboard
+      security: [{sessionCookie: []}]
+      summary: Home KPIs and charts (seller or provider, by the active organisation's kind)
+      description: |
+        Seller: sales and units (orders), top products (orders), orders by fulfilment (orders), stock by warehouse
+        (inventory positions). Provider: bookings and deposits, bookings by service, status donut and earnings by
+        week (bookings). Each chart reports `available: false` when its upstream cannot answer, so the rest of the
+        page still renders. Exports (PDF, Excel with a native chart, CSV) are produced from these rows.
+      parameters:
+        - {name: rangeDays, in: query, schema: {type: integer, enum: [7, 30, 90], default: 30}}
+      responses:
+        '200': {description: Dashboard, content: {application/json: {schema: {$ref: '#/components/schemas/Dashboard'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── orders
+  /v1/seller/orders:
+    get:
+      tags: [Orders]
+      operationId: listSellerOrders
+      security: [{sessionCookie: []}]
+      summary: Shipment queue of the active organisation (server-driven table)
+      description: orders `GET /v1/seller/shipments` (newest first, cursor pagination, status filter).
+      parameters:
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/ShipmentStatus'}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200': {description: One page, content: {application/json: {schema: {$ref: '#/components/schemas/SellerOrderPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/orders/{orderNumber}:
+    get:
+      tags: [Orders]
+      operationId: getSellerOrder
+      security: [{sessionCookie: []}]
+      summary: Order detail with the organisation's shipments (opened in a sheet)
+      description: orders `GET /v1/orders/{number}` (sellers see only their own shipments).
+      parameters: [{$ref: '#/components/parameters/OrderNumber'}]
+      responses:
+        '200': {description: Order, content: {application/json: {schema: {$ref: '#/components/schemas/SellerOrderDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/status:
+    post:
+      tags: [Orders]
+      operationId: updateShipmentStatus
+      security: [{sessionCookie: []}]
+      summary: Confirm, pack or mark ready (the only statuses a seller may set)
+      description: |
+        orders `POST /v1/shipments/{id}/transitions`. Anything but CONFIRMED, PACKED or READY is refused with 422
+        before calling orders; orders answers 409 `CONFLICT` for a transition that is not allowed from the current
+        status and 403 for a step that belongs to AfroTransact (AfroTransact-fulfilled shipments).
+      parameters: [{$ref: '#/components/parameters/OrderNumber'}, {$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StatusUpdateRequest'}}}
+      responses:
+        '200': {description: Updated order, content: {application/json: {schema: {$ref: '#/components/schemas/SellerOrderDetail'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/rates:
+    post:
+      tags: [Orders]
+      operationId: quoteShippingRates
+      security: [{sessionCookie: []}]
+      summary: Carrier rates for a seller-fulfilled shipment (cheapest first)
+      description: orders `GET /v1/orders/{number}` (ship-to) + carrier-gateway `POST /v1/rates`.
+      parameters: [{$ref: '#/components/parameters/OrderNumber'}, {$ref: '#/components/parameters/ShipmentId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RatesRequest'}}}
+      responses:
+        '200': {description: Quotes, content: {application/json: {schema: {$ref: '#/components/schemas/RateQuotes'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/orders/{orderNumber}/shipments/{shipmentId}/labels:
+    post:
+      tags: [Orders]
+      operationId: buyShippingLabel
+      security: [{sessionCookie: []}]
+      summary: Buy a label for a quoted rate and attach its tracking number to the shipment
+      description: |
+        carrier-gateway `POST /v1/labels` (Idempotency-Key relayed; the same key returns the same label) then orders
+        `POST /v1/shipments/{id}/tracking`.
+      parameters: [{$ref: '#/components/parameters/OrderNumber'}, {$ref: '#/components/parameters/ShipmentId'}, {$ref: '#/components/parameters/IdempotencyKeyRequired'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/BuyLabelRequest'}}}
+      responses:
+        '201': {description: Label bought, content: {application/json: {schema: {$ref: '#/components/schemas/LabelPurchase'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── listings
+  /v1/seller/listings:
+    get:
+      tags: [Listings]
+      operationId: listListings
+      security: [{sessionCookie: []}]
+      summary: The organisation's listings (server-driven table)
+      description: catalog `GET /v1/products` (own organisation; status, q, page, size).
+      parameters:
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/ListingStatus'}}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
+      responses:
+        '200': {description: One page, content: {application/json: {schema: {$ref: '#/components/schemas/ListingPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/listings/{productId}/status:
+    post:
+      tags: [Listings]
+      operationId: setListingActive
+      security: [{sessionCookie: []}]
+      summary: Pause or resume a live listing
+      description: catalog `POST /v1/products/{id}/pause` or `/resume`.
+      parameters: [{$ref: '#/components/parameters/ProductId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ListingStatusRequest'}}}
+      responses:
+        '200': {description: Updated listing, content: {application/json: {schema: {$ref: '#/components/schemas/ListingRow'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/products:
+    post:
+      tags: [Listings]
+      operationId: submitProduct
+      security: [{sessionCookie: []}]
+      summary: Submit the product builder (step 4) for review, or save it pending category approval
+      description: |
+        catalog `POST /v1/products`. With `categoryId` the product goes to listing review (IN_REVIEW); with
+        `categoryRequestId` it waits for the requested category (PENDING_CATEGORY_APPROVAL) and moves to review when
+        the catalog team approves the category.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ProductDraft'}}}
+      responses:
+        '201': {description: Listing created, content: {application/json: {schema: {$ref: '#/components/schemas/ListingRow'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/categories:
+    get:
+      tags: [Listings]
+      operationId: getCategoryTree
+      security: [{sessionCookie: []}]
+      summary: Category tree (department › category › product type) for step 1
+      description: catalog `GET /v1/categories`, nested.
+      responses:
+        '200': {description: Tree, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/CategoryNode'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/product-types/{code}:
+    get:
+      tags: [Listings]
+      operationId: getProductType
+      security: [{sessionCookie: []}]
+      summary: Required details, variation themes and identifier rule of a product type (steps 3 and 4)
+      description: catalog `GET /v1/product-types/{code}`.
+      parameters: [{name: code, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Schema, content: {application/json: {schema: {$ref: '#/components/schemas/ProductTypeSchema'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/catalog/gtin/{code}:
+    get:
+      tags: [Listings]
+      operationId: checkGtin
+      security: [{sessionCookie: []}]
+      summary: Validate a GTIN/ISBN and find an existing product page that uses it
+      description: catalog `GET /v1/identifiers/gtin/{code}`.
+      parameters:
+        - {name: code, in: path, required: true, schema: {type: string, pattern: '^\d{8,14}$'}}
+        - {name: isbn, in: query, schema: {type: boolean, default: false}}
+      responses:
+        '200': {description: Check, content: {application/json: {schema: {$ref: '#/components/schemas/GtinCheck'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/category-requests:
+    get:
+      tags: [Listings]
+      operationId: listCategoryRequests
+      security: [{sessionCookie: []}]
+      summary: The organisation's category requests
+      description: catalog `GET /v1/category-requests/mine`.
+      responses:
+        '200': {description: Requests, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/CategoryRequest'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Listings]
+      operationId: requestCategory
+      security: [{sessionCookie: []}]
+      summary: Request a new category; the builder switches to the requested category right away
+      description: catalog `POST /v1/category-requests`.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CategoryRequestInput'}}}
+      responses:
+        '201': {description: Request, content: {application/json: {schema: {$ref: '#/components/schemas/CategoryRequest'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/uploads:
+    post:
+      tags: [Listings]
+      operationId: requestUpload
+      security: [{sessionCookie: []}]
+      summary: Direct upload ticket for a product or storefront image
+      description: media `POST /v1/uploads` (JPG, PNG or WebP, ≤ 8 MB).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/UploadRequest'}}}
+      responses:
+        '201': {description: Upload instructions, content: {application/json: {schema: {$ref: '#/components/schemas/UploadTicket'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/uploads/{assetId}/complete:
+    post:
+      tags: [Listings]
+      operationId: completeUpload
+      security: [{sessionCookie: []}]
+      summary: Finalise an uploaded image (size and dimensions are read by media)
+      description: media `POST /v1/assets/{id}/complete`.
+      parameters: [{name: assetId, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/inventory:
+    get:
+      tags: [Listings]
+      operationId: getInventory
+      security: [{sessionCookie: []}]
+      summary: Stock by SKU and warehouse (Fulfilled by AfroTransact positions)
+      description: inventory `GET /v1/positions?ownerOrg=` (sellers see only their own stock).
+      parameters:
+        - {name: lowStock, in: query, schema: {type: boolean, default: false}}
+      responses:
+        '200': {description: Positions, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/inventory/adjustments:
+    post:
+      tags: [Listings]
+      operationId: adjustStock
+      security: [{sessionCookie: []}]
+      summary: Set the quantity of a seller-fulfilled SKU (count after a stock take)
+      description: offers `PUT /v1/offers/stock/{sellerSku}` (planned — offers is being built).
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/StockAdjustmentRequest'}}}
+      responses:
+        '200': {description: Adjusted, content: {application/json: {schema: {$ref: '#/components/schemas/StockAdjustment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── money
+  /v1/seller/payouts:
+    get:
+      tags: [Money]
+      operationId: getPayouts
+      security: [{sessionCookie: []}]
+      summary: Balance (available, on hold per order, on the way) and payout history
+      description: payments `GET /v1/payouts/balance` (incl. payoutsPaused, payoutsPausedReason, providerFeesMinor) + `GET /v1/payouts/requests?orgId=` (history is omitted with `historyAvailable=false` when the member may not read it).
+      responses:
+        '200': {description: Payouts, content: {application/json: {schema: {$ref: '#/components/schemas/PayoutsView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Money]
+      operationId: requestPayout
+      security: [{sessionCookie: []}]
+      summary: Request a payout (minimum USD 25, once a day, never more than available)
+      description: payments `POST /v1/payouts/requests` (Idempotency-Key relayed).
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PayoutRequest'}}}
+      responses:
+        '201': {description: Requested, content: {application/json: {schema: {$ref: '#/components/schemas/Payout'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing:
+    get:
+      tags: [Money]
+      operationId: getBilling
+      security: [{sessionCookie: []}]
+      summary: Plan, cadence, next charge, payment methods, invoices and the plan catalogue
+      description: seller `GET /v1/orgs/{orgId}/billing`, `GET /v1/orgs/{orgId}/billing/invoices` and `GET /v1/plans?kind=`.
+      responses:
+        '200': {description: Billing, content: {application/json: {schema: {$ref: '#/components/schemas/BillingView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/plan:
+    post:
+      tags: [Money]
+      operationId: changePlan
+      security: [{sessionCookie: []}]
+      summary: Change plan or cadence (owner only; upgrades prorate now, the rest apply at renewal)
+      description: seller `POST /v1/orgs/{orgId}/billing/plan`.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ChangePlanRequest'}}}
+      responses:
+        '200': {description: Result, content: {application/json: {schema: {$ref: '#/components/schemas/ChangePlanResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/payment-methods/{paymentMethodId}/default:
+    post:
+      tags: [Money]
+      operationId: makeDefaultPaymentMethod
+      security: [{sessionCookie: []}]
+      summary: Make a card or bank account the default (owner only)
+      description: seller `POST /v1/orgs/{orgId}/billing/payment-methods/{id}/default`.
+      parameters: [{$ref: '#/components/parameters/PaymentMethodId'}]
+      responses:
+        '200': {description: Payment methods, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/BillingPaymentMethod'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/billing/payment-methods/{paymentMethodId}:
+    delete:
+      tags: [Money]
+      operationId: removePaymentMethod
+      security: [{sessionCookie: []}]
+      summary: Remove a payment method (owner only; the default cannot be removed — 409)
+      description: seller `DELETE /v1/orgs/{orgId}/billing/payment-methods/{id}`.
+      parameters: [{$ref: '#/components/parameters/PaymentMethodId'}]
+      responses:
+        '200': {description: Payment methods, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/BillingPaymentMethod'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── team
+  /v1/seller/team:
+    get:
+      tags: [Team]
+      operationId: getTeam
+      security: [{sessionCookie: []}]
+      summary: Members with their roles plus one capability card per role (what it can change, view, can't access)
+      description: seller `GET /v1/orgs/{id}` (members) + identity module matrix for the portal (default matrix as fallback).
+      responses:
+        '200': {description: Team, content: {application/json: {schema: {$ref: '#/components/schemas/TeamView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/team/invitations:
+    post:
+      tags: [Team]
+      operationId: inviteMember
+      security: [{sessionCookie: []}]
+      summary: Invite a member by email with a role
+      description: identity `POST /v1/orgs/{orgId}/invitations` (planned — identity has no invitation endpoint yet).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/InviteRequest'}}}
+      responses:
+        '201': {description: Invited member, content: {application/json: {schema: {$ref: '#/components/schemas/TeamMember'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/team/members/{userId}:
+    put:
+      tags: [Team]
+      operationId: assignRole
+      security: [{sessionCookie: []}]
+      summary: Change a member's role
+      description: identity `PUT /v1/orgs/{orgId}/members/{userId}`.
+      parameters: [{name: userId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RoleChangeRequest'}}}
+      responses:
+        '200': {description: Team, content: {application/json: {schema: {$ref: '#/components/schemas/TeamView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── provider hub
+  /v1/seller/bookings/calendar:
+    get:
+      tags: [Provider Hub]
+      operationId: getCalendar
+      security: [{sessionCookie: []}]
+      summary: Appointments, open hours and day summaries for a date range (week or month view)
+      description: bookings `GET /v1/providers/me/calendar?from=&to=` (planned — bookings is being built).
+      parameters:
+        - {name: from, in: query, required: true, schema: {type: string, format: date}}
+        - {name: to, in: query, required: true, schema: {type: string, format: date}}
+      responses:
+        '200': {description: Calendar, content: {application/json: {schema: {$ref: '#/components/schemas/CalendarView'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/bookings/requests:
+    get:
+      tags: [Provider Hub]
+      operationId: listBookingRequests
+      security: [{sessionCookie: []}]
+      summary: Requests and reschedules waiting on the provider (expire after 4 hours)
+      description: bookings `GET /v1/providers/me/bookings?status=REQUESTED,RESCHEDULE_REQUESTED` (planned).
+      responses:
+        '200': {description: Requests, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/BookingCard'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/bookings/{bookingId}/actions:
+    post:
+      tags: [Provider Hub]
+      operationId: actOnBooking
+      security: [{sessionCookie: []}]
+      summary: Confirm, decline (with a reason), propose a new time, complete, mark no-show or cancel
+      description: bookings `POST /v1/bookings/{id}/{confirm|decline|propose|complete|no-show|cancel}` (planned).
+      parameters: [{name: bookingId, in: path, required: true, schema: {type: string}}, {$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/BookingActionRequest'}}}
+      responses:
+        '200': {description: Updated booking, content: {application/json: {schema: {$ref: '#/components/schemas/BookingCard'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/provider/hours:
+    get:
+      tags: [Provider Hub]
+      operationId: getWorkingHours
+      security: [{sessionCookie: []}]
+      summary: Weekly hours with breaks, blocked dates and booking rules
+      description: bookings `GET /v1/providers/me/availability` (planned).
+      responses:
+        '200': {description: Availability, content: {application/json: {schema: {$ref: '#/components/schemas/Availability'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Provider Hub]
+      operationId: saveWorkingHours
+      security: [{sessionCookie: []}]
+      summary: Save weekly hours, blocked dates and booking rules
+      description: bookings `PUT /v1/providers/me/availability` (planned).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/Availability'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/Availability'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/provider/services:
+    get:
+      tags: [Provider Hub]
+      operationId: listServices
+      security: [{sessionCookie: []}]
+      summary: Services with price, deposit and what the provider takes home after commission and card fees
+      description: bookings `GET /v1/providers/me/services` (planned).
+      responses:
+        '200': {description: Services, content: {application/json: {schema: {type: array, items: {$ref: '#/components/schemas/ServiceOffer'}}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Provider Hub]
+      operationId: createService
+      security: [{sessionCookie: []}]
+      summary: Add a service
+      description: bookings `POST /v1/providers/me/services` (planned).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ServiceInput'}}}
+      responses:
+        '201': {description: Created, content: {application/json: {schema: {$ref: '#/components/schemas/ServiceOffer'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/provider/services/{serviceId}:
+    patch:
+      tags: [Provider Hub]
+      operationId: updateService
+      security: [{sessionCookie: []}]
+      summary: Change a service (price changes apply to new bookings only)
+      description: bookings `PATCH /v1/providers/me/services/{id}` (planned).
+      parameters: [{name: serviceId, in: path, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ServiceInput'}}}
+      responses:
+        '200': {description: Updated, content: {application/json: {schema: {$ref: '#/components/schemas/ServiceOffer'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/provider/cancellation-policy:
+    get:
+      tags: [Provider Hub]
+      operationId: getCancellationPolicy
+      security: [{sessionCookie: []}]
+      summary: Cancellation, late and no-show rules shown before customers book
+      description: bookings `GET /v1/providers/me/cancellation-policy` (planned).
+      responses:
+        '200': {description: Policy, content: {application/json: {schema: {$ref: '#/components/schemas/CancellationPolicy'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Provider Hub]
+      operationId: saveCancellationPolicy
+      security: [{sessionCookie: []}]
+      summary: Pick Flexible, Moderate or Strict, or build a Custom policy (existing bookings keep theirs)
+      description: bookings `PUT /v1/providers/me/cancellation-policy` (planned).
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CancellationPolicyInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/CancellationPolicy'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/provider/earnings:
+    get:
+      tags: [Provider Hub]
+      operationId: getEarnings
+      security: [{sessionCookie: []}]
+      summary: Per booking what was collected minus commission, Stripe fees and late-cancellation fees
+      description: bookings `GET /v1/providers/me/earnings?from=&to=` (planned) + payments `GET /v1/payouts/provider-fees` (outstanding provider fees).
+      parameters:
+        - {name: from, in: query, schema: {type: string, format: date}}
+        - {name: to, in: query, schema: {type: string, format: date}}
+      responses:
+        '200': {description: Earnings, content: {application/json: {schema: {$ref: '#/components/schemas/Earnings'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/storefront:
+    get:
+      tags: [Provider Hub]
+      operationId: getPublicPage
+      security: [{sessionCookie: []}]
+      summary: Draft of the seller storefront or provider public page (layout, colours, gallery, featured work, social links)
+      description: storefront `GET /v1/storefronts/me/draft`.
+      responses:
+        '200': {description: Draft, content: {application/json: {schema: {$ref: '#/components/schemas/PublicPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Provider Hub]
+      operationId: savePublicPage
+      security: [{sessionCookie: []}]
+      summary: Save the draft (edited social links go back to pending approval)
+      description: storefront `GET /v1/storefronts/me/draft` merged with the changes, then `PUT /v1/storefronts/me/draft`.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PublicPageInput'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/PublicPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/storefront/publish:
+    post:
+      tags: [Provider Hub]
+      operationId: publishPublicPage
+      security: [{sessionCookie: []}]
+      summary: Publish the draft (blocked with the failing contrast checks)
+      description: storefront `POST /v1/storefronts/me/publish` then the draft is read back.
+      responses:
+        '200': {description: Published page, content: {application/json: {schema: {$ref: '#/components/schemas/PublicPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: at_session
+      description: Opaque BFF session id (HttpOnly, Secure, SameSite=Lax). Tokens stay server-side.
+  parameters:
+    OrderNumber: {name: orderNumber, in: path, required: true, schema: {type: string}}
+    ShipmentId: {name: shipmentId, in: path, required: true, schema: {type: string}}
+    ProductId: {name: productId, in: path, required: true, schema: {type: string}}
+    PaymentMethodId: {name: paymentMethodId, in: path, required: true, schema: {type: string}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
+    IdempotencyKeyRequired: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}, description: Same key = same label; never buys twice.}
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    ValidationProblem:
+      description: Validation failed; `errors` maps request properties to messages
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        instance: {type: string}
+        code:
+          type: string
+          description: |
+            Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, NOT_APPROVED,
+            NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR.
+        errors:
+          type: object
+          additionalProperties: {type: string}
+      additionalProperties: true
+    # ── shell
+    OrgKind: {type: string, enum: [SELLER, PROVIDER]}
+    OrgStatus:
+      type: string
+      enum: [DRAFT, PENDING_REVIEW, FLAGGED, AWAITING_FINAL_APPROVAL, INFO_REQUESTED, APPROVED, REJECTED, SUSPENDED]
+    Portal: {type: string, enum: [SELLER_CENTER, PROVIDER_HUB]}
+    AccessLevel: {type: string, enum: [VIEW, EDIT, APPROVE, FULL]}
+    ModuleKey:
+      type: string
+      enum: [onboarding, home, orders, listings, inventory, storefront, calendar, requests, hours, services, policy, public-page, earnings, payouts, billing, account-health, team]
+    SellerUser:
+      type: object
+      required: [id, firstName, lastName, email, initials]
+      properties:
+        id: {type: string}
+        firstName: {type: string}
+        lastName: {type: string}
+        email: {type: string}
+        initials: {type: string}
+    OrgSummary:
+      type: object
+      required: [id, kind, name, status, approved, roleKey, roleLabel]
+      properties:
+        id: {type: string}
+        kind: {$ref: '#/components/schemas/OrgKind'}
+        name: {type: string}
+        status: {$ref: '#/components/schemas/OrgStatus'}
+        approved: {type: boolean}
+        roleKey: {type: string, description: 'Organisation role, e.g. seller.owner or provider.practitioner'}
+        roleLabel: {type: string}
+    NavModule:
+      type: object
+      required: [key, label, level, badge]
+      properties:
+        key: {$ref: '#/components/schemas/ModuleKey'}
+        label: {type: string}
+        level: {$ref: '#/components/schemas/AccessLevel'}
+        badge: {type: [integer, 'null'], description: 'Count shown next to the item (orders to ship, requests waiting, open compliance items)'}
+    NavGroup:
+      type: object
+      required: [key, label, modules]
+      properties:
+        key: {type: string}
+        label: {type: string}
+        modules: {type: array, items: {$ref: '#/components/schemas/NavModule'}}
+    SellerSession:
+      type: object
+      required: [user, orgs, activeOrg, portal, approved, navGroups, landing, accessNote]
+      properties:
+        user: {$ref: '#/components/schemas/SellerUser'}
+        orgs: {type: array, items: {$ref: '#/components/schemas/OrgSummary'}}
+        activeOrg:
+          oneOf:
+            - {$ref: '#/components/schemas/OrgSummary'}
+            - {type: 'null'}
+        portal:
+          oneOf:
+            - {$ref: '#/components/schemas/Portal'}
+            - {type: 'null'}
+        approved: {type: boolean}
+        navGroups:
+          type: array
+          description: Sidebar groups in order; only Onboarding until the organisation is approved.
+          items: {$ref: '#/components/schemas/NavGroup'}
+        landing: {$ref: '#/components/schemas/ModuleKey'}
+        accessNote: {type: string}
+    ActiveOrgRequest:
+      type: object
+      required: [orgId]
+      properties:
+        orgId: {type: string, minLength: 1}
+    OnboardingStepState: {type: string, enum: [DONE, TODO, ACTION, WAITING, BLOCKED]}
+    OnboardingStatus:
+      type: object
+      required: [orgId, kind, status, reference, steps, requestedItems, canResume]
+      properties:
+        orgId: {type: string}
+        kind: {$ref: '#/components/schemas/OrgKind'}
+        status: {type: string}
+        reference: {type: [string, 'null']}
+        steps:
+          type: array
+          items:
+            type: object
+            required: [key, label, state]
+            properties:
+              key: {type: string}
+              label: {type: string}
+              state: {$ref: '#/components/schemas/OnboardingStepState'}
+        requestedItems: {type: array, items: {type: string}}
+        canResume: {type: boolean}
+    ComplianceStatus: {type: string, enum: [COMPLIANT, ACTION_NEEDED, RESTRICTED_SOON, RESTRICTED, VERIFYING]}
+    ComplianceSummary:
+      type: object
+      required: [status, showBanner, tone, title, message, openItems, deadline, payoutsPaused, chargesEnabled, payoutsEnabled, listingsHidden, items]
+      properties:
+        status: {$ref: '#/components/schemas/ComplianceStatus'}
+        showBanner: {type: boolean}
+        tone: {type: string, enum: [none, info, warning, danger]}
+        title: {type: string}
+        message: {type: string}
+        openItems: {type: integer, minimum: 0}
+        deadline: {type: [string, 'null'], format: date-time}
+        payoutsPaused: {type: boolean}
+        chargesEnabled: {type: boolean}
+        payoutsEnabled: {type: boolean}
+        listingsHidden: {type: boolean}
+        items:
+          type: array
+          items:
+            type: object
+            required: [requirement, label, bucket]
+            properties:
+              requirement: {type: string}
+              label: {type: string}
+              bucket: {type: string}
+    # ── dashboard
+    ChartTone: {type: string, enum: [ink, gold, green, blue, red, grey]}
+    ChartKind: {type: string, enum: [trend, hbar, donut, stack]}
+    ChartSpec:
+      type: object
+      description: One chart and its rows. Money series are in major currency units (dollars) so exports read naturally.
+      required: [id, title, kind, categoryLabel, valueFormat, series, rows, available]
+      properties:
+        id: {type: string}
+        title: {type: string}
+        kind: {$ref: '#/components/schemas/ChartKind'}
+        categoryLabel: {type: string}
+        valueFormat: {type: string, enum: [money, count]}
+        series:
+          type: array
+          items:
+            type: object
+            required: [key, label, tone]
+            properties:
+              key: {type: string}
+              label: {type: string}
+              tone: {$ref: '#/components/schemas/ChartTone'}
+              format: {type: string, enum: [money, count]}
+        rows:
+          type: array
+          items:
+            type: object
+            required: [category, values]
+            properties:
+              category: {type: string}
+              values: {type: object, additionalProperties: {type: number}}
+        available: {type: boolean}
+    Kpi:
+      type: object
+      required: [label, value, detail, tone]
+      properties:
+        label: {type: string}
+        value: {type: string}
+        detail: {type: string}
+        tone: {type: string, enum: [positive, attention, neutral]}
+    TodoItem:
+      type: object
+      required: [label, module, tone]
+      properties:
+        label: {type: string}
+        module: {$ref: '#/components/schemas/ModuleKey'}
+        tone: {type: string, enum: [info, warning, success, danger]}
+    Dashboard:
+      type: object
+      required: [portal, rangeDays, kpis, charts, todo]
+      properties:
+        portal: {$ref: '#/components/schemas/Portal'}
+        rangeDays: {type: integer}
+        kpis: {type: array, items: {$ref: '#/components/schemas/Kpi'}}
+        charts: {type: array, items: {$ref: '#/components/schemas/ChartSpec'}}
+        todo: {type: array, items: {$ref: '#/components/schemas/TodoItem'}}
+    # ── orders
+    Fulfilment: {type: string, enum: [SELLER, AFROTRANSACT]}
+    ShipmentStatus:
+      type: string
+      enum: [PENDING_PAYMENT, PLACED, CONFIRMED, PACKED, READY, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERY_FAILED, DELIVERED, RETURNED, CANCELLED]
+    SellerStatusAction: {type: string, enum: [CONFIRMED, PACKED, READY], description: The only statuses a seller may set.}
+    SellerOrderRow:
+      type: object
+      required: [orderNumber, shipmentId, placedAt, buyerName, shipTo, itemsSummary, itemCount, totalMinor, currency, fulfilment, status, statusLabel, carrier, trackingNumber, nextActions, canBuyLabel]
+      properties:
+        orderNumber: {type: string}
+        shipmentId: {type: string}
+        placedAt: {type: string, format: date-time}
+        buyerName: {type: string}
+        shipTo: {type: string, description: '"City, ST"'}
+        itemsSummary: {type: string}
+        itemCount: {type: integer}
+        totalMinor: {type: integer}
+        currency: {type: string}
+        fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        status: {$ref: '#/components/schemas/ShipmentStatus'}
+        statusLabel: {type: string}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
+        nextActions: {type: array, items: {$ref: '#/components/schemas/SellerStatusAction'}}
+        canBuyLabel: {type: boolean}
+    SellerOrderPage:
+      type: object
+      required: [items, nextCursor, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SellerOrderRow'}}
+        nextCursor: {type: [string, 'null']}
+        total: {type: integer}
+    PostalAddress:
+      type: object
+      required: [name, line1, city, state, postalCode, country]
+      properties:
+        name: {type: string}
+        phone: {type: [string, 'null']}
+        line1: {type: string}
+        line2: {type: [string, 'null']}
+        city: {type: string}
+        state: {type: string}
+        postalCode: {type: string}
+        country: {type: string}
+    SellerShipment:
+      type: object
+      required: [shipmentId, label, status, statusLabel, fulfilment, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, timeline]
+      properties:
+        shipmentId: {type: string}
+        label: {type: string}
+        status: {$ref: '#/components/schemas/ShipmentStatus'}
+        statusLabel: {type: string}
+        fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        perishable: {type: boolean}
+        lines:
+          type: array
+          items:
+            type: object
+            required: [title, quantity, unitPriceMinor, itemsMinor, variantAtin, imageUrl]
+            properties:
+              title: {type: string}
+              quantity: {type: integer}
+              unitPriceMinor: {type: integer}
+              itemsMinor: {type: integer}
+              variantAtin: {type: string}
+              imageUrl: {type: [string, 'null']}
+        itemsMinor: {type: integer}
+        shippingMinor: {type: integer}
+        totalMinor: {type: integer}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
+        nextActions: {type: array, items: {$ref: '#/components/schemas/SellerStatusAction'}}
+        canBuyLabel: {type: boolean}
+        timeline:
+          type: array
+          items:
+            type: object
+            required: [status, at, actor]
+            properties:
+              status: {type: string}
+              at: {type: string, format: date-time}
+              actor: {type: string}
+    SellerOrderDetail:
+      type: object
+      required: [orderNumber, status, placedAt, currency, buyerName, shippingAddress, shipments, totalMinor]
+      properties:
+        orderNumber: {type: string}
+        status: {type: string}
+        placedAt: {type: string, format: date-time}
+        currency: {type: string}
+        buyerName: {type: string}
+        shippingAddress:
+          oneOf:
+            - {$ref: '#/components/schemas/PostalAddress'}
+            - {type: 'null'}
+        shipments: {type: array, items: {$ref: '#/components/schemas/SellerShipment'}}
+        totalMinor: {type: integer}
+    StatusUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status: {$ref: '#/components/schemas/SellerStatusAction'}
+    Parcel:
+      type: object
+      required: [weightLb]
+      properties:
+        weightLb: {type: number, exclusiveMinimum: 0, maximum: 150}
+        lengthIn: {type: number, minimum: 0}
+        widthIn: {type: number, minimum: 0}
+        heightIn: {type: number, minimum: 0}
+    RatesRequest:
+      type: object
+      required: [parcel, shipFrom]
+      properties:
+        parcel: {$ref: '#/components/schemas/Parcel'}
+        shipFrom: {$ref: '#/components/schemas/PostalAddress'}
+    Carrier: {type: string, enum: [usps, ups, fedex, dhl]}
+    RateQuote:
+      type: object
+      required: [carrier, service, serviceName, amountMinor, currency, transitDays, estimatedDelivery]
+      properties:
+        carrier: {$ref: '#/components/schemas/Carrier'}
+        service: {type: string}
+        serviceName: {type: string}
+        amountMinor: {type: integer}
+        currency: {type: string}
+        transitDays: {type: [integer, 'null']}
+        estimatedDelivery: {type: [string, 'null'], format: date-time}
+    RateQuotes:
+      type: object
+      required: [quotes, partial]
+      properties:
+        quotes: {type: array, items: {$ref: '#/components/schemas/RateQuote'}}
+        partial: {type: boolean, description: Some carriers did not answer in time}
+    BuyLabelRequest:
+      type: object
+      required: [carrier, service, parcel, shipFrom]
+      properties:
+        carrier: {$ref: '#/components/schemas/Carrier'}
+        service: {type: string, minLength: 1}
+        parcel: {$ref: '#/components/schemas/Parcel'}
+        shipFrom: {$ref: '#/components/schemas/PostalAddress'}
+    LabelPurchase:
+      type: object
+      required: [carrier, service, trackingNumber, costMinor, currency, documentUrl, order]
+      properties:
+        carrier: {$ref: '#/components/schemas/Carrier'}
+        service: {type: string}
+        trackingNumber: {type: string}
+        costMinor: {type: integer}
+        currency: {type: string}
+        documentUrl: {type: [string, 'null']}
+        order: {$ref: '#/components/schemas/SellerOrderDetail'}
+    # ── listings
+    ListingStatus: {type: string, enum: [IN_REVIEW, PENDING_CATEGORY_APPROVAL, LIVE, REJECTED, PAUSED]}
+    ListingRow:
+      type: object
+      required: [productId, atin, title, sku, variantCount, priceMinor, currency, stock, fulfilment, status, statusLabel, moderationNote, imageUrl, updatedAt]
+      properties:
+        productId: {type: string}
+        atin: {type: [string, 'null']}
+        title: {type: string}
+        sku: {type: string}
+        variantCount: {type: integer}
+        priceMinor: {type: integer, description: Lowest variant price}
+        currency: {type: string}
+        stock: {type: integer, description: Sum of variant quantities}
+        fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        status: {$ref: '#/components/schemas/ListingStatus'}
+        statusLabel: {type: string}
+        moderationNote: {type: [string, 'null']}
+        imageUrl: {type: [string, 'null']}
+        updatedAt: {type: string, format: date-time}
+    ListingPage:
+      type: object
+      required: [items, total, page, size]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ListingRow'}}
+        total: {type: integer}
+        page: {type: integer}
+        size: {type: integer}
+    ListingStatusRequest:
+      type: object
+      required: [active]
+      properties:
+        active: {type: boolean}
+    CategoryNode:
+      type: object
+      required: [id, name, level, productType, path, children]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        level: {type: string, description: 'DEPARTMENT, CATEGORY or PRODUCT_TYPE'}
+        productType: {type: [string, 'null']}
+        path: {type: string}
+        children: {type: array, items: {$ref: '#/components/schemas/CategoryNode'}}
+    ProductTypeSchema:
+      type: object
+      required: [code, label, identifierRule, attributes, themes]
+      properties:
+        code: {type: string}
+        label: {type: string}
+        identifierRule: {type: string, enum: [gtin, isbn, none]}
+        attributes:
+          type: array
+          items:
+            type: object
+            required: [key, label, options, required, multiline]
+            properties:
+              key: {type: string}
+              label: {type: string}
+              options: {type: array, items: {type: string}}
+              required: {type: boolean}
+              multiline: {type: boolean}
+        themes:
+          type: array
+          items:
+            type: object
+            required: [name, dimensions]
+            properties:
+              name: {type: string}
+              dimensions:
+                type: array
+                items:
+                  type: object
+                  required: [name, options]
+                  properties:
+                    name: {type: string}
+                    options: {type: array, items: {type: string}}
+    GtinCheck:
+      type: object
+      required: [digits, valid, suggestion, existingAtin, message]
+      properties:
+        digits: {type: string}
+        valid: {type: boolean}
+        suggestion: {type: [string, 'null']}
+        existingAtin: {type: [string, 'null']}
+        message: {type: string}
+    CategoryRequestInput:
+      type: object
+      required: [parentPath, name, exampleProduct, detailsNeeded]
+      properties:
+        parentPath: {type: string, minLength: 3, maxLength: 200}
+        name: {type: string, minLength: 3, maxLength: 80}
+        exampleProduct: {type: string, minLength: 3, maxLength: 200}
+        detailsNeeded: {type: string, minLength: 3, maxLength: 1000}
+    CategoryRequest:
+      type: object
+      required: [id, reference, path, status, decisionNote, createdAt]
+      properties:
+        id: {type: string}
+        reference: {type: string}
+        path: {type: string}
+        status: {type: string, enum: [PENDING_REVIEW, APPROVED, REJECTED]}
+        decisionNote: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+    ProductImageInput:
+      type: object
+      required: [url, contentType]
+      properties:
+        url: {type: string, minLength: 1}
+        width: {type: integer, minimum: 0}
+        height: {type: integer, minimum: 0}
+        bytes: {type: integer, minimum: 0}
+        contentType: {type: string}
+    VariantInput:
+      type: object
+      required: [options, sellerSku, priceMinor, quantity]
+      properties:
+        options: {type: object, additionalProperties: {type: string}}
+        sellerSku: {type: string, minLength: 1, maxLength: 64}
+        gtin: {type: string}
+        gtinExempt: {type: boolean}
+        priceMinor: {type: integer, minimum: 1}
+        quantity: {type: integer, minimum: 0}
+    ProductDraft:
+      type: object
+      required: [title, attributes, images, variationTheme, variants]
+      description: Exactly one of categoryId or categoryRequestId.
+      properties:
+        categoryId: {type: string}
+        categoryRequestId: {type: string}
+        title: {type: string, minLength: 10, maxLength: 200}
+        attributes: {type: object, additionalProperties: {type: string}}
+        images: {type: array, minItems: 1, maxItems: 10, items: {$ref: '#/components/schemas/ProductImageInput'}}
+        variationTheme: {type: string, minLength: 1}
+        variants: {type: array, minItems: 1, maxItems: 200, items: {$ref: '#/components/schemas/VariantInput'}}
+    UploadRequest:
+      type: object
+      required: [purpose, fileName, contentType, size]
+      properties:
+        purpose: {type: string, enum: [product-image, storefront]}
+        fileName: {type: string, minLength: 1, maxLength: 200}
+        contentType: {type: string, enum: [image/jpeg, image/png, image/webp]}
+        size: {type: integer, minimum: 1, maximum: 8388608}
+    UploadTicket:
+      type: object
+      required: [assetId, method, url, headers, publicUrl, expiresAt]
+      properties:
+        assetId: {type: string}
+        method: {type: string}
+        url: {type: string}
+        headers: {type: object, additionalProperties: {type: string}}
+        publicUrl: {type: [string, 'null']}
+        expiresAt: {type: [string, 'null'], format: date-time}
+    Asset:
+      type: object
+      required: [id, url, width, height, bytes, contentType, status]
+      properties:
+        id: {type: string}
+        url: {type: string}
+        width: {type: [integer, 'null']}
+        height: {type: [integer, 'null']}
+        bytes: {type: [integer, 'null']}
+        contentType: {type: string}
+        status: {type: string, enum: [PENDING, READY, FLAGGED, REJECTED]}
+    StockPosition:
+      type: object
+      required: [sku, nodeId, onHand, reserved, available, inbound, lowStock]
+      properties:
+        sku: {type: string}
+        nodeId: {type: string}
+        onHand: {type: integer}
+        reserved: {type: integer}
+        available: {type: integer}
+        inbound: {type: integer}
+        lowStock: {type: boolean}
+    InventoryView:
+      type: object
+      required: [positions, totals]
+      properties:
+        positions: {type: array, items: {$ref: '#/components/schemas/StockPosition'}}
+        totals:
+          type: object
+          required: [available, reserved, inbound, lowStockSkus]
+          properties:
+            available: {type: integer}
+            reserved: {type: integer}
+            inbound: {type: integer}
+            lowStockSkus: {type: integer}
+    StockAdjustmentRequest:
+      type: object
+      required: [sku, quantity, reason]
+      properties:
+        sku: {type: string, minLength: 1}
+        quantity: {type: integer, minimum: 0, maximum: 100000}
+        reason: {type: string, enum: [STOCK_TAKE, DAMAGED, FOUND, RETURNED, OTHER]}
+    StockAdjustment:
+      type: object
+      required: [sku, quantity]
+      properties:
+        sku: {type: string}
+        quantity: {type: integer}
+    # ── money
+    PayoutBalance:
+      type: object
+      required: [currency, availableMinor, onHoldMinor, requestedOrInTransitMinor, paidMinor, providerFeesMinor, minimumPayoutMinor, canRequestToday, payoutsPaused, payoutsPausedReason, payoutsPausedMessage, holds]
+      properties:
+        currency: {type: string}
+        availableMinor: {type: integer}
+        onHoldMinor: {type: integer}
+        requestedOrInTransitMinor: {type: integer}
+        paidMinor: {type: integer}
+        providerFeesMinor: {type: integer, description: Provider fees (late cancellations) debited from or reserved in the balance}
+        payoutsPaused: {type: boolean, description: 'Compliance hold: payout requests fail until it is lifted; the balance keeps accruing'}
+        payoutsPausedReason:
+          oneOf:
+            - {type: string, enum: [AUTO_PAST_DUE, MANUAL, DEAUTHORIZED, CHARGES_DISABLED]}
+            - {type: 'null'}
+        payoutsPausedMessage: {type: [string, 'null'], description: What the hold means for the member and how it lifts}
+        minimumPayoutMinor: {type: integer}
+        canRequestToday: {type: boolean}
+        holds:
+          type: array
+          items:
+            type: object
+            required: [orderId, amountMinor, releaseAt]
+            properties:
+              orderId: {type: string}
+              amountMinor: {type: integer}
+              releaseAt: {type: [string, 'null']}
+    Payout:
+      type: object
+      required: [id, amountMinor, currency, status, requestedAt, holdReason, failureMessage]
+      properties:
+        id: {type: string}
+        amountMinor: {type: integer}
+        currency: {type: string}
+        status: {type: string, enum: [REQUESTED, HELD, IN_TRANSIT, PAID, FAILED]}
+        requestedAt: {type: string}
+        holdReason: {type: [string, 'null']}
+        failureMessage: {type: [string, 'null']}
+    PayoutsView:
+      type: object
+      required: [balance, payouts, historyAvailable]
+      properties:
+        balance: {$ref: '#/components/schemas/PayoutBalance'}
+        payouts: {type: array, items: {$ref: '#/components/schemas/Payout'}}
+        historyAvailable: {type: boolean}
+    PayoutRequest:
+      type: object
+      properties:
+        amountMinor: {type: integer, minimum: 1}
+        all: {type: boolean}
+    Cadence: {type: string, enum: [MONTHLY, QUARTERLY, ANNUAL]}
+    PlanPrice:
+      type: object
+      required: [cadence, months, totalMinor, perMonthMinor, savingMinor, perMonthLabel, billedLabel, savingLabel]
+      properties:
+        cadence: {$ref: '#/components/schemas/Cadence'}
+        months: {type: integer}
+        totalMinor: {type: integer}
+        perMonthMinor: {type: integer}
+        savingMinor: {type: integer}
+        perMonthLabel: {type: string}
+        billedLabel: {type: string}
+        savingLabel: {type: string}
+    Plan:
+      type: object
+      required: [code, name, tagline, monthlyMinor, trialDays, features, prices, current]
+      properties:
+        code: {type: string}
+        name: {type: string}
+        tagline: {type: string}
+        monthlyMinor: {type: integer}
+        trialDays: {type: integer}
+        features: {type: array, items: {type: string}}
+        prices: {type: array, items: {$ref: '#/components/schemas/PlanPrice'}}
+        current: {type: boolean}
+    BillingPaymentMethod:
+      type: object
+      required: [id, kind, brand, last4, expMonth, expYear, bankName, accountType, verified, receivesPayouts, isDefault, label]
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [card, bank]}
+        brand: {type: [string, 'null']}
+        last4: {type: string}
+        expMonth: {type: [integer, 'null']}
+        expYear: {type: [integer, 'null']}
+        bankName: {type: [string, 'null']}
+        accountType: {type: [string, 'null']}
+        verified: {type: boolean}
+        receivesPayouts: {type: boolean}
+        isDefault: {type: boolean}
+        label: {type: string}
+    Invoice:
+      type: object
+      required: [id, number, periodStart, periodEnd, amountDueMinor, amountPaidMinor, currency, status, pdfUrl, hostedUrl, createdAt]
+      properties:
+        id: {type: string}
+        number: {type: string}
+        periodStart: {type: [string, 'null'], format: date-time}
+        periodEnd: {type: [string, 'null'], format: date-time}
+        amountDueMinor: {type: integer}
+        amountPaidMinor: {type: integer}
+        currency: {type: string}
+        status: {type: string}
+        pdfUrl: {type: [string, 'null']}
+        hostedUrl: {type: [string, 'null']}
+        createdAt: {type: string, format: date-time}
+    Subscription:
+      type: object
+      required: [planCode, planName, cadence, status, priceLabel, billedLabel, trialEndsAt, currentPeriodEnd, nextChargeAt, nextChargeMinor, nextChargeLabel, cancelAtPeriodEnd, pendingChange, dunning]
+      properties:
+        planCode: {type: string}
+        planName: {type: string}
+        cadence: {$ref: '#/components/schemas/Cadence'}
+        status: {type: string}
+        priceLabel: {type: string}
+        billedLabel: {type: string}
+        trialEndsAt: {type: [string, 'null'], format: date-time}
+        currentPeriodEnd: {type: [string, 'null'], format: date-time}
+        nextChargeAt: {type: [string, 'null'], format: date-time}
+        nextChargeMinor: {type: [integer, 'null']}
+        nextChargeLabel: {type: string}
+        cancelAtPeriodEnd: {type: boolean}
+        pendingChange:
+          type: [object, 'null']
+          required: [planCode, planName, cadence, effectiveAt]
+          properties:
+            planCode: {type: string}
+            planName: {type: string}
+            cadence: {$ref: '#/components/schemas/Cadence'}
+            effectiveAt: {type: string, format: date-time}
+        dunning: {type: [string, 'null']}
+    BillingView:
+      type: object
+      required: [subscription, plans, paymentMethods, invoices, canManage]
+      properties:
+        subscription: {$ref: '#/components/schemas/Subscription'}
+        plans: {type: array, items: {$ref: '#/components/schemas/Plan'}}
+        paymentMethods: {type: array, items: {$ref: '#/components/schemas/BillingPaymentMethod'}}
+        invoices: {type: array, items: {$ref: '#/components/schemas/Invoice'}}
+        canManage: {type: boolean, description: Only the owner role changes billing}
+    ChangePlanRequest:
+      type: object
+      required: [planCode, cadence]
+      properties:
+        planCode: {type: string, minLength: 1}
+        cadence: {$ref: '#/components/schemas/Cadence'}
+    ChangePlanResult:
+      type: object
+      required: [applied, billing]
+      properties:
+        applied: {type: string, enum: [IMMEDIATE_UPGRADE, AT_RENEWAL, NO_CHANGE]}
+        billing: {$ref: '#/components/schemas/BillingView'}
+    # ── team
+    RoleCard:
+      type: object
+      required: [key, label, summary, note, can, view, cannot]
+      properties:
+        key: {type: string}
+        label: {type: string}
+        summary: {type: string}
+        note: {type: [string, 'null']}
+        can: {type: array, items: {type: string}, description: What the role can change}
+        view: {type: array, items: {type: string}, description: What it can only view}
+        cannot: {type: array, items: {type: string}, description: What it can't access}
+    TeamMember:
+      type: object
+      required: [userId, name, email, roleKey, roleLabel, status, isYou]
+      properties:
+        userId: {type: string}
+        name: {type: string}
+        email: {type: [string, 'null']}
+        roleKey: {type: string}
+        roleLabel: {type: string}
+        status: {type: string, enum: [ACTIVE, INVITED]}
+        isYou: {type: boolean}
+    TeamView:
+      type: object
+      required: [members, roles, yourRoleKey, canManage]
+      properties:
+        members: {type: array, items: {$ref: '#/components/schemas/TeamMember'}}
+        roles: {type: array, items: {$ref: '#/components/schemas/RoleCard'}}
+        yourRoleKey: {type: string}
+        canManage: {type: boolean}
+    InviteRequest:
+      type: object
+      required: [email, roleKey]
+      properties:
+        email: {type: string, format: email}
+        roleKey: {type: string, minLength: 1}
+    RoleChangeRequest:
+      type: object
+      required: [roleKey]
+      properties:
+        roleKey: {type: string, minLength: 1}
+    # ── provider hub
+    BookingStatus:
+      type: string
+      enum: [PENDING_PAYMENT, REQUESTED, CONFIRMED, RESCHEDULE_REQUESTED, RESCHEDULE_PROPOSED, COMPLETED, NO_SHOW, DECLINED, EXPIRED, CANCELLED_CUSTOMER, CANCELLED_PROVIDER]
+    BookingAction: {type: string, enum: [CONFIRM, DECLINE, PROPOSE, COMPLETE, NO_SHOW, CANCEL]}
+    BookingCard:
+      type: object
+      required: [id, reference, customerName, serviceName, startAt, endAt, durationMinutes, status, statusLabel, priceMinor, depositMinor, currency, depositState, note, practitioner, expiresAt, proposedStartAt, allowedActions]
+      properties:
+        id: {type: string}
+        reference: {type: string}
+        customerName: {type: string}
+        serviceName: {type: string}
+        startAt: {type: string, format: date-time}
+        endAt: {type: string, format: date-time}
+        durationMinutes: {type: integer}
+        status: {$ref: '#/components/schemas/BookingStatus'}
+        statusLabel: {type: string}
+        priceMinor: {type: integer}
+        depositMinor: {type: integer}
+        currency: {type: string}
+        depositState: {type: string, enum: [none, held, captured, released, refunded]}
+        note: {type: [string, 'null']}
+        practitioner: {type: [string, 'null']}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        proposedStartAt: {type: [string, 'null'], format: date-time}
+        allowedActions: {type: array, items: {$ref: '#/components/schemas/BookingAction'}}
+    DaySummary:
+      type: object
+      required: [date, appointments, bookedMinutes, expectedRevenueMinor, needsAction]
+      properties:
+        date: {type: string, format: date}
+        appointments: {type: integer}
+        bookedMinutes: {type: integer}
+        expectedRevenueMinor: {type: integer}
+        needsAction: {type: integer}
+    TimeRange:
+      type: object
+      required: [start, end]
+      properties:
+        start: {type: string, pattern: '^([01]\d|2[0-3]):[0-5]\d$'}
+        end: {type: string, pattern: '^([01]\d|2[0-4]):[0-5]\d$'}
+    Weekday: {type: string, enum: [MON, TUE, WED, THU, FRI, SAT, SUN]}
+    DayHours:
+      type: object
+      required: [day, ranges]
+      properties:
+        day: {$ref: '#/components/schemas/Weekday'}
+        ranges: {type: array, items: {$ref: '#/components/schemas/TimeRange'}, description: Empty = closed; two ranges = a break}
+    CalendarView:
+      type: object
+      required: [timezone, from, to, openHours, bookings, days]
+      properties:
+        timezone: {type: string}
+        from: {type: string, format: date}
+        to: {type: string, format: date}
+        openHours: {type: array, items: {$ref: '#/components/schemas/DayHours'}}
+        bookings: {type: array, items: {$ref: '#/components/schemas/BookingCard'}}
+        days: {type: array, items: {$ref: '#/components/schemas/DaySummary'}}
+    BookingActionRequest:
+      type: object
+      required: [action]
+      properties:
+        action: {$ref: '#/components/schemas/BookingAction'}
+        reason: {type: string, maxLength: 500, description: Required to decline or cancel}
+        proposedStartAt: {type: string, format: date-time, description: Required to propose a new time}
+    BookingRules:
+      type: object
+      required: [leadMinutes, horizonDays, bufferMinutes, stepMinutes, maxPerDay, instantBooking, autoAcceptReschedule]
+      properties:
+        leadMinutes: {type: integer, minimum: 0, maximum: 43200}
+        horizonDays: {type: integer, minimum: 1, maximum: 365}
+        bufferMinutes: {type: integer, minimum: 0, maximum: 240}
+        stepMinutes: {type: integer, minimum: 5, maximum: 240}
+        maxPerDay: {type: integer, minimum: 1, maximum: 50}
+        instantBooking: {type: boolean}
+        autoAcceptReschedule: {type: boolean}
+    Availability:
+      type: object
+      required: [timezone, weekly, blockedDates, rules]
+      properties:
+        timezone: {type: string}
+        weekly: {type: array, minItems: 7, maxItems: 7, items: {$ref: '#/components/schemas/DayHours'}}
+        blockedDates:
+          type: array
+          items:
+            type: object
+            required: [date, note]
+            properties:
+              date: {type: string, format: date}
+              note: {type: string}
+        rules: {$ref: '#/components/schemas/BookingRules'}
+    TakeHome:
+      type: object
+      required: [commissionPercent, commissionMinor, cardFeesMinor, takeHomeMinor]
+      properties:
+        commissionPercent: {type: number}
+        commissionMinor: {type: integer}
+        cardFeesMinor: {type: integer}
+        takeHomeMinor: {type: integer}
+    ServiceOffer:
+      type: object
+      required: [id, name, description, durationMinutes, priceMinor, depositMinor, currency, active, takeHome]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        description: {type: string}
+        durationMinutes: {type: integer}
+        priceMinor: {type: integer}
+        depositMinor: {type: integer}
+        currency: {type: string}
+        active: {type: boolean}
+        takeHome: {$ref: '#/components/schemas/TakeHome'}
+    ServiceInput:
+      type: object
+      required: [name, durationMinutes, priceMinor, depositMinor, active]
+      properties:
+        name: {type: string, minLength: 3, maxLength: 120}
+        description: {type: string, maxLength: 2000}
+        durationMinutes: {type: integer, minimum: 5, maximum: 1440}
+        priceMinor: {type: integer, minimum: 1}
+        depositMinor: {type: integer, minimum: 0}
+        active: {type: boolean}
+    PolicyKind: {type: string, enum: [FLEXIBLE, MODERATE, STRICT, CUSTOM]}
+    CancellationPolicyInput:
+      type: object
+      required: [kind]
+      properties:
+        kind: {$ref: '#/components/schemas/PolicyKind'}
+        freeHours: {type: integer, minimum: 0, maximum: 720}
+        partialRefund: {type: boolean}
+        partialFromHours: {type: integer, minimum: 0, maximum: 720}
+        partialPercent: {type: integer, minimum: 1, maximum: 99}
+        noShow: {type: string, enum: [DEPOSIT, FULL]}
+        rescheduleHours: {type: integer, minimum: 0, maximum: 720}
+        maxReschedules: {type: integer, minimum: 0, maximum: 10}
+    CancellationPolicy:
+      type: object
+      required: [kind, label, freeHours, partialRefund, partialFromHours, partialPercent, noShow, rescheduleHours, maxReschedules, summary, timeline]
+      properties:
+        kind: {$ref: '#/components/schemas/PolicyKind'}
+        label: {type: string}
+        freeHours: {type: integer}
+        partialRefund: {type: boolean}
+        partialFromHours: {type: integer}
+        partialPercent: {type: integer}
+        noShow: {type: string, enum: [DEPOSIT, FULL]}
+        rescheduleHours: {type: integer}
+        maxReschedules: {type: integer}
+        summary: {type: string}
+        timeline:
+          type: array
+          description: Refund timeline from booking to the appointment
+          items:
+            type: object
+            required: [label, refundPercent]
+            properties:
+              label: {type: string}
+              refundPercent: {type: integer}
+    EarningsRow:
+      type: object
+      required: [bookingId, reference, customerName, serviceName, startAt, status, statusLabel, collectedMinor, commissionMinor, cardFeesMinor, lateCancelFeeMinor, netMinor]
+      properties:
+        bookingId: {type: string}
+        reference: {type: string}
+        customerName: {type: string}
+        serviceName: {type: string}
+        startAt: {type: string, format: date-time}
+        status: {$ref: '#/components/schemas/BookingStatus'}
+        statusLabel: {type: string}
+        collectedMinor: {type: integer}
+        commissionMinor: {type: integer}
+        cardFeesMinor: {type: integer}
+        lateCancelFeeMinor: {type: integer}
+        netMinor: {type: integer}
+    ProviderFee:
+      type: object
+      required: [id, bookingReference, amountMinor, currency, reason, status, nextAttemptAt, createdAt]
+      properties:
+        id: {type: string}
+        bookingReference: {type: string}
+        amountMinor: {type: integer}
+        currency: {type: string}
+        reason: {type: string}
+        status: {type: string, enum: [OUTSTANDING, COLLECTED]}
+        nextAttemptAt: {type: [string, 'null'], format: date-time}
+        createdAt: {type: string, format: date-time}
+    ProviderFees:
+      type: object
+      description: Late-cancellation fees the provider owes (payments `GET /v1/payouts/provider-fees`); `available` is false when payments cannot answer.
+      required: [available, outstandingMinor, collectedMinor, items]
+      properties:
+        available: {type: boolean}
+        outstandingMinor: {type: integer}
+        collectedMinor: {type: integer}
+        items: {type: array, items: {$ref: '#/components/schemas/ProviderFee'}}
+    Earnings:
+      type: object
+      required: [currency, commissionPercent, payoutDay, totals, rows, providerFees]
+      properties:
+        currency: {type: string}
+        commissionPercent: {type: number}
+        payoutDay: {type: string}
+        totals:
+          type: object
+          required: [collectedMinor, commissionMinor, cardFeesMinor, lateCancelFeesMinor, netMinor, heldMinor]
+          properties:
+            collectedMinor: {type: integer}
+            commissionMinor: {type: integer}
+            cardFeesMinor: {type: integer}
+            lateCancelFeesMinor: {type: integer}
+            netMinor: {type: integer}
+            heldMinor: {type: integer}
+        rows: {type: array, items: {$ref: '#/components/schemas/EarningsRow'}}
+        providerFees: {$ref: '#/components/schemas/ProviderFees'}
+    SocialLink:
+      type: object
+      required: [network, url, status]
+      properties:
+        network: {type: string, enum: [instagram, tiktok, facebook, youtube, whatsapp, x, linkedin, website]}
+        url: {type: string}
+        status: {type: string, enum: [PENDING, APPROVED, REJECTED]}
+    PublicPage:
+      type: object
+      required: [kind, slug, name, tagline, status, publishedAt, primaryColor, accentColor, layout, header, buttonShape, gallerySize, gallery, featured, social, publicPath]
+      properties:
+        kind: {$ref: '#/components/schemas/OrgKind'}
+        slug: {type: string}
+        name: {type: string}
+        tagline: {type: string}
+        status: {type: string, enum: [DRAFT, PUBLISHED]}
+        publishedAt: {type: [string, 'null'], format: date-time}
+        primaryColor: {type: string}
+        accentColor: {type: string}
+        layout: {type: string, enum: [CLASSIC, GALLERY_FIRST, STORY]}
+        header: {type: string, enum: [COVER, BAND]}
+        buttonShape: {type: string, enum: [ROUNDED, SQUARE]}
+        gallerySize: {type: integer}
+        gallery:
+          type: array
+          items:
+            type: object
+            required: [assetId, url, caption]
+            properties:
+              assetId: {type: string}
+              url: {type: string}
+              caption: {type: string}
+        featured:
+          type: array
+          items:
+            type: object
+            required: [id, headline, body, serviceId, published]
+            properties:
+              id: {type: string}
+              headline: {type: string}
+              body: {type: string}
+              serviceId: {type: [string, 'null']}
+              published: {type: boolean}
+        social: {type: array, items: {$ref: '#/components/schemas/SocialLink'}}
+        publicPath: {type: string, description: Path of the page in the shop}
+    PublicPageInput:
+      type: object
+      properties:
+        name: {type: string, minLength: 2, maxLength: 80}
+        tagline: {type: string, maxLength: 80}
+        primaryColor: {type: string, pattern: '^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$'}
+        accentColor: {type: string, pattern: '^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$'}
+        layout: {type: string, enum: [CLASSIC, GALLERY_FIRST, STORY]}
+        header: {type: string, enum: [COVER, BAND]}
+        buttonShape: {type: string, enum: [ROUNDED, SQUARE]}
+        gallerySize: {type: integer, minimum: 0, maximum: 24}
+        featured:
+          type: array
+          maxItems: 6
+          items:
+            type: object
+            required: [id, headline, body, published]
+            properties:
+              id: {type: string}
+              headline: {type: string, maxLength: 80}
+              body: {type: string, maxLength: 400}
+              serviceId: {type: [string, 'null']}
+              published: {type: boolean}
+        social:
+          type: array
+          items:
+            type: object
+            required: [network, url]
+            properties:
+              network: {type: string, enum: [instagram, tiktok, facebook, youtube, whatsapp, x, linkedin, website]}
+              url: {type: string, format: uri}

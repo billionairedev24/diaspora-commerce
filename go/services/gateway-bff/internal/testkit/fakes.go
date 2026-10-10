@@ -79,6 +79,9 @@ type Options struct {
 	Content  bool
 	Payments bool
 	Promise  bool
+	// SellerPending serves the seller-side routes of services still being built (orders, bookings) so their
+	// mapping can be tested; without it they answer 404 like a service that does not exist yet.
+	SellerPending bool
 }
 
 // Upstreams is one httptest server playing every upstream the BFF calls.
@@ -102,6 +105,12 @@ type Upstreams struct {
 	// FailInventory makes inventory answer 503.
 	FailInventory bool
 	opts          Options
+	// MemberOrgs are the organisations of every signed-in member; ActiveOrgID is identity's active org.
+	MemberOrgs  []MemberOrg
+	ActiveOrgID string
+	// AccessDeniedMatrix makes identity's module matrix answer 403 (like for org members without access:read).
+	AccessDeniedMatrix bool
+	seller             *sellerState
 }
 
 type issuedCode struct {
@@ -116,9 +125,11 @@ func NewUpstreams(o Options) *Upstreams {
 	}
 	u := &Upstreams{ClientID: "gateway-bff", Secret: "test-secret", products: defaultProducts(), carts: map[string]*fakeCart{},
 		codes: map[string]issuedCode{}, refresh: map[string]string{}, addresses: map[string][]map[string]any{}, key: key,
-		AccessTTL: 5 * time.Minute, Calls: map[string]int{}, opts: o}
+		AccessTTL: 5 * time.Minute, Calls: map[string]int{}, opts: o, MemberOrgs: DefaultMemberOrgs(), ActiveOrgID: SellerOrgID,
+		AccessDeniedMatrix: true, seller: newSellerState()}
 	mux := http.NewServeMux()
 	u.routes(mux)
+	u.sellerRoutes(mux)
 	u.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()
 		u.Calls[r.Method+" "+r.URL.Path]++
@@ -710,7 +721,11 @@ func (u *Upstreams) identityRoutes(mux *http.ServeMux) {
 			problem(w, 401, "auth.unauthenticated", "Bearer token required", nil)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"id": sub, "firstName": "Adaeze", "lastName": "Nwosu", "email": "adaeze@example.com", "roles": []string{"account.customer"}, "landing": "shop"})
+		u.mu.Lock()
+		orgs, active := u.memberOrgsJSON(), u.ActiveOrgID
+		u.mu.Unlock()
+		writeJSON(w, 200, map[string]any{"id": sub, "firstName": "Adaeze", "lastName": "Nwosu", "email": "adaeze@example.com", "roles": []string{"account.customer"},
+			"landing": "shop", "orgId": active, "orgs": orgs})
 	})
 	mux.HandleFunc("GET /v1/identity-providers", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, []map[string]any{{"id": "google", "displayName": "Google", "authorizationPath": "/oauth2/authorization/google"}})

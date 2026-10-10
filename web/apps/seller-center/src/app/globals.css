@@ -1,0 +1,107 @@
+/* Seller Center styles: Tailwind CSS 4 utilities bound to the AfroTransact design tokens (--at-*). The default
+   Tailwind palette is removed, so only token colours exist (no raw colours in components). */
+@import "tailwindcss";
+
+@theme inline {
+  --color-*: initial;
+  --color-canvas: var(--at-color-canvas);
+  --color-surface: var(--at-color-surface);
+  --color-surface-muted: var(--at-color-surface-muted);
+  --color-surface-sunken: var(--at-color-surface-sunken);
+  --color-surface-hover: var(--at-color-surface-hover);
+  --color-surface-brand: var(--at-color-surface-brand);
+  --color-text: var(--at-color-text);
+  --color-muted: var(--at-color-text-muted);
+  --color-subtle: var(--at-color-text-subtle);
+  --color-inverse: var(--at-color-text-inverse);
+  --color-border: var(--at-color-border);
+  --color-border-strong: var(--at-color-border-strong);
+  --color-overlay: var(--at-color-overlay);
+  --color-header: var(--at-color-header-bg);
+  --color-header-text: var(--at-color-header-text);
+  --color-header-muted: var(--at-color-header-muted);
+  --color-primary: var(--at-color-action-primary);
+  --color-primary-hover: var(--at-color-action-primary-hover);
+  --color-on-primary: var(--at-color-action-primary-text);
+  --color-secondary: var(--at-color-action-secondary);
+  --color-secondary-hover: var(--at-color-action-secondary-hover);
+  --color-on-secondary: var(--at-color-action-secondary-text);
+  --color-link: var(--at-color-link);
+  --color-link-hover: var(--at-color-link-hover);
+  --color-focus: var(--at-color-focus);
+  --color-success: var(--at-color-success);
+  --color-success-bg: var(--at-color-success-bg);
+  --color-warning: var(--at-color-warning);
+  --color-warning-bg: var(--at-color-warning-bg);
+  --color-danger: var(--at-color-danger);
+  --color-danger-bg: var(--at-color-danger-bg);
+  --color-info: var(--at-color-info);
+  --color-info-bg: var(--at-color-info-bg);
+  --color-gold-50: var(--at-gold-50);
+  --color-gold-100: var(--at-gold-100);
+  --color-gold-300: var(--at-gold-300);
+  --color-gold-500: var(--at-gold-500);
+  --color-gold-700: var(--at-gold-700);
+  --color-green-50: var(--at-green-50);
+  --color-green-200: var(--at-green-200);
+  --color-green-800: var(--at-green-800);
+  --color-ink-100: var(--at-ink-100);
+  --color-ink-700: var(--at-ink-700);
+  --color-ink-800: var(--at-ink-800);
+  --color-ink-1000: var(--at-ink-1000);
+  --color-red-100: var(--at-red-100);
+  --font-sans: var(--at-font-sans);
+  --font-mono: var(--at-font-mono);
+  --text-2xs: var(--at-text-2xs);
+  --text-xs: var(--at-text-xs);
+  --text-sm: var(--at-text-sm);
+  --text-md: var(--at-text-md);
+  --text-base: var(--at-text-base);
+  --text-lg: var(--at-text-lg);
+  --text-xl: var(--at-text-xl);
+  --text-2xl: var(--at-text-2xl);
+  --text-3xl: var(--at-text-3xl);
+  --text-4xl: var(--at-text-4xl);
+  --radius-xs: var(--at-radius-xs);
+  --radius-sm: var(--at-radius-sm);
+  --radius-md: var(--at-radius-md);
+  --radius-lg: var(--at-radius-lg);
+  --radius-pill: var(--at-radius-pill);
+  --shadow-sm: var(--at-shadow-sm);
+  --shadow-md: var(--at-shadow-md);
+  --shadow-lg: var(--at-shadow-lg);
+  --spacing: 4px;
+}
+
+@layer base {
+  html,
+  body {
+    background: var(--at-color-canvas);
+    color: var(--at-color-text);
+    font-family: var(--at-font-sans);
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+/* Tables never scroll sideways: fixed layout, fixed column widths, cells wrap. */
+.at-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.at-table td,
+.at-table th {
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}

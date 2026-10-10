@@ -1,9 +1,12 @@
 # gateway-bff
 
-Screen-shaped API for the storefront (`web/apps/storefront`, through its same-origin `/api/bff` proxy) and the
-customer app. Go 1.27.1 · Valkey · local port **8200**. Contract:
+Screen-shaped API for the storefront (`web/apps/storefront`, through its same-origin `/api/bff` proxy), the customer
+app, and the Seller Center & Provider Hub (`web/apps/seller-center`, same proxy pattern, `/v1/seller/...`). Go 1.27.1 ·
+Valkey · local port **8200**. Contracts:
 [`contracts/openapi/gateway-bff.yaml`](../../../contracts/openapi/gateway-bff.yaml) (embedded copy in `api/openapi.yaml`,
-served at `/openapi.yaml`, `/docs`, `/redoc`; a test fails when the two differ).
+served at `/openapi.yaml`, `/docs`, `/redoc`) and
+[`contracts/openapi/gateway-bff-seller.yaml`](../../../contracts/openapi/gateway-bff-seller.yaml) (embedded copy in
+`api/openapi-seller.yaml`, served at `/openapi-seller.yaml`); tests fail when a copy differs from its contract.
 
 ## What it does
 
@@ -72,18 +75,59 @@ served at `/openapi.yaml`, `/docs`, `/redoc`; a test fails when the two differ).
 | `POST /v1/checkout/orders` | orders `POST /v1/orders` (Idempotency-Key relayed) | **pending (orders)** |
 | `GET /v1/careers/jobs`, `POST /v1/careers/jobs/{id}/applications` | content careers (open roles only; `resumeAssetId` required, `CAR-######` receipts) | live |
 
+## Seller Center & Provider Hub endpoints → upstreams
+
+Every route relays the member's access token, resolves the active organisation from identity `GET /v1/me` (`orgId`,
+`orgs[].role`) and checks the role's module level (identity `GET /v1/admin/module-access?portal=`, cached per portal;
+members without `access:read` get the seeded default matrix). Before approval only `/v1/seller/session` and
+`/v1/seller/onboarding` answer; everything else is 403 `NOT_APPROVED`. Provider Hub routes need a PROVIDER organisation.
+
+| BFF operation | Upstream(s) | Status |
+|---|---|---|
+| `GET /v1/seller/session` | identity `GET /v1/me` + module matrix, seller `GET /v1/orgs/{id}`; badges: seller account-health, orders `GET /v1/seller/shipments?status=placed`, bookings requests | live (badges best effort) |
+| `PUT /v1/seller/session/active-org` | identity `PUT /v1/me/active-org` | live |
+| `GET /v1/seller/onboarding` | seller `GET /v1/applications/me` | live |
+| `GET /v1/seller/compliance` | seller `GET /v1/orgs/{orgId}/account-health` | live |
+| `GET /v1/seller/dashboard` | seller: orders `GET /v1/seller/analytics` (planned) + inventory `GET /v1/positions` + payments `GET /v1/payouts/balance` + account-health; provider: bookings `GET /v1/providers/me/analytics` (planned) | partial: charts from planned upstreams report `available=false` |
+| `GET /v1/seller/orders`, `GET /v1/seller/orders/{orderNumber}` | orders `GET /v1/seller/shipments`, `GET /v1/orders/{number}` | **pending (orders)** → 503 |
+| `POST …/shipments/{shipmentId}/status` | orders `POST /v1/shipments/{id}/transitions` (only `confirmed`, `packed`, `ready`) | **pending (orders)** |
+| `POST …/shipments/{shipmentId}/rates` | orders (ship-to) + carrier-gateway `POST /v1/rates` | **pending (orders)**; carrier live |
+| `POST …/shipments/{shipmentId}/labels` | carrier-gateway `POST /v1/labels` (Idempotency-Key) + orders `POST /v1/shipments/{id}/tracking` | **pending (orders)**; carrier live |
+| `GET /v1/seller/listings`, `POST …/listings/{productId}/status` | catalog `GET /v1/products`, `POST /v1/products/{id}/pause` / `/resume` | live |
+| `POST /v1/seller/products` | catalog `POST /v1/products` (`categoryId` → IN_REVIEW, `categoryRequestId` → PENDING_CATEGORY_APPROVAL) | live |
+| `GET /v1/seller/catalog/categories`, `…/product-types/{code}`, `…/gtin/{code}` | catalog `GET /v1/categories` (nested), `GET /v1/product-types/{code}`, `GET /v1/identifiers/gtin/{code}` | live (tree/types cached) |
+| `GET/POST /v1/seller/category-requests` | catalog `GET /v1/category-requests/mine`, `POST /v1/category-requests` | live |
+| `POST /v1/seller/uploads`, `POST /v1/seller/uploads/{assetId}/complete` | media `POST /v1/uploads`, `POST /v1/assets/{id}/complete` | live |
+| `GET /v1/seller/inventory` | inventory `GET /v1/positions?ownerOrg=` | live |
+| `POST /v1/seller/inventory/adjustments` | offers `PUT /v1/offers/stock/{sellerSku}` | **pending (offers)** → 503 |
+| `GET/POST /v1/seller/payouts` | payments `GET /v1/payouts/balance`, `GET /v1/payouts/requests?orgId=` (history; 403 → `historyAvailable=false`), `POST /v1/payouts/requests` | live |
+| `GET /v1/seller/billing`, `POST …/billing/plan`, `POST …/payment-methods/{id}/default`, `DELETE …/payment-methods/{id}` | seller `GET /v1/orgs/{orgId}/billing`, `/billing/invoices`, `GET /v1/plans?kind=`, `POST /billing/plan`, payment-method routes (owner only) | live |
+| `GET /v1/seller/team`, `PUT …/team/members/{userId}` | seller `GET /v1/orgs/{id}` (members) + module matrix (capability cards); identity `PUT /v1/orgs/{orgId}/members/{userId}` | live (member names: see gaps) |
+| `POST /v1/seller/team/invitations` | identity `POST /v1/orgs/{orgId}/invitations` (planned) | **pending (identity)** → 503 |
+| `GET /v1/seller/bookings/calendar`, `…/requests`, `POST …/bookings/{id}/actions` | bookings `GET /v1/providers/me/calendar`, `GET /v1/providers/me/bookings?status=`, `POST /v1/bookings/{id}/{confirm\|decline\|propose\|complete\|no-show\|cancel}` | **pending (bookings)** → 503 |
+| `GET/PUT /v1/seller/provider/hours`, `GET/POST/PATCH …/services`, `GET/PUT …/cancellation-policy`, `GET …/earnings` | bookings `/v1/providers/me/availability`, `/services`, `/cancellation-policy`, `/earnings` | **pending (bookings)** → 503 |
+| `GET/PUT /v1/seller/storefront`, `POST /v1/seller/storefront/publish` | storefront `GET/PUT /v1/storefronts/me/draft`, `POST /v1/storefronts/me/publish` | live |
+
+Upstream gaps found while building the seller routes: identity has no member directory for organisation admins
+(the team list shows names only for the signed-in member), no invitation endpoint, and the module matrix needs
+`access:read`; the seller service stores no ship-from address (the label form asks for it); payments lists payout
+history only for `payouts:approve`; orders has no seller analytics endpoint; offers (seller stock) and bookings
+provider endpoints are not served yet.
+
 ## Configuration
 
 `config/<APP_ENV>.yaml` (local, dev, uat, prod) with env overrides: `PORT`, `REDIS_URL`, `SESSION_SIGNING_KEY` (≥ 32
 chars), `OIDC_CLIENT_SECRET`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL`, `OIDC_CLIENT_ID`, `OIDC_REDIRECT_URI`, `OIDC_AUDIENCE`,
 `WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `WEB_BFF_PATH`, `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_DOMAIN`,
 `<UPSTREAM>_URL` (`SEARCH_URL`, `CATALOG_URL`, `INVENTORY_URL`, `CART_URL`, `GEO_URL`, `IDENTITY_URL`, `CONTENT_URL`,
-`PAYMENTS_URL`, `PROMISE_URL`, `ORDERS_URL`, `NOTIFICATIONS_URL`), `RATE_LIMIT_AUTH_PER_MINUTE`,
+`PAYMENTS_URL`, `PROMISE_URL`, `ORDERS_URL`, `NOTIFICATIONS_URL`, `SELLER_URL`, `OFFERS_URL`, `BOOKINGS_URL`,
+`STOREFRONT_URL`, `MEDIA_URL`, `CARRIER_URL`), `RATE_LIMIT_AUTH_PER_MINUTE`,
 `RATE_LIMIT_LOOKUP_PER_MINUTE`, `TRUST_FORWARDED_FOR`, `RETAIL_ORG_ID`, `OTEL_EXPORTER_OTLP_ENDPOINT_HOST`,
 `TRACE_SAMPLING`, `DOCS_ENABLED`. Secrets (`REDIS_URL`, `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY`) come from the
 cloud secret store via External Secrets (Helm chart in `deploy/helm`).
 
-Local defaults: upstreams on their `infra/local/PORTS.md` ports, storefront origin `http://localhost:3000`, identity
+Local defaults: upstreams on their `infra/local/PORTS.md` ports, storefront origin `http://localhost:3000` (Seller Center
+`http://localhost:3001` is also allowed for CORS/CSRF), identity
 client secret `local-bff-secret`, cookie not `Secure` (plain-http localhost). In dev/uat/prod the OIDC redirect URI is
 `https://<storefront>/api/bff/v1/auth/oidc/callback` so the cookie stays first-party — identity must register it for
 `gateway-bff`.

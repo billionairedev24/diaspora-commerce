@@ -20,6 +20,16 @@ import (
 // WebOrigin is the storefront origin the test BFF allows.
 const WebOrigin = "http://localhost:3000"
 
+// SellerCenterOrigin is the Seller Center origin the test BFF allows.
+const SellerCenterOrigin = "http://localhost:3001"
+
+func chicago() *time.Location {
+	if l, err := time.LoadLocation("America/Chicago"); err == nil {
+		return l
+	}
+	return time.UTC
+}
+
 // RedirectURI is the BFF callback registered at the fake identity.
 const RedirectURI = "http://localhost:8200/login/oauth2/code/afrotransact"
 
@@ -88,6 +98,14 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	orders := upstreams.NewOrders(client("orders", pending))
 	notifications := upstreams.NewNotifications(client("notifications", pending))
 	verifier := upstreams.NewTokenVerifier(base, "", u.ClientID, &http.Client{Timeout: 2 * time.Second})
+	identityClient := client("identity", base)
+	sellerDeps := app.SellerDeps{Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", base)),
+		Catalog: upstreams.NewSellerCatalog(client("catalog", base), cache, 10*time.Minute), Stock: upstreams.NewStock(client("inventory", base)),
+		Offers: upstreams.NewOffers(client("offers", pending)), Media: upstreams.NewMedia(client("media", base)),
+		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),
+		Payouts: upstreams.NewPayouts(client("payments", base)), Storefront: upstreams.NewStorefront(client("storefront", base)),
+		Bookings: upstreams.NewBookings(client("bookings", pending)), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
+		Clock: clock.Now, Log: log}
 
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
 	sellers := app.SellerDirectory{RetailOrgID: "org_afrotransact_retail", Names: map[string]string{"org_kente": "Kente Naturals"}}
@@ -110,9 +128,17 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Cart:     carts,
 		Account:  app.NewAccountService(identity, geo, payments, orders),
 		Checkout: app.NewCheckoutService(carts, identity, payments, orders),
+
+		SellerShell:     app.NewSellerShellService(sellerDeps),
+		SellerDashboard: app.NewSellerDashboardService(sellerDeps),
+		SellerOrders:    app.NewSellerOrdersService(sellerDeps),
+		SellerCatalog:   app.NewSellerCatalogService(sellerDeps),
+		SellerMoney:     app.NewSellerMoneyService(sellerDeps),
+		SellerTeam:      app.NewSellerTeamService(sellerDeps),
+		ProviderHub:     app.NewProviderHubService(sellerDeps),
 	}
 	mux := http.NewServeMux()
-	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin}, CookieName: "at_session",
+	httpapi.New(services, store, httpapi.SecurityOptions{AllowedOrigins: []string{WebOrigin, SellerCenterOrigin}, CookieName: "at_session",
 		CookieSecure: true, MaxBodyBytes: 64 << 10, AuthPerMinute: cfg.AuthPerMinute, LookupPerMinute: 1000}, log).Register(mux)
 	return &BFF{Handler: mux, Upstreams: u, Store: store, Metrics: reg, Clock: clock}
 }

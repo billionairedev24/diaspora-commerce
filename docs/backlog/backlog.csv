@@ -464,21 +464,21 @@
 - About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","Done"
 "S150","Story","Services browsing and provider pages","Find a provider, see their designed page and book.","- Provider page renders the provider's chosen layout and approved links
 - Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","To Do"
-"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","In Progress"
+"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","Done"
 "S151","Story","Seller Center app shell with grouped, fixed sidebar","Fixed sidebar grouped into collapsible sections; collapsed by default except the active group.","- Sidebar doesn't scroll with the page
-- Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","In Progress"
+- Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","Done"
 "S152","Story","Orders management with labels and status updates","TanStack server-driven table; open rows in a sheet; buy labels; update allowed statuses.","- Sellers can confirm, pack and mark ready only
-- Tables never scroll horizontally; columns fixed width with wrapping","E24","","High","8","seller-center web","seller-center","In Progress"
+- Tables never scroll horizontally; columns fixed width with wrapping","E24","","High","8","seller-center web","seller-center","Done"
 "S153","Story","Listings and product builder (4 steps)","Guided product builder: category → images → details → variations with live shopper preview.","- Each step validates before Continue
 - Category request switches the form to the requested category
-- Submit for review or save pending category approval","E24","","High","8","seller-center web catalog","seller-center","In Progress"
+- Submit for review or save pending category approval","E24","","High","8","seller-center web catalog","seller-center","Done"
 "S154","Story","Dashboards with charts and exports","Recharts dashboards; export PDF, CSV and Excel (with native charts).","- Seller: sales and units, top products, orders by fulfilment, stock by warehouse
 - Provider: bookings and deposits, bookings by service, status donut, earnings
-- Each chart exports PDF, Excel (.xlsx with chart) and CSV","E24","","High","8","seller-center web exports","seller-center","In Progress"
+- Each chart exports PDF, Excel (.xlsx with chart) and CSV","E24","","High","8","seller-center web exports","seller-center","Done"
 "S155","Story","Team & roles with capability cards","Invite members; cards list what each role can change, view or can't access.","- Your own role is highlighted
-- Seller roles: owner, admin, catalog, fulfilment, finance, ads, support","E24","","Medium","3","seller-center web rbac","seller-center","In Progress"
+- Seller roles: owner, admin, catalog, fulfilment, finance, ads, support","E24","","Medium","3","seller-center web rbac","seller-center","Done"
 "S156","Story","Provider Hub: calendar, hours, services, policy, public page, earnings","Provider tools inside the portal without a second sidebar.","- Calendar shows quick views and day summaries
-- Earnings show commission, Stripe fees and late-cancel fees","E24","","High","8","seller-center web bookings","seller-center","In Progress"
+- Earnings show commission, Stripe fees and late-cancel fees","E24","","High","8","seller-center web bookings","seller-center","Done"
 "E25","Epic","Staff console (platform back office)","All platform tools gated by RBAC: applications, sellers, moderation, orders, payouts, inventory, dispatch, config.","","","Staff console (platform back office)","High","","staff-console","staff-console","To Do"
 "S157","Story","Staff console shell with RBAC-filtered navigation","Grouped sidebar (Overview, Commerce, Partners, Finance, Growth, Trust & compliance, Settings) filtered by permissions.","- Menu items hidden when the role has no access
 - Dashboard opens by default","E25","","High","5","staff-console web","staff-console","To Do"
@@ -621,7 +621,7 @@
 - Indexer warms its directory on start and refreshes on events
 - Restart does not change indexed seller names","E04","","Medium","3","indexer seller","search","To Do"
 "S214","Story","Expose payout hold in payouts balance","Payments adds payoutsPaused (and reason) to the payouts balance response so Seller Center can show the hold before a request fails.","- Balance response includes payoutsPaused and reason
-- Seller Center shows a banner when paused","E14","","Medium","1","payments","billing","In Progress"
+- Seller Center shows a banner when paused","E14","","Medium","1","payments","billing","Done"
 "S215","Story","Org kind 'both' and market alignment","Seller emits BOTH when an org sells products and services; identity's market is aligned with content's market codes.","- Seller org events can carry BOTH
 - identity market values match content market codes
 - Navigation in Seller Center shows both groups for BOTH orgs","E13","","Low","3","seller identity","onboarding","To Do"
@@ -674,3 +674,9 @@
 "S230","Story","Notifications for trust-ops events","Notifications subscribes to at.trustops.events and maps claim, moderation and enforcement events to templates for customers and seller owners.","- Claim opened/seller response due/decided notify the right parties
 - Moderation decisions notify the seller owners
 - Contract test covers the new rules","E19","","Medium","3","notifications trust-ops","notifications","To Do"
+"S231","Story","Seller Center upstream gaps","Close the upstream gaps that make Seller Center routes return 503: BFF maps provider routes to bookings' /v1/providers/{orgId}/... using the active org; orders seller analytics; offers stock update; identity member directory and invitations; seller ship-from addresses stored in seller service; payout history for org finance roles.","- BFF provider routes call bookings with the token's org id
+- Orders exposes seller analytics (sales, orders, conversion by day)
+- Offers supports PUT stock for seller-fulfilled SKUs
+- Identity lists org members with names and supports invitations
+- Seller service stores ship-from addresses
+- Payout history visible to seller.owner and seller.finance","E24","","High","8","seller-center bff orders identity","seller-center","To Do"

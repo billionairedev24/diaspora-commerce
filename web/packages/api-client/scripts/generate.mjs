@@ -12,6 +12,7 @@ const contracts = resolve(here, '../../../../contracts/openapi');
 const outDir = resolve(here, '../src/generated');
 const SPECS = [
   ['gateway-bff.yaml', 'gateway-bff.ts'],
+  ['gateway-bff-seller.yaml', 'gateway-bff-seller.ts'],
   ['search.yaml', 'search.ts'],
   ['catalog.yaml', 'catalog.ts']
 ];

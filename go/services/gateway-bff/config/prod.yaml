@@ -8,6 +8,7 @@ web:
   origins:
     - https://www.afrotransact.com
     - https://afrotransact.com
+    - https://seller.afrotransact.com
   publicOrigin: https://www.afrotransact.com
   bffPath: /api/bff
 session:
@@ -77,6 +78,36 @@ upstreams:
   notifications:
     url: http://notifications
     timeout: 2s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  seller:
+    url: http://seller
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  offers:
+    url: http://offers
+    timeout: 2s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  bookings:
+    url: http://bookings
+    timeout: 3s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  storefront:
+    url: http://storefront
+    timeout: 2s
+    retries: 1
+    breaker: {failures: 5, cooldown: 15s}
+  media:
+    url: http://media
+    timeout: 3s
+    retries: 0
+    breaker: {failures: 5, cooldown: 15s}
+  carrier:
+    url: http://carrier-gateway
+    timeout: 10s
     retries: 0
     breaker: {failures: 5, cooldown: 15s}
 rateLimit:
