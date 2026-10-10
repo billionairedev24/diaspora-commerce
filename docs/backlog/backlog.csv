@@ -597,7 +597,7 @@
 - Payments consumes seller.payouts.paused/resumed; catalog/bookings/indexer consume seller.listings.hidden/restored","E13","","Highest","8","onboarding identity events","onboarding","Done"
 "S206","Story","Metered billing usage (FBA storage, ads, AI credits)","Report usage to Stripe Billing meters for plan add-ons.","- Usage events aggregated daily per org
 - Stripe meter events sent idempotently
-- Invoices show metered lines","E14","","Medium","5","billing stripe","billing","To Do"
+- Invoices show metered lines","E14","","Medium","5","billing stripe","billing","In Progress"
 "S207","Story","Global MCP rate limits and durable audit","Move per-pod MCP rate-limit buckets to Valkey and give mcp.tool.invoked a durable path (outbox or local spool) so audit events survive broker outages.","- Rate limits are enforced across all replicas using Valkey token buckets
 - Audit events are spooled and replayed when Kafka is unavailable
 - Load test shows limits hold with 3 replicas","E21","","Medium","5","mcp ai","ai","In Progress"
@@ -624,7 +624,7 @@
 - Seller Center shows a banner when paused","E14","","Medium","1","payments","billing","Done"
 "S215","Story","Org kind 'both' and market alignment","Seller emits BOTH when an org sells products and services; identity's market is aligned with content's market codes.","- Seller org events can carry BOTH
 - identity market values match content market codes
-- Navigation in Seller Center shows both groups for BOTH orgs","E13","","Low","3","seller identity","onboarding","To Do"
+- Navigation in Seller Center shows both groups for BOTH orgs","E13","","Low","3","seller identity","onboarding","In Progress"
 "S216","Story","Page hide and restore for large seller catalogs","Catalog pages through an org's products on hide/restore instead of loading all of them in one transaction.","- Hide/restore processes products in pages of 500
 - Large catalog (50k) hide completes without timeouts","E03","","Low","2","catalog","catalog","In Progress"
 "S217","Story","Align notification rules with real producer events","Notifications' event rules and topics are speculative (at.seller.events, order.placed). Map the real event types and topics from contracts/asyncapi/events.yaml and resolve recipients (email/phone/push) from identity when payloads carry only user ids.","- Rules cover orders.order.placed, orders.order.cancelled (wasPlaced), orders.shipment.status_changed/delivered/cancelled, seller application and compliance events, bookings events and identity verification
@@ -635,7 +635,7 @@
 - Cancelling one of several AfroTransact shipments releases only its stock
 - Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","Done"
 "S219","Story","Cluster-wide shipment status stream","SSE shipment stream fans out across replicas via Kafka or Valkey pub/sub, and orders consumes carrier.pickup.ready.","- Staff on any replica see every transition within 2s
-- carrier.pickup.ready moves eligible shipments forward","E08","","Medium","3","orders","orders","To Do"
+- carrier.pickup.ready moves eligible shipments forward","E08","","Medium","3","orders","orders","In Progress"
 "S220","Story","Payments support for long-dated bookings","Payments adds release of remaining authorisation after partial capture, off-session charges on saved cards for balances beyond the auth window, and debiting provider late-cancellation fees.","- Remaining authorisation can be released after a deposit capture
 - Balance can be charged off-session on a saved card with SCA fallback
 - Provider late-cancellation fee is debited from the provider balance
