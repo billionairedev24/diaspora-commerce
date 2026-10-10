@@ -1,9 +1,11 @@
 import { type Metadata } from 'next';
 
-import { ComingSoon } from '@/components/common/ComingSoon';
+import { CheckoutView } from '@/components/checkout/CheckoutView';
+import { requireCustomer } from '@/lib/auth/session';
 
 export const metadata: Metadata = { title: 'Checkout', robots: { index: false } };
 
-export default function Page() {
-  return <ComingSoon page="soon.checkout" />;
+export default async function Page() {
+  await requireCustomer('/checkout');
+  return <CheckoutView />;
 }

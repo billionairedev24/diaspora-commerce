@@ -26,6 +26,8 @@ type OrderLineView struct {
 	Quantity       int     `json:"quantity"`
 	UnitPriceMinor int64   `json:"unitPriceMinor"`
 	ItemsMinor     int64   `json:"itemsMinor"`
+	// RefundedMinor is what payments refunded on this line so far (returns, cancellations, claims).
+	RefundedMinor int64 `json:"refundedMinor,omitempty"`
 }
 
 // TimelineEvent is one step of a shipment's tracking timeline.
@@ -53,6 +55,10 @@ type ShipmentDetail struct {
 	DeliveryCode   *string         `json:"deliveryCode"`
 	Lines          []OrderLineView `json:"lines"`
 	Timeline       []TimelineEvent `json:"timeline"`
+	// Returns (S148/S166): show "Return items" when returnable, "Report a problem" when only that is possible.
+	Returnable         bool    `json:"returnable"`
+	ReturnWindowEndsAt *string `json:"returnWindowEndsAt"`
+	ProblemReportOnly  bool    `json:"problemReportOnly"`
 }
 
 // OrderDetail is one order with its shipments, lines and tracking.
@@ -69,6 +75,17 @@ type OrderDetail struct {
 	ShipTo          string           `json:"shipTo"`
 	ShippingAddress *OrderAddress    `json:"shippingAddress"`
 	Shipments       []ShipmentDetail `json:"shipments"`
+	// Payment is what was charged and refunded (payments); absent when payments cannot answer.
+	Payment *OrderPayment `json:"payment,omitempty"`
+}
+
+// OrderPayment sums an order's payment lines: captured, refunded, still refundable, and tax on shipping.
+type OrderPayment struct {
+	Status           string `json:"status"`
+	CapturedMinor    int64  `json:"capturedMinor"`
+	RefundedMinor    int64  `json:"refundedMinor"`
+	RefundableMinor  int64  `json:"refundableMinor"`
+	ShippingTaxMinor int64  `json:"shippingTaxMinor"`
 }
 
 // ---------------------------------------------------------------- returns

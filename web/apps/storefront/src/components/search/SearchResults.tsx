@@ -1,6 +1,6 @@
 'use client';
 
-import { type FacetBucket, parseSearchUrl, PRICE_BUCKETS, type SearchQuery, type SearchSort } from '@afrotransact/api-client';
+import { type FacetBucket, parseSearchUrl, PRICE_BUCKETS, type ProductSummary, type SearchQuery, type SearchSort } from '@afrotransact/api-client';
 import { Button, Skeleton, Stars } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -31,6 +31,11 @@ export function SearchResults() {
   const { data, isFetching, isPlaceholderData, isError, refetch, isPending } = useQuery(searchQueries.results(api, urlQuery));
   const { data: location } = useQuery(siteQueries.deliveryLocation(api));
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Result clicks feed search analytics and charge sponsored products (S240); fire and forget.
+  const reportClick = (p: ProductSummary, position: number) => {
+    if (!data?.searchId) return;
+    api.recordSearchClick({ searchId: data.searchId, q: query.q || undefined, atin: p.atin, position, adToken: p.sponsor?.adToken }).catch(() => undefined);
+  };
 
   const href = (patch: Partial<SearchQuery>) => searchHref({ ...query, page: 0, ...patch });
   const go = (patch: Partial<SearchQuery>) => {
@@ -169,8 +174,14 @@ export function SearchResults() {
             </div>
           ) : (
             <ul className={`${styles.grid} ${isPlaceholderData && isFetching ? styles.stale : ''}`} aria-busy={isFetching} data-testid="results-grid">
-              {data?.hits.map((p) => (
-                <li key={p.atin} style={{ display: 'grid' }}>
+              {data?.hits.map((p, i) => (
+                <li
+                  key={p.atin}
+                  style={{ display: 'grid' }}
+                  onClickCapture={(e) => {
+                    if ((e.target as Element).closest('a')) reportClick(p, data.page * query.size + i + 1);
+                  }}
+                >
                   <CartAwareProductCard product={p} />
                 </li>
               ))}

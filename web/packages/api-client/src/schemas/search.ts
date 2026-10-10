@@ -56,7 +56,9 @@ export const SearchPageSchema = z.object({
   pageCount: z.number().int().min(0),
   facets: SearchFacetsSchema,
   deliverToLabel: z.string(),
-  tookMs: z.number().int().min(0)
+  tookMs: z.number().int().min(0),
+  /** Identifies this search for click reporting (POST /v1/search/clicks). */
+  searchId: z.string().optional()
 });
 export type SearchPage = z.infer<typeof SearchPageSchema>;
 
@@ -69,3 +71,20 @@ export const SuggestionsSchema = z.object({
   products: z.array(ProductSummarySchema).max(5)
 });
 export type Suggestions = z.infer<typeof SuggestionsSchema>;
+
+export const SearchClickRequestSchema = z.object({
+  searchId: z.string().min(1).max(200),
+  q: z.string().max(200).optional(),
+  atin: z.string().regex(/^AT[0-9A-Z]{8}$/),
+  position: z.number().int().min(1).max(1000),
+  adToken: z.string().max(4096).optional()
+});
+export type SearchClickRequest = z.infer<typeof SearchClickRequestSchema>;
+
+export const SearchClickResultSchema = z.object({
+  recorded: z.boolean(),
+  duplicate: z.boolean(),
+  sponsored: z.boolean(),
+  adStatus: z.enum(['BILLABLE', 'DUPLICATE', 'EXPIRED']).optional()
+});
+export type SearchClickResult = z.infer<typeof SearchClickResultSchema>;

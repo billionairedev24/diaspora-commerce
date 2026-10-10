@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { type PaymentMethod } from '../schemas/account';
 import { type CartPackage } from '../schemas/cart';
 import { type DeliveryOption } from '../schemas/cart';
+import { SearchClickRequestSchema } from '../schemas/search';
 import {
   AddressInputSchema,
   BookingRequestSchema,
@@ -26,10 +27,11 @@ import {
   StartReturnRequestSchema
 } from '../schemas/shopper';
 import { getDb, type MockSession } from './db';
-import { addBusinessDays } from './delivery';
+import { addBusinessDays, locationForZip, metroOf } from './delivery';
+import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
-import { buildCart, MockProblem } from './service';
+import { buildCart, MockProblem, sessionLocation } from './service';
 import { account, type AccountState, bookingFor, MOCK_REFUND_QUOTE, type MockOrder, PROVIDERS, seq, SERVICES } from './shopper-state';
 
 const DEMO_CODE = '246810';
@@ -88,17 +90,6 @@ function addMethod(a: AccountState, c: z.infer<typeof MockCardSchema>): PaymentM
 
 /* ── Checkout ──────────────────────────────────────────────────── */
 
-/** States with AfroTransact Delivery (Houston, Edison/NYC, Atlanta metros). */
-const DRIVER_STATES = new Set(['TX', 'NJ', 'NY', 'GA']);
-
-const PLATFORM_POINTS: Record<string, PickupPoint[]> = {
-  TX: [{ id: 'pp-hou-fc', name: 'AfroTransact Houston FC counter', address: '8800 Fulfilment Way, Houston, TX 77042', hours: 'Mon–Sat 9:00–19:00', ready: 'Ready in about 4 h', setBy: 'platform' },
-    { id: 'pp-hou-locker', name: 'Westheimer locker', address: '9700 Westheimer Rd, Houston, TX 77042', hours: 'Every day 6:00–23:00', ready: 'Ready tomorrow by 10:00', setBy: 'platform' }],
-  NJ: [{ id: 'pp-edison-fc', name: 'AfroTransact Edison FC counter', address: '100 Raritan Center Pkwy, Edison, NJ 08837', hours: 'Mon–Sat 9:00–19:00', ready: 'Ready in about 4 h', setBy: 'platform' }],
-  NY: [{ id: 'pp-bronx-locker', name: 'Grand Concourse locker', address: '1200 Grand Concourse, Bronx, NY 10456', hours: 'Every day 7:00–22:00', ready: 'Ready tomorrow by 12:00', setBy: 'platform' }],
-  GA: [{ id: 'pp-atl-fc', name: 'AfroTransact Atlanta FC counter', address: '500 Fulton Industrial Blvd, Atlanta, GA 30336', hours: 'Mon–Sat 9:00–19:00', ready: 'Ready in about 4 h', setBy: 'platform' }]
-};
-
 const fmtDate = (d: Date) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
 
 function withDates(o: DeliveryOption, now: Date, days: number): DeliveryOption {
@@ -112,8 +103,11 @@ function perishableLine(atin: string): boolean {
   return getDb().products.get(atin)?.cat === 'Groceries';
 }
 
-function checkoutPackages(session: MockSession, state: string, now: Date): CheckoutPackage[] {
-  const cart = buildCart(session, now);
+function checkoutPackages(session: MockSession, zip: string, now: Date): CheckoutPackage[] {
+  // Options as the cart computes them for the delivery address (zones, nearby origins, pickup points), with dates.
+  const cart = buildCart({ ...session, zip }, now);
+  const metro = metroOf(locationForZip(zip) ?? sessionLocation(session));
+  const here = (city: string) => metro === city;
   return cart.packages
     .map((p): CartPackage => {
       const lines = p.lines.filter((l) => l.selected).map((l) => ({ ...l, perishable: perishableLine(l.atin) }));
@@ -122,19 +116,10 @@ function checkoutPackages(session: MockSession, state: string, now: Date): Check
     .filter((p) => p.lines.length > 0)
     .map((p) => {
       const isAT = p.fulfilment === 'AFROTRANSACT';
-      const carrierDays = Math.max(1, p.delivery.days);
-      const options = p.deliveryOptions.map((o) => withDates(o, now, o.key === 'express' ? 1 : carrierDays));
-      let points: PickupPoint[] = [];
-      if (isAT) {
-        if (DRIVER_STATES.has(state)) {
-          const free = options[0]?.free ?? false;
-          options.push(withDates({ key: 'afrotransact_delivery', label: 'AfroTransact Delivery', eta: '', feeMinor: free ? 0 : 399, free }, now, 1));
-        }
-        points = PLATFORM_POINTS[state] ?? [];
-      } else if (p.seller.city.endsWith(`, ${state}`)) {
-        points = [{ id: `pp-${p.seller.id}`, name: `${p.seller.name} shop`, address: p.seller.city, hours: 'Tue–Sat 10:00–18:00', ready: 'Ready in 2 business days', setBy: 'seller' }];
-      }
-      if (points.length) options.push(withDates({ key: 'pickup', label: 'Pick up', eta: '', feeMinor: 0, free: true }, now, 0));
+      const days = (o: DeliveryOption) => (o.key === 'express' || o.key === 'afrotransact_delivery' ? 1 : o.key === 'pickup' ? 0 : Math.max(1, p.delivery.days));
+      const options = p.deliveryOptions.map((o) => withDates(o, now, days(o)));
+      const points: PickupPoint[] = !options.some((o) => o.key === 'pickup') ? [] : PICKUP_POINTS.filter((x) => (isAT ? x.owner === 'AT' && here(x.metro) : x.owner === p.seller.name))
+        .map((x) => ({ id: x.id, name: x.name, address: x.addr, hours: x.hours, ready: x.ready, setBy: x.owner === 'AT' ? 'platform' : 'seller' }));
       return { ...p, deliveryOptions: options, pickupPoints: points, delivery: { ...p.delivery, label: options[0]?.eta ?? p.delivery.label } };
     });
 }
@@ -142,7 +127,7 @@ function checkoutPackages(session: MockSession, state: string, now: Date): Check
 function summary(ctx: Ctx, addressId: string | null): CheckoutSummary {
   const a = me(ctx);
   const addr = a.addresses.find((x) => x.id === addressId) ?? a.addresses.find((x) => x.isDefault) ?? a.addresses[0];
-  const packages = checkoutPackages(ctx.session, addr?.state ?? 'TX', ctx.now);
+  const packages = checkoutPackages(ctx.session, addr?.zip.slice(0, 5) ?? ctx.session.zip, ctx.now);
   if (!packages.length) throw new MockProblem(409, 'CART_EMPTY', 'Your cart is empty', 'Select at least one item to check out.', { available: 0, inCart: 0, requested: 0 });
   const subtotal = packages.reduce((s, p) => s + p.subtotalMinor, 0);
   const shipping = packages.reduce((s, p) => s + (p.deliveryOptions[0]?.feeMinor ?? 0), 0);
@@ -179,6 +164,34 @@ function returnable(a: AccountState, o: MockOrder, now: Date) {
           ineligibleReason: max === 0 ? 'Already being returned' : open ? null : 'The return window has closed' };
       })
     }));
+}
+
+/** Return button facts per shipment, as orders computes them from tax-returns' eligibility (S148/S166). */
+function returnFacts(a: AccountState, o: MockOrder, shipmentId: string, now: Date) {
+  const lines = returnable(a, o, now).find((s) => s.shipmentId === shipmentId)?.lines ?? [];
+  if (!lines.length) return { returnable: false, returnWindowEndsAt: null, problemReportOnly: false };
+  const eligible = lines.filter((l) => l.eligible);
+  return {
+    returnable: eligible.some((l) => !l.reportProblemOnly),
+    returnWindowEndsAt: lines[0]?.windowEndsAt ?? null,
+    problemReportOnly: eligible.length > 0 && eligible.every((l) => l.reportProblemOnly)
+  };
+}
+
+/** Payment facts (payments): per-line refunds from refunded returns and cancelled shipments; no tax on delivery in TX. */
+function orderPayment(a: AccountState, o: MockOrder) {
+  const refunded = new Map<string, number>();
+  for (const r of a.returns.filter((x) => x.orderNumber === o.orderNumber && x.status === 'refunded'))
+    for (const l of r.lines) refunded.set(l.lineId, (refunded.get(l.lineId) ?? 0) + l.unitPriceMinor * l.quantity);
+  for (const s of o.shipments.filter((x) => x.status === 'cancelled')) for (const l of s.lines) refunded.set(l.lineId, l.itemsMinor);
+  const shipments = o.shipments.map((s) => ({
+    ...s,
+    ...returnFacts(a, o, s.shipmentId, new Date()),
+    lines: s.lines.map((l) => ({ ...l, refundedMinor: refunded.get(l.lineId) ?? 0 }))
+  }));
+  const refundedMinor = [...refunded.values()].reduce((n, x) => n + x, 0);
+  const capturedMinor = o.shipments.filter((s) => s.status === 'delivered').reduce((n, s) => n + s.lines.reduce((m, l) => m + l.itemsMinor, 0), 0);
+  return { shipments, payment: { status: capturedMinor ? 'captured' : 'authorized', capturedMinor, refundedMinor, refundableMinor: Math.max(0, capturedMinor - refundedMinor), shippingTaxMinor: 0 } };
 }
 
 /* ── Services ──────────────────────────────────────────────────── */
@@ -231,7 +244,19 @@ function setStatus(b: AccountState['bookings'][number], status: string) {
 
 /* ── Handlers ──────────────────────────────────────────────────── */
 
+const seenClicks = new Set<string>();
+
 export const shopperHandlers = [
+  /* Search result clicks (S240): once per search and product; a mock ad token is "charged" once. */
+  http.post('*/v1/search/clicks', route(async (ctx) => {
+    const c = await body(ctx.request, SearchClickRequestSchema);
+    const key = `${c.searchId}|${c.atin}`;
+    const duplicate = seenClicks.has(key);
+    seenClicks.add(key);
+    const sponsored = Boolean(c.adToken);
+    return json({ recorded: !duplicate, duplicate, sponsored, ...(sponsored ? { adStatus: duplicate ? 'DUPLICATE' : 'BILLABLE' } : {}) }, 202);
+  })),
+
   /* Addresses */
   http.get('*/v1/account/addresses', route((ctx) => json({ items: me(ctx).addresses, nextCursor: null }))),
   http.post('*/v1/account/addresses', route(async (ctx) => json(saveAddress(me(ctx), null, await body(ctx.request, AddressInputSchema)), 201))),
@@ -289,14 +314,16 @@ export const shopperHandlers = [
   http.get('*/v1/account/orders', route((ctx) => json({
     items: me(ctx).orders.map((o) => ({ orderNumber: o.orderNumber, placedAt: o.placedAt, totalMinor: o.totalMinor, currency: o.currency, shipTo: o.shipTo, status: o.status,
       shipments: o.shipments.map((s) => ({ shipmentId: s.shipmentId, label: s.label, status: s.statusLabel, items: s.items, cancellable: s.cancellable, carrier: s.carrier,
-        trackingNumber: s.trackingNumber, promisedBy: s.promisedBy, deliveredAt: s.deliveredAt, deliveryCode: s.deliveryCode })) })),
+        trackingNumber: s.trackingNumber, promisedBy: s.promisedBy, deliveredAt: s.deliveredAt, deliveryCode: s.deliveryCode,
+        ...returnFacts(me(ctx), o, s.shipmentId, ctx.now) })) })),
     nextCursor: null
   }))),
   http.get('*/v1/account/orders/:orderNumber', route((ctx, p) => {
     const o = me(ctx).orders.find((x) => x.orderNumber === p.orderNumber);
     if (!o) throw new MockProblem(404, 'ORDER_NOT_FOUND', 'Order not found', 'We couldn’t find that order.');
+    const a = me(ctx);
     const { perishable: _p, ...detail } = o;
-    return json(detail);
+    return json({ ...detail, ...orderPayment(a, o) });
   })),
   http.post('*/v1/account/orders/:orderNumber/shipments/:shipmentId/cancel', route((ctx, p) => {
     const o = me(ctx).orders.find((x) => x.orderNumber === p.orderNumber);
@@ -366,9 +393,16 @@ export const shopperHandlers = [
     const { lines: _l, quote: _q, ...summary } = rma;
     return json(summary, 201);
   })),
-  http.get('*/v1/account/returns', route((ctx) => json({ items: me(ctx).returns.map(({ lines: _l, quote: _q, ...r }) => r), nextCursor: null }))),
+  http.get('*/v1/account/returns', route((ctx) => {
+    const a = me(ctx);
+    const orderNumber = new URL(ctx.request.url).searchParams.get('orderNumber');
+    if (orderNumber && !a.orders.some((o) => o.orderNumber === orderNumber)) throw new MockProblem(404, 'ORDER_NOT_FOUND', 'Order not found', 'We couldn’t find that order.');
+    const list = orderNumber ? a.returns.filter((r) => r.orderNumber === orderNumber) : a.returns;
+    return json({ items: list.map(({ lines: _l, quote: _q, ...r }) => r), nextCursor: null });
+  })),
   http.get('*/v1/account/returns/:rmaId', route((ctx, p) => {
-    const r = me(ctx).returns.find((x) => x.rmaId === p.rmaId);
+    const id = String(p.rmaId ?? '');
+    const r = me(ctx).returns.find((x) => x.rmaId === id || (x.number && x.number === id.toUpperCase()));
     if (!r) throw notFound('return');
     return json(r);
   })),

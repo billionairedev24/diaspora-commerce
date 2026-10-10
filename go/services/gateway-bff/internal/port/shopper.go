@@ -102,6 +102,10 @@ type UpShipment struct {
 	Cancellable      bool              `json:"cancellable"`
 	Lines            []UpOrderLine     `json:"lines"`
 	Timeline         []UpTimelineEntry `json:"timeline"`
+	// Returns (S148/S166): whether a return can start, until when, and whether only a problem report is possible.
+	Returnable         bool   `json:"returnable"`
+	ReturnWindowEndsAt string `json:"returnWindowEndsAt"`
+	ProblemReportOnly  bool   `json:"problemReportOnly"`
 }
 
 // UpShipTo is orders' ShipTo snapshot.
@@ -288,8 +292,11 @@ type UpCreateReturn struct {
 type ReturnsClient interface {
 	Eligibility(ctx context.Context, bearer, orderID string) (UpReturnEligibility, error)
 	Create(ctx context.Context, bearer, key string, req UpCreateReturn) (UpRma, error)
-	List(ctx context.Context, bearer string) ([]UpRma, error)
+	// List returns the customer's returns, optionally for one order (orderID "" = all).
+	List(ctx context.Context, bearer, orderID string) ([]UpRma, error)
 	Get(ctx context.Context, bearer, id string) (UpRma, error)
+	// ByNumber reads a return by its number (RMA-XXXXXXXX).
+	ByNumber(ctx context.Context, bearer, number string) (UpRma, error)
 	Cancel(ctx context.Context, bearer, id string) (UpRma, error)
 	Quote(ctx context.Context, bearer, id string) (domain.RefundQuote, error)
 }

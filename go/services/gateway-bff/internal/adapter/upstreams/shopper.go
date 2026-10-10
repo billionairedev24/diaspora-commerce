@@ -143,13 +143,23 @@ func (r *returnsImpl) Create(ctx context.Context, bearer, key string, req port.U
 	return out, err
 }
 
-func (r *returnsImpl) List(ctx context.Context, bearer string) ([]port.UpRma, error) {
-	res, err := call(ctx, r.c, httpclient.Request{Path: "/v1/returns", Query: url.Values{"limit": {"50"}}, Bearer: bearer}, nil)
+func (r *returnsImpl) List(ctx context.Context, bearer, orderID string) ([]port.UpRma, error) {
+	q := url.Values{"limit": {"50"}}
+	if orderID != "" {
+		q.Set("orderId", orderID)
+	}
+	res, err := call(ctx, r.c, httpclient.Request{Path: "/v1/returns", Query: q, Bearer: bearer}, nil)
 	if err != nil {
 		return nil, err
 	}
 	items, _, err := itemsOf[port.UpRma](res.Body)
 	return items, err
+}
+
+func (r *returnsImpl) ByNumber(ctx context.Context, bearer, number string) (port.UpRma, error) {
+	var out port.UpRma
+	_, err := call(ctx, r.c, httpclient.Request{Path: "/v1/returns/number/" + esc(number), Bearer: bearer}, &out)
+	return out, err
 }
 
 func (r *returnsImpl) Get(ctx context.Context, bearer, id string) (port.UpRma, error) {

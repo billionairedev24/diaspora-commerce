@@ -416,7 +416,7 @@ func (u *Upstreams) search(w http.ResponseWriter, r *http.Request) {
 	if size == 0 {
 		size = 24
 	}
-	writeJSON(w, 200, map[string]any{"hits": hits, "total": len(hits), "page": 0, "size": size, "tookMs": 3, "semantic": false,
+	writeJSON(w, 200, map[string]any{"searchId": u.searchSeen(r), "hits": u.withAds(r, hits), "total": len(hits), "page": 0, "size": size, "tookMs": 3, "semantic": false,
 		"facets": map[string]any{
 			"department":  []map[string]any{{"value": "Groceries", "count": 2}, {"value": "Beauty", "count": 1}},
 			"communities": []map[string]any{{"value": "Nigerian", "count": 1}},

@@ -160,7 +160,7 @@
 - Funding source (AfroTransact or seller) is recorded for settlement","E05","","Medium","5","offers java","offers","Done"
 "S043","Story","Other sellers on product page","Product page lists other offers for the same item with price, delivery and seller rating.","- All eligible offers listed with landed price
 - Customers can add a non-buy-box offer to cart","E05","","Medium","3","offers","offers","Done"
-"E06","Epic","Cart & checkout","Amazon-style cart split per seller, stock-capped quantities, and a clean three-step checkout saga.","","","Cart & checkout","High","","checkout","checkout","In Progress"
+"E06","Epic","Cart & checkout","Amazon-style cart split per seller, stock-capped quantities, and a clean three-step checkout saga.","","","Cart & checkout","High","","checkout","checkout","Done"
 "S044","Story","Cart service (Redis + Postgres)","Carts with price snapshots, save for later and merge on login.","- Quantities can never exceed sellable stock
 - Lines that lose stock are flagged and excluded from checkout
 - Guest cart merges into the account cart on sign-in
@@ -176,11 +176,11 @@
 - Add address opens a dialog with address autocomplete
 - Add payment method supports card and US bank (ACH) via Stripe Elements
 - Apple Pay, Google Pay and Link quick-pay buttons
-- No 'use my current location' in checkout","E06","","Highest","8","checkout web","checkout","In Progress"
+- No 'use my current location' in checkout","E06","","Highest","8","checkout web","checkout","Done"
 "S048","Story","Delivery choices per package","Carrier shipping, AfroTransact Delivery or pickup chosen per package with dates.","- Carrier options come from carrier-gateway rate shopping
 - AfroTransact Delivery offered only in served zones from nearby origins
 - Pickup locations show address, hours and ready time
-- Delivery instructions and preference captured; handover code required for perishables or hand delivery","E06","","High","8","checkout web delivery","checkout","In Progress"
+- Delivery instructions and preference captured; handover code required for perishables or hand delivery","E06","","High","8","checkout web delivery","checkout","Done"
 "S049","Story","Delivery promise service","Delivery dates per ZIP from FC cutoffs, carrier SLAs and seller handling time.","- Promise shown on cards, PDP, cart and checkout
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
@@ -394,12 +394,12 @@
 - Test-send goes only to the editor","E19","","Medium","5","notifications staff-console","notifications","Done"
 "S125","Story","Delivery receipts and notification log","Provider webhooks update status; staff can see every message sent.","- Bounces and complaints add to suppression list
 - Log shows channel, provider, status and template version","E19","","Medium","3","notifications","notifications","Done"
-"E20","Epic","Content, ads, announcements, markets & site config","Nothing promotional or legal is hard-coded: placements, campaigns, markets and site settings are data.","","","Content, ads, announcements, markets & site config","High","","content","content","In Progress"
+"E20","Epic","Content, ads, announcements, markets & site config","Nothing promotional or legal is hard-coded: placements, campaigns, markets and site settings are data.","","","Content, ads, announcements, markets & site config","High","","content","content","Done"
 "S126","Story","Placements: announcement bar, hero, banners","Slots with schemas and targeting edited in the back office and cached at the edge.","- Draft → review → scheduled → live → ended workflow
 - Publishing purges the CDN cache
 - Storefront renders placements server-side","E20","","High","5","content java","content","Done"
 "S127","Story","Sponsored products","Seller campaigns with budgets and CPC bids blended with organic results, always labelled Sponsored.","- Second-price auction with relevance floor
-- Impressions, clicks and attributed sales reported","E20","","Low","8","content ads","content","In Progress"
+- Impressions, clicks and attributed sales reported","E20","","Low","8","content ads","content","Done"
 "S128","Story","Markets & locations","Activate or deactivate AfroTransact per country and state, with per-capability switches.","- Country status: Live, Paused, Coming soon, Planned
 - Per state: marketplace, services, food, pickup, tax registration
 - Turning off marketplace in a state turns off everything there","E20","","High","5","content markets","content","Done"
@@ -423,7 +423,7 @@
 - Every tool call is audited","E21","","High","8","ai java mcp","ai","Done"
 "S135","Story","Lola chat UI on web and mobile","Real chat with typing indicator, product cards, add-all-to-cart and suggestion chips.","- Opening greeting persists after first message
 - Messages stream token by token
-- Hand-off to human support with context","E21","","High","5","ai web mobile","ai","In Progress"
+- Hand-off to human support with context","E21","","High","5","ai web mobile","ai","Done"
 "S136","Story","Seller and staff AI assistants","Listing writer/translator, tagline suggestions and trust-team triage summaries.","- AI drafts are editable and never auto-published
 - Triage summaries show sources","E21","","Medium","5","ai","ai","Done"
 "E22","Epic","Geo & address autocomplete","Every address field uses autocomplete (Google Places when keyed, OpenStreetMap Nominatim otherwise) with validation.","","","Geo & address autocomplete","High","","geo","geo","In Progress"
@@ -437,7 +437,7 @@
 - No plain-text address field remains in any app","E22","","High","5","geo web mobile","geo","In Progress"
 "S140","Story","Service areas and delivery zones (PostGIS)","Zones for AfroTransact Delivery, FC catchments and provider service areas.","- Point-in-zone checks for delivery eligibility
 - Provider distance search ('within 15 miles')","E22","","Medium","5","geo go","geo","Done"
-"E23","Epic","Storefront web (Next.js)","Customer web shop recreated from design/AfroTransact Shop.dc.html on Next.js 16, TanStack Query and design tokens.","","","Storefront web (Next.js)","High","","storefront-web","storefront-web","In Progress"
+"E23","Epic","Storefront web (Next.js)","Customer web shop recreated from design/AfroTransact Shop.dc.html on Next.js 16, TanStack Query and design tokens.","","","Storefront web (Next.js)","High","","storefront-web","storefront-web","Done"
 "S141","Story","Next.js storefront app with tokens and white canvas","App shell on Next.js 16 with @afrotransact/tokens, Figtree, white background and no visible scrollbars.","- All colours come from tokens; lint bans raw hex
 - No visible scrollbars anywhere; no horizontal page scroll
 - Builds for Cloudflare Workers via OpenNext","E23","","Highest","5","storefront-web web","storefront-web","Done"
@@ -459,11 +459,11 @@
 - Create account uses the unified form","E23","","High","5","storefront-web web identity","storefront-web","Done"
 "S148","Story","Account pages: addresses, payments, orders, returns, login & security","Self-service account management.","- Addresses add/edit/remove/default with autocomplete
 - Payments add card or bank, remove, default
-- Returns flow with reason and refund amount","E23","","High","8","storefront-web web","storefront-web","In Progress"
+- Returns flow with reason and refund amount","E23","","High","8","storefront-web web","storefront-web","Done"
 "S149","Story","Footer with configurable social links, about and careers","Beautiful footer with social icons from config, link columns, newsletter, app badges and language picker.","- Social links and phone come from site config (no deploy to change)
 - About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","Done"
 "S150","Story","Services browsing and provider pages","Find a provider, see their designed page and book.","- Provider page renders the provider's chosen layout and approved links
-- Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","In Progress"
+- Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","Done"
 "E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","In Progress"
 "S151","Story","Seller Center app shell with grouped, fixed sidebar","Fixed sidebar grouped into collapsible sections; collapsed by default except the active group.","- Sidebar doesn't scroll with the page
 - Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","Done"
@@ -494,7 +494,7 @@
 - Links expire after 24 hours","E25","","Medium","8","staff-console exports","staff-console","Done"
 "S162","Story","Customer support console","Order, payment and delivery timeline with refunds within role limits; Zendesk/Freshdesk integration.","- Refund limits per role enforced
 - Ticket links back to the order","E25","","Medium","5","staff-console support","staff-console","Done"
-"E26","Epic","Customer mobile app","Expo / React Native customer app: sign-in first, Face ID, shopping, tracking, returns, bookings and Lola.","","","Customer mobile app","High","","mobile","mobile","In Progress"
+"E26","Epic","Customer mobile app","Expo / React Native customer app: sign-in first, Face ID, shopping, tracking, returns, bookings and Lola.","","","Customer mobile app","High","","mobile","mobile","Done"
 "S163","Story","App shell with sign-in, Face ID and passcode","App opens on sign-in; Face ID and passcode set up after first sign-in; unlock on reopen.","- Five wrong passcodes force full sign-in
 - Sign out removes Face ID and passcode from the device
 - Logo on sign-in, sign-up, unlock, home and side panel","E26","","High","8","mobile","mobile","Done"
@@ -503,7 +503,7 @@
 "S165","Story","Shopping, cart and checkout with Stripe","Browse, search, PDP, cart grouped by shipper, checkout with Apple/Google Pay and Stripe payment sheet.","- Add payment method supports card (with ZIP) and US bank (ACH)
 - Orders over $100 ask for Face ID","E26","","High","8","mobile checkout","mobile","Done"
 "S166","Story","Orders, tracking and returns","Tracking with delivery code and driver, buy again, returns with QR code.","- Delivery code shown for hand-delivery and perishables
-- Return flow produces a QR code","E26","","High","5","mobile","mobile","In Progress"
+- Return flow produces a QR code","E26","","High","5","mobile","mobile","Done"
 "S167","Story","Bookings in the app","Book, reschedule and cancel services synced with provider calendars.","- Exact refund shown before cancelling","E26","","Medium","5","mobile bookings","mobile","Done"
 "S168","Story","Push notifications with deep links","FCM/APNs push for orders, deliveries and bookings.","- Tapping a notification opens the right screen
 - Preferences per category respected","E26","","Medium","5","mobile notifications","mobile","Done"
@@ -709,7 +709,7 @@
 "S238","Story","Mobile apps against real backends","Close the gaps for running the apps against real services: BFF order placement accepts a new PaymentSheet method and always returns the client secret plus a Stripe customer key; BFF tracking, address create/default, Lola and bookings routes; perishable flag on cart lines; fulfilment delivery brief wired; development builds validated on devices.","- Customer app completes checkout with PaymentSheet against dev
 - Tracking and address management work against the BFF
 - Driver app shows delivery brief instructions
-- Both apps run as EAS development builds on iOS and Android","E26","","High","8","mobile bff","mobile","To Do"
+- Both apps run as EAS development builds on iOS and Android","E26","","High","8","mobile bff","mobile","Done"
 "S239","Story","Staff console upstream gaps","Internal notes service on records; staff bookings lookup per customer; media accepts export files; trust-ops audit write endpoint for BFF-initiated staff actions; notifications:send for support roles; trust-ops case filter by customer; platform analytics feed; identity user lookup scoped to users:read; helpdesk integration; plans, coupons, pickup, feature flags and API keys configuration modules.","- Notes can be added on any record and are audited
 - Customer 360 shows bookings
 - Exports stored in media with signed URLs
@@ -720,4 +720,10 @@
 - Sellers create campaigns and see reports
 - Staff see top/zero-result queries and edit synonyms
 - Index mapping defined once in go/pkg
-- 'plantian chips' finds plantain chips","E04","","Medium","8","search ads bff seller-center staff-console","search","To Do"
+- 'plantian chips' finds plantain chips","E04","","Medium","8","search ads bff seller-center staff-console","search","Done"
+"S241","Story","Payment ownership checks and PaymentSheet customer key","Payments checks the caller owns the order on GET /v1/payments?orderId= and issues Stripe customer ephemeral keys for mobile PaymentSheet.","- Non-owners get 403 on order payment reads
+- Ephemeral key endpoint returns customer id and key for the signed-in shopper
+- BFF payment-sheet route works","E07","","Highest","3","payments security mobile","payments","To Do"
+"S242","Story","Streaming support in go/pkg/httpserver","Shared Go HTTP server supports flushing through its response recorder and per-route write timeouts for long-lived streams (SSE), removing BFF workarounds.","- Recorder implements http.Flusher
+- SSE routes are exempt from the 30s write timeout
+- BFF Lola relay uses the shared server without workarounds","E01","","Medium","2","go platform","foundation","To Do"

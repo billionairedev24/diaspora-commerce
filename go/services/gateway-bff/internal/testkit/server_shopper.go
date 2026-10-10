@@ -20,7 +20,7 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 	tokens := upstreams.NewServiceTokens(client("identity", u.URL()), upstreams.IdentityOptions{ClientID: u.ClientID, ClientSecret: u.Secret, Now: clock.Now})
 	d := app.ShopperDeps{
 		Wallet: upstreams.NewWallet(client("payments", base)), Orders: upstreams.NewCustomerOrders(client("orders", base)),
-		Returns: upstreams.NewReturns(client("tax-returns", base)), Security: upstreams.NewSecurity(client("identity", base)),
+		Returns: upstreams.NewReturns(client("tax-returns", base)), Payments: upstreams.NewOrderPayments(client("payments", base)), Security: upstreams.NewSecurity(client("identity", base)),
 		Bookings: upstreams.NewCustomerBookings(client("bookings", base)), Pages: upstreams.NewPublishedPages(client("storefront", base)),
 		Lola:     upstreams.NewLola(client("ai-gateway", base), upstreams.LolaOptions{BaseURL: base}),
 		Delivery: upstreams.NewDeliveryFacts(client("promise", base), client("carrier-gateway", base), client("geo", base), tokens),
@@ -29,5 +29,6 @@ func shopperServices(u *Upstreams, client func(name, url string) httpclient.Clie
 	}
 	return httpapi.ShopperServices{Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
 		Checkout: app.NewCheckoutPaymentService(d), Returns: app.NewReturnsService(d), Security: app.NewSecurityService(d),
-		Services: app.NewServicesService(d), Lola: app.NewLolaService(d)}
+		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
+		SearchClicks: app.NewSearchClickService(upstreams.NewSearchClicks(client("search", u.URL())), "us")}
 }

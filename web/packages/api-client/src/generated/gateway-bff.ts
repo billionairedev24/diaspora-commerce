@@ -108,12 +108,33 @@ export interface paths {
         /**
          * Search products with filters, facet counts and delivery promises
          * @description Every typed word must match (prefix, synonym or typo tolerance). Facet counts for a dimension are computed
-         *     with every other active filter applied (disjunctive faceting). Sponsored placements that match the query
-         *     are labelled with `sponsor`.
+         *     with every other active filter applied (disjunctive faceting). Sponsored products (S240) take fixed slots
+         *     and carry `sponsor` (advertiser, reason and a click token); a page with ads is `Cache-Control: private,
+         *     no-store`. Report clicks with POST /v1/search/clicks using `searchId`.
          */
         get: operations["search"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/search/clicks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a click on a search result (organic or sponsored)
+         * @description Counted once per search and product; a sponsored click with a valid, unexpired adToken is charged once per token. Clients fire and forget (navigation never waits on it).
+         */
+        post: operations["recordSearchClick"];
         delete?: never;
         options?: never;
         head?: never;
@@ -732,7 +753,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Returns of the signed-in customer */
+        /** Returns of the signed-in customer (all, or one order's) */
         get: operations["listReturns"];
         put?: never;
         /** Start a return for delivered items (tax-returns RMA with label / QR, handover code or refund without return) */
@@ -1691,9 +1712,43 @@ export interface components {
             delivery: components["schemas"]["DeliveryPromise"];
             offerCount: number;
             minOfferPriceMinor: number;
+            /** @description Present on sponsored products — render "Sponsored · {advertiser}" with the reason. */
             sponsor: {
                 advertiser: string;
+                campaignId?: string;
+                /** @description 1-based position the ad won */
+                slot?: number;
+                /** @description Send back as adToken with POST /v1/search/clicks */
+                adToken?: string;
+                reason?: components["schemas"]["SponsorReason"];
             } | null;
+        };
+        /** @description Why this ad was shown (no bids or prices are disclosed) */
+        SponsorReason: {
+            /** @enum {string} */
+            targeting: "KEYWORD" | "CATEGORY";
+            matched: string;
+            qualityScore: number;
+            auctionRank: number;
+            competitors: number;
+            eligibility: string[];
+            summary: string;
+        };
+        SearchClickRequest: {
+            searchId: string;
+            q?: string;
+            atin: string;
+            /** @description 1-based position on the page */
+            position: number;
+            /** @description sponsor.adToken of a sponsored product */
+            adToken?: string;
+        };
+        SearchClickResult: {
+            recorded: boolean;
+            duplicate: boolean;
+            sponsored: boolean;
+            /** @enum {string} */
+            adStatus?: "BILLABLE" | "DUPLICATE" | "EXPIRED";
         };
         VariantOption: {
             atin: components["schemas"]["Atin"];
@@ -1794,6 +1849,8 @@ export interface components {
             };
             deliverToLabel: string;
             tookMs: number;
+            /** @description Identifies this search for click reporting (POST /v1/search/clicks) */
+            searchId?: string;
         };
         Suggestions: {
             query: string;
@@ -2209,6 +2266,12 @@ export interface components {
                 deliveredAt?: string | null;
                 /** @description One-time handover code (hand delivery or perishables) */
                 deliveryCode?: string | null;
+                /** @description A return can be started (show "Return items") */
+                returnable?: boolean;
+                /** Format: date-time */
+                returnWindowEndsAt?: string | null;
+                /** @description Only "Report a problem" is possible (e.g. perishables, window closed) */
+                problemReportOnly?: boolean;
             }[];
         };
         OrderPage: {
@@ -2367,6 +2430,16 @@ export interface components {
             quantity: number;
             unitPriceMinor: number;
             itemsMinor: number;
+            /** @description Refunded on this line so far (returns, cancellations, claims) */
+            refundedMinor?: number;
+        };
+        /** @description What was charged and refunded (payments); shippingTaxMinor is the part of the tax charged on delivery */
+        OrderPayment: {
+            status: string;
+            capturedMinor: number;
+            refundedMinor: number;
+            refundableMinor: number;
+            shippingTaxMinor: number;
         };
         OrderDetail: {
             orderNumber: string;
@@ -2407,7 +2480,14 @@ export interface components {
                 deliveryCode: string | null;
                 lines: components["schemas"]["OrderLineView"][];
                 timeline: components["schemas"]["TimelineEvent"][];
+                /** @description A return can be started (show "Return items") */
+                returnable?: boolean;
+                /** Format: date-time */
+                returnWindowEndsAt?: string | null;
+                /** @description Only "Report a problem" is possible */
+                problemReportOnly?: boolean;
             }[];
+            payment?: components["schemas"]["OrderPayment"];
         };
         OrderTracking: {
             orderNumber: string;
@@ -3064,6 +3144,8 @@ export interface operations {
                 sort?: components["schemas"]["SearchSort"];
                 page?: number;
                 size?: number;
+                /** @description Blend sponsored products into the page (results pages). Send false for machine-made queries. */
+                ads?: boolean;
             };
             header?: never;
             path?: never;
@@ -3082,6 +3164,33 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
+        };
+    };
+    recordSearchClick: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchClickRequest"];
+            };
+        };
+        responses: {
+            /** @description Recorded, or recognised as a duplicate */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchClickResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     suggest: {
@@ -3884,7 +3993,10 @@ export interface operations {
     };
     listReturns: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Only this order's returns */
+                orderNumber?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3901,6 +4013,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };
@@ -4173,6 +4286,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
+                /** @description The return id, or its number (RMA-XXXXXXXX, e.g. scanned from the QR code) */
                 rmaId: string;
             };
             cookie?: never;

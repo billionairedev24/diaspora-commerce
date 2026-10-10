@@ -195,7 +195,7 @@ func (s *siteServiceImpl) railItems(ctx context.Context, src domain.RailSource) 
 	if src.Kind == "atins" {
 		return s.byATIN(ctx, src.ATINs, limit, now), nil
 	}
-	p := port.SearchParams{Q: src.Query, Market: s.d.Market, Department: src.Department, Sort: src.Sort, Size: limit, InStock: true}
+	p := port.SearchParams{Q: src.Query, Market: s.d.Market, Department: src.Department, Sort: src.Sort, Size: limit, InStock: true, NoTrack: true}
 	switch src.Kind {
 	case "fulfilled-fastest":
 		p.Fulfilment = domain.FulfilledByAfroTransact

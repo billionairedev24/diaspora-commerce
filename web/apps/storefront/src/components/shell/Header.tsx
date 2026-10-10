@@ -14,7 +14,7 @@ import { AccountMenu } from './AccountMenu';
 import { AnnouncementBar } from './AnnouncementBar';
 import { DeliverToDialog } from './DeliverToDialog';
 import styles from './Header.module.css';
-import { LolaSheet } from './LolaSheet';
+import { useLolaLauncher } from './LolaLauncher';
 import { SearchBox } from './SearchBox';
 
 export function Header() {
@@ -23,7 +23,7 @@ export function Header() {
   const { data: cart } = useQuery(cartQueries.current(api));
   const { data: me } = useQuery(accountQueries.me(api));
   const [locOpen, setLocOpen] = useState(false);
-  const [lolaOpen, setLolaOpen] = useState(false);
+  const lola = useLolaLauncher();
   const pathname = usePathname();
   const params = useSearchParams();
   const count = cart?.itemCount ?? 0;
@@ -49,11 +49,11 @@ export function Header() {
             <SearchBox />
           </div>
           <span className={styles.spacer} />
-          <button type="button" className={`${styles.chromeBtn} ${styles.logoBtn}`} onClick={() => setLolaOpen(true)} aria-label={t('header.lolaAria')} aria-haspopup="dialog">
+          <button type="button" className={`${styles.chromeBtn} ${styles.logoBtn}`} onClick={() => lola.open()} aria-label={t('header.lolaAria')} aria-haspopup="dialog">
             <Sparkle size={20} weight="fill" className={styles.sparkle} aria-hidden />
             <span className={styles.lolaLabel}>{t('header.lola')}</span>
           </button>
-          <AccountMenu me={me} onAskLola={() => setLolaOpen(true)} />
+          <AccountMenu me={me} onAskLola={() => lola.open()} />
           <Link href="/cart" className={styles.chromeBtn} aria-label={t('header.cartAria', { count })}>
             <span className={styles.cartIcon}>
               <ShoppingCart size={30} aria-hidden />
@@ -75,7 +75,7 @@ export function Header() {
               </Link>
             </li>
             <li>
-              <button type="button" className={styles.navItem} onClick={() => setLolaOpen(true)} aria-haspopup="dialog">
+              <button type="button" className={styles.navItem} onClick={() => lola.open()} aria-haspopup="dialog">
                 <Sparkle weight="fill" className={styles.gold} aria-hidden />
                 {t('nav.lola')}
               </button>
@@ -122,7 +122,6 @@ export function Header() {
       </header>
       <AnnouncementBar />
       <DeliverToDialog open={locOpen} onOpenChange={setLocOpen} />
-      <LolaSheet open={lolaOpen} onOpenChange={setLolaOpen} />
     </>
   );
 }

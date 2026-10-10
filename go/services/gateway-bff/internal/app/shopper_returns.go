@@ -15,7 +15,8 @@ import (
 type ReturnsService interface {
 	Returnable(ctx context.Context, c *domain.Caller, orderNumber string) (domain.ReturnEligibility, error)
 	Start(ctx context.Context, c *domain.Caller, key string, r domain.StartReturn) (domain.ReturnSummary, error)
-	List(ctx context.Context, c *domain.Caller) (domain.Page[domain.ReturnSummary], error)
+	// List returns the customer's returns, or one order's when orderNumber is set.
+	List(ctx context.Context, c *domain.Caller, orderNumber string) (domain.Page[domain.ReturnSummary], error)
 	Detail(ctx context.Context, c *domain.Caller, id string) (domain.ReturnDetail, error)
 	Cancel(ctx context.Context, c *domain.Caller, id string) (domain.ReturnSummary, error)
 }
@@ -171,12 +172,8 @@ func (s *returnsServiceImpl) Start(ctx context.Context, c *domain.Caller, key st
 	if len(errs) > 0 {
 		return domain.ReturnSummary{}, domain.ValidationProblem(errs)
 	}
+	// returnFrom is left out: tax-returns defaults it to the order's delivery address.
 	req := port.UpCreateReturn{OrderID: o.ID, ShipmentID: r.ShipmentID, Method: r.Method, Lines: lines}
-	if r.Method == "DROP_OFF" && o.ShippingAddress != nil {
-		a := o.ShippingAddress
-		req.ReturnFrom = &port.UpReturnAddress{Name: a.FullName, Phone: a.Phone, Line1: a.Line1, Line2: a.Line2, City: a.City, State: a.State,
-			PostalCode: a.PostalCode, Country: firstNonEmpty(a.Country, "US")}
-	}
 	if key == "" {
 		key = derivedKey(c, s.d.Clock.now(), "return", o.ID, r.ShipmentID, r.Method)
 	}
@@ -187,11 +184,19 @@ func (s *returnsServiceImpl) Start(ctx context.Context, c *domain.Caller, key st
 	return toReturnSummary(rma), nil
 }
 
-func (s *returnsServiceImpl) List(ctx context.Context, c *domain.Caller) (domain.Page[domain.ReturnSummary], error) {
+func (s *returnsServiceImpl) List(ctx context.Context, c *domain.Caller, orderNumber string) (domain.Page[domain.ReturnSummary], error) {
 	if err := requireCustomer(c); err != nil {
 		return domain.Page[domain.ReturnSummary]{}, err
 	}
-	list, err := s.d.Returns.List(ctx, c.BearerToken)
+	orderID := ""
+	if orderNumber = strings.TrimSpace(orderNumber); orderNumber != "" {
+		o, err := s.order(ctx, c, orderNumber)
+		if err != nil {
+			return domain.Page[domain.ReturnSummary]{}, err
+		}
+		orderID = o.ID
+	}
+	list, err := s.d.Returns.List(ctx, c.BearerToken, orderID)
 	if err != nil {
 		return domain.Page[domain.ReturnSummary]{}, returnsErr(err)
 	}
@@ -206,10 +211,16 @@ func (s *returnsServiceImpl) Detail(ctx context.Context, c *domain.Caller, id st
 	if err := requireCustomer(c); err != nil {
 		return domain.ReturnDetail{}, err
 	}
-	r, err := s.d.Returns.Get(ctx, c.BearerToken, id)
+	get := s.d.Returns.Get
+	if strings.HasPrefix(strings.ToUpper(id), "RMA-") { // scanned from the QR code / shared by number
+		get = s.d.Returns.ByNumber
+		id = strings.ToUpper(id)
+	}
+	r, err := get(ctx, c.BearerToken, id)
 	if err != nil {
 		return domain.ReturnDetail{}, returnsErr(err)
 	}
+	id = firstNonEmpty(r.ID, id)
 	out := domain.ReturnDetail{ReturnSummary: toReturnSummary(r), Lines: []domain.ReturnLineView{}}
 	for _, l := range r.Lines {
 		out.Lines = append(out.Lines, domain.ReturnLineView{LineID: l.LineID, ATIN: l.ATIN, Title: l.Title, Quantity: l.Quantity,

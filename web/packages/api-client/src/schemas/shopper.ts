@@ -47,7 +47,9 @@ export const OrderLineViewSchema = z.object({
   imageUrl: nullableString,
   quantity: z.number().int(),
   unitPriceMinor: MinorSchema,
-  itemsMinor: MinorSchema
+  itemsMinor: MinorSchema,
+  /** Refunded on this line so far (returns, cancellations, claims). */
+  refundedMinor: MinorSchema.optional()
 });
 export type OrderLineView = z.infer<typeof OrderLineViewSchema>;
 
@@ -67,7 +69,11 @@ export const ShipmentDetailSchema = z.object({
   deliveredAt: nullableString,
   deliveryCode: nullableString,
   lines: z.array(OrderLineViewSchema),
-  timeline: z.array(TimelineEventSchema)
+  timeline: z.array(TimelineEventSchema),
+  /** Returns (S148/S166): "Return items" when returnable; "Report a problem" when only that is possible. */
+  returnable: z.boolean().optional(),
+  returnWindowEndsAt: z.string().nullable().optional(),
+  problemReportOnly: z.boolean().optional()
 });
 export type ShipmentDetail = z.infer<typeof ShipmentDetailSchema>;
 
@@ -83,7 +89,11 @@ export const OrderDetailSchema = z.object({
   totalMinor: MinorSchema,
   shipTo: z.string(),
   shippingAddress: z.object({ name: z.string(), line1: z.string(), line2: z.string(), city: z.string(), state: z.string(), zip: z.string() }).nullable(),
-  shipments: z.array(ShipmentDetailSchema)
+  shipments: z.array(ShipmentDetailSchema),
+  /** What was charged and refunded (payments); absent when payments cannot answer. */
+  payment: z
+    .object({ status: z.string(), capturedMinor: MinorSchema, refundedMinor: MinorSchema, refundableMinor: MinorSchema, shippingTaxMinor: MinorSchema })
+    .optional()
 });
 export type OrderDetail = z.infer<typeof OrderDetailSchema>;
 

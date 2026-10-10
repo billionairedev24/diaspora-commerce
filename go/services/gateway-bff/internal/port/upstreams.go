@@ -25,6 +25,10 @@ type SearchParams struct {
 	Sort       string
 	Page       int
 	Size       int
+	// Ads blends sponsored products into the page (results pages only; S240).
+	Ads bool
+	// NoTrack keeps machine-made queries (home rails, Lola) out of search analytics (track=false).
+	NoTrack bool
 }
 
 // SearchHit is a search-service product card.
@@ -46,6 +50,8 @@ type SearchHit struct {
 	DeliveryDays int     `json:"deliveryDays"`
 	ImageURL     string  `json:"imageUrl"`
 	OfferCount   int     `json:"offerCount"`
+	// Sponsored is present on ads only (S240).
+	Sponsored *SearchSponsored `json:"sponsored,omitempty"`
 }
 
 // SearchFacetBucket is a search-service facet value.
@@ -62,6 +68,8 @@ type SearchResult struct {
 	Size   int                            `json:"size"`
 	Facets map[string][]SearchFacetBucket `json:"facets"`
 	TookMs int64                          `json:"tookMs"`
+	// SearchID identifies the search for click reporting.
+	SearchID string `json:"searchId"`
 }
 
 // SuggestResult is the search-service typeahead.

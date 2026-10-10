@@ -184,7 +184,7 @@ export function search(q: SearchQuery, loc: DeliveryLocation, now: Date): Search
   if (q.sort === 'relevance' && hits.length) {
     const sponsored = SPONSORED_SEARCH.map((x) => ({ atin: atinOf(x.id), advertiser: x.advertiser })).filter((x) => hits.some((h) => h.atin === x.atin));
     hits = [
-      ...sponsored.map((x) => ({ ...(hits.find((h) => h.atin === x.atin) as ProductSummary), sponsor: { advertiser: x.advertiser } })),
+      ...sponsored.map((x, i) => ({ ...(hits.find((h) => h.atin === x.atin) as ProductSummary), sponsor: mockSponsor(x.advertiser, i + 1, q.q) })),
       ...hits.filter((h) => !sponsored.some((x) => x.atin === h.atin))
     ];
   }
@@ -408,5 +408,25 @@ export function buildCart(s: MockSession, now: Date): Cart {
     subtotalMinor: sel.reduce((a, l) => a + l.lineTotalMinor, 0),
     allSelected: allLines.length > 0 && allLines.every((l) => l.selected),
     sellerCount: new Set(packages.map((p) => p.seller.id)).size
+  };
+}
+
+/** Mock search ad (S240): label, slot, click token and the reason it was shown (never bids). */
+function mockSponsor(advertiser: string, slot: number, q: string): NonNullable<ProductSummary['sponsor']> {
+  const matched = q.trim().toLowerCase() || 'groceries';
+  return {
+    advertiser,
+    campaignId: `cmp-${slot}`,
+    slot,
+    adToken: `mock-ad.${slot}.${encodeURIComponent(matched)}`,
+    reason: {
+      targeting: 'KEYWORD',
+      matched,
+      qualityScore: 0.8,
+      auctionRank: slot,
+      competitors: 2,
+      eligibility: ['In stock', 'Holds the buy box', 'Matches your filters'],
+      summary: `Shown because you searched for “${matched}” and ${advertiser} sells it in stock.`
+    }
   };
 }

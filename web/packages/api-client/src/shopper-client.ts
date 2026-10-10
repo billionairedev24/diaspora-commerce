@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { type ApiClientOptions, type Requester } from './http';
 import { streamLola } from './lola';
 import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema, type ReturnSummary, ReturnSummarySchema } from './schemas/account';
+import { type SearchClickRequest, type SearchClickResult, SearchClickResultSchema } from './schemas/search';
 import {
   type AddressInput,
   type AvailableDay,
@@ -85,6 +86,10 @@ const idem = (key?: string): Record<string, string> | undefined => (key ? { 'Ide
 /** Account, checkout, services & bookings and Lola routes of the gateway BFF (spread into createApiClient). */
 export function shopperMethods(request: Requester, options: ApiClientOptions) {
   return {
+    /** Reports a click on a search result (organic or sponsored, S240). Fire and forget: never block navigation on it. */
+    recordSearchClick: (body: SearchClickRequest): Promise<SearchClickResult> =>
+      request('/v1/search/clicks', SearchClickResultSchema, { method: 'POST', body }),
+
     /* Addresses (identity, validated by geo) */
     createAddress: (input: AddressInput): Promise<Address> => request('/v1/account/addresses', AddressSchema, { method: 'POST', body: input }),
     updateAddress: (id: string, input: AddressInput): Promise<Address> => request(`/v1/account/addresses/${enc(id)}`, AddressSchema, { method: 'PATCH', body: input }),

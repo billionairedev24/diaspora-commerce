@@ -114,7 +114,8 @@ export function createApiClient(options: ApiClientOptions) {
     getAddresses: async (): Promise<Address[]> => (await request('/v1/account/addresses', pageOf(AddressSchema))).items,
     getPaymentMethods: async (): Promise<PaymentMethod[]> => (await request('/v1/account/payment-methods', pageOf(PaymentMethodSchema))).items,
     getOrders: async (): Promise<OrderSummary[]> => (await request('/v1/account/orders', pageOf(OrderSummarySchema))).items,
-    getReturns: async (): Promise<ReturnSummary[]> => (await request('/v1/account/returns', pageOf(ReturnSummarySchema))).items,
+    getReturns: async (orderNumber?: string): Promise<ReturnSummary[]> =>
+      (await request('/v1/account/returns', pageOf(ReturnSummarySchema), { query: orderNumber ? { orderNumber } : undefined })).items,
 
     /* Account details, checkout, services & bookings, Lola */
     ...shopperMethods(request, options)

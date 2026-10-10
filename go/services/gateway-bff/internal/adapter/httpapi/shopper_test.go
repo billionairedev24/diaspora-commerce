@@ -113,6 +113,15 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	if sh["statusLabel"] != "Delivered" || sh["trackingNumber"] != "1Z999" || len(sh["timeline"].([]any)) != 2 {
 		t.Fatalf("order detail: %v", sh)
 	}
+	if sh["returnable"] != true || sh["returnWindowEndsAt"] != "2026-11-02T17:00:00Z" || sh["problemReportOnly"] != false {
+		t.Fatalf("order detail should carry the return window: %v", sh)
+	}
+	if line := sh["lines"].([]any)[0].(map[string]any); line["refundedMinor"] != float64(1353) {
+		t.Fatalf("line refunds from payments: %v", line)
+	}
+	if pay, _ := r.json(t)["payment"].(map[string]any); pay == nil || pay["refundableMinor"] != float64(1353) || pay["refundedMinor"] != float64(1353) {
+		t.Fatalf("order payment: %v", r.json(t)["payment"])
+	}
 	mustStatus(t, b.do("GET", "/v1/account/orders/AT-2026-NOPE", nil), 404)
 	r = b.do("GET", "/v1/account/orders/"+testkit.ShopperOrderNumber+"/tracking", nil)
 	mustStatus(t, r, 200)
@@ -136,6 +145,17 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	// The customer app's short form.
 	mustStatus(t, b.do("POST", "/v1/account/returns", map[string]any{"orderNumber": testkit.ShopperOrderNumber, "atin": "ATJOLLOFV1", "reason": "NO_LONGER_NEEDED"}), 201)
 	mustStatus(t, b.do("GET", "/v1/account/returns", nil), 200)
+	r = b.do("GET", "/v1/account/returns?orderNumber="+testkit.ShopperOrderNumber, nil)
+	mustStatus(t, r, 200)
+	if n := len(r.json(t)["items"].([]any)); n != 1 {
+		t.Fatalf("returns of the order: %d", n)
+	}
+	mustStatus(t, b.do("GET", "/v1/account/returns?orderNumber=AT-2026-NOPE", nil), 404)
+	r = b.do("GET", "/v1/account/returns/RMA-0000ABCD", nil) // by number (QR)
+	mustStatus(t, r, 200)
+	if r.json(t)["rmaId"] != testkit.ShopperRMAID {
+		t.Fatalf("by number: %s", r.body)
+	}
 	r = b.do("GET", "/v1/account/returns/"+testkit.ShopperRMAID, nil)
 	mustStatus(t, r, 200)
 	if r.json(t)["quote"] == nil {

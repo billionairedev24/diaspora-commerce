@@ -38,7 +38,7 @@ func NewSearchService(search port.SearchClient, offers port.StorefrontOffersClie
 // with a local re-sort, maxDays ≥ 1).
 func toParams(q domain.SearchQuery, market string) (port.SearchParams, error) {
 	p := port.SearchParams{Q: strings.TrimSpace(q.Q), Market: market, Department: q.Department, Community: q.Community,
-		Fulfilment: q.Fulfilment, SellerKind: q.SellerKind, MinRating: q.MinRating, Sort: q.Sort, Page: q.Page, Size: q.Size}
+		Fulfilment: q.Fulfilment, SellerKind: q.SellerKind, MinRating: q.MinRating, Sort: q.Sort, Page: q.Page, Size: q.Size, Ads: q.Ads}
 	if q.Price != "" {
 		b, ok := domain.PriceBucketByID(q.Price)
 		if !ok {
@@ -71,17 +71,19 @@ func (s *searchServiceImpl) Search(ctx context.Context, c *domain.Caller, q doma
 	}
 	now := s.clock.now()
 	hits := make([]domain.ProductSummary, 0, len(res.Hits))
+	sponsored := false
 	for _, h := range res.Hits {
 		hits = append(hits, summaryFromHit(h, s.estimator, now))
+		sponsored = sponsored || h.Sponsored != nil
 	}
 	hits = withOffers(ctx, s.offers, hits)
 	if q.Sort == domain.SortFastest {
-		sort.SliceStable(hits, func(i, j int) bool { return hits[i].Delivery.Days < hits[j].Delivery.Days })
+		sortOrganicByDays(hits)
 	}
 	size := firstPositive(res.Size, q.Size, domain.DefaultSearchSize)
 	return domain.SearchPage{
 		Hits: hits, Total: res.Total, Page: res.Page, Size: size, PageCount: domain.PageCount(res.Total, size),
-		Facets: facetsFrom(res.Facets), DeliverToLabel: loc.Label, TookMs: res.TookMs,
+		Facets: facetsFrom(res.Facets), DeliverToLabel: loc.Label, TookMs: res.TookMs, SearchID: res.SearchID, Sponsored: sponsored,
 	}, nil
 }
 
@@ -150,4 +152,35 @@ func (s *searchServiceImpl) Suggest(ctx context.Context, _ *domain.Caller, q str
 	}
 	out.Products = withOffers(ctx, s.offers, out.Products)
 	return out, nil
+}
+
+// sortOrganicByDays orders organic cards by delivery days; sponsored cards keep the slots they won.
+func sortOrganicByDays(hits []domain.ProductSummary) {
+	idx := []int{}
+	organic := []domain.ProductSummary{}
+	for i, h := range hits {
+		if h.Sponsor == nil {
+			idx = append(idx, i)
+			organic = append(organic, h)
+		}
+	}
+	sort.SliceStable(organic, func(i, j int) bool { return organic[i].Delivery.Days < organic[j].Delivery.Days })
+	for k, i := range idx {
+		hits[i] = organic[k]
+	}
+}
+
+// sponsorOf maps a search ad to the card's sponsor label, click token and reason.
+func sponsorOf(s *port.SearchSponsored) *domain.Sponsor {
+	if s == nil || s.Advertiser == "" {
+		return nil
+	}
+	r := s.Reason
+	elig := r.Eligibility
+	if elig == nil {
+		elig = []string{}
+	}
+	return &domain.Sponsor{Advertiser: s.Advertiser, CampaignID: s.CampaignID, Slot: s.Slot, AdToken: s.Token,
+		Reason: &domain.SponsorReason{Targeting: r.Targeting, Matched: r.Matched, QualityScore: r.QualityScore,
+			AuctionRank: r.AuctionRank, Competitors: r.Competitors, Eligibility: elig, Summary: r.Summary}}
 }

@@ -185,8 +185,9 @@ paths:
       summary: Search products with filters, facet counts and delivery promises
       description: |
         Every typed word must match (prefix, synonym or typo tolerance). Facet counts for a dimension are computed
-        with every other active filter applied (disjunctive faceting). Sponsored placements that match the query
-        are labelled with `sponsor`.
+        with every other active filter applied (disjunctive faceting). Sponsored products (S240) take fixed slots
+        and carry `sponsor` (advertiser, reason and a click token); a page with ads is `Cache-Control: private,
+        no-store`. Report clicks with POST /v1/search/clicks using `searchId`.
       parameters:
         - {name: q, in: query, schema: {type: string, maxLength: 200}}
         - {name: department, in: query, schema: {type: string}}
@@ -199,6 +200,10 @@ paths:
         - {name: sort, in: query, schema: {$ref: '#/components/schemas/SearchSort'}}
         - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
         - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 60, default: 12}}
+        - name: ads
+          in: query
+          schema: {type: boolean, default: true}
+          description: Blend sponsored products into the page (results pages). Send false for machine-made queries.
       responses:
         '200':
           description: One page of results
@@ -207,6 +212,29 @@ paths:
               schema: {$ref: '#/components/schemas/SearchPage'}
         '400': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
+  /v1/search/clicks:
+    post:
+      tags: [Search]
+      operationId: recordSearchClick
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Report a click on a search result (organic or sponsored)
+      description: >-
+        Counted once per search and product; a sponsored click with a valid, unexpired adToken is charged once per
+        token. Clients fire and forget (navigation never waits on it).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SearchClickRequest'}
+      responses:
+        '202':
+          description: Recorded, or recognised as a duplicate
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SearchClickResult'}
+        '400': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/search/suggestions:
     get:
       tags: [Search]
@@ -825,8 +853,10 @@ paths:
     get:
       tags: [Account]
       operationId: listReturns
-      summary: Returns of the signed-in customer
+      summary: Returns of the signed-in customer (all, or one order's)
       security: [{sessionCookie: []}, {bearer: []}]
+      parameters:
+        - {name: orderNumber, in: query, schema: {type: string}, description: Only this order's returns}
       responses:
         '200':
           description: Returns
@@ -834,6 +864,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/ReturnPage'}
         '401': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
     post:
       tags: [Account]
@@ -1038,7 +1069,7 @@ paths:
       summary: One of my returns with its lines and the refund estimate (tax-returns refund quote)
       security: [{sessionCookie: []}, {bearer: []}]
       parameters:
-        - {name: rmaId, in: path, required: true, schema: {type: string}}
+        - {name: rmaId, in: path, required: true, schema: {type: string}, description: 'The return id, or its number (RMA-XXXXXXXX, e.g. scanned from the QR code)'}
       responses:
         '200':
           description: Return
@@ -2031,9 +2062,43 @@ components:
         minOfferPriceMinor: {type: integer}
         sponsor:
           type: [object, 'null']
+          description: Present on sponsored products — render "Sponsored · {advertiser}" with the reason.
           required: [advertiser]
           properties:
             advertiser: {type: string}
+            campaignId: {type: string}
+            slot: {type: integer, minimum: 1, description: 1-based position the ad won}
+            adToken: {type: string, description: Send back as adToken with POST /v1/search/clicks}
+            reason: {$ref: '#/components/schemas/SponsorReason'}
+    SponsorReason:
+      type: object
+      description: Why this ad was shown (no bids or prices are disclosed)
+      required: [targeting, matched, qualityScore, auctionRank, competitors, eligibility, summary]
+      properties:
+        targeting: {type: string, enum: [KEYWORD, CATEGORY]}
+        matched: {type: string}
+        qualityScore: {type: number, minimum: 0, maximum: 1}
+        auctionRank: {type: integer}
+        competitors: {type: integer}
+        eligibility: {type: array, items: {type: string}}
+        summary: {type: string}
+    SearchClickRequest:
+      type: object
+      required: [searchId, atin, position]
+      properties:
+        searchId: {type: string, maxLength: 200}
+        q: {type: string, maxLength: 200}
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        position: {type: integer, minimum: 1, maximum: 1000, description: 1-based position on the page}
+        adToken: {type: string, maxLength: 4096, description: sponsor.adToken of a sponsored product}
+    SearchClickResult:
+      type: object
+      required: [recorded, duplicate, sponsored]
+      properties:
+        recorded: {type: boolean}
+        duplicate: {type: boolean}
+        sponsored: {type: boolean}
+        adStatus: {type: string, enum: [BILLABLE, DUPLICATE, EXPIRED]}
     VariantOption:
       type: object
       required: [atin, label, selected, available, priceMinor]
@@ -2150,6 +2215,7 @@ components:
             delivery: {type: array, items: {$ref: '#/components/schemas/FacetBucket'}}
         deliverToLabel: {type: string}
         tookMs: {type: integer}
+        searchId: {type: string, description: Identifies this search for click reporting (POST /v1/search/clicks)}
     Suggestions:
       type: object
       required: [query, phrases, products]
@@ -2646,6 +2712,9 @@ components:
               promisedBy: {type: [string, 'null']}
               deliveredAt: {type: [string, 'null']}
               deliveryCode: {type: [string, 'null'], description: One-time handover code (hand delivery or perishables)}
+              returnable: {type: boolean, description: A return can be started (show "Return items")}
+              returnWindowEndsAt: {type: [string, 'null'], format: date-time}
+              problemReportOnly: {type: boolean, description: 'Only "Report a problem" is possible (e.g. perishables, window closed)'}
     OrderPage:
       type: object
       required: [items, nextCursor]
@@ -2820,6 +2889,17 @@ components:
         quantity: {type: integer}
         unitPriceMinor: {type: integer}
         itemsMinor: {type: integer}
+        refundedMinor: {type: integer, description: 'Refunded on this line so far (returns, cancellations, claims)'}
+    OrderPayment:
+      type: object
+      description: What was charged and refunded (payments); shippingTaxMinor is the part of the tax charged on delivery
+      required: [status, capturedMinor, refundedMinor, refundableMinor, shippingTaxMinor]
+      properties:
+        status: {type: string}
+        capturedMinor: {type: integer}
+        refundedMinor: {type: integer}
+        refundableMinor: {type: integer}
+        shippingTaxMinor: {type: integer}
     OrderDetail:
       type: object
       required: [orderNumber, placedAt, status, currency, itemsMinor, shippingMinor, taxMinor, discountMinor, totalMinor, shipTo, shippingAddress, shipments]
@@ -2866,6 +2946,10 @@ components:
               deliveryCode: {type: [string, 'null'], description: One-time handover code (hand delivery or perishables)}
               lines: {type: array, items: {$ref: '#/components/schemas/OrderLineView'}}
               timeline: {type: array, items: {$ref: '#/components/schemas/TimelineEvent'}}
+              returnable: {type: boolean, description: A return can be started (show "Return items")}
+              returnWindowEndsAt: {type: [string, 'null'], format: date-time}
+              problemReportOnly: {type: boolean, description: Only "Report a problem" is possible}
+        payment: {$ref: '#/components/schemas/OrderPayment'}
     OrderTracking:
       type: object
       required: [orderNumber, placedAt, totalMinor, currency, shipments]

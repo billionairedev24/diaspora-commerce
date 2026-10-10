@@ -48,7 +48,10 @@ export const OrderSummarySchema = z.object({
       trackingNumber: z.string().nullable().optional(),
       promisedBy: z.string().nullable().optional(),
       deliveredAt: z.string().nullable().optional(),
-      deliveryCode: z.string().nullable().optional()
+      deliveryCode: z.string().nullable().optional(),
+      returnable: z.boolean().optional(),
+      returnWindowEndsAt: z.string().nullable().optional(),
+      problemReportOnly: z.boolean().optional()
     })
   )
 });

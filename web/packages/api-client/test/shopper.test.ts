@@ -11,11 +11,14 @@ import {
   type OrderConfirmation,
   type OrderDetail,
   type PaymentMethod,
+  type ProductSummary,
   type ProviderPage,
   readSse,
   type ReturnDetail,
   type ReturnEligibility,
   type ReturnSummary,
+  type SearchPage,
+  SearchQuerySchema,
   type SecurityOverview,
   type ServiceDetail,
   type ServiceSearch,
@@ -70,6 +73,8 @@ describe('shopper schemas stay aligned with the contract', () => {
     expectTypeOf<ProviderPage>().toExtend<S['ProviderPage']>();
     expectTypeOf<CustomerBooking>().toExtend<S['CustomerBooking']>();
     expectTypeOf<BookingCreated>().toExtend<S['BookingCreated']>();
+    expectTypeOf<NonNullable<ProductSummary['sponsor']>>().toExtend<NonNullable<S['ProductSummary']['sponsor']>>();
+    expectTypeOf<SearchPage['searchId']>().toExtend<S['SearchPage']['searchId']>();
   });
 });
 
@@ -119,6 +124,7 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
 
   it('starts a return with a reason and shows the refund; food can only be reported', async () => {
     const api = await signedIn();
+    expect((await api.getOrder('AT-2026-104221')).shipments[0]?.returnable).toBe(true);
     const e = await api.getReturnEligibility('AT-2026-104221');
     const lines = e.shipments[0]?.lines ?? [];
     const shea = lines.find((l) => !l.reportProblemOnly);
@@ -133,6 +139,13 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
     expect(rma.qrPayload).toContain('AFROTRANSACT-RETURN');
     const detail = await api.getReturn(rma.rmaId);
     expect(detail.quote?.totalMinor).toBe(rma.refundMinor);
+    expect((await api.getReturns('AT-2026-104221')).map((r) => r.rmaId)).toContain(rma.rmaId);
+    if (rma.number) expect((await api.getReturn(rma.number)).rmaId).toBe(rma.rmaId);
+    // Shea is now being returned; only the food line is left, and food can only be reported.
+    const order = await api.getOrder('AT-2026-104221');
+    expect(order.shipments[0]).toMatchObject({ returnable: false, problemReportOnly: true });
+    expect(order.shipments[0]?.returnWindowEndsAt).toBeTruthy();
+    expect(order.payment?.refundableMinor).toBeGreaterThanOrEqual(0);
     expect((await api.cancelReturn(rma.rmaId)).status).toBe('cancelled');
   });
 
@@ -181,5 +194,21 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
     expect((await api.revokeOtherSessions()).revoked).toBe(1);
     const prefs = await api.saveNotificationPreferences({ email: true, sms: false, push: true, marketingOptIn: true });
     expect(prefs.sms).toBe(false);
+  });
+});
+
+describe('mock BFF — sponsored search (S240)', () => {
+  it('labels ads with the reason and records clicks once per search and product', async () => {
+    const api = browserLikeClient();
+    const page = await api.search(SearchQuerySchema.parse({ q: 'shea' }));
+    expect(page.searchId).toBeTruthy();
+    const hit = page.hits[0];
+    expect(hit?.sponsor).toMatchObject({ advertiser: 'Tamale Shea Co-op', slot: 1 });
+    expect(hit?.sponsor?.reason?.summary).toContain('shea');
+    if (!hit) throw new Error('no hits');
+    const first = await api.recordSearchClick({ searchId: page.searchId ?? '', q: 'shea', atin: hit.atin, position: 1, adToken: hit.sponsor?.adToken });
+    expect(first.sponsored).toBe(true);
+    expect(first).toMatchObject({ recorded: true, duplicate: false });
+    expect((await api.recordSearchClick({ searchId: page.searchId ?? '', atin: hit.atin, position: 1 })).duplicate).toBe(true);
   });
 });

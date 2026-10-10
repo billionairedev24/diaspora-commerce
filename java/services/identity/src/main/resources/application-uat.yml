@@ -79,7 +79,7 @@ at:
         secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:}}
         grant-types: [authorization_code, refresh_token, client_credentials]
         redirect-uris: ["${STOREFRONT_URL:https://uat.afrotransact.com}/api/bff/v1/auth/oidc/callback", "${BFF_URL:https://api.uat.afrotransact.com}/login/oauth2/code/afrotransact"]
-        scopes: [openid, profile, email, phone, offline_access, "auth:first-party"]
+        scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote"]
       - client-id: seller-service
         name: Seller service
         type: confidential

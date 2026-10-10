@@ -53,6 +53,7 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 	shopperStates.Store(u, st)
 	mux := http.NewServeMux()
 	root.Handle(ShopperPrefix+"/", http.StripPrefix(ShopperPrefix, mux))
+	u.searchClickRoutes(root)
 	authed := func(fn http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if _, ok := bearerSub(w, r); ok {
@@ -94,6 +95,16 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		w.WriteHeader(204)
 	}))
 
+	mux.HandleFunc("GET /v1/payments", authed(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("orderId") != ShopperOrderID {
+			problem(w, 404, "payments.not-found", "No payment for this order", nil)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"status": "CAPTURED", "amountMinor": 2706, "capturedMinor": 2706, "refundedMinor": 1353, "currency": "USD",
+			"lines": []map[string]any{{"lineId": ShopperLineID, "itemsMinor": 2500, "shippingMinor": 0, "taxMinor": 206, "shippingTaxMinor": 0,
+				"refundedMinor": 1353, "refundableMinor": 1353}}})
+	}))
+
 	// ---- orders
 	order := func(status string, cancellable bool) map[string]any {
 		return map[string]any{"id": ShopperOrderID, "orderNumber": ShopperOrderNumber, "status": "COMPLETED", "placedAt": "2026-10-01T15:00:00Z",
@@ -103,6 +114,8 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 				"fulfilmentType": "RETAIL_1P", "deliveryMethod": "CARRIER", "serviceLevel": "standard", "status": status, "items": "Jollof Seasoning × 2",
 				"carrier": "ups", "trackingNumber": "1Z999", "promisedBy": "2026-10-03", "deliveredAt": "2026-10-03T17:00:00Z", "cancellable": cancellable,
 				"preferences": map[string]any{"handover": "DOOR"}, "perishable": false,
+				"returnable": true, "returnWindowEndsAt": "2026-11-02T17:00:00Z", "problemReportOnly": false,
+				"returns":  map[string]any{"eligibility": "/v1/returns/eligibility?orderId=" + ShopperOrderID, "list": "/v1/returns?orderId=" + ShopperOrderID},
 				"lines":    []map[string]any{{"id": ShopperLineID, "variantAtin": "ATJOLLOFV1", "title": "Jollof Seasoning", "quantity": 2, "unitPriceMinor": 1250, "itemsMinor": 2500}},
 				"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "at": "2026-10-01T15:00:00Z"}, {"from": "out_for_delivery", "to": "delivered", "at": "2026-10-03T17:00:00Z"}}}}}
 	}
@@ -185,8 +198,8 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 			problem(w, 422, "returns.not-returnable", "Not returnable", nil)
 			return
 		}
-		if b["method"] == "DROP_OFF" && b["returnFrom"] == nil {
-			problem(w, 422, "returns.return-from-required", "returnFrom is required for drop-off", map[string]any{"fieldErrors": map[string]string{"returnFrom": "Required"}})
+		if b["returnFrom"] != nil { // tax-returns defaults it to the order address; customer apps send nothing
+			problem(w, 400, "returns.unexpected-return-from", "returnFrom is staff-only here", nil)
 			return
 		}
 		rma := rmaJSON(ShopperRMAID, "AUTO_APPROVED", true)
@@ -195,12 +208,15 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		st.mu.Unlock()
 		writeJSON(w, 201, rma)
 	}))
-	mux.HandleFunc("GET /v1/returns", authed(func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/returns", authed(func(w http.ResponseWriter, r *http.Request) {
 		st.mu.Lock()
 		defer st.mu.Unlock()
 		out := []map[string]any{}
+		orderID := r.URL.Query().Get("orderId")
 		for _, v := range st.rmas {
-			out = append(out, v)
+			if orderID == "" || v["orderId"] == orderID {
+				out = append(out, v)
+			}
 		}
 		writeJSON(w, 200, out)
 	}))
@@ -214,7 +230,24 @@ func (u *Upstreams) shopperRoutes(root *http.ServeMux) {
 		}
 		writeJSON(w, 200, v)
 	}))
-	mux.HandleFunc("GET /v1/returns/{id}/refund-quote", authed(func(w http.ResponseWriter, _ *http.Request) {
+	// GET /v1/returns/number/{number} and /v1/returns/{id}/refund-quote share one pattern (ServeMux would see a conflict).
+	mux.HandleFunc("GET /v1/returns/{id}/{sub}", authed(func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") == "number" {
+			st.mu.Lock()
+			defer st.mu.Unlock()
+			for _, v := range st.rmas {
+				if v["number"] == r.PathValue("sub") {
+					writeJSON(w, 200, v)
+					return
+				}
+			}
+			problem(w, 404, "returns.not-found", "No such return", nil)
+			return
+		}
+		if r.PathValue("sub") != "refund-quote" {
+			http.NotFound(w, r)
+			return
+		}
 		writeJSON(w, 200, map[string]any{"itemsMinor": 1250, "shippingMinor": 0, "taxMinor": 103, "restockingFeeMinor": 0, "totalMinor": 1353, "lines": []any{}})
 	}))
 	mux.HandleFunc("POST /v1/returns/{id}/cancel", authed(func(w http.ResponseWriter, r *http.Request) {

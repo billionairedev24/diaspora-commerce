@@ -30,6 +30,8 @@ type SearchQuery struct {
 	Sort       string
 	Page       int
 	Size       int
+	// Ads blends sponsored products into the page (results pages; default on, ads=false opts out).
+	Ads bool
 }
 
 // PriceBucket is a filter-rail price range in minor units (inclusive bounds).

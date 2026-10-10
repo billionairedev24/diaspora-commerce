@@ -17,9 +17,11 @@ import (
 
 // ShopperDeps are the upstreams of the storefront's account, checkout, services and Lola use cases.
 type ShopperDeps struct {
-	Wallet   port.WalletClient
-	Orders   port.CustomerOrdersClient
-	Returns  port.ReturnsClient
+	Wallet  port.WalletClient
+	Orders  port.CustomerOrdersClient
+	Returns port.ReturnsClient
+	// Payments reads an order's charged and refunded amounts (optional).
+	Payments port.OrderPaymentsClient
 	Security port.SecurityClient
 	Bookings port.CustomerBookingsClient
 	Pages    port.PublishedPagesClient
@@ -254,7 +256,8 @@ func toOrderSummary(o port.UpOrder) domain.OrderSummary {
 		out.Shipments = append(out.Shipments, domain.OrderShipment{ShipmentID: firstNonEmpty(s.ShipmentID, s.ID), Label: s.Label,
 			Status: statusLabel(s.Status), Items: s.Items, Cancellable: s.Cancellable, Carrier: optStr(s.Carrier),
 			TrackingNumber: optStr(s.TrackingNumber), PromisedBy: optStr(s.PromisedBy), DeliveredAt: optStr(s.DeliveredAt),
-			DeliveryCode: optStr(s.HandoverCode)})
+			DeliveryCode: optStr(s.HandoverCode), Returnable: s.Returnable, ReturnWindowEndsAt: optStr(s.ReturnWindowEndsAt),
+			ProblemReportOnly: s.ProblemReportOnly})
 	}
 	return out
 }
@@ -312,14 +315,42 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 			StatusLabel: statusLabel(sh.Status), Items: sh.Items, SellerName: sh.SellerName, DeliveryMethod: methodKey(sh.DeliveryMethod, sh.ServiceLevel),
 			Cancellable: sh.Cancellable, Carrier: optStr(sh.Carrier), TrackingNumber: optStr(sh.TrackingNumber), PromisedFrom: optStr(sh.PromisedFrom),
 			PromisedBy: optStr(sh.PromisedBy), DeliveredAt: optStr(sh.DeliveredAt), DeliveryCode: optStr(sh.HandoverCode),
-			Lines: []domain.OrderLineView{}, Timeline: timeline(sh.Timeline)}
+			Lines: []domain.OrderLineView{}, Timeline: timeline(sh.Timeline), Returnable: sh.Returnable,
+			ReturnWindowEndsAt: optStr(sh.ReturnWindowEndsAt), ProblemReportOnly: sh.ProblemReportOnly}
 		for _, l := range sh.Lines {
 			d.Lines = append(d.Lines, domain.OrderLineView{LineID: firstNonEmpty(l.ID, l.VariantATIN), ATIN: l.VariantATIN, Title: l.Title,
 				ImageURL: optStr(l.ImageURL), Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor, ItemsMinor: l.ItemsMinor})
 		}
 		out.Shipments = append(out.Shipments, d)
 	}
+	s.withPayment(ctx, c, o.ID, &out)
 	return out, nil
+}
+
+// withPayment adds charged/refunded amounts and per-line refunds from payments (best effort). The order was read
+// with the shopper's token above, which is the ownership check payments' by-order read does not do itself.
+func (s *customerOrdersServiceImpl) withPayment(ctx context.Context, c *domain.Caller, orderID string, out *domain.OrderDetail) {
+	if s.d.Payments == nil || orderID == "" {
+		return
+	}
+	p, err := s.d.Payments.ByOrder(ctx, c.BearerToken, orderID)
+	if err != nil {
+		s.d.log().WarnContext(ctx, "order payment unavailable", "error", err)
+		return
+	}
+	sum := domain.OrderPayment{Status: strings.ToLower(p.Status), CapturedMinor: p.CapturedMinor, RefundedMinor: p.RefundedMinor}
+	refunded := map[string]int64{}
+	for _, l := range p.Lines {
+		sum.RefundableMinor += max(0, l.RefundableMinor)
+		sum.ShippingTaxMinor += max(0, l.ShippingTaxMinor)
+		refunded[l.LineID] += max(0, l.RefundedMinor)
+	}
+	for i := range out.Shipments {
+		for j := range out.Shipments[i].Lines {
+			out.Shipments[i].Lines[j].RefundedMinor = refunded[out.Shipments[i].Lines[j].LineID]
+		}
+	}
+	out.Payment = &sum
 }
 
 // Tracking adds carrier scans (carrier-gateway) to orders' shipment timelines; scans are best effort.

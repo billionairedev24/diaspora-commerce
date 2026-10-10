@@ -49,6 +49,11 @@ type Offer struct {
 // Sponsor labels a sponsored placement.
 type Sponsor struct {
 	Advertiser string `json:"advertiser"`
+	// Search ads (S240): the campaign, the 1-based slot it won, the click token to report back, and why it was shown.
+	CampaignID string         `json:"campaignId,omitempty"`
+	Slot       int            `json:"slot,omitempty"`
+	AdToken    string         `json:"adToken,omitempty"`
+	Reason     *SponsorReason `json:"reason,omitempty"`
 }
 
 // ProductSummary is a product card (search hit, rail item, typeahead product).
@@ -150,6 +155,10 @@ type SearchPage struct {
 	Facets         Facets           `json:"facets"`
 	DeliverToLabel string           `json:"deliverToLabel"`
 	TookMs         int64            `json:"tookMs"`
+	// SearchID identifies this search for click reporting (POST /v1/search/clicks).
+	SearchID string `json:"searchId,omitempty"`
+	// Sponsored is true when the page carries ads; such pages are never cached.
+	Sponsored bool `json:"-"`
 }
 
 // Phrase is a completed typeahead phrase.
@@ -392,6 +401,10 @@ type OrderShipment struct {
 	PromisedBy     *string `json:"promisedBy,omitempty"`
 	DeliveredAt    *string `json:"deliveredAt,omitempty"`
 	DeliveryCode   *string `json:"deliveryCode,omitempty"`
+	// Returns (S148/S166).
+	Returnable         bool    `json:"returnable,omitempty"`
+	ReturnWindowEndsAt *string `json:"returnWindowEndsAt,omitempty"`
+	ProblemReportOnly  bool    `json:"problemReportOnly,omitempty"`
 }
 
 // OrderSummary is one order in Your orders.

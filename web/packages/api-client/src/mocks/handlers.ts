@@ -106,7 +106,10 @@ export const handlers = [
     } catch {
       throw new MockProblem(400, 'INVALID_QUERY', 'Invalid search query', 'One or more search parameters are invalid.');
     }
-    return json(search(query, sessionLocation(ctx.session), ctx.now));
+    const page = search(query, sessionLocation(ctx.session), ctx.now);
+    // ads=false (machine-made queries) gets organic cards only; a searchId identifies the page for click reporting.
+    const ads = new URL(ctx.request.url).searchParams.get('ads') !== 'false';
+    return json({ ...page, hits: ads ? page.hits : page.hits.map((h) => ({ ...h, sponsor: null })), searchId: `srch-${crypto.randomUUID()}` });
   })),
   http.get('*/v1/search/suggestions', route((ctx) => {
     const q = (new URL(ctx.request.url).searchParams.get('q') ?? '').slice(0, 100);

@@ -18,7 +18,7 @@ export const orderKeys = {
 
 export const returnKeys = {
   all: [...accountKeys.all, 'returns'] as const,
-  list: () => [...returnKeys.all, 'list'] as const,
+  list: (orderNumber?: string) => [...returnKeys.all, 'list', orderNumber ?? 'all'] as const,
   detail: (rmaId: string) => [...returnKeys.all, 'detail', rmaId] as const
 };
 
@@ -63,7 +63,8 @@ export const shopperQueries = {
     queryOptions({ queryKey: orderKeys.detail(orderNumber), queryFn: ({ signal }) => api.getOrder(orderNumber, signal), staleTime: 30_000 }),
   returnable: (api: ApiClient, orderNumber: string) =>
     queryOptions({ queryKey: orderKeys.returnable(orderNumber), queryFn: ({ signal }) => api.getReturnEligibility(orderNumber, signal), staleTime: 0 }),
-  returns: (api: ApiClient) => queryOptions({ queryKey: returnKeys.list(), queryFn: () => api.getReturns(), staleTime: 30_000 }),
+  returns: (api: ApiClient, orderNumber?: string) =>
+    queryOptions({ queryKey: returnKeys.list(orderNumber), queryFn: () => api.getReturns(orderNumber), staleTime: 30_000 }),
   returnDetail: (api: ApiClient, rmaId: string) => queryOptions({ queryKey: returnKeys.detail(rmaId), queryFn: ({ signal }) => api.getReturn(rmaId, signal) }),
   security: (api: ApiClient) => queryOptions({ queryKey: securityKeys.overview(), queryFn: ({ signal }) => api.getSecurity(signal), staleTime: 0 }),
   notificationPreferences: (api: ApiClient) =>

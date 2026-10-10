@@ -54,6 +54,12 @@ func (s *searchImpl) Search(ctx context.Context, p port.SearchParams) (port.Sear
 	if p.Size > 0 {
 		q.Set("size", strconv.Itoa(p.Size))
 	}
+	if p.Ads {
+		q.Set("ads", "true")
+	}
+	if p.NoTrack {
+		q.Set("track", "false")
+	}
 	var out port.SearchResult
 	_, err := call(ctx, s.c, httpclient.Request{Path: "/v1/search", Query: q}, &out)
 	return out, err

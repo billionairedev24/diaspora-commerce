@@ -26,7 +26,7 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	ai := client("ai-gateway", up.AIGateway)
 	d := app.ShopperDeps{
 		Wallet: upstreams.NewWallet(sc.payments), Orders: upstreams.NewCustomerOrders(sc.orders),
-		Returns:  upstreams.NewReturns(client("tax-returns", up.TaxReturns)),
+		Returns: upstreams.NewReturns(client("tax-returns", up.TaxReturns)), Payments: upstreams.NewOrderPayments(sc.payments),
 		Security: upstreams.NewSecurity(sc.identity), Bookings: upstreams.NewCustomerBookings(client("bookings", up.Bookings)),
 		Pages: upstreams.NewPublishedPages(client("storefront", up.Storefront)),
 		Lola:  upstreams.NewLola(ai, upstreams.LolaOptions{BaseURL: up.AIGateway.URL}),
@@ -37,5 +37,6 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 	}
 	return httpapi.ShopperServices{Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),
 		Checkout: app.NewCheckoutPaymentService(d), Returns: app.NewReturnsService(d), Security: app.NewSecurityService(d),
-		Services: app.NewServicesService(d), Lola: app.NewLolaService(d)}
+		Services: app.NewServicesService(d), Lola: app.NewLolaService(d),
+		SearchClicks: app.NewSearchClickService(upstreams.NewSearchClicks(client("search", up.Search)), cfg.Market)}
 }

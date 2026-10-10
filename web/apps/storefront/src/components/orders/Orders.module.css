@@ -1,0 +1,26 @@
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--at-space-5); align-items: start; }
+.order { border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); overflow: hidden; background: var(--at-color-surface); }
+.orderHead { display: grid; grid-template-columns: repeat(3, auto) minmax(0, 1fr); gap: var(--at-space-2) var(--at-space-6); padding: var(--at-space-3) var(--at-space-5); background: var(--at-color-surface-muted); border-bottom: 1px solid var(--at-color-border); font-size: var(--at-text-xs); color: var(--at-color-text-muted); text-transform: uppercase; }
+.orderHead strong { display: block; color: var(--at-color-text); font-size: var(--at-text-sm); text-transform: none; }
+.orderNo { text-align: right; }
+.shipment { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--at-space-3); padding: var(--at-space-4) var(--at-space-5); border-top: 1px solid var(--at-color-border); }
+.shipment:first-of-type { border-top: 0; }
+.shipStatus { margin: 0; font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
+.shipActions { display: flex; flex-direction: column; gap: var(--at-space-2); min-width: 180px; }
+.code { display: inline-flex; gap: var(--at-space-2); align-items: center; padding: var(--at-space-1) var(--at-space-3); border-radius: var(--at-radius-sm); background: var(--at-color-surface-brand); font-size: var(--at-text-sm); }
+.aside { display: flex; flex-direction: column; gap: var(--at-space-4); position: sticky; top: var(--at-space-4); }
+.timeline { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-3); border-left: 2px solid var(--at-color-border); }
+.step { position: relative; padding-left: var(--at-space-4); font-size: var(--at-text-sm); }
+.step::before { content: ''; position: absolute; left: -7px; top: 4px; width: 12px; height: 12px; border-radius: var(--at-radius-pill); background: var(--at-color-action-secondary); }
+.when { display: block; color: var(--at-color-text-muted); font-size: var(--at-text-xs); }
+.lines { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: var(--at-space-2); }
+.line { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: var(--at-space-3); align-items: center; font-size: var(--at-text-sm); }
+.placed { display: flex; gap: var(--at-space-3); align-items: center; padding: var(--at-space-4); border-radius: var(--at-radius-md); background: var(--at-color-success-bg); color: var(--at-color-success); }
+
+@media (max-width: 899px) {
+  .layout { grid-template-columns: 1fr; }
+  .aside { position: static; }
+  .orderHead { grid-template-columns: 1fr 1fr; }
+  .orderNo { text-align: left; }
+  .shipment { grid-template-columns: 1fr; }
+}

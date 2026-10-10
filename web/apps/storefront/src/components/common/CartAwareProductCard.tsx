@@ -14,6 +14,7 @@ export const cardLabels = {
   inCart: (n: number) => t('card.inCart', { n }),
   unavailable: t('card.unavailable'),
   sponsored: (advertiser: string) => t('card.sponsored', { advertiser }),
+  whyAd: t('card.whyAd'),
   brand: t('card.brand'),
   onlyLeft: (n: number) => t('card.onlyLeft', { n }),
   offers: (count: number, from: string) => t('card.offers', { count, from }),

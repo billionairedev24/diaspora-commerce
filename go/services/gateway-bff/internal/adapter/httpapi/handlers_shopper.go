@@ -24,6 +24,8 @@ type ShopperServices struct {
 	Security app.SecurityService
 	Services app.ServicesService
 	Lola     app.LolaService
+	// SearchClicks reports result clicks to search (optional).
+	SearchClicks app.SearchClickService
 }
 
 func (s ShopperServices) enabled() bool { return s.Wallet != nil }
@@ -33,6 +35,9 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 		return
 	}
 	auth := func(fn http.HandlerFunc) http.HandlerFunc { return h.rl.wrap("auth", h.o.AuthPerMinute, fn) }
+	if h.s.Shopper.SearchClicks != nil {
+		route("POST /v1/search/clicks", h.searchClick)
+	}
 	// Payments & PaymentSheet
 	route("POST /v1/account/payment-methods/{paymentMethodId}/default", h.defaultPaymentMethod)
 	route("POST /v1/account/payment-sheet", h.paymentSheet)
@@ -470,4 +475,14 @@ func (h *handlersImpl) lolaChat(w http.ResponseWriter, r *http.Request) {
 func (h *handlersImpl) lolaHistory(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.Shopper.Lola.History(r.Context(), callerFrom(r.Context()), r.PathValue("sessionId"))
 	h.ok(w, r, map[string]any{"items": v}, err)
+}
+
+func (h *handlersImpl) searchClick(w http.ResponseWriter, r *http.Request) {
+	var body domain.SearchClick
+	if err := decode(r, &body, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Shopper.SearchClicks.Record(r.Context(), callerFrom(r.Context()), body)
+	h.reply(w, r, http.StatusAccepted, v, err)
 }

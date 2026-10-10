@@ -79,7 +79,26 @@ export const ProductSummarySchema = z.object({
   delivery: DeliveryPromiseSchema,
   offerCount: z.number().int().min(1),
   minOfferPriceMinor: MinorSchema,
-  sponsor: z.object({ advertiser: z.string() }).nullable()
+  sponsor: z
+    .object({
+      advertiser: z.string(),
+      // Search ads (S240): campaign, the slot it won, the click token and why it was shown.
+      campaignId: z.string().optional(),
+      slot: z.number().int().min(1).optional(),
+      adToken: z.string().optional(),
+      reason: z
+        .object({
+          targeting: z.enum(['KEYWORD', 'CATEGORY']).catch('KEYWORD'),
+          matched: z.string(),
+          qualityScore: z.number(),
+          auctionRank: z.number().int(),
+          competitors: z.number().int(),
+          eligibility: z.array(z.string()),
+          summary: z.string()
+        })
+        .optional()
+    })
+    .nullable()
 });
 export type ProductSummary = z.infer<typeof ProductSummarySchema>;
 

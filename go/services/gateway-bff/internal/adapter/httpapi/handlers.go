@@ -375,6 +375,7 @@ func parseSearch(r *http.Request) (domain.SearchQuery, error) {
 		}
 		q.Size = n
 	}
+	q.Ads = v.Get("ads") != "false" // results pages carry sponsored products unless the client opts out (S240)
 	return q, nil
 }
 
@@ -385,6 +386,9 @@ func (h *handlersImpl) search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := h.s.Search.Search(r.Context(), callerFrom(r.Context()), q)
+	if err == nil && v.Sponsored {
+		w.Header().Set("Cache-Control", "private, no-store") // ad click tokens are per page view
+	}
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

@@ -425,7 +425,7 @@ func (h *handlersImpl) cancelShipment(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) returns(w http.ResponseWriter, r *http.Request) {
 	if h.s.Shopper.enabled() {
-		v, err := h.s.Shopper.Returns.List(r.Context(), callerFrom(r.Context()))
+		v, err := h.s.Shopper.Returns.List(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("orderNumber"))
 		h.reply(w, r, http.StatusOK, v, err)
 		return
 	}
