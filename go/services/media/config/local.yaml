@@ -1,0 +1,37 @@
+# media · local: everything goes to MinIO from infra/local (buckets media and kyc-evidence).
+port: 8207
+docsEnabled: true
+databaseUrl: postgres://media:media@localhost:5432/media
+stores:
+  public:
+    kind: s3
+    name: minio
+    endpoint: http://localhost:9000
+    region: us-east-1
+    bucket: media
+    pathStyle: true
+    publicBaseUrl: http://localhost:9000/media
+    accessKeyEnv: MINIO_ACCESS_KEY
+    secretKeyEnv: MINIO_SECRET_KEY
+  private:
+    kind: s3
+    name: minio
+    endpoint: http://localhost:9000
+    region: us-east-1
+    bucket: kyc-evidence
+    pathStyle: true
+    accessKeyEnv: MINIO_ACCESS_KEY
+    secretKeyEnv: MINIO_SECRET_KEY
+purposes:
+  product-image: public
+  storefront: public
+  proof-photo: private
+  return-photo: private
+  kyc-document: private
+auth:
+  enabled: false
+  issuer: http://localhost:8100
+  audience: media
+telemetry:
+  otlpEndpoint: localhost:4318
+  sampleRatio: 1.0

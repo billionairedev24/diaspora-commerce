@@ -1,0 +1,106 @@
+openapi: 3.1.0
+info:
+  title: Media API
+  version: v1
+  description: |
+    Direct uploads for product images (UploadThing), storefront media, driver proof-of-delivery photos, return
+    photos and KYC documents (private, object-locked bucket on the primary cloud). Flow: `POST /v1/uploads`
+    returns a short-lived upload URL; the client PUTs the file straight to storage; `POST /v1/assets/{id}/complete`
+    makes the service read the object back, detect its real type, measure it and apply the purpose rules
+    (type, size, minimum edge, white background for product main images). Rejected files are deleted.
+servers:
+  - {url: 'http://localhost:8207', description: local}
+  - {url: 'https://api.dev.afrotransact.com/media', description: dev}
+  - {url: 'https://api.uat.afrotransact.com/media', description: uat}
+  - {url: 'https://api.afrotransact.com/media', description: prod}
+security: [{bearer: []}]
+paths:
+  /v1/uploads:
+    post:
+      operationId: requestUpload
+      summary: Get a direct upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, fileName, contentType, size]
+              properties:
+                purpose: {$ref: '#/components/schemas/Purpose'}
+                fileName: {type: string, maxLength: 200}
+                contentType: {type: string, enum: [image/jpeg, image/png, image/webp, application/pdf]}
+                size: {type: integer, format: int64, minimum: 1}
+      responses:
+        '201':
+          description: Upload instructions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  asset: {$ref: '#/components/schemas/Asset'}
+                  upload: {$ref: '#/components/schemas/Upload'}
+        '422': {$ref: '#/components/responses/Problem'}
+  /v1/assets/{id}/complete:
+    post:
+      operationId: completeUpload
+      summary: Inspect the uploaded file and finalise the asset (idempotent)
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '409': {$ref: '#/components/responses/Problem'}
+  /v1/assets/{id}:
+    get:
+      operationId: getAsset
+      summary: Asset metadata (private assets include a 5-minute signed URL)
+      parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
+      responses:
+        '200': {description: Asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/assets:
+    get:
+      operationId: listAssets
+      summary: The caller's organisation's assets
+      parameters: [{name: purpose, in: query, schema: {$ref: '#/components/schemas/Purpose'}}]
+      responses:
+        '200':
+          description: Assets
+          content: {application/json: {schema: {type: object, properties: {assets: {type: array, items: {$ref: '#/components/schemas/Asset'}}}}}}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  responses:
+    Problem:
+      description: RFC 9457 problem
+      content: {application/problem+json: {schema: {type: object, properties: {type: {type: string}, title: {type: string}, status: {type: integer}, detail: {type: string}, code: {type: string}}}}}
+  schemas:
+    Purpose: {type: string, enum: [product-image, storefront, proof-photo, return-photo, kyc-document]}
+    Upload:
+      type: object
+      properties:
+        method: {type: string}
+        url: {type: string}
+        headers: {type: object, additionalProperties: {type: string}}
+        key: {type: string}
+        publicUrl: {type: string}
+        expiresAt: {type: string, format: date-time}
+    Asset:
+      type: object
+      properties:
+        id: {type: string, format: uuid}
+        ownerOrg: {type: string}
+        uploadedBy: {type: string}
+        purpose: {$ref: '#/components/schemas/Purpose'}
+        provider: {type: string}
+        key: {type: string}
+        url: {type: string}
+        fileName: {type: string}
+        contentType: {type: string}
+        bytes: {type: integer, format: int64}
+        width: {type: integer}
+        height: {type: integer}
+        status: {type: string, enum: [PENDING, READY, FLAGGED, REJECTED]}
+        flags: {type: array, items: {type: string}}
+        createdAt: {type: string, format: date-time}

@@ -116,7 +116,7 @@
 - Each transition publishes a catalog.product.* event via the outbox","E03","","High","3","catalog java","catalog","Done"
 "S030","Story","Image upload via UploadThing with moderation checks","Signed uploads, size/dimension checks and background moderation (no watermarks, white background for main).","- media service issues UploadThing presigned uploads
 - Uploaded image metadata (url, width, height, bytes, type) is returned to the builder
-- Images failing moderation are flagged on the product","E03","","High","5","catalog go media","catalog","To Do"
+- Images failing moderation are flagged on the product","E03","","High","5","catalog go media","catalog","In Progress"
 "S031","Story","Barcode lookup prefill (GS1 / Open Food Facts)","When a seller types a GTIN, prefill name, images and description from product-data providers.","- Lookup tries GS1 US Data Hub then Open Food Facts for groceries
 - Prefilled fields are editable and marked as imported
 - No match falls back to manual entry","E03","","Low","5","catalog","catalog","To Do"

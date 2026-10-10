@@ -6,5 +6,6 @@ use (
 	./pkg
 	./services/geo
 	./services/indexer
+	./services/media
 	./services/search
 )
