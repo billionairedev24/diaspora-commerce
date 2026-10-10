@@ -70,6 +70,36 @@ at:
         secret: ${SELLER_SERVICE_CLIENT_SECRET:}
         grant-types: [client_credentials]
         scopes: [orgs:manage, users:read]
+      - client-id: orders-service
+        name: Orders service
+        type: confidential
+        secret: ${ORDERS_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read]
+      - client-id: bookings-service
+        name: Bookings service
+        type: confidential
+        secret: ${BOOKINGS_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [payments:service, users:read]
+      - client-id: fulfilment-service
+        name: Fulfilment service
+        type: confidential
+        secret: ${FULFILMENT_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [payments:service, orders:update-status, inventory:reserve]
+      - client-id: payments-service
+        name: Payments service
+        type: confidential
+        secret: ${PAYMENTS_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [orgs:read]
+      - client-id: notifications-service
+        name: Notifications service
+        type: confidential
+        secret: ${NOTIFICATIONS_CLIENT_SECRET}
+        grant-types: [client_credentials]
+        scopes: [users:read]
 spring:
   datasource:
     hikari:

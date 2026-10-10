@@ -1,0 +1,1656 @@
+openapi: 3.1.0
+info:
+  title: Payments API
+  description: Stripe PaymentIntents with manual capture per shipment, line-level refunds, the immutable double-entry ledger,
+    multi-seller payment splits and fee schedules, settlement holds and Connect transfers, payouts on request, chargebacks,
+    the signed Stripe webhook inbox, daily reconciliation and shoppers' saved payment methods.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8105
+  description: local
+- url: https://api.dev.afrotransact.com/payments
+  description: dev
+- url: https://api.uat.afrotransact.com/payments
+  description: uat
+- url: https://api.afrotransact.com/payments
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Settlement & payouts
+  description: Settlement hold after delivery, Connect transfers and payouts on request
+- name: Finance
+  description: 'Staff views and configuration: payment split, fees & commissions, ledger, reconciliation, connected accounts'
+- name: Payments
+  description: Order payment lifecycle for the orders saga (SERVICE principals with payments:service; Idempotency-Key on every
+    write)
+- name: Stripe webhooks
+  description: Signed, idempotent inbox for Stripe events
+- name: Saved payment methods
+  description: The signed-in shopper's wallet (called by gateway-bff with the customer's token)
+paths:
+  /v1/connected-accounts/{orgId}:
+    get:
+      tags:
+      - Finance
+      summary: Stripe Connect account of an organisation
+      operationId: account
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ConnectedAccountResponse'
+    put:
+      tags:
+      - Finance
+      summary: Register the Stripe Connect account of an organisation (seller-service or Finance)
+      operationId: registerAccount
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectedAccountRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ConnectedAccountResponse'
+  /v1/customers/me/payment-methods:
+    get:
+      tags:
+      - Saved payment methods
+      summary: List saved payment methods (display data only, never full numbers)
+      operationId: list
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentMethodResponse'
+  /v1/customers/me/payment-methods/{id}:
+    delete:
+      tags:
+      - Saved payment methods
+      summary: Remove (detach) a saved method
+      description: 'The default method cannot be removed: choose another default first (409 payments.default-method-required).'
+      operationId: remove
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: No Content
+  /v1/customers/me/payment-methods/{id}/default:
+    post:
+      tags:
+      - Saved payment methods
+      summary: Make a saved method the default
+      operationId: makeDefault
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentMethodResponse'
+  /v1/customers/me/setup-intents:
+    post:
+      tags:
+      - Saved payment methods
+      summary: 'Start saving a method: SetupIntent client secret for Stripe Elements / PaymentSheet'
+      description: Bank accounts verify instantly with Financial Connections or by microdeposits (listed as verified=false
+        until then). The Stripe Customer is created on first use.
+      operationId: setupIntent
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupIntentRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SetupIntentResponse'
+  /v1/fee-schedules:
+    get:
+      tags:
+      - Finance
+      summary: Fee schedule versions, newest first (payments:read)
+      operationId: feeSchedules
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FeeScheduleResponse'
+    post:
+      tags:
+      - Finance
+      summary: Create a fee schedule version (Super Admin / Finance, payments:configure)
+      description: Applies to orders placed from effectiveFrom (never in the past); history is kept.
+      operationId: createFeeSchedule
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeeScheduleRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FeeScheduleResponse'
+  /v1/fee-schedules/active:
+    get:
+      tags:
+      - Finance
+      summary: Fee schedule in force at a time (default now)
+      operationId: activeFeeSchedule
+      parameters:
+      - name: at
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/FeeScheduleResponse'
+  /v1/ledger/balances:
+    get:
+      tags:
+      - Finance
+      summary: Ledger balances of every account (payments:read)
+      operationId: balances
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BalanceResponse'
+  /v1/ledger/journals:
+    get:
+      tags:
+      - Finance
+      summary: Journals of an order (payments:read)
+      operationId: journals
+      parameters:
+      - name: orderId
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JournalResponse'
+  /v1/ledger/orgs/{orgId}/balances:
+    get:
+      tags:
+      - Finance
+      summary: Ledger balances attributed to one seller / provider organisation (payments:read)
+      operationId: orgBalances
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BalanceResponse'
+  /v1/orders/{orderId}/split:
+    get:
+      tags:
+      - Finance
+      summary: Payment split of an order (staff, payments:read)
+      description: 'Per recipient: items, shipping, tax collected, commission, FBA fees, pro-rata Stripe fee share (largest
+        remainder, leftover cents to AfroTransact) and net. Totals always reconcile to the charge.'
+      operationId: split
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SplitResponse'
+  /v1/payments:
+    get:
+      tags:
+      - Payments
+      summary: Get the payment of an order
+      operationId: byOrder
+      parameters:
+      - name: orderId
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+    post:
+      tags:
+      - Payments
+      summary: Create the order's PaymentIntent (manual capture) and return its client secret
+      description: Stripe idempotency key = <orderId>:create-intent. Replays (same order, same lines) return 200 with replayed=true;
+        a different amount or lines for the same order is 409.
+      operationId: create
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+  /v1/payments/{id}:
+    get:
+      tags:
+      - Payments
+      summary: Get a payment
+      description: refresh=true reads the intent's status from Stripe first (confirmation, 3-D Secure, authorisation).
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: refresh
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+  /v1/payments/{id}/cancel:
+    post:
+      tags:
+      - Payments
+      summary: Cancel an uncaptured payment (releases the authorisation)
+      operationId: cancel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+  /v1/payments/{id}/capture:
+    post:
+      tags:
+      - Payments
+      summary: Capture one shipment and post its journal
+      description: Stripe amount_to_capture = the lines' items + shipping + tax (multicapture; final_capture releases the
+        rest). Posts Dr 1000 Stripe clearing / Dr 5000 Stripe fees, Cr 2000 seller payables, 2100 sales tax, 4000 commission,
+        4100 FBA fees, 4200 shipping. Idempotent per (payment, shipmentId).
+      operationId: capture
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaptureRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CaptureResponse'
+  /v1/payments/{id}/captures:
+    get:
+      tags:
+      - Payments
+      summary: Captures of a payment
+      operationId: captures
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CaptureResponse'
+  /v1/payments/{id}/refunds:
+    get:
+      tags:
+      - Payments
+      summary: Refunds of a payment
+      operationId: refunds
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RefundResponse'
+    post:
+      tags:
+      - Payments
+      summary: Refund captured lines (partially)
+      description: Reverses the seller payable, tax and — per fee policy — commission of each line; FBA fees and Stripe fee
+        shares are kept. If the seller's net was already transferred, a Stripe transfer reversal takes it back.
+      operationId: refund
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+  /v1/payouts/balance:
+    get:
+      tags:
+      - Settlement & payouts
+      summary: 'Your balance: available to request, on hold per order (with release date), requested / on the way'
+      operationId: balance
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: currency
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PayoutBalanceResponse'
+  /v1/payouts/requests:
+    get:
+      tags:
+      - Settlement & payouts
+      summary: Finance queue of payout requests (payouts:approve)
+      operationId: queue
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - REQUESTED
+          - HELD
+          - IN_TRANSIT
+          - PAID
+          - FAILED
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PayoutResponse'
+    post:
+      tags:
+      - Settlement & payouts
+      summary: Request a payout (owner / finance roles, payouts:request)
+      description: Minimum USD 25, one request per day, never more than available; no fee.
+      operationId: request
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayoutRequestBody'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PayoutResponse'
+  /v1/payouts/requests/{id}:
+    get:
+      tags:
+      - Settlement & payouts
+      summary: One payout request
+      operationId: payout
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PayoutResponse'
+  /v1/payouts/requests/{id}/approve:
+    post:
+      tags:
+      - Settlement & payouts
+      summary: 'Approve: creates the Stripe payout on the connected account (payouts:approve)'
+      operationId: approve
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PayoutResponse'
+  /v1/payouts/requests/{id}/hold:
+    post:
+      tags:
+      - Settlement & payouts
+      summary: Put a request on hold with a reason (payouts:approve)
+      operationId: hold
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HoldRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PayoutResponse'
+  /v1/payouts/requests/{id}/release:
+    post:
+      tags:
+      - Settlement & payouts
+      summary: Release a held request back to the queue (payouts:approve)
+      operationId: release
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PayoutResponse'
+  /v1/reconciliation/runs:
+    get:
+      tags:
+      - Finance
+      summary: Recent reconciliation runs (payments:read)
+      operationId: runs
+      parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReconciliationResponse'
+    post:
+      tags:
+      - Finance
+      summary: Reconcile one day now (payments:configure)
+      description: Compares ledger 1000 Stripe clearing per Stripe object with Stripe balance transactions.
+      operationId: reconcile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReconcileRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReconciliationResponse'
+  /v1/settlements/{orderId}:
+    get:
+      tags:
+      - Settlement & payouts
+      summary: Settlement hold of an order
+      operationId: settlement
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SettlementResponse'
+  /v1/settlements/{orderId}/delivered:
+    post:
+      tags:
+      - Settlement & payouts
+      summary: 'Order delivered / service completed: start the settlement hold (payments:service)'
+      description: Each seller's net becomes transferable after the hold (7 days by default). Idempotent.
+      operationId: delivered
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveredRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SettlementResponse'
+  /v1/webhooks/stripe:
+    post:
+      tags:
+      - Stripe webhooks
+      summary: Stripe webhook endpoint
+      description: Verifies Stripe-Signature with the endpoint secret (400 payments.invalid-signature), stores the event once
+        by id and acknowledges; processing is asynchronous. Duplicates and unknown types are acknowledged.
+      operationId: receive
+      parameters:
+      - name: Stripe-Signature
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          '*/*':
+            schema:
+              type: string
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/WebhookAck'
+      security: []
+components:
+  schemas:
+    ConnectedAccountRequest:
+      type: object
+      properties:
+        stripeAccountId:
+          type: string
+          maxLength: 80
+          minLength: 0
+      required:
+      - stripeAccountId
+    ConnectedAccountResponse:
+      type: object
+      properties:
+        orgId:
+          type: string
+        stripeAccountId:
+          type: string
+    WebhookAck:
+      type: object
+      properties:
+        received:
+          type: boolean
+        eventId:
+          type: string
+        type:
+          type: string
+        duplicate:
+          type: boolean
+        handled:
+          type: boolean
+    DeliveredRequest:
+      type: object
+      properties:
+        deliveredAt:
+          type: string
+          format: date-time
+          description: Delivery or service completion time; default now
+        kind:
+          type: string
+          description: PRODUCT (delivery) or SERVICE (booking completed)
+    SettlementResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+        kind:
+          type: string
+        deliveredAt:
+          type: string
+          format: date-time
+        releaseAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+    ReconcileRequest:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+      required:
+      - date
+    DriftResponse:
+      type: object
+      properties:
+        stripeRef:
+          type: string
+        ledgerMinor:
+          type: integer
+          format: int64
+        stripeMinor:
+          type: integer
+          format: int64
+        differenceMinor:
+          type: integer
+          format: int64
+    ReconciliationResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        ledgerNetMinor:
+          type: integer
+          format: int64
+        stripeNetMinor:
+          type: integer
+          format: int64
+        driftMinor:
+          type: integer
+          format: int64
+        drifts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DriftResponse'
+        createdAt:
+          type: string
+          format: date-time
+    PayoutRequestBody:
+      type: object
+      description: 'Request a payout: an amount, or all=true for everything available'
+      properties:
+        orgId:
+          type: string
+          description: Staff only; members always request for their own org
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        all:
+          type: boolean
+        currency:
+          type: string
+          pattern: '[A-Za-z]{3}'
+    PayoutResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        status:
+          type: string
+        requestedBy:
+          type: string
+        requestedAt:
+          type: string
+          format: date-time
+        requestDay:
+          type: string
+          format: date
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        holdReason:
+          type: string
+        stripePayoutId:
+          type: string
+        failureMessage:
+          type: string
+    HoldRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
+    CreatePaymentRequest:
+      type: object
+      description: Create the PaymentIntent (manual capture) of an order
+      properties:
+        orderId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        customerId:
+          type: string
+          description: Stripe customer id (cus_…) of the shopper
+          maxLength: 120
+          minLength: 0
+        amountMinor:
+          type: integer
+          format: int64
+          minimum: 1
+        currency:
+          type: string
+          minLength: 1
+          pattern: '[A-Za-z]{3}'
+        paymentMethodTypes:
+          type: array
+          description: Explicit types (card, us_bank_account, cashapp, affirm, link); empty = automatic payment methods
+          items:
+            type: string
+        placedAt:
+          type: string
+          format: date-time
+          description: When the order was placed; selects the fee schedule version
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineRequest'
+          maxItems: 200
+          minItems: 0
+      required:
+      - amountMinor
+      - currency
+      - lines
+      - orderId
+    LineRequest:
+      type: object
+      description: 'One order line: who sells it and what the shopper pays for it'
+      properties:
+        lineId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        sellerOrg:
+          type: string
+          maxLength: 80
+          minLength: 0
+        category:
+          type: string
+          maxLength: 80
+          minLength: 0
+        fulfilment:
+          type: string
+          enum:
+          - FBA
+          - SELF
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+        itemsMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        shippingMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        taxMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        taxJurisdiction:
+          type: string
+          maxLength: 40
+          minLength: 0
+      required:
+      - fulfilment
+      - itemsMinor
+      - lineId
+      - sellerOrg
+    LineResponse:
+      type: object
+      properties:
+        lineId:
+          type: string
+        sellerOrg:
+          type: string
+        category:
+          type: string
+        fulfilment:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        taxJurisdiction:
+          type: string
+        captureId:
+          type: string
+          format: uuid
+        commissionMinor:
+          type: integer
+          format: int64
+        fbaFeeMinor:
+          type: integer
+          format: int64
+        refundedMinor:
+          type: integer
+          format: int64
+    PaymentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+        status:
+          type: string
+        stripePaymentIntentId:
+          type: string
+        clientSecret:
+          type: string
+          description: For Stripe.js / PaymentSheet confirmation; only returned to the calling service
+        amountMinor:
+          type: integer
+          format: int64
+        capturedMinor:
+          type: integer
+          format: int64
+        refundedMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        feeScheduleId:
+          type: string
+          format: uuid
+        placedAt:
+          type: string
+          format: date-time
+        authorizedAt:
+          type: string
+          format: date-time
+        failureMessage:
+          type: string
+        replayed:
+          type: boolean
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineResponse'
+    RefundLineRequest:
+      type: object
+      properties:
+        lineId:
+          type: string
+          minLength: 1
+        itemsMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        shippingMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        taxMinor:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - lineId
+    RefundRequest:
+      type: object
+      description: Line-level partial refund
+      properties:
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundLineRequest'
+          maxItems: 200
+          minItems: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - lines
+    RefundLineResponse:
+      type: object
+      properties:
+        lineId:
+          type: string
+        sellerOrg:
+          type: string
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        commissionReversedMinor:
+          type: integer
+          format: int64
+    RefundResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        paymentId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+        stripeRefundId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        status:
+          type: string
+        reason:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundLineResponse'
+        transferReversals:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reversal'
+        createdAt:
+          type: string
+          format: date-time
+        settledAt:
+          type: string
+          format: date-time
+        replayed:
+          type: boolean
+    Reversal:
+      type: object
+      properties:
+        orgId:
+          type: string
+        stripeTransferId:
+          type: string
+        stripeReversalId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+    CaptureRequest:
+      type: object
+      description: Capture one shipment (carrier acceptance)
+      properties:
+        shipmentId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        lineIds:
+          type: array
+          description: Lines in the shipment; empty = every line not captured yet
+          items:
+            type: string
+        amountMinor:
+          type: integer
+          format: int64
+          description: Expected amount; must equal the lines' items + shipping + tax
+        finalCapture:
+          type: boolean
+          description: Release the rest of the authorisation after this capture
+      required:
+      - shipmentId
+    CaptureResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        paymentId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+        shipmentId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        stripeFeeMinor:
+          type: integer
+          format: int64
+        feeEstimated:
+          type: boolean
+        currency:
+          type: string
+        stripeChargeId:
+          type: string
+        finalCapture:
+          type: boolean
+        lineIds:
+          type: array
+          items:
+            type: string
+        journalId:
+          type: string
+          format: uuid
+        capturedAt:
+          type: string
+          format: date-time
+        paymentStatus:
+          type: string
+        replayed:
+          type: boolean
+    CancelRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+    FeeScheduleRequest:
+      type: object
+      description: A new fee-schedule version (Super Admin / Finance)
+      properties:
+        effectiveFrom:
+          type: string
+          format: date-time
+          description: Takes effect for orders placed from this time; default now, never in the past
+        currency:
+          type: string
+          pattern: '[A-Za-z]{3}'
+        categoryBps:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+          description: Commission per category in basis points (800 = 8 %)
+        defaultCommissionBps:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 0
+        overrides:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverrideRequest'
+        cardPctBps:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 0
+        cardFixedMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        fbaPerUnitMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        reverseCommissionOnRefund:
+          type: boolean
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - categoryBps
+    OverrideRequest:
+      type: object
+      properties:
+        orgId:
+          type: string
+          minLength: 1
+        category:
+          type: string
+        commissionBps:
+          type: integer
+          format: int32
+          maximum: 10000
+          minimum: 0
+      required:
+      - orgId
+    FeeScheduleResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int32
+        effectiveFrom:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        categoryBps:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        defaultCommissionBps:
+          type: integer
+          format: int32
+        overrides:
+          type: array
+          items:
+            $ref: '#/components/schemas/OverrideRequest'
+        cardPctBps:
+          type: integer
+          format: int32
+        cardFixedMinor:
+          type: integer
+          format: int64
+        fbaPerUnitMinor:
+          type: integer
+          format: int64
+        reverseCommissionOnRefund:
+          type: boolean
+        note:
+          type: string
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    SetupIntentRequest:
+      type: object
+      properties:
+        types:
+          type: array
+          description: card, us_bank_account, cashapp, link; default card
+          items:
+            type: string
+    SetupIntentResponse:
+      type: object
+      properties:
+        setupIntentId:
+          type: string
+        clientSecret:
+          type: string
+        status:
+          type: string
+    PaymentMethodResponse:
+      type: object
+      description: A saved payment method (display data only — never full numbers)
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+          - card
+          - us_bank_account
+          - cashapp
+          - link
+        brand:
+          type: string
+        last4:
+          type: string
+        expMonth:
+          type: integer
+          format: int32
+        expYear:
+          type: integer
+          format: int32
+        bankName:
+          type: string
+        accountType:
+          type: string
+        verified:
+          type: boolean
+          description: false = bank account pending verification
+        isDefault:
+          type: boolean
+    HeldOrderResponse:
+      type: object
+      description: Net on settlement hold for one order; releaseAt null until delivered / completed
+      properties:
+        orderId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        releaseAt:
+          type: string
+          format: date-time
+    PayoutBalanceResponse:
+      type: object
+      properties:
+        orgId:
+          type: string
+        currency:
+          type: string
+        availableMinor:
+          type: integer
+          format: int64
+        onHoldMinor:
+          type: integer
+          format: int64
+        onHold:
+          type: array
+          items:
+            $ref: '#/components/schemas/HeldOrderResponse'
+        requestedOrInTransitMinor:
+          type: integer
+          format: int64
+        paidMinor:
+          type: integer
+          format: int64
+        minimumPayoutMinor:
+          type: integer
+          format: int64
+        canRequestToday:
+          type: boolean
+    LineSplitResponse:
+      type: object
+      properties:
+        lineId:
+          type: string
+        sellerOrg:
+          type: string
+        commissionBps:
+          type: integer
+          format: int32
+        commissionMinor:
+          type: integer
+          format: int64
+        fbaFeeMinor:
+          type: integer
+          format: int64
+        shippingToPlatform:
+          type: boolean
+    RecipientResponse:
+      type: object
+      description: One recipient. For sellers commission, FBA fees and Stripe fee are deductions; for the AfroTransact platform
+        row they are the totals earned. Tax is collected and remitted by AfroTransact.
+      properties:
+        recipient:
+          type: string
+        kind:
+          type: string
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        taxByJurisdiction:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        commissionMinor:
+          type: integer
+          format: int64
+        fbaFeesMinor:
+          type: integer
+          format: int64
+        stripeFeeMinor:
+          type: integer
+          format: int64
+        netMinor:
+          type: integer
+          format: int64
+    SplitResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+        paymentId:
+          type: string
+          format: uuid
+        feeScheduleVersion:
+          type: integer
+          format: int32
+        feeSource:
+          type: string
+        chargeMinor:
+          type: integer
+          format: int64
+        stripeFeeMinor:
+          type: integer
+          format: int64
+        taxCollectedMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        recipients:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecipientResponse'
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineSplitResponse'
+    BalanceResponse:
+      type: object
+      properties:
+        account:
+          type: string
+        code:
+          type: string
+        key:
+          type: string
+        title:
+          type: string
+        type:
+          type: string
+        currency:
+          type: string
+        debitsMinor:
+          type: integer
+          format: int64
+        creditsMinor:
+          type: integer
+          format: int64
+        balanceMinor:
+          type: integer
+          format: int64
+    JournalLineResponse:
+      type: object
+      properties:
+        account:
+          type: string
+        title:
+          type: string
+        side:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        orgId:
+          type: string
+    JournalResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        key:
+          type: string
+        type:
+          type: string
+        orderId:
+          type: string
+        paymentId:
+          type: string
+        stripeRef:
+          type: string
+        description:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/JournalLineResponse'
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

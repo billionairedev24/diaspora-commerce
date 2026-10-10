@@ -185,29 +185,29 @@
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","To Do"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
 - Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","To Do"
-"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","To Do"
+"E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","Done"
 "S051","Story","Payments service with Stripe PaymentIntents","Create, confirm (3-D Secure), capture per shipment and refund through Stripe.","- Manual capture per shipment on carrier acceptance
 - 3-D Secure test card triggers authentication
 - Declined test card returns a clear error
-- Stripe calls reuse the order idempotency key","E07","","Highest","8","payments java stripe","payments","To Do"
+- Stripe calls reuse the order idempotency key","E07","","Highest","8","payments java stripe","payments","Done"
 "S052","Story","Stripe webhook inbox","Signed, de-duplicated, ordered handling of Stripe events.","- Signature verified with the endpoint secret
 - Duplicate event ids are ignored
-- Unknown events are stored and acknowledged","E07","","Highest","3","payments java stripe","payments","To Do"
+- Unknown events are stored and acknowledged","E07","","Highest","3","payments java stripe","payments","Done"
 "S053","Story","Double-entry ledger","Immutable journal for charges, commission, seller payables, fees, tax, refunds and chargebacks.","- Every journal balances (debits = credits)
 - Ledger runs at SERIALIZABLE isolation
-- Daily reconciliation against Stripe balance transactions alerts on drift","E07","","Highest","8","payments java","payments","To Do"
+- Daily reconciliation against Stripe balance transactions alerts on drift","E07","","Highest","8","payments java","payments","Done"
 "S054","Story","Payment split per order","Per-recipient breakdown: items, shipping, tax, commission, FBA fees and pro-rata Stripe fee.","- Stripe fee shared pro rata; leftover cents go to AfroTransact
 - AfroTransact Retail pays no commission
-- Staff can view the split on any order","E07","","High","5","payments java","payments","To Do"
+- Staff can view the split on any order","E07","","High","5","payments java","payments","Done"
 "S055","Story","Configurable commission and fees","Commission % per category with seller overrides, card fee and FBA fee, versioned with effective dates.","- Only Super Admin and Finance can edit
 - Changes apply to new orders only
-- Worked two-seller example shown in the UI","E07","","High","5","payments java staff-console","payments","To Do"
+- Worked two-seller example shown in the UI","E07","","High","5","payments java staff-console","payments","Done"
 "S056","Story","Payouts on request with settlement hold","Earnings held 7 days after delivery/completion; sellers request payouts; finance approves.","- Balance shows available, on hold (per order with release date) and requested
 - Minimum $25, one request per day, owner/finance roles only
 - Connected accounts use manual payout schedule
-- Finance can approve, hold or release payout requests","E07","","High","8","payments java stripe","payments","To Do"
+- Finance can approve, hold or release payout requests","E07","","High","8","payments java stripe","payments","Done"
 "S057","Story","Refund and chargeback reversals","Partial refunds reverse matching transfer and commission; chargebacks debit the responsible seller.","- Partial refund per line updates the ledger
-- Chargeback debits the seller's balance and notifies them","E07","","High","5","payments java","payments","To Do"
+- Chargeback debits the seller's balance and notifies them","E07","","High","5","payments java","payments","Done"
 "E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","To Do"
 "S058","Story","Order and sub-order model","One order, one shipment per seller/fulfilment node, each cancellable separately.","- Order totals equal the sum of shipments plus tax
 - Each shipment can be cancelled before it is packed","E08","","Highest","5","orders java","orders","To Do"

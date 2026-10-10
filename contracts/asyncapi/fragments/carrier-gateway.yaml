@@ -1,0 +1,87 @@
+# AsyncAPI 3.0 fragment for carrier-gateway. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  carrierShipmentEvents:
+    address: at.carrier-shipment.events
+    description: >-
+      Carrier tracking and pickup-ready events from carrier-gateway, written to its Postgres outbox in the same
+      transaction as the tracking state and relayed by a SKIP LOCKED dispatcher (at-least-once). Key = "<carrier>:<trackingNumber>"
+      (or "pickup:<orderRef>"), so one parcel's events stay in order. Headers event-id, event-type, occurred-at.
+      Consumers de-duplicate on event-id. Tracking events are only published for scans newer than the last applied one;
+      orders applies `state` to the shipment state machine (carriers may only move transit steps).
+    messages:
+      carrierTrackingUpdated: {$ref: '#/components/messages/carrierTrackingUpdated'}
+      carrierPickupReady: {$ref: '#/components/messages/carrierPickupReady'}
+operations:
+  publishCarrierShipmentEvents:
+    action: send
+    channel: {$ref: '#/channels/carrierShipmentEvents'}
+    summary: >-
+      carrier-gateway publishes normalised tracking from UPS Track Alert, FedEx and DHL pushes and USPS polling, and
+      pickup-ready notices for counters, lockers and seller pickup. Consumed by orders (shipment states, promise
+      measurement) and notifications (customer updates).
+components:
+  messages:
+    carrierTrackingUpdated:
+      name: carrier.tracking.updated
+      title: A carrier scan was applied to a tracked parcel
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CarrierTrackingUpdated'}
+    carrierPickupReady:
+      name: carrier.pickup.ready
+      title: An order is ready for collection at a pickup location
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CarrierPickupReady'}
+  schemas:
+    CarrierShipmentState:
+      type: string
+      enum: [label_created, picked_up, in_transit, out_for_delivery, delivered, delivery_failed, returned, exception]
+    CarrierTrackingUpdated:
+      type: object
+      required: [carrier, trackingNumber, state, stateChanged, event]
+      properties:
+        carrier: {type: string, enum: [usps, ups, fedex, dhl]}
+        trackingNumber: {type: string}
+        labelId: {type: [string, 'null'], format: uuid, description: Set when the label was bought through carrier-gateway}
+        reference: {type: [string, 'null'], description: Order/package reference given when buying or registering the label}
+        state: {$ref: '#/components/schemas/CarrierShipmentState'}
+        previousState: {type: [string, 'null']}
+        stateChanged: {type: boolean}
+        event:
+          type: object
+          required: [eventId, occurredAt]
+          properties:
+            eventId: {type: string, description: Carrier event id or a stable hash of carrier fields (same scan via push and poll de-duplicates)}
+            code: {type: string, description: Carrier status code (USPS eventCode, UPS type/code, FedEx eventType, DHL typeCode)}
+            description: {type: string}
+            state: {type: string}
+            occurredAt: {type: string, format: date-time, description: Carrier timestamp (UTC)}
+            location: {type: string}
+            sequence: {type: integer}
+    CarrierPickupReady:
+      type: object
+      required: [locationId, orderRef, customerRef, readyAt]
+      properties:
+        locationId: {type: string, format: uuid}
+        name: {type: string}
+        kind: {type: string, enum: [PLATFORM_COUNTER, LOCKER, SELLER]}
+        address:
+          type: object
+          properties:
+            line1: {type: string}
+            line2: {type: string}
+            city: {type: string}
+            state: {type: string}
+            postalCode: {type: string}
+            country: {type: string}
+        hours:
+          type: array
+          items:
+            type: object
+            properties:
+              weekday: {type: integer}
+              open: {type: string}
+              close: {type: string}
+        orderRef: {type: string}
+        customerRef: {type: string}
+        pickupCode: {type: [string, 'null']}
+        readyAt: {type: string, format: date-time}

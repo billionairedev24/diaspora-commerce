@@ -1,0 +1,11 @@
+# Shared dev cluster: per-PR preview namespaces; Stripe test mode; API reference pages on.
+at:
+  api-docs:
+    enabled: true
+  payments:
+    stripe:
+      require-live-key: false
+management:
+  tracing:
+    sampling:
+      probability: 1.0

@@ -1,0 +1,105 @@
+package com.afrotransact.payments.domain;
+
+import java.time.Instant;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+ * One immutable version of the fee schedule ("Fees & commissions"). A version applies to orders placed at or after
+ * its {@code effectiveFrom} until the next version takes effect; old versions are kept forever.
+ *
+ * @param categoryBps               commission per category in basis points (keys lower-case)
+ * @param defaultCommissionBps      commission for categories that are not listed
+ * @param overrides                 negotiated per-seller commission
+ * @param cardPctBps                card-processing fee (estimate of Stripe's), percentage part in basis points
+ * @param cardFixed                 card-processing fee, fixed part per charge
+ * @param fbaPerUnit                FBA pick, pack and ship fee per unit
+ * @param reverseCommissionOnRefund refunds give the seller back the matching commission (otherwise retained)
+ */
+public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String currency,
+                          Map<String, Integer> categoryBps, int defaultCommissionBps,
+                          List<CommissionOverride> overrides, int cardPctBps, Money cardFixed, Money fbaPerUnit,
+                          boolean reverseCommissionOnRefund, String note, String createdBy, Instant createdAt) {
+
+    public FeeSchedule {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(effectiveFrom, "effectiveFrom");
+        Objects.requireNonNull(cardFixed, "cardFixed");
+        Objects.requireNonNull(fbaPerUnit, "fbaPerUnit");
+        currency = Money.zero(currency).currency();
+        cardFixed.requireSameCurrency(Money.zero(currency));
+        fbaPerUnit.requireSameCurrency(Money.zero(currency));
+        Map<String, Integer> normalised = new LinkedHashMap<>();
+        categoryBps.forEach((k, v) -> {
+            requireBps(v, "category " + k);
+            normalised.put(k.trim().toLowerCase(Locale.ROOT), v);
+        });
+        categoryBps = Map.copyOf(normalised);
+        overrides = List.copyOf(overrides);
+        requireBps(defaultCommissionBps, "default");
+        requireBps(cardPctBps, "card fee");
+        if (cardFixed.isNegative() || fbaPerUnit.isNegative()) {
+            throw new PaymentsRuleViolation("payments.invalid-fee-schedule", "Fees cannot be negative");
+        }
+    }
+
+    static void requireBps(int bps, String what) {
+        if (bps < 0 || bps > 10_000) {
+            throw new PaymentsRuleViolation("payments.invalid-fee-schedule",
+                    "Commission / fee rate for " + what + " must be between 0 and 10000 bps");
+        }
+    }
+
+    /** Seller override for the category, then the seller's all-category override, then the category, then default. */
+    public int commissionBps(String orgId, String category) {
+        String cat = category == null ? "" : category.trim().toLowerCase(Locale.ROOT);
+        Optional<CommissionOverride> exact = overrides.stream()
+                .filter(o -> o.orgId().equals(orgId) && o.category().equals(cat)).findFirst();
+        if (exact.isPresent()) {
+            return exact.get().commissionBps();
+        }
+        Optional<CommissionOverride> any = overrides.stream()
+                .filter(o -> o.orgId().equals(orgId) && o.category().equals(CommissionOverride.ANY)).findFirst();
+        if (any.isPresent()) {
+            return any.get().commissionBps();
+        }
+        return categoryBps.getOrDefault(cat, defaultCommissionBps);
+    }
+
+    /** Card fee estimate (percentage + fixed) used before Stripe reports the real fee of a charge. */
+    public Money estimateCardFee(Money charge) {
+        if (!charge.isPositive()) {
+            return Money.zero(charge.currency());
+        }
+        return charge.basisPoints(cardPctBps).plus(cardFixed);
+    }
+
+    /** The version in force at {@code at}: the latest effectiveFrom ≤ at (highest version on ties). */
+    public static Optional<FeeSchedule> activeAt(List<FeeSchedule> history, Instant at) {
+        return history.stream().filter(s -> !s.effectiveFrom().isAfter(at))
+                .max(Comparator.comparing(FeeSchedule::effectiveFrom).thenComparingInt(FeeSchedule::version));
+    }
+
+    /**
+     * A new version never rewrites the past: it takes effect now or later, and not before the latest version, so
+     * orders already placed keep the schedule they were placed under.
+     */
+    public static void requireValidSuccessor(Instant effectiveFrom, Optional<FeeSchedule> latest, Instant now) {
+        if (effectiveFrom.isBefore(now)) {
+            throw new PaymentsRuleViolation("payments.fee-schedule-backdated",
+                    "A fee schedule version cannot take effect in the past (" + effectiveFrom + ")",
+                    Map.of("effectiveFrom", "Must be now or later"));
+        }
+        if (latest.isPresent() && effectiveFrom.isBefore(latest.get().effectiveFrom())) {
+            throw new PaymentsRuleViolation("payments.fee-schedule-out-of-order",
+                    "Version " + latest.get().version() + " already takes effect at " + latest.get().effectiveFrom(),
+                    Map.of("effectiveFrom", "Must not be before the latest version"));
+        }
+    }
+}

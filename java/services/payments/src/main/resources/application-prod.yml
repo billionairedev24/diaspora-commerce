@@ -1,0 +1,20 @@
+# Production: live Stripe keys required, reference pages off (published on developers.afrotransact.com).
+at:
+  api-docs:
+    enabled: false
+  payments:
+    stripe:
+      require-live-key: true
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:30}
+management:
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:0.1}

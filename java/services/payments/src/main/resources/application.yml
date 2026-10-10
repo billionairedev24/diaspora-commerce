@@ -1,0 +1,105 @@
+spring:
+  application:
+    name: payments-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/payments}
+    username: ${DB_USER:payments}
+    password: ${DB_PASSWORD:payments}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+
+server:
+  port: ${PORT:8105}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: payments-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  api-docs:
+    title: Payments API
+    description: >-
+      Stripe PaymentIntents with manual capture per shipment, line-level refunds, the immutable double-entry
+      ledger, multi-seller payment splits and fee schedules, settlement holds and Connect transfers, payouts on
+      request, chargebacks, the signed Stripe webhook inbox, daily reconciliation and shoppers' saved payment
+      methods.
+    version: v1
+  security:
+    # Stripe calls the webhook without a JWT; the Stripe-Signature header is verified instead.
+    public-paths:
+      - /v1/webhooks/stripe
+  events:
+    relay-enabled: true
+  payments:
+    retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    settlement-hold: ${SETTLEMENT_HOLD:7d}
+    currency: USD
+    zone: ${PAYMENTS_ZONE:America/New_York}
+    payout:
+      minimum-minor: ${PAYOUT_MINIMUM_MINOR:2500}
+    stripe:
+      # Keys only from the environment. No default here: every profile must provide them.
+      secret-key: ${STRIPE_SECRET_KEY}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET}
+      api-base: ${STRIPE_API_BASE:https://api.stripe.com}
+      require-live-key: false
+      max-network-retries: 2
+      webhook-tolerance-seconds: 300
+    webhooks:
+      max-attempts: 12
+    jobs:
+      enabled: ${PAYMENTS_JOBS_ENABLED:true}
+      webhook-batch: 100
+      webhook-interval: ${WEBHOOK_INTERVAL:1s}
+      settlement-batch: 200
+      settlement-cron: ${SETTLEMENT_CRON:0 */15 * * * *}
+      settlement-recheck: 1h
+      reconciliation-cron: ${RECONCILIATION_CRON:0 10 3 * * *}

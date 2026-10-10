@@ -1,0 +1,15 @@
+# UAT / staging: production-like, Stripe test mode, API reference pages on for testers.
+at:
+  api-docs:
+    enabled: true
+  payments:
+    stripe:
+      require-live-key: false
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+management:
+  tracing:
+    sampling:
+      probability: 0.5

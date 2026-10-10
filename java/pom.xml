@@ -20,5 +20,6 @@
         <module>services/catalog</module>
         <module>services/identity</module>
         <module>services/inventory</module>
+        <module>services/payments</module>
     </modules>
 </project>

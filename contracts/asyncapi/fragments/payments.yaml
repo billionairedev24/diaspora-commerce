@@ -1,0 +1,223 @@
+# AsyncAPI 3.0 fragment for payments-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  paymentsPaymentEvents:
+    address: at.payment.events
+    description: >-
+      Payment lifecycle, captures, refunds, settlement transfers and chargebacks from payments-service
+      (key = order id, so one order's money events stay in order). Headers event-id, event-type, occurred-at;
+      consumers de-duplicate on event-id.
+    messages:
+      paymentsIntentCreated: {$ref: '#/components/messages/paymentsIntentCreated'}
+      paymentsIntentSucceeded: {$ref: '#/components/messages/paymentsIntentSucceeded'}
+      paymentsIntentFailed: {$ref: '#/components/messages/paymentsIntentFailed'}
+      paymentsIntentCanceled: {$ref: '#/components/messages/paymentsIntentCanceled'}
+      paymentsCaptured: {$ref: '#/components/messages/paymentsCaptured'}
+      paymentsRefunded: {$ref: '#/components/messages/paymentsRefunded'}
+      paymentsTransferCreated: {$ref: '#/components/messages/paymentsTransferCreated'}
+      paymentsDisputeOpened: {$ref: '#/components/messages/paymentsDisputeOpened'}
+      paymentsDisputeClosed: {$ref: '#/components/messages/paymentsDisputeClosed'}
+  paymentsPayoutEvents:
+    address: at.payout.events
+    description: Payout requests on manual Connect payout schedules (key = organisation id).
+    messages:
+      paymentsPayoutRequested: {$ref: '#/components/messages/paymentsPayoutRequested'}
+      paymentsPayoutApproved: {$ref: '#/components/messages/paymentsPayoutApproved'}
+      paymentsPayoutPaid: {$ref: '#/components/messages/paymentsPayoutPaid'}
+      paymentsPayoutFailed: {$ref: '#/components/messages/paymentsPayoutFailed'}
+operations:
+  publishPaymentsPaymentEvents:
+    action: send
+    channel: {$ref: '#/channels/paymentsPaymentEvents'}
+    summary: >-
+      payments-service publishes via its transactional outbox. The orders saga confirms on intent.succeeded and
+      compensates on intent.failed; notifications tells sellers about chargebacks; finance reporting reads captures.
+  publishPaymentsPayoutEvents:
+    action: send
+    channel: {$ref: '#/channels/paymentsPayoutEvents'}
+    summary: Seller / provider payouts for the portals, notifications and Finance.
+components:
+  messages:
+    paymentsIntentCreated:
+      name: payments.intent.created
+      title: 'PaymentIntent created for an order (manual capture)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsIntentEvent'}
+    paymentsIntentSucceeded:
+      name: payments.intent.succeeded
+      title: 'Funds authorised (requires_capture): the order can be confirmed'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsIntentEvent'}
+    paymentsIntentFailed:
+      name: payments.intent.failed
+      title: 'Payment attempt failed (declined); the shopper may retry'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsIntentEvent'}
+    paymentsIntentCanceled:
+      name: payments.intent.canceled
+      title: 'Uncaptured intent cancelled; authorisation released'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsIntentEvent'}
+    paymentsCaptured:
+      name: payments.captured
+      title: 'One shipment captured and its journal posted'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsCaptured'}
+    paymentsRefunded:
+      name: payments.refunded
+      title: 'Line-level refund issued (with any transfer reversals)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsRefunded'}
+    paymentsTransferCreated:
+      name: payments.transfer.created
+      title: 'Seller net transferred to the connected account after the settlement hold'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsTransferCreated'}
+    paymentsDisputeOpened:
+      name: payments.dispute.opened
+      title: 'Chargeback opened; responsible sellers debited (notify them)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsDispute'}
+    paymentsDisputeClosed:
+      name: payments.dispute.closed
+      title: 'Chargeback closed as WON or LOST'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsDispute'}
+    paymentsPayoutRequested:
+      name: payments.payout.requested
+      title: 'Seller / provider requested a payout'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsPayout'}
+    paymentsPayoutApproved:
+      name: payments.payout.approved
+      title: 'Finance approved; Stripe payout created (IN_TRANSIT)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsPayout'}
+    paymentsPayoutPaid:
+      name: payments.payout.paid
+      title: 'Payout arrived (payout.paid)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsPayout'}
+    paymentsPayoutFailed:
+      name: payments.payout.failed
+      title: 'Payout failed; amount is available again'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsPayout'}
+  schemas:
+    PaymentsIntentEvent:
+      type: object
+      required: [paymentId, orderId, status, amountMinor, capturedMinor, refundedMinor, currency]
+      properties:
+        paymentId: {type: string, format: uuid}
+        orderId: {type: string}
+        stripePaymentIntentId: {type: [string, 'null']}
+        status:
+          type: string
+          enum: [REQUIRES_PAYMENT_METHOD, REQUIRES_CONFIRMATION, REQUIRES_ACTION, PROCESSING, AUTHORIZED,
+                 PARTIALLY_CAPTURED, CAPTURED, CANCELED, FAILED]
+        amountMinor: {type: integer, format: int64, description: Minor units (cents)}
+        capturedMinor: {type: integer, format: int64}
+        refundedMinor: {type: integer, format: int64}
+        currency: {type: string, examples: [USD]}
+        failureMessage: {type: [string, 'null'], description: Decline message and code for intent.failed}
+    PaymentsCaptured:
+      type: object
+      required: [paymentId, orderId, captureId, shipmentId, amountMinor, stripeFeeMinor, currency, recipients]
+      properties:
+        paymentId: {type: string, format: uuid}
+        orderId: {type: string}
+        captureId: {type: string, format: uuid}
+        shipmentId: {type: string}
+        amountMinor: {type: integer, format: int64}
+        stripeFeeMinor: {type: integer, format: int64}
+        feeEstimated: {type: boolean, description: Stripe had not reported the fee yet; the card-fee estimate was used}
+        currency: {type: string}
+        stripeChargeId: {type: [string, 'null']}
+        finalCapture: {type: boolean}
+        journalId: {type: string, format: uuid}
+        recipients:
+          type: array
+          items:
+            type: object
+            properties:
+              recipientId: {type: string, description: 'Seller org id, AfroTransact Retail, or afrotransact (platform)'}
+              kind: {type: string, enum: [SELLER, RETAIL, PLATFORM]}
+              netMinor: {type: integer, format: int64}
+              commissionMinor: {type: integer, format: int64}
+              taxMinor: {type: integer, format: int64}
+              stripeFeeMinor: {type: integer, format: int64}
+    PaymentsRefunded:
+      type: object
+      required: [paymentId, orderId, refundId, amountMinor, currency, status, lines]
+      properties:
+        paymentId: {type: string, format: uuid}
+        orderId: {type: string}
+        refundId: {type: string, format: uuid}
+        stripeRefundId: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        status: {type: string, enum: [PENDING, SUCCEEDED, FAILED]}
+        reason: {type: [string, 'null']}
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              lineId: {type: string}
+              sellerOrg: {type: string}
+              itemsMinor: {type: integer, format: int64}
+              shippingMinor: {type: integer, format: int64}
+              taxMinor: {type: integer, format: int64}
+              commissionReversedMinor: {type: integer, format: int64}
+        reversals:
+          type: array
+          items:
+            type: object
+            properties:
+              orgId: {type: string}
+              stripeTransferId: {type: string}
+              stripeReversalId: {type: string}
+              amountMinor: {type: integer, format: int64}
+    PaymentsTransferCreated:
+      type: object
+      required: [orderId, orgId, transferId, stripeTransferId, amountMinor, currency, transferGroup]
+      properties:
+        orderId: {type: string}
+        orgId: {type: string}
+        transferId: {type: string, format: uuid}
+        stripeTransferId: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        transferGroup: {type: string, description: Equals the order id}
+    PaymentsDispute:
+      type: object
+      required: [disputeId, paymentId, orderId, amountMinor, currency, status, allocations]
+      properties:
+        disputeId: {type: string}
+        paymentId: {type: string, format: uuid}
+        orderId: {type: string}
+        chargeId: {type: [string, 'null']}
+        amountMinor: {type: integer, format: int64}
+        feeMinor: {type: integer, format: int64}
+        currency: {type: string}
+        status: {type: string, enum: [OPEN, WON, LOST]}
+        reason: {type: string}
+        allocations:
+          type: array
+          description: Part of the disputed amount borne by each responsible seller (afrotransact = platform)
+          items:
+            type: object
+            properties:
+              recipientId: {type: string}
+              amountMinor: {type: integer, format: int64}
+    PaymentsPayout:
+      type: object
+      required: [payoutRequestId, orgId, amountMinor, currency, status]
+      properties:
+        payoutRequestId: {type: string, format: uuid}
+        orgId: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        status: {type: string, enum: [REQUESTED, HELD, IN_TRANSIT, PAID, FAILED]}
+        stripePayoutId: {type: [string, 'null']}
+        failureMessage: {type: [string, 'null']}
+        requestedAt: {type: string, format: date-time}
