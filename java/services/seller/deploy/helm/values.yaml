@@ -1,0 +1,53 @@
+# Base values for seller. Environment files override; Argo CD adds platform-values.yaml (cloud, identity, store).
+service:
+  name: seller
+  runtime: java
+  port: 8080
+env: dev
+cloud: none            # aws | gcp | azure | none (kind / local clusters)
+image:
+  registry: ghcr.io/billionairedev24/diaspora-commerce
+  repository: seller-service
+  tag: latest
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 3
+  cpu: 70
+rollout:
+  enabled: false
+  pause: 2m
+  maxErrorRate: "0.01"
+resources:
+  requests: {cpu: 100m, memory: 512Mi}
+  limits: {memory: 1Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+monitoring:
+  serviceMonitor: true
+  prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
+# Secret keys expected at afrotransact/<env>/seller in the cloud secret store:
+#   - DB_URL
+#   - DB_USER
+#   - DB_PASSWORD
+#   - KAFKA_BOOTSTRAP
+#   - STRIPE_SECRET_KEY
+#   - STRIPE_CONNECT_WEBHOOK_SECRET
+#   - STRIPE_BILLING_WEBHOOK_SECRET
+#   - FIELD_ENCRYPTION_KEY
+secrets:
+  enabled: true
+  store: platform-secrets
+  keySeparator: "/"     # "-" on GCP Secret Manager and Azure Key Vault (set in platform-values.yaml)
+workloadIdentity:
+  aws: {roleArn: ""}
+  gcp: {serviceAccount: ""}
+  azure: {clientId: ""}
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
+  MEDIA_BASE_URL: http://media.dev.svc.cluster.local:8080
+  SELLER_LIVE_COUNTRIES: US
+nodeSelector: {}
+tolerations: []

@@ -1,0 +1,12 @@
+# Shared dev cluster: per-PR preview namespaces; API reference pages on.
+at:
+  api-docs:
+    enabled: true
+  content:
+    newsletter:
+      confirm-url: https://www.dev.afrotransact.com/newsletter/confirm
+      unsubscribe-url: https://www.dev.afrotransact.com/newsletter/unsubscribe
+management:
+  tracing:
+    sampling:
+      probability: 1.0

@@ -259,7 +259,7 @@
 - COGS posted at lot landed cost on shipment","E10","","Medium","5","retail java finance","retail","To Do"
 "S074","Story","Three-way match and supplier payment","PO price × received qty vs supplier invoice (±1%) before payment; FX gain/loss posted.","- Variances route to the buyer
 - Closing the PO releases payment","E10","","Medium","5","retail java finance","retail","To Do"
-"E11","Epic","Carriers & shipping (USPS, UPS, FedEx, DHL)","Direct carrier integrations behind one Carrier port — no aggregator.","","","Carriers & shipping (USPS, UPS, FedEx, DHL)","High","","carriers","carriers","Done"
+"E11","Epic","Carriers & shipping (USPS, UPS, FedEx, DHL)","Direct carrier integrations behind one Carrier port — no aggregator.","","","Carriers & shipping (USPS, UPS, FedEx, DHL)","High","","carriers","carriers","In Progress"
 "S075","Story","Carrier port and gateway service","rate(), buy_label(), void(), track(), schedule_pickup(), validate_address() behind one interface.","- Each carrier is its own adapter implementing the same Go interface
 - Rate shopping fans out in parallel with a 1.5 s budget and caches per cart","E11","","High","5","carriers go","carriers","Done"
 "S076","Story","USPS adapter (Labels API, tracking polling)","USPS rates, labels and polled tracking.","- Labels stored as PDF/ZPL in object storage
@@ -294,53 +294,53 @@
 - SOS alerts dispatch immediately","E12","","High","8","delivery mobile","delivery","To Do"
 "S088","Story","Dispatch console","Plan routes per zone, assign drivers and reassign failed stops.","- Driver events stream into Delivery dispatch
 - Failed stops can be reassigned to another route","E12","","Medium","8","delivery staff-console","delivery","To Do"
-"E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","To Do"
+"E13","Epic","Seller & provider onboarding with two-step review","Account first, then a resumable, entity-aware application reviewed by two different staff members.","","","Seller & provider onboarding with two-step review","High","","onboarding","onboarding","Done"
 "S089","Story","Resumable application with autosave","Applicants can save, sign out and resume exactly where they left off.","- Draft autosaves after every change
 - Save & sign out returns to 'Welcome back' and resumes on sign-in
-- No sidebar or back-office navigation while applying","E13","","Highest","5","onboarding java web","onboarding","To Do"
+- No sidebar or back-office navigation while applying","E13","","Highest","5","onboarding java web","onboarding","Done"
 "S090","Story","Country and phone with launch-list for unsupported countries","All countries with flags; non-live countries disable the rest of the step and offer a launch list.","- Only the country picker and 'Notify me at launch' work in a non-live country
 - Phone uses a flag/country-code picker, formats as you type and validates mobile numbers (libphonenumber)
-- No RFC text shown under the phone field","E13","","High","5","onboarding web","onboarding","To Do"
+- No RFC text shown under the phone field","E13","","High","5","onboarding web","onboarding","Done"
 "S091","Story","Entity-aware business details","Fields change with business type (sole prop, LLCs, corporation, partnership, nonprofit).","- Sole proprietors: name, SSN/ITIN, DOB (18+), address
 - Companies: legal name, EIN, state and date of formation, address, formation document
 - Nonprofits: IRS determination letter
-- SSN/EIN dashes are added automatically","E13","","Highest","8","onboarding web java","onboarding","To Do"
+- SSN/EIN dashes are added automatically","E13","","Highest","8","onboarding web java","onboarding","Done"
 "S092","Story","Beneficial owners","Owners with ≥ 25%, significant control rules and multi-member requirements.","- Ownership cannot exceed 100%
 - At least one person with significant control
-- Multi-member LLCs and partnerships need two or more people","E13","","High","5","onboarding","onboarding","To Do"
+- Multi-member LLCs and partnerships need two or more people","E13","","High","5","onboarding","onboarding","Done"
 "S093","Story","Stripe Connect embedded onboarding","Identity, tax-ID match and KYC run inside Stripe's embedded components; no separate verification links.","- Account Session + account-onboarding component embedded
 - We store only verification results, never ID images or full tax numbers
-- Status rows show identity, IRS name/TIN match and sanctions screening","E13","","Highest","8","onboarding stripe","onboarding","To Do"
+- Status rows show identity, IRS name/TIN match and sanctions screening","E13","","Highest","8","onboarding stripe","onboarding","Done"
 "S094","Story","Payout bank account","Routing number validated; account number entered twice.","- Invalid routing numbers rejected
-- Mismatched account numbers rejected","E13","","High","2","onboarding","onboarding","To Do"
+- Mismatched account numbers rejected","E13","","High","2","onboarding","onboarding","Done"
 "S095","Story","Plan selection with billing frequency","Plans with monthly, quarterly (5% off) and annual (2 months free) billing, trials and payment method.","- Plan cards show per-month price, charged amount, cadence, saving and trial
 - Billing via payout bank (ACH) or card
-- First charge sentence shown, e.g. 'Free for 30 days. First charge of $139.65 on Nov 9'","E13","","High","5","onboarding billing","onboarding","To Do"
+- First charge sentence shown, e.g. 'Free for 30 days. First charge of $139.65 on Nov 9'","E13","","High","5","onboarding billing","onboarding","Done"
 "S096","Story","Catalog, permits and licences","Food permits, beauty labelling, service licences/insurance, agreements and W-9 certification.","- Expired licences rejected
 - Each regulated service needs a licence document
-- Agreements and W-9 certification required","E13","","High","5","onboarding","onboarding","To Do"
+- Agreements and W-9 certification required","E13","","High","5","onboarding","onboarding","Done"
 "S097","Story","Two-step review (reviewer then final approver)","Reviewer approves, flags or requests info; a different approver gives final approval.","- Reviewer cannot give final approval on the same application
 - Flagged applications list the failing checks
 - Only final approval unlocks Seller Center / Provider Hub
-- Application review sheet shows every field, documents (view is logged), checks, risk and timeline","E13","","Highest","8","onboarding staff-console java","onboarding","To Do"
+- Application review sheet shows every field, documents (view is logged), checks, risk and timeline","E13","","Highest","8","onboarding staff-console java","onboarding","Done"
 "S098","Story","Existing customers start selling without a second account","Signed-in customers get the seller/provider role added and onboarding prefilled.","- Role change is audited as pending approval
-- Name, email, phone and address prefilled with a 'check these' banner","E13","","High","3","onboarding identity","onboarding","To Do"
-"E14","Epic","Stripe compliance sync, plans & billing","Mirror Stripe requirements, notify sellers, collect answers in our UI; subscriptions via Stripe Billing.","","","Stripe compliance sync, plans & billing","High","","billing","billing","To Do"
+- Name, email, phone and address prefilled with a 'check these' banner","E13","","High","3","onboarding identity","onboarding","Done"
+"E14","Epic","Stripe compliance sync, plans & billing","Mirror Stripe requirements, notify sellers, collect answers in our UI; subscriptions via Stripe Billing.","","","Stripe compliance sync, plans & billing","High","","billing","billing","In Progress"
 "S099","Story","Compliance sync from Stripe webhooks","account.updated, capability.updated, person.* and payout events mirrored with history.","- Requirements (currently/eventually/past due, pending verification, errors, deadline) stored per account
-- Events applied in order of requirements version","E14","","High","5","billing stripe java","billing","To Do"
+- Events applied in order of requirements version","E14","","High","5","billing stripe java","billing","Done"
 "S100","Story","Compliance notifications and enforcement","Email + SMS + in-app on new requirements, reminders 7/3/1 days before deadline; payouts paused when past due.","- Reminders respect consent and quiet hours
 - past_due pauses payouts automatically and resumes when cleared
-- Charges disabled hides listings and bookings","E14","","High","5","billing notifications","billing","To Do"
+- Charges disabled hides listings and bookings","E14","","High","5","billing notifications","billing","Done"
 "S101","Story","Account health page (collect requirements in our UI)","A form per Stripe requirement; values tokenised with Stripe.js, documents via Stripe Files.","- Owner/finance roles can answer; others cannot see the page
 - Status moves to verifying until Stripe confirms
-- Banner on every page while something is outstanding","E14","","High","8","billing seller-center","billing","To Do"
+- Banner on every page while something is outstanding","E14","","High","8","billing seller-center","billing","Done"
 "S102","Story","Staff Stripe compliance console","Accounts with open items; send reminders, pause/resume payouts by role.","- Trust & Safety can pause and release payouts
-- Ops and Finance can remind and pause","E14","","Medium","5","billing staff-console","billing","To Do"
+- Ops and Finance can remind and pause","E14","","Medium","5","billing staff-console","billing","Done"
 "S103","Story","Plans & subscriptions via Stripe Billing","Seller Essentials/Growth/Pro and Provider Solo/Studio/Business with trials, proration and dunning.","- Upgrades prorate immediately; downgrades and frequency changes apply at renewal
 - Invoices listed with PDF download
-- Metered usage for FBA storage, ads and AI credits","E14","","High","8","billing stripe java","billing","To Do"
+- Metered usage for FBA storage, ads and AI credits","E14","","High","8","billing stripe java","billing","In Progress"
 "S104","Story","Billing page with real card/bank presentation","Payment methods shown as brand cards with last 4 or bank with type and verification.","- Default method cannot be removed until another is default
-- Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","To Do"
+- Only the owner role can change billing","E14","","Medium","3","billing seller-center","billing","Done"
 "E15","Epic","Services marketplace & bookings","Provider availability and prices flow to customers; bookings, cancellations and commission stay in sync across web, mobile and Provider Hub.","","","Services marketplace & bookings","High","","bookings","bookings","To Do"
 "S105","Story","Provider availability and calendar","Weekly hours with breaks, blocked dates, minimum notice, buffers, daily limit and instant booking.","- Week and month calendar views with booking quick view
 - Availability changes are reflected for customers immediately","E15","","High","8","bookings java","bookings","To Do"
@@ -394,20 +394,20 @@
 - Test-send goes only to the editor","E19","","Medium","5","notifications staff-console","notifications","Done"
 "S125","Story","Delivery receipts and notification log","Provider webhooks update status; staff can see every message sent.","- Bounces and complaints add to suppression list
 - Log shows channel, provider, status and template version","E19","","Medium","3","notifications","notifications","Done"
-"E20","Epic","Content, ads, announcements, markets & site config","Nothing promotional or legal is hard-coded: placements, campaigns, markets and site settings are data.","","","Content, ads, announcements, markets & site config","High","","content","content","To Do"
+"E20","Epic","Content, ads, announcements, markets & site config","Nothing promotional or legal is hard-coded: placements, campaigns, markets and site settings are data.","","","Content, ads, announcements, markets & site config","High","","content","content","In Progress"
 "S126","Story","Placements: announcement bar, hero, banners","Slots with schemas and targeting edited in the back office and cached at the edge.","- Draft → review → scheduled → live → ended workflow
 - Publishing purges the CDN cache
-- Storefront renders placements server-side","E20","","High","5","content java","content","To Do"
+- Storefront renders placements server-side","E20","","High","5","content java","content","Done"
 "S127","Story","Sponsored products","Seller campaigns with budgets and CPC bids blended with organic results, always labelled Sponsored.","- Second-price auction with relevance floor
 - Impressions, clicks and attributed sales reported","E20","","Low","8","content ads","content","To Do"
 "S128","Story","Markets & locations","Activate or deactivate AfroTransact per country and state, with per-capability switches.","- Country status: Live, Paused, Coming soon, Planned
 - Per state: marketplace, services, food, pickup, tax registration
-- Turning off marketplace in a state turns off everything there","E20","","High","5","content markets","content","To Do"
+- Turning off marketplace in a state turns off everything there","E20","","High","5","content markets","content","Done"
 "S129","Story","Site content & legal config","Social links, support phone, contact emails, address and policy versions editable without deployment.","- Invalid profile links block saving
 - Raising a policy version archives the old one
-- Changes appear in shop, app and legal pages immediately","E20","","High","3","content legal","content","To Do"
+- Changes appear in shop, app and legal pages immediately","E20","","High","3","content legal","content","Done"
 "S130","Story","Feature flags (OpenFeature + Unleash)","Rollout percentages and kill switches.","- Flags evaluated server-side and in web/mobile
-- Kill switch takes effect within 30 seconds","E20","","Medium","3","content platform","content","To Do"
+- Kill switch takes effect within 30 seconds","E20","","Medium","3","content platform","content","Done"
 "E21","Epic","Lola AI (Spring AI + OpenRouter) & MCP server","Lola is an agent calling the same APIs as the apps, via Spring AI with OpenRouter; MCP tools for shoppers, sellers and staff.","","","Lola AI (Spring AI + OpenRouter) & MCP server","High","","ai","ai","To Do"
 "S131","Story","AI gateway on Spring AI with OpenRouter","Spring AI ChatClient against OpenRouter's OpenAI-compatible API with model routing per task.","- Fast model for intent, strong model for planning, configurable per environment
 - Per-user and per-feature budgets enforced
@@ -557,11 +557,11 @@
 - Same build output deploys to Vercel if needed","E30","","High","5","cicd web cloudflare","cicd","To Do"
 "S190","Story","Mobile builds with EAS","Expo EAS builds and store submissions per environment.","- Dev, preview and production channels
 - OTA updates for JS-only changes","E30","","Medium","3","cicd mobile","cicd","To Do"
-"E31","Epic","Legal, privacy, i18n & accessibility","Policy pages, cookie consent, SMS terms, translations and WCAG 2.2 AA.","","","Legal, privacy, i18n & accessibility","High","","legal","legal","To Do"
+"E31","Epic","Legal, privacy, i18n & accessibility","Policy pages, cookie consent, SMS terms, translations and WCAG 2.2 AA.","","","Legal, privacy, i18n & accessibility","High","","legal","legal","In Progress"
 "S191","Story","Legal center pages","Conditions of Use, Privacy, Cookie Notice, Privacy Choices, Returns, Seller & Provider Terms, Prohibited Items, Accessibility, SMS & Notification Terms.","- Each page shows version, effective date and previous versions
-- Draft-for-counsel banner until legal approves","E31","","High","5","legal web","legal","To Do"
+- Draft-for-counsel banner until legal approves","E31","","High","5","legal web","legal","In Progress"
 "S192","Story","Cookie consent with GPC","Per-category switches, equal-weight Accept/Reject, Global Privacy Control respected.","- GPC signal locks advertising cookies off
-- Consent stored and auditable","E31","","High","3","legal web","legal","To Do"
+- Consent stored and auditable","E31","","High","3","legal web","legal","In Progress"
 "S193","Story","Internationalisation","English, French, Spanish and Arabic (RTL) across web and mobile.","- All UI strings externalised
 - Arabic flips to RTL
 - Dates and currency localised","E31","","Medium","8","legal i18n","legal","To Do"
@@ -591,3 +591,10 @@
 "S204","Story","Confirm carrier sandbox integrations (USPS, UPS, FedEx, DHL)","Adapters were built against published API shapes; run them against each carrier's sandbox with real credentials and confirm webhook formats.","- Rates, label, void and tracking succeed against each carrier sandbox
 - FedEx and DHL webhook signature formats confirmed and tests updated
 - Zone charts replace the seed transit table","E11","","High","5","carriers","carriers","To Do"
+"S205","Story","Cross-service org lifecycle wiring","Identity mirrors organisations owned by the seller service: string org ids (org_…), role/org claim granted on seller.org.approved, profile claims in access tokens for prefill.","- Identity accepts org_… string ids everywhere it uses org ids
+- seller.org.approved grants the owner role and org membership; next token carries the org claim
+- Access tokens carry given_name, family_name, email and phone_number for prefill
+- Payments consumes seller.payouts.paused/resumed; catalog/bookings/indexer consume seller.listings.hidden/restored","E13","","Highest","8","onboarding identity events","onboarding","To Do"
+"S206","Story","Metered billing usage (FBA storage, ads, AI credits)","Report usage to Stripe Billing meters for plan add-ons.","- Usage events aggregated daily per org
+- Stripe meter events sent idempotently
+- Invoices show metered lines","E14","","Medium","5","billing stripe","billing","To Do"

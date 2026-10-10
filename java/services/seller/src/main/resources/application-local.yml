@@ -1,0 +1,12 @@
+# Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
+# The field-encryption key below is a well-known DEV key; real environments inject FIELD_ENCRYPTION_KEY.
+at:
+  security:
+    enabled: false
+  seller:
+    crypto:
+      keys:
+        k1: ${FIELD_ENCRYPTION_KEY:ZGV2LW9ubHktZmllbGQta2V5LTMyLWJ5dGVzLWxvbiE=}
+logging:
+  level:
+    com.afrotransact: DEBUG

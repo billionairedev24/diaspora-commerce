@@ -52,10 +52,14 @@ public class PlatformSecurityAutoConfiguration {
             return http.build();
         }
         String[] extra = props.publicPaths().toArray(String[]::new);
+        String[] posts = props.publicPostPaths().toArray(String[]::new);
         http.authorizeHttpRequests(a -> {
             a.requestMatchers(ALWAYS_PUBLIC).permitAll();
             if (extra.length > 0) {
                 a.requestMatchers(HttpMethod.GET, extra).permitAll();
+            }
+            if (posts.length > 0) {
+                a.requestMatchers(HttpMethod.POST, posts).permitAll();
             }
             a.anyRequest().authenticated();
         })

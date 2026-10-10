@@ -1,0 +1,126 @@
+spring:
+  application:
+    name: content-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/content}
+    username: ${DB_USER:content}
+    password: ${DB_PASSWORD:content}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+
+server:
+  port: ${PORT:8112}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: content-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  api-docs:
+    title: Content API
+    description: >-
+      Nothing promotional or legal is hard-coded. Placements (announcement bar, hero carousel, tiles, banners,
+      product rows, checkout cross-sell) with targeting and a review workflow; markets & locations with per-state
+      capability switches and an eligibility check; site configuration (social links, contacts, app links, locales);
+      legal documents with versions; cookie consent; feature flags with OpenFeature (OFREP) evaluation;
+      newsletter double opt-in, launch lists and careers.
+    version: v1
+  security:
+    # Anonymous GETs (storefront, mobile, CDN). Everything else needs a JWT unless listed in public-post-paths.
+    public-paths:
+      - /v1/placements/resolve
+      - /v1/placements/bundles/*
+      - /v1/markets/eligibility
+      - /v1/markets/countries
+      - /v1/markets/countries/*
+      - /v1/site-config
+      - /v1/legal
+      - /v1/legal/*
+      - /v1/legal/*/versions
+      - /v1/legal/*/versions/*
+      - /v1/consent/cookie-policy
+      - /v1/careers/jobs
+      - /v1/careers/jobs/*
+  events:
+    relay-enabled: true
+  content:
+    # Anonymous POSTs: visitor forms and flag evaluation (roles in an anonymous context are ignored).
+    public-post-paths:
+      - /v1/newsletter/subscriptions
+      - /v1/newsletter/confirmations
+      - /v1/newsletter/unsubscriptions
+      - /v1/markets/launch-list
+      - /v1/careers/jobs/*/applications
+      - /v1/consent/records
+      - /v1/flags/evaluate
+      - /ofrep/v1/evaluate/flags
+      - /ofrep/v1/evaluate/flags/*
+    # Kill switches and rollout changes reach every replica within this TTL.
+    flags:
+      cache-ttl: ${FLAGS_CACHE_TTL:30s}
+    markets:
+      cache-ttl: ${MARKETS_CACHE_TTL:30s}
+    placements:
+      cache-ttl: ${PLACEMENTS_CACHE_TTL:10s}
+      resolve-max-age: 30s
+      bundle-max-age: 60s
+      bundle-shared-max-age: 300s
+    site:
+      max-age: 60s
+      legal-base-href: /legal/
+    newsletter:
+      token-key: ${NEWSLETTER_TOKEN_KEY:}
+      token-ttl: 72h
+      confirm-url: https://www.afrotransact.com/newsletter/confirm
+      unsubscribe-url: https://www.afrotransact.com/newsletter/unsubscribe
+    jobs:
+      enabled: ${CONTENT_JOBS_ENABLED:true}
+      placement-lifecycle-interval: ${PLACEMENT_LIFECYCLE_INTERVAL:60s}

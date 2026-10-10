@@ -1,0 +1,13 @@
+# Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
+at:
+  security:
+    enabled: false
+  content:
+    # Fixed dev-only key so confirmation links survive restarts; every other environment reads NEWSLETTER_TOKEN_KEY.
+    newsletter:
+      token-key: ${NEWSLETTER_TOKEN_KEY:local-dev-newsletter-token-key-change-me-0123456789}
+      confirm-url: http://localhost:3000/newsletter/confirm
+      unsubscribe-url: http://localhost:3000/newsletter/unsubscribe
+logging:
+  level:
+    com.afrotransact: DEBUG

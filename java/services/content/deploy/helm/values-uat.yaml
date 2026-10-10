@@ -1,0 +1,19 @@
+env: uat
+replicas: 2
+autoscaling:
+  enabled: true
+  min: 2
+  max: 4
+  cpu: 70
+rollout:
+  enabled: true
+resources:
+  requests: {cpu: 250m, memory: 768Mi}
+  limits: {memory: 1536Mi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.5"
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.uat.afrotransact.com
+tolerations:
+  - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}

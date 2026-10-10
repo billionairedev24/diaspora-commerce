@@ -18,8 +18,10 @@
         <module>libs/platform-security</module>
         <module>libs/platform-test</module>
         <module>services/catalog</module>
+        <module>services/content</module>
         <module>services/identity</module>
         <module>services/inventory</module>
         <module>services/payments</module>
+        <module>services/seller</module>
     </modules>
 </project>

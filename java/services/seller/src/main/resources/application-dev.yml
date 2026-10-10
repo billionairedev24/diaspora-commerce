@@ -1,0 +1,8 @@
+# Shared dev cluster: per-PR preview namespaces; API reference pages on; Stripe test mode keys from the secret store.
+at:
+  api-docs:
+    enabled: true
+management:
+  tracing:
+    sampling:
+      probability: 1.0
