@@ -1,0 +1,14 @@
+packages:
+  - web/apps/*
+  - web/packages/*
+  - mobile/apps/*
+  - docs/portal
+
+# Packages allowed to run install scripts (pnpm 10 blocks them by default).
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+  - workerd
+  - msw
+  - '@parcel/watcher'
+  - unrs-resolver

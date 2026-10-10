@@ -35,3 +35,5 @@ storybook-static/
 # Helm dependency builds
 **/deploy/helm/charts/
 **/deploy/helm/Chart.lock
+__pycache__/
+*.pyc

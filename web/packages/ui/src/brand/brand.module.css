@@ -1,0 +1,47 @@
+.logo { display: inline-flex; align-items: center; gap: var(--at-space-2); color: inherit; text-decoration: none; }
+.logo:hover { text-decoration: none; color: inherit; }
+.wordmark { font-size: var(--at-text-2xl); font-weight: var(--at-weight-black); letter-spacing: var(--at-tracking-tight); line-height: 1; }
+.mark { flex: none; }
+
+.social {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--at-space-2);
+  width: 100%;
+  height: var(--at-size-control-lg);
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  font-family: inherit;
+  font-weight: var(--at-weight-semibold);
+  font-size: var(--at-text-md);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.social:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); text-decoration: none; }
+.social:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.socialIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  text-decoration: none;
+  transition: transform var(--at-duration-fast) var(--at-ease);
+}
+
+.socialIcon:hover { transform: translateY(-2px); }
+.socialIcon svg { width: 20px; height: 20px; fill: var(--at-brand-on-mark); }
+.tiktok { background: var(--at-brand-tiktok); box-shadow: 0 0 0 1px var(--at-brand-ring-dark); }
+.instagram { background: var(--at-brand-instagram); }
+.facebook { background: var(--at-brand-facebook-social); }
+.x { background: var(--at-brand-x); box-shadow: 0 0 0 1px var(--at-brand-ring-dark); }
+.youtube { background: var(--at-brand-youtube); }
+.linkedin { background: var(--at-brand-linkedin); }
+.whatsapp { background: var(--at-brand-whatsapp); }

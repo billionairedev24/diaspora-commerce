@@ -1,0 +1,8 @@
+/* App-level layout helpers (tokens and global rules come from @afrotransact/tokens). */
+.page { max-width: var(--at-page-max); margin: 0 auto; padding: 0 var(--at-page-gutter) var(--at-space-16); }
+.page:focus { outline: none; }
+.full-bleed { margin-left: calc(-1 * var(--at-page-gutter)); margin-right: calc(-1 * var(--at-page-gutter)); }
+.link-button { border: 0; background: none; padding: 0; color: var(--at-color-link); cursor: pointer; font: inherit; text-align: left; }
+.link-button:hover { color: var(--at-color-link-hover); text-decoration: underline; }
+.sep { color: var(--at-color-border-strong); }
+h1, h2, h3 { text-wrap: balance; }

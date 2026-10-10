@@ -167,7 +167,7 @@
 - Save for later moves lines out of the active cart","E06","","Highest","5","checkout go","checkout","Done"
 "S045","Story","Add-to-cart stepper and stock caps","'Add to cart' becomes a − / + stepper; out-of-stock shows 'Currently unavailable' with back-in-stock alert.","- Stepper never exceeds available stock
 - Out-of-stock items cannot be added
-- 'Email me when available' subscribes the user","E06","","High","3","checkout web","checkout","In Progress"
+- 'Email me when available' subscribes the user","E06","","High","3","checkout web","checkout","Done"
 "S046","Story","Checkout saga (Temporal) with compensations","Validate cart → reserve inventory → PaymentIntent (manual capture) → order + shipments → confirm.","- Each step has a compensation (release reservation, cancel intent, void order)
 - Idempotency-Key on placeOrder returns the same order on retry
 - A failed payment releases reservations within 1 minute
@@ -437,31 +437,31 @@
 - No plain-text address field remains in any app","E22","","High","5","geo web mobile","geo","In Progress"
 "S140","Story","Service areas and delivery zones (PostGIS)","Zones for AfroTransact Delivery, FC catchments and provider service areas.","- Point-in-zone checks for delivery eligibility
 - Provider distance search ('within 15 miles')","E22","","Medium","5","geo go","geo","Done"
-"E23","Epic","Storefront web (Next.js)","Customer web shop recreated from design/AfroTransact Shop.dc.html on Next.js 16, TanStack Query and design tokens.","","","Storefront web (Next.js)","High","","storefront-web","storefront-web","To Do"
+"E23","Epic","Storefront web (Next.js)","Customer web shop recreated from design/AfroTransact Shop.dc.html on Next.js 16, TanStack Query and design tokens.","","","Storefront web (Next.js)","High","","storefront-web","storefront-web","In Progress"
 "S141","Story","Next.js storefront app with tokens and white canvas","App shell on Next.js 16 with @afrotransact/tokens, Figtree, white background and no visible scrollbars.","- All colours come from tokens; lint bans raw hex
 - No visible scrollbars anywhere; no horizontal page scroll
-- Builds for Cloudflare Workers via OpenNext","E23","","Highest","5","storefront-web web","storefront-web","To Do"
+- Builds for Cloudflare Workers via OpenNext","E23","","Highest","5","storefront-web web","storefront-web","Done"
 "S142","Story","Header: deliver-to, search with typeahead, avatar menu, cart badge","Black header, deliver-to picker, yellow search button, avatar dropdown, cart count badge.","- Guest avatar shows 'Welcome, Guest' with Sign in / Create account
 - Signed-in menu: account, orders, returns, addresses, payments, Ask Lola, Sell, Offer your services, sign out
-- Header stays one row down to 900px","E23","","Highest","5","storefront-web web","storefront-web","To Do"
+- Header stays one row down to 900px","E23","","Highest","5","storefront-web web","storefront-web","Done"
 "S143","Story","Home page with dynamic placements","Hero, tiles and product rows driven by content placements.","- Announcement bar and banners come from content-service
-- Rows render server-side for SEO","E23","","High","5","storefront-web web content","storefront-web","To Do"
+- Rows render server-side for SEO","E23","","High","5","storefront-web web content","storefront-web","Done"
 "S144","Story","Search results page with filters","Results with delivery speed, fulfilment, seller, rating, community and price filters and URL-synced state.","- Filters and sort serialise to the URL
 - Facet counts come from the search API
-- Infinite scroll or pagination with keepPreviousData","E23","","Highest","5","storefront-web web search","storefront-web","To Do"
+- Infinite scroll or pagination with keepPreviousData","E23","","Highest","5","storefront-web web search","storefront-web","Done"
 "S145","Story","Product detail page with buy box","Images, details, variant pickers, buy box, other sellers and fulfilment badges.","- 'Fulfilled by AfroTransact' vs 'Ships from seller' badge
 - Low stock 'Only N left — order soon' at ≤5
-- Rating stars use brand yellow","E23","","Highest","8","storefront-web web","storefront-web","To Do"
+- Rating stars use brand yellow","E23","","Highest","8","storefront-web web","storefront-web","Done"
 "S146","Story","Cart page split per seller","Packages per seller with save for later and stock-capped steppers.","- Each package shows its seller and delivery options
-- Save for later and move back to cart","E23","","Highest","5","storefront-web web","storefront-web","To Do"
+- Save for later and move back to cart","E23","","Highest","5","storefront-web web","storefront-web","Done"
 "S147","Story","Sign-in and create account (two-column with advertorial)","Two-column card with brand panel; social buttons at the bottom with official logos; no navbar.","- No header, department bar or footer on auth pages
 - Passkey only on sign-in
-- Create account uses the unified form","E23","","High","5","storefront-web web identity","storefront-web","To Do"
+- Create account uses the unified form","E23","","High","5","storefront-web web identity","storefront-web","Done"
 "S148","Story","Account pages: addresses, payments, orders, returns, login & security","Self-service account management.","- Addresses add/edit/remove/default with autocomplete
 - Payments add card or bank, remove, default
 - Returns flow with reason and refund amount","E23","","High","8","storefront-web web","storefront-web","To Do"
 "S149","Story","Footer with configurable social links, about and careers","Beautiful footer with social icons from config, link columns, newsletter, app badges and language picker.","- Social links and phone come from site config (no deploy to change)
-- About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","To Do"
+- About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","Done"
 "S150","Story","Services browsing and provider pages","Find a provider, see their designed page and book.","- Provider page renders the provider's chosen layout and approved links
 - Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","To Do"
 "E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","To Do"
@@ -507,7 +507,7 @@
 "S167","Story","Bookings in the app","Book, reschedule and cancel services synced with provider calendars.","- Exact refund shown before cancelling","E26","","Medium","5","mobile bookings","mobile","To Do"
 "S168","Story","Push notifications with deep links","FCM/APNs push for orders, deliveries and bookings.","- Tapping a notification opens the right screen
 - Preferences per category respected","E26","","Medium","5","mobile notifications","mobile","To Do"
-"E27","Epic","API docs & developer portal","Contract-first APIs with Swagger UI, Scalar, Redoc, Docusaurus portal and AsyncAPI event catalog.","","","API docs & developer portal","High","","docs","docs","To Do"
+"E27","Epic","API docs & developer portal","Contract-first APIs with Swagger UI, Scalar, Redoc, Docusaurus portal and AsyncAPI event catalog.","","","API docs & developer portal","High","","docs","docs","In Progress"
 "S169","Story","OpenAPI 3.1 contracts for every service","contracts/openapi/<service>.yaml as source of truth; CI fails on breaking changes.","- Each service has a contract file
 - openapi-diff gate blocks breaking changes without a version bump
 - Java implementations verified against contracts","E27","","Highest","5","docs contracts","docs","To Do"
@@ -518,7 +518,7 @@
 "S172","Story","AsyncAPI event catalog","contracts/asyncapi/events.yaml documents every topic and payload.","- Every published event type is documented
 - Catalog rendered in the portal","E27","","High","3","docs events","docs","To Do"
 "S173","Story","Generated TypeScript clients and Zod schemas","Clients for web and mobile generated from contracts.","- Clients regenerate in CI when contracts change
-- Generated code is never edited by hand","E27","","High","5","docs web","docs","To Do"
+- Generated code is never edited by hand","E27","","High","5","docs web","docs","In Progress"
 "E28","Epic","Observability & monitoring","OpenTelemetry everywhere, Prometheus/Grafana/Loki/Tempo, SLOs, alerting and on-call.","","","Observability & monitoring","High","","observability","observability","In Progress"
 "S174","Story","Local observability stack","OTel Collector, Prometheus, Grafana, Loki, Tempo and Alertmanager in docker compose.","- Grafana provisioned with datasources and service dashboards
 - Traces from Java and Go services visible in Tempo","E28","","High","3","observability infra","observability","Done"

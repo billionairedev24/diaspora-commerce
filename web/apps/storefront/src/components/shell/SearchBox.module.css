@@ -1,0 +1,38 @@
+.wrap { position: relative; }
+.form { display: flex; height: var(--at-size-control); border-radius: var(--at-radius-sm); overflow: hidden; background: var(--at-color-surface); }
+.form:focus-within { box-shadow: 0 0 0 3px var(--at-gold-500); }
+.dept { flex: none; width: 68px; border: 0; background: var(--at-color-surface-muted); color: var(--at-color-text); font-size: var(--at-text-xs); padding: 0 var(--at-space-1); cursor: pointer; }
+.input { flex: 1; min-width: 0; border: 0; padding: 0 var(--at-space-3); font-size: var(--at-text-base); color: var(--at-color-text); background: var(--at-color-surface); outline: none; }
+.submit { width: 48px; border: 0; background: var(--at-color-action-primary); color: var(--at-color-action-primary-text); cursor: pointer; display: grid; place-items: center; }
+.submit:hover { background: var(--at-color-action-primary-hover); }
+
+.list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: var(--at-z-dropdown);
+  margin: 0;
+  padding: var(--at-space-1) 0;
+  list-style: none;
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  border: 1px solid var(--at-color-border);
+  border-radius: var(--at-radius-sm);
+  box-shadow: var(--at-shadow-lg);
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.head { padding: var(--at-space-2) var(--at-space-3) var(--at-space-1); font-size: var(--at-text-2xs); font-weight: var(--at-weight-bold); letter-spacing: var(--at-tracking-caps); text-transform: uppercase; color: var(--at-color-text-muted); }
+.option { display: flex; align-items: center; gap: var(--at-space-3); min-height: var(--at-size-touch); padding: var(--at-space-2) var(--at-space-3); cursor: pointer; font-size: var(--at-text-md); }
+.option[aria-selected='true'] { background: var(--at-color-surface-hover); }
+.optionIcon { color: var(--at-color-text-muted); flex: none; }
+.phrase { flex: 1; min-width: 0; }
+.scope { font-size: var(--at-text-xs); color: var(--at-color-link); }
+.product { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: var(--at-space-3); align-items: center; }
+.thumb { width: 44px; border-radius: var(--at-radius-xs); overflow: hidden; }
+.pname { display: block; font-size: var(--at-text-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pmeta { display: block; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
+.price { font-size: var(--at-text-md); }
+.foot { padding: var(--at-space-2) var(--at-space-3) var(--at-space-1); font-size: var(--at-text-2xs); color: var(--at-color-text-subtle); border-top: 1px solid var(--at-color-border); margin-top: var(--at-space-1); }

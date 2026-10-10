@@ -1,0 +1,49 @@
+{
+  "name": "storefront",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AfroTransact customer web storefront (Next.js 16 App Router; Cloudflare Workers via OpenNext, Vercel-compatible).",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "dev:mocks": "NEXT_PUBLIC_API_MOCKS=1 next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "eslint . && stylelint \"src/**/*.css\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+  },
+  "dependencies": {
+    "@afrotransact/api-client": "workspace:*",
+    "@afrotransact/tokens": "workspace:*",
+    "@afrotransact/ui": "workspace:*",
+    "@opennextjs/cloudflare": "^1.20.10",
+    "@phosphor-icons/react": "^2.1.10",
+    "@tanstack/react-query": "^5.104.1",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "server-only": "^0.0.1",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "^27.0.0",
+    "typescript": "5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "5.0.3",
+    "wrangler": "^4.149.0"
+  }
+}

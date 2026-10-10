@@ -1,0 +1,4 @@
+.next-e2e/
+playwright-report/
+test-results/
+cloudflare-env.d.ts

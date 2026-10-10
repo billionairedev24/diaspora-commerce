@@ -1,0 +1,134 @@
+/* AfroTransact design tokens — single source of truth (ported from design/afrotransact-tokens.css).
+   Layer 1: primitives (raw ramps). Layer 2: semantic roles (what UI uses). Layer 3: store theme (seller-overridable, vetted by the theme service).
+   Components reference ONLY layer 2/3 tokens. Brand values from afrotransact-v2-ui/app/globals.css.
+   The TypeScript object in src/generated/tokens.ts is generated from this file (`pnpm --filter @afrotransact/tokens generate`).
+   Fonts: import "@afrotransact/tokens/fonts.css" (self-hosted Figtree) instead of the Google Fonts @import of the prototype. */
+
+:root {
+  /* ── Primitives ─────────────────────────────── */
+  --at-gold-50:#FFFBE6; --at-gold-100:#FFF4BF; --at-gold-200:#FFEB80; --at-gold-300:#FFE240; --at-gold-400:#FFDA1A;
+  --at-gold-500:#FFD400; --at-gold-600:#E6BF00; --at-gold-700:#B89900; --at-gold-800:#7A6400; --at-gold-900:#4D3F00;
+
+  --at-green-50:#E8F5F0; --at-green-100:#C7E8DC; --at-green-200:#93D2BC; --at-green-300:#57B597; --at-green-400:#23967A;
+  --at-green-500:#0A8264; --at-green-600:#067457; --at-green-700:#055E47; --at-green-800:#044836; --at-green-900:#033226;
+
+  --at-ink-0:#FFFFFF; --at-ink-25:#FCFBF8; --at-ink-50:#F6F4EF; --at-ink-100:#EEEBE4; --at-ink-200:#E0DCD2; --at-ink-300:#C8C3B8;
+  --at-ink-400:#A29D92; --at-ink-500:#7C776D; --at-ink-600:#5D5951; --at-ink-700:#44413B; --at-ink-800:#2D2B27; --at-ink-900:#191816; --at-ink-1000:#000000;
+
+  --at-red-50:#FDEDEC; --at-red-100:#FAD1CE; --at-red-500:#D92D20; --at-red-600:#B42318; --at-red-700:#912018;
+  --at-sand-100:#F6F0E4; --at-sand-200:#EDE3CF; --at-sand-700:#5E4B2C;
+
+  /* ── Third-party brand marks (official colours; used only by brand logos/icons) ── */
+  --at-brand-google-blue:#4285F4; --at-brand-google-red:#EA4335; --at-brand-google-yellow:#FBBC05; --at-brand-google-green:#34A853;
+  --at-brand-facebook:#1877F2; --at-brand-apple:#000000;
+  --at-brand-tiktok:#000000; --at-brand-instagram:#E4405F; --at-brand-facebook-social:#0866FF; --at-brand-x:#000000;
+  --at-brand-youtube:#FF0000; --at-brand-linkedin:#0A66C2; --at-brand-whatsapp:#25D366;
+  --at-brand-on-mark:#FFFFFF; --at-brand-ring-dark:#FFFFFF55;
+
+  /* ── Semantic: surfaces & text ──────────────── */
+  --at-color-canvas: var(--at-ink-0);           /* page ground — pure white */
+  --at-color-surface: var(--at-ink-0);          /* cards, panels */
+  --at-color-surface-muted: var(--at-ink-50);   /* inputs' addon, table header */
+  --at-color-surface-sunken: var(--at-ink-25);
+  --at-color-surface-hover: var(--at-ink-50);
+  --at-color-surface-brand: var(--at-sand-100);
+  --at-color-text: var(--at-ink-900);
+  --at-color-text-muted: var(--at-ink-600);     /* 7.0:1 on surface */
+  --at-color-text-subtle: var(--at-ink-500);    /* 4.6:1 — meta only */
+  --at-color-text-inverse: var(--at-ink-0);
+  --at-color-border: var(--at-ink-200);
+  --at-color-border-strong: var(--at-ink-300);
+  --at-color-overlay: rgb(0 0 0 / .55);
+
+  /* ── Semantic: chrome ───────────────────────── */
+  --at-color-header-bg: var(--at-ink-1000);
+  --at-color-header-text: var(--at-ink-0);
+  --at-color-header-muted: var(--at-ink-300);
+  --at-color-header-hover-ring: var(--at-ink-0);
+  --at-color-subheader-bg: var(--at-ink-900);
+  --at-color-subheader-text: var(--at-ink-0);
+  --at-color-footer-bg: var(--at-ink-900);
+
+  /* ── Semantic: actions ──────────────────────── */
+  --at-color-action-primary: var(--at-gold-500);        /* Add to cart, Search */
+  --at-color-action-primary-hover: var(--at-gold-600);
+  --at-color-action-primary-press: var(--at-gold-700);
+  --at-color-action-primary-text: var(--at-ink-1000);   /* 13.9:1 on gold */
+  --at-color-action-secondary: var(--at-green-600);     /* Buy now, Place order */
+  --at-color-action-secondary-hover: var(--at-green-700);
+  --at-color-action-secondary-text: var(--at-ink-0);    /* 5.8:1 */
+  --at-color-action-neutral: var(--at-ink-0);
+  --at-color-action-neutral-hover: var(--at-ink-50);
+  --at-color-link: var(--at-green-700);
+  --at-color-link-hover: var(--at-green-800);
+  --at-color-focus: var(--at-green-500);
+
+  /* ── Semantic: commerce & status ────────────── */
+  --at-color-price: var(--at-ink-900);
+  --at-color-deal: var(--at-red-600);
+  --at-color-rating: var(--at-gold-500);
+  --at-color-rating-text: var(--at-gold-500);
+  --at-color-in-stock: var(--at-green-700);
+  --at-color-low-stock: var(--at-red-600);
+  --at-color-success: var(--at-green-700);  --at-color-success-bg: var(--at-green-50);
+  --at-color-warning: var(--at-gold-800);   --at-color-warning-bg: var(--at-gold-50);
+  --at-color-danger: var(--at-red-600);     --at-color-danger-bg: var(--at-red-50);
+  --at-color-info: var(--at-ink-700);       --at-color-info-bg: var(--at-ink-100);
+  --at-color-badge-fulfilled-bg: var(--at-green-50);  --at-color-badge-fulfilled-text: var(--at-green-800);
+  --at-color-badge-seller-bg: var(--at-ink-100);      --at-color-badge-seller-text: var(--at-ink-700);
+  --at-color-badge-brand-bg: var(--at-ink-1000);      --at-color-badge-brand-text: var(--at-gold-500);
+  --at-color-badge-ai-bg: var(--at-gold-100);         --at-color-badge-ai-text: var(--at-gold-900);
+  --at-color-cart-badge: var(--at-red-600);           --at-color-cart-badge-text: var(--at-ink-0);
+  --at-color-placeholder-a: var(--at-ink-100);        --at-color-placeholder-b: var(--at-ink-50);
+
+  /* ── Type ───────────────────────────────────── */
+  --at-font-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --at-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --at-text-2xs: 11px; --at-text-xs: 12px; --at-text-sm: 13px; --at-text-md: 14px; --at-text-base: 15px; --at-text-lg: 17px;
+  --at-text-xl: 20px; --at-text-2xl: 24px; --at-text-3xl: 30px; --at-text-4xl: 38px; --at-text-5xl: 52px;
+  --at-weight-regular: 400; --at-weight-medium: 500; --at-weight-semibold: 600; --at-weight-bold: 700; --at-weight-black: 800;
+  --at-leading-tight: 1.2; --at-leading-normal: 1.45; --at-leading-relaxed: 1.6;
+  --at-tracking-tight: -0.015em; --at-tracking-caps: 0.06em;
+
+  /* ── Space, size, radius, elevation ─────────── */
+  --at-space-0:0; --at-space-1:4px; --at-space-2:8px; --at-space-3:12px; --at-space-4:16px; --at-space-5:20px; --at-space-6:24px;
+  --at-space-8:32px; --at-space-10:40px; --at-space-12:48px; --at-space-16:64px;
+  --at-size-control-sm:32px; --at-size-control:40px; --at-size-control-lg:48px; --at-size-touch:44px;
+  --at-page-max:1500px; --at-page-gutter:clamp(12px,2.4vw,32px);
+  --at-radius-xs:4px; --at-radius-sm:6px; --at-radius-md:8px; --at-radius-lg:12px; --at-radius-pill:999px;
+  --at-shadow-sm: 0 1px 2px rgb(25 24 22 / .08);
+  --at-shadow-md: 0 4px 14px rgb(25 24 22 / .12);
+  --at-shadow-lg: 0 16px 40px rgb(25 24 22 / .22);
+  --at-shadow-focus: 0 0 0 3px var(--at-green-200);
+  --at-z-dropdown:20; --at-z-drawer:40; --at-z-dialog:50; --at-z-toast:60;
+  --at-duration-fast:120ms; --at-duration:200ms; --at-ease: cubic-bezier(.2,.7,.2,1);
+
+  /* ── Store theme (seller-overridable; the theme service writes vetted values) ── */
+  --store-primary: var(--at-color-action-primary);
+  --store-primary-hover: var(--at-color-action-primary-hover);
+  --store-on-primary: var(--at-color-action-primary-text);
+  --store-accent: var(--at-color-action-secondary);
+  --store-on-accent: var(--at-color-action-secondary-text);
+  --store-ink: var(--at-color-link);        /* accessible text tone of the brand colour */
+  --store-tint: var(--at-gold-50);
+  --store-surface: var(--at-color-surface);
+  --store-text: var(--at-color-text);
+}
+
+html, body { margin: 0; background: var(--at-color-canvas); color: var(--at-color-text); font-family: var(--at-font-sans); font-size: var(--at-text-base); line-height: var(--at-leading-normal); -webkit-font-smoothing: antialiased; }
+*, *::before, *::after { box-sizing: border-box; }
+a { color: var(--at-color-link); text-decoration: none; }
+a:hover { color: var(--at-color-link-hover); text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
+::selection { background: var(--at-gold-200); }
+button, input, select, textarea { font-family: inherit; }
+
+/* No visible scrollbars anywhere (content still scrolls by wheel, touch, keyboard). No horizontal page scroll. */
+html, body { overflow-x: hidden; }
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+/* Respect reduced-motion preferences everywhere. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
+}

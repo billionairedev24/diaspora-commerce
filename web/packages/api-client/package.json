@@ -1,0 +1,38 @@
+{
+  "name": "@afrotransact/api-client",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Typed gateway-BFF client, Zod schemas, TanStack Query key factories/queryOptions, OpenAPI-generated types and MSW mocks.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./mocks": "./src/mocks/index.ts",
+    "./mocks/runtime": "./src/mocks/runtime.ts",
+    "./mocks/node": "./src/mocks/node.ts",
+    "./generated/gateway-bff": "./src/generated/gateway-bff.ts",
+    "./generated/search": "./src/generated/search.ts"
+  },
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "check:generated": "node scripts/generate.mjs --check",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "libphonenumber-js": "^1.13.15",
+    "msw": "^2.15.0",
+    "zod": "^4.6.5"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.104.0"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.104.1",
+    "@types/node": "^22.19.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  }
+}

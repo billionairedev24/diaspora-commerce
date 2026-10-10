@@ -1,0 +1,32 @@
+{
+  "name": "diaspora-commerce",
+  "private": true,
+  "description": "AfroTransact v2 JavaScript workspace (web apps, shared packages, mobile apps, developer portal)",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "web:dev": "pnpm --filter storefront dev",
+    "web:e2e": "pnpm --filter storefront e2e",
+    "generate:clients": "pnpm --filter @afrotransact/api-client generate"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@next/eslint-plugin-next": "16.4.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-simple-import-sort": "^14.0.0",
+    "eslint-plugin-storybook": "10.6.1",
+    "globals": "^17.13.0",
+    "stylelint": "^17.16.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.71.1"
+  }
+}

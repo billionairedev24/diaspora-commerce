@@ -1,0 +1,97 @@
+/* Badges */
+.badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px var(--at-space-2);
+  border-radius: var(--at-radius-xs);
+  font-size: var(--at-text-2xs);
+  font-weight: var(--at-weight-bold);
+  line-height: var(--at-leading-normal);
+  white-space: nowrap;
+}
+
+.fulfilled { background: var(--at-color-badge-fulfilled-bg); color: var(--at-color-badge-fulfilled-text); }
+.seller { background: var(--at-color-badge-seller-bg); color: var(--at-color-badge-seller-text); font-weight: var(--at-weight-semibold); }
+.brand { background: var(--at-color-badge-brand-bg); color: var(--at-color-badge-brand-text); padding: 1px var(--at-space-2); }
+.ai { background: var(--at-color-badge-ai-bg); color: var(--at-color-badge-ai-text); }
+.neutral { background: var(--at-color-surface-muted); color: var(--at-color-text); }
+.success { background: var(--at-color-success-bg); color: var(--at-color-success); }
+.warning { background: var(--at-color-warning-bg); color: var(--at-color-warning); }
+.danger { background: var(--at-color-danger-bg); color: var(--at-color-danger); }
+
+/* Stars */
+.stars { display: inline-flex; align-items: center; gap: var(--at-space-1); color: var(--at-color-rating-text); font-size: var(--at-text-sm); }
+.starRow { display: inline-flex; color: var(--at-color-rating); }
+.reviews { color: var(--at-color-link); }
+.star { position: relative; display: inline-block; }
+.starTrack { opacity: 0.28; }
+.starFill { position: absolute; inset: 0 auto 0 0; overflow: hidden; }
+
+/* Price */
+.price { display: inline-flex; align-items: flex-start; gap: var(--at-space-2); color: var(--at-color-price); }
+.amount { display: inline-flex; align-items: flex-start; }
+.sup { font-size: var(--at-text-xs); margin-top: 3px; }
+.whole { font-weight: var(--at-weight-semibold); line-height: 1; }
+.p-sm .whole { font-size: var(--at-text-lg); }
+.p-md .whole { font-size: var(--at-text-2xl); }
+.p-lg .whole { font-size: var(--at-text-3xl); }
+.p-xl .whole { font-size: var(--at-text-4xl); }
+.p-lg .sup, .p-xl .sup { font-size: var(--at-text-sm); margin-top: 4px; }
+.list { font-size: var(--at-text-xs); color: var(--at-color-text-muted); margin-top: var(--at-space-2); }
+.deal { font-size: var(--at-text-2xl); color: var(--at-color-deal); font-weight: var(--at-weight-regular); line-height: 1; }
+
+/* Quantity stepper */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--at-size-control-sm);
+  border: 2px solid var(--at-color-action-primary);
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-surface);
+  min-width: 112px;
+}
+
+.stepperBlock { display: flex; width: 100%; }
+.stepper-md { height: var(--at-size-control); }
+
+.stepBtn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 100%;
+  border: 0;
+  background: none;
+  color: var(--at-color-text);
+  cursor: pointer;
+  border-radius: var(--at-radius-pill);
+}
+
+.stepBtn::after { content: ''; position: absolute; inset: -6px -4px; }
+.stepBtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.stepBtn:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 0; }
+.stepValue { font-size: var(--at-text-sm); font-weight: var(--at-weight-bold); text-align: center; padding: 0 var(--at-space-1); white-space: nowrap; }
+
+/* Placeholder image (striped, as in the design until real photography exists) */
+.placeholder {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: repeating-linear-gradient(135deg, var(--at-color-placeholder-a) 0 6px, var(--at-color-placeholder-b) 6px 12px);
+  color: var(--at-ink-600);
+  font-size: var(--at-text-xs);
+  overflow: hidden;
+}
+
+.placeholder img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.placeholderCaption { position: relative; padding: var(--at-space-3); }
+
+/* Skeleton */
+.skeleton { display: block; border-radius: var(--at-radius-sm); background: linear-gradient(90deg, var(--at-ink-100), var(--at-ink-50), var(--at-ink-100)); background-size: 200% 100%; animation: shimmer 1.4s ease-in-out infinite; }
+
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }

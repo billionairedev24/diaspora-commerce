@@ -1,0 +1,91 @@
+.header { background: var(--at-color-header-bg); color: var(--at-color-header-text); }
+.bar { display: flex; align-items: center; gap: var(--at-space-2); padding: var(--at-space-2) var(--at-page-gutter); flex-wrap: nowrap; min-width: 0; }
+
+.chromeBtn {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--at-space-1);
+  min-height: var(--at-size-touch);
+  padding: var(--at-space-1) var(--at-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--at-radius-xs);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  font: inherit;
+}
+
+.chromeBtn:hover { border-color: var(--at-color-header-hover-ring); color: inherit; text-decoration: none; }
+.logoBtn { align-items: center; }
+.locText { display: flex; flex-direction: column; line-height: 1.1; }
+.locSmall { font-size: var(--at-text-xs); color: var(--at-color-header-muted); }
+.locMain { font-size: var(--at-text-md); font-weight: var(--at-weight-bold); white-space: nowrap; max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.lolaLabel { font-size: var(--at-text-md); font-weight: var(--at-weight-bold); white-space: nowrap; }
+.sparkle { color: var(--at-gold-500); }
+.search { flex: 1 1 auto; min-width: 260px; }
+
+.cartIcon { position: relative; display: flex; padding: 6px 8px 0 0; }
+.cartCount {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-cart-badge);
+  color: var(--at-color-cart-badge-text);
+  border: 2px solid var(--at-color-header-bg);
+  font-size: var(--at-text-2xs);
+  font-weight: var(--at-weight-bold);
+  line-height: 16px;
+  text-align: center;
+}
+.cartLabel { font-size: var(--at-text-md); font-weight: var(--at-weight-bold); }
+
+.nav { background: var(--at-color-subheader-bg); }
+.navList { display: flex; align-items: center; gap: var(--at-space-1); margin: 0; padding: var(--at-space-1) var(--at-page-gutter); list-style: none; flex-wrap: wrap; font-size: var(--at-text-md); }
+
+.navItem {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--at-space-1);
+  min-height: 36px;
+  padding: var(--at-space-1) var(--at-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--at-radius-xs);
+  background: none;
+  color: var(--at-color-subheader-text);
+  font: inherit;
+  font-weight: var(--at-weight-medium);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.navItem:hover { border-color: var(--at-color-header-hover-ring); color: var(--at-color-subheader-text); text-decoration: none; }
+.navItem[aria-current='page'] { border-color: var(--at-color-header-hover-ring); }
+.navBold { font-weight: var(--at-weight-bold); }
+.gold { color: var(--at-gold-500); }
+
+/* ≤1100px: hide secondary labels (deliver-to text, "Lola") — header stays one row down to ~900px. */
+@media (max-width: 1100px) {
+  .locText, .lolaLabel { display: none; }
+}
+
+/* <900px: the search box moves to its own full-width row; the department bar scrolls sideways (no scrollbar). */
+@media (max-width: 899px) {
+  .bar { flex-wrap: wrap; }
+  .search { order: 10; flex-basis: 100%; min-width: 0; }
+  .spacer { flex: 1; }
+  .navList { flex-wrap: nowrap; overflow-x: auto; }
+  .cartLabel { display: none; }
+}
+
+@media (max-width: 420px) {
+  .wordmark { display: none; }
+}

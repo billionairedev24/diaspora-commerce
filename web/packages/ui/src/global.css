@@ -1,0 +1,26 @@
+/* Utilities shared by every app that uses @afrotransact/ui (import once after the tokens). */
+.at-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.at-skip-link {
+  position: absolute;
+  left: var(--at-space-2);
+  top: -100px;
+  z-index: var(--at-z-toast);
+  padding: var(--at-space-2) var(--at-space-4);
+  border-radius: var(--at-radius-sm);
+  background: var(--at-color-action-primary);
+  color: var(--at-color-action-primary-text);
+  font-weight: var(--at-weight-bold);
+}
+
+.at-skip-link:focus { top: var(--at-space-2); }
