@@ -1,0 +1,1067 @@
+openapi: 3.1.0
+info:
+  title: Orders API
+  description: Checkout saga on Temporal (cart validation, price and tax snapshot, all-or-nothing stock reservation, PaymentIntent
+    with manual capture, payment wait with compensations), orders split into one shipment per seller and fulfilment node,
+    the shipment state machine with actor rules per fulfilment type, delivery preferences and handover codes, courier events
+    with proof of delivery, capture per shipment and settlement notices.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8104
+  description: local
+- url: https://api.dev.afrotransact.com/orders
+  description: dev
+- url: https://api.uat.afrotransact.com/orders
+  description: uat
+- url: https://api.afrotransact.com/orders
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Checkout
+  description: 'Checkout saga (Temporal): reserve stock, authorise payment, split into shipments'
+- name: Orders
+  description: Your orders, order detail per viewer, customer shipment cancellation, payment split
+- name: Shipments
+  description: 'Shipment state machine: seller queue, status transitions per actor, courier events with proof, tracking, staff
+    search'
+paths:
+  /v1/admin/orders:
+    get:
+      tags:
+      - Shipments
+      summary: Staff order search (orders:read)
+      operationId: search
+      parameters:
+      - name: number
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: customer
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: seller
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: shipmentStatus
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrderPageOrderView'
+  /v1/checkout:
+    post:
+      tags:
+      - Checkout
+      summary: Place an order from the cart
+      description: 'Starts the checkout saga: validate the cart and address (markets switched off block checkout), snapshot
+        prices and tax, reserve AfroTransact stock (all or nothing), create the PaymentIntent (manual capture) and store the
+        order + shipments as pending payment. Returns the client secret to confirm with Stripe; the order is placed when payments
+        reports the authorisation (15 minutes, then everything is released). The same Idempotency-Key returns the same order.
+        POST /v1/orders is an alias used by gateway-bff.'
+      operationId: checkout
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        description: Required; the same key returns the same order
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+        required: true
+      responses:
+        '201':
+          description: Order created; awaiting payment (or already placed)
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CheckoutView'
+        '202':
+          description: Still processing; poll GET /v1/checkout/{orderNumber}
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CheckoutView'
+        '409':
+          description: orders.insufficient-stock / orders.idempotency-key-reused
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: orders.cart-empty, orders.cart-not-checkoutable, orders.market-disabled, orders.address-not-found,
+            orders.invalid-delivery-selection
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /v1/checkout/{orderNumber}:
+    get:
+      tags:
+      - Checkout
+      summary: Checkout status of one of my orders
+      operationId: status
+      parameters:
+      - name: orderNumber
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CheckoutView'
+  /v1/checkout/{orderNumber}/confirm:
+    post:
+      tags:
+      - Checkout
+      summary: I confirmed the payment (Stripe.js / PaymentSheet)
+      description: Orders asks payments for the intent status and continues the saga without waiting for the webhook.
+      operationId: confirm
+      parameters:
+      - name: orderNumber
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CheckoutView'
+  /v1/orders:
+    get:
+      tags:
+      - Orders
+      summary: My orders (newest first)
+      description: Customer token; each order with its shipments, status timeline, tracking and handover codes. Page with
+        limit and the opaque nextCursor.
+      operationId: list
+      parameters:
+      - name: customer
+        in: query
+        description: Only 'me' is supported
+        required: false
+        schema:
+          type: string
+          default: me
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrderPageOrderView'
+    post:
+      tags:
+      - Checkout
+      summary: Place an order from the cart
+      description: 'Starts the checkout saga: validate the cart and address (markets switched off block checkout), snapshot
+        prices and tax, reserve AfroTransact stock (all or nothing), create the PaymentIntent (manual capture) and store the
+        order + shipments as pending payment. Returns the client secret to confirm with Stripe; the order is placed when payments
+        reports the authorisation (15 minutes, then everything is released). The same Idempotency-Key returns the same order.
+        POST /v1/orders is an alias used by gateway-bff.'
+      operationId: checkout_1
+      parameters:
+      - name: Idempotency-Key
+        in: header
+        description: Required; the same key returns the same order
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+        required: true
+      responses:
+        '201':
+          description: Order created; awaiting payment (or already placed)
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CheckoutView'
+        '202':
+          description: Still processing; poll GET /v1/checkout/{orderNumber}
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CheckoutView'
+        '409':
+          description: orders.insufficient-stock / orders.idempotency-key-reused
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: orders.cart-empty, orders.cart-not-checkoutable, orders.market-disabled, orders.address-not-found,
+            orders.invalid-delivery-selection
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+  /v1/orders/{number}:
+    get:
+      tags:
+      - Orders
+      summary: One order (by number or id)
+      description: The customer sees their own order with handover codes; a seller organisation only its own shipments (totals
+        of those); staff with orders:read everything except the codes.
+      operationId: get
+      parameters:
+      - name: number
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrderView'
+  /v1/orders/{number}/payment-split:
+    get:
+      tags:
+      - Orders
+      summary: 'Payment split of an order (staff: all recipients; seller: own row)'
+      description: 'One charge, many recipients: items, shipping, tax, commission, FBA fees, Stripe fee share and net per
+        recipient, from payments-service.'
+      operationId: split
+      parameters:
+      - name: number
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Split'
+  /v1/orders/{number}/shipments/{shipmentId}/cancel:
+    post:
+      tags:
+      - Orders
+      summary: Cancel one shipment of my order (until it is packed)
+      description: Refunds or releases the shipment's amount and stock (captured shipments are refunded).
+      operationId: cancel
+      parameters:
+      - name: number
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: shipmentId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelShipmentRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrderView'
+  /v1/seller/shipments:
+    get:
+      tags:
+      - Shipments
+      summary: Seller shipment queue
+      description: 'Shipments of the caller''s organisation (staff: name it with org), newest first.'
+      operationId: sellerQueue
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: org
+        in: query
+        description: 'Staff only: seller organisation'
+        required: false
+        schema:
+          type: string
+      - name: cursor
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrderPageSellerShipmentView'
+  /v1/shipments/stream:
+    get:
+      tags:
+      - Shipments
+      summary: Live shipment status changes (server-sent events)
+      description: Staff with orders:read receive every transition; sellers only their organisation's. Event name shipment.status_changed;
+        driver and carrier updates appear within a second of commit.
+      operationId: stream
+      responses:
+        '200':
+          description: OK
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/SseEmitter'
+  /v1/shipments/{id}/courier-events:
+    post:
+      tags:
+      - Shipments
+      summary: Driver-app event (AfroTransact Delivery)
+      description: DRIVER principal with delivery:operate. Delivered needs a photo and a handover method; handing to the customer
+        checks their 4-digit code when one is required; a safe place is refused for perishables and hand-delivery orders.
+        Out-of-order events never move a shipment backwards; replays of the same eventId are ignored.
+      operationId: courier
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CourierEventRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ShipmentActionResult'
+  /v1/shipments/{id}/delivery-brief:
+    get:
+      tags:
+      - Shipments
+      summary: Stop details for the driver app (address, instructions, perishable, code needed)
+      operationId: brief
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/DeliveryBrief'
+  /v1/shipments/{id}/tracking:
+    post:
+      tags:
+      - Shipments
+      summary: Record the carrier label of a carrier shipment (seller or staff)
+      description: carrier.tracking.updated events are matched by label reference (shipment id) or by carrier + tracking number.
+      operationId: tracking
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TrackingRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrderView'
+  /v1/shipments/{id}/transitions:
+    post:
+      tags:
+      - Shipments
+      summary: Move a shipment to another status
+      description: 'Seller-fulfilled: only the seller confirms, packs and marks ready; platform admins may confirm delivery,
+        record a failure, process returns or cancel — never packed. AfroTransact-fulfilled: admins and fulfilment ops own
+        every step. Refusals: 403 orders.transition-forbidden (not this actor''s step) or 409 orders.invalid-transition. The
+        optional Idempotency-Key makes retries safe (same key = same result).'
+      operationId: transition
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: false
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransitionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ShipmentActionResult'
+components:
+  schemas:
+    TransitionRequest:
+      type: object
+      description: Move a shipment to the next status
+      properties:
+        to:
+          type: string
+          description: confirmed | packed | ready | picked_up | in_transit | out_for_delivery | delivered | delivery_failed
+            | returned | cancelled
+          minLength: 1
+        reason:
+          type: string
+          description: Required for cancelled and delivery_failed
+          maxLength: 500
+          minLength: 0
+      required:
+      - to
+    DeliveryPreferences:
+      type: object
+      properties:
+        handover:
+          type: string
+          enum:
+          - HAND
+          - DOOR
+          - DESK
+        safePlace:
+          type: string
+        instructions:
+          type: string
+        contact:
+          type: string
+          enum:
+          - TEXT
+          - CALL
+          - NONE
+    LineView:
+      type: object
+      properties:
+        id:
+          type: string
+        lineNo:
+          type: integer
+          format: int32
+        variantAtin:
+          type: string
+        productAtin:
+          type: string
+        title:
+          type: string
+        imageUrl:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        unitPriceMinor:
+          type: integer
+          format: int64
+        itemsMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        discountMinor:
+          type: integer
+          format: int64
+        category:
+          type: string
+        perishable:
+          type: boolean
+        taxJurisdiction:
+          type: string
+    OrderView:
+      type: object
+      properties:
+        id:
+          type: string
+        orderNumber:
+          type: string
+        status:
+          type: string
+        customerId:
+          type: string
+        placedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        discountMinor:
+          type: integer
+          format: int64
+        totalMinor:
+          type: integer
+          format: int64
+        shipTo:
+          type: string
+        shippingAddress:
+          $ref: '#/components/schemas/ShipTo'
+        cancelReason:
+          type: string
+        paymentId:
+          type: string
+        partial:
+          type: boolean
+        shipments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentView'
+    ShipTo:
+      type: object
+      properties:
+        addressId:
+          type: string
+        fullName:
+          type: string
+        phone:
+          type: string
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+        instructions:
+          type: string
+    ShipmentActionResult:
+      type: object
+      properties:
+        outcome:
+          type: string
+        note:
+          type: string
+        order:
+          $ref: '#/components/schemas/OrderView'
+    ShipmentView:
+      type: object
+      properties:
+        id:
+          type: string
+        shipmentId:
+          type: string
+        seq:
+          type: integer
+          format: int32
+        label:
+          type: string
+        sellerOrgId:
+          type: string
+        sellerName:
+          type: string
+        fulfilmentType:
+          type: string
+        nodeId:
+          type: string
+        deliveryMethod:
+          type: string
+        serviceLevel:
+          type: string
+        pickupLocationId:
+          type: string
+        preferences:
+          $ref: '#/components/schemas/DeliveryPreferences'
+        perishable:
+          type: boolean
+        handoverRequired:
+          type: boolean
+        handoverCode:
+          type: string
+        status:
+          type: string
+        items:
+          type: string
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        totalMinor:
+          type: integer
+          format: int64
+        carrier:
+          type: string
+        trackingNumber:
+          type: string
+        promisedFrom:
+          type: string
+          format: date
+        promisedBy:
+          type: string
+          format: date
+        deliveredAt:
+          type: string
+          format: date-time
+        captured:
+          type: boolean
+        cancellable:
+          type: boolean
+        nextActions:
+          type: array
+          items:
+            type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineView'
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/TimelineEntry'
+    TimelineEntry:
+      type: object
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+        actorType:
+          type: string
+        source:
+          type: string
+        reason:
+          type: string
+        at:
+          type: string
+          format: date-time
+    TrackingRequest:
+      type: object
+      description: Carrier label of a seller-fulfilled carrier shipment
+      properties:
+        carrier:
+          type: string
+          description: usps | ups | fedex | dhl
+          minLength: 1
+        trackingNumber:
+          type: string
+          maxLength: 80
+          minLength: 0
+      required:
+      - carrier
+      - trackingNumber
+    CourierEventRequest:
+      type: object
+      description: Driver-app event with proof (queued offline, own id)
+      properties:
+        eventId:
+          type: string
+          description: Unique id from the driver app; replays are ignored
+          minLength: 1
+        status:
+          type: string
+          description: picked_up | in_transit | out_for_delivery | delivered | delivery_failed | returned
+          minLength: 1
+        occurredAt:
+          type: string
+          format: date-time
+        proof:
+          $ref: '#/components/schemas/CourierProof'
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - eventId
+      - status
+    CourierProof:
+      type: object
+      properties:
+        photoAssetId:
+          type: string
+          description: Media asset of the proof photo
+        handoverMethod:
+          type: string
+          description: customer | someone_else | safe_place
+        handoverCode:
+          type: string
+          description: Customer's 4-digit code (handed to the customer)
+        recipientName:
+          type: string
+        relationship:
+          type: string
+        signatureAssetId:
+          type: string
+        safePlace:
+          type: string
+        failureReason:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+    CancelShipmentRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+    CheckoutView:
+      type: object
+      properties:
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        status:
+          type: string
+        clientSecret:
+          type: string
+        paymentClientSecret:
+          type: string
+        totalMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        shipments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shipment'
+    Shipment:
+      type: object
+      properties:
+        shipmentId:
+          type: string
+        label:
+          type: string
+        eta:
+          type: string
+        promisedBy:
+          type: string
+          format: date
+        deliveryMethod:
+          type: string
+        deliveryCode:
+          type: string
+    CheckoutLine:
+      type: object
+      properties:
+        variantAtin:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          format: int32
+        packageId:
+          type: string
+      required:
+      - variantAtin
+    CheckoutRequest:
+      type: object
+      description: Place the order for the selected cart lines
+      properties:
+        addressId:
+          type: string
+          description: Saved address id from the identity address book
+          minLength: 1
+        deliverySelections:
+          type: array
+          description: Delivery choice per cart package (<sellerOrgId>:<fulfilment>)
+          items:
+            $ref: '#/components/schemas/DeliverySelection'
+        lines:
+          type: array
+          description: Cart lines to buy; omit to buy every available line
+          items:
+            $ref: '#/components/schemas/CheckoutLine'
+        paymentMethodId:
+          type: string
+          description: Saved Stripe payment method (confirmed client-side)
+        wallet:
+          type: string
+          description: apple_pay | google_pay | link
+        gift:
+          type: boolean
+      required:
+      - addressId
+    DeliverySelection:
+      type: object
+      properties:
+        packageId:
+          type: string
+          minLength: 1
+        option:
+          type: string
+          description: carrier | express | afrotransact_delivery | pickup
+        serviceLevel:
+          type: string
+          description: standard | express | local | pickup; derived from option when omitted
+        pickupPointId:
+          type: string
+          description: Pickup point (pickup only)
+        preferences:
+          $ref: '#/components/schemas/DeliveryPreferences'
+      required:
+      - packageId
+    ProblemDetail:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri
+        properties:
+          type: object
+          additionalProperties: {}
+    DeliveryBrief:
+      type: object
+      properties:
+        shipmentId:
+          type: string
+        orderNumber:
+          type: string
+        status:
+          type: string
+        shipTo:
+          $ref: '#/components/schemas/ShipTo'
+        preferences:
+          $ref: '#/components/schemas/DeliveryPreferences'
+        perishable:
+          type: boolean
+        handoverRequired:
+          type: boolean
+        safePlaceAllowed:
+          type: boolean
+        units:
+          type: integer
+          format: int32
+        sellerName:
+          type: string
+        nodeId:
+          type: string
+    SseEmitter:
+      type: object
+      properties:
+        timeout:
+          type: integer
+          format: int64
+    OrderPageSellerShipmentView:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellerShipmentView'
+        nextCursor:
+          type: string
+        total:
+          type: integer
+          format: int64
+    SellerShipmentView:
+      type: object
+      properties:
+        orderNumber:
+          type: string
+        orderStatus:
+          type: string
+        placedAt:
+          type: string
+          format: date-time
+        shipTo:
+          $ref: '#/components/schemas/ShipTo'
+        shipment:
+          $ref: '#/components/schemas/ShipmentView'
+    OrderPageOrderView:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderView'
+        nextCursor:
+          type: string
+        total:
+          type: integer
+          format: int64
+    Recipient:
+      type: object
+      properties:
+        recipient:
+          type: string
+        kind:
+          type: string
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        commissionMinor:
+          type: integer
+          format: int64
+        fbaFeesMinor:
+          type: integer
+          format: int64
+        stripeFeeMinor:
+          type: integer
+          format: int64
+        netMinor:
+          type: integer
+          format: int64
+    Split:
+      type: object
+      properties:
+        orderId:
+          type: string
+        chargeMinor:
+          type: integer
+          format: int64
+        stripeFeeMinor:
+          type: integer
+          format: int64
+        taxCollectedMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        recipients:
+          type: array
+          items:
+            $ref: '#/components/schemas/Recipient'
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

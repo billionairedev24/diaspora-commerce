@@ -1,0 +1,178 @@
+# AsyncAPI 3.0 fragment for orders-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  ordersOrderEvents:
+    address: at.order.events
+    description: >-
+      Order and shipment lifecycle from orders-service, written to its transactional outbox in the same transaction as
+      the change (key = order id, so one order's events stay in order). Headers event-id, event-type, occurred-at;
+      consumers de-duplicate on event-id. Shipment statuses use the wire names of the state machine (placed,
+      confirmed, packed, ready, picked_up, in_transit, out_for_delivery, delivered, delivery_failed, returned,
+      cancelled).
+    messages:
+      ordersOrderPlaced: {$ref: '#/components/messages/ordersOrderPlaced'}
+      ordersOrderCancelled: {$ref: '#/components/messages/ordersOrderCancelled'}
+      ordersShipmentStatusChanged: {$ref: '#/components/messages/ordersShipmentStatusChanged'}
+      ordersShipmentDelivered: {$ref: '#/components/messages/ordersShipmentDelivered'}
+      ordersShipmentCancelled: {$ref: '#/components/messages/ordersShipmentCancelled'}
+operations:
+  publishOrdersOrderEvents:
+    action: send
+    channel: {$ref: '#/channels/ordersOrderEvents'}
+    summary: >-
+      orders-service publishes order placement / cancellation and every applied shipment transition. Notifications map
+      them to templates (order confirmation, shipped, out for delivery, delivered, cancelled), payments and finance
+      follow deliveries and cancellations, the indexer keeps sales stats, tax-returns reads delivered lines for RMAs.
+  receiveOrdersPaymentEvents:
+    action: receive
+    channel: {$ref: '#/channels/paymentsPaymentEvents'}
+    summary: >-
+      orders consumes payments.intent.succeeded / failed / canceled (inbox-deduplicated) and signals the checkout saga
+      waiting for the authorisation.
+  receiveOrdersCarrierEvents:
+    action: receive
+    channel: {$ref: '#/channels/carrierShipmentEvents'}
+    summary: >-
+      orders consumes carrier.tracking.updated (inbox-deduplicated, idempotent per carrier event id) and applies the
+      transit steps to carrier shipments; scans older than the last applied one are ignored.
+components:
+  messages:
+    ordersOrderPlaced:
+      name: orders.order.placed
+      title: 'Payment authorised: the order is placed and split into shipments'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OrdersOrderPlaced'}
+    ordersOrderCancelled:
+      name: orders.order.cancelled
+      title: 'Checkout voided (wasPlaced=false) or every shipment of a placed order cancelled'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OrdersOrderCancelled'}
+    ordersShipmentStatusChanged:
+      name: orders.shipment.status_changed
+      title: 'A shipment moved through the state machine (actor, source and reason recorded)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OrdersShipmentStatusChanged'}
+    ordersShipmentDelivered:
+      name: orders.shipment.delivered
+      title: 'A shipment was delivered (carrier scan, driver proof or admin confirmation)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OrdersShipmentDelivered'}
+    ordersShipmentCancelled:
+      name: orders.shipment.cancelled
+      title: 'One shipment of a placed order was cancelled (refund or release follows)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/OrdersShipmentCancelled'}
+  schemas:
+    OrdersShipmentStatus:
+      type: string
+      enum: [pending_payment, placed, confirmed, packed, ready, picked_up, in_transit, out_for_delivery,
+             delivery_failed, delivered, returned, cancelled]
+    OrdersOrderPlaced:
+      type: object
+      required: [orderId, orderNumber, customerId, currency, itemsMinor, shippingMinor, taxMinor, discountMinor,
+                 totalMinor, placedAt, shipments]
+      properties:
+        orderId: {type: string, format: uuid}
+        orderNumber: {type: string, examples: [AT-2026-7KQ3MD]}
+        customerId: {type: string, description: identity subject of the shopper}
+        currency: {type: string, examples: [USD]}
+        itemsMinor: {type: integer, format: int64}
+        shippingMinor: {type: integer, format: int64}
+        taxMinor: {type: integer, format: int64}
+        discountMinor: {type: integer, format: int64}
+        totalMinor: {type: integer, format: int64, description: items + shipping + tax − discount}
+        placedAt: {type: string, format: date-time}
+        shipToCity: {type: [string, 'null']}
+        shipToState: {type: [string, 'null']}
+        shipToPostalCode: {type: [string, 'null']}
+        shipToCountry: {type: [string, 'null']}
+        shipments:
+          type: array
+          items:
+            type: object
+            required: [shipmentId, sellerOrgId, fulfilmentType, deliveryMethod, totalMinor, lines]
+            properties:
+              shipmentId: {type: string, format: uuid}
+              sellerOrgId: {type: string}
+              sellerName: {type: [string, 'null']}
+              fulfilmentType: {type: string, enum: [SELLER_FULFILLED, FBA_AFROTRANSACT, RETAIL_1P]}
+              deliveryMethod: {type: string, enum: [CARRIER, AFROTRANSACT_DELIVERY, PICKUP]}
+              serviceLevel: {type: [string, 'null'], examples: [standard, express, local, pickup]}
+              promisedBy: {type: [string, 'null'], format: date}
+              handoverRequired: {type: boolean, description: The customer must give the driver their 4-digit code}
+              totalMinor: {type: integer, format: int64}
+              lines:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    lineId: {type: string, format: uuid}
+                    variantAtin: {type: string}
+                    title: {type: [string, 'null']}
+                    quantity: {type: integer}
+                    unitPriceMinor: {type: integer, format: int64}
+                    taxMinor: {type: integer, format: int64}
+    OrdersOrderCancelled:
+      type: object
+      required: [orderId, orderNumber, customerId, code, wasPlaced, cancelledAt]
+      properties:
+        orderId: {type: string, format: uuid}
+        orderNumber: {type: string}
+        customerId: {type: string}
+        code:
+          type: string
+          description: >-
+            Checkout failure code (orders.insufficient-stock, orders.payment-failed, orders.payment-timeout,
+            orders.market-disabled …) or orders.all-shipments-cancelled
+        reason: {type: [string, 'null']}
+        wasPlaced: {type: boolean, description: false when the checkout never completed (no notification to send)}
+        cancelledAt: {type: string, format: date-time}
+    OrdersShipmentStatusChanged:
+      type: object
+      required: [orderId, orderNumber, customerId, shipmentId, sellerOrgId, fulfilmentType, deliveryMethod, to,
+                 actorType, actorId, source, occurredAt]
+      properties:
+        orderId: {type: string, format: uuid}
+        orderNumber: {type: string}
+        customerId: {type: string}
+        shipmentId: {type: string, format: uuid}
+        sellerOrgId: {type: string}
+        fulfilmentType: {type: string, enum: [SELLER_FULFILLED, FBA_AFROTRANSACT, RETAIL_1P]}
+        deliveryMethod: {type: string, enum: [CARRIER, AFROTRANSACT_DELIVERY, PICKUP]}
+        from: {$ref: '#/components/schemas/OrdersShipmentStatus'}
+        to: {$ref: '#/components/schemas/OrdersShipmentStatus'}
+        actorType: {type: string, enum: [CUSTOMER, SELLER, PLATFORM_ADMIN, FULFILMENT_OPS, CARRIER, COURIER, SYSTEM]}
+        actorId: {type: string}
+        source: {type: string, enum: [api, carrier, driver, system]}
+        reason: {type: [string, 'null']}
+        occurredAt: {type: string, format: date-time}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
+        promisedBy: {type: [string, 'null'], format: date}
+    OrdersShipmentDelivered:
+      type: object
+      required: [orderId, orderNumber, customerId, shipmentId, sellerOrgId, deliveredAt, totalMinor, lineIds, source]
+      properties:
+        orderId: {type: string, format: uuid}
+        orderNumber: {type: string}
+        customerId: {type: string}
+        shipmentId: {type: string, format: uuid}
+        sellerOrgId: {type: string}
+        deliveredAt: {type: string, format: date-time}
+        totalMinor: {type: integer, format: int64}
+        lineIds: {type: array, items: {type: string, format: uuid}}
+        source: {type: string, enum: [api, carrier, driver, system]}
+    OrdersShipmentCancelled:
+      type: object
+      required: [orderId, orderNumber, customerId, shipmentId, sellerOrgId, actorType, captured, totalMinor,
+                 cancelledAt]
+      properties:
+        orderId: {type: string, format: uuid}
+        orderNumber: {type: string}
+        customerId: {type: string}
+        shipmentId: {type: string, format: uuid}
+        sellerOrgId: {type: string}
+        actorType: {type: string, enum: [CUSTOMER, PLATFORM_ADMIN, FULFILMENT_OPS, SYSTEM]}
+        reason: {type: [string, 'null']}
+        captured: {type: boolean, description: true → payments refunds the lines; false → authorisation / stock released}
+        totalMinor: {type: integer, format: int64}
+        cancelledAt: {type: string, format: date-time}

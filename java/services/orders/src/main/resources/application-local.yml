@@ -1,0 +1,9 @@
+# Local developer profile: docker compose stack from infra/local (Temporal on localhost:7233, UI on 8088),
+# security off, human-readable logs.
+at:
+  security:
+    enabled: false
+logging:
+  level:
+    com.afrotransact: DEBUG
+    io.temporal: INFO

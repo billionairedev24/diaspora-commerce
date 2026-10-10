@@ -1,0 +1,28 @@
+# Shared dev cluster: per-PR preview namespaces; API reference pages on. Temporal Cloud namespace per environment
+# (e.g. afrotransact-dev.<account>) with mTLS client certificates from the secret store.
+spring:
+  temporal:
+    connection:
+      target: ${TEMPORAL_TARGET}
+      mtls:
+        cert-chain: ${TEMPORAL_TLS_CERT}
+        key: ${TEMPORAL_TLS_KEY}
+    namespace: ${TEMPORAL_NAMESPACE:afrotransact-dev}
+at:
+  api-docs:
+    enabled: true
+  orders:
+    handover:
+      key: ${HANDOVER_CODE_KEY}
+    upstreams:
+      cart-url: ${CART_URL:http://cart}
+      identity-url: ${IDENTITY_URL:http://identity}
+      inventory-url: ${INVENTORY_URL:http://inventory}
+      payments-url: ${PAYMENTS_URL:http://payments}
+      promise-url: ${PROMISE_URL:http://promise}
+      content-url: ${CONTENT_URL:http://content}
+      catalog-url: ${CATALOG_URL:http://catalog}
+management:
+  tracing:
+    sampling:
+      probability: 1.0

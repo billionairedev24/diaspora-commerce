@@ -1,0 +1,172 @@
+# AsyncAPI 3.0 fragment for bookings-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  bookingsEvents:
+    address: at.bookings.events
+    description: >-
+      Booking lifecycle (key = booking id, so one booking's events stay in order) and service changes (key = service
+      id) from bookings-service. Headers event-id, event-type, occurred-at; consumers de-duplicate on event-id.
+      Booking payloads follow notifications' convention (recipient block + template fields).
+    messages:
+      bookingsRequested: {$ref: '#/components/messages/bookingsRequested'}
+      bookingsConfirmed: {$ref: '#/components/messages/bookingsConfirmed'}
+      bookingsDeclined: {$ref: '#/components/messages/bookingsDeclined'}
+      bookingsExpired: {$ref: '#/components/messages/bookingsExpired'}
+      bookingsCancelled: {$ref: '#/components/messages/bookingsCancelled'}
+      bookingsRescheduleRequested: {$ref: '#/components/messages/bookingsRescheduleRequested'}
+      bookingsTimeProposed: {$ref: '#/components/messages/bookingsTimeProposed'}
+      bookingsRescheduled: {$ref: '#/components/messages/bookingsRescheduled'}
+      bookingsCompleted: {$ref: '#/components/messages/bookingsCompleted'}
+      bookingsNoShow: {$ref: '#/components/messages/bookingsNoShow'}
+      bookingsServiceUpserted: {$ref: '#/components/messages/bookingsServiceUpserted'}
+  bookingsPaymentEvents:
+    address: at.payment.events
+    description: >-
+      payments-service intent events bookings consumes (consumer group bookings-service, inbox consumer
+      bookings.payment-events). Only orders whose id is a booking reference (BK-…) are used.
+    messages:
+      bookingsPaymentIntentSucceeded: {$ref: '#/components/messages/paymentsIntentSucceeded'}
+      bookingsPaymentIntentFailed: {$ref: '#/components/messages/paymentsIntentFailed'}
+  bookingsSellerComplianceEvents:
+    address: at.seller-compliance.events
+    description: >-
+      seller-service enforcement bookings consumes (inbox consumer bookings.seller-compliance): hidden organisations'
+      services and slots disappear from /v1/public/** and cannot be booked until restored. Stale events (older
+      occurredAt than the last applied) are ignored.
+    messages:
+      bookingsSellerListingsHidden: {$ref: '#/components/messages/sellerListingsHidden'}
+      bookingsSellerListingsRestored: {$ref: '#/components/messages/sellerListingsRestored'}
+operations:
+  publishBookingsEvents:
+    action: send
+    channel: {$ref: '#/channels/bookingsEvents'}
+    summary: >-
+      bookings-service publishes via its transactional outbox. notifications sends booking.confirmed to the customer;
+      search indexes booking.service.upserted.
+  consumeBookingsPaymentEvents:
+    action: receive
+    channel: {$ref: '#/channels/bookingsPaymentEvents'}
+    summary: >-
+      payments.intent.succeeded → the deposit is authorised: PENDING_PAYMENT becomes REQUESTED (or CONFIRMED with the
+      deposit captured for instant-booking providers); payments.intent.failed records the failure (slot stays held).
+  consumeBookingsSellerComplianceEvents:
+    action: receive
+    channel: {$ref: '#/channels/bookingsSellerComplianceEvents'}
+    summary: seller.listings.hidden hides the provider's services from public reads; seller.listings.restored restores them.
+components:
+  messages:
+    bookingsRequested:
+      name: booking.requested
+      title: Deposit authorised; waiting for the provider (expires after the request SLA, 4 h)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsConfirmed:
+      name: booking.confirmed
+      title: Confirmed by the provider or automatically (instant booking); deposit captured
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsDeclined:
+      name: booking.declined
+      title: Declined by the provider; deposit hold released
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsExpired:
+      name: booking.expired
+      title: Unanswered request or unpaid slot hold expired; authorisation released
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsCancelled:
+      name: booking.cancelled
+      title: Cancelled by the customer (policy refund) or the provider (full refund, late fee under 24 h)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsRescheduleRequested:
+      name: booking.reschedule_requested
+      title: The customer asked for a new time; the provider decides
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsTimeProposed:
+      name: booking.time_proposed
+      title: The provider proposed a new time; the customer accepts or declines
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsRescheduled:
+      name: booking.rescheduled
+      title: The appointment moved to a new time
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsCompleted:
+      name: booking.completed
+      title: Appointment completed (by the provider or automatically 48 h after); balance charged, settlement hold started
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsNoShow:
+      name: booking.no_show
+      title: Customer didn't show; deposit kept (or full price per policy)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsBookingEvent'}
+    bookingsServiceUpserted:
+      name: booking.service.upserted
+      title: A provider's service was created or changed (key = service id)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/BookingsServiceEvent'}
+  schemas:
+    BookingsBookingEvent:
+      type: object
+      required: [recipient, firstName, serviceName, providerName, startsAt, location, bookingReference, manageUrl,
+                 bookingId, orgId, memberId, serviceId, status, startAt, endAt, priceMinor, depositMinor, currency, policy]
+      properties:
+        recipient:
+          type: object
+          description: The customer (notifications' recipient block).
+          properties:
+            id: {type: string, description: Customer id (token subject)}
+            email: {type: [string, 'null']}
+            phone: {type: [string, 'null']}
+            timeZone: {type: string, description: Provider's IANA zone}
+        firstName: {type: string}
+        serviceName: {type: string}
+        providerName: {type: string}
+        startsAt: {type: string, description: 'Formatted in the provider zone, e.g. "Sat, Oct 17 · 10:00 AM"'}
+        location: {type: string}
+        bookingReference: {type: string, examples: [BK-24018]}
+        manageUrl: {type: string, format: uri}
+        bookingId: {type: string, format: uuid}
+        orgId: {type: string}
+        memberId: {type: string, format: uuid}
+        serviceId: {type: string, format: uuid}
+        status:
+          type: string
+          enum: [PENDING_PAYMENT, REQUESTED, CONFIRMED, RESCHEDULE_REQUESTED, RESCHEDULE_PROPOSED, COMPLETED, NO_SHOW,
+                 DECLINED, EXPIRED, CANCELLED_CUSTOMER, CANCELLED_PROVIDER]
+        previousStatus: {type: [string, 'null']}
+        startAt: {type: string, format: date-time}
+        endAt: {type: string, format: date-time}
+        proposedStartAt: {type: [string, 'null'], format: date-time}
+        priceMinor: {type: integer, format: int64, description: Minor units (cents), add-ons included}
+        depositMinor: {type: integer, format: int64}
+        currency: {type: string, examples: [USD]}
+        policy: {type: string, enum: [FLEXIBLE, MODERATE, STRICT, CUSTOM]}
+        refundedMinor: {type: integer, format: int64}
+        providerFeeMinor: {type: integer, format: int64, description: Late provider-cancellation fee}
+        reason: {type: [string, 'null']}
+        cancelledBy: {type: [string, 'null'], enum: [CUSTOMER, PROVIDER, SYSTEM, null]}
+    BookingsServiceEvent:
+      type: object
+      required: [serviceId, orgId, name, category, durationMinutes, priceMinor, depositMinor, currency, modes, active]
+      properties:
+        serviceId: {type: string, format: uuid}
+        orgId: {type: string}
+        name: {type: string}
+        description: {type: string}
+        category: {type: string}
+        durationMinutes: {type: integer}
+        priceMinor: {type: integer, format: int64}
+        depositMinor: {type: integer, format: int64}
+        currency: {type: string}
+        modes:
+          type: array
+          items: {type: string, enum: [IN_PERSON, AT_HOME, VIRTUAL]}
+        addOns:
+          type: array
+          items: {type: string}
+        active: {type: boolean}

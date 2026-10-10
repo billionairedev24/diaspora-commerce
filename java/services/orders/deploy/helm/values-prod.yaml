@@ -1,0 +1,26 @@
+env: prod
+replicas: 3
+autoscaling:
+  enabled: true
+  min: 3
+  max: 12
+  cpu: 70
+rollout:
+  enabled: true
+resources:
+  requests: {cpu: 500m, memory: 1Gi}
+  limits: {memory: 2Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "0.1"
+tolerations: []
+# Temporal Cloud: one namespace per environment (<namespace>.<account>); mTLS cert/key come from the secret store
+# (TEMPORAL_TLS_CERT / TEMPORAL_TLS_KEY). Override TEMPORAL_TARGET / TEMPORAL_NAMESPACE with the account suffix in
+# infra/argocd/envs/prod/platform-values.yaml if it differs.
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.afrotransact.com
+  RETAIL_ORG_ID: org_afrotransact_retail
+  ORDERS_ZONE: America/Chicago
+  TEMPORAL_NAMESPACE: afrotransact-prod
+  TEMPORAL_TARGET: afrotransact-prod.tmprl.cloud:7233
+  CHECKOUT_PAYMENT_TIMEOUT: 15m

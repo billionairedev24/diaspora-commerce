@@ -1,0 +1,67 @@
+package com.afrotransact.orders.config;
+
+import java.util.Set;
+
+import com.afrotransact.orders.application.OrdersSettings;
+import com.afrotransact.orders.domain.CourierProofPolicy;
+import com.afrotransact.orders.domain.DefaultCourierProofPolicy;
+import com.afrotransact.orders.domain.DefaultHandoverPolicy;
+import com.afrotransact.orders.domain.DefaultOrderNumberGenerator;
+import com.afrotransact.orders.domain.DefaultShipmentTransitionPolicy;
+import com.afrotransact.orders.domain.DefaultShippingPolicy;
+import com.afrotransact.orders.domain.HandoverPolicy;
+import com.afrotransact.orders.domain.OrderNumberGenerator;
+import com.afrotransact.orders.domain.ShipmentTransitionPolicy;
+import com.afrotransact.orders.domain.ShippingPolicy;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
+
+/** Explicit wiring of the framework-free domain policies and settings. */
+@Configuration(proxyBeanMethods = false)
+@EnableConfigurationProperties(OrdersProperties.class)
+class OrdersConfiguration {
+
+    @Bean
+    ShipmentTransitionPolicy shipmentTransitionPolicy() {
+        return new DefaultShipmentTransitionPolicy();
+    }
+
+    @Bean
+    HandoverPolicy handoverPolicy() {
+        return new DefaultHandoverPolicy();
+    }
+
+    @Bean
+    CourierProofPolicy courierProofPolicy(HandoverPolicy handover) {
+        return new DefaultCourierProofPolicy(handover);
+    }
+
+    @Bean
+    OrderNumberGenerator orderNumberGenerator() {
+        return new DefaultOrderNumberGenerator();
+    }
+
+    @Bean
+    ShippingPolicy shippingPolicy(OrdersProperties props) {
+        OrdersProperties.Shipping s = props.shipping();
+        return new DefaultShippingPolicy(new DefaultShippingPolicy.Rates(s.carrierStandardMinor(),
+                s.carrierExpressMinor(), s.freeCarrierAboveMinor(), s.deliveryMinor(), s.freeDeliveryAboveMinor(),
+                s.standardDays(), s.expressDays(), s.deliveryDays(), s.pickupDays()));
+    }
+
+    @Bean
+    OrdersSettings ordersSettings(OrdersProperties props) {
+        return new OrdersSettings(props.retailOrgId(), props.paymentTimeout(),
+                props.checkoutResponseTimeout(), Set.copyOf(props.perishableTypes()), props.commissionCategories(),
+                props.jobs().followUpBatch(), props.jobs().followUpMaxAttempts(), props.zone());
+    }
+
+    @Bean
+    TransactionOperations ordersTransactions(PlatformTransactionManager transactionManager) {
+        return new TransactionTemplate(transactionManager);
+    }
+}

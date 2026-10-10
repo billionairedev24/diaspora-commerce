@@ -171,7 +171,7 @@
 "S046","Story","Checkout saga (Temporal) with compensations","Validate cart → reserve inventory → PaymentIntent (manual capture) → order + shipments → confirm.","- Each step has a compensation (release reservation, cancel intent, void order)
 - Idempotency-Key on placeOrder returns the same order on retry
 - A failed payment releases reservations within 1 minute
-- Cart is cleared after a successful order","E06","","Highest","13","checkout java temporal","checkout","To Do"
+- Cart is cleared after a successful order","E06","","Highest","13","checkout java temporal","checkout","Done"
 "S047","Story","Three-step checkout UI (address, payment, items & delivery)","Each step folds to a summary with Change; order summary stays on the right.","- Saved addresses and payment methods load by default
 - Add address opens a dialog with address autocomplete
 - Add payment method supports card and US bank (ACH) via Stripe Elements
@@ -184,7 +184,7 @@
 "S049","Story","Delivery promise service","Delivery dates per ZIP from FC cutoffs, carrier SLAs and seller handling time.","- Promise shown on cards, PDP, cart and checkout
 - The promise is stored on the order and measured against actual delivery","E06","","High","5","checkout go","checkout","Done"
 "S050","Story","Deactivated markets block delivery","Entering a ZIP in a deactivated state blocks delivery and checkout there.","- Deliver-to ZIP in a disabled state shows a clear message
-- Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","To Do"
+- Checkout cannot proceed with an address in a disabled state","E06","","Medium","3","checkout markets","checkout","Done"
 "E07","Epic","Payments, ledger & settlement","Stripe Connect separate charges and transfers, configurable commission, double-entry ledger and payouts on request.","","","Payments, ledger & settlement","High","","payments","payments","Done"
 "S051","Story","Payments service with Stripe PaymentIntents","Create, confirm (3-D Secure), capture per shipment and refund through Stripe.","- Manual capture per shipment on carrier acceptance
 - 3-D Secure test card triggers authentication
@@ -208,18 +208,18 @@
 - Finance can approve, hold or release payout requests","E07","","High","8","payments java stripe","payments","Done"
 "S057","Story","Refund and chargeback reversals","Partial refunds reverse matching transfer and commission; chargebacks debit the responsible seller.","- Partial refund per line updates the ledger
 - Chargeback debits the seller's balance and notifies them","E07","","High","5","payments java","payments","Done"
-"E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","To Do"
+"E08","Epic","Orders, shipments & status state machine","Orders split into shipments per seller with a role-aware status state machine.","","","Orders, shipments & status state machine","High","","orders","orders","Done"
 "S058","Story","Order and sub-order model","One order, one shipment per seller/fulfilment node, each cancellable separately.","- Order totals equal the sum of shipments plus tax
-- Each shipment can be cancelled before it is packed","E08","","Highest","5","orders java","orders","To Do"
+- Each shipment can be cancelled before it is packed","E08","","Highest","5","orders java","orders","Done"
 "S059","Story","Shipment state machine with actor rules","placed → confirmed → packed → ready → picked_up → in_transit → out_for_delivery → delivered (+ failed, returned, cancelled).","- Seller-fulfilled: only the seller confirms, packs and marks ready
 - Carriers (webhooks) and AfroTransact Delivery move transit steps
 - Platform admins may confirm delivery, record failure, process returns or cancel — never 'packed'
 - Fulfilled by AfroTransact: admins and fulfilment ops own every step
-- Rules enforced in the service, not the UI","E08","","Highest","8","orders java","orders","To Do"
+- Rules enforced in the service, not the UI","E08","","Highest","8","orders java","orders","Done"
 "S060","Story","Your Orders page with creative side panel","Order history with per-shipment tracking, buy again and a useful right-hand panel.","- Each shipment shows status timeline and tracking
-- Right panel shows recommendations / delivery map / help instead of blank space","E08","","Medium","5","orders web","orders","To Do"
+- Right panel shows recommendations / delivery map / help instead of blank space","E08","","Medium","5","orders web","orders","Done"
 "S061","Story","Driver events update order status live","Driver pickup/delivery scans move shipment statuses in the back office immediately.","- 'Picked up' and 'Delivered' scans update the shipment within 5 seconds
-- Staff console reflects updates without refresh (SSE)","E08","","High","5","orders delivery","orders","To Do"
+- Staff console reflects updates without refresh (SSE)","E08","","High","5","orders delivery","orders","Done"
 "E09","Epic","Inventory: platform & FBA stock, lots and concurrency","Strongly consistent stock positions, reservations, lots (FEFO) and an append-only ledger.","","","Inventory: platform & FBA stock, lots and concurrency","High","","inventory","inventory","In Progress"
 "S062","Story","Inventory positions and append-only ledger","inventory_position(sku, node, on_hand, reserved, inbound, damaged, version) + ledger.","- available = on_hand − reserved is published via events, never computed in clients
 - Every movement writes a ledger row with actor and reason
@@ -627,3 +627,12 @@
 - Navigation in Seller Center shows both groups for BOTH orgs","E13","","Low","3","seller identity","onboarding","To Do"
 "S216","Story","Page hide and restore for large seller catalogs","Catalog pages through an org's products on hide/restore instead of loading all of them in one transaction.","- Hide/restore processes products in pages of 500
 - Large catalog (50k) hide completes without timeouts","E03","","Low","2","catalog","catalog","To Do"
+"S217","Story","Align notification rules with real producer events","Notifications' event rules and topics are speculative (at.seller.events, order.placed). Map the real event types and topics from contracts/asyncapi/events.yaml and resolve recipients (email/phone/push) from identity when payloads carry only user ids.","- Rules cover orders.order.placed, orders.order.cancelled (wasPlaced), orders.shipment.status_changed/delivered/cancelled, seller application and compliance events, bookings events and identity verification
+- Topics match the AsyncAPI channels
+- Recipient contact details are resolved from identity by user id with caching
+- Contract test fails if a mapped event type is missing from events.yaml","E19","","High","5","notifications events","notifications","To Do"
+"S218","Story","Returns endpoints and per-shipment inventory release","Orders adds return requests per shipment and releases or commits inventory per shipment rather than per order; payments delivered/settlement per shipment.","- Customer can request a return per shipment within policy
+- Cancelling one of several AfroTransact shipments releases only its stock
+- Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","To Do"
+"S219","Story","Cluster-wide shipment status stream","SSE shipment stream fans out across replicas via Kafka or Valkey pub/sub, and orders consumes carrier.pickup.ready.","- Staff on any replica see every transition within 2s
+- carrier.pickup.ready moves eligible shipments forward","E08","","Medium","3","orders","orders","To Do"

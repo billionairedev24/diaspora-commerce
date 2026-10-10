@@ -1,0 +1,160 @@
+spring:
+  application:
+    name: orders-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/orders}
+    username: ${DB_USER:orders}
+    password: ${DB_PASSWORD:orders}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      auto-offset-reset: earliest
+  mvc:
+    problemdetails:
+      enabled: true
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+  # Temporal (temporal-spring-boot-starter). The checkout worker polls task queue "orders-checkout" in the namespace
+  # of the environment. Cloud environments add mTLS (Temporal Cloud) in application-<env>.yml.
+  temporal:
+    connection:
+      target: ${TEMPORAL_TARGET:localhost:7233}
+    namespace: ${TEMPORAL_NAMESPACE:default}
+    start-workers: ${TEMPORAL_START_WORKERS:true}
+    workers-auto-discovery:
+      packages:
+        - com.afrotransact.orders.application
+
+server:
+  port: ${PORT:8104}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: orders-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  api-docs:
+    title: Orders API
+    description: >-
+      Checkout saga on Temporal (cart validation, price and tax snapshot, all-or-nothing stock reservation,
+      PaymentIntent with manual capture, payment wait with compensations), orders split into one shipment per seller
+      and fulfilment node, the shipment state machine with actor rules per fulfilment type, delivery preferences and
+      handover codes, courier events with proof of delivery, capture per shipment and settlement notices.
+    version: v1
+  events:
+    relay-enabled: true
+  orders:
+    retail-org-id: ${RETAIL_ORG_ID:org_afrotransact_retail}
+    # How long checkout waits for the payment authorisation; matches inventory's reservation TTL.
+    payment-timeout: ${CHECKOUT_PAYMENT_TIMEOUT:15m}
+    checkout-response-timeout: ${CHECKOUT_RESPONSE_TIMEOUT:20s}
+    zone: ${ORDERS_ZONE:America/Chicago}
+    perishable-types: [perishable]
+    commission-categories:
+      grocery: groceries
+      perishable: groceries
+      fashion: fashion
+      beauty: beauty
+      books: books
+      health: health
+    shipping:
+      carrier-standard-minor: 599
+      carrier-express-minor: 1499
+      free-carrier-above-minor: 3500
+      delivery-minor: 499
+      free-delivery-above-minor: 5000
+      standard-days: 5
+      express-days: 2
+      delivery-days: 1
+      pickup-days: 1
+    # Interim combined state + average local sales tax (basis points) until the tax service exists.
+    tax:
+      default-bps: 0
+      rates:
+        TX: 825
+        NJ: 663
+        NY: 888
+        GA: 740
+        CA: 882
+        IL: 886
+        MD: 600
+        FL: 700
+        MA: 625
+        PA: 634
+        VA: 577
+        NC: 699
+        WA: 938
+        MN: 749
+        OH: 724
+    handover:
+      # AES key material for sealing customer handover codes (HANDOVER_CODE_KEY in cloud).
+      key: ${HANDOVER_CODE_KEY:local-only-handover-code-key-change-me}
+    oauth:
+      issuer-url: ${AUTH_ISSUER_URI:http://localhost:8100}
+      token-path: /oauth2/token
+      client-id: ${ORDERS_CLIENT_ID:orders-service}
+      client-secret: ${ORDERS_CLIENT_SECRET:local-orders-service-secret}
+      scopes: payments:service inventory:reserve cart:service
+    upstreams:
+      timeout: ${UPSTREAM_TIMEOUT:5s}
+      promise-timeout: ${PROMISE_TIMEOUT:800ms}
+      cart-url: ${CART_URL:http://localhost:8203}
+      identity-url: ${IDENTITY_URL:http://localhost:8100}
+      inventory-url: ${INVENTORY_URL:http://localhost:8103}
+      payments-url: ${PAYMENTS_URL:http://localhost:8105}
+      promise-url: ${PROMISE_URL:http://localhost:8204}
+      content-url: ${CONTENT_URL:http://localhost:8112}
+      catalog-url: ${CATALOG_URL:http://localhost:8101}
+    topics:
+      payment-events: at.payment.events
+      carrier-events: at.carrier-shipment.events
+    consumers:
+      enabled: ${ORDERS_CONSUMERS_ENABLED:true}
+    jobs:
+      enabled: ${ORDERS_JOBS_ENABLED:true}
+      follow-up-interval: ${FOLLOW_UP_INTERVAL:5s}
+      follow-up-batch: 50
+      follow-up-max-attempts: 12

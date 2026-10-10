@@ -1,0 +1,30 @@
+# UAT / staging: production-like, anonymised data, API reference pages on for testers. Temporal Cloud with mTLS.
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:20}
+  temporal:
+    connection:
+      target: ${TEMPORAL_TARGET}
+      mtls:
+        cert-chain: ${TEMPORAL_TLS_CERT}
+        key: ${TEMPORAL_TLS_KEY}
+    namespace: ${TEMPORAL_NAMESPACE:afrotransact-uat}
+at:
+  api-docs:
+    enabled: true
+  orders:
+    handover:
+      key: ${HANDOVER_CODE_KEY}
+    upstreams:
+      cart-url: ${CART_URL:http://cart}
+      identity-url: ${IDENTITY_URL:http://identity}
+      inventory-url: ${INVENTORY_URL:http://inventory}
+      payments-url: ${PAYMENTS_URL:http://payments}
+      promise-url: ${PROMISE_URL:http://promise}
+      content-url: ${CONTENT_URL:http://content}
+      catalog-url: ${CATALOG_URL:http://catalog}
+management:
+  tracing:
+    sampling:
+      probability: 0.5

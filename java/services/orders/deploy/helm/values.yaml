@@ -1,0 +1,50 @@
+# Base values for orders. Environment files override; Argo CD adds platform-values.yaml (cloud, identity, store).
+service:
+  name: orders
+  runtime: java
+  port: 8080
+env: dev
+cloud: none            # aws | gcp | azure | none (kind / local clusters)
+image:
+  registry: ghcr.io/billionairedev24/diaspora-commerce
+  repository: orders-service
+  tag: latest
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 3
+  cpu: 70
+rollout:
+  enabled: false
+  pause: 2m
+  maxErrorRate: "0.01"
+resources:
+  requests: {cpu: 100m, memory: 512Mi}
+  limits: {memory: 1Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+monitoring:
+  serviceMonitor: true
+  prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
+# Secret keys expected at afrotransact/<env>/orders in the cloud secret store:
+#   - DB_URL
+#   - DB_USER
+#   - DB_PASSWORD
+#   - KAFKA_BOOTSTRAP
+#   - ORDERS_CLIENT_SECRET
+#   - TEMPORAL_TLS_CERT
+#   - TEMPORAL_TLS_KEY
+#   - HANDOVER_CODE_KEY
+secrets:
+  enabled: true
+  store: platform-secrets
+  keySeparator: "/"     # "-" on GCP Secret Manager and Azure Key Vault (set in platform-values.yaml)
+workloadIdentity:
+  aws: {roleArn: ""}
+  gcp: {serviceAccount: ""}
+  azure: {clientId: ""}
+extraEnv: {}
+nodeSelector: {}
+tolerations: []
