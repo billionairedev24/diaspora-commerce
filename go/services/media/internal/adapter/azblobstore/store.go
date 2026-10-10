@@ -75,6 +75,21 @@ func (s *storeImpl) PrepareUpload(_ context.Context, key, _, contentType string,
 	return up, nil
 }
 
+// Put uploads a block blob; public objects are served from PublicBaseURL.
+func (s *storeImpl) Put(ctx context.Context, key, _, contentType string, data []byte, public bool) (string, string, error) {
+	_, err := s.client.UploadBuffer(ctx, s.opts.Container, key, data, &azblob.UploadBufferOptions{
+		HTTPHeaders: &blob.HTTPHeaders{BlobContentType: to.Ptr(contentType)},
+	})
+	if err != nil {
+		return "", "", fmt.Errorf("upload %s: %w", key, err)
+	}
+	publicURL := ""
+	if public && s.opts.PublicBaseURL != "" {
+		publicURL = strings.TrimSuffix(s.opts.PublicBaseURL, "/") + "/" + key
+	}
+	return key, publicURL, nil
+}
+
 func (s *storeImpl) Open(ctx context.Context, key string, n int64) (io.ReadCloser, int64, string, error) {
 	opts := &azblob.DownloadStreamOptions{}
 	if n > 0 {

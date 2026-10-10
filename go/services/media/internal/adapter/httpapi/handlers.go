@@ -30,8 +30,51 @@ func New(media app.MediaService) Handlers { return &handlersImpl{media: media} }
 func (h *handlersImpl) Register(mux *http.ServeMux, authenticated func(http.Handler) http.Handler) {
 	mux.Handle("POST /v1/uploads", authenticated(http.HandlerFunc(h.request)))
 	mux.Handle("POST /v1/assets/{id}/complete", authenticated(http.HandlerFunc(h.complete)))
+	mux.Handle("POST /v1/assets/{id}/review", authenticated(http.HandlerFunc(h.review)))
 	mux.Handle("GET /v1/assets/{id}", authenticated(http.HandlerFunc(h.get)))
 	mux.Handle("GET /v1/assets", authenticated(http.HandlerFunc(h.list)))
+	// Media-hosted long-lived links: the signed token is the credential (e-mailed to suppliers).
+	mux.HandleFunc("GET /v1/l/{token}", h.link)
+}
+
+// link redirects a media-hosted long-lived link to a fresh short-lived storage URL.
+func (h *handlersImpl) link(w http.ResponseWriter, r *http.Request) {
+	u, err := h.media.ResolveLink(r.Context(), r.PathValue("token"))
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	switch {
+	case errors.Is(err, app.ErrLinkExpired):
+		problem.Write(w, r, problem.New(http.StatusGone, "media.link-expired",
+			"This link has expired. Ask the sender for a new one."))
+	case errors.Is(err, app.ErrLinkInvalid):
+		problem.Write(w, r, problem.New(http.StatusNotFound, "media.link-not-found", "This link is not valid"))
+	case err != nil:
+		writeErr(w, r, err)
+	default:
+		// u is a storage URL media signed itself for the asset the verified token names, not request input.
+		http.Redirect(w, r, u, http.StatusFound) //nolint:gosec // G710: target signed by media, not user-controlled
+
+	}
+}
+
+type reviewRequest struct {
+	Decision domain.ReviewDecision `json:"decision"`
+	Note     string                `json:"note"`
+}
+
+func (h *handlersImpl) review(w http.ResponseWriter, r *http.Request) {
+	actor, _ := auth.FromContext(r.Context())
+	var req reviewRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+		problem.Write(w, r, problem.New(http.StatusBadRequest, "media.invalid-json", "Body must be a review decision"))
+		return
+	}
+	a, err := h.media.Review(r.Context(), actor, r.PathValue("id"), req.Decision, req.Note)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
 }
 
 type uploadRequest struct {
@@ -107,7 +150,7 @@ func writeErr(w http.ResponseWriter, r *http.Request, err error) {
 		problem.Write(w, r, problem.New(http.StatusForbidden, "media.forbidden", "Not your asset or not allowed for this purpose"))
 	case errors.Is(err, pgrepo.ErrNotFound):
 		problem.Write(w, r, problem.New(http.StatusNotFound, "media.not-found", "Asset not found"))
-	case errors.Is(err, app.ErrState):
+	case errors.Is(err, app.ErrState), errors.Is(err, domain.ErrConflict):
 		problem.Write(w, r, &problem.Error{Status: http.StatusConflict, Code: "media.not-uploaded", Detail: err.Error()})
 	default:
 		problem.Write(w, r, problem.New(http.StatusBadGateway, "media.storage-unavailable", "Storage is temporarily unavailable"))

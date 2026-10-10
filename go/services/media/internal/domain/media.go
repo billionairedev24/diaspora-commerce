@@ -148,7 +148,20 @@ type Asset struct {
 	CreatedAt   time.Time `json:"createdAt"`
 	// URLExpiresAt is when a signed download URL in URL stops working (private assets only).
 	URLExpiresAt *time.Time `json:"urlExpiresAt,omitempty"`
+	// Moderation is set for public images once completed: the checks that gate publication.
+	Moderation *Moderation `json:"moderation,omitempty"`
+	// PHash is the 64-bit perceptual (difference) hash of an image, for duplicate detection (never serialised).
+	PHash *uint64 `json:"-"`
+	// Version guards updates (optimistic locking): an update of a stale copy fails with ErrConflict.
+	Version int `json:"-"`
 }
+
+// ErrConflict is returned when an asset changed since it was read (concurrent completion or review).
+var ErrConflict = errors.New("asset changed concurrently")
+
+// QuarantinePrefix starts the object key of a public image until moderation releases it: the public store serves
+// only the purpose prefixes, never quarantine/ (bucket policy), and UploadThing keeps such files private.
+const QuarantinePrefix = "quarantine/"
 
 // ErrRejected marks uploads that break the purpose rules.
 var ErrRejected = errors.New("upload rejected")
@@ -204,12 +217,18 @@ func Judge(p Purpose, in Inspection) (Status, []string) {
 	if p == PurposeProductImage && in.Width >= 1000 && in.Height >= 1000 {
 		flags = append(flags, "eligible as main image")
 	}
+	return StatusForFlags(flags), flags
+}
+
+// StatusForFlags is FLAGGED when any flag needs attention and READY when the only flags are informational
+// ("eligible as main image").
+func StatusForFlags(flags []string) Status {
 	for _, f := range flags {
 		if !strings.HasPrefix(f, "eligible") {
-			return StatusFlagged, flags
+			return StatusFlagged
 		}
 	}
-	return StatusReady, flags
+	return StatusReady
 }
 
 // DefaultLinkTTL is how long a signed download link lasts unless the caller asks otherwise.

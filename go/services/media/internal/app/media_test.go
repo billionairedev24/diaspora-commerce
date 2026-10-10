@@ -8,6 +8,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"io"
+	"slices"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ type memStore struct {
 	deleted []string
 	maxTTL  time.Duration
 	signed  []time.Duration
+	puts    []string
 }
 
 func (m *memStore) Name() string { return "mem" }
@@ -46,6 +48,14 @@ func (m *memStore) SignedGetURL(_ context.Context, key string, ttl time.Duration
 	return "https://signed/" + key, nil
 }
 func (m *memStore) MaxSignedURLTTL() time.Duration { return m.maxTTL }
+func (m *memStore) Put(_ context.Context, key, _, _ string, data []byte, public bool) (string, string, error) {
+	m.objects[key] = data
+	m.puts = append(m.puts, key)
+	if public {
+		return key, "https://cdn/" + key, nil
+	}
+	return key, "", nil
+}
 
 type memRepo struct{ assets map[string]domain.Asset }
 
@@ -57,9 +67,34 @@ func (r *memRepo) Get(_ context.Context, id string) (domain.Asset, error) {
 	}
 	return a, nil
 }
-func (r *memRepo) Update(_ context.Context, a domain.Asset) error { r.assets[a.ID] = a; return nil }
+func (r *memRepo) Update(_ context.Context, a domain.Asset) error {
+	if cur, ok := r.assets[a.ID]; ok && cur.Version != a.Version {
+		return domain.ErrConflict
+	}
+	a.Version++
+	r.assets[a.ID] = a
+	return nil
+}
 func (r *memRepo) ListByOrg(context.Context, string, domain.Purpose, int) ([]domain.Asset, error) {
 	return nil, nil
+}
+
+// SimilarImages compares hashes like the SQL query does (Hamming distance, completed images only).
+func (r *memRepo) SimilarImages(_ context.Context, purposes []domain.Purpose, hash uint64, maxDistance int,
+	excludeID string, limit int,
+) ([]domain.SimilarImage, error) {
+	out := []domain.SimilarImage{}
+	for _, a := range r.assets {
+		if a.ID == excludeID || a.PHash == nil || (a.Status != domain.StatusReady && a.Status != domain.StatusFlagged) ||
+			!slices.Contains(purposes, a.Purpose) {
+			continue
+		}
+		if d := domain.HashDistance(*a.PHash, hash); d <= maxDistance {
+			out = append(out, domain.SimilarImage{AssetID: a.ID, OwnerOrg: a.OwnerOrg, Distance: d})
+		}
+	}
+	slices.SortFunc(out, func(x, y domain.SimilarImage) int { return x.Distance - y.Distance })
+	return out[:min(limit, len(out))], nil
 }
 func (r *memRepo) Ping(context.Context) error { return nil }
 

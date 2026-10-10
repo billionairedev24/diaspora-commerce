@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -20,10 +21,13 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media"
+	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/aimoderation"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/authn"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/azblobstore"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/httpapi"
+	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/imageproc"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/inspect"
+	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/linktoken"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/pgrepo"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/s3store"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/uploadthing"
@@ -51,8 +55,12 @@ func run() error {
 	if err := loader.Load(&cfg); err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	cfg.Resolve(loader.Env())
 	log := logging.New(serviceName, loader.Env())
 	slog.SetDefault(log)
+	if err := resolveUploadThing(&cfg); err != nil {
+		return err
+	}
 	shutdownTracing, err := telemetry.Setup(ctx, serviceName, loader.Env(), cfg.Telemetry.OTLPEndpoint, cfg.Telemetry.SampleRatio)
 	if err != nil {
 		return fmt.Errorf("tracing: %w", err)
@@ -86,13 +94,21 @@ func run() error {
 		stores[domain.Purpose(purpose)] = st
 	}
 	repo := pgrepo.New(pool)
+	opts := []app.Option{app.WithLogger(log), moderation(cfg, log)}
+	if o, err := links(cfg, log); err != nil {
+		return err
+	} else if o != nil {
+		opts = append(opts, o)
+	}
 	svc := app.NewMediaService(stores, repo, inspect.New(40_000_000),
-		domain.LinkPolicy{Default: cfg.Links.DefaultTTL, MaxLong: cfg.Links.MaxLongTTL})
+		domain.LinkPolicy{Default: cfg.Links.DefaultTTL, MaxLong: cfg.Links.MaxLongTTL}, opts...)
 
 	var verifier auth.Verifier
 	if cfg.Auth.Enabled {
-		// Tokens for media, plus the own client-credentials tokens of the service clients the purposes name.
-		verifier = authn.NewVerifier(cfg.Auth.Issuer, cfg.Auth.Audience, domain.ServiceClients(), httpClient)
+		// Tokens for media, the own client-credentials tokens of the service clients the purposes name, and user
+		// tokens forwarded by the BFF (S250).
+		verifier = authn.NewVerifier(cfg.Auth.Issuer, cfg.Auth.Audience, domain.ServiceClients(),
+			cfg.Auth.ForwardedAudiences, httpClient)
 	}
 	openapi, err := media.Files.ReadFile("api/openapi.yaml")
 	if err != nil {
@@ -107,6 +123,65 @@ func run() error {
 		return fmt.Errorf("serve: %w", err)
 	}
 	return nil
+}
+
+// resolveUploadThing fills the API key and app id from UPLOADTHING_TOKEN when they are not set separately.
+func resolveUploadThing(cfg *config.Config) error {
+	ut := &cfg.UploadThing
+	if ut.Token == "" || ut.APIKey != "" {
+		return nil
+	}
+	tok, err := uploadthing.ParseToken(ut.Token)
+	if err != nil {
+		return fmt.Errorf("UPLOADTHING_TOKEN: %w", err)
+	}
+	ut.APIKey = tok.APIKey
+	if ut.AppID == "" {
+		ut.AppID = tok.AppID
+	}
+	return nil
+}
+
+// moderation wires the S030 gate for public images: metadata stripping, perceptual hashes and, when enabled, the
+// AI hook on ai-gateway.
+func moderation(cfg config.Config, log *slog.Logger) app.Option {
+	m := cfg.Moderation
+	maxPixels := m.MaxPixels
+	if maxPixels <= 0 {
+		maxPixels = 40_000_000
+	}
+	var moderator port.ImageModerator
+	if m.AI.Enabled && m.AI.BaseURL != "" {
+		if m.AI.TokenURL != "" && m.AI.ClientSecret == "" {
+			log.Warn("MEDIA_CLIENT_SECRET not set: AI moderation calls are unauthenticated")
+		}
+		timeout := m.AI.Timeout
+		if timeout <= 0 {
+			timeout = 10 * time.Second
+		}
+		moderator = aimoderation.New(aimoderation.Config{BaseURL: m.AI.BaseURL, TokenURL: m.AI.TokenURL,
+			ClientID: m.AI.ClientID, ClientSecret: m.AI.ClientSecret, Scopes: m.AI.Scopes}, &http.Client{Timeout: timeout})
+	} else {
+		log.Info("AI image moderation off: public images are checked by rules and duplicates only")
+	}
+	return app.WithModeration(imageproc.New(maxPixels), moderator,
+		domain.ModerationPolicy{AIFailOpen: cfg.FailOpen(), DuplicateDistance: m.DuplicateDistance}, m.AI.Timeout)
+}
+
+// links enables media-hosted long-lived links when a signing key is configured.
+func links(cfg config.Config, log *slog.Logger) (app.Option, error) {
+	if cfg.Links.SigningKey == "" {
+		log.Warn("LINK_SIGNING_KEY not set: long document links are storage-signed URLs (7 days at most on S3 and UploadThing)")
+		return nil, nil
+	}
+	if cfg.PublicBaseURL == "" {
+		return nil, errors.New("links: set PUBLIC_BASE_URL or API_BASE_URL for media-hosted links")
+	}
+	signer, err := linktoken.New(append([]string{cfg.Links.SigningKey}, cfg.Links.PreviousKeys...)...)
+	if err != nil {
+		return nil, fmt.Errorf("LINK_SIGNING_KEY: %w", err)
+	}
+	return app.WithLinks(signer, cfg.PublicBaseURL, cfg.Links.RedirectTTL), nil
 }
 
 func buildStore(sc config.Store, cfg config.Config, client *http.Client) (port.ObjectStore, error) {
