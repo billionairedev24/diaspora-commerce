@@ -789,3 +789,26 @@
 - Seller earnings show delivery-fee totals from payments
 - Cart shows one package per pickup location
 - Concurrent offer edits are rejected with 409","E12","","Medium","5","fulfilment payments orders offers cart","delivery","To Do"
+"E34","Epic","Community delivery runs (preorders)","Scheduled batched deliveries to towns outside regular delivery areas: customers preorder for a run, sellers' items are collected in one sweep, and the run is announced through WhatsApp communities, email, push, social and location-targeted advertorials.","","","Community delivery runs","High","","delivery-runs","delivery-runs","To Do"
+"S260","Story","Delivery runs service and run lifecycle","New delivery-runs service: staff create runs per location (town/area by polygon or radius from geo), with delivery window, order cutoff, minimum orders, capacity, run delivery fee, and doorstep or community pickup-point drop. Lifecycle draft, announced, open, cutoff, confirmed (minimum met) or extended or cancelled, collecting, out for delivery, completed.","- Staff create, schedule, extend and cancel runs from the staff console
+- Run area comes from geo (polygon or radius around a town)
+- Minimum orders and capacity are enforced at cutoff
+- Cancelled runs release stock and payment holds and notify customers","E34","","Highest","13","delivery-runs","delivery-runs","To Do"
+"S261","Story","Preorder checkout for a delivery run","Customers whose address is inside an open run's area (and outside regular delivery) can preorder for that run: stock is reserved, the card is saved and authorised, and charged at cutoff confirmation (off-session if the hold would expire). The run delivery fee (e.g. 7.99) is set per run.","- Checkout offers the next open run with its date, cutoff and fee
+- Payment is captured only when the run is confirmed
+- Orders after cutoff go to the next run or are refused
+- Customers can cancel before cutoff","E34","","Highest","13","delivery-runs orders payments","delivery-runs","To Do"
+"S262","Story","Location subscriptions and run announcements","Shoppers subscribe to run alerts for their ZIP or town with per-channel consent (email, SMS, push, WhatsApp). Runs are announced at open, 24h before cutoff and on dispatch through notifications; each location has a WhatsApp community invite link and opted-in WhatsApp template messages; social share links with UTM.","- Subscribe/unsubscribe per location and channel with consent records
+- Announcements go out on open, cutoff reminder and dispatch
+- WhatsApp messages use approved templates to opted-in users; the community link is shown on the location page
+- Each announcement link is attributed (UTM) in analytics","E34","","High","8","delivery-runs notifications whatsapp","delivery-runs","To Do"
+"S263","Story","Location-targeted dynamic advertorials","Content placements targeted by the visitor's deliver-to ZIP or town, generated from run data (town, date, cutoff countdown, fee, featured products) or authored by staff, with schedule, priority and A/B variants.","- Visitors in a run's area see the run advertorial with a live cutoff countdown
+- Staff can author or auto-generate advertorials per run in the staff console
+- Advertorials expire at cutoff and show results (views, clicks, orders)","E34","","High","8","delivery-runs content storefront","delivery-runs","To Do"
+"S264","Story","Batched seller pickups and run dispatch","At run confirmation, fulfilment plans one sweep: pickups from each participating seller (and FC load-out), then drops in the run area (doorstep stops ordered by road distance, or a community pickup point with handover codes). Sellers see run deadlines and pack in time.","- Sellers get the run pickup time and a pick list for all run orders
+- One route per run (or split by capacity) with seller pickups before drops
+- Pickup-point drops use handover codes per order
+- Proof of delivery per order as for regular deliveries","E34","","High","13","delivery-runs fulfilment seller-center","delivery-runs","To Do"
+"S265","Story","Run economics and reporting","Per run: orders, revenue, delivery fees collected, estimated cost (road distance and drive time from geo x configurable driver cost per hour and per mile), contribution margin, and break-even orders; used to decide fees and minimums per location.","- Staff see run P&L before and after the run
+- Break-even orders shown when creating a run
+- Per-location history (orders per run, growth of subscribers)","E34","","Medium","5","delivery-runs analytics","delivery-runs","To Do"
