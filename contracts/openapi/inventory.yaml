@@ -691,6 +691,75 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Reservation'
+  /v1/reservations/{orderId}/groups/commit:
+    post:
+      tags:
+      - Reservations
+      summary: Ship only some groups (one shipment's lines)
+      description: 'Commits the held lines of the groups: SHIP movements and COGS for those lines only; other groups stay
+        held. Idempotent per group. 404 inventory.group-not-found for unknown groups (reservations made without groups use
+        /commit).'
+      operationId: commitGroups
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationGroupsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/CommitResult'
+  /v1/reservations/{orderId}/groups/release:
+    post:
+      tags:
+      - Reservations
+      summary: Release only some groups (one cancelled shipment)
+      description: Gives the held lines of the groups back to available stock; other groups stay held. Idempotent; 409 inventory.group-committed
+        when a line already shipped.
+      operationId: releaseGroups
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationGroupsRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Reservation'
   /v1/reservations/{orderId}/release:
     post:
       tags:
@@ -727,9 +796,9 @@ paths:
     post:
       tags:
       - Returns
-      summary: Restock a returned unit or move it to the lot's -DMG lot
+      summary: Restock a returned unit or move it to the lot's -DMG lot (inventory:adjust, or a SERVICE with inventory:returns)
       description: RETURN_RESTOCK puts units back into their sellable lot; RETURN_DAMAGED holds them in <lot>-DMG. Never more
-        than the order shipped.
+        than the order shipped. With receivingNodeId the units go into the same lot number at that node (e.g. the return centre).
       operationId: accept
       parameters:
       - name: Idempotency-Key
@@ -779,6 +848,11 @@ components:
         reason:
           type: string
           maxLength: 500
+          minLength: 0
+        receivingNodeId:
+          type: string
+          description: Warehouse that received the parcel (e.g. the return centre); default = the node the unit shipped from
+          maxLength: 20
           minLength: 0
       required:
       - condition
@@ -870,6 +944,12 @@ components:
           format: int32
           maximum: 10000
           minimum: 1
+        group:
+          type: string
+          description: 'Caller''s grouping key (orders: the order line id); groups can be committed or released on their own
+            (one shipment at a time)'
+          maxLength: 80
+          minLength: 0
       required:
       - sku
     ReserveRequest:
@@ -969,6 +1049,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LotAllocation'
+        group:
+          type: string
+        status:
+          type: string
+          description: HELD, COMMITTED or RELEASED
+        stockOwnerOrgId:
+          type: string
     ReleaseRequest:
       type: object
       properties:
@@ -976,6 +1063,24 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+    ReservationGroupsRequest:
+      type: object
+      description: 'The groups (orders: line ids of one shipment) to commit or release'
+      properties:
+        groups:
+          type: array
+          items:
+            type: string
+            maxLength: 80
+            minLength: 0
+          maxItems: 100
+          minItems: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - groups
     CommitResult:
       type: object
       description: Shipped reservation with COGS at lot landed cost
@@ -1009,6 +1114,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Money'
+        group:
+          type: string
+        stockOwnerOrgId:
+          type: string
     Money:
       type: object
       properties:
@@ -1108,6 +1217,12 @@ components:
           format: int32
           description: Shelf life from manufacture in days (short-dated rule)
           exclusiveMinimum: 0
+        holdReason:
+          type: string
+          description: Receive the good units straight into QUARANTINE with this reason (e.g. QC hold at the dock); omit for
+            sellable stock
+          maxLength: 500
+          minLength: 0
       required:
       - currency
       - lotNo

@@ -137,7 +137,13 @@ at:
         type: confidential
         secret: ${SEARCH_CLIENT_SECRET:local-search-service-secret}
         grant-types: [client_credentials]
-        scopes: [ai:use]
+        scopes: [ai:use, ads:serve]
+      - client-id: indexer-service
+        name: Search indexer
+        type: confidential
+        secret: ${INDEXER_CLIENT_SECRET:local-indexer-service-secret}
+        grant-types: [client_credentials]
+        scopes: [sellers:directory]
       - client-id: offers-service
         name: Offers service
         type: confidential

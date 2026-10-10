@@ -85,6 +85,10 @@ components:
         shipToState: {type: [string, 'null']}
         shipToPostalCode: {type: [string, 'null']}
         shipToCountry: {type: [string, 'null']}
+        shipToName: {type: [string, 'null'], description: Recipient name of the ship-to address}
+        shipToLine1: {type: [string, 'null'], description: Ship-to street line (return labels need no app address)}
+        shipToLine2: {type: [string, 'null']}
+        paymentId: {type: [string, 'null'], description: payments-service payment of the order}
         shipments:
           type: array
           items:
@@ -106,17 +110,32 @@ components:
               shipToLine2: {type: [string, 'null']}
               lat: {type: [number, 'null'], description: Ship-to latitude when the address book knows it}
               lng: {type: [number, 'null'], description: Ship-to longitude when the address book knows it}
+              shippingMinor:
+                type: integer
+                format: int64
+                description: Shipping of the shipment (charged on its first line, as payments allocates it)
+              shipBy: {type: [string, 'null'], format: date, description: Date the shipment must be handed over by}
+              promisedFrom: {type: [string, 'null'], format: date}
               lines:
                 type: array
                 items:
                   type: object
                   properties:
-                    lineId: {type: string, format: uuid}
+                    lineId: {type: string, format: uuid, description: Order line id (= payments line id)}
+                    lineNo: {type: integer}
                     variantAtin: {type: string}
+                    productAtin: {type: [string, 'null']}
                     title: {type: [string, 'null']}
                     quantity: {type: integer}
                     unitPriceMinor: {type: integer, format: int64}
-                    taxMinor: {type: integer, format: int64}
+                    taxMinor: {type: integer, format: int64, description: Tax of the line incl. tax on its shipping}
+                    productType: {type: [string, 'null'], description: Catalog product type}
+                    category: {type: [string, 'null'], description: Payments commission category}
+                    perishable: {type: boolean}
+                    discountMinor: {type: integer, format: int64, description: Coupon discount allocated to the line}
+                    taxJurisdiction: {type: [string, 'null'], examples: [US-TX]}
+                    localTaxJurisdiction: {type: [string, 'null'], examples: [US-TX-770]}
+                    shippingTaxMinor: {type: integer, format: int64, description: Part of taxMinor on shipping}
     OrdersOrderCancelled:
       type: object
       required: [orderId, orderNumber, customerId, code, wasPlaced, cancelledAt]

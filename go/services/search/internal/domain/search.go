@@ -37,6 +37,12 @@ type Query struct {
 	Sort        Sort
 	Page        int
 	Size        int
+	// Ads asks for sponsored products at the configured slots (results pages only; rails and Lola leave it off).
+	Ads bool
+	// Track records the search in analytics (search.query.performed); rails and Lola send track=false.
+	Track bool
+	// CustomerID is the signed-in shopper (from the token), for click attribution only.
+	CustomerID string
 }
 
 // MaxPageSize caps page size.
@@ -45,12 +51,16 @@ const MaxPageSize = 60
 // ErrInvalidQuery is returned when a query is malformed.
 var ErrInvalidQuery = errors.New("invalid query")
 
+// ErrUnknownMarket is returned for a market the service does not serve (market filter).
+var ErrUnknownMarket = errors.New("unknown market")
+
 // Normalize fills defaults and validates bounds.
 func (q Query) Normalize() (Query, error) {
 	q.Text = strings.Join(strings.Fields(q.Text), " ")
 	if len(q.Text) > 200 {
 		return q, errors.Join(ErrInvalidQuery, errors.New("query longer than 200 characters"))
 	}
+	q.Market = strings.ToLower(strings.TrimSpace(q.Market))
 	if q.Market == "" {
 		q.Market = "us"
 	}
@@ -99,6 +109,13 @@ type Hit struct {
 	ImageURL     string  `json:"imageUrl,omitempty"`
 	OfferCount   int     `json:"offerCount"`
 	Score        float64 `json:"score"`
+	// Sponsored is set on ads only (always labelled "Sponsored" with the reason it was shown).
+	Sponsored *Sponsored `json:"sponsored,omitempty"`
+
+	// Internal fields used by the ad auction (never serialised).
+	SellerID     string   `json:"-"`
+	Department   string   `json:"-"`
+	VariantATINs []string `json:"-"`
 }
 
 // LowStockThreshold matches the storefront's "Only N left" rule.
@@ -119,6 +136,8 @@ type Page struct {
 	Facets   map[string][]FacetBucket `json:"facets"`
 	Semantic bool                     `json:"semantic"`
 	TookMs   int64                    `json:"tookMs"`
+	// SearchID identifies this search for click reporting (POST /v1/search/clicks).
+	SearchID string `json:"searchId,omitempty"`
 }
 
 // Suggestion is a completed phrase, optionally scoped to a department ("jollof seasoning in Groceries").

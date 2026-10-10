@@ -20,6 +20,12 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    consumer:
+      group-id: ${KAFKA_GROUP:content-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
   mvc:
     problemdetails:
       enabled: true
@@ -64,6 +70,10 @@ springdoc:
     path: /swagger-ui.html
 
 at:
+  consumers:
+    # Kafka listeners for other services' events: ads impressions / clicks (at.ads.events, search-service) and
+    # orders.order.placed (at.order.events) for sponsored-products attribution. Off in tests without a broker.
+    enabled: ${CONSUMERS_ENABLED:true}
   api-docs:
     title: Content API
     description: >-
@@ -71,7 +81,8 @@ at:
       product rows, checkout cross-sell) with targeting and a review workflow; markets & locations with per-state
       capability switches and an eligibility check; site configuration (social links, contacts, app links, locales);
       legal documents with versions; cookie consent; feature flags with OpenFeature (OFREP) evaluation;
-      newsletter double opt-in, launch lists and careers.
+      newsletter double opt-in, launch lists and careers; sponsored-products campaigns (CPC bids, budgets,
+      targeting, charged clicks, 7-day-click attribution and reports) served to search-service's auction.
     version: v1
   security:
     # Anonymous GETs (storefront, mobile, CDN). Everything else needs a JWT unless listed in public-post-paths.

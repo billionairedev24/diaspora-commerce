@@ -19,6 +19,7 @@ channels:
       contentNewsletterUnsubscribed: {$ref: '#/components/messages/contentNewsletterUnsubscribed'}
       contentLaunchListJoined: {$ref: '#/components/messages/contentLaunchListJoined'}
       contentCareerApplicationReceived: {$ref: '#/components/messages/contentCareerApplicationReceived'}
+      contentAdsCampaignPaused: {$ref: '#/components/messages/contentAdsCampaignPaused'}
 operations:
   publishContentEvents:
     action: send
@@ -30,9 +31,29 @@ operations:
       (content.site-config.changed, content.legal.*); notifications (newsletter confirmation and welcome emails,
       launch-list emails for newly live countries, careers acknowledgements, 30-day notices of material legal
       changes); identity (re-acceptance of raised Conditions of Use / Privacy versions); OFREP providers
-      (content.flag.changed, optional early refresh).
+      (content.flag.changed, optional early refresh); notifications (content.ads.campaign_paused: tell the seller a
+      sponsored-products campaign stopped because its budget is spent).
+  receiveContentAdsEvents:
+    action: receive
+    channel: {$ref: '#/channels/adsEvents'}
+    summary: >-
+      Sponsored products (S127): ads.impression.recorded adds to the campaign's daily impressions; ads.click.recorded
+      charges the click (at most the second price, the lifetime budget left and today's budget left) under a row lock
+      and pauses the campaign at zero budget (content.ads.campaign_paused). Inbox-deduplicated on event-id
+      (consumer group content-service) and on clickId.
+  receiveContentOrderEvents:
+    action: receive
+    channel: {$ref: '#/channels/ordersOrderEvents'}
+    summary: >-
+      orders.order.placed attributes order lines to the shopper's last sponsored-product click on the ordered
+      variant from the same seller within 7 days (attributed orders and sales, ROAS). Each line is attributed once.
 components:
   messages:
+    contentAdsCampaignPaused:
+      name: content.ads.campaign_paused
+      title: A sponsored-products campaign was paused (budget spent or by its owner); key = campaign id
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/ContentAdsCampaignPaused'}
     contentPlacementsPublished:
       name: content.placements.published
       title: Placements of a market changed (approved, live or ended) — purge the CDN bundle
@@ -86,6 +107,18 @@ components:
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/ContentCareerApplicationReceived'}
   schemas:
+    ContentAdsCampaignPaused:
+      type: object
+      required: [campaignId, sellerOrgId, name, reason, spentMinor, totalBudgetMinor, currency, occurredAt]
+      properties:
+        campaignId: {type: string}
+        sellerOrgId: {type: string}
+        name: {type: string}
+        reason: {type: string, enum: [BUDGET_EXHAUSTED, MANUAL]}
+        spentMinor: {type: integer, format: int64}
+        totalBudgetMinor: {type: integer, format: int64}
+        currency: {type: string}
+        occurredAt: {type: string, format: date-time}
     ContentPlacementsPublished:
       type: object
       required: [placementId, slot, market, status, action, purgePaths, cacheTags, occurredAt]

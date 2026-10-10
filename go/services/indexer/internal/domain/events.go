@@ -88,3 +88,20 @@ type Versioned struct {
 
 // VersionOf returns a monotonically comparable version for an event timestamp.
 func VersionOf(at time.Time) int64 { return at.UnixMicro() }
+
+// SellerOrg is one organisation of seller-service's directory (GET /v1/orgs/directory) or public profile
+// (GET /v1/orgs/{id}/public).
+type SellerOrg struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	Kind        string `json:"kind"`
+	Status      string `json:"status"`
+}
+
+// SellerDirectoryPage is one page of the organisation directory.
+type SellerDirectoryPage struct {
+	Items []SellerOrg `json:"items"`
+	Page  int         `json:"page"`
+	Size  int         `json:"size"`
+	Total int64       `json:"total"`
+}

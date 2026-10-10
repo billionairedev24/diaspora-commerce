@@ -6,7 +6,10 @@ info:
     Kafka → Elasticsearch projection of the product read model. Consumes catalog.product.* and
     inventory.availability.changed (topics at.product.events, at.inventory.events), upserts product documents
     with version guards so redelivered or out-of-order events never overwrite newer data, and parks poison
-    events on at.indexer.dlq.events after retries. The HTTP surface is operational only.
+    events on at.indexer.dlq.events after retries. Seller display names are warmed on start from seller-service's
+    organisation directory (GET /v1/orgs/directory, client indexer-service, scope sellers:directory) and kept current
+    by seller.org.* events, so restarts never change indexed seller names. New indices reference the diaspora
+    synonyms set owned by search-service. The HTTP surface is operational only.
 servers:
   - url: http://localhost:8202
     description: local

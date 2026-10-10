@@ -32,6 +32,7 @@ monitoring:
 #   - ES_URLS
 #   - ES_API_KEY
 #   - KAFKA_BOOTSTRAP
+#   - INDEXER_CLIENT_SECRET    (identity client indexer-service, scope sellers:directory)
 secrets:
   enabled: true
   store: platform-secrets

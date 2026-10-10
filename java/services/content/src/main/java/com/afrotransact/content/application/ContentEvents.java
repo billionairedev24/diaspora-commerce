@@ -21,6 +21,8 @@ public final class ContentEvents {
     public static final String NEWSLETTER_UNSUBSCRIBED = "content.newsletter.unsubscribed";
     public static final String LAUNCH_LIST_JOINED = "content.launch-list.joined";
     public static final String CAREER_APPLICATION_RECEIVED = "content.career-application.received";
+    /** A sponsored-products campaign was paused (budget spent or by its owner); key = campaign id. */
+    public static final String ADS_CAMPAIGN_PAUSED = "content.ads.campaign_paused";
 
     private ContentEvents() {
     }

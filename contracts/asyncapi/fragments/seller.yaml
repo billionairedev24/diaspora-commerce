@@ -49,7 +49,8 @@ operations:
       seller.org.approved: identity-service (consumer group identity-service, inbox-deduplicated) mirrors the
       organisation with the seller org id (org_…) as its id and grants applicantUserId and ownerUserIds the
       seller.owner / provider.owner role, so the next token carries the org claim (unlocking Seller Center / Provider
-      Hub). seller.org.updated: indexer refreshes the seller display name on indexed documents, cart refreshes it;
+      Hub). seller.org.updated: indexer refreshes the seller display name on indexed documents (and its directory,
+      which it warms on start from GET /v1/orgs/directory, scope sellers:directory), cart refreshes it;
       identity mirrors name, status and market. Also published when Trust and Safety suspends (status SUSPENDED) or
       reinstates (status back to APPROVED) an organisation.
   publishSellerComplianceEvents:

@@ -253,3 +253,38 @@ func TestTakenDownListingsLeaveSearchAndReinstatedOnesReturn(t *testing.T) {
 		t.Fatalf("reinstated listing should be LIVE again, got %q", idx.docs[1].Status)
 	}
 }
+
+type directorySource struct{ orgs []domain.SellerOrg }
+
+func (d directorySource) Directory(_ context.Context, page, _ int) (domain.SellerDirectoryPage, error) {
+	if page > 0 {
+		return domain.SellerDirectoryPage{Page: page, Total: int64(len(d.orgs))}, nil
+	}
+	return domain.SellerDirectoryPage{Items: d.orgs, Total: int64(len(d.orgs))}, nil
+}
+
+func (d directorySource) Org(context.Context, string) (domain.SellerOrg, bool, error) {
+	return domain.SellerOrg{}, false, nil
+}
+
+// S213: after a restart the warmed directory already knows the seller, so the first product event after start
+// indexes the real name (not the fallback) — restarts never change indexed seller names.
+func TestRestartKeepsSellerNamesFromTheWarmedDirectory(t *testing.T) {
+	ctx := context.Background()
+	src := directorySource{orgs: []domain.SellerOrg{{ID: "org_kemi", DisplayName: "Kemi's Pantry", Kind: "SELLER",
+		Status: "APPROVED"}}}
+	for restart := range 2 {
+		dir := sellers.NewDirectory(nil, "Marketplace seller", src, sellers.Options{Log: quiet})
+		if _, err := dir.Warm(ctx); err != nil {
+			t.Fatal(err)
+		}
+		idx := &fakeIndex{}
+		p := app.NewProjector(idx, fakeCatalog{}, dir, "us", quiet)
+		if err := p.Handle(ctx, sellerProduct(t, domain.ProductResumed, false, time.Now())); err != nil {
+			t.Fatal(err)
+		}
+		if idx.docs[0].SellerName != "Kemi's Pantry" || idx.opts[0].PreserveSellerName {
+			t.Fatalf("restart %d: %q %+v", restart, idx.docs[0].SellerName, idx.opts[0])
+		}
+	}
+}

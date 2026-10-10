@@ -4,8 +4,11 @@ channels:
     address: at.mcp-tool.events
     description: >-
       Audit trail of MCP tool calls (key = token subject). Headers event-id, event-type, occurred-at. The MCP server
-      has no database, so events are sent directly (not via an outbox) and also written to the
-      com.afrotransact.mcp.audit log; consumers must tolerate gaps during broker outages and reconcile from logs.
+      has no database, so events are sent directly (not via an outbox table); when Kafka refuses them they are
+      spooled in a Valkey stream shared by all replicas and replayed in spool order once the broker is back (one
+      replica at a time, holding a lease). Replayed events keep their original event-id and occurred-at, so they can
+      arrive late and, after a partial failure, more than once: consumers de-duplicate on event-id. Every call is also
+      written to the com.afrotransact.mcp.audit log, the backstop if Kafka and Valkey are both down.
     messages:
       mcpToolInvoked: {$ref: '#/components/messages/mcpToolInvoked'}
 operations:

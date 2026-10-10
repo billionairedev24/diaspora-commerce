@@ -136,6 +136,8 @@ channels:
         $ref: '#/components/messages/contentLaunchListJoined'
       contentCareerApplicationReceived:
         $ref: '#/components/messages/contentCareerApplicationReceived'
+      contentAdsCampaignPaused:
+        $ref: '#/components/messages/contentAdsCampaignPaused'
   fulfilmentEvents:
     address: at.fulfilment.events
     description: 'Fulfilment-centre tasks, delivery routes and stops, vehicle defects, SOS alerts and driver access changes
@@ -183,6 +185,18 @@ channels:
         $ref: '#/components/messages/fulfilmentDriverAccessRevoked'
       fulfilmentOrdersForwardFailed:
         $ref: '#/components/messages/fulfilmentOrdersForwardFailed'
+      fulfilmentShipmentHandedOver:
+        $ref: '#/components/messages/fulfilmentShipmentHandedOver'
+      fulfilmentReturnPickupScheduled:
+        $ref: '#/components/messages/fulfilmentReturnPickupScheduled'
+      fulfilmentReturnPickupRouted:
+        $ref: '#/components/messages/fulfilmentReturnPickupRouted'
+      fulfilmentReturnPickupCollected:
+        $ref: '#/components/messages/fulfilmentReturnPickupCollected'
+      fulfilmentReturnPickupFailed:
+        $ref: '#/components/messages/fulfilmentReturnPickupFailed'
+      fulfilmentReturnPickupCancelled:
+        $ref: '#/components/messages/fulfilmentReturnPickupCancelled'
   identityEvents:
     address: at.identity.events
     description: 'Accounts, one-time codes, phone verification, access changes, organisation invitations, sign-in lockouts,
@@ -257,6 +271,10 @@ channels:
         $ref: '#/components/messages/inventoryReservationCommitted'
       inventoryReservationReleased:
         $ref: '#/components/messages/inventoryReservationReleased'
+      inventoryReservationGroupCommitted:
+        $ref: '#/components/messages/inventoryReservationGroupCommitted'
+      inventoryReservationGroupReleased:
+        $ref: '#/components/messages/inventoryReservationGroupReleased'
   inventoryReconciliationEvents:
     address: at.inventory-reconciliation.events
     description: Nightly reconciliation alerts (key = run id).
@@ -265,9 +283,12 @@ channels:
         $ref: '#/components/messages/inventoryReconciliationDriftDetected'
   mcpToolEvents:
     address: at.mcp-tool.events
-    description: Audit trail of MCP tool calls (key = token subject). Headers event-id, event-type, occurred-at. The MCP server
-      has no database, so events are sent directly (not via an outbox) and also written to the com.afrotransact.mcp.audit
-      log; consumers must tolerate gaps during broker outages and reconcile from logs.
+    description: 'Audit trail of MCP tool calls (key = token subject). Headers event-id, event-type, occurred-at. The MCP
+      server has no database, so events are sent directly (not via an outbox table); when Kafka refuses them they are spooled
+      in a Valkey stream shared by all replicas and replayed in spool order once the broker is back (one replica at a time,
+      holding a lease). Replayed events keep their original event-id and occurred-at, so they can arrive late and, after a
+      partial failure, more than once: consumers de-duplicate on event-id. Every call is also written to the com.afrotransact.mcp.audit
+      log, the backstop if Kafka and Valkey are both down.'
     messages:
       mcpToolInvoked:
         $ref: '#/components/messages/mcpToolInvoked'
@@ -549,6 +570,25 @@ channels:
         $ref: '#/components/messages/retailInvoiceRejected'
       retailPaymentReleased:
         $ref: '#/components/messages/retailPaymentReleased'
+  searchEvents:
+    address: at.search.events
+    description: Searches and result clicks (key = search id). search.query.performed is published for every tracked search
+      page (the BFF sends track=false for rails and Lola); search.result.clicked once per search and product.
+    messages:
+      searchQueryPerformed:
+        $ref: '#/components/messages/searchQueryPerformed'
+      searchResultClicked:
+        $ref: '#/components/messages/searchResultClicked'
+  adsEvents:
+    address: at.ads.events
+    description: Sponsored-product delivery from search's second-price auction (key = campaign id, so one campaign's clicks
+      are charged in order). Impression ids are stable per search and ad; click ids per served ad token (one billable click
+      per ad shown).
+    messages:
+      adsImpressionRecorded:
+        $ref: '#/components/messages/adsImpressionRecorded'
+      adsClickRecorded:
+        $ref: '#/components/messages/adsClickRecorded'
   sellerApplicationEvents:
     address: at.seller-application.events
     description: Onboarding applications (key = application id). Headers event-id, event-type, occurred-at; consumers de-duplicate
@@ -857,6 +897,13 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/CatalogCategoryRequestEvent'
+    contentAdsCampaignPaused:
+      name: content.ads.campaign_paused
+      title: A sponsored-products campaign was paused (budget spent or by its owner); key = campaign id
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/ContentAdsCampaignPaused'
     contentPlacementsPublished:
       name: content.placements.published
       title: Placements of a market changed (approved, live or ended) — purge the CDN bundle
@@ -1064,6 +1111,48 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/FulfilmentForwardFailed'
+    fulfilmentShipmentHandedOver:
+      name: fulfilment.shipment.handed_over
+      title: A shipment left its origin (seller pickup or FC load-out) with its ship-by date and lateness
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentShipmentHandedOver'
+    fulfilmentReturnPickupScheduled:
+      name: fulfilment.return_pickup.scheduled
+      title: tax-returns scheduled a driver pickup of a return (pool, REQUESTED)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentReturnPickupEvent'
+    fulfilmentReturnPickupRouted:
+      name: fulfilment.return_pickup.routed
+      title: Dispatch put the return pickup on a route (RETURN_PICKUP stop)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentReturnPickupEvent'
+    fulfilmentReturnPickupCollected:
+      name: fulfilment.return_pickup.collected
+      title: The driver collected the return parcel
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentReturnPickupEvent'
+    fulfilmentReturnPickupFailed:
+      name: fulfilment.return_pickup.failed
+      title: The return could not be collected (note says why)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentReturnPickupEvent'
+    fulfilmentReturnPickupCancelled:
+      name: fulfilment.return_pickup.cancelled
+      title: The return pickup was cancelled (RMA cancelled or dispatch)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/FulfilmentReturnPickupEvent'
     identityUserRegistered:
       name: identity.user.registered
       title: Account created (sign-up form, social sign-in or staff provisioning)
@@ -1258,6 +1347,20 @@ components:
     inventoryReservationReleased:
       name: inventory.reservation.released
       title: Hold released (status RELEASED on cancel / payment failure, EXPIRED after the TTL)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryReservationEvent'
+    inventoryReservationGroupCommitted:
+      name: inventory.reservation.group_committed
+      title: Some groups (one shipment's lines) shipped; lines = those groups' lines, cogs = their landed cost
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/InventoryReservationEvent'
+    inventoryReservationGroupReleased:
+      name: inventory.reservation.group_released
+      title: Some groups (one cancelled shipment's lines) released; other groups stay held
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1745,6 +1848,34 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/RetailPaymentReleased'
+    searchQueryPerformed:
+      name: search.query.performed
+      title: A shopper searched (one results page)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SearchQueryPerformed'
+    searchResultClicked:
+      name: search.result.clicked
+      title: A shopper clicked a search result (organic or sponsored)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/SearchResultClicked'
+    adsImpressionRecorded:
+      name: ads.impression.recorded
+      title: A sponsored product was served at an ad slot
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/AdsImpressionRecorded'
+    adsClickRecorded:
+      name: ads.click.recorded
+      title: A billable click on a sponsored product (second price)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/AdsClickRecorded'
     sellerApplicationSubmitted:
       name: seller.application.submitted
       title: Application submitted (or resubmitted after a request for info; see submissionCount)
@@ -2608,6 +2739,40 @@ components:
           - PENDING_REVIEW
           - APPROVED
           - REJECTED
+    ContentAdsCampaignPaused:
+      type: object
+      required:
+      - campaignId
+      - sellerOrgId
+      - name
+      - reason
+      - spentMinor
+      - totalBudgetMinor
+      - currency
+      - occurredAt
+      properties:
+        campaignId:
+          type: string
+        sellerOrgId:
+          type: string
+        name:
+          type: string
+        reason:
+          type: string
+          enum:
+          - BUDGET_EXHAUSTED
+          - MANUAL
+        spentMinor:
+          type: integer
+          format: int64
+        totalBudgetMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
     ContentPlacementsPublished:
       type: object
       required:
@@ -2919,6 +3084,129 @@ components:
         submittedAt:
           type: string
           format: date-time
+    FulfilmentShipmentHandedOver:
+      type: object
+      required:
+      - shipmentId
+      - orderId
+      - origin
+      - handedOverAt
+      properties:
+        shipmentId:
+          type: string
+        orderId:
+          type: string
+        orderNumber:
+          type:
+          - string
+          - 'null'
+        sellerOrgId:
+          type:
+          - string
+          - 'null'
+        fulfilmentType:
+          type:
+          - string
+          - 'null'
+          enum:
+          - SELLER_FULFILLED
+          - FBA_AFROTRANSACT
+          - RETAIL_1P
+          - null
+        origin:
+          type: string
+          enum:
+          - SELLER
+          - FC
+          description: SELLER = collected at the seller's pickup stop
+        routeId:
+          type:
+          - string
+          - 'null'
+        driverId:
+          type:
+          - string
+          - 'null'
+        shipBy:
+          type:
+          - string
+          - 'null'
+          format: date
+          description: Date it had to leave its origin by (orders)
+        handedOverAt:
+          type: string
+          format: date-time
+        late:
+          type:
+          - boolean
+          - 'null'
+          description: Handed over after shipBy (business zone); null without shipBy
+    FulfilmentReturnPickupEvent:
+      type: object
+      required:
+      - returnPickupId
+      - rmaId
+      - rmaNumber
+      - status
+      - at
+      properties:
+        returnPickupId:
+          type: string
+        rmaId:
+          type: string
+        rmaNumber:
+          type: string
+          examples:
+          - RMA-7K2Q9H4M
+        orderId:
+          type:
+          - string
+          - 'null'
+        shipmentId:
+          type:
+          - string
+          - 'null'
+        customerId:
+          type:
+          - string
+          - 'null'
+        sellerOrgId:
+          type:
+          - string
+          - 'null'
+        depotNodeId:
+          type:
+          - string
+          - 'null'
+          description: FC the parcel goes back to
+        status:
+          type: string
+          enum:
+          - REQUESTED
+          - ROUTED
+          - COLLECTED
+          - FAILED
+          - CANCELLED
+        routeId:
+          type:
+          - string
+          - 'null'
+        stopId:
+          type:
+          - string
+          - 'null'
+        collectBy:
+          type:
+          - string
+          - 'null'
+          format: date
+        note:
+          type:
+          - string
+          - 'null'
+        at:
+          type: string
+          format: date-time
     FulfilmentTaskEvent:
       type: object
       required:
@@ -3041,6 +3329,7 @@ components:
           enum:
           - PICKUP
           - DROPOFF
+          - RETURN_PICKUP
         status:
           type: string
           enum:
@@ -3858,6 +4147,13 @@ components:
           type:
           - string
           - 'null'
+        groups:
+          type:
+          - array
+          - 'null'
+          description: Groups a group_committed / group_released event is about; null for whole-order events
+          items:
+            type: string
         cogs:
           type: array
           items:
@@ -3875,6 +4171,22 @@ components:
                 type: string
               qty:
                 type: integer
+              group:
+                type:
+                - string
+                - 'null'
+                description: Caller's grouping key (orders' line id)
+              status:
+                type: string
+                enum:
+                - HELD
+                - COMMITTED
+                - RELEASED
+              stockOwnerOrgId:
+                type:
+                - string
+                - 'null'
+                description: Owner of the reserved stock (AfroTransact Retail for 1P, the FBA seller otherwise)
               allocations:
                 type: array
                 items:
@@ -4451,6 +4763,25 @@ components:
           type:
           - string
           - 'null'
+        shipToName:
+          type:
+          - string
+          - 'null'
+          description: Recipient name of the ship-to address
+        shipToLine1:
+          type:
+          - string
+          - 'null'
+          description: Ship-to street line (return labels need no app address)
+        shipToLine2:
+          type:
+          - string
+          - 'null'
+        paymentId:
+          type:
+          - string
+          - 'null'
+          description: payments-service payment of the order
         shipments:
           type: array
           items:
@@ -4531,6 +4862,21 @@ components:
                 - number
                 - 'null'
                 description: Ship-to longitude when the address book knows it
+              shippingMinor:
+                type: integer
+                format: int64
+                description: Shipping of the shipment (charged on its first line, as payments allocates it)
+              shipBy:
+                type:
+                - string
+                - 'null'
+                format: date
+                description: Date the shipment must be handed over by
+              promisedFrom:
+                type:
+                - string
+                - 'null'
+                format: date
               lines:
                 type: array
                 items:
@@ -4539,8 +4885,15 @@ components:
                     lineId:
                       type: string
                       format: uuid
+                      description: Order line id (= payments line id)
+                    lineNo:
+                      type: integer
                     variantAtin:
                       type: string
+                    productAtin:
+                      type:
+                      - string
+                      - 'null'
                     title:
                       type:
                       - string
@@ -4553,6 +4906,39 @@ components:
                     taxMinor:
                       type: integer
                       format: int64
+                      description: Tax of the line incl. tax on its shipping
+                    productType:
+                      type:
+                      - string
+                      - 'null'
+                      description: Catalog product type
+                    category:
+                      type:
+                      - string
+                      - 'null'
+                      description: Payments commission category
+                    perishable:
+                      type: boolean
+                    discountMinor:
+                      type: integer
+                      format: int64
+                      description: Coupon discount allocated to the line
+                    taxJurisdiction:
+                      type:
+                      - string
+                      - 'null'
+                      examples:
+                      - US-TX
+                    localTaxJurisdiction:
+                      type:
+                      - string
+                      - 'null'
+                      examples:
+                      - US-TX-770
+                    shippingTaxMinor:
+                      type: integer
+                      format: int64
+                      description: Part of taxMinor on shipping
     OrdersOrderCancelled:
       type: object
       required:
@@ -5731,6 +6117,212 @@ components:
               amountMinor:
                 type: integer
                 format: int64
+    SearchQueryPerformed:
+      type: object
+      required:
+      - searchId
+      - market
+      - query
+      - normalizedQuery
+      - filters
+      - sort
+      - page
+      - total
+      - zeroResults
+      - semantic
+      - tookMs
+      - topAtins
+      - sponsoredAtins
+      - occurredAt
+      properties:
+        searchId:
+          type: string
+          format: uuid
+        market:
+          type: string
+          examples:
+          - us
+        query:
+          type: string
+        normalizedQuery:
+          type: string
+          description: Lowercase
+          punctuation removed: null
+          single spaces (analytics key): null
+        department:
+          type: string
+        filters:
+          type: array
+          items:
+            type: string
+          description: Filters applied (department, community, price …)
+        sort:
+          type: string
+          enum:
+          - relevance
+          - price_asc
+          - price_desc
+          - rating
+          - newest
+        page:
+          type: integer
+        total:
+          type: integer
+          format: int64
+        zeroResults:
+          type: boolean
+        semantic:
+          type: boolean
+          description: kNN blended
+        tookMs:
+          type: integer
+          format: int64
+        topAtins:
+          type: array
+          items:
+            type: string
+          description: Up to 10 organic results in order
+        sponsoredAtins:
+          type: array
+          items:
+            type: string
+        customerId:
+          type: string
+          description: Signed-in shopper (identity subject)
+          when known: null
+        occurredAt:
+          type: string
+          format: date-time
+    SearchResultClicked:
+      type: object
+      required:
+      - searchId
+      - market
+      - query
+      - normalizedQuery
+      - atin
+      - position
+      - sponsored
+      - occurredAt
+      properties:
+        searchId:
+          type: string
+        market:
+          type: string
+        query:
+          type: string
+        normalizedQuery:
+          type: string
+        atin:
+          type: string
+          pattern: ^AT[0-9A-Z]{8}$
+        position:
+          type: integer
+          minimum: 1
+        sponsored:
+          type: boolean
+        campaignId:
+          type: string
+        customerId:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+    AdsImpressionRecorded:
+      type: object
+      required:
+      - impressionId
+      - campaignId
+      - sellerOrgId
+      - atin
+      - searchId
+      - market
+      - query
+      - slot
+      - auctionRank
+      - qualityScore
+      - occurredAt
+      properties:
+        impressionId:
+          type: string
+          format: uuid
+          description: Equals the event-id
+        campaignId:
+          type: string
+        sellerOrgId:
+          type: string
+        atin:
+          type: string
+        searchId:
+          type: string
+        market:
+          type: string
+        query:
+          type: string
+        slot:
+          type: integer
+          description: 1-based result position
+        auctionRank:
+          type: integer
+        qualityScore:
+          type: number
+          minimum: 0
+          maximum: 1
+        occurredAt:
+          type: string
+          format: date-time
+    AdsClickRecorded:
+      type: object
+      required:
+      - clickId
+      - campaignId
+      - sellerOrgId
+      - atin
+      - variantAtins
+      - searchId
+      - market
+      - query
+      - slot
+      - priceMinor
+      - currency
+      - occurredAt
+      properties:
+        clickId:
+          type: string
+          format: uuid
+          description: Equals the event-id; one per served ad token
+        campaignId:
+          type: string
+        sellerOrgId:
+          type: string
+        atin:
+          type: string
+        variantAtins:
+          type: array
+          items:
+            type: string
+          description: For order attribution (order lines carry variant ATINs)
+        searchId:
+          type: string
+        market:
+          type: string
+        query:
+          type: string
+        slot:
+          type: integer
+        priceMinor:
+          type: integer
+          format: int64
+          description: 'Second price: at most the bid; content charges at most the budget left'
+        currency:
+          type: string
+        customerId:
+          type: string
+          description: Shopper
+          for 7-day click attribution: null
+        occurredAt:
+          type: string
+          format: date-time
     SellerApplicationEvent:
       type: object
       required:
@@ -6904,7 +7496,22 @@ operations:
       refresh eligibility, block disabled states); gateway-bff and web/mobile (content.site-config.changed, content.legal.*);
       notifications (newsletter confirmation and welcome emails, launch-list emails for newly live countries, careers acknowledgements,
       30-day notices of material legal changes); identity (re-acceptance of raised Conditions of Use / Privacy versions);
-      OFREP providers (content.flag.changed, optional early refresh).'
+      OFREP providers (content.flag.changed, optional early refresh); notifications (content.ads.campaign_paused: tell the
+      seller a sponsored-products campaign stopped because its budget is spent).'
+  receiveContentAdsEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/adsEvents'
+    summary: 'Sponsored products (S127): ads.impression.recorded adds to the campaign''s daily impressions; ads.click.recorded
+      charges the click (at most the second price, the lifetime budget left and today''s budget left) under a row lock and
+      pauses the campaign at zero budget (content.ads.campaign_paused). Inbox-deduplicated on event-id (consumer group content-service)
+      and on clickId.'
+  receiveContentOrderEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/ordersOrderEvents'
+    summary: orders.order.placed attributes order lines to the shopper's last sponsored-product click on the ordered variant
+      from the same seller within 7 days (attributed orders and sales, ROAS). Each line is attributed once.
   publishFulfilmentEvents:
     action: send
     channel:
@@ -6912,7 +7519,9 @@ operations:
     summary: 'fulfilment-service publishes pick/pack progress, route lifecycle, stop outcomes (delivered, failed, skipped,
       reassigned), vehicle defects, SOS alerts (priority HIGH: notifications pages dispatch at once), driver access revocations
       and orders-service calls that could not be applied. Dispatch consoles also get the same updates live over GET /v1/dispatch/stream
-      (server-sent events).'
+      (server-sent events). fulfilment.shipment.handed_over (key shipment id) carries the ship-by date when a seller hands
+      a shipment to the driver or the FC loads it out (trust-ops seller health); fulfilment.return_pickup.* (key RMA id) follow
+      return pickups scheduled by tax-returns-service.'
   receiveFulfilmentOrderEvents:
     action: receive
     channel:
@@ -6960,7 +7569,10 @@ operations:
     channel:
       $ref: '#/channels/sellerOrgEvents'
     summary: 'seller.org.approved / updated: the seller display name (else legal name) is applied to seller_name on every
-      document of the organisation and used for documents indexed afterwards.'
+      document of the organisation and used for documents indexed afterwards. The in-memory seller directory is warmed on
+      start from seller-service''s GET /v1/orgs/directory (client indexer-service, scope sellers:directory) before events
+      are consumed, refreshed every 30 minutes, and an unknown organisation is looked up once via GET /v1/orgs/{id}/public,
+      so restarts never change indexed seller names (S213).'
   publishInventoryStockEvents:
     action: send
     channel:
@@ -6971,7 +7583,8 @@ operations:
     action: send
     channel:
       $ref: '#/channels/inventoryReservationEvents'
-    summary: Reservation lifecycle for the orders saga and finance (COGS on committed).
+    summary: Reservation lifecycle for the orders saga and finance (COGS on committed / group_committed). Lines carry the
+      caller's group (orders' line id) and the stock owner; group events cover one shipment's lines.
   publishInventoryReconciliationEvents:
     action: send
     channel:
@@ -7161,6 +7774,18 @@ operations:
     summary: 'retail-service (consumer group retail-service, inbox-deduplicated) handles inventory.reservation.committed:
       shipped units of 1P SKUs are costed at their lots'' landed cost and posted as COGS (Dr 5000 / Cr 1300, retail.gl.journal.posted
       with source COGS). Other reservation events are ignored.'
+  publishSearchEvents:
+    action: send
+    channel:
+      $ref: '#/channels/searchEvents'
+    summary: 'Search analytics: data platform and personalisation consume them; search itself keeps daily per-query aggregates
+      (searches, zero results, clicks) in Elasticsearch for the staff console.'
+  publishAdsEvents:
+    action: send
+    channel:
+      $ref: '#/channels/adsEvents'
+    summary: content-service counts impressions, charges clicks against campaign budgets (pausing at zero) and attributes
+      orders (7-day click). ads.click.recorded is only published for a valid, unexpired, first use of an ad token.
   publishSellerApplicationEvents:
     action: send
     channel:
@@ -7175,8 +7800,9 @@ operations:
     summary: 'seller.org.approved: identity-service (consumer group identity-service, inbox-deduplicated) mirrors the organisation
       with the seller org id (org_…) as its id and grants applicantUserId and ownerUserIds the seller.owner / provider.owner
       role, so the next token carries the org claim (unlocking Seller Center / Provider Hub). seller.org.updated: indexer
-      refreshes the seller display name on indexed documents, cart refreshes it; identity mirrors name, status and market.
-      Also published when Trust and Safety suspends (status SUSPENDED) or reinstates (status back to APPROVED) an organisation.'
+      refreshes the seller display name on indexed documents (and its directory, which it warms on start from GET /v1/orgs/directory,
+      scope sellers:directory), cart refreshes it; identity mirrors name, status and market. Also published when Trust and
+      Safety suspends (status SUSPENDED) or reinstates (status back to APPROVED) an organisation.'
   publishSellerComplianceEvents:
     action: send
     channel:

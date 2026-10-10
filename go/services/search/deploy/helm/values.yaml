@@ -31,6 +31,9 @@ monitoring:
 # Secret keys expected at afrotransact/<env>/search in the cloud secret store:
 #   - ES_URLS
 #   - ES_API_KEY
+#   - KAFKA_BOOTSTRAP          (search.* and ads.* events)
+#   - ADS_TOKEN_KEY            (≥ 32 chars; signs sponsored-product click tokens)
+#   - SEARCH_CLIENT_SECRET     (identity client search-service: ai:use, ads:serve)
 secrets:
   enabled: true
   store: platform-secrets

@@ -29,6 +29,12 @@ channels:
       fulfilmentDriverSosRaised: {$ref: '#/components/messages/fulfilmentDriverSosRaised'}
       fulfilmentDriverAccessRevoked: {$ref: '#/components/messages/fulfilmentDriverAccessRevoked'}
       fulfilmentOrdersForwardFailed: {$ref: '#/components/messages/fulfilmentOrdersForwardFailed'}
+      fulfilmentShipmentHandedOver: {$ref: '#/components/messages/fulfilmentShipmentHandedOver'}
+      fulfilmentReturnPickupScheduled: {$ref: '#/components/messages/fulfilmentReturnPickupScheduled'}
+      fulfilmentReturnPickupRouted: {$ref: '#/components/messages/fulfilmentReturnPickupRouted'}
+      fulfilmentReturnPickupCollected: {$ref: '#/components/messages/fulfilmentReturnPickupCollected'}
+      fulfilmentReturnPickupFailed: {$ref: '#/components/messages/fulfilmentReturnPickupFailed'}
+      fulfilmentReturnPickupCancelled: {$ref: '#/components/messages/fulfilmentReturnPickupCancelled'}
 operations:
   publishFulfilmentEvents:
     action: send
@@ -37,7 +43,9 @@ operations:
       fulfilment-service publishes pick/pack progress, route lifecycle, stop outcomes (delivered, failed, skipped,
       reassigned), vehicle defects, SOS alerts (priority HIGH: notifications pages dispatch at once), driver access
       revocations and orders-service calls that could not be applied. Dispatch consoles also get the same updates
-      live over GET /v1/dispatch/stream (server-sent events).
+      live over GET /v1/dispatch/stream (server-sent events). fulfilment.shipment.handed_over (key shipment id) carries
+      the ship-by date when a seller hands a shipment to the driver or the FC loads it out (trust-ops seller health);
+      fulfilment.return_pickup.* (key RMA id) follow return pickups scheduled by tax-returns-service.
   receiveFulfilmentOrderEvents:
     action: receive
     channel: {$ref: '#/channels/ordersOrderEvents'}
@@ -153,7 +161,70 @@ components:
       title: orders-service refused or never accepted a transition / courier event / tracking call
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/FulfilmentForwardFailed'}
+    fulfilmentShipmentHandedOver:
+      name: fulfilment.shipment.handed_over
+      title: A shipment left its origin (seller pickup or FC load-out) with its ship-by date and lateness
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentShipmentHandedOver'}
+    fulfilmentReturnPickupScheduled:
+      name: fulfilment.return_pickup.scheduled
+      title: tax-returns scheduled a driver pickup of a return (pool, REQUESTED)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentReturnPickupEvent'}
+    fulfilmentReturnPickupRouted:
+      name: fulfilment.return_pickup.routed
+      title: Dispatch put the return pickup on a route (RETURN_PICKUP stop)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentReturnPickupEvent'}
+    fulfilmentReturnPickupCollected:
+      name: fulfilment.return_pickup.collected
+      title: The driver collected the return parcel
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentReturnPickupEvent'}
+    fulfilmentReturnPickupFailed:
+      name: fulfilment.return_pickup.failed
+      title: The return could not be collected (note says why)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentReturnPickupEvent'}
+    fulfilmentReturnPickupCancelled:
+      name: fulfilment.return_pickup.cancelled
+      title: The return pickup was cancelled (RMA cancelled or dispatch)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/FulfilmentReturnPickupEvent'}
   schemas:
+    FulfilmentShipmentHandedOver:
+      type: object
+      required: [shipmentId, orderId, origin, handedOverAt]
+      properties:
+        shipmentId: {type: string}
+        orderId: {type: string}
+        orderNumber: {type: [string, 'null']}
+        sellerOrgId: {type: [string, 'null']}
+        fulfilmentType: {type: [string, 'null'], enum: [SELLER_FULFILLED, FBA_AFROTRANSACT, RETAIL_1P, null]}
+        origin: {type: string, enum: [SELLER, FC], description: SELLER = collected at the seller's pickup stop}
+        routeId: {type: [string, 'null']}
+        driverId: {type: [string, 'null']}
+        shipBy: {type: [string, 'null'], format: date, description: Date it had to leave its origin by (orders)}
+        handedOverAt: {type: string, format: date-time}
+        late: {type: [boolean, 'null'], description: Handed over after shipBy (business zone); null without shipBy}
+    FulfilmentReturnPickupEvent:
+      type: object
+      required: [returnPickupId, rmaId, rmaNumber, status, at]
+      properties:
+        returnPickupId: {type: string}
+        rmaId: {type: string}
+        rmaNumber: {type: string, examples: [RMA-7K2Q9H4M]}
+        orderId: {type: [string, 'null']}
+        shipmentId: {type: [string, 'null']}
+        customerId: {type: [string, 'null']}
+        sellerOrgId: {type: [string, 'null']}
+        depotNodeId: {type: [string, 'null'], description: FC the parcel goes back to}
+        status: {type: string, enum: [REQUESTED, ROUTED, COLLECTED, FAILED, CANCELLED]}
+        routeId: {type: [string, 'null']}
+        stopId: {type: [string, 'null']}
+        collectBy: {type: [string, 'null'], format: date}
+        note: {type: [string, 'null']}
+        at: {type: string, format: date-time}
     FulfilmentTaskEvent:
       type: object
       required: [taskId, shipmentId, orderId, orderNumber, status, at]
@@ -188,7 +259,7 @@ components:
         routeId: {type: string}
         stopId: {type: string, format: uuid}
         driverId: {type: [string, 'null']}
-        kind: {type: string, enum: [PICKUP, DROPOFF]}
+        kind: {type: string, enum: [PICKUP, DROPOFF, RETURN_PICKUP]}
         status: {type: string, enum: [DONE, FAILED, SKIPPED, REASSIGNED]}
         shipmentIds: {type: array, items: {type: string}}
         reason: {type: [string, 'null'], description: problem type → resolution and the driver's note}

@@ -20,6 +20,8 @@ channels:
       inventoryReservationHeld: {$ref: '#/components/messages/inventoryReservationHeld'}
       inventoryReservationCommitted: {$ref: '#/components/messages/inventoryReservationCommitted'}
       inventoryReservationReleased: {$ref: '#/components/messages/inventoryReservationReleased'}
+      inventoryReservationGroupCommitted: {$ref: '#/components/messages/inventoryReservationGroupCommitted'}
+      inventoryReservationGroupReleased: {$ref: '#/components/messages/inventoryReservationGroupReleased'}
   inventoryReconciliationEvents:
     address: at.inventory-reconciliation.events
     description: Nightly reconciliation alerts (key = run id).
@@ -35,7 +37,9 @@ operations:
   publishInventoryReservationEvents:
     action: send
     channel: {$ref: '#/channels/inventoryReservationEvents'}
-    summary: Reservation lifecycle for the orders saga and finance (COGS on committed).
+    summary: >-
+      Reservation lifecycle for the orders saga and finance (COGS on committed / group_committed). Lines carry the
+      caller's group (orders' line id) and the stock owner; group events cover one shipment's lines.
   publishInventoryReconciliationEvents:
     action: send
     channel: {$ref: '#/channels/inventoryReconciliationEvents'}
@@ -84,6 +88,16 @@ components:
     inventoryReservationReleased:
       name: inventory.reservation.released
       title: Hold released (status RELEASED on cancel / payment failure, EXPIRED after the TTL)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/InventoryReservationEvent'}
+    inventoryReservationGroupCommitted:
+      name: inventory.reservation.group_committed
+      title: Some groups (one shipment's lines) shipped; lines = those groups' lines, cogs = their landed cost
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/InventoryReservationEvent'}
+    inventoryReservationGroupReleased:
+      name: inventory.reservation.group_released
+      title: Some groups (one cancelled shipment's lines) released; other groups stay held
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/InventoryReservationEvent'}
     inventoryReconciliationDriftDetected:
@@ -138,6 +152,10 @@ components:
         status: {type: string, enum: [HELD, COMMITTED, RELEASED, EXPIRED]}
         expiresAt: {type: [string, 'null'], format: date-time}
         reason: {type: [string, 'null']}
+        groups:
+          type: [array, 'null']
+          description: Groups a group_committed / group_released event is about; null for whole-order events
+          items: {type: string}
         cogs:
           type: array
           items: {$ref: '#/components/schemas/InventoryMoney'}
@@ -150,6 +168,11 @@ components:
               sku: {type: string}
               nodeId: {type: string}
               qty: {type: integer}
+              group: {type: [string, 'null'], description: Caller's grouping key (orders' line id)}
+              status: {type: string, enum: [HELD, COMMITTED, RELEASED]}
+              stockOwnerOrgId:
+                type: [string, 'null']
+                description: Owner of the reserved stock (AfroTransact Retail for 1P, the FBA seller otherwise)
               allocations:
                 type: array
                 items:

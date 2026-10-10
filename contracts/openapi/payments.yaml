@@ -295,6 +295,41 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/BalanceResponse'
+  /v1/orders/{orderId}/refunds:
+    post:
+      tags:
+      - Payments
+      summary: Refund by order and line ids (payments:service; e.g. trust-ops claims)
+      description: 'Finds the order''s payment and spreads amountMinor (default: everything still refundable) over the lines''
+        remaining items, shipping and tax with the largest-remainder method, then refunds like POST /v1/payments/{id}/refunds.
+        Idempotent per Idempotency-Key.'
+      operationId: refundByOrder
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrderRefundRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
   /v1/orders/{orderId}/split:
     get:
       tags:
@@ -918,6 +953,58 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/SettlementResponse'
+  /v1/settlements/{orderId}/shipments:
+    get:
+      tags:
+      - Settlement & payouts
+      summary: Shipment settlement holds of an order
+      operationId: shipmentSettlements
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ShipmentSettlement'
+  /v1/settlements/{orderId}/shipments/{shipmentId}/delivered:
+    post:
+      tags:
+      - Settlement & payouts
+      summary: 'One shipment delivered: start that shipment''s settlement hold (payments:service)'
+      description: The seller net captured for the shipment becomes transferable after the hold, without waiting for the order's
+        other shipments; the order hold transfers whatever is left. Idempotent per shipment.
+      operationId: shipmentDelivered
+      parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: shipmentId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeliveredRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ShipmentSettlement'
   /v1/webhooks/stripe:
     post:
       tags:
@@ -987,6 +1074,24 @@ components:
         kind:
           type: string
           description: PRODUCT (delivery) or SERVICE (booking completed)
+    ShipmentSettlement:
+      type: object
+      description: Settlement hold of one shipment
+      properties:
+        orderId:
+          type: string
+        shipmentId:
+          type: string
+        kind:
+          type: string
+        deliveredAt:
+          type: string
+          format: date-time
+        releaseAt:
+          type: string
+          format: date-time
+        status:
+          type: string
     SettlementResponse:
       type: object
       properties:
@@ -1208,13 +1313,20 @@ components:
           type: string
           maxLength: 40
           minLength: 0
+        shippingTaxMinor:
+          type: integer
+          format: int64
+          description: Part of taxMinor charged on shipping (states that tax delivery); default 0
+          minimum: 0
       required:
       - fulfilment
       - itemsMinor
       - lineId
       - sellerOrg
-    LineResponse:
+    PaymentLineResponse:
       type: object
+      description: One line as charged, with what was refunded so far (by this service's refunds, cancellations and claims
+        alike)
       properties:
         lineId:
           type: string
@@ -1250,6 +1362,27 @@ components:
         refundedMinor:
           type: integer
           format: int64
+        shippingTaxMinor:
+          type: integer
+          format: int64
+          description: Part of taxMinor charged on shipping
+        itemsTaxMinor:
+          type: integer
+          format: int64
+          description: taxMinor − shippingTaxMinor
+        refundedItemsMinor:
+          type: integer
+          format: int64
+        refundedShippingMinor:
+          type: integer
+          format: int64
+        refundedTaxMinor:
+          type: integer
+          format: int64
+        refundableMinor:
+          type: integer
+          format: int64
+          description: Captured and not refunded yet (0 before capture)
     PaymentResponse:
       type: object
       properties:
@@ -1304,7 +1437,7 @@ components:
         lines:
           type: array
           items:
-            $ref: '#/components/schemas/LineResponse'
+            $ref: '#/components/schemas/PaymentLineResponse'
     ReleaseRequest:
       type: object
       description: Release the uncaptured rest of the authorisation (e.g. booking cancelled or no-show after the deposit capture)
@@ -1510,6 +1643,30 @@ components:
           type: string
           maxLength: 500
           minLength: 0
+    OrderRefundRequest:
+      type: object
+      description: 'Refund by order and line ids (service callers such as trust-ops): the amount is spread over the lines''
+        remaining items, shipping and tax'
+      properties:
+        lineIds:
+          type: array
+          items:
+            type: string
+            maxLength: 80
+            minLength: 0
+          maxItems: 200
+          minItems: 0
+        amountMinor:
+          type: integer
+          format: int64
+          description: Total to refund; omit to refund everything still refundable on the lines
+          exclusiveMinimum: 0
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - lineIds
     FeeScheduleRequest:
       type: object
       description: A new fee-schedule version (Super Admin / Finance)

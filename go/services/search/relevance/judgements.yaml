@@ -1,0 +1,76 @@
+# Relevance judgements (S039): query → expected ATINs with graded relevance, run against products.yaml by
+# internal/adapter/elastic/relevance_integration_test.go (Elasticsearch 9 in Testcontainers, the production query).
+#
+# Grades: 3 = exactly what the shopper wants (in stock), 2 = right product but a weaker offer (out of stock, seller-
+# fulfilled twin of an AfroTransact-fulfilled item) or a close variant, 1 = related, 0 / unlisted = not relevant.
+# The business preferences (in stock first, Fulfilled by AfroTransact preferred on ties) are encoded in the grades.
+#
+# Metrics: NDCG@10 (gain 2^grade − 1, ideal order from these grades) and precision@5 (share of the top
+# min(5, |grade ≥ 1|) results that are relevant). The test fails when a mean falls below its threshold.
+# Measured (Elasticsearch 9.3.0): before S039 tuning 0.855 / 0.807; after 0.942 / 0.913. Raise the thresholds when
+# the ranking improves; add a query here for every relevance bug fixed.
+thresholds:
+  ndcg10: 0.92
+  precision5: 0.90
+queries:
+  - q: garri
+    why: synonym of gari / cassava flakes; out-of-stock last; a new unrated listing is still a good match
+    judgements: {AT1GAR0001: 3, AT1GAR0002: 3, AT1GAR0005: 2, AT1GAR0003: 2, AT1GAR0004: 1}
+  - q: gari
+    judgements: {AT1GAR0001: 3, AT1GAR0002: 3, AT1GAR0005: 2, AT1GAR0003: 2, AT1GAR0004: 1}
+  - q: cassava flakes
+    judgements: {AT1GAR0001: 3, AT1GAR0002: 3, AT1GAR0005: 2, AT1GAR0003: 2}
+  - q: kpekere
+    why: Yoruba name for plantain chips (also ipekere)
+    judgements: {AT1PLA0001: 3, AT1PLA0002: 3, AT1PLA0003: 2, AT1PLA0005: 2}
+  - q: plantain chips
+    judgements: {AT1PLA0001: 3, AT1PLA0002: 3, AT1PLA0003: 2, AT1PLA0005: 2, AT1PLA0004: 1}
+  - q: plantian chips
+    why: typo
+    judgements: {AT1PLA0001: 3, AT1PLA0002: 3, AT1PLA0003: 2, AT1PLA0005: 2, AT1PLA0004: 1}
+  - q: jollof rice seasoning
+    why: no product says all three words in that order; seasoning/spice blends are what shoppers mean
+    judgements: {AT1JOL0001: 3, AT1JOL0002: 2, AT1JOL0003: 2, AT1JOL0004: 1}
+  - q: jollof seasoning
+    judgements: {AT1JOL0001: 3, AT1JOL0002: 2, AT1JOL0003: 2}
+  - q: jolof
+    why: typo
+    judgements: {AT1JOL0001: 3, AT1JOL0002: 2, AT1JOL0003: 2, AT1JOL0004: 1}
+  - q: egusi
+    why: also agushi (Ghana) and melon seeds
+    judgements: {AT1EGU0001: 3, AT1EGU0002: 3, AT1EGU0005: 2, AT1EGU0003: 2, AT1EGU0004: 2}
+  - q: egussi
+    why: typo
+    judgements: {AT1EGU0001: 3, AT1EGU0002: 3, AT1EGU0005: 2, AT1EGU0003: 2, AT1EGU0004: 2}
+  - q: melon seeds
+    judgements: {AT1EGU0001: 3, AT1EGU0002: 3, AT1EGU0005: 2, AT1EGU0004: 2, AT1EGU0003: 1}
+  - q: palm oil
+    why: in-stock first; palm kernel oil is only related
+    judgements: {AT1PAL0001: 3, AT1PAL0002: 2, AT1PAL0003: 1, AT1GAR0002: 1}
+  - q: shito
+    judgements: {AT1SHI0001: 3, AT1SHI0002: 3}
+  - q: suya spice
+    judgements: {AT1SUY0001: 3, AT1SUY0002: 3}
+  - q: zobo
+    judgements: {AT1BIS0002: 3, AT1BIS0001: 3}
+  - q: basmati rice
+    why: equal rating and reviews; the Fulfilled-by-AfroTransact offer is preferred
+    judgements: {AT1BAS0001: 3, AT1BAS0002: 2}
+  - q: shea butter
+    judgements: {AT1SHE0001: 3, AT1SHE0002: 3, AT1SHE0003: 1}
+  - q: black soap
+    judgements: {AT1SOA0001: 3, AT1SOA0002: 3, AT1SOA0003: 2}
+  - q: ankara dress
+    judgements: {AT1ANK0001: 3, AT1ANK0002: 3, AT1ANK0003: 1}
+  - q: kente
+    judgements: {AT1KEN0001: 3, AT1KEN0002: 2}
+  - q: head tie
+    judgements: {AT1GEL0001: 3, AT1GEL0002: 3}
+  - q: mama tee
+    why: brand-only match
+    judgements: {AT1GAR0001: 3, AT1PLA0004: 3, AT1EGU0001: 3}
+  - q: fufu
+    judgements: {AT1FUF0001: 3, AT1GAR0004: 1}
+  - q: spices
+    why: category match (Spices & seasonings)
+    judgements: {AT1SUY0001: 2, AT1SUY0002: 2, AT1JOL0001: 2, AT1JOL0002: 2, AT1MAG0001: 2}

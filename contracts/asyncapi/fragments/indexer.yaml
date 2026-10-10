@@ -22,4 +22,7 @@ operations:
     channel: {$ref: '#/channels/sellerOrgEvents'}
     summary: >-
       seller.org.approved / updated: the seller display name (else legal name) is applied to seller_name on every
-      document of the organisation and used for documents indexed afterwards.
+      document of the organisation and used for documents indexed afterwards. The in-memory seller directory is
+      warmed on start from seller-service's GET /v1/orgs/directory (client indexer-service, scope sellers:directory)
+      before events are consumed, refreshed every 30 minutes, and an unknown organisation is looked up once via
+      GET /v1/orgs/{id}/public, so restarts never change indexed seller names (S213).

@@ -18,32 +18,47 @@ import (
 )
 
 type indexImpl struct {
-	es *elasticsearch.Client
+	es      *elasticsearch.Client
+	ranking Ranking
 }
 
 var _ port.Index = (*indexImpl)(nil)
 
+// Option tunes the index adapter.
+type Option func(*indexImpl)
+
+// WithRanking replaces DefaultRanking.
+func WithRanking(r Ranking) Option { return func(i *indexImpl) { i.ranking = r } }
+
 // NewIndex returns an Index that queries the products-<market> alias.
-func NewIndex(es *elasticsearch.Client) port.Index { return &indexImpl{es: es} }
+func NewIndex(es *elasticsearch.Client, opts ...Option) port.Index {
+	i := &indexImpl{es: es, ranking: DefaultRanking()}
+	for _, o := range opts {
+		o(i)
+	}
+	return i
+}
 
 type source struct {
-	ATIN         string  `json:"atin"`
-	Title        string  `json:"title"`
-	Brand        string  `json:"brand"`
-	Department   string  `json:"department"`
-	CategoryPath string  `json:"category_path"`
-	SellerName   string  `json:"seller_name"`
-	SellerKind   string  `json:"seller_kind"`
-	Fulfilment   string  `json:"fulfilment"`
-	PriceMinor   int64   `json:"price_minor"`
-	Currency     string  `json:"currency"`
-	Rating       float64 `json:"rating"`
-	ReviewCount  int     `json:"review_count"`
-	InStock      bool    `json:"in_stock"`
-	AvailableQty int     `json:"available_qty"`
-	DeliveryDays int     `json:"delivery_days"`
-	ImageURL     string  `json:"image_url"`
-	OfferCount   int     `json:"offer_count"`
+	ATIN         string   `json:"atin"`
+	Title        string   `json:"title"`
+	Brand        string   `json:"brand"`
+	Department   string   `json:"department"`
+	CategoryPath string   `json:"category_path"`
+	SellerID     string   `json:"seller_id"`
+	VariantATINs []string `json:"variant_atins"`
+	SellerName   string   `json:"seller_name"`
+	SellerKind   string   `json:"seller_kind"`
+	Fulfilment   string   `json:"fulfilment"`
+	PriceMinor   int64    `json:"price_minor"`
+	Currency     string   `json:"currency"`
+	Rating       float64  `json:"rating"`
+	ReviewCount  int      `json:"review_count"`
+	InStock      bool     `json:"in_stock"`
+	AvailableQty int      `json:"available_qty"`
+	DeliveryDays int      `json:"delivery_days"`
+	ImageURL     string   `json:"image_url"`
+	OfferCount   int      `json:"offer_count"`
 }
 
 type bucket struct {
@@ -69,7 +84,7 @@ type response struct {
 
 func (i *indexImpl) Search(ctx context.Context, q domain.Query, vec []float32) (domain.Page, error) {
 	var res response
-	if err := i.do(ctx, searchindex.Alias(q.Market), buildSearch(q, vec), &res); err != nil {
+	if err := i.do(ctx, searchindex.Alias(q.Market), i.ranking.buildSearch(q, vec), &res); err != nil {
 		return domain.Page{}, err
 	}
 	page := domain.Page{Total: res.Hits.Total.Value, Page: q.Page, Size: q.Size, TookMs: res.Took,
@@ -119,6 +134,25 @@ func (i *indexImpl) Suggest(ctx context.Context, market, prefix string, limit in
 	return out, nil
 }
 
+func (i *indexImpl) AdCandidates(ctx context.Context, q domain.Query, atins []string) ([]domain.Hit, error) {
+	if len(atins) == 0 {
+		return []domain.Hit{}, nil
+	}
+	var res response
+	if err := i.do(ctx, searchindex.Alias(q.Market), i.ranking.buildAdCandidates(q, atins), &res); err != nil {
+		return nil, err
+	}
+	out := make([]domain.Hit, 0, len(res.Hits.Hits))
+	for _, h := range res.Hits.Hits {
+		hit := toHit(h.Source)
+		if h.Score != nil {
+			hit.Score = *h.Score
+		}
+		out = append(out, hit)
+	}
+	return out, nil
+}
+
 func (i *indexImpl) Ping(ctx context.Context) error {
 	res, err := i.es.Ping(i.es.Ping.WithContext(ctx))
 	if err != nil {
@@ -159,7 +193,8 @@ func toHit(s source) domain.Hit {
 	return domain.Hit{ATIN: s.ATIN, Title: s.Title, Brand: s.Brand, CategoryPath: s.CategoryPath,
 		SellerName: s.SellerName, SellerKind: s.SellerKind, Fulfilment: s.Fulfilment, PriceMinor: s.PriceMinor,
 		Currency: s.Currency, Rating: s.Rating, ReviewCount: s.ReviewCount, InStock: s.InStock,
-		AvailableQty: s.AvailableQty, DeliveryDays: s.DeliveryDays, ImageURL: s.ImageURL, OfferCount: s.OfferCount}
+		AvailableQty: s.AvailableQty, DeliveryDays: s.DeliveryDays, ImageURL: s.ImageURL, OfferCount: s.OfferCount,
+		SellerID: s.SellerID, Department: s.Department, VariantATINs: s.VariantATINs}
 }
 
 // completePhrase lowercases a title and keeps its first n words, e.g. "Jollof Seasoning Blend, 8 oz" → "jollof seasoning".

@@ -67,7 +67,10 @@ Nobody reviews their own application (`seller.self-review`). Every transition re
 
 ## Organisations
 
-`GET /v1/orgs/{id}/public` (no auth: display name, kind, status — indexer, cart, storefront), `GET /v1/orgs/{id}`
+`GET /v1/orgs/directory?page=&size=&status=` (S213: paged id, display name — legal name until a store name is set —
+kind, status, ordered by id, size ≤ 500; `sellers:directory`, held by the `indexer-service` client, or staff; the indexer
+warms its seller names from it on start), `GET /v1/orgs/{id}/public` (no auth: display name, kind, status — indexer,
+cart, storefront), `GET /v1/orgs/{id}`
 (members and reviewers), `PATCH /v1/orgs/{id} {displayName}` (owner, approved orgs) → `seller.org.updated`.
 
 ## Stripe compliance (S099–S102)

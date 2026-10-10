@@ -5,10 +5,35 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.content.domain.ads.Campaign;
+
 /** JSON payloads of content events. */
 public final class ContentEventPayloads {
 
     private ContentEventPayloads() {
+    }
+
+    /**
+     * A sponsored-products campaign was paused: its budget is spent (BUDGET_EXHAUSTED) or its owner paused it
+     * (MANUAL). Notifications tell the seller; search stops serving it within its campaign cache TTL.
+     *
+     * @param campaignId       campaign
+     * @param sellerOrgId      advertiser organisation
+     * @param name             campaign name
+     * @param reason           BUDGET_EXHAUSTED or MANUAL
+     * @param spentMinor       lifetime spend
+     * @param totalBudgetMinor lifetime budget
+     * @param currency         ISO 4217
+     * @param occurredAt       when
+     */
+    public record CampaignPaused(String campaignId, String sellerOrgId, String name, String reason, long spentMinor,
+                                 long totalBudgetMinor, String currency, Instant occurredAt) {
+    }
+
+    static CampaignPaused campaignPaused(Campaign c, Instant at) {
+        return new CampaignPaused(c.id(), c.sellerOrgId(), c.content().name(),
+                c.pauseReason() == null ? null : c.pauseReason().name(), c.spentMinor(), c.content().totalBudgetMinor(),
+                c.content().currency(), at);
     }
 
     /**

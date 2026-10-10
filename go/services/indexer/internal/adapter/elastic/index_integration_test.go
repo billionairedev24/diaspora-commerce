@@ -42,8 +42,12 @@ func TestVersionGuardedProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := searchindex.NewAdmin(es).EnsureIndex(ctx, "us"); err != nil {
+	// The index references the (still empty) synonyms set that search-service seeds.
+	if err := elastic.NewIndexAdmin(es, "diaspora-synonyms").EnsureIndex(ctx, "us"); err != nil {
 		t.Fatal(err)
+	}
+	if err := elastic.NewIndexAdmin(es, "diaspora-synonyms").EnsureIndex(ctx, "us"); err != nil {
+		t.Fatal("idempotent:", err)
 	}
 	idx := elastic.NewIndex(es, true)
 

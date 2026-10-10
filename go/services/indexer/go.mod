@@ -7,6 +7,7 @@ require (
 	github.com/elastic/go-elasticsearch/v9 v9.5.2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/testcontainers/testcontainers-go v0.44.0
+	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
 )
 

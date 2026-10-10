@@ -1,0 +1,126 @@
+# AsyncAPI 3.0 fragment for search-service (Go). Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+# Search analytics (S039) and sponsored-products delivery (S127). Events are published asynchronously (never on the
+# request path); event ids are deterministic for clicks and impressions, so consumers' inboxes drop replays.
+channels:
+  searchEvents:
+    address: at.search.events
+    description: >-
+      Searches and result clicks (key = search id). search.query.performed is published for every tracked search
+      page (the BFF sends track=false for rails and Lola); search.result.clicked once per search and product.
+    messages:
+      searchQueryPerformed: {$ref: '#/components/messages/searchQueryPerformed'}
+      searchResultClicked: {$ref: '#/components/messages/searchResultClicked'}
+  adsEvents:
+    address: at.ads.events
+    description: >-
+      Sponsored-product delivery from search's second-price auction (key = campaign id, so one campaign's clicks are
+      charged in order). Impression ids are stable per search and ad; click ids per served ad token (one billable
+      click per ad shown).
+    messages:
+      adsImpressionRecorded: {$ref: '#/components/messages/adsImpressionRecorded'}
+      adsClickRecorded: {$ref: '#/components/messages/adsClickRecorded'}
+operations:
+  publishSearchEvents:
+    action: send
+    channel: {$ref: '#/channels/searchEvents'}
+    summary: >-
+      Search analytics: data platform and personalisation consume them; search itself keeps daily per-query
+      aggregates (searches, zero results, clicks) in Elasticsearch for the staff console.
+  publishAdsEvents:
+    action: send
+    channel: {$ref: '#/channels/adsEvents'}
+    summary: >-
+      content-service counts impressions, charges clicks against campaign budgets (pausing at zero) and attributes
+      orders (7-day click). ads.click.recorded is only published for a valid, unexpired, first use of an ad token.
+components:
+  messages:
+    searchQueryPerformed:
+      name: search.query.performed
+      title: A shopper searched (one results page)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SearchQueryPerformed'}
+    searchResultClicked:
+      name: search.result.clicked
+      title: A shopper clicked a search result (organic or sponsored)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/SearchResultClicked'}
+    adsImpressionRecorded:
+      name: ads.impression.recorded
+      title: A sponsored product was served at an ad slot
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/AdsImpressionRecorded'}
+    adsClickRecorded:
+      name: ads.click.recorded
+      title: A billable click on a sponsored product (second price)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/AdsClickRecorded'}
+  schemas:
+    SearchQueryPerformed:
+      type: object
+      required: [searchId, market, query, normalizedQuery, filters, sort, page, total, zeroResults, semantic, tookMs,
+                 topAtins, sponsoredAtins, occurredAt]
+      properties:
+        searchId: {type: string, format: uuid}
+        market: {type: string, examples: [us]}
+        query: {type: string}
+        normalizedQuery: {type: string, description: Lowercase, punctuation removed, single spaces (analytics key)}
+        department: {type: string}
+        filters: {type: array, items: {type: string}, description: 'Filters applied (department, community, price …)'}
+        sort: {type: string, enum: [relevance, price_asc, price_desc, rating, newest]}
+        page: {type: integer}
+        total: {type: integer, format: int64}
+        zeroResults: {type: boolean}
+        semantic: {type: boolean, description: kNN blended}
+        tookMs: {type: integer, format: int64}
+        topAtins: {type: array, items: {type: string}, description: Up to 10 organic results in order}
+        sponsoredAtins: {type: array, items: {type: string}}
+        customerId: {type: string, description: Signed-in shopper (identity subject), when known}
+        occurredAt: {type: string, format: date-time}
+    SearchResultClicked:
+      type: object
+      required: [searchId, market, query, normalizedQuery, atin, position, sponsored, occurredAt]
+      properties:
+        searchId: {type: string}
+        market: {type: string}
+        query: {type: string}
+        normalizedQuery: {type: string}
+        atin: {type: string, pattern: '^AT[0-9A-Z]{8}$'}
+        position: {type: integer, minimum: 1}
+        sponsored: {type: boolean}
+        campaignId: {type: string}
+        customerId: {type: string}
+        occurredAt: {type: string, format: date-time}
+    AdsImpressionRecorded:
+      type: object
+      required: [impressionId, campaignId, sellerOrgId, atin, searchId, market, query, slot, auctionRank, qualityScore,
+                 occurredAt]
+      properties:
+        impressionId: {type: string, format: uuid, description: Equals the event-id}
+        campaignId: {type: string}
+        sellerOrgId: {type: string}
+        atin: {type: string}
+        searchId: {type: string}
+        market: {type: string}
+        query: {type: string}
+        slot: {type: integer, description: 1-based result position}
+        auctionRank: {type: integer}
+        qualityScore: {type: number, minimum: 0, maximum: 1}
+        occurredAt: {type: string, format: date-time}
+    AdsClickRecorded:
+      type: object
+      required: [clickId, campaignId, sellerOrgId, atin, variantAtins, searchId, market, query, slot, priceMinor,
+                 currency, occurredAt]
+      properties:
+        clickId: {type: string, format: uuid, description: Equals the event-id; one per served ad token}
+        campaignId: {type: string}
+        sellerOrgId: {type: string}
+        atin: {type: string}
+        variantAtins: {type: array, items: {type: string}, description: For order attribution (order lines carry variant ATINs)}
+        searchId: {type: string}
+        market: {type: string}
+        query: {type: string}
+        slot: {type: integer}
+        priceMinor: {type: integer, format: int64, description: 'Second price: at most the bid; content charges at most the budget left'}
+        currency: {type: string}
+        customerId: {type: string, description: Shopper, for 7-day click attribution}
+        occurredAt: {type: string, format: date-time}

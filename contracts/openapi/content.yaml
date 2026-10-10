@@ -4,7 +4,9 @@ info:
   description: Nothing promotional or legal is hard-coded. Placements (announcement bar, hero carousel, tiles, banners, product
     rows, checkout cross-sell) with targeting and a review workflow; markets & locations with per-state capability switches
     and an eligibility check; site configuration (social links, contacts, app links, locales); legal documents with versions;
-    cookie consent; feature flags with OpenFeature (OFREP) evaluation; newsletter double opt-in, launch lists and careers.
+    cookie consent; feature flags with OpenFeature (OFREP) evaluation; newsletter double opt-in, launch lists and careers;
+    sponsored-products campaigns (CPC bids, budgets, targeting, charged clicks, 7-day-click attribution and reports) served
+    to search-service's auction.
   contact:
     name: AfroTransact Platform
     url: https://developers.afrotransact.com
@@ -25,6 +27,8 @@ tags:
   description: Rollout percentages, targeting and kill switches (back office)
 - name: Legal
   description: 'Legal & privacy center: current documents, versions, counsel sign-off'
+- name: Sponsored products
+  description: 'Seller campaigns: CPC bids, budgets, targeting, reports (S127)'
 - name: Markets
   description: 'Published markets: eligibility for checkout and onboarding, country pickers, launch lists'
 - name: Careers
@@ -98,6 +102,209 @@ paths:
               schema:
                 type: object
       security: []
+  /v1/ads/campaigns:
+    get:
+      tags:
+      - Sponsored products
+      summary: 'List campaigns (sellers: their organisation''s with ads:manage; staff: content:ads.view)'
+      operationId: list_2
+      parameters:
+      - name: sellerOrgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - ENDED
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdCampaign'
+    post:
+      tags:
+      - Sponsored products
+      summary: Create a campaign (ACTIVE from startsAt; ads:manage for the organisation, or content:ads.edit)
+      operationId: create_3
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdCampaignRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+  /v1/ads/campaigns/{id}:
+    get:
+      tags:
+      - Sponsored products
+      summary: Get a campaign
+      operationId: get_3
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+    put:
+      tags:
+      - Sponsored products
+      summary: Edit bids, budgets, targeting or schedule (expectedVersion required); raising the budget of a campaign paused
+        at zero resumes it
+      operationId: update_4
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdCampaignRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+  /v1/ads/campaigns/{id}/end:
+    post:
+      tags:
+      - Sponsored products
+      summary: End the campaign for good
+      operationId: end_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+  /v1/ads/campaigns/{id}/pause:
+    post:
+      tags:
+      - Sponsored products
+      summary: Pause (publishes content.ads.campaign_paused)
+      operationId: pause
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+  /v1/ads/campaigns/{id}/report:
+    get:
+      tags:
+      - Sponsored products
+      summary: 'Daily report: impressions, clicks, CTR, spend, CPC, attributed orders and sales (7-day click), ROAS (default:
+        last 30 days)'
+      operationId: report
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdCampaignReport'
+  /v1/ads/campaigns/{id}/resume:
+    post:
+      tags:
+      - Sponsored products
+      summary: Resume a paused campaign (409 content.ads-budget-exhausted when nothing is left)
+      operationId: resume
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdCampaign'
+  /v1/ads/serving:
+    get:
+      tags:
+      - Sponsored products
+      summary: Campaigns eligible to serve in a market, for search-service's auction (scope ads:serve)
+      description: 'ACTIVE, inside the schedule, with budget left today. remainingMinor is the smaller of the lifetime and
+        today''s remaining budget. Bids are confidential: service and ads staff only.'
+      operationId: serving
+      parameters:
+      - name: market
+        in: query
+        required: false
+        schema:
+          type: string
+          default: US
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AdServingResponse'
   /v1/audit:
     get:
       tags:
@@ -1812,6 +2019,133 @@ components:
         postedAt:
           type: string
           format: date-time
+    AdCampaignRequest:
+      type: object
+      properties:
+        sellerOrgId:
+          type: string
+          description: 'Advertiser organisation (sellers: their own; required on create)'
+        name:
+          type: string
+        advertiser:
+          type: string
+          description: 'Shown with the ad: Sponsored · advertiser'
+        market:
+          type: string
+          example: US
+        bidMinor:
+          type: integer
+          format: int64
+          description: Maximum cost per click (minor units, ≥ 10)
+        dailyBudgetMinor:
+          type: integer
+          format: int64
+          description: Optional daily cap (minor units)
+        totalBudgetMinor:
+          type: integer
+          format: int64
+          description: Lifetime budget (minor units, ≥ 500); the campaign pauses when spent
+        currency:
+          type: string
+          example: USD
+        keywords:
+          type: array
+          description: Search phrases; every word must be in the query
+          items:
+            type: string
+        categories:
+          type: array
+          description: Departments or category paths, e.g. "Groceries › Pantry"
+          items:
+            type: string
+        atins:
+          type: array
+          description: Advertised products; the seller must hold their buy box
+          items:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        expectedVersion:
+          type: integer
+          format: int64
+          description: 'Required on update: the version that was loaded'
+      required:
+      - bidMinor
+      - totalBudgetMinor
+    AdCampaign:
+      type: object
+      properties:
+        id:
+          type: string
+        sellerOrgId:
+          type: string
+        name:
+          type: string
+        advertiser:
+          type: string
+        market:
+          type: string
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - PAUSED
+          - ENDED
+        pauseReason:
+          type: string
+          enum:
+          - MANUAL
+          - BUDGET_EXHAUSTED
+        bidMinor:
+          type: integer
+          format: int64
+        dailyBudgetMinor:
+          type: integer
+          format: int64
+        totalBudgetMinor:
+          type: integer
+          format: int64
+        spentMinor:
+          type: integer
+          format: int64
+        remainingMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            type: string
+        atins:
+          type: array
+          items:
+            type: string
+        startsAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
     RejectPlacementRequest:
       type: object
       properties:
@@ -2671,6 +3005,101 @@ components:
         detail:
           type: object
           additionalProperties: {}
+    AdServingResponse:
+      type: object
+      properties:
+        market:
+          type: string
+        campaigns:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServableAdCampaign'
+    ServableAdCampaign:
+      type: object
+      properties:
+        id:
+          type: string
+        sellerOrgId:
+          type: string
+        advertiser:
+          type: string
+        bidMinor:
+          type: integer
+          format: int64
+        remainingMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            type: string
+        atins:
+          type: array
+          items:
+            type: string
+    AdCampaignDay:
+      type: object
+      properties:
+        day:
+          type: string
+          format: date
+          description: UTC day; null on the totals row
+        impressions:
+          type: integer
+          format: int64
+        clicks:
+          type: integer
+          format: int64
+        ctr:
+          type: number
+          format: double
+        spendMinor:
+          type: integer
+          format: int64
+        cpcMinor:
+          type: integer
+          format: int64
+        attributedOrders:
+          type: integer
+          format: int64
+        attributedSalesMinor:
+          type: integer
+          format: int64
+        roas:
+          type: number
+          format: double
+    AdCampaignReport:
+      type: object
+      description: Impressions, clicks, spend and 7-day-click attributed sales
+      properties:
+        campaignId:
+          type: string
+        currency:
+          type: string
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdCampaignDay'
+        total:
+          $ref: '#/components/schemas/AdCampaignDay'
+        spentMinor:
+          type: integer
+          format: int64
+        remainingMinor:
+          type: integer
+          format: int64
   securitySchemes:
     bearer:
       type: http

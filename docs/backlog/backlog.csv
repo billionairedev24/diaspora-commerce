@@ -147,7 +147,7 @@
 - Out-of-stock items show 'Currently unavailable'","E04","","Medium","1","search","search","In Progress"
 "S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation
 - Ranking boosts in-stock and Fulfilled-by-AfroTransact items
-- A relevance test set runs in CI","E04","","Medium","5","search","search","In Progress"
+- A relevance test set runs in CI","E04","","Medium","5","search","search","Done"
 "E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","Done"
 "S040","Story","Offers service: create offer on existing product","Sellers attach price, stock and condition to an existing ATIN instead of duplicating the page.","- Offer created from catalog.product.created for the creating seller
 - Other sellers can add an offer by ATIN or GTIN
@@ -619,7 +619,7 @@
 - Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","Done"
 "S213","Story","Durable seller directory for the indexer","Indexer loads seller display names on startup from a seller endpoint instead of relying only on events seen since start.","- Seller exposes a paged org directory endpoint for service clients
 - Indexer warms its directory on start and refreshes on events
-- Restart does not change indexed seller names","E04","","Medium","3","indexer seller","search","In Progress"
+- Restart does not change indexed seller names","E04","","Medium","3","indexer seller","search","Done"
 "S214","Story","Expose payout hold in payouts balance","Payments adds payoutsPaused (and reason) to the payouts balance response so Seller Center can show the hold before a request fails.","- Balance response includes payoutsPaused and reason
 - Seller Center shows a banner when paused","E14","","Medium","1","payments","billing","Done"
 "S215","Story","Org kind 'both' and market alignment","Seller emits BOTH when an org sells products and services; identity's market is aligned with content's market codes.","- Seller org events can carry BOTH
@@ -716,3 +716,8 @@
 - Every staff action writes an audit entry
 - Dashboard uses an analytics feed instead of sampling
 - Remaining configuration modules available","E25","","Medium","13","staff-console bff","staff-console","To Do"
+"S240","Story","Sponsored products and search analytics in the apps","BFF requests ads on results pages, labels sponsored results, records clicks; Seller Center advertising module on content campaigns; staff console search analytics, synonyms and campaign oversight; shared index mapping and synonym settings move to go/pkg/searchindex; typo+synonym expansion.","- Results pages show Sponsored items with reasons and track clicks
+- Sellers create campaigns and see reports
+- Staff see top/zero-result queries and edit synonyms
+- Index mapping defined once in go/pkg
+- 'plantian chips' finds plantain chips","E04","","Medium","8","search ads bff seller-center staff-console","search","To Do"

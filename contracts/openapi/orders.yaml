@@ -28,6 +28,8 @@ tags:
 - name: Shipments
   description: 'Shipment state machine: seller queue, status transitions per actor, courier events with proof, tracking, staff
     search'
+- name: Order lookup
+  description: Service-to-service order lookup (tax-returns, trust-ops)
 - name: Seller analytics
   description: Seller Center dashboard figures (orders:read)
 paths:
@@ -183,6 +185,28 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/CheckoutView'
+  /v1/lookup/orders/{idOrNumber}:
+    get:
+      tags:
+      - Order lookup
+      summary: Look up an order by id or number (SERVICE with orders:lookup; staff with orders:read)
+      description: Customer id, payment id, the full ship-to address and every shipment with its lines (line ids = payments
+        line ids), shipping, tax jurisdictions, ship-by date and return window. Used by tax-returns (returns, labels) and
+        trust-ops (claim ownership, refunds). No handover codes.
+      operationId: lookup
+      parameters:
+      - name: idOrNumber
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrderLookup'
   /v1/orders:
     get:
       tags:
@@ -613,6 +637,8 @@ components:
           type: boolean
         taxJurisdiction:
           type: string
+        productType:
+          type: string
     OrderView:
       type: object
       properties:
@@ -661,6 +687,13 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ShipmentView'
+    ReturnLinks:
+      type: object
+      properties:
+        eligibility:
+          type: string
+        list:
+          type: string
     ShipTo:
       type: object
       properties:
@@ -778,6 +811,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TimelineEntry'
+        returnable:
+          type: boolean
+        returnWindowEndsAt:
+          type: string
+          format: date-time
+        problemReportOnly:
+          type: boolean
+        returns:
+          $ref: '#/components/schemas/ReturnLinks'
     TimelineEntry:
       type: object
       properties:
@@ -1203,6 +1245,45 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Recipient'
+    OrderLookup:
+      type: object
+      properties:
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        customerId:
+          type: string
+        status:
+          type: string
+        currency:
+          type: string
+        paymentId:
+          type: string
+        placedAt:
+          type: string
+          format: date-time
+        itemsMinor:
+          type: integer
+          format: int64
+        shippingMinor:
+          type: integer
+          format: int64
+        taxMinor:
+          type: integer
+          format: int64
+        discountMinor:
+          type: integer
+          format: int64
+        totalMinor:
+          type: integer
+          format: int64
+        shipTo:
+          $ref: '#/components/schemas/ShipTo'
+        shipments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shipment'
   securitySchemes:
     bearer:
       type: http

@@ -21,7 +21,6 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/logging"
-	"github.com/billionairedev24/diaspora-commerce/go/pkg/searchindex"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/telemetry"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/catalog"
@@ -70,7 +69,7 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("elasticsearch client: %w", err)
 	}
-	if err := searchindex.NewAdmin(es).EnsureIndex(ctx, cfg.Market); err != nil {
+	if err := elastic.NewIndexAdmin(es, cfg.SynonymsSet).EnsureIndex(ctx, cfg.Market); err != nil {
 		return fmt.Errorf("ensure index: %w", err)
 	}
 
@@ -83,8 +82,10 @@ func run() error {
 
 	index := elastic.NewIndex(es, cfg.Elasticsearch.Refresh)
 	httpClient := &http.Client{Timeout: 5 * time.Second}
-	projector := app.NewProjector(index, catalog.NewClient(cfg.CatalogURL, httpClient),
-		sellers.NewMemoryDirectory(cfg.SellerNames, "Marketplace seller"), cfg.Market, log)
+	directory := newSellerDirectory(cfg, httpClient, log)
+	// S213: warm seller names before consuming, so a restart never changes indexed seller names.
+	warmDirectory(ctx, directory, cfg.SellerDirectory.WarmTimeout, log)
+	projector := app.NewProjector(index, catalog.NewClient(cfg.CatalogURL, httpClient), directory, cfg.Market, log)
 
 	dlq, err := events.NewKafkaPublisher(cfg.Kafka.Brokers)
 	if err != nil {
@@ -111,10 +112,53 @@ func run() error {
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error { return srv.Run(gctx) })
 	g.Go(func() error { return consumer.Run(gctx, handler) })
+	g.Go(func() error { return directory.RunRefresh(gctx, cfg.SellerDirectory.RefreshInterval) })
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("indexer: %w", err)
 	}
 	return nil
+}
+
+const fallbackSellerName = "Marketplace seller"
+
+func newSellerDirectory(cfg config.Config, httpClient *http.Client, log *slog.Logger) sellers.Directory {
+	sd := cfg.SellerDirectory
+	if !sd.Enabled || sd.BaseURL == "" {
+		log.Warn("seller directory disabled: names come from configuration and seller.org.* events only")
+		return sellers.NewDirectory(cfg.SellerNames, fallbackSellerName, nil, sellers.Options{Log: log})
+	}
+	if sd.TokenURL != "" && sd.ClientSecret == "" {
+		log.Warn("INDEXER_CLIENT_SECRET not set: seller directory calls are unauthenticated")
+	}
+	source := sellers.NewClient(sellers.ClientConfig{BaseURL: sd.BaseURL, TokenURL: sd.TokenURL, ClientID: sd.ClientID,
+		ClientSecret: sd.ClientSecret, Scopes: sd.Scopes}, httpClient)
+	return sellers.NewDirectory(cfg.SellerNames, fallbackSellerName, source,
+		sellers.Options{PageSize: sd.PageSize, Log: log})
+}
+
+// warmDirectory retries the warm with backoff until it succeeds or timeout passes; the consumer then starts either
+// way (unknown sellers keep the name already indexed, and are looked up on their next event).
+func warmDirectory(ctx context.Context, d sellers.Directory, timeout time.Duration, log *slog.Logger) {
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	wctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	backoff := 500 * time.Millisecond
+	for {
+		n, err := d.Warm(wctx)
+		if err == nil {
+			log.Info("seller directory warmed", "names", n)
+			return
+		}
+		select {
+		case <-wctx.Done():
+			log.Error("seller directory not warmed; starting with known names only", "names", n, "error", err)
+			return
+		case <-time.After(backoff):
+			backoff = min(backoff*2, 8*time.Second)
+		}
+	}
 }
 
 type counting struct {

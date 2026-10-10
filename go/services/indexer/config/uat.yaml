@@ -1,4 +1,5 @@
-# indexer · uat. ES_URLS / KAFKA_BOOTSTRAP / ES_API_KEY come from the environment outside local and dev.
+# indexer · uat. ES_URLS / KAFKA_BOOTSTRAP / ES_API_KEY come from the environment outside local and dev;
+# INDEXER_CLIENT_SECRET (identity client indexer-service) always comes from the environment.
 port: 8080
 docsEnabled: true
 market: us
@@ -9,9 +10,19 @@ kafka:
 elasticsearch:
   urls: []
   refresh: false
+synonymsSet: diaspora-synonyms
 catalogUrl: http://catalog
 sellerNames:
   org_afrotransact_retail: AfroTransact Retail
+sellerDirectory:
+  enabled: true
+  baseUrl: http://seller
+  tokenUrl: https://auth.uat.afrotransact.com/oauth2/token
+  clientId: indexer-service
+  scopes: ["sellers:directory"]
+  pageSize: 500
+  warmTimeout: 30s
+  refreshInterval: 30m
 retry:
   attempts: 4
   backoffMs: 250

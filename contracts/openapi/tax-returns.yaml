@@ -1015,6 +1015,10 @@ components:
           type: string
         collectedBy:
           type: string
+        shippingTaxMinor:
+          type: integer
+          format: int64
+          description: Part of taxMinor charged on the line's shipping
     CreateReturn:
       type: object
       description: Items of one delivered shipment, the reason per item and the method
@@ -1039,7 +1043,8 @@ components:
           minItems: 0
         returnFrom:
           $ref: '#/components/schemas/Address'
-          description: 'Required for DROP_OFF: where the parcel ships from'
+          description: 'Optional: where the parcel ships from. Defaults to the order''s delivery address (orders.order.placed
+            / orders lookup), so apps send nothing; staff may override it (e.g. the customer moved)'
       required:
       - lines
       - method

@@ -1,0 +1,68 @@
+# Relevance fixtures (S039): a small diaspora catalogue with deliberate traps — synonyms (gari/garri/cassava flakes,
+# egusi/agushi/melon seeds, kpekere/ipekere/plantain chips, jollof seasoning/spice), out-of-stock twins, seller- vs
+# AfroTransact-fulfilled twins, brand-only matches and distractors that share a word ("Rice Cooker").
+# Indexed by internal/adapter/elastic/relevance_integration_test.go; judged in judgements.yaml.
+# fulfilment: AFROTRANSACT (Fulfilled by AfroTransact) | SELLER. Prices in minor units (USD cents).
+products:
+  # --- gari / garri / cassava flakes
+  - {atin: AT1GAR0001, title: "Gari Ijebu, Fine, 4 lb", brand: Mama Tee, path: "Groceries › Pantry › Flours & swallow", fulfilment: AFROTRANSACT, inStock: true, rating: 4.8, reviews: 77, price: 1299, days: 2,
+     description: "Sour, crunchy Ijebu-style cassava flakes for soaking or making eba."}
+  - {atin: AT1GAR0002, title: "Yellow Garri with Palm Oil, 2 kg", brand: Lagos Market, path: "Groceries › Pantry › Flours & swallow", fulfilment: SELLER, inStock: true, rating: 4.5, reviews: 40, price: 1599, days: 4}
+  - {atin: AT1GAR0003, title: "Cassava Flakes, White, 1 kg", brand: Accra Pantry, path: "Groceries › Pantry › Flours & swallow", fulfilment: SELLER, inStock: false, rating: 4.6, reviews: 12, price: 899, days: 5}
+  - {atin: AT1GAR0004, title: "Eba Turning Stick, Wooden", brand: Naija Kitchen, path: "Home › Kitchen › Tools", fulfilment: SELLER, inStock: true, rating: 4.1, reviews: 9, price: 1099, days: 5,
+     description: "Hardwood stick for turning garri, fufu and amala without lumps."}
+  # New listing, not yet rated (rating 0 is what the indexer writes until reviews exist).
+  - {atin: AT1GAR0005, title: "Ghana Gari, Extra Fine, 1 kg", brand: Accra Pantry, path: "Groceries › Pantry › Flours & swallow", fulfilment: AFROTRANSACT, inStock: true, rating: 0, reviews: 0, price: 799, days: 1}
+  # --- plantain chips / kpekere / ipekere
+  - {atin: AT1PLA0001, title: "Kpekere Plantain Chips, Sweet, 6 pack", brand: Ibadan Snacks, path: "Groceries › Snacks › Chips & crisps", fulfilment: SELLER, inStock: true, rating: 4.7, reviews: 120, price: 1499, days: 4}
+  - {atin: AT1PLA0002, title: "Plantain Chips, Lightly Salted, 3 oz", brand: Tropical Crunch, path: "Groceries › Snacks › Chips & crisps", fulfilment: AFROTRANSACT, inStock: true, rating: 4.4, reviews: 60, price: 399, days: 1}
+  - {atin: AT1PLA0003, title: "Plantain Crisps, Spicy Pepper", brand: Tropical Crunch, path: "Groceries › Snacks › Chips & crisps", fulfilment: AFROTRANSACT, inStock: true, rating: 4.2, reviews: 25, price: 449, days: 1}
+  - {atin: AT1PLA0004, title: "Unripe Plantain Flour, 2 lb", brand: Mama Tee, path: "Groceries › Pantry › Flours & swallow", fulfilment: AFROTRANSACT, inStock: true, rating: 4.6, reviews: 45, price: 1199, days: 2}
+  - {atin: AT1PLA0005, title: "Ipekere, Party Size", brand: Ibadan Snacks, path: "Groceries › Snacks › Chips & crisps", fulfilment: SELLER, inStock: false, rating: 4.8, reviews: 30, price: 2299, days: 4}
+  # --- jollof
+  - {atin: AT1JOL0001, title: "Jollof Seasoning Blend, 8 oz", brand: AfroTransact, path: "Groceries › Pantry › Spices & seasonings", fulfilment: AFROTRANSACT, inStock: true, rating: 4.7, reviews: 210, price: 899, days: 1}
+  - {atin: AT1JOL0002, title: "Party Jollof Spice Mix, Smoky", brand: Chef Tolu, path: "Groceries › Pantry › Spices & seasonings", fulfilment: SELLER, inStock: true, rating: 4.3, reviews: 18, price: 799, days: 5}
+  - {atin: AT1JOL0003, title: "Jollof Rice Kit: Parboiled Rice + Seasoning", brand: Chef Tolu, path: "Groceries › Pantry › Grains & rice", fulfilment: SELLER, inStock: true, rating: 4.1, reviews: 11, price: 1899, days: 5}
+  - {atin: AT1JOL0004, title: "Long Grain Parboiled Rice, 10 lb", brand: AfroTransact, path: "Groceries › Pantry › Grains & rice", fulfilment: AFROTRANSACT, inStock: true, rating: 4.6, reviews: 300, price: 1799, days: 1,
+     description: "Firm grains that stay separate: perfect for party jollof rice."}
+  # --- egusi / melon seeds
+  - {atin: AT1EGU0001, title: "Ground Egusi, 1 lb", brand: Mama Tee, path: "Groceries › Pantry › Seeds & nuts", fulfilment: AFROTRANSACT, inStock: true, rating: 4.8, reviews: 95, price: 1099, days: 2}
+  - {atin: AT1EGU0002, title: "Whole Agushi Seeds, 2 lb", brand: Accra Pantry, path: "Groceries › Pantry › Seeds & nuts", fulfilment: SELLER, inStock: true, rating: 4.5, reviews: 20, price: 1399, days: 4}
+  - {atin: AT1EGU0003, title: "Egusi Soup Base, Ready to Cook", brand: Chef Tolu, path: "Groceries › Prepared › Soups & stews", fulfilment: SELLER, inStock: true, rating: 4.0, reviews: 8, price: 1299, days: 5}
+  - {atin: AT1EGU0004, title: "Peeled Melon Seeds, 500 g", brand: Lagos Market, path: "Groceries › Pantry › Seeds & nuts", fulfilment: SELLER, inStock: false, rating: 4.4, reviews: 14, price: 999, days: 4}
+  - {atin: AT1EGU0005, title: "Egusi Seeds, Unpeeled, 3 lb", brand: Kumasi Kitchen, path: "Groceries › Pantry › Seeds & nuts", fulfilment: SELLER, inStock: true, rating: 0, reviews: 0, price: 1599, days: 4}
+  # --- palm oil
+  - {atin: AT1PAL0001, title: "Red Palm Oil, Unrefined, 1 L", brand: Accra Pantry, path: "Groceries › Pantry › Oils", fulfilment: SELLER, inStock: true, rating: 4.6, reviews: 150, price: 1299, days: 4}
+  - {atin: AT1PAL0002, title: "Zomi Palm Oil, Spiced, 500 ml", brand: Accra Pantry, path: "Groceries › Pantry › Oils", fulfilment: SELLER, inStock: false, rating: 4.9, reviews: 80, price: 1499, days: 4}
+  - {atin: AT1PAL0003, title: "Palm Kernel Oil Hair Treatment", brand: Shea Origins, path: "Beauty › Hair care", fulfilment: SELLER, inStock: true, rating: 4.2, reviews: 30, price: 1599, days: 5}
+  # --- condiments and spices
+  - {atin: AT1SHI0001, title: "Shito Hot Pepper Sauce, 12 oz", brand: Accra Pantry, path: "Groceries › Pantry › Sauces & condiments", fulfilment: AFROTRANSACT, inStock: true, rating: 4.7, reviews: 88, price: 1099, days: 1}
+  - {atin: AT1SHI0002, title: "Black Pepper Sauce, Mild", brand: Kumasi Kitchen, path: "Groceries › Pantry › Sauces & condiments", fulfilment: SELLER, inStock: true, rating: 4.2, reviews: 15, price: 999, days: 5}
+  - {atin: AT1SUY0001, title: "Yaji Pepper Blend, 4 oz", brand: Kano Grill, path: "Groceries › Pantry › Spices & seasonings", fulfilment: AFROTRANSACT, inStock: true, rating: 4.8, reviews: 140, price: 699, days: 1}
+  - {atin: AT1SUY0002, title: "Suya Spice Rub, Extra Hot", brand: Chef Tolu, path: "Groceries › Pantry › Spices & seasonings", fulfilment: SELLER, inStock: true, rating: 4.4, reviews: 22, price: 749, days: 5}
+  - {atin: AT1MAG0001, title: "Star Seasoning Cubes, 100 ct", brand: Maggi, path: "Groceries › Pantry › Spices & seasonings", fulfilment: AFROTRANSACT, inStock: true, rating: 4.8, reviews: 500, price: 1199, days: 1}
+  # --- drinks
+  - {atin: AT1BIS0001, title: "Bissap Hibiscus Leaves, Dried", brand: Dakar Pantry, path: "Groceries › Drinks › Teas & hibiscus", fulfilment: SELLER, inStock: true, rating: 4.2, reviews: 31, price: 699, days: 4}
+  - {atin: AT1BIS0002, title: "Zobo Drink Mix with Ginger", brand: Lagos Market, path: "Groceries › Drinks › Teas & hibiscus", fulfilment: SELLER, inStock: true, rating: 4.5, reviews: 19, price: 899, days: 4}
+  # --- rice
+  - {atin: AT1BAS0001, title: "Basmati Rice, Extra Long Grain, 10 lb", brand: AfroTransact, path: "Groceries › Pantry › Grains & rice", fulfilment: AFROTRANSACT, inStock: true, rating: 4.5, reviews: 98, price: 2499, days: 1}
+  - {atin: AT1BAS0002, title: "Aged Basmati Rice, 10 lb", brand: Royal Grain, path: "Groceries › Pantry › Grains & rice", fulfilment: SELLER, inStock: true, rating: 4.5, reviews: 98, price: 2399, days: 5}
+  - {atin: AT1RIC0001, title: "Rice Cooker, 5 Cup", brand: HomeChef, path: "Home › Kitchen › Appliances", fulfilment: SELLER, inStock: true, rating: 4.9, reviews: 400, price: 3999, days: 3}
+  # --- beauty
+  - {atin: AT1SHE0001, title: "Raw Unrefined Shea Butter, 16 oz", brand: Tamale Shea Co-op, path: "Beauty › Skin care", fulfilment: SELLER, inStock: true, rating: 4.9, reviews: 400, price: 1899, days: 4}
+  - {atin: AT1SHE0002, title: "Whipped Ori, Lavender", brand: Shea Origins, path: "Beauty › Skin care", fulfilment: SELLER, inStock: true, rating: 4.4, reviews: 35, price: 1499, days: 5}
+  - {atin: AT1SHE0003, title: "Shea Butter Soap Bar", brand: Shea Origins, path: "Beauty › Bath & body", fulfilment: SELLER, inStock: true, rating: 4.3, reviews: 50, price: 599, days: 5}
+  - {atin: AT1SOA0001, title: "African Black Soap, Raw, 1 lb", brand: Tamale Shea Co-op, path: "Beauty › Bath & body", fulfilment: AFROTRANSACT, inStock: true, rating: 4.7, reviews: 210, price: 1299, days: 1}
+  - {atin: AT1SOA0002, title: "Ose Dudu Liquid Wash", brand: Lagos Glow, path: "Beauty › Bath & body", fulfilment: SELLER, inStock: true, rating: 4.1, reviews: 12, price: 1199, days: 5}
+  - {atin: AT1SOA0003, title: "Alata Samina Bar", brand: Accra Glow, path: "Beauty › Bath & body", fulfilment: SELLER, inStock: true, rating: 3.9, reviews: 6, price: 699, days: 5}
+  # --- fashion
+  - {atin: AT1ANK0001, title: "Ankara Wrap Dress, Midi", brand: Kemi's Closet, path: "Fashion › Women › Dresses", fulfilment: SELLER, inStock: true, rating: 4.6, reviews: 40, price: 6499, days: 5}
+  - {atin: AT1ANK0002, title: "Wax Print Maxi Dress", brand: Dakar Threads, path: "Fashion › Women › Dresses", fulfilment: SELLER, inStock: true, rating: 4.4, reviews: 15, price: 7999, days: 6}
+  - {atin: AT1ANK0003, title: "Ankara Fabric, 6 Yards", brand: Dakar Threads, path: "Fashion › Fabrics", fulfilment: SELLER, inStock: true, rating: 4.7, reviews: 60, price: 3499, days: 5}
+  - {atin: AT1KEN0001, title: "Kente Stole, Graduation", brand: Bonwire Weavers, path: "Fashion › Accessories", fulfilment: SELLER, inStock: true, rating: 4.9, reviews: 70, price: 4599, days: 5}
+  - {atin: AT1KEN0002, title: "Kente Cloth, Hand-woven, 2 Yards", brand: Bonwire Weavers, path: "Fashion › Fabrics", fulfilment: SELLER, inStock: false, rating: 4.8, reviews: 20, price: 12999, days: 6}
+  - {atin: AT1GEL0001, title: "Aso Oke Gele, Gold", brand: Lagos Glam, path: "Fashion › Accessories", fulfilment: SELLER, inStock: true, rating: 4.5, reviews: 33, price: 3999, days: 5}
+  - {atin: AT1GEL0002, title: "Pre-tied Headwrap, Satin Lined", brand: Kemi's Closet, path: "Fashion › Accessories", fulfilment: AFROTRANSACT, inStock: true, rating: 4.3, reviews: 25, price: 2499, days: 1}
+  # --- other pantry
+  - {atin: AT1CHI0001, title: "Chin Chin, Crunchy, 12 oz", brand: Ibadan Snacks, path: "Groceries › Snacks › Chips & crisps", fulfilment: SELLER, inStock: true, rating: 4.6, reviews: 77, price: 699, days: 4}
+  - {atin: AT1FUF0001, title: "Cocoyam Fufu Flour, 4 lb", brand: Accra Pantry, path: "Groceries › Pantry › Flours & swallow", fulfilment: SELLER, inStock: true, rating: 4.3, reviews: 41, price: 1299, days: 4}

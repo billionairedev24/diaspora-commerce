@@ -81,6 +81,49 @@ paths:
         '409': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/return-labels:
+    post:
+      tags: [labels]
+      operationId: buyReturnLabel
+      summary: Buy a customer return label with a rate choice, printed or box-free QR (permission shipping:label)
+      description: >-
+        For tax-returns-service (reference = RMA number). rateChoice CHEAPEST (default) or FASTEST rate-shops the
+        allowed carriers and buys the chosen quote; SERVICE buys the carrier and service named (a choice the customer
+        made from /v1/rates). mode BOX_FREE_QR asks for label-free QR drop-off ("show this code at any UPS Store"):
+        only carriers whose integration offers it are used. None of the current USPS, UPS, FedEx and DHL Express
+        integrations do, so such requests answer 422 carrier-gateway.unsupported with one entry per carrier in
+        errors, unless fallbackToLabel buys a printed label instead (boxFreeUnsupported then lists the reasons).
+        Retries with the same Idempotency-Key return the first label even when rates moved.
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, maxLength: 128}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shipment]
+              properties:
+                rateChoice: {type: string, enum: [CHEAPEST, FASTEST, SERVICE], default: CHEAPEST}
+                carrier: {$ref: '#/components/schemas/Carrier'}
+                service: {type: string, description: Carrier service code (rateChoice SERVICE)}
+                carriers:
+                  type: array
+                  description: Carriers rate shopping may use (default every enabled carrier)
+                  items: {$ref: '#/components/schemas/Carrier'}
+                mode: {type: string, enum: [LABEL, BOX_FREE_QR], default: LABEL}
+                fallbackToLabel:
+                  type: boolean
+                  description: Buy a printed label when no carrier offers box-free QR drop-off
+                shipment: {$ref: '#/components/schemas/Shipment'}
+      responses:
+        '201':
+          description: Return label purchased (or the label previously bought with this key)
+          content: {application/json: {schema: {$ref: '#/components/schemas/ReturnLabel'}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
   /v1/labels/{id}:
     get:
       tags: [labels]
@@ -104,6 +147,7 @@ paths:
           content:
             application/pdf: {schema: {type: string, format: binary}}
             application/x-zpl: {schema: {type: string}}
+            image/png: {schema: {type: string, format: binary}}
         '404': {$ref: '#/components/responses/Problem'}
   /v1/labels/{id}/void:
     post:
@@ -412,13 +456,33 @@ components:
         carrierShipmentId: {type: string}
         costMinor: {type: integer}
         currency: {type: string}
-        format: {type: string, enum: [PDF, ZPL]}
+        format: {type: string, enum: [PDF, ZPL, PNG], description: PNG is the QR image of a box-free return}
         labelKey: {type: string}
         status: {type: string, enum: [purchasing, purchased, voided]}
         trackingState: {$ref: '#/components/schemas/ShipmentState'}
         createdAt: {type: string, format: date-time}
         voidedAt: {type: string, format: date-time}
         documentUrl: {type: string, description: Short-lived signed URL (S3 stores only)}
+        kind: {type: string, enum: [outbound, return]}
+        rateChoice: {type: string, enum: [CHEAPEST, FASTEST, SERVICE], description: How a return label's service was chosen}
+        boxFree: {type: boolean, description: Label-free QR drop-off}
+        qrPayload: {type: string, description: Code the customer shows at the drop-off location (box-free returns)}
+        dropOffNetwork: {type: string, description: Where a box-free return is handed over}
+    ReturnLabel:
+      allOf:
+        - {$ref: '#/components/schemas/Label'}
+        - type: object
+          properties:
+            mode: {type: string, enum: [LABEL, BOX_FREE_QR], description: How the parcel is handed over}
+            quote: {$ref: '#/components/schemas/Quote'}
+            boxFreeUnsupported:
+              type: array
+              description: Why each carrier could not do a requested box-free return (fallback to a printed label)
+              items:
+                type: object
+                properties:
+                  carrier: {$ref: '#/components/schemas/Carrier'}
+                  reason: {type: string}
     TrackingEvent:
       type: object
       properties:
@@ -494,3 +558,7 @@ components:
         detail: {type: string}
         instance: {type: string}
         code: {type: string}
+        errors:
+          type: object
+          description: Field errors, or per carrier the reason for carrier-gateway.unsupported
+          additionalProperties: {type: string}

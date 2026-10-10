@@ -1,57 +1,122 @@
 package elastic
 
 import (
+	"strconv"
+	"strings"
+
 	"github.com/billionairedev24/diaspora-commerce/go/services/search/internal/domain"
 )
 
 type object = map[string]any
 
-// textFields are searched with per-field boosts; every word must match (operator=and) with typo tolerance:
-// words of 3–5 letters may be one edit off, 6+ letters two (fuzziness AUTO:3,6), first letter fixed.
-var textFields = []string{"title^4", "brand^2", "category_path.text^2", "description"}
+// Ranking holds the relevance tuning (S039). Text relevance (BM25 over boosted fields) is multiplied by commercial
+// boosts that never zero a score, so an unrated new listing still ranks by how well it matches.
+type Ranking struct {
+	// Field boosts: title, brand, category path, and attribute text (description and attribute values).
+	TitleBoost, BrandBoost, CategoryBoost, AttributeBoost float64
+	// ExactBoost rewards documents whose title or brand contains the query words without typos.
+	ExactBoost float64
+	// PhraseBoost rewards the query appearing as a phrase in the title.
+	PhraseBoost float64
+	// InStock multiplies in-stock items; Fulfilled multiplies "Fulfilled by AfroTransact" items.
+	InStock, Fulfilled float64
+	// RatingWeight scales 1 + w × rating × confidence, confidence = min(1, log10(1 + reviews) / 2).
+	RatingWeight float64
+	// FastDelivery multiplies items promised within FastDeliveryDays.
+	FastDelivery     float64
+	FastDeliveryDays int
+}
 
-// buildSearch translates a normalized domain query into an Elasticsearch request body.
-func buildSearch(q domain.Query, vec []float32) object {
-	filters := buildFilters(q)
-	var must []any
-	if q.Text != "" {
-		must = append(must, object{"bool": object{
-			"should": []any{
-				object{"multi_match": object{
-					"query": q.Text, "fields": textFields, "type": "best_fields",
-					"operator": "and", "fuzziness": "AUTO:3,6", "prefix_length": 1,
-				}},
-				object{"multi_match": object{
-					"query": q.Text, "type": "bool_prefix", "operator": "and",
-					"fields": []string{"title.suggest", "title.suggest._2gram", "title.suggest._3gram"},
-				}},
-			},
-			"minimum_should_match": 1,
-		}})
-	} else {
-		must = append(must, object{"match_all": object{}})
+// DefaultRanking is the tuned configuration measured by the relevance harness (relevance/judgements.yaml).
+func DefaultRanking() Ranking {
+	return Ranking{
+		TitleBoost: 5, BrandBoost: 3, CategoryBoost: 2, AttributeBoost: 1,
+		ExactBoost: 1.5, PhraseBoost: 2,
+		InStock: 3, Fulfilled: 1.2, RatingWeight: 0.08, FastDelivery: 1.05, FastDeliveryDays: 2,
 	}
+}
 
-	query := object{"function_score": object{
-		"query": object{"bool": object{"must": must, "filter": filters}},
-		"functions": []any{
-			object{"field_value_factor": object{"field": "rating", "modifier": "log1p", "missing": 0, "factor": 0.6}},
-			object{"filter": object{"term": object{"in_stock": true}}, "weight": 2},
-			object{"filter": object{"term": object{"fulfilment": "AFROTRANSACT"}}, "weight": 1.15},
+// ratingScript is the rating × review-volume boost; it is ≥ 1 so unrated products are never zeroed.
+const ratingScript = `double r = doc['rating'].size() == 0 ? 0 : doc['rating'].value;
+long n = doc['review_count'].size() == 0 ? 0 : doc['review_count'].value;
+double confidence = Math.min(1.0, Math.log10(1 + n) / 2.0);
+return 1 + params.w * r * confidence;`
+
+var sourceFields = []string{"atin", "title", "brand", "department", "category_path", "seller_id", "seller_name",
+	"seller_kind", "fulfilment", "price_minor", "currency", "rating", "review_count", "in_stock", "available_qty",
+	"delivery_days", "image_url", "offer_count", "variant_atins"}
+
+func (r Ranking) textFields() []string {
+	return []string{"title^" + num(r.TitleBoost), "brand^" + num(r.BrandBoost),
+		"category_path.text^" + num(r.CategoryBoost), "description^" + num(r.AttributeBoost)}
+}
+
+// textQuery matches when every typed word matches a field (operator and) with typos tolerated — words of 3–5
+// letters may be one edit off, 6+ letters two (fuzziness AUTO:3,6), first letter fixed — or when the words are
+// prefixes of the title (search-as-you-type). Diaspora synonyms expand through the product_search analyzer.
+func (r Ranking) textQuery(text string) object {
+	return object{"bool": object{
+		"should": []any{
+			object{"multi_match": object{
+				"query": text, "fields": r.textFields(), "type": "best_fields", "tie_breaker": 0.3,
+				"operator": "and", "fuzziness": "AUTO:3,6", "prefix_length": 1,
+			}},
+			object{"multi_match": object{
+				"query": text, "type": "bool_prefix", "operator": "and",
+				"fields": []string{"title.suggest", "title.suggest._2gram", "title.suggest._3gram"},
+			}},
 		},
+		"minimum_should_match": 1,
+	}}
+}
+
+// boosts are optional clauses that only add score, on fields analysed without synonyms so a literal match beats a
+// synonym-only one: every query word in the title (no typos), the query as a title phrase, and an exact brand.
+func (r Ranking) boosts(text string) []any {
+	return []any{
+		object{"match": object{"title.suggest": object{"query": text, "operator": "and", "boost": r.ExactBoost}}},
+		object{"match_phrase": object{"title.suggest": object{"query": text, "slop": 1, "boost": r.PhraseBoost}}},
+		object{"term": object{"brand.raw": object{"value": strings.ToLower(text), "boost": r.ExactBoost}}},
+	}
+}
+
+func (r Ranking) functions() []any {
+	return []any{
+		object{"filter": object{"term": object{"in_stock": true}}, "weight": r.InStock},
+		object{"filter": object{"term": object{"fulfilment": "AFROTRANSACT"}}, "weight": r.Fulfilled},
+		object{"script_score": object{"script": object{"source": ratingScript, "params": object{"w": r.RatingWeight}}}},
+		object{"filter": object{"range": object{"delivery_days": object{"gte": 1, "lte": r.FastDeliveryDays}}},
+			"weight": r.FastDelivery},
+	}
+}
+
+func (r Ranking) scored(q domain.Query, filters []any) object {
+	b := object{"filter": filters}
+	if q.Text != "" {
+		b["must"] = []any{r.textQuery(q.Text)}
+		b["should"] = r.boosts(q.Text)
+	} else {
+		b["must"] = []any{object{"match_all": object{}}}
+	}
+	return object{"function_score": object{
+		"query":      object{"bool": b},
+		"functions":  r.functions(),
 		"score_mode": "multiply",
 		"boost_mode": "multiply",
 	}}
+}
 
+// buildSearch translates a normalized domain query into an Elasticsearch request body.
+func (r Ranking) buildSearch(q domain.Query, vec []float32) object {
+	filters := buildFilters(q)
 	body := object{
-		"query":            query,
+		"query":            r.scored(q, filters),
 		"from":             q.Page * q.Size,
 		"size":             q.Size,
 		"track_total_hits": true,
+		"track_scores":     true,
 		"aggs":             facets(),
-		"_source": []string{"atin", "title", "brand", "category_path", "seller_name", "seller_kind", "fulfilment",
-			"price_minor", "currency", "rating", "review_count", "in_stock", "available_qty", "delivery_days",
-			"image_url", "offer_count"},
+		"_source":          sourceFields,
 	}
 	if s := sortClause(q.Sort); s != nil {
 		body["sort"] = s
@@ -65,8 +130,23 @@ func buildSearch(q domain.Query, vec []float32) object {
 	return body
 }
 
+// buildAdCandidates scores advertised products with the organic query, restricted to products that may be advertised
+// (live, in stock) and to the shopper's filters.
+func (r Ranking) buildAdCandidates(q domain.Query, atins []string) object {
+	filters := append(buildFilters(q),
+		object{"terms": object{"atin": atins}},
+		object{"term": object{"in_stock": true}},
+	)
+	return object{
+		"query":   r.scored(q, filters),
+		"size":    len(atins),
+		"_source": sourceFields,
+	}
+}
+
 func buildFilters(q domain.Query) []any {
-	// Only complete, live product pages are searchable (availability updates can arrive before the product).
+	// Only complete, live product pages are searchable (availability updates can arrive before the product; hidden
+	// sellers' products are indexed SELLER_HIDDEN).
 	f := []any{object{"term": object{"status": "LIVE"}}}
 	if q.Department != "" {
 		f = append(f, object{"term": object{"department": q.Department}})
@@ -101,7 +181,7 @@ func buildFilters(q domain.Query) []any {
 	}
 	if q.WithinMiles > 0 {
 		f = append(f, object{"geo_distance": object{
-			"distance": itoa(q.WithinMiles) + "mi", "ships_from": object{"lat": q.NearLat, "lon": q.NearLon},
+			"distance": strconv.Itoa(q.WithinMiles) + "mi", "ships_from": object{"lat": q.NearLat, "lon": q.NearLon},
 		}})
 	}
 	return f
@@ -152,21 +232,8 @@ func buildSuggest(prefix string, limit int) object {
 			"filter": []any{object{"term": object{"status": "LIVE"}}},
 			"should": []any{object{"term": object{"in_stock": object{"value": true, "boost": 2}}}},
 		}},
-		"_source": []string{"atin", "title", "department", "seller_name", "seller_kind", "fulfilment",
-			"price_minor", "currency", "rating", "review_count", "in_stock", "available_qty", "image_url"},
+		"_source": sourceFields,
 	}
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
-}
+func num(f float64) string { return strconv.FormatFloat(f, 'f', -1, 64) }

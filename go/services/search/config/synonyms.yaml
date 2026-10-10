@@ -1,0 +1,38 @@
+# Diaspora synonym set (S039), loaded into Elasticsearch as the synonyms set named below and referenced by the
+# product_search analyzer (synonym_graph, updateable): editing the set reloads search analyzers without reindexing.
+# One rule per line of equivalents (Solr format). Multi-word synonyms match as phrases ("plantain chips").
+# On start the service seeds the set when it does not exist yet (or always with SYNONYMS_OVERWRITE=true); staff curate
+# it afterwards with PUT/DELETE /v1/search/synonyms/{ruleId}, guided by GET /v1/search/analytics/zero-results.
+# Override the file with SYNONYMS_FILE (for example a ConfigMap mount).
+set: diaspora-synonyms
+rules:
+  - {id: gari, synonyms: "gari, garri, cassava flakes"}
+  - {id: egusi, synonyms: "egusi, egushi, agushi, melon seed, melon seeds"}
+  - {id: plantain-chips, synonyms: "plantain chips, kpekere, ipekere, plantain crisps"}
+  - {id: jollof-seasoning, synonyms: "jollof rice seasoning, jollof seasoning, jollof spice, jollof spice mix"}
+  - {id: zobo, synonyms: "zobo, bissap, sobolo, hibiscus"}
+  - {id: jeera, synonyms: "jeera, cumin"}
+  - {id: ofada, synonyms: "ofada, ofada rice"}
+  - {id: fufu, synonyms: "fufu, foofoo, foufou"}
+  - {id: plantain, synonyms: "plantain, plantains, dodo, kelewele"}
+  - {id: shito, synonyms: "shito, black pepper sauce"}
+  - {id: suya, synonyms: "suya, yaji, suya spice"}
+  - {id: ankara, synonyms: "ankara, wax print, kitenge, chitenge"}
+  - {id: kente, synonyms: "kente, kente cloth"}
+  - {id: aso-oke, synonyms: "aso oke, aso-oke, asooke"}
+  - {id: gele, synonyms: "gele, headwrap, head wrap, head tie"}
+  - {id: agbada, synonyms: "agbada, kaftan, boubou"}
+  - {id: shea-butter, synonyms: "shea butter, ori"}
+  - {id: black-soap, synonyms: "black soap, ose dudu, african black soap, alata samina"}
+  - {id: palm-oil, synonyms: "palm oil, red palm oil, zomi"}
+  - {id: stockfish, synonyms: "stockfish, okporoko"}
+  - {id: crayfish, synonyms: "crayfish, ground crayfish"}
+  - {id: berbere, synonyms: "berbere, berbere spice"}
+  - {id: injera, synonyms: "injera, teff bread"}
+  - {id: ugali, synonyms: "ugali, sadza, nshima, pap"}
+  - {id: chin-chin, synonyms: "chin chin, chinchin"}
+  - {id: maggi, synonyms: "maggi, bouillon, stock cube"}
+  - {id: poundo, synonyms: "poundo yam, pounded yam flour, poundo"}
+  - {id: ogbono, synonyms: "ogbono, apon, bush mango seeds"}
+  - {id: uziza, synonyms: "uziza, ashanti pepper"}
+  - {id: grains-of-selim, synonyms: "grains of selim, uda, hwentia, kili pepper"}

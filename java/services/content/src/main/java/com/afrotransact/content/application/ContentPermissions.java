@@ -22,6 +22,14 @@ public final class ContentPermissions {
     public static final String CAREERS_EDIT = "content:careers.edit";
     /** Read the audit trail of content changes. */
     public static final String AUDIT_VIEW = "content:audit.view";
+    /** Staff: read every organisation's sponsored-products campaigns and reports. */
+    public static final String ADS_VIEW = "content:ads.view";
+    /** Staff: create, edit, pause and end any organisation's campaigns. */
+    public static final String ADS_EDIT = "content:ads.edit";
+    /** Seller members (owner, marketing): manage their own organisation's campaigns (Seller Center → Advertising). */
+    public static final String ADS_MANAGE = "ads:manage";
+    /** Service scope of search-service: read the campaigns eligible to serve. */
+    public static final String ADS_SERVE = "ads:serve";
 
     private ContentPermissions() {
     }

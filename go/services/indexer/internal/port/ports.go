@@ -39,3 +39,11 @@ type SellerDirectory interface {
 	// Remember records a name published by seller-service.
 	Remember(ctx context.Context, orgID, name string)
 }
+
+// SellerSource reads organisations from seller-service (client-credentials token of client indexer-service).
+type SellerSource interface {
+	// Directory returns one page (from 0) of every organisation's id, display name, kind and status.
+	Directory(ctx context.Context, page, size int) (domain.SellerDirectoryPage, error)
+	// Org returns one organisation's public profile; found is false when seller-service does not know it.
+	Org(ctx context.Context, orgID string) (org domain.SellerOrg, found bool, err error)
+}

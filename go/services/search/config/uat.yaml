@@ -1,4 +1,5 @@
-# search · uat. Secrets (ES_PASSWORD / ES_API_KEY) come from env vars only.
+# search · uat. Secrets (ES_PASSWORD / ES_API_KEY, ADS_TOKEN_KEY, SEARCH_CLIENT_SECRET) come from env vars only.
+# KAFKA_BOOTSTRAP comes from the environment outside local.
 port: 8080
 docsEnabled: true
 markets: [us]
@@ -9,6 +10,30 @@ auth:
   issuer: https://auth.uat.afrotransact.com
   audience: search
 aiGatewayUrl: http://ai-gateway:8080
+kafka:
+  brokers: []
+  buffer: 10000
+synonyms:
+  file: ""
+  overwrite: false
+  migrateIndex: false
+analytics:
+  enabled: true
+  flushInterval: 10s
+  retentionDays: 400
+  clickDedupe: 30m
+ads:
+  enabled: true
+  slots: [1, 5]
+  minQuality: 0.3
+  reserveMinor: 5
+  tokenTtl: 1h
+  cacheTtl: 15s
+  content:
+    baseUrl: http://content
+    tokenUrl: https://auth.uat.afrotransact.com/oauth2/token
+    clientId: search-service
+    scopes: ["ads:serve"]
 telemetry:
   otlpEndpoint: otel-collector.observability:4318
   sampleRatio: 0.5

@@ -23,6 +23,8 @@ tags:
 - name: Dispatch
   description: 'Delivery dispatch console (delivery:dispatch): routes per zone, drivers, reassignment of failed stops, SOS
     and defects, live driver events'
+- name: Return pickups
+  description: Customer returns collected by AfroTransact Delivery (RETURN_PICKUP stops)
 - name: Driver app
   description: Offline-first API of the AfroTransact Delivery driver app (delivery:operate)
 - name: Fulfilment centres
@@ -371,6 +373,31 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ReasonRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Route'
+  /v1/dispatch/routes/{routeId}/return-pickups:
+    post:
+      tags:
+      - Return pickups
+      summary: Add waiting return pickups to a route as RETURN_PICKUP stops (dispatch)
+      operationId: addReturnPickupsToRoute
+      parameters:
+      - name: routeId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddReturnPickupsRequest'
         required: true
       responses:
         '200':
@@ -814,6 +841,110 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/FulfilmentTask'
+  /v1/return-pickups:
+    get:
+      tags:
+      - Return pickups
+      summary: Return pickups by status and depot (dispatch)
+      operationId: listReturnPickups
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - REQUESTED
+          - ROUTED
+          - COLLECTED
+          - FAILED
+          - CANCELLED
+      - name: nodeId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 100
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReturnPickup'
+    post:
+      tags:
+      - Return pickups
+      summary: Schedule a return pickup (SERVICE with delivery:returns, i.e. tax-returns; or dispatch)
+      description: 'One pickup per RMA: a retry returns the existing pickup with 200. The pickup waits in the pool (REQUESTED)
+        until dispatch adds it to a route as a RETURN_PICKUP stop; the driver checks the RMA''s handover code with tax-returns
+        (POST /v1/returns/{id}/pickup) and syncs return_pickup.collected or return_pickup.failed.'
+      operationId: scheduleReturnPickup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleReturnPickupRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReturnPickup'
+  /v1/return-pickups/{id}:
+    get:
+      tags:
+      - Return pickups
+      summary: One return pickup (tax-returns or dispatch)
+      operationId: getReturnPickup
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReturnPickup'
+  /v1/return-pickups/{id}/cancel:
+    post:
+      tags:
+      - Return pickups
+      summary: Cancel a return pickup (tax-returns when the RMA is cancelled, or dispatch)
+      description: Cancels its RETURN_PICKUP stop unless the driver is already there (409). Idempotent.
+      operationId: cancelReturnPickup
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelReturnPickupRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ReturnPickup'
 components:
   schemas:
     CentreRequest:
@@ -887,6 +1018,171 @@ components:
           type: boolean
         active:
           type: boolean
+    ReturnPickupAddress:
+      type: object
+      description: The customer's address (from the order)
+      properties:
+        name:
+          type: string
+          maxLength: 200
+          minLength: 0
+        phone:
+          type: string
+          maxLength: 40
+          minLength: 0
+        line1:
+          type: string
+          maxLength: 200
+          minLength: 0
+        line2:
+          type: string
+          maxLength: 200
+          minLength: 0
+        city:
+          type: string
+          maxLength: 100
+          minLength: 0
+        state:
+          type: string
+          maxLength: 60
+          minLength: 0
+        postalCode:
+          type: string
+          maxLength: 20
+          minLength: 0
+        country:
+          type: string
+          maxLength: 2
+          minLength: 0
+        lat:
+          type: number
+          format: double
+        lon:
+          type: number
+          format: double
+      required:
+      - line1
+      - postalCode
+    ScheduleReturnPickupRequest:
+      type: object
+      description: A DRIVER_PICKUP return to collect (one per RMA)
+      properties:
+        rmaId:
+          type: string
+          maxLength: 64
+          minLength: 0
+        rmaNumber:
+          type: string
+          maxLength: 40
+          minLength: 0
+        orderId:
+          type: string
+          maxLength: 64
+          minLength: 0
+        orderNumber:
+          type: string
+          maxLength: 40
+          minLength: 0
+        shipmentId:
+          type: string
+          maxLength: 64
+          minLength: 0
+        customerId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        sellerOrgId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        address:
+          $ref: '#/components/schemas/ReturnPickupAddress'
+        depotNodeId:
+          type: string
+          description: FC the parcel goes back to (return centre); default node otherwise
+          maxLength: 20
+          minLength: 0
+        readyFrom:
+          type: string
+          format: date
+          description: First day the customer is ready; default today
+        collectBy:
+          type: string
+          format: date
+          description: Last day of the pickup window
+        units:
+          type: integer
+          format: int32
+          maximum: 999
+          minimum: 1
+      required:
+      - address
+      - rmaId
+      - rmaNumber
+    ReturnPickup:
+      type: object
+      properties:
+        id:
+          type: string
+        rmaId:
+          type: string
+        rmaNumber:
+          type: string
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        shipmentId:
+          type: string
+        customerId:
+          type: string
+        sellerOrgId:
+          type: string
+        name:
+          type: string
+        addressLine:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+        depotNodeId:
+          type: string
+        readyFrom:
+          type: string
+          format: date
+        collectBy:
+          type: string
+          format: date
+        units:
+          type: integer
+          format: int32
+        status:
+          type: string
+          description: REQUESTED | ROUTED | COLLECTED | FAILED | CANCELLED
+        routeId:
+          type: string
+        stopId:
+          type: string
+        note:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CancelReturnPickupRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
     FulfilmentTask:
       type: object
       description: Pick and pack of one FBA / Retail 1P shipment
@@ -1460,6 +1756,19 @@ components:
           minItems: 1
       required:
       - shipmentIds
+    AddReturnPickupsRequest:
+      type: object
+      description: Return pickups to add to a route as RETURN_PICKUP stops
+      properties:
+        returnPickupIds:
+          type: array
+          items:
+            type: string
+            minLength: 1
+          maxItems: 50
+          minItems: 0
+      required:
+      - returnPickupIds
     ReasonRequest:
       type: object
       properties:

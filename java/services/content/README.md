@@ -23,6 +23,10 @@ Spring Boot 4.1 · Java 25 · PostgreSQL `content` · port **8112**. Architectur
 | `newsletter_subscription` | `PENDING → CONFIRMED → UNSUBSCRIBED` |
 | `job`, `job_application`, `career_reference_seq` | Roles and applications with `CAR-######` references |
 | `audit_log` | Every back-office change (actor, action, entity, detail) |
+| `ad_campaign` | Sponsored-products campaigns (S127): seller org, advertiser, CPC bid, optional daily + lifetime budget, spent, keywords, categories, advertised ATINs, schedule, `ACTIVE · PAUSED (MANUAL · BUDGET_EXHAUSTED) · ENDED`, `version`. DB checks: spent ≤ budget, a reason iff paused |
+| `ad_campaign_daily` | Per campaign and UTC day: impressions, clicks, spend, attributed orders and sales |
+| `ad_click` | One row per billable click (click id from search), price and amount charged, shopper, variant ATINs |
+| `ad_attribution` | Order line → click (7-day click, same shopper and seller), once per line |
 
 Seeds (Flyway V2–V6): the slot schemas and the prototype's live placements; all ISO countries (PLANNED), the US with
 50 states + DC (launch set TX, GA, NJ, NY, MD, DC, VA, PA, MA, IL, MN, CA, FL, NC live; food in the FC states;
@@ -59,6 +63,16 @@ six launch flags; the ten open roles.
   murmur3_x86_32(`flag:subject`) mod 10 000, so a subject keeps its bucket and raising a rollout only adds subjects.
   Roles are trusted only from SERVICE callers; otherwise the caller's own token roles are used. Flags are cached per
   replica for `FLAGS_CACHE_TTL` (30 s): kill switches apply everywhere within 30 s.
+- **Sponsored products (S127)**: sellers (`ads:manage`, their own organisation) or staff (`content:ads.edit`) create
+  campaigns: bid ≥ 10¢, lifetime budget ≥ $5, optional daily budget (≥ the bid), 1–50 keywords/categories, 1–50 ATINs,
+  schedule. search-service reads the eligible ones (`GET /v1/ads/serving`, scope `ads:serve`: ACTIVE, in schedule,
+  budget left today; `remainingMinor` = smaller of lifetime and today's remaining) and runs the second-price auction.
+  `ads.impression.recorded` adds impressions; `ads.click.recorded` charges the click under a row lock — at most the
+  second price, the lifetime budget left and today's budget left, so budgets are never overspent — and pauses the
+  campaign at zero (`BUDGET_EXHAUSTED`, `content.ads.campaign_paused`); raising the budget resumes it. Both are
+  inbox-deduplicated on event-id and the click id. `orders.order.placed` attributes each line to the shopper's last
+  click on that variant from the same seller within 7 days. `GET /v1/ads/campaigns/{id}/report` gives impressions,
+  clicks, CTR, spend, CPC, attributed orders and sales, ROAS by day.
 - **Newsletter**: subscribe → PENDING + `content.newsletter.confirmation_requested` (signed HMAC confirm link,
   72 h, and unsubscribe link) → confirm → CONFIRMED. Re-subscribing a confirmed address is a no-op.
 - **Careers**: applications validated (name, email, LinkedIn `/in/` URL or empty, work authorisation, résumé asset id
@@ -86,11 +100,13 @@ Back office (JWT): `/v1/slots`, `/v1/placements[/{id}[/submit|/approve|/reject|/
 `/v1/markets/publications`, `PUT /v1/site-config`, `/v1/site-config/settings|revisions`,
 `POST /v1/legal/{type}/versions`, `PATCH /v1/legal/{type}/current`, `/v1/consent/categories/{key}`,
 `/v1/consent/cookies/{name}`, `/v1/flags[/{key}[/kill-switch]]`, `/v1/careers/admin/jobs`, `POST|PUT /v1/careers/jobs`,
-`/v1/careers/applications`, `/v1/audit`.
+`/v1/careers/applications`, `/v1/audit`, `/v1/ads/campaigns[/{id}[/pause|/resume|/end|/report]]` (sellers with
+`ads:manage` for their organisation, staff with `content:ads.view|edit`). Service: `GET /v1/ads/serving?market=`
+(`ads:serve`, search-service).
 
 Permissions (edit implies view): `content:placements.view|edit|approve`, `content:markets.view|edit`,
 `content:site.view|edit`, `content:legal.view|edit`, `content:flags.view|edit`, `content:careers.view|edit`,
-`content:audit.view`. Site content & legal: Super Admin all, Marketing edit, Ops / Support / Trust & Safety view.
+`content:audit.view`, `content:ads.view|edit` (staff), `ads:manage` (seller members), `ads:serve` (search-service). Site content & legal: Super Admin all, Marketing edit, Ops / Support / Trust & Safety view.
 
 ## Events (outbox → Kafka `at.content.events`, `contracts/asyncapi/fragments/content.yaml`)
 
@@ -106,6 +122,10 @@ One topic (the pre-provisioned `content` aggregate); the key keeps per-entity or
 | `content.newsletter.confirmation_requested`, `.subscribed`, `.unsubscribed` | subscription id | notifications |
 | `content.launch-list.joined` | country | notifications |
 | `content.career-application.received` | CAR reference | notifications, recruiting |
+| `content.ads.campaign_paused` (reason `BUDGET_EXHAUSTED` or `MANUAL`) | campaign id | notifications (tell the seller) |
+
+Consumed (consumer group `content-service`, `CONSUMERS_ENABLED`): `ads.impression.recorded`, `ads.click.recorded`
+(`at.ads.events`, search-service) and `orders.order.placed` (`at.order.events`) for sponsored products.
 
 ## Configuration
 

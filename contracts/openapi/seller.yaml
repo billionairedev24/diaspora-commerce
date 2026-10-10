@@ -438,6 +438,44 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/MarketsResponse'
+  /v1/orgs/directory:
+    get:
+      tags:
+      - Organisations
+      summary: Paged organisation directory (id, display name, kind, status) for service clients
+      description: 'Ordered by id. displayName falls back to the legal name until a store name is set. Needs sellers:directory:
+        the indexer-service client-credentials client (seller-name warm-up), or staff.'
+      operationId: orgDirectory
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      - name: status
+        in: query
+        description: 'Comma-separated statuses (default: all)'
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgDirectoryPage'
   /v1/orgs/{id}:
     get:
       tags:
@@ -2295,6 +2333,36 @@ components:
           type: string
         status:
           type: string
+    OrgDirectoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+    OrgDirectoryPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgDirectoryEntry'
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
     MarketsResponse:
       type: object
       properties:
