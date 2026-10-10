@@ -767,3 +767,8 @@
 - needsReview cleared by native reviewers
 - VoiceOver and TalkBack pass on key mobile journeys
 - Sentry receives grouped errors with source maps from dev","E31","","Medium","8","i18n a11y telemetry","legal","To Do"
+"S254","Story","Fee schedule editor and seller fees page","Staff console edits full fee schedules (category rates, seller overrides, effective date, percent input, diff and impact preview, cancel future versions); Seller Center shows each seller's effective commission and fees, including upcoming changes.","- Finance can change a category rate and add a seller override from the UI
+- Values are entered as percentages
+- A future schedule can be cancelled before it takes effect
+- Sellers see their own rates and upcoming changes
+- AfroTransact Retail cannot be given an override","E25","","High","5","staff-console seller-center payments","staff-console","In Progress"
