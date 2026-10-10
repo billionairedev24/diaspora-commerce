@@ -272,7 +272,7 @@
 - Push tracking mapped to shipment states","E11","","Medium","5","carriers go","carriers","Done"
 "S080","Story","Pickup points and seller pickup","Platform pickup points/lockers and seller-configured pickup with address and hours.","- Sellers set their pickup address and hours in Seller Center
 - Pickup ready notifications sent to customers","E11","","Medium","5","carriers delivery","carriers","Done"
-"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","Done"
+"E12","Epic","AfroTransact Delivery & driver app","Internal delivery from sellers and FCs to customers with an offline-first driver app.","","","AfroTransact Delivery & driver app","High","","delivery","delivery","In Progress"
 "S081","Story","Driver app sign-in with access check","Email + password + 6-digit code; only users with delivery:operate get in.","- Users without delivery:operate see 'No driver access' with who can grant it
 - Revoking access signs the driver out without losing unsynced events","E12","","High","5","delivery mobile","delivery","Done"
 "S082","Story","Vehicle inspection","10 checks with critical items, odometer, fuel, cold-box temperature, 4 live photos and signature.","- Failing brakes, tyres or lights blocks the route and reports a defect to dispatch
@@ -789,11 +789,11 @@
 - Seller earnings show delivery-fee totals from payments
 - Cart shows one package per pickup location
 - Concurrent offer edits are rejected with 409","E12","","Medium","5","fulfilment payments orders offers cart","delivery","To Do"
-"E34","Epic","Community delivery runs (preorders)","Scheduled batched deliveries to towns outside regular delivery areas: customers preorder for a run, sellers' items are collected in one sweep, and the run is announced through WhatsApp communities, email, push, social and location-targeted advertorials.","","","Community delivery runs","High","","delivery-runs","delivery-runs","To Do"
+"E34","Epic","Community delivery runs (preorders)","Scheduled batched deliveries to towns outside regular delivery areas: customers preorder for a run, sellers' items are collected in one sweep, and the run is announced through WhatsApp communities, email, push, social and location-targeted advertorials.","","","Community delivery runs","High","","delivery-runs","delivery-runs","In Progress"
 "S260","Story","Delivery runs service and run lifecycle","New delivery-runs service: staff create runs per location (town/area by polygon or radius from geo), with delivery window, order cutoff, minimum orders, capacity, run delivery fee, and doorstep or community pickup-point drop. Lifecycle draft, announced, open, cutoff, confirmed (minimum met) or extended or cancelled, collecting, out for delivery, completed.","- Staff create, schedule, extend and cancel runs from the staff console
 - Run area comes from geo (polygon or radius around a town)
 - Minimum orders and capacity are enforced at cutoff
-- Cancelled runs release stock and payment holds and notify customers","E34","","Highest","13","delivery-runs","delivery-runs","To Do"
+- Cancelled runs release stock and payment holds and notify customers","E34","","Highest","13","delivery-runs","delivery-runs","In Progress"
 "S261","Story","Preorder checkout for a delivery run","Customers whose address is inside an open run's area (and outside regular delivery) can preorder for that run: stock is reserved, the card is saved and authorised, and charged at cutoff confirmation (off-session if the hold would expire). The run delivery fee (e.g. 7.99) is set per run.","- Checkout offers the next open run with its date, cutoff and fee
 - Payment is captured only when the run is confirmed
 - Orders after cutoff go to the next run or are refused
