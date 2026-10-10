@@ -739,7 +739,7 @@
 - Stripe prices metered_fba_storage, metered_ads_spend, metered_ai_credits exist in every environment","E24","","High","5","seller-center staff-console bff payments","seller-center","To Do"
 "S246","Story","Remediate security scan findings","Fix findings from the first scan: Go toolchain 1.27.2 and golang.org/x/net v0.60.0 in every module; Jackson 3.1.7 override; lz4-java 1.11.4; pnpm overrides for tinypool, glob, serialize-javascript; moby/go-archive bump; Dockerfile WORKDIR instead of RUN cd; no 'latest' image tags in Helm; Azure storage network default deny and logging.","- govulncheck reports no called vulnerabilities
 - Trivy filesystem and IaC scans have no CRITICAL or HIGH findings
-- Helm templates never render image tag latest","E33","","Highest","5","security","quality","To Do"
+- Helm templates never render image tag latest","E33","","Highest","5","security","quality","In Progress"
 "S247","Story","Storybook interaction tests and visual diffs in CI; fix known a11y issues","Add Storybook interaction tests and visual regression in CI, and fix the a11y issues recorded in tests/e2e/support/a11y-known-issues.ts (image alt, contrast, carousel dot size, calendar grid semantics).","- Storybook test-runner runs in CI
 - Visual diffs reviewed on PRs
 - a11y-known-issues list is empty","E33","","Medium","5","storybook a11y","quality","To Do"
