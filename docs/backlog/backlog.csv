@@ -380,7 +380,7 @@
 - Filter by actor, entity and date","E18","","High","3","trust java","trust","Done"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
 - Reinstatement restores them","E18","","Medium","5","trust","trust","Done"
-"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","Done"
+"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","In Progress"
 "S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
 - SMS adapters: Twilio, Vonage, AWS End User Messaging
 - Push: FCM and APNs; WhatsApp: Meta Cloud API
@@ -816,7 +816,7 @@
 - Dev runs with FGA enforce and no service call returns auth.relationship-denied","E02","","High","2","authz openfga","identity","To Do"
 "S267","Story","Spike: how pre-order delivery runs work end to end","Decision document with flows per actor, sequence and state diagrams, payment (authorise vs saved card + charge at cutoff), WhatsApp community and Business API options and costs, preorder inventory, batched routing, Bastrop economics with a break-even calculator, data model, risks, open questions and a phased rollout.","- Report in docs/spikes/preorder-delivery-runs.md with diagrams and cited sources
 - Economics calculator in tools/spikes with a Bastrop example
-- Product owner decisions recorded before S261-S264 are finalised","E34","","Highest","5","delivery-runs spike","delivery-runs","In Progress"
+- Product owner decisions recorded before S261-S264 are finalised","E34","","Highest","5","delivery-runs spike","delivery-runs","Done"
 "S268","Story","Remaining Java HIGH findings and Semgrep registry triage","Pin jackson-core/databind and json-smart to fixed versions across Java modules, triage Semgrep registry packs and make them blocking, and apply the S010 change requests (fixed build timestamp for reproducible Java jars, base images pinned by digest).","- Trivy fs reports no HIGH in Java Maven files
 - Semgrep registry rules are blocking after triage
 - Two clean Java image builds produce the same digest","E33","","High","3","security","quality","To Do"

@@ -178,6 +178,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      security-events: write
     with:
       app: {app}
       target: ${{{{ github.event_name == 'pull_request' && 'preview' || (github.event_name == 'workflow_dispatch' && inputs.environment || 'dev') }}}}
