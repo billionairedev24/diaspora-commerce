@@ -12,6 +12,7 @@
 <script src="at-inventory.js"></script>
 <script src="at-bookings.js"></script>
 <script src="at-site.js"></script>
+<script src="at-preorder.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
 <style>@keyframes atpulse{0%,100%{opacity:.35}50%{opacity:1}}@keyframes atspin{to{transform:rotate(360deg)}}</style>
@@ -20,7 +21,7 @@
 <div style="min-height:100vh;background:var(--at-color-canvas);color:var(--at-color-text);font-family:var(--at-font-sans)">
 
 <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-1) var(--at-space-5);align-items:center;padding:var(--at-space-1) var(--at-page-gutter);background:var(--at-gold-500);color:var(--at-ink-1000);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold)">
-  <span>Prototype · round 3</span><a href="AfroTransact Shop.dc.html" style="color:var(--at-ink-1000)">Shop</a><a href="AfroTransact Theme Studio.dc.html" style="color:var(--at-ink-1000)">Tokens &amp; seller themes</a><a href="AfroTransact Catalog.dc.html" style="color:var(--at-ink-1000)">Catalog &amp; barcodes</a><a href="AfroTransact Mobile App.dc.html" style="color:var(--at-ink-1000)">Customer app</a><a href="AfroTransact Driver.dc.html" style="color:var(--at-ink-1000)">Driver app</a><a href="AfroTransact Architecture.dc.html" style="color:var(--at-ink-1000)">Architecture</a>
+  <span>Prototype · round 3</span><button type="button" onClick="{{ previewLubbock }}" style="border:0;background:none;padding:0;color:var(--at-ink-1000);text-decoration:underline;cursor:pointer;font:inherit">Preview pre-order city (Lubbock 79401)</button><a href="AfroTransact Shop.dc.html" style="color:var(--at-ink-1000)">Shop</a><a href="AfroTransact Theme Studio.dc.html" style="color:var(--at-ink-1000)">Tokens &amp; seller themes</a><a href="AfroTransact Catalog.dc.html" style="color:var(--at-ink-1000)">Catalog &amp; barcodes</a><a href="AfroTransact Mobile App.dc.html" style="color:var(--at-ink-1000)">Customer app</a><a href="AfroTransact Driver.dc.html" style="color:var(--at-ink-1000)">Driver app</a><a href="AfroTransact Architecture.dc.html" style="color:var(--at-ink-1000)">Architecture</a>
 </div>
 
 <header style="display:{{ chromeDisp }};background:var(--at-color-header-bg);color:var(--at-color-header-text)">
@@ -74,7 +75,7 @@
       <span style="font-size:var(--at-text-md);font-weight:var(--at-weight-bold)">Cart</span>
     </button>
   </div>
-  <nav style="display:flex;align-items:center;gap:var(--at-space-1);padding:var(--at-space-1) var(--at-page-gutter);background:var(--at-color-subheader-bg);flex-wrap:wrap;font-size:var(--at-text-md)">
+  <nav style="display:flex;align-items:center;gap:var(--at-space-1);padding:var(--at-space-1) var(--at-page-gutter);background:var(--at-color-subheader-bg);flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;font-size:var(--at-text-md)">
     <sc-for list="{{ subnav }}" as="n" hint-placeholder-count="12">
       <button type="button" onClick="{{ n.go }}" style="flex:none;display:flex;align-items:center;gap:var(--at-space-1);padding:var(--at-space-1) var(--at-space-2);border:1px solid transparent;border-radius:var(--at-radius-xs);background:none;color:var(--at-color-subheader-text);cursor:pointer;font-size:var(--at-text-md);font-weight:{{ n.weight }}" style-hover="border-color:var(--at-color-header-hover-ring)"><i class="{{ n.icon }}" style="color:{{ n.iconColor }}"></i>{{ n.label }}</button>
     </sc-for>
@@ -89,11 +90,119 @@
 </div>
 </sc-if>
 
+<sc-if value="{{ preRibbon }}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{ goPreRibbon }}" style="width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:var(--at-space-2) var(--at-space-4);padding:var(--at-space-2) var(--at-page-gutter);border:0;background:{{ po.ribbonBg }};color:{{ po.ribbonFg }};font-size:var(--at-text-sm);cursor:pointer;font-family:inherit">
+  <i class="ph-fill ph-calendar-check" style="font-size:18px"></i><strong>{{ po.ribbon }}</strong><span>{{ po.ribbonSub }}</span>
+  <span style="padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-ink-1000);color:var(--at-gold-500);font-family:var(--at-font-mono);font-size:var(--at-text-xs);font-weight:var(--at-weight-bold)">{{ po.cdLabel }} {{ po.cdShort }}</span>
+  <span style="font-weight:var(--at-weight-bold);text-decoration:underline">View pre-order</span>
+</button>
+</sc-if>
+
+<sc-if value="{{ preFamily }}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{ goPre }}" style="width:100%;display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:var(--at-space-2) var(--at-space-4);padding:var(--at-space-2) var(--at-page-gutter);border:0;background:var(--at-ink-900);color:var(--at-ink-0);font-size:var(--at-text-sm);cursor:pointer;font-family:inherit">
+  <i class="ph-fill ph-calendar-check" style="font-size:18px;color:var(--at-gold-500)"></i><strong>{{ preFamilyText }}</strong><span style="color:var(--at-ink-300)">Shopping for family there? Their delivery fee is $7.99 flat.</span>
+  <span style="font-weight:var(--at-weight-bold);text-decoration:underline;color:var(--at-gold-500)">See pre-orders</span>
+</button>
+</sc-if>
 <main style="max-width:var(--at-page-max);margin:0 auto;padding:0 var(--at-page-gutter) var(--at-space-16)">
+
+<!-- ================= PRE-ORDER ================= -->
+<sc-if value="{{ vPreorder }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:var(--at-space-6);padding-top:var(--at-space-5)">
+  <sc-if value="{{ preOffPage }}" hint-placeholder-val="{{ false }}">
+    <div style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+      <div style="display:flex;flex-direction:column;gap:var(--at-space-1)"><h1 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-black)">Pre-orders</h1><p style="margin:0;color:var(--at-color-text-muted);max-width:720px">{{ preOffText }}</p></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr));gap:var(--at-space-4)">
+        <sc-for list="{{ preAnyCards }}" as="w" hint-placeholder-count="3">
+          <div style="display:flex;flex-direction:column;background:var(--at-color-surface);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);overflow:hidden">
+            <div role="img" aria-label="{{ w.name }}" style="aspect-ratio:3/1;background:var(--at-ink-900) center/cover no-repeat;background-image:{{ w.bg }}"></div>
+            <div style="padding:var(--at-space-4);display:flex;flex-direction:column;gap:var(--at-space-2);flex:1">
+              <span style="align-self:flex-start;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:{{ w.pillBg }};color:{{ w.pillFg }};font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold)">{{ w.stageLabel }}</span>
+              <strong style="font-size:var(--at-text-lg)">{{ w.name }}</strong>
+              <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)"><i class="ph ph-map-pin"></i> {{ w.where }}</span>
+              <span style="font-size:var(--at-text-sm)">{{ w.label }}</span>
+              <button type="button" onClick="{{ w.go }}" style="margin-top:auto;height:var(--at-size-control);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-weight:var(--at-weight-bold);cursor:pointer">{{ w.cta }}</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ preOn }}" hint-placeholder-val="{{ false }}">
+    <div style="position:relative;aspect-ratio:3/1;max-height:320px;border-radius:var(--at-radius-lg);overflow:hidden;background:var(--at-ink-900)">
+      <div role="img" aria-label="{{ po.name }}" style="position:absolute;inset:0;background:center/cover no-repeat;background-image:{{ po.heroBg }}"></div>
+      <sc-if value="{{ po.noHero }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;display:grid;place-items:center;color:var(--at-ink-400);font-size:var(--at-text-sm)">Banner uses the hero creative uploaded in Back office › Pre-orders · 1920 × 640</span></sc-if>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:var(--at-space-6);align-items:start">
+      <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+        <span style="align-self:flex-start;padding:2px var(--at-space-3);border-radius:var(--at-radius-pill);background:{{ po.pillBg }};color:{{ po.pillFg }};font-size:var(--at-text-xs);font-weight:var(--at-weight-bold)">{{ po.stageLabel }}</span>
+        <h1 style="margin:0;font-size:var(--at-text-4xl);font-weight:var(--at-weight-black);line-height:var(--at-leading-tight)">{{ po.name }}</h1>
+        <p style="margin:0;color:var(--at-color-text-muted);font-size:var(--at-text-lg);text-wrap:pretty">{{ po.headline }}</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--at-color-surface);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);overflow:hidden">
+          <sc-for list="{{ po.timeline }}" as="t" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:var(--at-space-1);padding:var(--at-space-3) var(--at-space-4);border-top:4px solid {{ t.bar }}"><span style="display:flex;align-items:center;gap:var(--at-space-1);font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);color:{{ t.fg }}"><i class="{{ t.icon }}" style="font-size:16px"></i>{{ t.label }}</span><strong style="font-size:var(--at-text-sm)">{{ t.date }}</strong></div></sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:var(--at-space-4);flex-wrap:wrap;padding:var(--at-space-3) var(--at-space-4);background:var(--at-ink-1000);color:var(--at-ink-0);border-radius:var(--at-radius-md)">
+          <span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">{{ po.cdLabel }}</span>
+          <div style="display:flex;gap:var(--at-space-3)"><sc-for list="{{ po.cd }}" as="u" hint-placeholder-count="4"><span style="display:flex;align-items:baseline;gap:4px"><strong style="font-size:var(--at-text-2xl);font-family:var(--at-font-mono);color:var(--at-gold-500)">{{ u.v }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-ink-300)">{{ u.l }}</span></span></sc-for></div>
+          <sc-if value="{{ po.showCount }}" hint-placeholder-val="{{ false }}"><span style="margin-left:auto;font-size:var(--at-text-sm);color:var(--at-ink-200)"><i class="ph-fill ph-users-three"></i> {{ po.countText }}</span></sc-if>
+        </div>
+      </div>
+    </div>
+    <sc-if value="{{ po.isClosed }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:var(--at-space-3);align-items:center;flex-wrap:wrap;padding:var(--at-space-4);border-radius:var(--at-radius-md);background:var(--at-gold-50);border:1px solid var(--at-gold-200)"><i class="ph-fill ph-headset" style="font-size:24px;color:var(--at-gold-800)"></i><span style="flex:1;min-width:240px"><strong>Missed the closing date?</strong> Call {{ po.phone }} or ask Lola to connect you to support. A customer service rep may be able to add your order to this delivery.</span><button type="button" onClick="{{ toggleLola }}" style="height:var(--at-size-control-sm);padding:0 var(--at-space-4);border:0;border-radius:var(--at-radius-pill);background:var(--at-ink-1000);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer">Chat with support</button></div></sc-if>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:var(--at-space-4)">
+      <sc-for list="{{ po.rules }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:var(--at-space-3);align-items:flex-start"><i class="{{ r.icon }}" style="font-size:22px;color:var(--at-color-action-secondary);flex:none"></i><span style="font-size:var(--at-text-sm);text-wrap:pretty">{{ r.text }}</span></div></sc-for>
+    </div>
+    <h2 style="margin:0;font-size:var(--at-text-2xl);font-weight:var(--at-weight-bold)">In this pre-order</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:var(--at-space-3)">
+      <sc-for list="{{ preProds }}" as="p" hint-placeholder-count="8">
+        <div style="background:var(--at-color-surface);border:1px solid var(--at-color-border);border-radius:var(--at-radius-sm);overflow:hidden;display:flex;flex-direction:column">
+          <button type="button" onClick="{{ p.open }}" style="border:0;padding:var(--at-space-4);background:var(--at-color-surface-sunken);cursor:pointer"><div style="aspect-ratio:1/1;width:100%;background:repeating-linear-gradient(135deg,var(--at-ink-100) 0 6px,var(--at-ink-50) 6px 12px)"></div></button>
+          <div style="padding:var(--at-space-3) var(--at-space-4) var(--at-space-4);display:flex;flex-direction:column;gap:var(--at-space-1);flex:1">
+            <sc-if value="{{ p.isPre }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;display:inline-flex;align-items:center;gap:4px;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-ink-1000);color:var(--at-gold-500);font-size:var(--at-text-2xs);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-caps);white-space:nowrap;text-transform:uppercase"><i class="ph-fill ph-calendar-check"></i>Pre-order</span></sc-if>
+            <button type="button" onClick="{{ p.open }}" style="border:0;padding:0;background:none;cursor:pointer;text-align:left;color:var(--at-color-text);font-size:var(--at-text-base);font-weight:var(--at-weight-medium);line-height:var(--at-leading-tight)" style-hover="color:var(--at-color-link)">{{ p.name }}</button>
+            <span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ p.brand }} · {{ p.unit }}</span>
+            <strong style="font-size:var(--at-text-xl)">{{ p.priceLabel }}</strong>
+            <span style="font-size:var(--at-text-sm)">{{ p.etaPrefix }} <strong>{{ p.eta }}</strong></span>
+            <div style="margin-top:auto;padding-top:var(--at-space-2);display:flex;flex-direction:column">
+              <sc-if value="{{ p.showAdd }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ p.add }}" style="width:100%;height:var(--at-size-control-sm);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);cursor:pointer" style-hover="background:var(--at-color-action-primary-hover)">Add to cart</button></sc-if>
+              <sc-if value="{{ p.showStepper }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;height:var(--at-size-control-sm);border:2px solid var(--at-color-action-primary);border-radius:var(--at-radius-pill)"><button type="button" onClick="{{ p.dec }}" aria-label="Decrease quantity" style="width:36px;height:100%;border:0;background:none;cursor:pointer"><i class="{{ p.decIcon }}"></i></button><span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-bold)">{{ p.inCart }} in cart</span><button type="button" onClick="{{ p.inc }}" disabled="{{ p.atMax }}" aria-label="Increase quantity" style="width:36px;height:100%;border:0;background:none;cursor:pointer;opacity:{{ p.incOpacity }}"><i class="ph ph-plus"></i></button></div></sc-if>
+              <sc-if value="{{ p.preLocked }}" hint-placeholder-val="{{ false }}"><div style="height:var(--at-size-control-sm);display:flex;align-items:center;justify-content:center;gap:var(--at-space-1);border:1px dashed var(--at-gold-700);border-radius:var(--at-radius-pill);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);color:var(--at-gold-800);background:var(--at-gold-50)"><i class="ph ph-lock-simple"></i>{{ p.preLockedText }}</div></sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </sc-if>
+</div>
+</sc-if>
+
 
 <!-- ================= HOME ================= -->
 <sc-if value="{{ vHome }}" hint-placeholder-val="{{ true }}">
 <div>
+  <sc-if value="{{ preHero }}" hint-placeholder-val="{{ false }}">
+  <section style="position:relative;margin:var(--at-space-4) 0;border-radius:var(--at-radius-lg);overflow:hidden;background:var(--at-ink-1000);color:var(--at-ink-0);min-height:320px;display:flex">
+    <div role="img" aria-label="{{ po.name }}" style="position:absolute;inset:0;background:center/cover no-repeat;background-image:{{ po.heroBg }}"></div>
+    <sc-if value="{{ po.noHero }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;right:var(--at-space-4);top:var(--at-space-4);padding:var(--at-space-1) var(--at-space-2);border:1px dashed var(--at-ink-500);border-radius:var(--at-radius-sm);font-size:var(--at-text-2xs);color:var(--at-ink-300)">Hero creative · 1920 × 640 · upload in Back office › Pre-orders</span></sc-if>
+    <div style="position:relative;flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:var(--at-space-4);padding:var(--at-space-8);background:linear-gradient(90deg,rgb(0 0 0 / .82) 0%,rgb(0 0 0 / .5) 45%,rgb(0 0 0 / 0) 80%)">
+      <span style="align-self:flex-start;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-gold-500);color:var(--at-ink-1000);font-size:var(--at-text-xs);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-caps);text-transform:uppercase">{{ po.kicker }}</span>
+      <h2 style="margin:0;font-size:var(--at-text-4xl);font-weight:var(--at-weight-black);line-height:var(--at-leading-tight);max-width:640px;text-wrap:pretty">{{ po.headline }}</h2>
+      <div style="display:flex;gap:var(--at-space-6);flex-wrap:wrap;align-items:flex-end">
+        <div style="display:flex;flex-direction:column;gap:var(--at-space-1)">
+          <span style="font-size:var(--at-text-xs);color:var(--at-ink-300);font-weight:var(--at-weight-semibold)">{{ po.cdLabel }}</span>
+          <div style="display:flex;gap:var(--at-space-2)"><sc-for list="{{ po.cd }}" as="u" hint-placeholder-count="4"><span style="display:flex;flex-direction:column;align-items:center;min-width:56px;padding:var(--at-space-2);border-radius:var(--at-radius-md);background:rgb(255 255 255 / .12)"><strong style="font-size:var(--at-text-2xl);font-family:var(--at-font-mono)">{{ u.v }}</strong><span style="font-size:var(--at-text-2xs);color:var(--at-ink-300)">{{ u.l }}</span></span></sc-for></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;font-size:var(--at-text-sm)"><span>Order by <strong>{{ po.closesT }}</strong></span><span>Delivered <strong>{{ po.deliversT }}</strong> · $7.99 flat</span></div>
+      </div>
+      <div style="display:flex;gap:var(--at-space-3);flex-wrap:wrap;align-items:center">
+        <button type="button" onClick="{{ goPreHero }}" style="height:var(--at-size-control-lg);padding:0 var(--at-space-6);border:0;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);font-weight:var(--at-weight-bold);font-size:var(--at-text-base);cursor:pointer">{{ po.cta }}</button>
+        <sc-if value="{{ po.showCount }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-sm);color:var(--at-ink-200)"><i class="ph-fill ph-users-three"></i> {{ po.countText }}</span></sc-if>
+      </div>
+    </div>
+  </section>
+  </sc-if>
   <section style="position:relative;margin:0 calc(-1 * var(--at-page-gutter));min-height:380px;padding-bottom:150px;background:{{ hero.bg }};color:{{ hero.fg }};overflow:hidden">
     <div style="position:relative;max-width:var(--at-page-max);margin:0 auto;padding:var(--at-space-10) calc(var(--at-page-gutter) + 48px) 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:var(--at-space-8);align-items:center">
       <div style="display:flex;flex-direction:column;gap:var(--at-space-3);align-items:flex-start">
@@ -204,6 +313,7 @@
               <sc-if value="{{ p.isSponsored }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-2xs);color:var(--at-color-text-muted)">Sponsored · {{ p.advertiser }}</span></sc-if><sc-if value="{{ p.is1P }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;padding:1px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-color-badge-brand-bg);color:var(--at-color-badge-brand-text);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold)">AfroTransact Brand</span></sc-if>
               <button type="button" onClick="{{ p.open }}" style="border:0;padding:0;background:none;cursor:pointer;text-align:left;color:var(--at-color-text);font-size:var(--at-text-base);font-weight:var(--at-weight-medium);line-height:var(--at-leading-tight)" style-hover="color:var(--at-color-link)">{{ p.name }}</button>
               <span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ p.comm }} · {{ p.unit }}</span>
+              <sc-if value="{{ p.isPre }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;display:inline-flex;align-items:center;gap:4px;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-ink-1000);color:var(--at-gold-500);font-size:var(--at-text-2xs);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-caps);white-space:nowrap;text-transform:uppercase"><i class="ph-fill ph-calendar-check"></i>Pre-order</span></sc-if>
               <span style="font-size:var(--at-text-sm);color:var(--at-color-rating-text)">{{ p.stars }} <span style="color:var(--at-color-link)">{{ p.reviews }}</span></span>
               <span style="display:flex;align-items:flex-start;gap:var(--at-space-2)"><span style="display:flex;align-items:flex-start"><span style="font-size:var(--at-text-xs);margin-top:3px">$</span><span style="font-size:var(--at-text-3xl);font-weight:var(--at-weight-semibold);line-height:1">{{ p.whole }}</span><span style="font-size:var(--at-text-xs);margin-top:3px">{{ p.cents }}</span></span><sc-if value="{{ p.hasList }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted);margin-top:var(--at-space-2)">List: <s>{{ p.listLabel }}</s></span></sc-if></span>
               <sc-if value="{{ p.isAT }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;display:inline-flex;align-items:center;gap:3px;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-color-badge-fulfilled-bg);color:var(--at-color-badge-fulfilled-text);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold)"><i class="ph-fill ph-check-circle"></i>Fulfilled by AfroTransact</span></sc-if>
@@ -213,7 +323,7 @@
               <div style="margin-top:auto;display:flex;flex-direction:column">
                 <sc-if value="{{ p.showAdd }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ p.add }}" style="width:100%;height:var(--at-size-control-sm);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);cursor:pointer" style-hover="background:var(--at-color-action-primary-hover)">Add to cart</button></sc-if>
                 <sc-if value="{{ p.showStepper }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;height:var(--at-size-control-sm);border:2px solid var(--at-color-action-primary);border-radius:var(--at-radius-pill)"><button type="button" onClick="{{ p.dec }}" aria-label="Decrease quantity" style="width:36px;height:100%;border:0;background:none;cursor:pointer"><i class="{{ p.decIcon }}"></i></button><span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-bold)">{{ p.inCart }} in cart</span><button type="button" onClick="{{ p.inc }}" disabled="{{ p.atMax }}" aria-label="Increase quantity" style="width:36px;height:100%;border:0;background:none;cursor:pointer;opacity:{{ p.incOpacity }}"><i class="ph ph-plus"></i></button></div></sc-if>
-                <sc-if value="{{ p.unavailable }}" hint-placeholder-val="{{ false }}"><div style="height:var(--at-size-control-sm);display:flex;align-items:center;justify-content:center;border:1px solid var(--at-color-border);border-radius:var(--at-radius-pill);font-size:var(--at-text-sm);color:var(--at-color-text-muted)">Currently unavailable</div></sc-if>
+                <sc-if value="{{ p.unavailable }}" hint-placeholder-val="{{ false }}"><div style="height:var(--at-size-control-sm);display:flex;align-items:center;justify-content:center;border:1px solid var(--at-color-border);border-radius:var(--at-radius-pill);font-size:var(--at-text-sm);color:var(--at-color-text-muted)">Currently unavailable</div></sc-if><sc-if value="{{ p.preLocked }}" hint-placeholder-val="{{ false }}"><div style="height:var(--at-size-control-sm);display:flex;align-items:center;justify-content:center;gap:var(--at-space-1);border:1px dashed var(--at-gold-700);border-radius:var(--at-radius-pill);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);color:var(--at-gold-800);background:var(--at-gold-50)"><i class="ph ph-lock-simple"></i>{{ p.preLockedText }}</div></sc-if>
               </div>
             </div>
           </div>
@@ -271,6 +381,14 @@
     </div>
     <div style="border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-3);position:sticky;top:var(--at-space-4)">
       <span style="display:flex;align-items:flex-start"><span style="font-size:var(--at-text-sm);margin-top:4px">$</span><span style="font-size:var(--at-text-3xl);font-weight:var(--at-weight-semibold);line-height:1">{{ pd.whole }}</span><span style="font-size:var(--at-text-sm);margin-top:4px">{{ pd.cents }}</span></span>
+      <sc-if value="{{ pd.isPre }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:var(--at-space-2);padding:var(--at-space-3);border-radius:var(--at-radius-md);background:var(--at-gold-50);border:1px solid var(--at-gold-200)">
+        <span style="align-self:flex-start;display:inline-flex;align-items:center;gap:4px;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-ink-1000);color:var(--at-gold-500);font-size:var(--at-text-2xs);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-caps)"><i class="ph-fill ph-calendar-check"></i>PRE-ORDER · {{ po.stageLabel }}</span>
+        <span style="font-size:var(--at-text-md)">Delivered <strong>{{ po.deliversT }}</strong> to {{ po.cityName }} · $7.99 flat</span>
+        <span style="display:flex;align-items:center;gap:var(--at-space-2);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)"><i class="ph ph-timer" style="font-size:18px"></i>{{ po.cdLabel }} <span style="font-family:var(--at-font-mono)">{{ po.cdShort }}</span></span>
+        <span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ po.pdpNote }}</span>
+        <sc-if value="{{ po.hasPdp }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ goPrePdp }}" aria-label="{{ po.name }}" style="aspect-ratio:4/1;border:0;padding:0;border-radius:var(--at-radius-sm);background:center/cover no-repeat;background-image:{{ po.pdpBg }};cursor:pointer"></button></sc-if>
+        <button type="button" onClick="{{ goPrePdp }}" style="align-self:flex-start;border:0;background:none;padding:0;color:var(--at-color-link);font-size:var(--at-text-sm);cursor:pointer">See everything in the {{ po.cityName }} pre-order</button>
+      </div></sc-if>
       <span style="font-size:var(--at-text-md)">{{ pd.shipText }} <strong>{{ pd.eta }}</strong>{{ pd.cutoff }}</span>
       <sc-if value="{{ pd.isAT }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-sm)">Or fastest delivery <strong>{{ pd.expressEta }}</strong></span></sc-if>
       <button type="button" onClick="{{ openLoc }}" style="display:flex;align-items:center;gap:var(--at-space-1);border:0;background:none;padding:0;color:var(--at-color-link);font-size:var(--at-text-sm);cursor:pointer"><i class="ph ph-map-pin"></i>Deliver to {{ locLabel }}</button>
@@ -325,6 +443,7 @@
             <sc-if value="{{ i.isAT }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;display:inline-flex;align-items:center;gap:3px;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-color-badge-fulfilled-bg);color:var(--at-color-badge-fulfilled-text);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold)"><i class="ph-fill ph-check-circle"></i>Fulfilled by AfroTransact</span></sc-if>
             <sc-if value="{{ i.isSeller }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">Ships from {{ i.shipsFrom }}</span></sc-if>
             <span style="font-size:var(--at-text-xs)">Sold by <span style="color:var(--at-color-link)">{{ i.seller }}</span> · {{ i.unit }}</span>
+            <sc-if value="{{ i.isPre }}" hint-placeholder-val="{{ false }}"><span style="align-self:flex-start;display:inline-flex;align-items:center;gap:4px;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-ink-1000);color:var(--at-gold-500);font-size:var(--at-text-2xs);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-caps);white-space:nowrap;text-transform:uppercase"><i class="ph-fill ph-calendar-check"></i>Pre-order</span></sc-if>
             <span style="font-size:var(--at-text-sm)">{{ i.etaPrefix }} <strong>{{ i.eta }}</strong></span>
             <div style="display:flex;flex-wrap:wrap;align-items:center;gap:var(--at-space-3);margin-top:var(--at-space-2);font-size:var(--at-text-sm)">
               <div style="display:flex;align-items:center;border:2px solid var(--at-color-action-primary);border-radius:var(--at-radius-pill);height:var(--at-size-control-sm)"><button type="button" onClick="{{ i.dec }}" aria-label="Decrease quantity" style="width:34px;height:100%;border:0;background:none;cursor:pointer"><i class="{{ i.decIcon }}"></i></button><span style="min-width:26px;text-align:center;font-weight:var(--at-weight-bold)">{{ i.qty }}</span><button type="button" onClick="{{ i.inc }}" disabled="{{ i.atMax }}" aria-label="Increase quantity" style="width:34px;height:100%;border:0;background:none;cursor:pointer"><i class="ph ph-plus"></i></button></div>
@@ -361,6 +480,8 @@
   <aside style="display:flex;flex-direction:column;gap:var(--at-space-4);position:sticky;top:var(--at-space-4)">
     <div style="background:var(--at-color-surface);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-3)">
       <sc-if value="{{ freeShipNudge }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-sm);color:var(--at-color-success)"><i class="ph-fill ph-check-circle"></i> {{ freeShipText }}</span></sc-if>
+      <sc-if value="{{ cartHasPre }}" hint-placeholder-val="{{ false }}"><div style="display:flex;flex-direction:column;gap:var(--at-space-2);padding:var(--at-space-3);border-radius:var(--at-radius-sm);background:var(--at-gold-50);border:1px solid var(--at-gold-200);font-size:var(--at-text-xs)"><strong style="display:flex;align-items:center;gap:var(--at-space-1);font-size:var(--at-text-sm)"><i class="ph-fill ph-calendar-check"></i>Pre-order · delivered {{ po.deliversT }}</strong><sc-for list="{{ po.payNotes }}" as="n" hint-placeholder-count="3"><span style="display:flex;gap:var(--at-space-2)"><i class="{{ n.icon }}" style="font-size:16px;flex:none"></i>{{ n.text }}</span></sc-for></div></sc-if>
+      <sc-if value="{{ cartPreLocked }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-3);border-radius:var(--at-radius-sm);background:var(--at-color-warning-bg);color:var(--at-color-warning);font-size:var(--at-text-xs)">{{ cartPreLockedText }}</div></sc-if>
       <span style="font-size:var(--at-text-lg)">Subtotal ({{ selCount }} items): <strong>{{ selSubtotalLabel }}</strong></span>
       <label style="display:flex;align-items:center;gap:var(--at-space-2);font-size:var(--at-text-sm);cursor:pointer"><input type="checkbox" checked="{{ gift }}" onChange="{{ toggleGift }}" style="accent-color:var(--at-color-action-secondary)">This order contains a gift</label>
       <button type="button" onClick="{{ goCheckout }}" disabled="{{ noSel }}" style="height:var(--at-size-control);border:0;border-radius:var(--at-radius-pill);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-size:var(--at-text-md);font-weight:var(--at-weight-semibold);cursor:pointer;opacity:{{ checkoutOpacity }}" style-hover="background:var(--at-color-action-primary-hover)">Proceed to checkout</button>
@@ -1000,7 +1121,7 @@
 <script type="text/x-dc" data-dc-script>
 const TODAY = new Date(2026, 9, 9);
 const GEO = {
-  'Houston, TX': [29.76, -95.37], 'Bronx, NY': [40.84, -73.87], 'Brooklyn, NY': [40.68, -73.94], 'Silver Spring, MD': [38.99, -77.03], 'Atlanta, GA': [33.75, -84.39],
+  'Houston, TX': [29.76, -95.37], 'Lubbock, TX': [33.58, -101.86], 'Amarillo, TX': [35.22, -101.83], 'El Paso, TX': [31.76, -106.49], 'Midland, TX': [31.99, -102.08], 'Laredo, TX': [27.53, -99.48], 'Bronx, NY': [40.84, -73.87], 'Brooklyn, NY': [40.68, -73.94], 'Silver Spring, MD': [38.99, -77.03], 'Atlanta, GA': [33.75, -84.39],
   'Columbus, OH': [39.96, -83.0], 'Minneapolis, MN': [44.98, -93.27], 'Edison, NJ': [40.52, -74.41], 'Miami, FL': [25.76, -80.19], 'Daly City, CA': [37.69, -122.47],
   'Los Angeles, CA': [34.05, -118.24], 'Charlotte, NC': [35.23, -80.84], 'Dallas, TX': [32.78, -96.8], 'Newark, NJ': [40.74, -74.17], 'Chicago, IL': [41.88, -87.63], 'Seattle, WA': [47.61, -122.33]
 };
@@ -1094,7 +1215,7 @@ const ADDRS = [
   { line1: '333 Gellert Blvd', city: 'Daly City', state: 'CA', zip: '94015', geo: 'Daly City, CA' },
   { line1: '1200 W Harrison St', city: 'Chicago', state: 'IL', zip: '60607', geo: 'Chicago, IL', multi: true }
 ];
-const ZIPS = { '77': 'Houston, TX', '10': 'Bronx, NY', '11': 'Brooklyn, NY', '20': 'Silver Spring, MD', '30': 'Atlanta, GA', '08': 'Edison, NJ', '07': 'Newark, NJ', '55': 'Minneapolis, MN', '33': 'Miami, FL', '94': 'Daly City, CA', '90': 'Los Angeles, CA', '60': 'Chicago, IL', '75': 'Dallas, TX', '28': 'Charlotte, NC', '98': 'Seattle, WA', '43': 'Columbus, OH' };
+const ZIPS = { '794': 'Lubbock, TX', '791': 'Amarillo, TX', '799': 'El Paso, TX', '797': 'Midland, TX', '780': 'Laredo, TX', '77': 'Houston, TX', '10': 'Bronx, NY', '11': 'Brooklyn, NY', '20': 'Silver Spring, MD', '30': 'Atlanta, GA', '08': 'Edison, NJ', '07': 'Newark, NJ', '55': 'Minneapolis, MN', '33': 'Miami, FL', '94': 'Daly City, CA', '90': 'Los Angeles, CA', '60': 'Chicago, IL', '75': 'Dallas, TX', '28': 'Charlotte, NC', '98': 'Seattle, WA', '43': 'Columbus, OH' };
 const TAX = { TX: 0.0825, NY: 0.08875, MD: 0.06, GA: 0.089, NJ: 0.06625, MN: 0.0788, FL: 0.07, CA: 0.0925, IL: 0.1025 };
 const STEPS = ['Creating PaymentIntent (manual capture)', 'Confirming payment with Stripe', 'Reserving inventory', 'Splitting shipments & seller settlements', 'Order confirmed'];
 
@@ -1165,6 +1286,8 @@ class Component extends DCLogic {
     this._rs = () => { const w = window.innerWidth; if ((w < 1100) !== this.state.narrow) this.setState({ narrow: w < 1100 }); }; this._rs(); window.addEventListener('resize', this._rs);
     const bootInv = () => { if (!window.ATInv) { this._ib = setTimeout(bootInv, 80); return; } syncInv(); this.forceUpdate(); this._invUnsub = window.ATInv.subscribe(() => { syncInv(); this.forceUpdate(); }); };
     bootInv();
+    const bootPre = () => { if (!window.ATPre) { this._pb = setTimeout(bootPre, 80); return; } this._preUnsub = window.ATPre.subscribe(() => this.forceUpdate()); window.ATPre.attr.capture(); this.forceUpdate(); }; bootPre();
+    this._preTick = setInterval(() => { if (this._pre && this._pre.on && ['home', 'product', 'preorder', 'cart', 'results'].includes(this.state.view)) this.setState({ preTick: Date.now() }); }, 1000);
     this.watchSentinel();
     this._hero = setInterval(() => this.setState((s) => ({ heroIdx: s.heroIdx + 1 })), 7000);
     this._ann = setInterval(() => this.setState((s) => ({ annIdx: s.annIdx + 1 })), 6000);
@@ -1218,8 +1341,63 @@ class Component extends DCLogic {
       sellerCity: o.city, eta: fmtDay(eta), etaDays: eta, etaPrefix: o.ff === 'AT' ? 'FREE delivery' : 'Delivery', etaLine: (o.ff === 'AT' ? 'FREE delivery ' : 'Delivery ') + fmtDay(eta),
       ffShort: o.ff === 'AT' ? 'Fulfilled by AT' : 'Ships from seller', hasList: !!o.list, listLabel: o.list ? money(o.list) : '', price: o.price,
       offerNote: p.offers.length > 1 ? `${p.offers.length} offers from ${money(Math.min(...p.offers.map((x) => x.price)))}` : `Sold by ${o.seller}`,
-      open: () => this.setState({ view: 'product', pid: p.id, qty: 1, img: 0, lolaOpen: this.state.lolaOpen }), add: () => this.add(p.id), ...this.cardCart(p, o)
+      open: () => this.setState({ view: 'product', pid: p.id, qty: 1, img: 0, lolaOpen: this.state.lolaOpen }), add: () => this.add(p.id), ...this.cardCart(p, o), ...this.preCard(p)
     };
+  }
+  isPreP(p) { const pr = this._pre; return !!(pr && pr.on && pr.stage === 'open' && p && p.cat === 'Groceries'); }
+  preCard(p) {
+    const pr = this._pre; const base = { isPre: false, preLocked: false, preBadge: '', preLockedText: '' };
+    if (!pr || !pr.on || p.cat !== 'Groceries') return base;
+    const st = pr.stage, open = st === 'open';
+    const r = { isPre: pr.settings.placements.badge !== false, preBadge: open ? 'delivered ' + pr.deliversS : st === 'upcoming' ? 'opens ' + pr.opensS : 'closed',
+      etaPrefix: open ? 'Delivered' : st === 'upcoming' ? 'Pre-order opens' : 'Pre-order closed ·', eta: open ? pr.deliversT : st === 'upcoming' ? pr.opensT : 'delivering ' + pr.deliversS, etaLine: open ? 'Pre-order · delivered ' + pr.deliversT : 'Pre-order ' + (st === 'upcoming' ? 'opens ' + pr.opensS : 'closed') };
+    if (!open) Object.assign(r, { preLocked: true, preLockedText: st === 'upcoming' ? 'Pre-order opens ' + pr.opensS : 'Pre-order closed', showAdd: false, showStepper: false, unavailable: false });
+    return r;
+  }
+  preLine(p) { const c = this.preCard(p); return { isPre: c.isPre, preBadge: c.preBadge, ...(c.isPre ? { etaPrefix: c.etaPrefix, eta: c.eta } : {}) }; }
+  preShipOpts() {
+    const pr = this._pre; const days = Math.max(0, Math.round((pr.deliversAt - TODAY.getTime()) / 86400000)); const out = [];
+    if (pr.win.door !== false) out.push({ key: 'carrier', days, cost: 7.99, eta: pr.deliversT, price: money(7.99) + ' · Pre-order delivery, AfroTransact driver on ' + pr.deliversS, icon: 'ph ph-calendar-check' });
+    if (pr.win.pickup) out.push({ key: 'pickup', days, cost: 0, eta: pr.deliversT, price: 'FREE · Pickup point on delivery day', icon: 'ph ph-storefront', points: [{ id: 'pu-pre-' + String(pr.key).replace(/\W/g, ''), owner: 'AT', metro: pr.cityName, name: pr.cityName + ' pre-order pickup point', addr: pr.cityName === 'Lubbock' ? '4410 19th St, Lubbock, TX 79407' : 'Announced by email before delivery', hours: pr.deliversS + ', 10 am–2 pm', ready: 'Ready ' + pr.deliversT + ', 10 am–2 pm', by: 'set by AfroTransact' }] });
+    return out;
+  }
+  preVals() {
+    const s = this.state, pr = this._pre;
+    const goPre = () => this.setState({ view: 'preorder', acctOpen: false });
+    const tagGo = (src) => () => { if (window.ATPre && pr && pr.win) window.ATPre.attr.set(src, { po: pr.win.id }); goPre(); };
+    const previewLubbock = () => { this.setState({ loc: { city: 'Lubbock, TX', zip: '79401' }, view: 'home' }); this.flash('Delivering to Lubbock 79401'); };
+    const any = this._preAny || []; const covered = !!(pr && pr.on);
+    const zipMap = { Lubbock: '79401', Amarillo: '79101', 'El Paso': '79901', Midland: '79701', Odessa: '79761' };
+    const famNames = [...new Set(any.map((w) => w.city))];
+    const base = { goPre, goPreRibbon: tagGo('ribbon'), goPreHero: tagGo('hero'), goPrePdp: tagGo('pdp'), previewLubbock, vPreorder: s.view === 'preorder', preOn: false, preOffPage: s.view === 'preorder',
+      preOffText: any.length ? 'Pre-orders deliver to cities outside our daily routes. ' + s.loc.city + ' isn’t in one right now, but you can shop one for family or friends there: pick a pre-order and we’ll switch your delivery city.' : 'There are no open pre-orders right now. We’ll announce the next one by email and on this page.',
+      preFamily: !covered && any.length > 0 && !(pr && pr.settings && pr.settings.placements && pr.settings.placements.family === false) && s.view !== 'preorder',
+      preFamilyText: 'Pre-order open in ' + famNames.slice(0, 3).join(', ') + (famNames.length > 3 ? ' + ' + (famNames.length - 3) + ' more' : '') + '.',
+      preAnyCards: any.map((w) => ({ name: w.name, where: w.where, label: w.label, stageLabel: w.open ? 'Open now' : 'Opens soon', pillBg: w.open ? 'var(--at-green-50)' : 'var(--at-ink-100)', pillFg: w.open ? 'var(--at-green-800)' : 'var(--at-ink-800)', bg: w.heroSrc ? 'url("' + w.heroSrc + '")' : 'none', cta: 'Shop for ' + w.city,
+        go: () => { if (window.ATPre) window.ATPre.attr.set('page', { po: w.id }); this.setState({ loc: { city: w.city + ', ' + w.region, zip: zipMap[w.city] || w.zip || '' }, view: 'preorder' }); this.flash('Delivering to ' + w.city + ', ' + w.region); } })), preRibbon: false, preHero: false, cartHasPre: false, cartPreLocked: false, cartPreLockedText: '', po: { cd: [], timeline: [], payNotes: [], rules: [] }, preProds: [] };
+    if (!pr || !pr.on) return base;
+    const st = pr.stage, open = st === 'open', w = pr.win, cre = pr.creatives || {}, PL = pr.settings.placements, PH = window.ATPre.PHONE;
+    const bg = (k) => (cre[k] ? 'url("' + cre[k].src + '")' : 'none');
+    const preInCart = s.cart.map((c) => P.find((x) => x.id === c.pid)).filter((p) => p && p.cat === 'Groceries');
+    const idx = { upcoming: -1, open: 0, closed: 1 }[st];
+    const timeline = [['Opens', pr.opensT], ['Closes', pr.closesT], ['Delivered', pr.deliversT]].map(([label, date], i) => { const done = i <= idx, cur = i === idx + 1; return { label, date, bar: done ? 'var(--at-green-600)' : cur ? 'var(--at-gold-500)' : 'var(--at-ink-200)', fg: done ? 'var(--at-green-700)' : cur ? 'var(--at-gold-800)' : 'var(--at-ink-500)', icon: done ? 'ph-fill ph-check-circle' : cur ? 'ph-fill ph-circle-half' : 'ph ph-circle' }; });
+    return { ...base, preOn: true, preOffPage: false, preRibbon: PL.ribbon !== false, preHero: PL.hero !== false, cartHasPre: open && preInCart.length > 0 && PL.cart !== false,
+      cartPreLocked: !open && preInCart.length > 0, cartPreLockedText: st === 'upcoming' ? 'Pre-order items can be bought from ' + pr.opensT + '. They stay in your cart until then.' : 'The ' + pr.cityName + ' pre-order closed ' + pr.closesT + '. Remove those items to check out, or call ' + PH + ' about a late add.',
+      po: { name: w.name, cityName: pr.cityName, headline: st === 'closed' ? 'Pre-order closed. ' + pr.cityName + ' deliveries go out ' + pr.deliversT + '.' : w.headline,
+        kicker: pr.cityName + ' pre-order · ' + (open ? 'open now' : st === 'upcoming' ? 'opens soon' : 'closed'), stageLabel: open ? 'Open now' : st === 'upcoming' ? 'Opens soon' : 'Closed',
+        pillBg: open ? 'var(--at-green-50)' : st === 'upcoming' ? 'var(--at-ink-100)' : 'var(--at-gold-100)', pillFg: open ? 'var(--at-green-800)' : st === 'upcoming' ? 'var(--at-ink-800)' : 'var(--at-gold-900)',
+        ribbon: open ? w.ribbon : st === 'upcoming' ? pr.cityName + ' pre-order opens ' + pr.opensS : pr.cityName + ' pre-order is closed',
+        ribbonSub: open ? 'Order by ' + pr.closesT + ' · delivered ' + pr.deliversT + ' · $7.99 flat' : st === 'upcoming' ? 'Order ' + pr.opensS + ' – ' + pr.closesS + ' · delivered ' + pr.deliversT : 'Delivering ' + pr.deliversT + '. Missed it? Call ' + PH,
+        ribbonBg: open ? 'var(--at-gold-100)' : 'var(--at-ink-100)', ribbonFg: open ? 'var(--at-gold-900)' : 'var(--at-ink-800)',
+        cdLabel: open ? 'Closes in' : st === 'upcoming' ? 'Opens in' : 'Delivers in', cdShort: pr.cdShort, cd: pr.cdParts.map(([v, l]) => ({ v, l })),
+        opensT: pr.opensT, closesT: pr.closesT, deliversT: pr.deliversT, heroBg: bg('hero'), noHero: !cre.hero, hasPdp: !!cre.pdp && PL.pdp !== false, pdpBg: bg('pdp'),
+        cta: open ? 'Shop the pre-order' : st === 'upcoming' ? 'See what’s coming' : 'Missed it? Contact us',
+        showCount: !!w.showCount && st !== 'upcoming', countText: pr.count.toLocaleString() + ' pre-orders from ' + pr.cityName + ' so far',
+        pdpNote: open ? 'Order by ' + pr.closesT + '. Charged at checkout like any order; change or cancel for a full refund until then.' : st === 'upcoming' ? 'You can pre-order from ' + pr.opensT + '.' : 'This pre-order closed ' + pr.closesT + '. Call ' + PH + ' to ask about a late add.',
+        isClosed: st === 'closed', timeline, phone: PH,
+        rules: [{ icon: 'ph ph-calendar-check', text: 'Order any time between ' + pr.opensT + ' and ' + pr.closesT + '.' }, { icon: 'ph ph-credit-card', text: 'Paid at checkout with the rest of your cart. Change quantities or cancel for a full refund until close.' }, { icon: 'ph ph-truck', text: 'Everything is delivered ' + pr.deliversT + ', $7.99 flat' + (w.pickup ? ' or free pickup' : '') + '. No minimum order count.' }, { icon: 'ph ph-headset', text: 'Missed the closing date? Call ' + PH + '. A rep may be able to add you.' }],
+        payNotes: [{ icon: 'ph ph-credit-card', text: 'One payment today for the whole cart.' }, { icon: 'ph ph-arrows-split', text: 'Pre-order items ship as their own package on ' + pr.deliversS + '; the rest ship now.' }, { icon: 'ph ph-arrow-u-up-left', text: 'Change or cancel pre-order items for a full refund until ' + pr.closesT + '.' }] },
+      preProds: P.filter((p) => p.cat === 'Groceries').map((p) => this.card(p)) };
   }
   search(q, extra) { this.setState((s) => ({ view: 'results', query: q ?? s.query, ...(extra || {}) })); }
 
@@ -1310,6 +1488,8 @@ class Component extends DCLogic {
     const payLabel = s.pay === 'wallet' ? s.walletLabel : pmSel.label;
     const order = { no: orderNo, when: 'October 9, 2026', total, items: lines.map((l) => ({ pid: l.pid, name: l.name, qty: l.qty, price: l.o.price, delivered: null, returnable: l.p.cat !== 'Groceries' })), shipTo: a.line1 + ', ' + a.city, payment: payLabel, hasSettle: true, settle: st.rows, settleNote: st.note,
       shipments: ships.map((g) => ({ key: g.key, label: g.label, eta: g.eta, items: g.items.map((i) => i.name + ' × ' + i.qty).join(' · '), status: g.isAT ? 'Arriving ' + g.eta : 'Seller notified — preparing', cancelled: false, ...this.atdOrderInfo(g, orderNo) })) };
+    const preShip = ships.find((g) => g.key === 'PRE');
+    if (preShip && window.ATPre && this._pre && this._pre.win) { const pl = s.speeds && s.speeds.PRE === 'pickup'; window.ATPre.addOrder({ id: orderNo, win: this._pre.win.id, ...(() => { const ad = s.addresses.find((x) => x.id === s.selAddr) || {}; const at = window.ATPre.attr.get(); return { customer: ad.name || 'Shop customer', phone: ad.phone || '', email: 'adaeze.n@gmail.com', addr: [ad.line1, ad.line2].filter(Boolean).join(', '), city: ad.city || '', region: ad.state || '', zip: ad.zip || '', dnote: (preShip.note || '').trim(), source: at.source, srcTag: at.tag }; })(), placed: Date.now(), lines: preShip.items.map((i) => ({ id: i.pid, name: i.name, qty: i.qty })), units: preShip.items.reduce((a, i) => a + i.qty, 0), fulfil: pl ? 'Pickup' : 'Door', total: preShip.items.reduce((a, i) => a + i.line, 0) + preShip.ship, status: 'Paid', note: 'Shop checkout · ' + payLabel }); }
     const bought = new Set(lines.map((l) => l.pid + ':' + l.p.offers.indexOf(l.o)));
     this.setState((x) => ({ placing: false, placeIdx: -1, cart: x.cart.filter((c) => !bought.has(c.pid + ':' + c.o)), orders: [order, ...x.orders], view: 'orders', justPlaced: true, pay: 'pm', idem: 'ord_' + Math.random().toString(36).slice(2, 10), card: { number: '', exp: '', cvc: '', zip: '' }, cardTouched: false }));
   }
@@ -1366,6 +1546,8 @@ ${msgs.slice(-8).map((m) => m.role + ': ' + m.text).join('\n')}`;
 
   renderVals() {
     const s = this.state, f = s.f;
+    this._pre = window.ATPre ? window.ATPre.resolve(s.loc.city) : null;
+    this._preAny = window.ATPre ? window.ATPre.openList() : [];
     const setF = (patch) => this.setState((st) => ({ f: { ...st.f, ...patch }, view: 'results' }));
     const cats = ['Groceries', 'Fashion', 'Beauty', 'Home & Art', 'Books', 'Health', 'Party'];
     const comms = [...new Set(P.map((p) => p.comm))].sort();
@@ -1411,21 +1593,21 @@ ${msgs.slice(-8).map((m) => m.role + ': ' + m.text).join('\n')}`;
       available: bb.stock > 0, unavailable: bb.stock <= 0, stockLabel: bb.stock <= 0 ? '' : bb.stock > 10 ? 'In Stock' : 'Only ' + bb.stock + ' left in stock — order soon.',
       inCartAny: this.cartQty(p0.id, p0.offers.indexOf(bb)) > 0, inCartLabel: this.cartQty(p0.id, p0.offers.indexOf(bb)) + ' in your cart', atMax: this.cartQty(p0.id, p0.offers.indexOf(bb)) >= bb.stock, addOpacity: this.cartQty(p0.id, p0.offers.indexOf(bb)) >= bb.stock ? 0.45 : 1,
       notify: () => this.setState((st) => ({ notified: { ...st.notified, [p0.id]: true } })), notifyLabel: s.notified[p0.id] ? '✓ We’ll email you when it’s back' : 'Email me when available',
-      addQty: () => this.add(p0.id, null, s.qty), buyNow: () => { this.add(p0.id, null, s.qty); this.setState({ view: 'checkout' }); }, askLola: () => this.sendLola(`Tell me about ${p0.name}: how is it used and is there a better value option?`), eta: fmtDay(etaD) };
+      addQty: () => this.add(p0.id, null, s.qty), buyNow: () => { this.add(p0.id, null, s.qty); this.setState({ view: 'checkout' }); }, askLola: () => this.sendLola(`Tell me about ${p0.name}: how is it used and is there a better value option?`), eta: fmtDay(etaD), ...(pc.isPre && this.isPreP(p0) ? { shipText: 'Pre-order delivery $7.99 ·', eta: this._pre.deliversT, cutoff: '' } : {}), ...(pc.preLocked ? { atMax: true, addOpacity: 0.45, buyNow: () => {} } : {}) };
 
     // Cart → shipments (one per fulfilment node / seller)
     const lines = s.cart.filter((c) => c.sel !== false).map((c) => { const p = P.find((x) => x.id === c.pid); const o = p.offers[c.o] || p.offers[0]; return { ...c, p, o, name: p.name, unit: p.unit, seller: o.seller, line: o.price * c.qty, lineLabel: money(o.price * c.qty) }; });
-    const groupKey = (l) => (l.o.ff === 'AT' ? 'AT' : 'S:' + l.o.seller);
+    const groupKey = (l) => (this.isPreP(l.p) ? 'PRE' : l.o.ff === 'AT' ? 'AT' : 'S:' + l.o.seller);
     const keys = [...new Set(lines.map(groupKey))];
     const shipments = keys.map((k) => {
       const items = lines.filter((l) => groupKey(l) === k); const isAT = k === 'AT'; const sub = items.reduce((a, l) => a + l.line, 0);
-      const opts0 = this.shipOpts(k, isAT, items, sub); const speed = opts0.some((o) => o.key === s.speeds[k]) ? s.speeds[k] : 'carrier'; const chosen = opts0.find((o) => o.key === speed) || opts0[0];
+      const opts0 = k === 'PRE' ? this.preShipOpts() : this.shipOpts(k, isAT, items, sub); const speed = opts0.some((o) => o.key === s.speeds[k]) ? s.speeds[k] : 'carrier'; const chosen = opts0.find((o) => o.key === speed) || opts0[0];
       const days = chosen.days; const ship = chosen.cost; const base = chosen.cost;
       const ptSel = chosen.points && chosen.points.length ? (chosen.points.find((p) => p.id === (s.pickupSel || {})[k]) || chosen.points[0]) : null;
       const labelOv = speed === 'pickup' && ptSel ? 'Pick up at ' + ptSel.name + ' · ' + ptSel.addr : speed === 'atd' ? 'AfroTransact Delivery · our driver' + (isAT ? ' from ' + this.nearestFc() : ' collects from ' + items[0].seller) : null;
       const opts = opts0.map((o) => ({ eta: o.eta, price: o.price, icon: o.icon, on: o.key === speed, showPoints: o.key === speed && !!(o.points && o.points.length), pick: () => this.setState((st) => ({ speeds: { ...st.speeds, [k]: o.key } })),
         points: (o.points || []).map((p) => ({ ...p, group: 'pu-' + k, on: ptSel && p.id === ptSel.id, pick: () => this.setState((st) => ({ pickupSel: { ...(st.pickupSel || {}), [k]: p.id } })) })) }));
-      return { key: k, isAT, label: isAT ? `Shipped by AfroTransact from ${this.nearestFc()}` : `Shipped by ${items[0].seller} from ${items[0].o.city}`, eta: fmtDay(days), ship, itemCount: items.reduce((a, l) => a + l.qty, 0),
+      return { key: k, isAT, label: k === 'PRE' ? 'Pre-order · ' + this._pre.win.name + ' · delivered ' + this._pre.deliversT : isAT ? `Shipped by AfroTransact from ${this.nearestFc()}` : `Shipped by ${items[0].seller} from ${items[0].o.city}`, eta: fmtDay(days), ship, itemCount: items.reduce((a, l) => a + l.qty, 0),
         items: items.map((l) => ({ ...l, inc: () => this.setState((st) => ({ cart: st.cart.map((c) => (c.pid === l.pid && c.o === l.o ? { ...c, qty: c.qty + 1 } : c)) })),
           dec: () => this.setState((st) => ({ cart: st.cart.map((c) => (c.pid === l.pid && c.o === l.o ? { ...c, qty: c.qty - 1 } : c)).filter((c) => c.qty > 0) })), decIcon: l.qty === 1 ? 'ph ph-trash' : 'ph ph-minus',
           remove: () => this.setState((st) => ({ cart: st.cart.filter((c) => !(c.pid === l.pid && c.o === l.o)) })), save: () => this.setState((st) => ({ cart: st.cart.filter((c) => !(c.pid === l.pid && c.o === l.o)), saved: [...st.saved, { pid: l.pid, o: l.o }] })) })),
@@ -1435,7 +1617,7 @@ ${msgs.slice(-8).map((m) => m.role + ': ' + m.text).join('\n')}`;
     const selA = s.addresses.find((x) => x.id === s.selAddr); const st = ((selA && selA.state) || '').toUpperCase(); const locState = s.loc.city.split(', ')[1]; const rate = TAX[st] ?? TAX[locState] ?? 0.08;
     const tax = subtotal * rate; const total = subtotal + shipTotal + tax;
     const sellerSubs = shipments.filter((g) => !g.isAT).map((g) => g.items.reduce((a, l) => a + l.line, 0));
-    const nudge = shipments.find((g) => !g.isAT && g.ship > 0);
+    const nudge = shipments.find((g) => !g.isAT && g.key !== 'PRE' && g.ship > 0);
 
     const a = s.addr; const typed = a.line1.trim().toLowerCase();
     const suggestions = typed.length >= 2 ? ADDRS.filter((x) => { const l = x.line1.toLowerCase(); return l.includes(typed) || l.startsWith(typed.split(' ')[0]) && lev(l.slice(0, typed.length), typed) <= 3; }).slice(0, 5)
@@ -1453,6 +1635,7 @@ ${msgs.slice(-8).map((m) => m.role + ': ' + m.text).join('\n')}`;
     const go = (view) => () => this.setState({ view });
     const subnav = [
       { label: 'All', icon: 'ph ph-list', go: () => this.search(''), weight: 'var(--at-weight-bold)' },
+      ...((this._preAny || []).length ? [{ label: 'Pre-order', icon: 'ph-fill ph-calendar-check', go: () => { if (window.ATPre) window.ATPre.attr.set('page'); this.setState({ view: 'preorder' }); }, weight: 'var(--at-weight-bold)' }] : []),
       { label: 'Lola AI', icon: 'ph-fill ph-sparkle', iconColor: 'var(--at-gold-500)', go: () => this.setState({ lolaOpen: true }) },
       { label: "Today's Deals", icon: 'ph ph-tag', go: () => this.search('', { sort: 'price-asc' }) },
       { label: 'AfroTransact Brand', icon: 'ph ph-seal-check', iconColor: 'var(--at-gold-500)', go: () => { this.setState({ query: '' }); setF({ sold: '1P' }); } },
@@ -1471,7 +1654,7 @@ ${msgs.slice(-8).map((m) => m.role + ': ' + m.text).join('\n')}`;
       locLabel: `${s.loc.city.split(',')[0]} ${s.loc.zip}`, locCity: s.loc.city, openLoc: () => this.setState({ locOpen: true, zipErr: '', geoMsg: '' }), closeLoc: () => this.setState({ locOpen: false }), stop: (e) => e.stopPropagation(),
       useGeo: () => this.useGeo(false), useGeoForAddr: () => this.useGeo(true), geoBtn: s.geo === 'busy' ? 'Locating…' : 'Use my current location', geoMsg: s.geoMsg,
       zipInput: s.zipInput, onZipInput: (e) => this.setState({ zipInput: e.target.value.replace(/\D/g, '') }), zipErr: s.zipErr,
-      applyZip: () => { const z = s.zipInput; const c = ZIPS[z.slice(0, 2)]; if (!/^\d{5}$/.test(z)) return this.setState({ zipErr: 'Enter a valid 5-digit US ZIP code.' }); if (!c) return this.setState({ zipErr: 'We don’t deliver to that ZIP yet.' }); this.setState({ loc: { city: c, zip: z }, locOpen: false }); this.flash(`Delivering to ${c.split(',')[0]} ${z}`); },
+      applyZip: () => { const z = s.zipInput; const c = ZIPS[z.slice(0, 3)] || ZIPS[z.slice(0, 2)]; if (!/^\d{5}$/.test(z)) return this.setState({ zipErr: 'Enter a valid 5-digit US ZIP code.' }); if (!c) return this.setState({ zipErr: 'We don’t deliver to that ZIP yet.' }); this.setState({ loc: { city: c, zip: z }, locOpen: false }); this.flash(`Delivering to ${c.split(',')[0]} ${z}`); },
       dept: s.dept, deptOptions: [{ value: 'all', label: 'All' }, ...cats.map((c) => ({ value: c, label: c }))], onDept: (e) => this.setState({ dept: e.target.value }),
       query: s.query, onQuery: (e) => this.setState({ query: e.target.value }), onQueryKey: (e) => { if (e.key === 'Enter') this.search(); }, runSearch: () => this.search(),
       toggleLola: () => this.setState((st) => ({ lolaOpen: !st.lolaOpen })), goOrders: () => this.setState({ view: 'orders', justPlaced: false }), goCart: go('cart'),
@@ -1528,7 +1711,7 @@ ${msgs.slice(-8).map((m) => m.role + ': ' + m.text).join('\n')}`;
     const upd = (c, fn) => this.setState((st) => ({ cart: st.cart.map((x) => (same(c)(x) ? fn(x) : x)).filter((x) => x.qty > 0) }));
     const cartLines = allLines.map(({ c, p, o }) => { const eta = this.offerEta(o); return { name: p.name, unit: p.unit, qty: c.qty, sel: c.sel !== false, seller: o.seller, shipsFrom: o.city, isAT: o.ff === 'AT', isSeller: o.ff !== 'AT',
       stockLabel: o.stock > 10 ? 'In Stock' : 'Only ' + o.stock + ' left in stock', stockColor: o.stock > 10 ? 'var(--at-color-in-stock)' : 'var(--at-color-low-stock)', etaPrefix: o.ff === 'AT' ? 'FREE delivery' : 'Delivery', eta: fmtDay(eta),
-      lineLabel: money(o.price * c.qty), eachLabel: c.qty > 1 ? money(o.price) + ' each' : '', decIcon: c.qty === 1 ? 'ph ph-trash' : 'ph ph-minus',
+      lineLabel: money(o.price * c.qty), eachLabel: c.qty > 1 ? money(o.price) + ' each' : '', decIcon: c.qty === 1 ? 'ph ph-trash' : 'ph ph-minus', ...this.preLine(p),
       toggleSel: () => upd(c, (x) => ({ ...x, sel: x.sel === false })), inc: () => upd(c, (x) => ({ ...x, qty: Math.min(o.stock, x.qty + 1) })), atMax: c.qty >= o.stock, dec: () => upd(c, (x) => ({ ...x, qty: x.qty - 1 })),
       remove: () => this.setState((st) => ({ cart: st.cart.filter((x) => !same(c)(x)) })), save: () => this.setState((st) => ({ cart: st.cart.filter((x) => !same(c)(x)), saved: [...st.saved, { pid: c.pid, o: c.o }] })),
       similar: () => this.setState({ view: 'results', query: '', dept: p.cat, f: { ...this.state.f, comm: 'all' } }), open: () => this.setState({ view: 'product', pid: p.id, qty: 1, img: 0 }) }; });
@@ -1545,7 +1728,7 @@ ${msgs.slice(-8).map((m) => m.role + ': ' + m.text).join('\n')}`;
       heroPrev: () => this.setState({ heroIdx: hi - 1 + slides.length }), heroNext: () => this.setState({ heroIdx: hi + 1 }),
       heroDots: slides.map((x, i) => ({ w: i === hi ? '28px' : '8px', bg: i === hi ? ht[1] : 'var(--at-ink-400)', go: () => this.setState({ heroIdx: i }) })),
       homeBanners: (pl.banners || []).filter((b) => b.active !== false).map((b) => ({ ...b, go: () => this.runAction(b.action) })),
-      cartLines, hasLines: cartLines.length > 0, cartEmpty: cartLines.length === 0, selCount, selSubtotalLabel: subtotalSel, noSel: selCount === 0, checkoutOpacity: selCount ? 1 : 0.45,
+      ...this.preVals(), cartLines, hasLines: cartLines.length > 0, cartEmpty: cartLines.length === 0, selCount, selSubtotalLabel: subtotalSel, noSel: selCount === 0, checkoutOpacity: selCount ? 1 : 0.45,
       selAllLabel: allSel ? 'Deselect all items' : 'Select all items', toggleAllSel: () => this.setState((st) => ({ cart: st.cart.map((c) => ({ ...c, sel: !allSel })) })),
       gift: s.gift, toggleGift: () => this.setState({ gift: !s.gift }),
       saved: s.saved.map((x, i) => { const p = P.find((y) => y.id === x.pid); return { name: p.name, priceLabel: money(p.offers[x.o].price), move: () => this.setState((st) => ({ saved: st.saved.filter((_, j) => j !== i), cart: [...st.cart, { ...x, qty: 1 }] })), drop: () => this.setState((st) => ({ saved: st.saved.filter((_, j) => j !== i) })) }; }),

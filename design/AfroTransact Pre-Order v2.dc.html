@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="afrotransact-tokens.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+<link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+<script src="at-preorder.js"></script>
+</helmet>
+<div style="min-height:{{ rootMinH }};background:{{ rootBg }};color:var(--at-color-text);font-family:var(--at-font-sans)">
+
+<sc-if value="{{ notEmbedded }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-wrap:wrap;gap:var(--at-space-1) var(--at-space-5);align-items:center;padding:var(--at-space-1) var(--at-page-gutter);background:var(--at-gold-500);color:var(--at-ink-1000);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold)">
+  <span>Prototype · Pre-order v2</span><a href="AfroTransact Shop.dc.html" style="color:var(--at-ink-1000)">Shop</a><a href="AfroTransact Backoffice.dc.html" style="color:var(--at-ink-1000)">Back office</a><a href="AfroTransact Pre-Order.dc.html" style="color:var(--at-ink-1000)">Pre-order v1 (threshold model)</a>
+</div>
+
+<header style="background:var(--at-ink-1000);color:var(--at-ink-0)">
+  <div style="max-width:var(--at-page-max);margin:0 auto;padding:var(--at-space-3) var(--at-page-gutter) 0;display:flex;flex-direction:column;gap:var(--at-space-3)">
+    <div style="display:flex;align-items:center;gap:var(--at-space-3);flex-wrap:wrap;width:100%">
+      <img src="assets/logo-mark.svg" alt="" style="width:28px;height:28px">
+      <span style="font-size:var(--at-text-xl);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-tight)">Pre-order</span>
+      <span style="font-size:var(--at-text-sm);color:var(--at-ink-300)">Opening date → closing date → we deliver</span>
+      <button type="button" onClick="{{ toggleMaster }}" style="margin-left:auto;display:flex;align-items:center;gap:var(--at-space-2);padding:var(--at-space-1) var(--at-space-3) var(--at-space-1) var(--at-space-1);border:1px solid var(--at-ink-700);border-radius:var(--at-radius-pill);background:var(--at-ink-900);color:var(--at-ink-0);font-size:var(--at-text-sm);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit">
+        <span style="width:40px;height:22px;border-radius:var(--at-radius-pill);background:{{ masterTrack }};position:relative;display:block"><span style="position:absolute;top:3px;left:{{ masterKnob }};width:16px;height:16px;border-radius:50%;background:var(--at-ink-0);transition:left var(--at-duration) var(--at-ease)"></span></span>
+        Pre-order {{ masterLabel }}
+      </button>
+    </div>
+    <nav style="display:flex;gap:var(--at-space-1);flex-wrap:wrap">
+      <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+        <button type="button" onClick="{{ t.go }}" style="display:flex;align-items:center;gap:var(--at-space-2);padding:var(--at-space-3) var(--at-space-5);border:0;border-radius:var(--at-radius-md) var(--at-radius-md) 0 0;background:{{ t.bg }};color:{{ t.fg }};font-size:var(--at-text-md);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit"><i class="{{ t.icon }}" style="font-size:var(--at-text-lg)"></i>{{ t.label }}</button>
+      </sc-for>
+    </nav>
+  </div>
+</header>
+</sc-if>
+
+<main style="max-width:var(--at-page-max);margin:0 auto;padding:{{ mainPad }}">
+
+<!-- ================= STOREFRONT ================= -->
+<sc-if value="{{ isShop }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-3) var(--at-space-5);align-items:center;padding:var(--at-space-3) var(--at-space-4);background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-lg)">
+    <span style="font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);color:var(--at-color-text-subtle);letter-spacing:var(--at-tracking-caps);text-transform:uppercase">Preview as</span>
+    <label style="display:flex;align-items:center;gap:var(--at-space-2);font-size:var(--at-text-sm)">City
+      <select key="{{ citySelKey }}" defaultValue="{{ city }}" data-sync="{{ city }}" onChange="{{ onCity }}" style="height:34px;border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);font-family:inherit;font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);padding:0 var(--at-space-2)"><sc-for list="{{ previewCities }}" as="o" hint-placeholder-count="6"><option value="{{ o.v }}">{{ o.label }}</option></sc-for></select></label>
+    <div style="display:flex;align-items:center;gap:var(--at-space-2);font-size:var(--at-text-sm)">Stage
+      <div style="display:flex;gap:2px;padding:2px;background:var(--at-ink-100);border-radius:var(--at-radius-md)">
+        <sc-for list="{{ stageOpts }}" as="o" hint-placeholder-count="4"><button type="button" onClick="{{ o.pick }}" style="padding:var(--at-space-1) var(--at-space-3);border:0;border-radius:var(--at-radius-sm);background:{{ o.bg }};color:{{ o.fg }};box-shadow:{{ o.sh }};font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit">{{ o.label }}</button></sc-for>
+      </div>
+    </div>
+    <span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted);margin-left:auto">Advertorials here use the creatives uploaded in Back office › Creatives.</span>
+  </div>
+
+  <div style="background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-lg);overflow:hidden;box-shadow:var(--at-shadow-md)">
+    <div style="display:flex;align-items:center;gap:var(--at-space-4);padding:var(--at-space-2) var(--at-space-4);background:var(--at-ink-1000);color:var(--at-ink-0);flex-wrap:wrap">
+      <span style="display:flex;align-items:center;gap:var(--at-space-2)"><img src="assets/logo-mark.svg" alt="" style="width:26px;height:26px"><span style="font-size:var(--at-text-xl);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-tight)">afrotransact</span></span>
+      <span style="display:flex;align-items:flex-end;gap:var(--at-space-1)"><i class="ph ph-map-pin" style="font-size:20px"></i><span style="display:flex;flex-direction:column;line-height:1.1"><span style="font-size:var(--at-text-2xs);color:var(--at-ink-300)">Deliver to</span><strong style="font-size:var(--at-text-sm)">{{ cityName }}</strong></span></span>
+      <div style="flex:1 1 220px;display:flex;height:38px;border-radius:var(--at-radius-sm);overflow:hidden;background:var(--at-ink-0)"><span style="flex:1;display:flex;align-items:center;padding:0 var(--at-space-3);color:var(--at-ink-500);font-size:var(--at-text-sm)">Search AfroTransact</span><span style="width:46px;display:grid;place-items:center;background:var(--at-gold-500);color:var(--at-ink-1000)"><i class="ph ph-magnifying-glass" style="font-size:18px"></i></span></div>
+      <button type="button" onClick="{{ goCart }}" style="display:flex;align-items:center;gap:var(--at-space-1);font-weight:var(--at-weight-bold);background:transparent;border:0;color:var(--at-ink-0);cursor:pointer;font-family:inherit"><i class="ph ph-shopping-cart" style="font-size:26px"></i>{{ cartCount }}</button>
+    </div>
+    <div style="display:flex;gap:var(--at-space-1);padding:0 var(--at-space-3);background:var(--at-ink-900);flex-wrap:wrap">
+      <sc-for list="{{ shopTabs }}" as="t" hint-placeholder-count="4"><button type="button" onClick="{{ t.go }}" style="padding:var(--at-space-2) var(--at-space-3);border:0;border-bottom:2px solid {{ t.line }};background:transparent;color:var(--at-ink-0);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit">{{ t.label }}</button></sc-for>
+    </div>
+
+    <sc-if value="{{ showRibbon }}" hint-placeholder-val="{{ true }}">
+      <button type="button" onClick="{{ goPre }}" style="width:100%;display:flex;flex-wrap:wrap;align-items:center;gap:var(--at-space-2) var(--at-space-4);padding:var(--at-space-2) var(--at-space-4);border:0;background:{{ ribbonBg }};color:{{ ribbonFg }};font-size:var(--at-text-sm);text-align:left;cursor:pointer;font-family:inherit">
+        <i class="ph-fill ph-calendar-check" style="font-size:18px"></i>
+        <strong>{{ sf.ribbon }}</strong>
+        <span>{{ sf.ribbonSub }}</span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:var(--at-space-2)"><span style="padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-ink-1000);color:var(--at-gold-500);font-family:var(--at-font-mono);font-size:var(--at-text-xs);font-weight:var(--at-weight-bold)">{{ sf.cdShort }}</span><span style="font-weight:var(--at-weight-bold);text-decoration:underline">View pre-order</span></span>
+      </button>
+    </sc-if>
+    <sc-if value="{{ sfOff }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;align-items:center;gap:var(--at-space-2);padding:var(--at-space-2) var(--at-space-4);background:var(--at-ink-100);color:var(--at-ink-800);font-size:var(--at-text-sm)"><i class="ph ph-package" style="font-size:18px"></i>{{ offRibbon }}</div>
+    </sc-if>
+
+    <div style="padding:var(--at-space-6);background:var(--at-ink-50);min-height:560px">
+
+      <!-- HOME -->
+      <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:var(--at-space-6)">
+          <sc-if value="{{ sfOn }}" hint-placeholder-val="{{ true }}">
+            <div style="position:relative;border-radius:var(--at-radius-lg);overflow:hidden;background:var(--at-ink-1000);color:var(--at-ink-0);min-height:340px;display:flex">
+              <sc-if value="{{ sf.hasHero }}" hint-placeholder-val="{{ false }}"><div role="img" aria-label="Pre-order hero" style="position:absolute;inset:0;background:center/cover no-repeat;background-image:{{ sf.heroBg }}"></div></sc-if>
+              <sc-if value="{{ sf.noHero }}" hint-placeholder-val="{{ true }}"><div style="position:absolute;right:var(--at-space-4);top:var(--at-space-4);padding:var(--at-space-1) var(--at-space-2);border:1px dashed var(--at-ink-500);border-radius:var(--at-radius-sm);font-size:var(--at-text-2xs);color:var(--at-ink-300)">Hero creative not uploaded yet · 1920 × 640</div></sc-if>
+              <div style="position:relative;flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:var(--at-space-4);padding:var(--at-space-8);background:linear-gradient(90deg,rgb(0 0 0 / .82) 0%,rgb(0 0 0 / .55) 45%,rgb(0 0 0 / 0) 80%)">
+                <span style="align-self:flex-start;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-gold-500);color:var(--at-ink-1000);font-size:var(--at-text-xs);font-weight:var(--at-weight-black);letter-spacing:var(--at-tracking-caps);text-transform:uppercase">{{ sf.kicker }}</span>
+                <h2 style="margin:0;font-size:var(--at-text-4xl);font-weight:var(--at-weight-black);line-height:var(--at-leading-tight);max-width:620px;text-wrap:pretty">{{ sf.headline }}</h2>
+                <div style="display:flex;gap:var(--at-space-6);flex-wrap:wrap;align-items:flex-end">
+                  <div style="display:flex;flex-direction:column;gap:var(--at-space-1)">
+                    <span style="font-size:var(--at-text-xs);color:var(--at-ink-300);font-weight:var(--at-weight-semibold)">{{ sf.cdLabel }}</span>
+                    <div style="display:flex;gap:var(--at-space-2)">
+                      <sc-for list="{{ sf.cd }}" as="u" hint-placeholder-count="3"><span style="display:flex;flex-direction:column;align-items:center;min-width:56px;padding:var(--at-space-2);border-radius:var(--at-radius-md);background:rgb(255 255 255 / .12)"><strong style="font-size:var(--at-text-2xl);font-family:var(--at-font-mono)">{{ u.v }}</strong><span style="font-size:var(--at-text-2xs);color:var(--at-ink-300)">{{ u.l }}</span></span></sc-for>
+                    </div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:2px;font-size:var(--at-text-sm)"><span>Order by <strong>{{ sf.closesT }}</strong></span><span>Delivered <strong>{{ sf.deliversT }}</strong></span></div>
+                </div>
+                <div style="display:flex;gap:var(--at-space-3);flex-wrap:wrap;align-items:center">
+                  <button type="button" onClick="{{ goPre }}" style="height:var(--at-size-control-lg);padding:0 var(--at-space-6);border:0;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);font-weight:var(--at-weight-bold);font-size:var(--at-text-base);cursor:pointer;font-family:inherit">{{ sf.cta }}</button>
+                  <sc-if value="{{ sf.showCount }}" hint-placeholder-val="{{ true }}"><span style="font-size:var(--at-text-sm);color:var(--at-ink-200)"><i class="ph-fill ph-users-three" style="vertical-align:-2px"></i> {{ sf.countText }}</span></sc-if>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ sfMetro }}" hint-placeholder-val="{{ false }}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--at-space-4)">
+              <div style="background:var(--at-ink-0);border-radius:var(--at-radius-lg);padding:var(--at-space-6);display:flex;flex-direction:column;gap:var(--at-space-2);border:1px solid var(--at-color-border)"><span style="font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);color:var(--at-color-success);letter-spacing:var(--at-tracking-caps);text-transform:uppercase">{{ cityName }}</span><h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-black)">Regular delivery to {{ cityName }}.</h2><p style="margin:0;color:var(--at-color-text-muted)">No pre-order covers this city, so everything ships the usual way. Open one for it in Back office › Pre-orders.</p></div>
+              <div style="background:var(--at-gold-50);border:1px solid var(--at-gold-200);border-radius:var(--at-radius-lg);padding:var(--at-space-6);display:flex;flex-direction:column;gap:var(--at-space-3)">
+                <span style="font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);color:var(--at-gold-900);letter-spacing:var(--at-tracking-caps);text-transform:uppercase">Send to family</span>
+                <h3 style="margin:0;font-size:var(--at-text-xl);font-weight:var(--at-weight-black)">Family in Lubbock? Pre-order closes {{ lbkCloses }}.</h3>
+                <button type="button" onClick="{{ sendFamily }}" style="align-self:flex-start;height:var(--at-size-control);padding:0 var(--at-space-5);border:0;border-radius:var(--at-radius-pill);background:var(--at-ink-1000);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit">Shop for Lubbock</button>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ sfOff }}" hint-placeholder-val="{{ false }}">
+            <div style="background:var(--at-ink-0);border-radius:var(--at-radius-lg);padding:var(--at-space-6);display:flex;flex-direction:column;gap:var(--at-space-3);border:1px solid var(--at-color-border)">
+              <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-black)">{{ offHeadline }}</h2>
+              <p style="margin:0;color:var(--at-color-text-muted);max-width:640px">{{ offBody }}</p>
+            </div>
+          </sc-if>
+          <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+            <h3 style="margin:0;font-size:var(--at-text-xl);font-weight:var(--at-weight-black)">{{ rowTitle }}</h3>
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(176px,1fr));gap:var(--at-space-3)">
+              <sc-for list="{{ products }}" as="p" hint-placeholder-count="5">
+                <div style="display:flex;flex-direction:column;gap:var(--at-space-2);padding:var(--at-space-3);background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md)">
+                  <button type="button" onClick="{{ p.open }}" style="aspect-ratio:1;border:0;border-radius:var(--at-radius-sm);background:var(--at-ink-100);display:grid;place-items:center;color:var(--at-ink-500);cursor:pointer;position:relative"><i class="{{ p.icon }}" style="font-size:44px"></i><sc-if value="{{ p.badge }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;left:6px;top:6px;padding:1px 6px;border-radius:var(--at-radius-xs);background:var(--at-ink-1000);color:var(--at-gold-500);font-size:10px;font-weight:var(--at-weight-black)">PRE-ORDER</span></sc-if></button>
+                  <span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);line-height:var(--at-leading-tight)">{{ p.name }}</span>
+                  <strong>{{ p.price }}</strong>
+                  <span style="font-size:var(--at-text-xs);color:{{ p.tagColor }};font-weight:var(--at-weight-semibold)">{{ p.tag }}</span>
+                  <sc-if value="{{ p.showAdd }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ p.add }}" disabled="{{ p.disabled }}" style="height:var(--at-size-control-sm);min-width:96px;padding:0 var(--at-space-3);border:0;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);font-weight:var(--at-weight-bold);font-size:var(--at-text-xs);cursor:pointer;opacity:{{ p.op }};font-family:inherit">{{ p.addLabel }}</button></sc-if><sc-if value="{{ p.showStep }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;min-width:96px;height:var(--at-size-control-sm);border:2px solid var(--at-gold-500);border-radius:var(--at-radius-pill);overflow:hidden;background:var(--at-ink-0)"><button type="button" onClick="{{ p.dec }}" aria-label="Decrease" style="width:32px;height:100%;border:0;background:transparent;cursor:pointer;display:grid;place-items:center"><i class="{{ p.decIcon }}" style="font-size:14px"></i></button><strong style="font-size:var(--at-text-sm)">{{ p.qty }}</strong><button type="button" onClick="{{ p.add }}" aria-label="Increase" style="width:32px;height:100%;border:0;background:transparent;cursor:pointer;display:grid;place-items:center"><i class="ph ph-plus" style="font-size:14px"></i></button></div></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- PRE-ORDER PAGE -->
+      <sc-if value="{{ isPre }}" hint-placeholder-val="{{ false }}">
+        <sc-if value="{{ preUnavailable }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-10);text-align:center;color:var(--at-color-text-muted)">{{ preUnavailableText }}</div></sc-if>
+        <sc-if value="{{ sfOn }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:var(--at-space-6)">
+          <div style="position:relative;aspect-ratio:3/1;max-height:300px;border-radius:var(--at-radius-lg);overflow:hidden;background:var(--at-ink-900)">
+            <sc-if value="{{ sf.hasHero }}" hint-placeholder-val="{{ false }}"><div role="img" aria-label="Pre-order banner" style="width:100%;height:100%;background:center/cover no-repeat;background-image:{{ sf.heroBg }}"></div></sc-if>
+            <sc-if value="{{ sf.noHero }}" hint-placeholder-val="{{ true }}"><div style="position:absolute;inset:0;display:grid;place-items:center;color:var(--at-ink-400);font-size:var(--at-text-sm)">Banner uses the hero creative · 1920 × 640</div></sc-if>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,380px),1fr));gap:var(--at-space-6);align-items:start">
+            <div style="display:flex;flex-direction:column;gap:var(--at-space-5)">
+              <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+                <span style="align-self:flex-start;padding:2px var(--at-space-3);border-radius:var(--at-radius-pill);background:{{ sf.pillBg }};color:{{ sf.pillFg }};font-size:var(--at-text-xs);font-weight:var(--at-weight-bold)">{{ sf.stageLabel }}</span>
+                <h2 style="margin:0;font-size:var(--at-text-4xl);font-weight:var(--at-weight-black);line-height:var(--at-leading-tight)">{{ sf.name }}</h2>
+                <p style="margin:0;color:var(--at-color-text-muted);text-wrap:pretty">{{ sf.headline }}</p>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-lg);overflow:hidden">
+                <sc-for list="{{ sf.timeline }}" as="t" hint-placeholder-count="3">
+                  <div style="display:flex;flex-direction:column;gap:var(--at-space-1);padding:var(--at-space-4);border-top:4px solid {{ t.bar }}">
+                    <span style="display:flex;align-items:center;gap:var(--at-space-1);font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);color:{{ t.fg }}"><i class="{{ t.icon }}" style="font-size:16px"></i>{{ t.label }}</span>
+                    <strong style="font-size:var(--at-text-sm)">{{ t.date }}</strong>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display:flex;align-items:center;gap:var(--at-space-4);flex-wrap:wrap;padding:var(--at-space-4);background:var(--at-ink-1000);color:var(--at-ink-0);border-radius:var(--at-radius-lg)">
+                <span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">{{ sf.cdLabel }}</span>
+                <div style="display:flex;gap:var(--at-space-2)"><sc-for list="{{ sf.cd }}" as="u" hint-placeholder-count="3"><span style="display:flex;align-items:baseline;gap:4px"><strong style="font-size:var(--at-text-2xl);font-family:var(--at-font-mono);color:var(--at-gold-500)">{{ u.v }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-ink-300)">{{ u.l }}</span></span></sc-for></div>
+                <sc-if value="{{ sf.showCount }}" hint-placeholder-val="{{ true }}"><span style="margin-left:auto;font-size:var(--at-text-sm);color:var(--at-ink-200)">{{ sf.countText }}</span></sc-if>
+              </div>
+              <sc-if value="{{ sfClosed }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;gap:var(--at-space-3);align-items:flex-start;padding:var(--at-space-4);border-radius:var(--at-radius-lg);background:var(--at-gold-50);border:1px solid var(--at-gold-200)">
+                  <i class="ph-fill ph-headset" style="font-size:24px;color:var(--at-gold-800);flex:none"></i>
+                  <span style="display:flex;flex-direction:column;gap:var(--at-space-2)"><strong>Missed the closing date?</strong><span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">Call {{ phone }} or chat with us. A customer service rep may be able to add your order to this delivery.</span>
+                    <span style="display:flex;gap:var(--at-space-2);flex-wrap:wrap"><button type="button" onClick="{{ askSupport }}" style="height:var(--at-size-control);padding:0 var(--at-space-4);border:0;border-radius:var(--at-radius-pill);background:var(--at-ink-1000);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit">Chat with support</button><span style="display:flex;align-items:center;font-weight:var(--at-weight-bold)">{{ phone }}</span></span>
+                    <sc-if value="{{ supportAsked }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-sm);color:var(--at-color-success)">Request sent. An agent can add it from Back office › Late add.</span></sc-if>
+                  </span>
+                </div>
+              </sc-if>
+              <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+                <sc-for list="{{ preRules }}" as="r" hint-placeholder-count="4"><div style="display:flex;gap:var(--at-space-3);align-items:flex-start"><i class="{{ r.icon }}" style="font-size:22px;color:var(--at-green-600);flex:none"></i><span style="font-size:var(--at-text-sm);text-wrap:pretty">{{ r.text }}</span></div></sc-for>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+              <div style="display:flex;justify-content:space-between;align-items:baseline"><h3 style="margin:0;font-size:var(--at-text-lg)">In this pre-order</h3><span style="font-size:var(--at-text-xs);color:var(--at-color-text-subtle)">{{ sf.catsText }}</span></div>
+              <sc-for list="{{ preProducts }}" as="p" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;gap:var(--at-space-3);padding:var(--at-space-2) var(--at-space-3);background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md)">
+                  <span style="width:48px;height:48px;border-radius:var(--at-radius-sm);background:var(--at-ink-100);display:grid;place-items:center;flex:none"><i class="{{ p.icon }}" style="font-size:24px;color:var(--at-ink-500)"></i></span>
+                  <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">{{ p.name }}</span><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ p.seller }}</span></span>
+                  <strong style="font-size:var(--at-text-sm)">{{ p.price }}</strong>
+                  <sc-if value="{{ p.showAdd }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ p.add }}" disabled="{{ p.disabled }}" style="height:var(--at-size-control-sm);min-width:96px;padding:0 var(--at-space-3);border:0;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);font-weight:var(--at-weight-bold);font-size:var(--at-text-xs);cursor:pointer;opacity:{{ p.op }};font-family:inherit">{{ p.addLabel }}</button></sc-if><sc-if value="{{ p.showStep }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;min-width:96px;height:var(--at-size-control-sm);border:2px solid var(--at-gold-500);border-radius:var(--at-radius-pill);overflow:hidden;background:var(--at-ink-0)"><button type="button" onClick="{{ p.dec }}" aria-label="Decrease" style="width:32px;height:100%;border:0;background:transparent;cursor:pointer;display:grid;place-items:center"><i class="{{ p.decIcon }}" style="font-size:14px"></i></button><strong style="font-size:var(--at-text-sm)">{{ p.qty }}</strong><button type="button" onClick="{{ p.add }}" aria-label="Increase" style="width:32px;height:100%;border:0;background:transparent;cursor:pointer;display:grid;place-items:center"><i class="ph ph-plus" style="font-size:14px"></i></button></div></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+      </sc-if>
+
+      <!-- PRODUCT -->
+      <sc-if value="{{ isPdp }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:var(--at-space-5)">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--at-space-6);align-items:start">
+            <div style="aspect-ratio:1;max-height:400px;border-radius:var(--at-radius-lg);background:var(--at-ink-0);border:1px solid var(--at-color-border);display:grid;place-items:center"><i class="{{ pdp.icon }}" style="font-size:120px;color:var(--at-ink-300)"></i></div>
+            <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+              <span style="font-size:var(--at-text-sm);color:var(--at-color-link)">Visit the {{ pdp.seller }} store</span>
+              <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold);line-height:var(--at-leading-tight)">{{ pdp.name }}</h2>
+              <span style="font-size:var(--at-text-3xl);font-weight:var(--at-weight-bold)">{{ pdp.price }}</span>
+              <p style="margin:0;color:var(--at-color-text-muted);font-size:var(--at-text-sm)">Batch best-by {{ pdp.bestBy }}.</p>
+            </div>
+            <div style="background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-lg);padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-3)">
+              <sc-if value="{{ pdpPre }}" hint-placeholder-val="{{ true }}">
+                <span style="align-self:flex-start;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:var(--at-ink-1000);color:var(--at-gold-500);font-size:var(--at-text-xs);font-weight:var(--at-weight-black)">PRE-ORDER · {{ sf.stageLabel }}</span>
+                <span style="font-size:var(--at-text-lg)">Delivered <strong>{{ sf.deliversT }}</strong></span>
+                <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">{{ sf.pdpNote }}</span>
+                <span style="display:flex;align-items:center;gap:var(--at-space-2);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)"><i class="ph ph-timer" style="font-size:18px"></i>{{ sf.cdLabel }} <span style="font-family:var(--at-font-mono)">{{ sf.cdShort }}</span></span>
+                <div style="display:flex;align-items:center;gap:var(--at-space-2);font-size:var(--at-text-sm)"><span>Qty</span><div style="display:flex;align-items:center;height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);overflow:hidden"><button type="button" onClick="{{ pdpDec }}" aria-label="Decrease" style="width:40px;height:100%;border:0;background:var(--at-ink-50);cursor:pointer"><i class="ph ph-minus"></i></button><strong style="min-width:36px;text-align:center">{{ pdpQty }}</strong><button type="button" onClick="{{ pdpInc }}" aria-label="Increase" style="width:40px;height:100%;border:0;background:var(--at-ink-50);cursor:pointer"><i class="ph ph-plus"></i></button></div><span style="color:var(--at-color-text-muted);font-size:var(--at-text-xs)">{{ pdpInCart }}</span></div>
+                <button type="button" onClick="{{ pdpAdd }}" disabled="{{ pdpDisabled }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);font-weight:var(--at-weight-bold);font-size:var(--at-text-base);cursor:pointer;opacity:{{ pdpOp }};font-family:inherit">{{ pdpAddLabel }}</button>
+              </sc-if>
+              <sc-if value="{{ pdpStd }}" hint-placeholder-val="{{ false }}">
+                <span style="font-size:var(--at-text-lg)"><strong>{{ stdArrive }}</strong></span>
+                <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">{{ stdNote }}</span>
+                <div style="display:flex;align-items:center;gap:var(--at-space-2);font-size:var(--at-text-sm)"><span>Qty</span><div style="display:flex;align-items:center;height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);overflow:hidden"><button type="button" onClick="{{ pdpDec }}" aria-label="Decrease" style="width:40px;height:100%;border:0;background:var(--at-ink-50);cursor:pointer"><i class="ph ph-minus"></i></button><strong style="min-width:36px;text-align:center">{{ pdpQty }}</strong><button type="button" onClick="{{ pdpInc }}" aria-label="Increase" style="width:40px;height:100%;border:0;background:var(--at-ink-50);cursor:pointer"><i class="ph ph-plus"></i></button></div><span style="color:var(--at-color-text-muted);font-size:var(--at-text-xs)">{{ pdpInCart }}</span></div>
+                <button type="button" onClick="{{ pdpAdd }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);font-weight:var(--at-weight-bold);font-size:var(--at-text-base);cursor:pointer;font-family:inherit">Add to cart</button>
+              </sc-if>
+            </div>
+          </div>
+          <sc-if value="{{ showPdpBanner2 }}" hint-placeholder-val="{{ false }}">
+            <button type="button" onClick="{{ goPre }}" style="position:relative;aspect-ratio:4/1;max-height:220px;border:0;padding:0;border-radius:var(--at-radius-lg);overflow:hidden;background:var(--at-ink-900);cursor:pointer">
+              <sc-if value="{{ sf.hasPdp }}" hint-placeholder-val="{{ false }}"><span role="img" aria-label="{{ sf.name }}" style="display:block;width:100%;height:100%;background:center/cover no-repeat;background-image:{{ sf.pdpBg }}"></span></sc-if>
+              <sc-if value="{{ sf.noPdp }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;inset:0;display:grid;place-items:center;color:var(--at-ink-400);font-size:var(--at-text-sm);font-family:var(--at-font-sans)">Product page banner not uploaded · 1200 × 300</span></sc-if>
+            </button>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- CART -->
+      <sc-if value="{{ isCart }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:var(--at-space-6);align-items:start">
+          <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+            <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-black)">Cart</h2>
+            <sc-if value="{{ hasPreLines }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:var(--at-space-2);padding:var(--at-space-3) var(--at-space-4);background:var(--at-ink-1000);color:var(--at-ink-0);border-radius:var(--at-radius-md) var(--at-radius-md) 0 0;font-size:var(--at-text-sm)"><i class="ph-fill ph-calendar-check" style="font-size:18px;color:var(--at-gold-500)"></i><strong>Pre-order · delivered {{ sf.deliversT }}</strong><span style="margin-left:auto;color:var(--at-ink-300)">{{ sf.cdLabel }} <span style="font-family:var(--at-font-mono);color:var(--at-gold-500)">{{ sf.cdShort }}</span></span></div>
+              <sc-for list="{{ preLines }}" as="l" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:var(--at-space-3);padding:var(--at-space-3);background:var(--at-ink-0);border:1px solid var(--at-color-border);border-top:0">
+                <span style="width:56px;height:56px;border-radius:var(--at-radius-sm);background:var(--at-ink-100);display:grid;place-items:center;flex:none"><i class="{{ l.icon }}" style="font-size:26px;color:var(--at-ink-500)"></i></span>
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-weight:var(--at-weight-semibold)">{{ l.name }}</span><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ l.price }} each · {{ l.seller }}</span></span>
+                <sc-if value="{{ l.showAdd }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ l.add }}" disabled="{{ l.disabled }}" style="height:var(--at-size-control-sm);min-width:96px;padding:0 var(--at-space-3);border:0;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);font-weight:var(--at-weight-bold);font-size:var(--at-text-xs);cursor:pointer;opacity:{{ l.op }};font-family:inherit">{{ l.addLabel }}</button></sc-if><sc-if value="{{ l.showStep }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;min-width:96px;height:var(--at-size-control-sm);border:2px solid var(--at-gold-500);border-radius:var(--at-radius-pill);overflow:hidden;background:var(--at-ink-0)"><button type="button" onClick="{{ l.dec }}" aria-label="Decrease" style="width:32px;height:100%;border:0;background:transparent;cursor:pointer;display:grid;place-items:center"><i class="{{ l.decIcon }}" style="font-size:14px"></i></button><strong style="font-size:var(--at-text-sm)">{{ l.qty }}</strong><button type="button" onClick="{{ l.add }}" aria-label="Increase" style="width:32px;height:100%;border:0;background:transparent;cursor:pointer;display:grid;place-items:center"><i class="ph ph-plus" style="font-size:14px"></i></button></div></sc-if>
+                <strong style="min-width:64px;text-align:right">{{ l.lineTotal }}</strong>
+              </div>
+            </sc-for>
+            </sc-if>
+            <sc-if value="{{ hasNowLines }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:var(--at-space-2);padding:var(--at-space-3) var(--at-space-4);background:var(--at-ink-100);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md) var(--at-radius-md) 0 0;font-size:var(--at-text-sm)"><i class="ph ph-package" style="font-size:18px"></i><strong>{{ nowHead }}</strong></div>
+              <sc-for list="{{ nowLines }}" as="l" hint-placeholder-count="2">
+              <div style="display:flex;align-items:center;gap:var(--at-space-3);padding:var(--at-space-3);background:var(--at-ink-0);border:1px solid var(--at-color-border);border-top:0">
+                <span style="width:56px;height:56px;border-radius:var(--at-radius-sm);background:var(--at-ink-100);display:grid;place-items:center;flex:none"><i class="{{ l.icon }}" style="font-size:26px;color:var(--at-ink-500)"></i></span>
+                <span style="flex:1;min-width:0;display:flex;flex-direction:column"><span style="font-weight:var(--at-weight-semibold)">{{ l.name }}</span><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ l.price }} each · {{ l.seller }}</span></span>
+                <sc-if value="{{ l.showAdd }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ l.add }}" disabled="{{ l.disabled }}" style="height:var(--at-size-control-sm);min-width:96px;padding:0 var(--at-space-3);border:0;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);font-weight:var(--at-weight-bold);font-size:var(--at-text-xs);cursor:pointer;opacity:{{ l.op }};font-family:inherit">{{ l.addLabel }}</button></sc-if><sc-if value="{{ l.showStep }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;min-width:96px;height:var(--at-size-control-sm);border:2px solid var(--at-gold-500);border-radius:var(--at-radius-pill);overflow:hidden;background:var(--at-ink-0)"><button type="button" onClick="{{ l.dec }}" aria-label="Decrease" style="width:32px;height:100%;border:0;background:transparent;cursor:pointer;display:grid;place-items:center"><i class="{{ l.decIcon }}" style="font-size:14px"></i></button><strong style="font-size:var(--at-text-sm)">{{ l.qty }}</strong><button type="button" onClick="{{ l.add }}" aria-label="Increase" style="width:32px;height:100%;border:0;background:transparent;cursor:pointer;display:grid;place-items:center"><i class="ph ph-plus" style="font-size:14px"></i></button></div></sc-if>
+                <strong style="min-width:64px;text-align:right">{{ l.lineTotal }}</strong>
+              </div>
+            </sc-for>
+            </sc-if>
+            <sc-if value="{{ cartEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-6);background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);color:var(--at-color-text-muted)">Your cart is empty.</div></sc-if>
+            <sc-if value="{{ showFulfil }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--at-space-2)">
+                <sc-for list="{{ fulfilOpts }}" as="f" hint-placeholder-count="2">
+                  <button type="button" onClick="{{ f.pick }}" style="display:flex;gap:var(--at-space-2);align-items:flex-start;padding:var(--at-space-3);border:2px solid {{ f.border }};border-radius:var(--at-radius-md);background:var(--at-ink-0);text-align:left;cursor:pointer;font-family:inherit;color:var(--at-color-text)"><i class="{{ f.icon }}" style="font-size:20px"></i><span style="display:flex;flex-direction:column;flex:1"><strong style="font-size:var(--at-text-sm)">{{ f.title }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ f.sub }}</span></span><strong style="font-size:var(--at-text-sm)">{{ f.price }}</strong></button>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div style="background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-lg);padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-3)">
+            <sc-for list="{{ summaryRows }}" as="r" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;gap:var(--at-space-3)"><span>{{ r.k }}</span><span>{{ r.v }}</span></div></sc-for>
+            <div style="display:flex;justify-content:space-between;font-size:var(--at-text-lg);font-weight:var(--at-weight-bold);padding-top:var(--at-space-3);border-top:1px solid var(--at-color-border)"><span>Total</span><span>{{ cartTotal }}</span></div>
+            <sc-if value="{{ hasPreLines }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:var(--at-space-2);padding:var(--at-space-3);background:var(--at-ink-50);border-radius:var(--at-radius-md);font-size:var(--at-text-sm)">
+                <strong style="font-size:var(--at-text-xs);letter-spacing:var(--at-tracking-caps);text-transform:uppercase;color:var(--at-color-text-subtle)">How payment works</strong>
+                <sc-for list="{{ payNotes }}" as="n" hint-placeholder-count="4"><span style="display:flex;gap:var(--at-space-2)"><i class="{{ n.icon }}" style="font-size:18px;flex:none"></i>{{ n.text }}</span></sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ sfLocked }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-3);background:var(--at-gold-50);border-radius:var(--at-radius-md);font-size:var(--at-text-sm);color:var(--at-gold-900)">{{ lockedText }}</div></sc-if>
+            <button type="button" onClick="{{ placeOrder }}" disabled="{{ placeDisabled }}" style="height:var(--at-size-control-lg);border:0;border-radius:var(--at-radius-pill);background:var(--at-green-600);color:var(--at-ink-0);font-weight:var(--at-weight-bold);font-size:var(--at-text-base);cursor:pointer;opacity:{{ placeOp }};font-family:inherit">{{ placeLabel }}</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CONFIRM -->
+      <sc-if value="{{ isConfirm }}" hint-placeholder-val="{{ false }}">
+        <div style="max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:var(--at-space-4);background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-lg);padding:var(--at-space-8)">
+          <i class="ph-fill ph-check-circle" style="font-size:44px;color:var(--at-green-600)"></i>
+          <h2 style="margin:0;font-size:var(--at-text-3xl);font-weight:var(--at-weight-black)">{{ conf.title }}</h2>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--at-space-3)">
+            <sc-for list="{{ conf.facts }}" as="f" hint-placeholder-count="3"><div style="padding:var(--at-space-3);background:var(--at-ink-50);border-radius:var(--at-radius-md)"><div style="font-size:var(--at-text-xs);color:var(--at-color-text-subtle)">{{ f.k }}</div><strong>{{ f.v }}</strong></div></sc-for>
+          </div>
+          <p style="margin:0;font-size:var(--at-text-sm);color:var(--at-color-text-muted)">{{ conf.body }}</p>
+          <div style="display:flex;gap:var(--at-space-2);flex-wrap:wrap">
+            <button type="button" style="height:var(--at-size-control);padding:0 var(--at-space-4);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-pill);background:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:var(--at-space-2)"><i class="ph ph-calendar-plus"></i>Add to calendar</button>
+            <button type="button" onClick="{{ goBo }}" style="height:var(--at-size-control);padding:0 var(--at-space-4);border:0;border-radius:var(--at-radius-pill);background:var(--at-ink-1000);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit">See it in back office</button>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+<!-- ================= BACK OFFICE ================= -->
+<sc-if value="{{ isBo }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:var(--at-space-4)">
+  <sc-if value="{{ notEmbedded }}" hint-placeholder-val="{{ true }}">
+    <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-3);align-items:center">
+      <h2 style="margin:0;font-size:var(--at-text-2xl);font-weight:var(--at-weight-black)">Pre-orders</h2>
+      <label style="display:flex;align-items:center;gap:var(--at-space-2);font-size:var(--at-text-sm);margin-left:auto">Signed in as
+        <select value="{{ role }}" onChange="{{ onRole }}" style="height:36px;border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);font-family:inherit;font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);padding:0 var(--at-space-2)">
+          <option value="manager">Pre-order manager</option><option value="cs">Customer service rep</option><option value="analyst">Analyst</option><option value="viewer">Viewer</option>
+        </select></label>
+    </div>
+    <div style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ roleNote }}</div>
+  </sc-if>
+
+  <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-2);align-items:center">
+    <sc-if value="{{ showBack }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ backToList }}" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-md);background:var(--at-color-surface);font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm);cursor:pointer;display:flex;align-items:center;gap:var(--at-space-2);font-family:inherit;color:var(--at-color-text)"><i class="ph ph-arrow-left" style="font-size:16px"></i>All pre-orders</button></sc-if>
+    <sc-if value="{{ inList }}" hint-placeholder-val="{{ true }}">
+      <div role="tablist" style="display:flex;gap:2px;padding:2px;background:var(--at-color-surface-muted);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md)">
+        <sc-for list="{{ listTabs }}" as="t" hint-placeholder-count="5"><button type="button" role="tab" onClick="{{ t.go }}" style="display:flex;align-items:center;gap:6px;height:32px;padding:0 var(--at-space-3);border:0;border-radius:var(--at-radius-sm);background:{{ t.bg }};box-shadow:{{ t.sh }};color:var(--at-color-text);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit">{{ t.label }}<span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ t.n }}</span></button></sc-for>
+      </div>
+    </sc-if>
+    <span style="flex:1"></span>
+    <button type="button" onClick="{{ toggleMaster }}" disabled="{{ noEdit }}" title="Switch pre-order on or off everywhere" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-md);background:var(--at-color-surface);font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm);cursor:pointer;display:flex;align-items:center;gap:var(--at-space-2);font-family:inherit;color:var(--at-color-text);opacity:{{ createOp }}"><span style="width:34px;height:20px;border-radius:var(--at-radius-pill);background:{{ masterTrack }};position:relative;display:block"><span style="position:absolute;top:3px;left:{{ masterKnobSm }};width:14px;height:14px;border-radius:50%;background:var(--at-ink-0)"></span></span>Pre-order {{ masterLabel }}</button>
+    <button type="button" onClick="{{ pickSettings }}" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-md);background:var(--at-color-surface);font-weight:var(--at-weight-semibold);font-size:var(--at-text-sm);cursor:pointer;display:flex;align-items:center;gap:var(--at-space-2);font-family:inherit;color:var(--at-color-text)"><i class="ph ph-gear-six" style="font-size:16px"></i>Areas &amp; settings</button>
+    <button type="button" onClick="{{ newPre }}" disabled="{{ noCreate }}" title="{{ createTitle }}" style="height:var(--at-size-control);padding:0 var(--at-space-4);border:0;border-radius:var(--at-radius-md);background:var(--at-color-action-primary);color:var(--at-color-action-primary-text);font-weight:var(--at-weight-bold);font-size:var(--at-text-sm);cursor:pointer;opacity:{{ createOp }};display:flex;align-items:center;gap:var(--at-space-2);font-family:inherit"><i class="ph ph-plus" style="font-size:16px"></i>Open a pre-order</button>
+  </div>
+
+  <sc-if value="{{ inList }}" hint-placeholder-val="{{ true }}">
+    <div style="border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);background:var(--at-color-surface);overflow-x:auto">
+      <div style="min-width:920px">
+        <div style="display:grid;grid-template-columns:minmax(200px,1.5fr) minmax(170px,1.3fr) 150px 110px 90px 100px 130px;gap:var(--at-space-3);padding:var(--at-space-2) var(--at-space-4);background:var(--at-color-surface-muted);font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);color:var(--at-color-text-muted)"><span>Pre-order</span><span>Where</span><span>Order window</span><span>Delivers</span><span style="text-align:right">Pre-orders</span><span style="text-align:right">Revenue</span><span>Status</span></div>
+        <sc-for list="{{ listRows }}" as="w" hint-placeholder-count="5">
+          <button type="button" onClick="{{ w.pick }}" style="width:100%;display:grid;grid-template-columns:minmax(200px,1.5fr) minmax(170px,1.3fr) 150px 110px 90px 100px 130px;gap:var(--at-space-3);align-items:center;padding:var(--at-space-3) var(--at-space-4);border:0;border-top:1px solid var(--at-color-border);background:var(--at-color-surface);text-align:left;cursor:pointer;font-family:inherit;font-size:var(--at-text-sm);color:var(--at-color-text)" style-hover="background:var(--at-color-surface-hover)">
+            <strong style="color:var(--at-color-link)">{{ w.name }}</strong>
+            <span style="color:var(--at-color-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ w.where }}</span>
+            <span>{{ w.opens }} – {{ w.closes }}</span>
+            <span>{{ w.delivers }}</span>
+            <strong style="text-align:right">{{ w.count }}</strong>
+            <span style="text-align:right">{{ w.rev }}</span>
+            <span style="justify-self:start;padding:2px var(--at-space-2);border-radius:var(--at-radius-xs);background:{{ w.pillBg }};color:{{ w.pillFg }};font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);white-space:nowrap">{{ w.statusLabel }}</span>
+          </button>
+        </sc-for>
+        <sc-if value="{{ listEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-8);text-align:center;color:var(--at-color-text-muted);font-size:var(--at-text-sm);border-top:1px solid var(--at-color-border)">No pre-orders here yet.</div></sc-if>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ inPanel }}" hint-placeholder-val="{{ false }}">
+    <section style="min-width:0;background:var(--at-color-surface);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md)">
+
+      <!-- WIZARD -->
+      <sc-if value="{{ inWizard }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:var(--at-space-3);padding:var(--at-space-4) var(--at-space-5);border-bottom:1px solid var(--at-color-border)">
+            <strong style="font-size:var(--at-text-lg)">{{ wzTitle }}</strong>
+            <div style="display:flex;gap:var(--at-space-1);margin-left:auto;flex-wrap:wrap">
+              <sc-for list="{{ wzSteps }}" as="s" hint-placeholder-count="4"><button type="button" onClick="{{ s.go }}" style="display:flex;align-items:center;gap:var(--at-space-2);padding:var(--at-space-1) var(--at-space-3);border:0;border-radius:var(--at-radius-pill);background:{{ s.bg }};color:{{ s.fg }};font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit"><span style="width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:{{ s.dotBg }};color:{{ s.dotFg }};font-size:10px">{{ s.n }}</span>{{ s.label }}</button></sc-for>
+            </div>
+          </div>
+          <div style="padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-5)">
+            <sc-if value="{{ wzS0 }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:var(--at-space-4)">
+                <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Name<input value="{{ wz.name }}" onChange="{{ wzSet.name }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit"></label>
+                
+                <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Opens<input type="datetime-local" value="{{ wz.opens }}" onChange="{{ wzSet.opens }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit"></label>
+                <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Closes<input type="datetime-local" value="{{ wz.closes }}" onChange="{{ wzSet.closes }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit"></label>
+                <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Delivery date<input type="date" value="{{ wz.delivers }}" onChange="{{ wzSet.delivers }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit"></label>
+                <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Header ribbon text<input value="{{ wz.ribbon }}" onChange="{{ wzSet.ribbon }}" maxLength="60" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit"></label>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:var(--at-space-2);padding:var(--at-space-4);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);background:var(--at-ink-25)">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;gap:var(--at-space-3);flex-wrap:wrap"><span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Where this pre-order runs</span><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">Pick a country, then a state or province, then a city or every city in it. Add as many as you need; each one is also saved to your pre-order areas.</span></div>
+                <div style="display:flex;gap:var(--at-space-2);flex-wrap:wrap">
+                  <sc-for list="{{ wzTargets }}" as="t" hint-placeholder-count="1"><span style="display:flex;align-items:center;gap:var(--at-space-1);padding:var(--at-space-1) var(--at-space-1) var(--at-space-1) var(--at-space-3);border-radius:var(--at-radius-pill);background:var(--at-ink-1000);color:var(--at-ink-0);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold)"><i class="ph ph-map-pin"></i>{{ t.label }}<button type="button" onClick="{{ t.remove }}" aria-label="Remove" style="width:22px;height:22px;border:0;border-radius:50%;background:rgb(255 255 255 / .15);color:var(--at-ink-0);cursor:pointer;display:grid;place-items:center"><i class="ph ph-x" style="font-size:12px"></i></button></span></sc-for>
+                  <sc-if value="{{ wzNoTargets }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-xs);color:var(--at-red-600)">No area chosen yet.</span></sc-if>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) auto;gap:var(--at-space-2);align-items:end;max-width:760px">
+                  <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold);color:var(--at-color-text-muted)">Country<select key="{{ wzCKey }}" defaultValue="{{ wzC }}" data-sync="{{ wzC }}" onChange="{{ onWzC }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0);min-width:0"><sc-for list="{{ wzCountries }}" as="o" hint-placeholder-count="6"><option value="{{ o.code }}">{{ o.name }}</option></sc-for></select></label>
+                  <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold);color:var(--at-color-text-muted)">{{ wzRegionLabel }}<select key="{{ wzRKey }}" defaultValue="{{ wzR }}" data-sync="{{ wzR }}" onChange="{{ onWzR }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0);min-width:0"><option value="">{{ wzRegPh }}</option><sc-for list="{{ wzRegions }}" as="o" hint-placeholder-count="8"><option value="{{ o.code }}">{{ o.name }}</option></sc-for></select></label>
+                  <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold);color:var(--at-color-text-muted)">City<select value="{{ wzX }}" onChange="{{ onWzX }}" disabled="{{ wzNoRegion }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0);min-width:0"><option value="">{{ wzCityPh }}</option><option value="*">{{ wzWholeLabel }}</option><sc-for list="{{ wzCities }}" as="c" hint-placeholder-count="6"><option value="{{ c }}">{{ c }}</option></sc-for></select></label>
+                  <button type="button" onClick="{{ wzAddTarget }}" disabled="{{ wzCantAdd }}" style="height:var(--at-size-control);padding:0 var(--at-space-4);border:0;border-radius:var(--at-radius-md);background:var(--at-green-600);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer;opacity:{{ wzAddOp }};font-family:inherit;display:flex;align-items:center;gap:var(--at-space-1)"><i class="ph ph-plus"></i>Add</button>
+                </div>
+                <sc-if value="{{ wzHasSaved }}" hint-placeholder-val="{{ false }}"><label style="display:flex;align-items:center;gap:var(--at-space-2);max-width:460px;font-size:var(--at-text-xs);color:var(--at-color-text-muted)">Or reuse a saved area<select value="" onChange="{{ wzPickArea }}" style="flex:1;height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0);min-width:0"><option value="">Choose a saved area…</option><sc-for list="{{ wzAreaOpts }}" as="o" hint-placeholder-count="6"><option value="{{ o.key }}">{{ o.label }}</option></sc-for></select></label></sc-if>
+              </div>
+              <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Headline (hero and pre-order page)<input value="{{ wz.headline }}" onChange="{{ wzSet.headline }}" maxLength="90" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit"></label>
+              <div style="display:flex;flex-direction:column;gap:var(--at-space-2)"><span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Eligible categories</span><div style="display:flex;gap:var(--at-space-2);flex-wrap:wrap"><sc-for list="{{ wzCats }}" as="c" hint-placeholder-count="6"><button type="button" onClick="{{ c.toggle }}" style="padding:var(--at-space-1) var(--at-space-3);border:1px solid {{ c.border }};border-radius:var(--at-radius-pill);background:{{ c.bg }};color:{{ c.fg }};font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit">{{ c.label }}</button></sc-for></div></div>
+              <div style="display:flex;gap:var(--at-space-5);flex-wrap:wrap;font-size:var(--at-text-sm)">
+                <label style="display:flex;gap:var(--at-space-2);align-items:center"><input type="checkbox" checked="{{ wz.door }}" onChange="{{ wzSet.door }}" style="width:18px;height:18px;accent-color:var(--at-green-600)">Door delivery ($7.99)</label>
+                <label style="display:flex;gap:var(--at-space-2);align-items:center"><input type="checkbox" checked="{{ wz.pickup }}" onChange="{{ wzSet.pickup }}" style="width:18px;height:18px;accent-color:var(--at-green-600)">Pickup point (free)</label>
+                <label style="display:flex;gap:var(--at-space-2);align-items:center"><input type="checkbox" checked="{{ wz.showCount }}" onChange="{{ wzSet.showCount }}" style="width:18px;height:18px;accent-color:var(--at-green-600)">Show pre-order count to shoppers</label>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ creativesVisible }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+                <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">Upload a creative for each slot. As soon as the pre-order is live, it appears in that slot on the storefront, in emails and on social. Only pre-order managers can upload.</span>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:var(--at-space-4)">
+                  <sc-for list="{{ creativeCards }}" as="c" hint-placeholder-count="5">
+                    <div style="display:flex;flex-direction:column;gap:var(--at-space-2);padding:var(--at-space-3);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);background:var(--at-ink-0)">
+                      <div style="position:relative;aspect-ratio:{{ c.ar }};max-height:260px;border-radius:var(--at-radius-sm);overflow:hidden;background:var(--at-ink-50);border:1px dashed {{ c.dash }};display:grid;place-items:center">
+                        <sc-if value="{{ c.has }}" hint-placeholder-val="{{ false }}"><div role="img" aria-label="{{ c.name }}" style="position:absolute;inset:0;background:center/cover no-repeat;background-image:{{ c.bg }}"></div></sc-if>
+                        <sc-if value="{{ c.none }}" hint-placeholder-val="{{ true }}"><span style="display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--at-ink-500);font-size:var(--at-text-xs)"><i class="ph ph-image" style="font-size:26px"></i>{{ c.spec }}</span></sc-if>
+                      </div>
+                      <span style="display:flex;justify-content:space-between;align-items:center;gap:var(--at-space-2)"><strong style="font-size:var(--at-text-sm)">{{ c.name }}</strong><span style="padding:1px var(--at-space-2);border-radius:var(--at-radius-pill);background:{{ c.pillBg }};color:{{ c.pillFg }};font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);white-space:nowrap">{{ c.status }}</span></span>
+                      <span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ c.where }} · {{ c.spec }}</span>
+                      <div style="display:flex;gap:var(--at-space-2)">
+                        <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ true }}">
+                          <label style="flex:1;height:var(--at-size-control-sm);display:flex;align-items:center;justify-content:center;gap:var(--at-space-1);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);cursor:pointer"><i class="ph ph-upload-simple" style="font-size:14px"></i>{{ c.upLabel }}<input type="file" accept="image/*" onChange="{{ c.onFile }}" style="display:none"></label>
+                          <sc-if value="{{ c.has }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ c.remove }}" aria-label="Remove" style="width:32px;height:var(--at-size-control-sm);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);cursor:pointer"><i class="ph ph-trash" style="font-size:14px"></i></button></sc-if>
+                        </sc-if>
+                        <sc-if value="{{ noEdit }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-xs);color:var(--at-color-text-subtle)">View only for your role</span></sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ wzS2 }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+                <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">Messages are timed against the opening and closing dates. SMS only goes to customers who have opted in (Twilio).</span>
+                <sc-for list="{{ wzComms }}" as="m" hint-placeholder-count="6">
+                  <div style="display:flex;gap:var(--at-space-3);align-items:center;padding:var(--at-space-3);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md)">
+                    <button type="button" onClick="{{ m.toggle }}" aria-label="Toggle" style="flex:none;width:40px;height:22px;border:0;border-radius:var(--at-radius-pill);background:{{ m.track }};position:relative;cursor:pointer"><span style="position:absolute;top:3px;left:{{ m.knob }};width:16px;height:16px;border-radius:50%;background:var(--at-ink-0)"></span></button>
+                    <span style="flex:1;display:flex;flex-direction:column"><strong style="font-size:var(--at-text-sm)">{{ m.title }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ m.when }}</span></span>
+                    <span style="font-size:var(--at-text-xs);color:var(--at-color-text-subtle);text-align:right">{{ m.channels }}</span>
+                  </div>
+                </sc-for>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:var(--at-space-4)">
+                  <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Paid social budget (whole window)<input type="number" value="{{ wz.budget }}" onChange="{{ wzSet.budget }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit"></label>
+                  <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">SMS copy <span style="font-weight:var(--at-weight-regular);color:{{ smsColor }}">{{ smsCount }}</span><textarea value="{{ wz.sms }}" onChange="{{ wzSet.sms }}" rows="3" style="border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:var(--at-space-2) var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit;resize:vertical"></textarea></label>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ wzS3 }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--at-space-5)">
+                <div style="display:flex;flex-direction:column">
+                  <sc-for list="{{ wzSummary }}" as="r" hint-placeholder-count="6"><div style="display:flex;justify-content:space-between;gap:var(--at-space-3);padding:var(--at-space-2) 0;border-bottom:1px solid var(--at-color-border);font-size:var(--at-text-sm)"><span style="color:var(--at-color-text-muted)">{{ r.k }}</span><strong style="text-align:right">{{ r.v }}</strong></div></sc-for>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+                  <strong style="font-size:var(--at-text-sm)">Checks</strong>
+                  <sc-for list="{{ wzChecks }}" as="c" hint-placeholder-count="5"><span style="display:flex;gap:var(--at-space-2);align-items:center;font-size:var(--at-text-sm);color:{{ c.color }}"><i class="{{ c.icon }}" style="font-size:18px"></i>{{ c.text }}</span></sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+          <div style="display:flex;gap:var(--at-space-2);padding:var(--at-space-4) var(--at-space-5);border-top:1px solid var(--at-color-border);background:var(--at-ink-25);flex-wrap:wrap">
+            <button type="button" onClick="{{ wzCancel }}" style="height:var(--at-size-control);padding:0 var(--at-space-4);border:0;background:transparent;font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit">Cancel</button>
+            <button type="button" onClick="{{ wzBack }}" disabled="{{ wzAtStart }}" style="margin-left:auto;height:var(--at-size-control);padding:0 var(--at-space-4);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-md);background:var(--at-ink-0);font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit">Back</button>
+            <button type="button" onClick="{{ wzSaveDraft }}" style="height:var(--at-size-control);padding:0 var(--at-space-4);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-md);background:var(--at-ink-0);font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit">Save draft</button>
+            <button type="button" onClick="{{ wzNext }}" disabled="{{ wzNextDisabled }}" style="height:var(--at-size-control);padding:0 var(--at-space-5);border:0;border-radius:var(--at-radius-md);background:var(--at-green-600);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer;opacity:{{ wzNextOp }};font-family:inherit">{{ wzNextLabel }}</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- SETTINGS -->
+      <sc-if value="{{ inSettings }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-6)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--at-space-4);flex-wrap:wrap">
+            <div style="display:flex;flex-direction:column;gap:var(--at-space-1)"><strong style="font-size:var(--at-text-lg)">Pre-order for the whole platform</strong><span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">Switches every city on or off at once. Takes effect right away, with no deployment.</span></div>
+            <button type="button" onClick="{{ toggleMaster }}" disabled="{{ noEdit }}" aria-label="Master switch" style="width:56px;height:30px;border:0;border-radius:var(--at-radius-pill);background:{{ masterTrack }};position:relative;cursor:pointer"><span style="position:absolute;top:4px;left:{{ masterKnobLg }};width:22px;height:22px;border-radius:50%;background:var(--at-ink-0)"></span></button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:var(--at-space-3);flex-wrap:wrap"><strong style="font-size:var(--at-text-sm)">Pre-order areas</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ areaCount }}</span></div>
+            <span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">Only places you add here can get a pre-order. Pick a country, then a state or province, then a city (or every city in it). Switch an area off to pause it without losing its settings.</span>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr)) auto;gap:var(--at-space-2);align-items:end;max-width:720px;padding:var(--at-space-3);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);background:var(--at-ink-25)">
+              <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold);color:var(--at-color-text-muted)">Country<select key="{{ apCKey }}" defaultValue="{{ apC }}" data-sync="{{ apC }}" onChange="{{ onApC }}" disabled="{{ noEdit }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0);min-width:0"><sc-for list="{{ apCountries }}" as="o" hint-placeholder-count="6"><option value="{{ o.code }}">{{ o.name }}</option></sc-for></select></label>
+              <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold);color:var(--at-color-text-muted)">{{ apRegionLabel }}<select key="{{ apRKey }}" defaultValue="{{ apR }}" data-sync="{{ apR }}" onChange="{{ onApR }}" disabled="{{ noEdit }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0);min-width:0"><option value="">{{ apRegPh }}</option><sc-for list="{{ apRegions }}" as="o" hint-placeholder-count="8"><option value="{{ o.code }}">{{ o.name }}</option></sc-for></select></label>
+              <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold);color:var(--at-color-text-muted)">City<select value="{{ apX }}" onChange="{{ onApX }}" disabled="{{ apNoRegion }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0);min-width:0"><option value="">{{ apCityPh }}</option><option value="*">{{ apWholeLabel }}</option><sc-for list="{{ apCities }}" as="c" hint-placeholder-count="6"><option value="{{ c }}">{{ c }}</option></sc-for></select></label>
+              <button type="button" onClick="{{ apAdd }}" disabled="{{ apCantAdd }}" style="height:var(--at-size-control);padding:0 var(--at-space-4);border:0;border-radius:var(--at-radius-md);background:var(--at-green-600);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer;opacity:{{ apAddOp }};font-family:inherit;display:flex;align-items:center;gap:var(--at-space-1)"><i class="ph ph-plus"></i>Add area</button>
+            </div>
+            <div style="display:flex;flex-direction:column;border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);overflow:hidden">
+              <div style="display:flex;flex-wrap:wrap;align-items:center;gap:var(--at-space-2);padding:var(--at-space-2) var(--at-space-3);background:var(--at-ink-50)">
+                <nav aria-label="Area level" style="display:flex;align-items:center;gap:var(--at-space-1);flex-wrap:wrap;font-size:var(--at-text-sm)">
+                  <sc-for list="{{ areaCrumbs }}" as="c" hint-placeholder-count="1"><button type="button" onClick="{{ c.go }}" disabled="{{ c.cur }}" style="border:0;background:none;padding:2px 4px;font-family:inherit;font-size:var(--at-text-sm);font-weight:{{ c.weight }};color:{{ c.fg }};cursor:pointer">{{ c.label }}</button><span style="color:var(--at-color-text-subtle);display:{{ c.sepDisp }}">›</span></sc-for>
+                </nav>
+                <span style="flex:1"></span>
+                <div style="display:flex;align-items:center;gap:var(--at-space-1);height:32px;padding:0 var(--at-space-2);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);min-width:180px"><i class="ph ph-funnel-simple" style="color:var(--at-ink-500)"></i><input value="{{ areaQ }}" onChange="{{ onAreaQ }}" placeholder="{{ areaFilterPh }}" aria-label="Filter this list" style="flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:var(--at-text-sm);font-family:inherit"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1.4fr) 90px 110px 28px;gap:var(--at-space-3);padding:var(--at-space-2) var(--at-space-3);border-top:1px solid var(--at-color-border);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);letter-spacing:var(--at-tracking-caps);text-transform:uppercase;color:var(--at-color-text-subtle)"><span>{{ areaColName }}</span><span>Coverage</span><span>Pre-orders</span><span>On / off</span><span></span></div>
+              <sc-for list="{{ areaRows }}" as="a" hint-placeholder-count="5">
+                <div style="width:100%;display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1.4fr) 90px 110px 28px;gap:var(--at-space-3);align-items:center;padding:var(--at-space-2) var(--at-space-3);border:0;border-top:1px solid var(--at-color-border);background:var(--at-ink-0);text-align:left;cursor:pointer;font-family:inherit;font-size:var(--at-text-sm);color:var(--at-color-text);cursor:default">
+                  <button type="button" onClick="{{ a.open }}" disabled="{{ a.leaf }}" style="display:flex;align-items:center;gap:var(--at-space-2);border:0;background:none;padding:0;font-family:inherit;font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);color:var(--at-color-text);cursor:pointer;text-align:left;text-decoration:{{ a.deco }};min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.name }}</span></button>
+                  <span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ a.cover }}</span>
+                  <span style="font-size:var(--at-text-xs)">{{ a.pre }}</span>
+                  <span style="display:flex;align-items:center;gap:var(--at-space-2)"><button type="button" onClick="{{ a.toggle }}" disabled="{{ noEdit }}" aria-label="Switch on or off" style="flex:none;width:40px;height:22px;border:0;border-radius:var(--at-radius-pill);background:{{ a.track }};position:relative;cursor:pointer"><span style="position:absolute;top:3px;left:{{ a.knob }};width:16px;height:16px;border-radius:50%;background:var(--at-ink-0)"></span></button><span style="font-size:var(--at-text-2xs);color:var(--at-color-text-muted)">{{ a.onText }}</span></span>
+                  <sc-if value="{{ a.leaf }}" hint-placeholder-val="{{ false }}"><button type="button" onClick="{{ a.remove }}" disabled="{{ noEdit }}" aria-label="Remove area" style="width:28px;height:28px;border:0;border-radius:var(--at-radius-sm);background:transparent;color:var(--at-ink-500);cursor:pointer"><i class="ph ph-x"></i></button></sc-if>
+                  <sc-if value="{{ a.branch }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ a.open }}" aria-label="Open" style="width:28px;height:28px;border:0;border-radius:var(--at-radius-sm);background:transparent;color:var(--at-ink-500);cursor:pointer"><i class="ph ph-caret-right"></i></button></sc-if>
+                </div>
+              </sc-for>
+              <sc-if value="{{ noAreas }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-5);border-top:1px solid var(--at-color-border);font-size:var(--at-text-sm);color:var(--at-color-text-muted)">{{ noAreasText }}</div></sc-if>
+              <sc-if value="{{ areaMore }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;padding:var(--at-space-2) var(--at-space-3);border-top:1px solid var(--at-color-border);font-size:var(--at-text-xs);color:var(--at-color-text-muted)"><span>{{ areaPageText }}</span><span style="display:flex;gap:var(--at-space-1)"><button type="button" onClick="{{ areaPrev }}" style="height:28px;padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);cursor:pointer;font-family:inherit">Prev</button><button type="button" onClick="{{ areaNext }}" style="height:28px;padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);cursor:pointer;font-family:inherit">Next</button></span></div></sc-if>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+            <strong style="font-size:var(--at-text-sm)">When pre-order is off for a city</strong>
+            <sc-for list="{{ fallbackOpts }}" as="f" hint-placeholder-count="2"><button type="button" onClick="{{ f.pick }}" style="display:flex;gap:var(--at-space-3);align-items:flex-start;padding:var(--at-space-3);border:2px solid {{ f.border }};border-radius:var(--at-radius-md);background:var(--at-ink-0);text-align:left;cursor:pointer;font-family:inherit;color:var(--at-color-text)"><i class="{{ f.icon }}" style="font-size:20px"></i><span style="display:flex;flex-direction:column"><strong style="font-size:var(--at-text-sm)">{{ f.title }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ f.sub }}</span></span></button></sc-for>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+            <strong style="font-size:var(--at-text-sm)">Advertorial placements</strong>
+            <sc-for list="{{ placementRows }}" as="p" hint-placeholder-count="6">
+              <div style="display:flex;gap:var(--at-space-3);align-items:center;padding:var(--at-space-2) 0;border-bottom:1px solid var(--at-color-border)">
+                <button type="button" onClick="{{ p.toggle }}" disabled="{{ noEdit }}" aria-label="Toggle placement" style="flex:none;width:40px;height:22px;border:0;border-radius:var(--at-radius-pill);background:{{ p.track }};position:relative;cursor:pointer"><span style="position:absolute;top:3px;left:{{ p.knob }};width:16px;height:16px;border-radius:50%;background:var(--at-ink-0)"></span></button>
+                <span style="flex:1;display:flex;flex-direction:column"><strong style="font-size:var(--at-text-sm)">{{ p.name }}</strong><span style="font-size:var(--at-text-xs);color:var(--at-color-text-muted)">{{ p.where }}</span></span>
+                <span style="font-size:var(--at-text-xs);color:var(--at-color-text-subtle)">{{ p.creative }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- DETAIL -->
+      <sc-if value="{{ inDetail }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column">
+          <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-3);align-items:flex-start;padding:var(--at-space-5);border-bottom:1px solid var(--at-color-border)">
+            <div style="display:flex;flex-direction:column;gap:var(--at-space-1);min-width:0">
+              <span style="display:flex;gap:var(--at-space-2);align-items:center;flex-wrap:wrap"><strong style="font-size:var(--at-text-2xl);font-weight:var(--at-weight-black)">{{ sel.name }}</strong><span style="padding:2px var(--at-space-2);border-radius:var(--at-radius-pill);background:{{ sel.pillBg }};color:{{ sel.pillFg }};font-size:var(--at-text-xs);font-weight:var(--at-weight-bold)">{{ sel.statusLabel }}</span></span>
+              <span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)"><i class="ph ph-map-pin"></i> {{ sel.where }} · Opens {{ sel.opensT }} · Closes {{ sel.closesT }} · Delivers {{ sel.deliversT }}</span>
+            </div>
+            <div style="display:flex;gap:var(--at-space-2);margin-left:auto;flex-wrap:wrap">
+              <sc-if value="{{ canLate }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ openLate }}" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-md);background:var(--at-ink-0);font-weight:var(--at-weight-semibold);cursor:pointer;display:flex;align-items:center;gap:var(--at-space-2);font-family:inherit"><i class="ph ph-headset" style="font-size:16px"></i>Late add</button></sc-if>
+              <sc-if value="{{ canEdit }}" hint-placeholder-val="{{ true }}">
+                <button type="button" onClick="{{ togglePause }}" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-md);background:var(--at-ink-0);font-weight:var(--at-weight-semibold);cursor:pointer;display:flex;align-items:center;gap:var(--at-space-2);font-family:inherit"><i class="{{ pauseIcon }}" style="font-size:16px"></i>{{ pauseLabel }}</button>
+                <button type="button" onClick="{{ editSel }}" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-md);background:var(--at-ink-0);font-weight:var(--at-weight-semibold);cursor:pointer;display:flex;align-items:center;gap:var(--at-space-2);font-family:inherit"><i class="ph ph-pencil-simple" style="font-size:16px"></i>Edit</button>
+              </sc-if>
+              <sc-if value="{{ canExport }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ exportAll }}" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:0;border-radius:var(--at-radius-md);background:var(--at-ink-1000);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer;display:flex;align-items:center;gap:var(--at-space-2);font-family:inherit"><i class="ph ph-download-simple" style="font-size:16px"></i>Export orders</button></sc-if>
+            </div>
+          </div>
+          <div style="display:flex;gap:var(--at-space-1);padding:0 var(--at-space-5);border-bottom:1px solid var(--at-color-border);flex-wrap:wrap">
+            <sc-for list="{{ dTabs }}" as="t" hint-placeholder-count="4"><button type="button" onClick="{{ t.go }}" style="padding:var(--at-space-3) var(--at-space-3);border:0;border-bottom:2px solid {{ t.line }};background:transparent;color:{{ t.fg }};font-size:var(--at-text-sm);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit">{{ t.label }}</button></sc-for>
+          </div>
+
+          <div style="padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-5)">
+            <sc-if value="{{ dOverview }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:var(--at-space-3)">
+                <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="6"><div style="padding:var(--at-space-3) var(--at-space-4);border:1px solid var(--at-color-border);border-radius:var(--at-radius-md);display:flex;flex-direction:column;gap:2px"><span style="font-size:var(--at-text-xs);color:var(--at-color-text-subtle)">{{ k.label }}</span><strong style="font-size:var(--at-text-2xl);font-weight:var(--at-weight-black)">{{ k.value }}</strong><span style="font-size:var(--at-text-2xs);color:var(--at-color-text-muted)">{{ k.sub }}</span></div></sc-for>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+                <div style="display:flex;justify-content:space-between;font-size:var(--at-text-xs);color:var(--at-color-text-muted)"><span>Opens {{ sel.opensShort }}</span><span>{{ sel.progressText }}</span><span>Closes {{ sel.closesShort }}</span></div>
+                <span style="height:10px;border-radius:var(--at-radius-pill);background:var(--at-ink-100);overflow:hidden;display:block"><span style="display:block;height:100%;width:{{ sel.timePct }};background:var(--at-ink-900)"></span></span>
+              </div>
+            </sc-if>
+            <sc-if value="{{ showCharts }}" hint-placeholder-val="{{ true }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:var(--at-space-5)">
+                <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+                  <strong style="font-size:var(--at-text-sm)">Pre-orders per day</strong>
+                  <sc-if value="{{ noDays }}" hint-placeholder-val="{{ false }}"><span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">No orders yet. The window hasn't opened.</span></sc-if>
+                  <div style="display:flex;align-items:flex-end;gap:3px;height:160px;padding-bottom:18px;position:relative">
+                    <sc-for list="{{ byDay }}" as="b" hint-placeholder-count="10"><span title="{{ b.tip }}" style="flex:1;min-width:6px;height:{{ b.h }};background:{{ b.color }};border-radius:3px 3px 0 0;position:relative"><span style="position:absolute;top:100%;left:50%;transform:translateX(-50%);margin-top:3px;font-size:9px;color:var(--at-color-text-subtle);white-space:nowrap">{{ b.lbl }}</span></span></sc-for>
+                  </div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+                  <strong style="font-size:var(--at-text-sm)">By channel</strong>
+                  <sc-for list="{{ bySource }}" as="b" hint-placeholder-count="8"><div style="display:grid;grid-template-columns:130px minmax(0,1fr) 40px;gap:var(--at-space-2);align-items:center;font-size:var(--at-text-xs)"><span>{{ b.k }}</span><span style="height:10px;border-radius:var(--at-radius-pill);background:var(--at-ink-100);overflow:hidden;display:block"><span style="display:block;height:100%;width:{{ b.w }};background:var(--at-green-600)"></span></span><strong style="text-align:right">{{ b.n }}</strong></div></sc-for>
+                </div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ dAnalytics }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:var(--at-space-5)">
+                <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+                  <strong style="font-size:var(--at-text-sm)">Top products (units)</strong>
+                  <sc-for list="{{ topProducts }}" as="b" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:150px minmax(0,1fr) 40px;gap:var(--at-space-2);align-items:center;font-size:var(--at-text-xs)"><span>{{ b.k }}</span><span style="height:10px;border-radius:var(--at-radius-pill);background:var(--at-ink-100);overflow:hidden;display:block"><span style="display:block;height:100%;width:{{ b.w }};background:var(--at-gold-500)"></span></span><strong style="text-align:right">{{ b.n }}</strong></div></sc-for>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+                  <strong style="font-size:var(--at-text-sm)">Fulfilment split</strong>
+                  <sc-for list="{{ fulfilSplit }}" as="b" hint-placeholder-count="2"><div style="display:grid;grid-template-columns:150px minmax(0,1fr) 60px;gap:var(--at-space-2);align-items:center;font-size:var(--at-text-xs)"><span>{{ b.k }}</span><span style="height:10px;border-radius:var(--at-radius-pill);background:var(--at-ink-100);overflow:hidden;display:block"><span style="display:block;height:100%;width:{{ b.w }};background:var(--at-ink-800)"></span></span><strong style="text-align:right">{{ b.n }}</strong></div></sc-for>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--at-space-3);flex-wrap:wrap"><strong style="font-size:var(--at-text-sm)">Advertorial performance</strong><sc-if value="{{ canExport }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ exportReport }}" style="height:var(--at-size-control-sm);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);font-size:var(--at-text-xs);font-weight:var(--at-weight-bold);cursor:pointer;font-family:inherit">Export report (.csv)</button></sc-if></div>
+                <div style="overflow:auto;border:1px solid var(--at-color-border);border-radius:var(--at-radius-md)">
+                  <div style="min-width:640px">
+                    <div style="display:grid;grid-template-columns:minmax(160px,1.4fr) 90px repeat(4,minmax(80px,1fr));gap:var(--at-space-2);padding:var(--at-space-2) var(--at-space-3);background:var(--at-color-surface-muted);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);color:var(--at-color-text-muted);text-transform:uppercase;letter-spacing:var(--at-tracking-caps)"><span>Placement</span><span>Creative</span><span style="text-align:right">Impressions</span><span style="text-align:right">Clicks</span><span style="text-align:right">CTR</span><span style="text-align:right">Pre-orders</span></div>
+                    <sc-for list="{{ adPerf }}" as="a" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:minmax(160px,1.4fr) 90px repeat(4,minmax(80px,1fr));gap:var(--at-space-2);padding:var(--at-space-2) var(--at-space-3);border-top:1px solid var(--at-color-border);font-size:var(--at-text-sm)"><span>{{ a.name }}</span><span style="font-size:var(--at-text-xs);color:{{ a.cColor }}">{{ a.creative }}</span><span style="text-align:right">{{ a.imp }}</span><span style="text-align:right">{{ a.clicks }}</span><span style="text-align:right">{{ a.ctr }}</span><strong style="text-align:right">{{ a.orders }}</strong></div></sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ dOrders }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-wrap:wrap;gap:var(--at-space-2);align-items:center">
+                <div style="flex:1 1 220px;display:flex;align-items:center;gap:var(--at-space-2);height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm)"><i class="ph ph-magnifying-glass" style="color:var(--at-ink-500)"></i><input value="{{ q }}" onChange="{{ onQ }}" placeholder="Search order # or customer" style="flex:1;border:0;outline:0;font-size:var(--at-text-sm);font-family:inherit;background:transparent"></div>
+                <select value="{{ fStatus }}" onChange="{{ onFStatus }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);font-family:inherit;font-size:var(--at-text-sm);padding:0 var(--at-space-2)"><option value="all">All statuses</option><option value="Paid">Paid</option><option value="Late add">Late add</option><option value="Cancelled">Cancelled</option></select>
+                <select value="{{ fSource }}" onChange="{{ onFSource }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);font-family:inherit;font-size:var(--at-text-sm);padding:0 var(--at-space-2)"><option value="all">All channels</option><option value="Site · hero">Site · hero</option><option value="Site · ribbon">Site · ribbon</option><option value="Site · product page">Site · product page</option><option value="Mobile app">Mobile app</option><option value="Instagram">Instagram</option><option value="Facebook">Facebook</option><option value="TikTok">TikTok</option><option value="WhatsApp">WhatsApp</option><option value="Email">Email</option><option value="SMS">SMS</option><option value="Agent (late)">Agent (late)</option></select>
+                <sc-if value="{{ canExport }}" hint-placeholder-val="{{ true }}">
+                  <button type="button" onClick="{{ exportFiltered }}" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:var(--at-space-1)"><i class="ph ph-file-csv"></i>Export {{ filteredCount }} rows</button>
+                  <button type="button" onClick="{{ exportPick }}" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:var(--at-space-1)"><i class="ph ph-list-checks"></i>Picking list</button>
+                </sc-if>
+              </div>
+              <div style="overflow:auto;border:1px solid var(--at-color-border);border-radius:var(--at-radius-md)">
+                <div style="min-width:1060px">
+                  <div style="display:grid;grid-template-columns:100px minmax(140px,1fr) minmax(200px,1.4fr) 110px 120px 50px 70px 90px 90px;gap:var(--at-space-2);padding:var(--at-space-2) var(--at-space-3);background:var(--at-color-surface-muted);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);color:var(--at-color-text-muted);text-transform:uppercase;letter-spacing:var(--at-tracking-caps)"><span>Order</span><span>Customer · phone</span><span>Deliver to</span><span>Placed</span><span>Channel</span><span>Units</span><span>Fulfil</span><span style="text-align:right">Total</span><span>Status</span></div>
+                  <sc-for list="{{ orderRows }}" as="o" hint-placeholder-count="12">
+                    <div style="display:grid;grid-template-columns:100px minmax(140px,1fr) minmax(200px,1.4fr) 110px 120px 50px 70px 90px 90px;gap:var(--at-space-2);align-items:center;padding:var(--at-space-2) var(--at-space-3);border-top:1px solid var(--at-color-border);font-size:var(--at-text-sm);background:{{ o.bg }}">
+                      <span style="font-family:var(--at-font-mono);font-size:var(--at-text-xs)">{{ o.id }}</span><span style="display:flex;flex-direction:column;min-width:0"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ o.customer }}</span><span style="font-size:var(--at-text-2xs);color:var(--at-color-text-subtle)">{{ o.phone }}</span></span><span style="display:flex;flex-direction:column;min-width:0;font-size:var(--at-text-xs)"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ o.addrLine }}</span><span style="font-size:var(--at-text-2xs);color:var(--at-color-text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ o.subLine }}</span></span><span style="font-size:var(--at-text-xs)">{{ o.placedT }}</span><span style="display:flex;flex-direction:column;font-size:var(--at-text-xs)"><span>{{ o.source }}</span><span style="font-family:var(--at-font-mono);font-size:10px;color:var(--at-color-text-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ o.srcTag }}</span></span><span>{{ o.units }}</span><span style="font-size:var(--at-text-xs)">{{ o.fulfil }}</span><strong style="text-align:right">{{ o.totalT }}</strong>
+                      <span style="justify-self:start;padding:1px var(--at-space-2);border-radius:var(--at-radius-pill);background:{{ o.pillBg }};color:{{ o.pillFg }};font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold)">{{ o.status }}</span>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ noRows }}" hint-placeholder-val="{{ false }}"><div style="padding:var(--at-space-6);text-align:center;color:var(--at-color-text-muted);font-size:var(--at-text-sm)">No pre-orders match.</div></sc-if>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:var(--at-text-sm);color:var(--at-color-text-muted)"><span>{{ pageText }}</span><span style="display:flex;gap:var(--at-space-1)"><button type="button" onClick="{{ prevPage }}" style="height:32px;padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);cursor:pointer;font-family:inherit">Prev</button><button type="button" onClick="{{ nextPage }}" style="height:32px;padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);background:var(--at-ink-0);cursor:pointer;font-family:inherit">Next</button></span></div>
+            </sc-if>
+
+            <sc-if value="{{ dCreatives }}" hint-placeholder-val="{{ false }}">
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--at-space-5);align-items:start">
+                <div style="display:flex;flex-direction:column;gap:var(--at-space-2)">
+                  <strong style="font-size:var(--at-text-sm)">Social preview</strong>
+                  <div style="width:240px;aspect-ratio:9/16;border-radius:var(--at-radius-lg);overflow:hidden;background:var(--at-ink-1000);color:var(--at-ink-0);position:relative;box-shadow:var(--at-shadow-lg)">
+                    <sc-if value="{{ selStory.has }}" hint-placeholder-val="{{ false }}"><div role="img" aria-label="Story creative" style="position:absolute;inset:0;background:center/cover no-repeat;background-image:{{ selStory.bg }}"></div></sc-if>
+                    <div style="position:absolute;left:0;right:0;bottom:0;padding:var(--at-space-4);display:flex;flex-direction:column;gap:var(--at-space-2);background:linear-gradient(0deg,rgb(0 0 0 / .85),rgb(0 0 0 / 0))">
+                      <span style="font-size:10px;color:var(--at-ink-300)">Sponsored · AfroTransact</span>
+                      <strong style="font-size:var(--at-text-md);line-height:var(--at-leading-tight)">{{ sel.ribbon }}</strong>
+                      <span style="font-size:var(--at-text-xs);color:var(--at-ink-200)">Order by {{ sel.closesShort }} · delivered {{ sel.deliversShort }}</span>
+                      <span style="height:32px;border-radius:var(--at-radius-pill);background:var(--at-gold-500);color:var(--at-ink-1000);display:grid;place-items:center;font-weight:var(--at-weight-bold);font-size:var(--at-text-xs)">Pre-order now</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+    </section>
+  </sc-if>
+</div>
+
+<sc-if value="{{ lateOpen }}" hint-placeholder-val="{{ false }}">
+  <div style="position:fixed;inset:0;z-index:var(--at-z-dialog);background:var(--at-color-overlay);display:flex;justify-content:center;align-items:{{ modalAlign }};padding:var(--at-space-12) var(--at-space-4)">
+    <div style="width:min(520px,100%);background:var(--at-ink-0);border-radius:var(--at-radius-lg);box-shadow:var(--at-shadow-lg);display:flex;flex-direction:column">
+      <div style="padding:var(--at-space-5);border-bottom:1px solid var(--at-color-border);display:flex;flex-direction:column;gap:var(--at-space-1)"><strong style="font-size:var(--at-text-lg)">Late add · {{ sel.name }}</strong><span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted)">For customers who call or chat after the closing date. Every late add is logged with your name and the reason.</span></div>
+      <div style="padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-4)">
+        <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Customer<select value="{{ late.cust }}" onChange="{{ lateSet.cust }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0)"><option value="">Find the customer by name, phone or email…</option><sc-for list="{{ lateCustomers }}" as="c" hint-placeholder-count="6"><option value="{{ c.id }}">{{ c.label }}</option></sc-for></select></label>
+        <sc-if value="{{ lateHasCust }}" hint-placeholder-val="{{ false }}">
+          <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Deliver to<select value="{{ late.addr }}" onChange="{{ lateSet.addr }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0)"><option value="">Choose a saved address…</option><sc-for list="{{ lateAddrs }}" as="a" hint-placeholder-count="2"><option value="{{ a.id }}">{{ a.label }}</option></sc-for><option value="new">+ New address (verify before saving)</option></select></label>
+          <sc-if value="{{ lateNewAddr }}" hint-placeholder-val="{{ false }}"><div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto;gap:var(--at-space-2);align-items:end"><label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Street<input value="{{ late.na.line1 }}" onChange="{{ lateSet.line1 }}" placeholder="Street and number" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit;min-width:0"></label><label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Postal code<input value="{{ late.na.zip }}" onChange="{{ lateSet.zip }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit;min-width:0"></label><button type="button" onClick="{{ lateVerify }}" style="height:var(--at-size-control);padding:0 var(--at-space-3);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-md);background:var(--at-ink-0);font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit">{{ lateVerifyLabel }}</button><span style="grid-column:1/-1;font-size:var(--at-text-xs);color:var(--at-color-text-muted)">City: {{ lateCity }} · checked against the address service before it can be saved</span></div></sc-if>
+          <label style="display:flex;gap:var(--at-space-2);align-items:center;font-size:var(--at-text-sm)"><input type="checkbox" checked="{{ late.phoneOk }}" onChange="{{ lateSet.phoneOk }}" style="width:18px;height:18px;accent-color:var(--at-green-600)">Phone read back and confirmed: <strong>{{ latePhone }}</strong></label>
+          <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Payment<select value="{{ late.pay }}" onChange="{{ lateSet.pay }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0)"><option value="card">Charge the saved card on file</option><option value="link">Send a payment link by SMS</option></select></label>
+        </sc-if>
+        <div style="display:flex;flex-direction:column;gap:var(--at-space-2)"><span style="font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Items</span><div style="display:flex;gap:var(--at-space-2);flex-wrap:wrap"><sc-for list="{{ lateItems }}" as="c" hint-placeholder-count="5"><button type="button" onClick="{{ c.toggle }}" style="padding:var(--at-space-1) var(--at-space-3);border:1px solid {{ c.border }};border-radius:var(--at-radius-pill);background:{{ c.bg }};color:{{ c.fg }};font-size:var(--at-text-xs);font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit">{{ c.label }}</button></sc-for></div></div>
+        <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Reason
+          <select value="{{ late.reason }}" onChange="{{ lateSet.reason }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-2);font-size:var(--at-text-sm);font-family:inherit;background:var(--at-ink-0)"><option value="Customer called">Customer called</option><option value="Live chat">Live chat</option><option value="Payment failed at close">Payment failed at close</option><option value="Goodwill">Goodwill</option></select></label>
+        <label style="display:flex;flex-direction:column;gap:var(--at-space-1);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold)">Delivery note<input value="{{ late.note }}" onChange="{{ lateSet.note }}" style="height:var(--at-size-control);border:1px solid var(--at-color-border-strong);border-radius:var(--at-radius-sm);padding:0 var(--at-space-3);font-size:var(--at-text-sm);font-family:inherit"></label>
+      </div>
+      <div style="display:flex;gap:var(--at-space-2);justify-content:flex-end;padding:var(--at-space-4) var(--at-space-5);border-top:1px solid var(--at-color-border)">
+        <button type="button" onClick="{{ closeLate }}" style="height:var(--at-size-control);padding:0 var(--at-space-4);border:0;background:transparent;font-weight:var(--at-weight-semibold);cursor:pointer;font-family:inherit">Cancel</button>
+        <button type="button" onClick="{{ saveLate }}" disabled="{{ lateInvalid }}" style="height:var(--at-size-control);padding:0 var(--at-space-5);border:0;border-radius:var(--at-radius-md);background:var(--at-green-600);color:var(--at-ink-0);font-weight:var(--at-weight-bold);cursor:pointer;opacity:{{ lateOp }};font-family:inherit">Add {{ lateTotal }} order</button>
+      </div>
+    </div>
+  </div>
+</sc-if>
+</sc-if>
+
+<!-- ================= HOW IT WORKS ================= -->
+<sc-if value="{{ isHow }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:var(--at-space-8);max-width:1100px">
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-lg);overflow:hidden">
+    <sc-for list="{{ howSteps }}" as="s" hint-placeholder-count="3"><div style="padding:var(--at-space-5);display:flex;flex-direction:column;gap:var(--at-space-2);border-top:4px solid {{ s.bar }}"><i class="{{ s.icon }}" style="font-size:26px"></i><strong style="font-size:var(--at-text-lg)">{{ s.title }}</strong><span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted);text-wrap:pretty">{{ s.body }}</span></div></sc-for>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:var(--at-space-4)">
+    <sc-for list="{{ howRules }}" as="r" hint-placeholder-count="6"><div style="display:flex;gap:var(--at-space-3);align-items:flex-start"><i class="{{ r.icon }}" style="font-size:22px;color:var(--at-green-600);flex:none"></i><span style="display:flex;flex-direction:column;gap:2px"><strong style="font-size:var(--at-text-sm)">{{ r.title }}</strong><span style="font-size:var(--at-text-sm);color:var(--at-color-text-muted);text-wrap:pretty">{{ r.body }}</span></span></div></sc-for>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:var(--at-space-3)">
+    <strong style="font-size:var(--at-text-lg)">Who can do what</strong>
+    <div style="overflow:auto;background:var(--at-ink-0);border:1px solid var(--at-color-border);border-radius:var(--at-radius-lg)">
+      <div style="min-width:620px">
+        <div style="display:grid;grid-template-columns:minmax(200px,1.6fr) repeat(4,minmax(90px,1fr));padding:var(--at-space-2) var(--at-space-4);background:var(--at-color-surface-muted);font-size:var(--at-text-2xs);font-weight:var(--at-weight-bold);color:var(--at-color-text-muted);text-transform:uppercase;letter-spacing:var(--at-tracking-caps)"><span>Permission</span><span>Manager</span><span>Customer service</span><span>Analyst</span><span>Viewer</span></div>
+        <sc-for list="{{ permRows }}" as="p" hint-placeholder-count="6"><div style="display:grid;grid-template-columns:minmax(200px,1.6fr) repeat(4,minmax(90px,1fr));padding:var(--at-space-2) var(--at-space-4);border-top:1px solid var(--at-color-border);font-size:var(--at-text-sm);align-items:center"><span>{{ p.k }}</span><sc-for list="{{ p.cells }}" as="c" hint-placeholder-count="4"><i class="{{ c.icon }}" style="font-size:18px;color:{{ c.color }}"></i></sc-for></div></sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+</main>
+
+<sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}"><div style="position:fixed;left:50%;bottom:{{ toastBottom }};top:{{ toastTop }};transform:translateX(-50%);z-index:var(--at-z-toast);padding:var(--at-space-3) var(--at-space-5);border-radius:var(--at-radius-pill);background:var(--at-ink-1000);color:var(--at-ink-0);font-size:var(--at-text-sm);font-weight:var(--at-weight-semibold);box-shadow:var(--at-shadow-lg)">{{ toastText }}</div></sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;preorderEnabled&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Pre-order&quot;},&quot;offFallback&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;ship&quot;,&quot;waitlist&quot;],&quot;default&quot;:&quot;ship&quot;,&quot;tsType&quot;:&quot;'ship'|'waitlist'&quot;,&quot;section&quot;:&quot;Pre-order&quot;}}">
+const DAY = 86400000, PHONE = '+1 (833) 555-0199', LS = 'at.preorder.v2';
+const PRE = () => window.ATPre;
+const locName = l => (PRE() ? PRE().locName(l) : '');
+const slugOf = w => (PRE() && w && w.targets ? PRE().slug(w) : 'PRE');
+const CATALOG = [
+  { id: 'garri', name: 'Ijebu Garri, 4 lb', price: 12.99, seller: 'Mama Put Pantry', icon: 'ph ph-grains', bestBy: 'Apr 2027' },
+  { id: 'egusi', name: 'Ground Egusi, 2 lb', price: 14.49, seller: 'Lagos Larder', icon: 'ph ph-bowl-food', bestBy: 'Feb 2027' },
+  { id: 'palm', name: 'Red Palm Oil, 1 L', price: 9.99, seller: 'Accra Market Co.', icon: 'ph ph-drop', bestBy: 'Jun 2027' },
+  { id: 'jollof', name: 'Jollof Spice Kit', price: 8.49, seller: 'Mama Put Pantry', icon: 'ph ph-pepper', bestBy: 'Jan 2027' },
+  { id: 'plantain', name: 'Plantain Chips, 6-pack', price: 11.99, seller: 'Dakar Snacks', icon: 'ph ph-cookie', bestBy: 'Dec 2026' },
+  { id: 'shea', name: 'Raw Shea Butter, 16 oz', price: 15.99, seller: 'Tamale Naturals', icon: 'ph ph-flower-lotus', bestBy: 'Aug 2028', now: true },
+  { id: 'fabric', name: 'Ankara Print Fabric, 6 yd', price: 34.00, seller: 'Kente & Co.', icon: 'ph ph-scissors', bestBy: 'n/a', now: true },
+];
+const BYID = Object.fromEntries(CATALOG.map(p => [p.id, p]));
+const NM = l => l.name || (BYID[l.id] || {}).name || l.id;
+const SELLER = n => (CATALOG.find(p => p.name === n) || {}).seller || 'Marketplace seller';
+const PRECAT = CATALOG.filter(p => !p.now);
+const CATS = ['Pantry', 'Spices', 'Snacks', 'Oils', 'Grains & flours', 'Beverages'];
+const SLOTS = [
+  { k: 'hero', name: 'Storefront hero', spec: '1920 × 640', ar: 3, where: 'Home + pre-order page', req: true },
+  { k: 'pdp', name: 'Product page banner', spec: '1200 × 300', ar: 4, where: 'Eligible product pages' },
+  { k: 'story', name: 'Social story', spec: '1080 × 1920', ar: 0.5625, where: 'Instagram, TikTok, WhatsApp' },
+  { k: 'feed', name: 'Social feed post', spec: '1080 × 1080', ar: 1, where: 'Instagram + Facebook feed' },
+  { k: 'email', name: 'Email header', spec: '1200 × 400', ar: 3, where: 'Announcement + reminders' },
+];
+const SOURCES = [['Site · hero', 18], ['Site · ribbon', 10], ['Site · product page', 12], ['Mobile app', 14], ['Instagram', 12], ['Facebook', 9], ['TikTok', 7], ['WhatsApp', 8], ['Email', 7], ['SMS', 3]];
+const FIRST = ['Adaeze', 'Kwame', 'Fatou', 'Chidi', 'Amina', 'Tunde', 'Grace', 'Ibrahim', 'Ngozi', 'Yaw', 'Aisha', 'Emeka', 'Zainab', 'Kofi', 'Blessing', 'Samuel', 'Halima', 'Olu', 'Mariam', 'Jide'];
+const LAST = ['Okafor', 'Mensah', 'Diallo', 'Eze', 'Bello', 'Adeyemi', 'Owusu', 'Sow', 'Nwosu', 'Boateng', 'Kamara', 'Obi', 'Musa', 'Asante', 'Tetteh', 'Yusuf', 'Bakare', 'Cissé'];
+const SEED = (window.ATPre && window.ATPre.SEED) || [];
+const T = s => new Date(s.length === 10 ? s + 'T12:00' : s).getTime();
+const fD = t => new Date(t).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+const fS = t => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+const fDT = t => fD(t) + ', ' + new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+const money = n => '$' + n.toFixed(2);
+const num = n => n.toLocaleString('en-US');
+function rng(seed) { let h = 2166136261; for (const c of seed) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return () => { h += 0x6D2B79F5; let t = h; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const PILL = { open: ['var(--at-green-50)', 'var(--at-green-800)', 'Open', 'var(--at-green-600)'], upcoming: ['var(--at-ink-100)', 'var(--at-ink-800)', 'Scheduled', 'var(--at-ink-500)'], closed: ['var(--at-gold-100)', 'var(--at-gold-900)', 'Closed · delivering', 'var(--at-gold-500)'], delivered: ['var(--at-ink-100)', 'var(--at-ink-600)', 'Delivered', 'var(--at-ink-300)'], draft: ['var(--at-ink-50)', 'var(--at-ink-600)', 'Draft', 'var(--at-ink-200)'], paused: ['var(--at-red-50)', 'var(--at-red-700)', 'Paused', 'var(--at-red-500)'] };
+
+class Component extends DCLogic {
+  state = {
+    tab: 'shop', view: 'home', city: 'Lubbock, TX', stage: 'auto', cart: { garri: 2, egusi: 1, shea: 1 }, pdpQty: 1, fulfil: 'door', pdpId: 'garri', supportAsked: false, lastOrder: null,
+    enabled: this.props.preorderEnabled ?? true, fallback: this.props.offFallback ?? 'ship',
+    areas: [], areaQ: '', apC: 'US', apR: 'TX', apX: '', wzC: 'US', wzR: '', wzX: '', areaClosed: {},
+    placements: { ribbon: true, hero: true, badge: true, pdp: true, cart: true, family: true },
+    windows: SEED, creatives: {}, extra: [], role: 'manager', sel: null, listF: 'all', dTab: 'overview', wiz: null,
+    q: '', fStatus: 'all', fSource: 'all', page: 0, late: null, toast: '', now: Date.now(),
+  };
+  _gen = {};
+  componentDidMount() {
+    const ld = () => { const d = PRE().load(), st = d.settings; this.setState({ creatives: d.creatives, windows: d.windows, extra: d.extra, enabled: st.enabled, areas: st.areas, placements: st.placements, fallback: st.fallback }); };
+    const boot = () => { if (!PRE()) { this._bt = setTimeout(boot, 60); return; } ld(); this._geoU = PRE().geo.subscribe(() => this.forceUpdate()); }; boot(); this._onStore = (e) => { if (e.key === LS) ld(); }; window.addEventListener('storage', this._onStore);
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('embed')) { const root = () => document.querySelector('main') || document.body.firstElementChild; const post = () => { try { const el = root(); if (!el) return; const r = el.getBoundingClientRect(); window.parent.postMessage({ type: 'at-embed-h', h: Math.ceil(r.height + 8) }, '*'); } catch (e) {} }; const watch = () => { const el = root(); if (!el) { setTimeout(watch, 100); return; } if (window.ResizeObserver) { this._ro = new ResizeObserver(post); this._ro.observe(el); } post(); }; watch(); this._postH = post; setTimeout(post, 300); const lv = q.get('lv'), r = q.get('role'); const role = r === 'support' ? 'cs' : (lv === 'F' || lv === 'E') ? 'manager' : lv === 'A' ? 'cs' : ['finance', 'auditor', 'productOwner'].includes(r) ? 'analyst' : 'viewer'; this.setState({ embedded: true, tab: 'bo', role }); }
+    this._t = setInterval(() => this.setState({ now: Date.now() }), 1000);
+  }
+  componentWillUnmount() { if (this._ro) this._ro.disconnect(); clearInterval(this._t); clearTimeout(this._tt); window.removeEventListener('storage', this._onStore); }
+  syncSelects() { cancelAnimationFrame(this._sr); this._sr = requestAnimationFrame(() => { document.querySelectorAll('select[data-sync]').forEach(el => { const want = el.getAttribute('data-sync') || ''; if (el.value !== want && [...el.options].some(o => o.value === want)) el.value = want; }); }); }
+  componentDidUpdate(pp, ps) {
+    pp = pp || {}; ps = ps || this._ps || {}; this._ps = this.state;
+    this.syncSelects();
+    if (pp.preorderEnabled !== this.props.preorderEnabled && this.props.preorderEnabled != null) this.setState({ enabled: this.props.preorderEnabled });
+    if (pp.offFallback !== this.props.offFallback && this.props.offFallback) this.setState({ fallback: this.props.offFallback });
+    const s = this.state;
+    if (PRE() && (ps.creatives !== s.creatives || ps.windows !== s.windows || ps.extra !== s.extra || ps.enabled !== s.enabled || ps.areas !== s.areas || ps.placements !== s.placements || ps.fallback !== s.fallback)) {
+      if (!PRE().save({ creatives: s.creatives, windows: s.windows, extra: s.extra, settings: { enabled: s.enabled, areas: s.areas, placements: s.placements, fallback: s.fallback } })) this.flash('Storage full. Creative kept for this session only.');
+    }
+  }
+  flash(t) { clearTimeout(this._tt); this.setState({ toast: t }); this._tt = setTimeout(() => this.setState({ toast: '' }), 2600); }
+  statusOf(w) {
+    const now = this.state.now;
+    if (w.draft) return 'draft'; if (!w.active) return 'paused';
+    if (now < T(w.opens)) return 'upcoming'; if (now <= T(w.closes)) return 'open';
+    if (now < T(w.delivers) + DAY) return 'closed'; return 'delivered';
+  }
+  gen(w) {
+    const key = w.id + w.seedN; if (this._gen[key]) return this._gen[key];
+    const r = rng(w.id), out = [], o = T(w.opens), end = Math.min(this.state.now, T(w.closes)), span = Math.max(0, end - o);
+    const tot = SOURCES.reduce((a, b) => a + b[1], 0);
+    for (let i = 0; i < (span ? w.seedN : 0); i++) {
+      let x = r() * tot, src = SOURCES[0][0]; for (const [k, v] of SOURCES) { if ((x -= v) < 0) { src = k; break; } }
+      const lines = []; const n = 1 + Math.floor(r() * 3); for (let j = 0; j < n; j++) { const p = PRECAT[Math.floor(r() * PRECAT.length)]; lines.push({ id: p.id, qty: 1 + Math.floor(r() * 2) }); }
+      const door = w.pickup ? r() < 0.7 : true;
+      const sub = lines.reduce((a, l) => a + BYID[l.id].price * l.qty, 0);
+      const cancelled = r() < 0.04;
+      out.push({ id: `${slugOf(w)}-${1001 + i}`, win: w.id, customer: FIRST[Math.floor(r() * FIRST.length)] + ' ' + LAST[Math.floor(r() * LAST.length)], placed: o + Math.pow(r(), 0.85) * span, source: src, lines, units: lines.reduce((a, l) => a + l.qty, 0), fulfil: door ? 'Door' : 'Pickup', total: sub + (door ? 7.99 : 0), status: cancelled ? 'Cancelled' : 'Paid', note: '' });
+    }
+    if (this.statusOf(w) === 'closed' || this.statusOf(w) === 'delivered') {
+      for (let i = 0; i < Math.round(w.seedN * 0.03); i++) { const p = CATALOG[Math.floor(r() * 5)]; out.push({ id: `${slugOf(w)}-L${11 + i}`, win: w.id, customer: FIRST[Math.floor(r() * 20)] + ' ' + LAST[Math.floor(r() * 18)], placed: T(w.closes) + r() * DAY * 1.5, source: 'Agent (late)', lines: [{ id: p.id, qty: 1 }], units: 1, fulfil: 'Door', total: p.price + 7.99, status: 'Late add', note: 'Customer called · by T. Ade (CS)' }); }
+    }
+    return (this._gen[key] = out);
+  }
+  ordersFor(w) { const TAG = { 'Site · hero': 'hero', 'Site · ribbon': 'ribbon', 'Site · product page': 'pdp', 'Mobile app': 'app', Instagram: 'ig&cr=story', Facebook: 'fb&cr=feed', TikTok: 'tt&cr=story', WhatsApp: 'wa', Email: 'email&cr=announce', SMS: 'sms', 'Agent (late)': 'agent' }; return [...this.gen(w), ...this.state.extra.filter(e => e.win === w.id)].map(o => (o.addr ? o : { ...o, ...this.fakeAddr(o, w), srcTag: 'src=' + (TAG[o.source] || 'direct') + '&po=' + w.id })).sort((a, b) => b.placed - a.placed); }
+  fakeAddr(o, w) {
+    const k = (w.targets || [])[0] || 'US/TX/Lubbock'; const [c, r, city0] = k.split('/'); const G = PRE() ? PRE().GEO : {}; const city = city0 || ((((G[c] || {}).regions || {})[r] || {}).cities || [r])[0];
+    const rr = rng(String(o.id)); const ST = ['19th St', 'Indiana Ave', 'Slide Rd', 'Quaker Ave', 'University Ave', 'Main St', 'Elm St', 'Oak Dr', 'Maple Ave', 'Cedar Ln', 'Park Blvd', 'Lakeview Dr'];
+    const AC = { Lubbock: '806', Amarillo: '806', 'El Paso': '915', Midland: '432', Odessa: '432', Toronto: '416', Mississauga: '905', Brampton: '905', Houston: '713', Dallas: '214', Atlanta: '404' };
+    const ZP = { Lubbock: '794', Amarillo: '791', 'El Paso': '799', Midland: '797', Odessa: '797', Houston: '770', Dallas: '752', Atlanta: '303' };
+    const n = 100 + Math.floor(rr() * 8900), st = ST[Math.floor(rr() * ST.length)];
+    const zip = c === 'CA' ? 'L' + Math.floor(rr() * 9) + 'T ' + Math.floor(rr() * 9) + 'K' + Math.floor(rr() * 9) : (ZP[city] || '7' + Math.floor(rr() * 90 + 10)) + String(Math.floor(rr() * 90 + 10));
+    const phone = (c === 'US' || c === 'CA' ? '+1 ' : '+') + (AC[city] || '555') + ' 555 0' + String(Math.floor(rr() * 900 + 100));
+    const notes = ['', '', '', 'Leave at side door', 'Call on arrival', 'Gate code 4512', 'Ring twice'];
+    return { phone, email: '', addr: n + ' ' + st, city, region: r, zip, dnote: notes[Math.floor(rr() * notes.length)] };
+  }
+  directory(w) {
+    const P0 = [['Adaeze Nwosu', 'adaeze.n@gmail.com'], ['Kwame Mensah', 'kwame.mensah@outlook.com'], ['Fatou Diallo', 'fatou.d@yahoo.com'], ['Chidi Eze', 'chidi.eze@gmail.com'], ['Grace Owusu', 'grace.owusu@icloud.com'], ['Ibrahim Sow', 'isow@gmail.com']];
+    const pick = f => ({ line1: f.addr, city: f.city, region: f.region, zip: f.zip });
+    return P0.map(([name, email], i) => { const f = this.fakeAddr({ id: name }, w), f2 = this.fakeAddr({ id: name + '#2' }, w); return { id: 'c' + i, name, email, phone: f.phone, city: f.city, region: f.region, addrs: [{ id: 'a1', label: 'Home', ...pick(f) }].concat(i % 2 ? [{ id: 'a2', label: 'Work', ...pick(f2) }] : []) }; });
+  }
+  dl(name, rows) {
+    const csv = rows.map(r => r.map(v => { v = String(v ?? ''); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(',')).join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    this.flash(`Exported ${rows.length - 1} rows · ${name}`);
+  }
+  readImg(file, cb) {
+    const fr = new FileReader();
+    fr.onload = () => { const img = new Image(); img.onload = () => { const k = Math.min(1, 1400 / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); cb({ src: c.toDataURL('image/jpeg', 0.82), w: img.width, h: img.height, name: file.name }); }; img.src = fr.result; };
+    fr.readAsDataURL(file);
+  }
+  renderVals() {
+    const s = this.state, set = o => this.setState(o), now = s.now;
+    const role = s.role, canEdit = role === 'manager', canExport = role === 'manager' || role === 'analyst', canLate = role === 'manager' || role === 'cs';
+    const wins = s.windows;
+    const P = s.placements;
+    const G = PRE() ? PRE().GEO : {};
+    const [cityName, cityRegion] = String(s.city).split(', ');
+    const cityCountry = PRE() ? PRE().countryOf(cityRegion) : 'US';
+    const covers = w => (PRE() ? PRE().covers(w, cityCountry, cityRegion, cityName) : false);
+    const scopeOn = (c, r, x) => (PRE() ? PRE().areaOn({ areas: s.areas }, c, r, x) : false);
+    const winOn = w => (w.targets || []).some(k => { const [c, r, x] = k.split('/'); return x ? scopeOn(c, r, x) : (s.areas || []).some(a => a.key === k && a.on); });
+    const isMetro = !wins.some(w => covers(w) && !w.draft);
+
+    // ---- storefront window resolution
+    const cw = wins.filter(w => covers(w) && !w.draft);
+    let win = null, stage = null;
+    if (s.stage === 'auto') {
+      for (const want of ['open', 'upcoming', 'closed']) { const f = cw.find(w => this.statusOf(w) === want); if (f) { win = f; stage = want; break; } }
+    } else { win = cw.filter(w => w.active).sort((a, b) => T(b.opens) - T(a.opens)).find(w => this.statusOf(w) !== 'delivered') || cw[0]; stage = s.stage; }
+    const sfOn = !isMetro && !!win && win.active && s.enabled && scopeOn(cityCountry, cityRegion, cityName);
+    const sfOff = !isMetro && !sfOn;
+    const forced = s.stage !== 'auto';
+    let target = 0;
+    if (win) {
+      const real = stage === 'open' ? T(win.closes) : stage === 'upcoming' ? T(win.opens) : T(win.delivers);
+      target = real > now ? real : now + (stage === 'open' ? 3.18 : stage === 'upcoming' ? 4.3 : 2.4) * DAY;
+    }
+    const diff = Math.max(0, target - now), cdD = Math.floor(diff / DAY), cdH = Math.floor(diff % DAY / 3600000), cdM = Math.floor(diff % 3600000 / 60000), cdS = Math.floor(diff % 60000 / 1000);
+    const wOrders = win ? this.ordersFor(win).filter(o => o.status !== 'Cancelled') : [];
+    const cre = (win && s.creatives[win.id]) || {};
+    const sfOpen = sfOn && stage === 'open', sfUp = sfOn && stage === 'upcoming', sfClosed = sfOn && stage === 'closed';
+    const opensT = win ? fDT(T(win.opens)) : '', closesT = win ? fDT(T(win.closes)) : '', deliversT = win ? fD(T(win.delivers)) : '';
+    const tlState = i => { const idx = { upcoming: -1, open: 0, closed: 1 }[stage] ?? 2; return i <= idx ? ['var(--at-green-600)', 'var(--at-green-700)', 'ph-fill ph-check-circle'] : i === idx + 1 ? ['var(--at-gold-500)', 'var(--at-gold-800)', 'ph-fill ph-circle-half'] : ['var(--at-ink-200)', 'var(--at-ink-500)', 'ph ph-circle']; };
+    const sf = win ? {
+      name: win.name, headline: stage === 'closed' ? `Pre-order closed. ${cityName} deliveries go out ${deliversT}.` : win.headline,
+      kicker: { open: `${cityName} pre-order · open`, upcoming: `${cityName} pre-order · opens soon`, closed: `${cityName} pre-order · closed` }[stage],
+      stageLabel: { open: 'Open now', upcoming: 'Opens soon', closed: 'Closed' }[stage],
+      pillBg: PILL[stage === 'upcoming' ? 'upcoming' : stage].concat()[0], pillFg: PILL[stage === 'upcoming' ? 'upcoming' : stage][1],
+      ribbon: stage === 'open' ? win.ribbon : stage === 'upcoming' ? `${cityName} pre-order opens ${fS(T(win.opens))}` : `${cityName} pre-order is closed`,
+      ribbonSub: stage === 'open' ? `Order by ${closesT} · delivered ${deliversT} · $7.99 flat` : stage === 'upcoming' ? `Order ${fS(T(win.opens))} – ${fS(T(win.closes))} · delivered ${deliversT}` : `Delivering ${deliversT}. Missed it? Call ${PHONE}`,
+      cdLabel: stage === 'open' ? 'Closes in' : stage === 'upcoming' ? 'Opens in' : 'Delivers in',
+      cd: [{ v: String(cdD), l: 'days' }, { v: String(cdH).padStart(2, '0'), l: 'hrs' }, { v: String(cdM).padStart(2, '0'), l: 'min' }, { v: String(cdS).padStart(2, '0'), l: 'sec' }],
+      cdShort: `${cdD}d ${String(cdH).padStart(2, '0')}h ${String(cdM).padStart(2, '0')}m ${String(cdS).padStart(2, '0')}s`,
+      cta: stage === 'open' ? 'Pre-order now' : stage === 'upcoming' ? 'See what\'s coming' : 'Missed it? Contact us',
+      opensT, closesT, deliversT,
+      hasHero: !!cre.hero, noHero: !cre.hero, heroImg: cre.hero ? cre.hero.src : '', heroBg: cre.hero ? `url("${cre.hero.src}")` : 'none',
+      hasPdp: !!cre.pdp, noPdp: !cre.pdp, pdpImg: cre.pdp ? cre.pdp.src : '', pdpBg: cre.pdp ? `url("${cre.pdp.src}")` : 'none',
+      showCount: win.showCount && stage !== 'upcoming', countText: `${num(wOrders.length + (forced && stage === 'open' && !wOrders.length ? 0 : 0))} pre-orders from ${cityName} so far`,
+      catsText: win.cats.join(' · '),
+      pdpNote: stage === 'open' ? `Order by ${closesT}. Charged at checkout. Cancel for free until the pre-order closes.` : stage === 'upcoming' ? `You can pre-order from ${opensT}.` : `This pre-order closed on ${closesT}. Call ${PHONE} to ask about a late add.`,
+      timeline: [['Opens', opensT], ['Closes', closesT], ['Delivered', deliversT]].map(([label, date], i) => { const st = tlState(i); return { label, date, bar: st[0], fg: st[1], icon: st[2] }; }),
+    } : {};
+    const fb = s.fallback;
+    const qty = id => s.cart[id] || 0;
+    const setQ = (id, n) => { const c = { ...s.cart }; if (n <= 0) delete c[id]; else c[id] = n; set({ cart: c }); };
+    const isPreItem = p => sfOn && !p.now;
+    const preBlocked = sfOn && !sfOpen, waitBlocked = sfOff && fb === 'waitlist';
+    const mkProd = p => {
+      const pre = isPreItem(p), q = qty(p.id), dis = (pre && preBlocked) || waitBlocked;
+      return { ...p, price: money(p.price), badge: pre && P.badge, qty: q, showAdd: q === 0, showStep: q > 0,
+        tag: pre ? (sfOpen ? `Pre-order · delivered ${fS(T(win.delivers))}` : sfUp ? `Pre-order opens ${fS(T(win.opens))}` : 'Pre-order closed') : isMetro ? 'Arrives tomorrow' : waitBlocked ? 'Not delivering here yet' : 'Ships now · UPS Ground 3–5 days',
+        tagColor: pre ? (sfOpen ? 'var(--at-gold-800)' : 'var(--at-ink-600)') : isMetro ? 'var(--at-green-700)' : 'var(--at-ink-600)',
+        open: () => set({ view: 'pdp', pdpId: p.id, pdpQty: 1 }),
+        add: () => !dis && setQ(p.id, q + 1), dec: () => setQ(p.id, q - 1), decIcon: q === 1 ? 'ph ph-trash' : 'ph ph-minus',
+        disabled: dis, op: dis ? 0.45 : 1,
+        addLabel: dis ? (pre && sfUp ? `Opens ${fS(T(win.opens))}` : pre ? 'Closed' : 'Unavailable') : 'Add to cart' };
+    };
+    const products = CATALOG.map(mkProd), preProducts = PRECAT.map(mkProd);
+    const lines = Object.entries(s.cart).map(([id, q]) => ({ p: BYID[id], q }));
+    const preL = lines.filter(l => isPreItem(l.p)), nowL = lines.filter(l => !isPreItem(l.p));
+    const subPre = preL.reduce((a, l) => a + l.p.price * l.q, 0), subNow = nowL.reduce((a, l) => a + l.p.price * l.q, 0), sub = subPre + subNow;
+    const pickup = sfOn && win.pickup && s.fulfil === 'pickup';
+    const delivPre = preL.length ? (pickup ? 0 : 7.99) : 0;
+    const delivNow = nowL.length ? (isMetro ? 7.99 : waitBlocked ? 0 : 14.99) : 0;
+    const deliv = delivPre + delivNow;
+    const mkLine = l => ({ ...mkProd(l.p), lineTotal: money(l.p.price * l.q) });
+    const cartCount = lines.reduce((a, l) => a + l.q, 0);
+    const pdpP = BYID[s.pdpId], pdpPre = isPreItem(pdpP), pdpDis = (pdpPre && preBlocked) || waitBlocked;
+    const lo = s.lastOrder;
+
+    // ---- back office
+    const selW = wins.find(w => w.id === s.sel);
+    const inWizard = !!s.wiz, inSettings = !inWizard && s.sel === 'settings', inDetail = !inWizard && !!selW, inList = !inWizard && !inSettings && !inDetail;
+    const selOrders = selW ? this.ordersFor(selW) : [];
+    const paid = selOrders.filter(o => o.status !== 'Cancelled');
+    const selSt = selW ? this.statusOf(selW) : 'draft';
+    const fil = selOrders.filter(o => (s.fStatus === 'all' || o.status === s.fStatus) && (s.fSource === 'all' || o.source === s.fSource) && (!s.q || (o.id + ' ' + o.customer + ' ' + (o.phone || '') + ' ' + (o.addr || '') + ' ' + (o.zip || '')).toLowerCase().includes(s.q.toLowerCase())));
+    const PER = 12, pages = Math.max(1, Math.ceil(fil.length / PER)), page = Math.min(s.page, pages - 1);
+    const rowsCsv = list => [['Order', 'Pre-order', 'Customer', 'Phone', 'Email', 'Street', 'City', 'Region', 'Postal code', 'Delivery note', 'Placed', 'Channel', 'Tracking tag', 'Items', 'Units', 'Fulfilment', 'Total', 'Status', 'Note'], ...list.map(o => [o.id, selW.name, o.customer, o.phone, o.email || '', o.addr, o.city, o.region, o.zip, o.dnote, new Date(o.placed).toISOString(), o.source, o.srcTag, o.lines.map(l => `${NM(l)} x${l.qty}`).join('; '), o.units, o.fulfil, o.total.toFixed(2), o.status, o.note])];
+    const cnt = (arr, f) => { const m = {}; arr.forEach(o => { const k = f(o); m[k] = (m[k] || 0) + 1; }); return m; };
+    const srcM = cnt(paid, o => o.source), srcMax = Math.max(1, ...Object.values(srcM));
+    const units = {}; paid.forEach(o => o.lines.forEach(l => { const k = NM(l); units[k] = (units[k] || 0) + l.qty; })); const uMax = Math.max(1, ...Object.values(units));
+    let byDay = [];
+    if (selW && selOrders.length) {
+      const d0 = new Date(T(selW.opens)); d0.setHours(0, 0, 0, 0); const last = Math.min(now, T(selW.closes) + 2 * DAY);
+      const days = Math.max(1, Math.ceil((last - d0.getTime()) / DAY)); const arr = Array(days).fill(0);
+      paid.forEach(o => { const i = Math.floor((o.placed - d0.getTime()) / DAY); if (i >= 0 && i < days) arr[i]++; });
+      const mx = Math.max(1, ...arr);
+      byDay = arr.map((n, i) => { const t = d0.getTime() + i * DAY; return { h: Math.max(2, n / mx * 100) + '%', tip: `${fS(t)}: ${n}`, lbl: i % Math.ceil(days / 7) === 0 ? fS(t) : '', color: t > T(selW.closes) ? 'var(--at-gold-500)' : 'var(--at-green-600)' }; });
+    }
+    const selCre = (selW && s.creatives[selW.id]) || {};
+    const r2 = rng((selW && selW.id) || 'x');
+    const PL = [['hero', 'Storefront hero', ['Site · hero']], ['ribbon', 'Header ribbon (text)', ['Site · ribbon']], ['pdp', 'Product page banner', ['Site · product page']], ['story', 'Social story', ['Instagram', 'TikTok', 'WhatsApp']], ['feed', 'Social feed', ['Facebook']], ['email', 'Email header', ['Email']]];
+    const adRows = PL.map(([k, name, srcs]) => { const ord = paid.filter(o => srcs.includes(o.source)).length; const imp = Math.round(ord * (55 + r2() * 40) + 200 * r2()); const clk = Math.round(ord * (3 + r2() * 3) + 5 * r2()); const has = k === 'ribbon' ? !!selW?.ribbon : !!selCre[k]; return { name, creative: has ? 'Uploaded' : 'Missing', cColor: has ? 'var(--at-green-700)' : 'var(--at-red-600)', imp: num(imp), clicks: num(clk), ctr: imp ? (clk / imp * 100).toFixed(1) + '%' : '–', orders: ord, raw: [name, has ? 'yes' : 'no', imp, clk, imp ? (clk / imp * 100).toFixed(2) : 0, ord] }; });
+    const revenue = paid.reduce((a, o) => a + o.total, 0), uTot = paid.reduce((a, o) => a + o.units, 0);
+    const winList = wins.map(w => { const st = this.statusOf(w), pl = PILL[st], n = this.ordersFor(w).filter(o => o.status !== 'Cancelled').length; const cityOff = !s.enabled || !winOn(w); return { name: w.name, where: locName(w.targets), statusLabel: cityOff && st !== 'delivered' && st !== 'draft' ? 'City off' : pl[2], pillBg: cityOff ? 'var(--at-red-50)' : pl[0], pillFg: cityOff ? 'var(--at-red-700)' : pl[1], edge: pl[3], dates: `${fS(T(w.opens))} – ${fS(T(w.closes))} · delivers ${fS(T(w.delivers))}`, countText: `${num(n)} pre-orders`, pick: () => set({ sel: w.id, wiz: null, page: 0, dTab: 'overview' }), bg: s.sel === w.id && !inWizard ? 'var(--at-gold-50)' : 'var(--at-ink-0)', border: s.sel === w.id && !inWizard ? 'var(--at-gold-400)' : 'var(--at-color-border)' }; });
+
+    // ---- wizard
+    const wz = s.wiz ? s.wiz.d : null, step = s.wiz ? s.wiz.step : 0;
+    const wzUpd = (k, v) => set({ wiz: { ...s.wiz, d: { ...s.wiz.d, [k]: v } } });
+    const wzSet = Object.fromEntries(['name', 'city', 'opens', 'closes', 'delivers', 'ribbon', 'headline', 'budget', 'sms'].map(k => [k, e => wzUpd(k, e.target.value)]).concat(['door', 'pickup', 'showCount'].map(k => [k, e => wzUpd(k, e.target.checked)])));
+    const wzCre = (wz && s.creatives[wz.id]) || {};
+    const checks = wz ? [
+      [!!wz.name.trim(), 'Name set'],
+      [!!(wz.targets && wz.targets.length), 'At least one pre-order area chosen'],
+      [T(wz.closes) > T(wz.opens), 'Closing date is after opening date'],
+      [T(wz.delivers) >= T(wz.closes) - DAY / 2, 'Delivery date is on or after closing date'],
+      [!!wzCre.hero, 'Storefront hero uploaded (required)'],
+      [!!wz.ribbon.trim(), 'Ribbon text set'],
+      [wz.door || wz.pickup, 'At least one fulfilment option'],
+    ] : [];
+    const blocking = checks.filter(c => !c[0]).length;
+    const publish = () => {
+      const d = { ...wz, draft: false, active: true, seedN: wz.seedN || 0 };
+      const exists = wins.some(w => w.id === d.id);
+      set({ windows: exists ? wins.map(w => w.id === d.id ? d : w) : [d, ...wins], wiz: null, sel: d.id, dTab: 'overview' });
+      this.flash(`${d.name} published. Placements and comms will follow its dates.`);
+    };
+    const creativeTarget = inWizard ? wz.id : selW ? selW.id : null;
+    const tCre = (creativeTarget && s.creatives[creativeTarget]) || {};
+    const creativeCards = SLOTS.map(sl => { const c = tCre[sl.k]; const mism = c && Math.abs(c.w / c.h - sl.ar) / sl.ar > 0.12; return { ...sl, ar: String(sl.ar), has: !!c, none: !c, src: c ? c.src : '', bg: c ? `url("${c.src}")` : 'none', dash: c ? 'transparent' : 'var(--at-ink-300)', status: !c ? (sl.req ? 'Required' : 'Missing') : mism ? `Ratio off · ${c.w}×${c.h}` : 'Uploaded', pillBg: !c ? (sl.req ? 'var(--at-red-50)' : 'var(--at-ink-100)') : mism ? 'var(--at-gold-100)' : 'var(--at-green-50)', pillFg: !c ? (sl.req ? 'var(--at-red-700)' : 'var(--at-ink-700)') : mism ? 'var(--at-gold-900)' : 'var(--at-green-800)', upLabel: c ? 'Replace' : 'Upload',
+      onFile: e => { const f = e.target.files && e.target.files[0]; if (!f) return; this.readImg(f, img => { this.setState(st => ({ creatives: { ...st.creatives, [creativeTarget]: { ...(st.creatives[creativeTarget] || {}), [sl.k]: img } } })); this.flash(`${sl.name} uploaded`); }); e.target.value = ''; },
+      remove: () => { const n = { ...tCre }; delete n[sl.k]; set({ creatives: { ...s.creatives, [creativeTarget]: n } }); } }; });
+    const COMMS = [['announce', 'Announcement', 'At opening time', 'Email · push · SMS'], ['remind', 'Reminder', '48 hours before close', 'Email · push'], ['last', 'Last call', '6 hours before close', 'Push · SMS'], ['closed', 'Closed + delivery date', 'At closing time', 'Email'], ['ofd', 'Out for delivery', 'Delivery day (driver app events)', 'SMS · push'], ['social', 'Paid social', 'Opening → closing, geo-targeted', 'Instagram · Facebook · TikTok']];
+    const smsLen = wz ? (wz.sms || '').length : 0;
+    const late = s.late, lateItems = late ? late.items : [];
+    const lateSub = lateItems.reduce((a, id) => a + BYID[id].price, 0);
+    const tg = on => ({ track: on ? 'var(--at-green-600)' : 'var(--at-ink-300)', knob: on ? '21px' : '3px' });
+    const chip = on => ({ bg: on ? 'var(--at-ink-1000)' : 'var(--at-ink-0)', fg: on ? 'var(--at-ink-0)' : 'var(--at-ink-800)', border: on ? 'var(--at-ink-1000)' : 'var(--at-color-border-strong)' });
+    const newDraft = () => ({ id: 'pre-' + Date.now().toString(36), targets: [], name: 'New pre-order', opens: '2026-10-20T09:00', closes: '2026-11-01T23:59', delivers: '2026-11-04', ribbon: 'Pre-order is open', headline: '', cats: ['Pantry', 'Spices'], door: true, pickup: false, showCount: true, active: true, draft: true, budget: 200, sms: 'AfroTransact: pre-order open. afrt.co/pre Reply STOP to opt out', comms: { announce: true, remind: true, last: true, closed: true, ofd: true, social: true }, seedN: 0 });
+    const selC = (selW && s.creatives[selW.id]) || {};
+
+    return {
+      embedded: !!s.embedded, notEmbedded: !s.embedded, mainPad: s.embedded ? 'var(--at-space-2) 0 var(--at-space-8)' : 'var(--at-space-6) var(--at-page-gutter) var(--at-space-16)', masterKnobSm: s.enabled ? '17px' : '3px',
+      roleName: { manager: 'Pre-order manager (open, edit, upload, export, late add)', cs: 'Customer service (view + late add)', analyst: 'Analyst (view + export)', viewer: 'View only' }[role],
+      tabs: [['shop', 'Storefront', 'ph ph-storefront'], ['bo', 'Back office', 'ph ph-sliders-horizontal'], ['how', 'How it works', 'ph ph-flow-arrow']].map(([k, label, icon]) => ({ label, icon, go: () => set({ tab: k }), bg: s.tab === k ? 'var(--at-ink-50)' : 'transparent', fg: s.tab === k ? 'var(--at-ink-900)' : 'var(--at-ink-200)' })),
+      isShop: s.tab === 'shop', isBo: s.tab === 'bo', isHow: s.tab === 'how',
+      toggleMaster: () => { set({ enabled: !s.enabled }); this.flash(`Pre-order switched ${s.enabled ? 'off' : 'on'} for all cities`); },
+      masterLabel: s.enabled ? 'on' : 'off', masterTrack: s.enabled ? 'var(--at-green-600)' : 'var(--at-ink-500)', masterKnob: s.enabled ? '21px' : '3px', masterKnobLg: s.enabled ? '30px' : '4px',
+      // storefront
+      city: s.city, onCity: e => set({ city: e.target.value, view: s.view === 'confirm' ? 'home' : s.view, supportAsked: false }), cityName,
+      stageOpts: [['auto', 'Live dates'], ['upcoming', 'Upcoming'], ['open', 'Open'], ['closed', 'Closed']].map(([k, label]) => ({ label, pick: () => set({ stage: k }), bg: s.stage === k ? 'var(--at-ink-0)' : 'transparent', fg: s.stage === k ? 'var(--at-ink-900)' : 'var(--at-ink-600)', sh: s.stage === k ? 'var(--at-shadow-sm)' : 'none' })),
+      shopTabs: [['home', 'Home'], ['pre', 'Pre-order page'], ['pdp', 'Product'], ['cart', `Cart (${cartCount})`]].map(([k, label]) => ({ label, go: () => set({ view: k }), line: s.view === k ? 'var(--at-gold-500)' : 'transparent' })),
+      isHome: s.view === 'home', isPre: s.view === 'pre', isPdp: s.view === 'pdp', isCart: s.view === 'cart', isConfirm: s.view === 'confirm',
+      cartCount, goCart: () => set({ view: 'cart' }), goPre: () => set({ view: 'pre' }),
+      sf, sfOn, sfOff, sfOpen, sfClosed, sfMetro: isMetro, sfNotOn: !sfOn, sfLocked: preL.length > 0 && preBlocked,
+      showRibbon: sfOn && P.ribbon,
+      ribbonBg: sfOpen ? 'var(--at-gold-100)' : sfClosed ? 'var(--at-ink-100)' : 'var(--at-ink-50)', ribbonFg: sfOpen ? 'var(--at-gold-900)' : 'var(--at-ink-800)',
+      offRibbon: fb === 'ship' ? `There's no pre-order in ${cityName} right now. Orders ship by UPS Ground in 3–5 days.` : `We don't deliver to ${cityName} yet. Join the waitlist to hear when the next pre-order opens.`,
+      offHeadline: fb === 'ship' ? 'Shipping by UPS Ground for now.' : `Pre-orders are coming to ${cityName}.`,
+      offBody: fb === 'ship' ? 'There\'s no open pre-order for your city. You can still order, and it ships by UPS Ground at the rate quoted at checkout.' : 'We\'ll email you as soon as the next pre-order window opens for your city.',
+      lbkCloses: fS(T((wins.find(w => w.id === 'lbk-7') || { closes: '2026-10-22T23:59' }).closes)),
+      sendFamily: () => set({ city: 'Lubbock, TX', view: 'pre' }),
+      rowTitle: sfOn ? `In the ${cityName} pre-order` : 'Pantry staples',
+      products, preProducts,
+      preUnavailable: !sfOn, preUnavailableText: isMetro ? `${cityName} gets next-day delivery, so there's no pre-order page.` : `No live pre-order for ${cityName}. Shoppers see the fallback set in Back office › Settings.`,
+      phone: PHONE, supportAsked: s.supportAsked, askSupport: () => set({ supportAsked: true }),
+      preRules: [
+        { icon: 'ph ph-calendar-check', text: `Order any time between ${opensT} and ${closesT}.` },
+        { icon: 'ph ph-credit-card', text: 'You pay at checkout. Cancel for a full refund until the pre-order closes.' },
+        { icon: 'ph ph-truck', text: `Everything is delivered on ${deliversT}, $7.99 flat or free pickup. There's no minimum order count.` },
+        { icon: 'ph ph-headset', text: `Missed the closing date? Call ${PHONE}. A rep may be able to add you.` },
+      ],
+      pdp: { ...pdpP, price: money(pdpP.price) },
+      pdpPre, pdpStd: !pdpPre, pdpQty: s.pdpQty,
+      pdpInc: () => set({ pdpQty: s.pdpQty + 1 }), pdpDec: () => set({ pdpQty: Math.max(1, s.pdpQty - 1) }),
+      pdpInCart: qty(s.pdpId) ? `${qty(s.pdpId)} already in cart` : '',
+      pdpAdd: () => { if (pdpDis) return; setQ(s.pdpId, qty(s.pdpId) + s.pdpQty); this.flash(`Added ${s.pdpQty} × ${pdpP.name} to cart`); this.setState({ pdpQty: 1 }); },
+      pdpDisabled: pdpDis, pdpOp: pdpDis ? 0.45 : 1,
+      pdpAddLabel: pdpPre ? (sfOpen ? 'Add to cart' : sfUp ? `Opens ${opensT}` : 'Pre-order closed') : 'Add to cart',
+      showPdpBanner2: pdpPre && P.pdp,
+      stdArrive: isMetro ? 'Arrives tomorrow · $7.99' : waitBlocked ? 'Not delivering here yet' : 'Ships now · UPS Ground, 3–5 days',
+      stdNote: isMetro ? 'In stock on our next-day route.' : pdpP.now ? 'This item isn\'t part of the pre-order, so it ships on its own.' : 'There\'s no open pre-order for this city.',
+      cartEmpty: !lines.length, hasPreLines: preL.length > 0, hasNowLines: nowL.length > 0,
+      preLines: preL.map(mkLine), nowLines: nowL.map(mkLine),
+      nowHead: isMetro ? 'Arrives tomorrow' : waitBlocked ? 'Not deliverable to this city yet' : 'Ships now · UPS Ground, 3–5 days',
+      showFulfil: sfOpen && preL.length > 0,
+      fulfilOpts: (win ? [win.door && ['door', 'ph ph-house-line', 'Door delivery', deliversT, '$7.99'], win.pickup && ['pickup', 'ph ph-storefront', 'Pickup point', `${deliversT}, 10am–2pm`, 'Free']].filter(Boolean) : []).map(([k, icon, title, sub, price]) => ({ icon, title, sub, price, pick: () => set({ fulfil: k }), border: s.fulfil === k ? 'var(--at-green-600)' : 'var(--at-color-border)' })),
+      summaryRows: [{ k: `Items (${cartCount})`, v: money(sub) }, preL.length && { k: pickup ? 'Pre-order · pickup' : 'Pre-order · door delivery', v: money(delivPre) }, nowL.length && { k: isMetro ? 'Next-day delivery' : 'UPS Ground (est.)', v: waitBlocked ? 'n/a' : money(delivNow) }].filter(Boolean),
+      cartTotal: money(sub + deliv),
+      payNotes: [
+        { icon: 'ph ph-credit-card', text: `One payment today for the whole cart: ${money(sub + deliv)}, by card, Apple Pay or ACH.` },
+        { icon: 'ph ph-arrows-split', text: nowL.length ? `Split into two shipments: pre-order items are delivered ${deliversT}, the rest ship now.` : `Pre-order items are delivered together on ${deliversT}.` },
+        { icon: 'ph ph-arrow-u-up-left', text: `Change quantities or cancel pre-order items for a full refund until ${closesT}.` },
+        { icon: 'ph ph-shield-check', text: 'If we miss the delivery date, you choose: a full refund, or wait for the new date.' },
+      ],
+      lockedText: sfUp ? `Pre-order items can be bought from ${opensT}. They stay in your cart until then.` : `The pre-order closed ${closesT}. Remove those items to check out, or call ${PHONE} about a late add.`,
+      placeDisabled: !lines.length || (preL.length > 0 && preBlocked) || waitBlocked, placeOp: !lines.length || (preL.length > 0 && preBlocked) || waitBlocked ? 0.45 : 1,
+      placeLabel: preL.length > 0 && preBlocked ? 'Pre-order not open' : `Place order · ${money(sub + deliv)}`,
+      placeOrder: () => {
+        if (!lines.length || (preL.length && preBlocked) || waitBlocked) return;
+        if (preL.length) {
+          const id = `${slugOf(win)}-${2001 + s.extra.length}`;
+          const o = { id, win: win.id, customer: 'Adaeze Nwosu (demo)', phone: '+1 806 555 0142', email: 'adaeze.n@gmail.com', addr: '4410 19th St', city: cityName, region: cityRegion, zip: '79407', dnote: 'Call on arrival', placed: Date.now(), ...(PRE() ? { source: PRE().attr.get().source, srcTag: PRE().attr.get().tag } : { source: 'Site · direct', srcTag: '' }), lines: preL.map(l => ({ id: l.p.id, qty: l.q })), units: preL.reduce((a, l) => a + l.q, 0), fulfil: pickup ? 'Pickup' : 'Door', total: subPre + delivPre, status: 'Paid', note: 'Placed from storefront preview' };
+          set({ extra: [...s.extra, o], lastOrder: { id, name: win.name, deliv: deliversT, closes: closesT, total: money(sub + deliv), pre: true, win: win.id, nowN: nowL.reduce((a, l) => a + l.q, 0) }, cart: {}, view: 'confirm' });
+        } else set({ lastOrder: { id: 'ORD-' + Math.floor(Math.random() * 90000 + 10000), pre: false, total: money(sub + deliv) }, cart: {}, view: 'confirm' });
+      },
+      conf: lo ? (lo.pre ? { title: `You're in: ${lo.name}`, facts: [{ k: 'Pre-order #', v: lo.id }, { k: 'Delivered', v: lo.deliv }, { k: 'Charged', v: lo.total }], body: `${lo.nowN ? lo.nowN + ' other item(s) ship now with tracking. ' : ''}Pre-order items can be changed or cancelled for a full refund until ${lo.closes}. If you've opted in, we'll text you on delivery day.` } : { title: 'Order placed', facts: [{ k: 'Order #', v: lo.id }, { k: 'Total', v: lo.total }], body: 'You\'ll get tracking by email.' }) : { title: '', facts: [], body: '' },
+      goBo: () => set({ tab: 'bo', sel: lo && lo.win ? lo.win : s.sel, dTab: 'orders', wiz: null, page: 0, q: '', fStatus: 'all', fSource: 'all' }),
+      // back office
+      role, onRole: e => set({ role: e.target.value }), canEdit, noEdit: !canEdit, canExport, canLate,
+      roleNote: { manager: 'Pre-order manager: can open, edit, pause and publish pre-orders, upload creatives, export data and add late orders.', cs: 'Customer service: can view pre-orders and add late orders for customers who call or chat. Can\'t export or edit.', analyst: 'Analyst: view only, plus exports and analytics.', viewer: 'Viewer: read-only.' }[role],
+      noCreate: !canEdit, createOp: canEdit ? 1 : 0.45, createTitle: canEdit ? '' : 'Only pre-order managers can open a pre-order',
+      newPre: () => canEdit && set({ wiz: { step: 0, d: newDraft(), isNew: true } }),
+      inList, inPanel: !inList, showBack: !inList, backToList: () => set({ sel: null, wiz: null }),
+      listTabs: [['all', 'All'], ['open', 'Open'], ['upcoming', 'Scheduled'], ['closed', 'Closed'], ['draft', 'Drafts']].map(([k, label]) => ({ label, n: String(wins.filter(w => k === 'all' || this.statusOf(w) === k || (k === 'closed' && this.statusOf(w) === 'delivered')).length), go: () => set({ listF: k }), bg: s.listF === k ? 'var(--at-color-surface)' : 'transparent', sh: s.listF === k ? 'var(--at-shadow-sm)' : 'none' })),
+      listRows: wins.filter(w => s.listF === 'all' || this.statusOf(w) === s.listF || (s.listF === 'closed' && this.statusOf(w) === 'delivered')).map(w => { const st = this.statusOf(w), pl = PILL[st]; const paidW = this.ordersFor(w).filter(o => o.status !== 'Cancelled'); const cityOff = !s.enabled || !winOn(w); return { name: w.name, where: locName(w.targets), opens: fS(T(w.opens)), closes: fS(T(w.closes)), delivers: fD(T(w.delivers)), count: num(paidW.length), rev: '$' + num(Math.round(paidW.reduce((a, o) => a + o.total, 0))), statusLabel: cityOff && st !== 'delivered' && st !== 'draft' ? 'Area off' : pl[2], pillBg: cityOff && st !== 'delivered' && st !== 'draft' ? 'var(--at-red-50)' : pl[0], pillFg: cityOff && st !== 'delivered' && st !== 'draft' ? 'var(--at-red-700)' : pl[1], pick: () => set({ sel: w.id, wiz: null, page: 0, dTab: 'overview' }) }; }),
+      listEmpty: !wins.some(w => s.listF === 'all' || this.statusOf(w) === s.listF || (s.listF === 'closed' && this.statusOf(w) === 'delivered')),
+      rootMinH: s.embedded ? '0' : '100vh', rootBg: s.embedded ? 'var(--at-color-canvas)' : 'var(--at-ink-50)', toastTop: s.embedded ? '12px' : 'auto', toastBottom: s.embedded ? 'auto' : '24px', modalAlign: s.embedded ? 'flex-start' : 'center',
+      winList, pickSettings: () => set({ sel: 'settings', wiz: null }), setBg: inSettings ? 'var(--at-gold-50)' : 'var(--at-ink-0)', setBorder: inSettings ? 'var(--at-gold-400)' : 'var(--at-color-border)',
+      inWizard, inSettings, inDetail,
+      sel: selW ? { name: selW.name, where: locName(selW.targets), ribbon: selW.ribbon, statusLabel: PILL[selSt][2], pillBg: PILL[selSt][0], pillFg: PILL[selSt][1], opensT: fDT(T(selW.opens)), closesT: fDT(T(selW.closes)), deliversT: fD(T(selW.delivers)), opensShort: fS(T(selW.opens)), closesShort: fS(T(selW.closes)), deliversShort: fS(T(selW.delivers)), timePct: Math.max(0, Math.min(100, (now - T(selW.opens)) / (T(selW.closes) - T(selW.opens)) * 100)) + '%', progressText: selSt === 'open' ? `${Math.ceil((T(selW.closes) - now) / DAY)} days left` : PILL[selSt][2] } : {},
+      selStory: { has: !!selC.story, src: selC.story ? selC.story.src : '', bg: selC.story ? `url("${selC.story.src}")` : 'none' },
+      togglePause: () => selW && set({ windows: wins.map(w => w.id === selW.id ? { ...w, active: !w.active } : w) }),
+      pauseLabel: selW && selW.active ? 'Pause' : 'Resume', pauseIcon: selW && selW.active ? 'ph ph-pause' : 'ph ph-play',
+      editSel: () => selW && set({ wiz: { step: 0, d: { ...selW }, isNew: false } }),
+      exportAll: () => this.dl(`${selW.id}-orders.csv`, rowsCsv(selOrders)),
+      exportFiltered: () => this.dl(`${selW.id}-orders-filtered.csv`, rowsCsv(fil)),
+      exportPick: () => this.dl(`${selW.id}-picking-list.csv`, [['Product', 'Seller', 'Units'], ...Object.entries(units).sort((a, b) => b[1] - a[1]).map(([name, n]) => [name, SELLER(name), n])]),
+      exportReport: () => this.dl(`${selW.id}-advertorial-report.csv`, [['Placement', 'Creative', 'Impressions', 'Clicks', 'CTR %', 'Pre-orders'], ...adRows.map(a => a.raw)]),
+      dTabs: [['overview', 'Overview'], ['orders', `Orders (${selOrders.length})`], ['creatives', 'Creatives'], ['analytics', 'Analytics']].map(([k, label]) => ({ label, go: () => set({ dTab: k }), line: s.dTab === k ? 'var(--at-ink-900)' : 'transparent', fg: s.dTab === k ? 'var(--at-ink-900)' : 'var(--at-ink-500)' })),
+      dOverview: s.dTab === 'overview', dOrders: s.dTab === 'orders', dCreatives: s.dTab === 'creatives', dAnalytics: s.dTab === 'analytics',
+      showCharts: s.dTab === 'overview' || s.dTab === 'analytics', noDays: !byDay.length,
+      creativesVisible: (inWizard && step === 1) || (inDetail && s.dTab === 'creatives'),
+      kpis: [
+        { label: 'Pre-orders', value: num(paid.length), sub: `${selOrders.length - paid.length} cancelled` },
+        { label: 'Customers', value: num(new Set(paid.map(o => o.customer)).size), sub: 'unique' },
+        { label: 'Units', value: num(uTot), sub: 'to pick' },
+        { label: 'Revenue', value: '$' + num(Math.round(revenue)), sub: 'incl. delivery' },
+        { label: 'Avg order', value: paid.length ? money(revenue / paid.length) : '–', sub: '' },
+        { label: 'Late adds', value: num(paid.filter(o => o.status === 'Late add').length), sub: 'by customer service' },
+      ],
+      byDay, bySource: Object.entries(srcM).sort((a, b) => b[1] - a[1]).map(([k, n]) => ({ k, n, w: n / srcMax * 100 + '%' })),
+      topProducts: Object.entries(units).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => ({ k, n, w: n / uMax * 100 + '%' })),
+      fulfilSplit: ['Door', 'Pickup'].map(k => { const n = paid.filter(o => o.fulfil === k).length; return { k, n: paid.length ? Math.round(n / paid.length * 100) + '%' : '–', w: paid.length ? n / paid.length * 100 + '%' : '0%' }; }),
+      adPerf: adRows,
+      q: s.q, onQ: e => set({ q: e.target.value, page: 0 }), fStatus: s.fStatus, onFStatus: e => set({ fStatus: e.target.value, page: 0 }), fSource: s.fSource, onFSource: e => set({ fSource: e.target.value, page: 0 }),
+      filteredCount: fil.length, noRows: !fil.length,
+      orderRows: fil.slice(page * PER, page * PER + PER).map(o => { const pl = o.status === 'Paid' ? ['var(--at-green-50)', 'var(--at-green-800)'] : o.status === 'Late add' ? ['var(--at-gold-100)', 'var(--at-gold-900)'] : ['var(--at-red-50)', 'var(--at-red-700)']; return { ...o, addrLine: [o.addr, o.city].filter(Boolean).join(', ') + (o.zip ? ' ' + o.zip : ''), subLine: o.dnote || (o.status === 'Late add' ? o.note : ''), placedT: fS(o.placed) + ' ' + new Date(o.placed).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), totalT: money(o.total), pillBg: pl[0], pillFg: pl[1], bg: o.customer.startsWith('You') ? 'var(--at-gold-50)' : 'transparent' }; }),
+      pageText: `${fil.length ? page * PER + 1 : 0}–${Math.min(fil.length, page * PER + PER)} of ${fil.length}`,
+      prevPage: () => set({ page: Math.max(0, page - 1) }), nextPage: () => set({ page: Math.min(pages - 1, page + 1) }),
+      creativeCards,
+      // wizard
+      wz: wz || {}, wzSet, wzTitle: s.wiz ? (s.wiz.isNew ? 'Open a pre-order' : `Edit · ${wz.name}`) : '',
+      wzSteps: ['Details', 'Advertorials', 'Comms', 'Review'].map((label, i) => ({ label, n: i < step ? '✓' : String(i + 1), go: () => set({ wiz: { ...s.wiz, step: i } }), bg: i === step ? 'var(--at-ink-1000)' : 'transparent', fg: i === step ? 'var(--at-ink-0)' : 'var(--at-ink-700)', dotBg: i <= step ? 'var(--at-gold-500)' : 'var(--at-ink-200)', dotFg: 'var(--at-ink-1000)' })),
+      wzS0: inWizard && step === 0, wzS2: inWizard && step === 2, wzS3: inWizard && step === 3,
+      wzCats: CATS.map(label => { const on = wz && wz.cats.includes(label); return { label, ...chip(on), toggle: () => wzUpd('cats', on ? wz.cats.filter(c => c !== label) : [...wz.cats, label]) }; }),
+      wzComms: COMMS.map(([k, title, when, channels]) => { const on = wz && wz.comms[k]; return { title, when, channels, ...tg(on), toggle: () => wzUpd('comms', { ...wz.comms, [k]: !on }) }; }),
+      smsCount: `${smsLen}/160`, smsColor: smsLen > 160 ? 'var(--at-red-600)' : 'var(--at-color-text-subtle)',
+      wzSummary: wz ? [{ k: 'Where', v: locName(wz.targets) }, { k: 'Opens', v: fDT(T(wz.opens)) }, { k: 'Closes', v: fDT(T(wz.closes)) }, { k: 'Delivers', v: fD(T(wz.delivers)) }, { k: 'Categories', v: wz.cats.join(', ') || '–' }, { k: 'Fulfilment', v: [wz.door && 'Door $7.99', wz.pickup && 'Pickup free'].filter(Boolean).join(' · ') }, { k: 'Creatives', v: `${Object.keys(wzCre).length} of ${SLOTS.length}` }, { k: 'Comms on', v: String(Object.values(wz.comms).filter(Boolean).length) }, { k: 'Social budget', v: '$' + wz.budget }] : [],
+      wzChecks: checks.map(([ok, text]) => ({ text, icon: ok ? 'ph-fill ph-check-circle' : 'ph-fill ph-x-circle', color: ok ? 'var(--at-green-700)' : 'var(--at-red-600)' })),
+      wzAtStart: step === 0,
+      wzBack: () => set({ wiz: { ...s.wiz, step: Math.max(0, step - 1) } }),
+      wzNext: () => step < 3 ? set({ wiz: { ...s.wiz, step: step + 1 } }) : (!blocking && publish()),
+      wzNextLabel: step < 3 ? 'Continue' : blocking ? `${blocking} check${blocking > 1 ? 's' : ''} to fix` : 'Publish pre-order',
+      wzNextDisabled: step === 3 && blocking > 0, wzNextOp: step === 3 && blocking > 0 ? 0.45 : 1,
+      wzCancel: () => set({ wiz: null }),
+      wzSaveDraft: () => { const d = { ...wz, draft: true }; const ex = wins.some(w => w.id === d.id); set({ windows: ex ? wins.map(w => w.id === d.id ? d : w) : [d, ...wins], wiz: null, sel: d.id }); this.flash('Draft saved'); },
+      // settings
+      ...(() => {
+        const A = s.areas || [];
+        const has = k => A.some(a => a.key === k);
+        const setAreas = next => canEdit && set({ areas: next });
+        const q = (s.areaQ || '').trim(), ql = q.toLowerCase();
+        const MK = (() => { try { return JSON.parse(localStorage.getItem('at.markets.v1') || 'null'); } catch (e) { return null; } })();
+        const mkLive = (c, r) => { if (!MK) return true; const m = MK.find(x => x.code === c); if (!m) return false; const rg = m.regions.find(y => y.code === r); return !!(rg && rg.marketplace); };
+        const winsIn = k => wins.filter(w => !w.draft && (w.targets || []).some(t => t === k || k.startsWith(t + '/') || t.startsWith(k + '/'))).length;
+        const lbl = k => (PRE() ? PRE().areaLabel(k) : k);
+        const nav = s.areaNav || {}; const PER_A = 12;
+        const cName = c => (PRE() ? PRE().countryName(c) : c), rName = (c, r) => (PRE() ? PRE().regionName(c, r) : r);
+        const sumOn = list => list.filter(a => a.on).length;
+        const setOn = (list, on) => setAreas(A.map(x => list.some(y => y.key === x.key) ? { ...x, on } : x));
+        let rowsAll = [], colName = 'Country', filterPh = 'Filter countries';
+        if (!nav.c) {
+          const by = {}; A.forEach(a => { (by[a.country] = by[a.country] || []).push(a); });
+          rowsAll = Object.entries(by).map(([c, list]) => { const regs = new Set(list.map(a => a.region)).size, n = winsIn(c), on = sumOn(list); return { name: cName(c), cover: regs + ' ' + (PRE() ? PRE().geo.label(c).toLowerCase() : 'region') + (regs > 1 ? 's' : '') + ' · ' + list.filter(a => a.city).length + ' cities', pre: n ? String(n) : '—', ...tg(on > 0), onText: on + ' of ' + list.length, toggle: () => setOn(list, on === 0), open: () => set({ areaNav: { c }, areaQ: '', areaPage: 0 }), leaf: false, branch: true, deco: on ? 'none' : 'line-through' }; });
+        } else if (!nav.r) {
+          colName = PRE() ? PRE().geo.label(nav.c) : 'State'; filterPh = 'Filter ' + colName.toLowerCase() + 's';
+          const by = {}; A.filter(a => a.country === nav.c).forEach(a => { (by[a.region] = by[a.region] || []).push(a); });
+          rowsAll = Object.entries(by).map(([r, list]) => { const whole = list.find(a => !a.city), cities = list.filter(a => a.city), n = winsIn(nav.c + '/' + r), on = sumOn(list); return { name: rName(nav.c, r), cover: (whole ? 'Every city' + (cities.length ? ' + ' : '') : '') + (cities.length ? cities.length + ' cit' + (cities.length > 1 ? 'ies' : 'y') : ''), pre: n ? String(n) : '—', ...tg(on > 0), onText: on + ' of ' + list.length, toggle: () => setOn(list, on === 0), open: () => set({ areaNav: { c: nav.c, r }, areaQ: '', areaPage: 0 }), leaf: false, branch: true, deco: on ? 'none' : 'line-through' }; });
+        } else {
+          colName = 'City'; filterPh = 'Filter cities';
+          rowsAll = A.filter(a => a.country === nav.c && a.region === nav.r).sort((x, y) => (x.city ? 1 : 0) - (y.city ? 1 : 0) || String(x.city).localeCompare(String(y.city))).map(a => { const n = winsIn(a.key); return { name: a.city || 'Every city in ' + rName(nav.c, nav.r), cover: a.city ? 'City' : 'Whole ' + (PRE() ? PRE().geo.label(nav.c).toLowerCase() : 'state'), pre: n ? String(n) : '—', ...tg(a.on), onText: a.on ? 'On' : 'Off', toggle: () => setAreas(A.map(x => x.key === a.key ? { ...x, on: !x.on } : x)), remove: () => setAreas(A.filter(x => x.key !== a.key)), open: () => {}, leaf: true, branch: false, deco: a.on ? 'none' : 'line-through' }; });
+        }
+        rowsAll = rowsAll.filter(x => !ql || x.name.toLowerCase().includes(ql)).sort((x, y) => (nav.r ? 0 : x.name.localeCompare(y.name)));
+        const aPages = Math.max(1, Math.ceil(rowsAll.length / PER_A)), aPage = Math.min(s.areaPage || 0, aPages - 1);
+        const crumbs = [{ label: 'All countries', go: () => set({ areaNav: {}, areaQ: '', areaPage: 0 }) }].concat(nav.c ? [{ label: cName(nav.c), go: () => set({ areaNav: { c: nav.c }, areaQ: '', areaPage: 0 }) }] : []).concat(nav.r ? [{ label: rName(nav.c, nav.r), go: () => {} }] : []);
+        const sugg = PRE() && ql.length >= 2 ? PRE().search(q, 8).filter(x => !has(x.key) && x.type !== 'country') : [];
+        const custom = (() => { if (!PRE()) return null; const m = q.match(/^(.+?),\s*([A-Za-z]{2,3})$/); if (!m) return null; const r = m[2].toUpperCase(), c = PRE().countryOf(r); if (!((G[c] || {}).regions || {})[r]) return null; const key = c + '/' + r + '/' + m[1].trim(); return has(key) || sugg.some(x => x.key === key) ? null : { key, label: m[1].trim() + ', ' + r, sub: 'New city in ' + PRE().regionName(c, r), type: 'city' }; })();
+        const addArea = key => { if (!canEdit) return; const [c, r, city] = key.split('/'); this.setState({ areas: [...A, { key, country: c, region: r, city: city || null, on: true }], areaQ: '', areaNav: { c, r }, areaPage: 0 }); this.flash(lbl(key) + ' added to pre-order areas'); };
+        const areaSugg = [...sugg, ...(custom ? [custom] : [])].map(x => ({ ...x, add: () => addArea(x.key), icon: x.type === 'region' ? 'ph ph-map-trifold' : 'ph ph-map-pin' }));
+        const tg2 = (wz && wz.targets) || [];
+        const wzAreaOpts = A.filter(a => a.on && !tg2.includes(a.key)).map(a => ({ key: a.key, label: lbl(a.key) })).sort((x, y) => x.label.localeCompare(y.label));
+        const GL = PRE() && PRE().geo; const apStates = GL ? GL.states(s.apC) : null; const apCityList = GL && s.apR ? GL.cities(s.apC, s.apR) : null; const apRegName = GL && s.apR ? GL.stateName(s.apC, s.apR) : s.apR; const apCs = (GL && GL.countries()) || [];
+        const apKey = s.apR && s.apX ? s.apC + '/' + s.apR + (s.apX === '*' ? '' : '/' + s.apX) : '';
+        const pcs = new Set(); wins.filter(w => !w.draft).forEach(w => (w.targets || []).forEach(k => { const [c, r, city] = k.split('/'); if (city) pcs.add(city + ', ' + r); else ((((G[c] || {}).regions || {})[r] || {}).cities || []).slice(0, 2).forEach(x => pcs.add(x + ', ' + r)); }));
+        ['Houston, TX', 'Atlanta, GA', 'Laredo, TX'].forEach(x => pcs.add(x));
+        const pl = [...pcs].sort();
+        return {
+          areaQ: s.areaQ || '', onAreaQ: e => set({ areaQ: e.target.value, areaPage: 0 }), areaSugg, hasAreaSugg: false,
+          areaCrumbs: crumbs.map((c, i) => ({ ...c, cur: i === crumbs.length - 1, weight: i === crumbs.length - 1 ? 'var(--at-weight-bold)' : 'var(--at-weight-regular)', fg: i === crumbs.length - 1 ? 'var(--at-color-text)' : 'var(--at-color-link)', sepDisp: i === crumbs.length - 1 ? 'none' : 'inline' })),
+          areaColName: colName, areaFilterPh: filterPh, areaRows: rowsAll.slice(aPage * PER_A, aPage * PER_A + PER_A),
+          areaMore: rowsAll.length > PER_A, areaPageText: (aPage * PER_A + 1) + '–' + Math.min(rowsAll.length, aPage * PER_A + PER_A) + ' of ' + rowsAll.length,
+          areaPrev: () => set({ areaPage: Math.max(0, aPage - 1) }), areaNext: () => set({ areaPage: Math.min(aPages - 1, aPage + 1) }),
+          hasAreaHint: false, areaHint: 'No new place matches. Type it as “City, ST” to add a city that isn’t in the list.',
+          noAreas: !rowsAll.length, noAreasText: ql ? 'Nothing here matches “' + q + '”.' : 'No pre-order areas yet. Use the dropdowns above to add the first one.',
+          areaCount: A.filter(a => a.on).length + ' on · ' + A.filter(a => !a.on).length + ' off',
+          wzTargets: tg2.map(k => ({ label: lbl(k), remove: () => wzUpd('targets', tg2.filter(x => x !== k)) })), wzNoTargets: !tg2.length,
+          ...(() => {
+            const wSt = GL ? GL.states(s.wzC) : null, wCi = GL && s.wzR ? GL.cities(s.wzC, s.wzR) : null, wRn = GL && s.wzR ? GL.stateName(s.wzC, s.wzR) : s.wzR;
+            const key = s.wzR && s.wzX ? s.wzC + '/' + s.wzR + (s.wzX === '*' ? '' : '/' + s.wzX) : '';
+            const bad = !key || tg2.includes(key);
+            return {
+              wzC: s.wzC, wzR: s.wzR, wzX: s.wzX, wzCountries: apCs.map(c => ({ code: c.code, name: (c.emoji ? c.emoji + '  ' : '') + c.name })), wzCKey: apCs.length + ':' + s.wzC + ':' + (wz ? wz.id : ''),
+              wzRegionLabel: GL ? GL.label(s.wzC) : 'State', wzRegions: (wSt || []).map(x => ({ code: x.code, name: x.name })), wzRKey: s.wzC + ':' + (wSt ? wSt.length : 0) + ':' + (wz ? wz.id : ''),
+              wzRegPh: wSt ? 'Choose… (' + wSt.length + ')' : 'Loading…', wzCityPh: !s.wzR ? 'Choose a ' + (GL ? GL.label(s.wzC) : 'state').toLowerCase() + ' first' : wCi ? 'Choose… (' + wCi.length + ' cities)' : 'Loading cities…',
+              wzNoRegion: !s.wzR, wzWholeLabel: s.wzR ? 'Every city in ' + wRn : 'Every city', wzCities: (wCi || []).filter(c => !tg2.includes(s.wzC + '/' + s.wzR + '/' + c)),
+              onWzC: e => set({ wzC: e.target.value, wzR: '', wzX: '' }), onWzR: e => set({ wzR: e.target.value, wzX: '' }), onWzX: e => set({ wzX: e.target.value }),
+              wzCantAdd: bad, wzAddOp: bad ? 0.45 : 1,
+              wzAddTarget: () => { if (bad || !s.wiz) return; const [c, r, city] = key.split('/'); this.setState({ wzX: '', wiz: { ...s.wiz, d: { ...s.wiz.d, targets: [...tg2, key] } }, areas: has(key) ? A : [...A, { key, country: c, region: r, city: city || null, on: true }] }); },
+              wzHasSaved: wzAreaOpts.length > 0,
+            };
+          })(),
+          wzAreaOpts, wzNoOpts: !wzAreaOpts.length, wzPickLabel: wzAreaOpts.length ? 'Add an area…' : 'All your areas are already added',
+          wzPickArea: e => { const k = e.target.value; if (k && s.wiz) this.setState({ wiz: { ...s.wiz, d: { ...s.wiz.d, targets: [...tg2, k] } } }); },
+          apC: s.apC, apR: s.apR, apX: s.apX, apRegionLabel: GL ? GL.label(s.apC) : 'State', apCountries: apCs.map(c => ({ code: c.code, name: (c.emoji ? c.emoji + '  ' : '') + c.name })), apCKey: apCs.length + ':' + s.apC, apRKey: s.apC + ':' + (apStates ? apStates.length : 0), apRegPh: apStates ? 'Choose… (' + apStates.length + ')' : 'Loading…', apCityPh: !s.apR ? 'Choose…' : apCityList ? 'Choose… (' + apCityList.length + ' cities)' : 'Loading cities…', apNoRegion: !s.apR || !canEdit,
+          onApC: e => set({ apC: e.target.value, apR: '', apX: '' }), onApR: e => set({ apR: e.target.value, apX: '' }), onApX: e => set({ apX: e.target.value }),
+          apRegions: (apStates || []).map(x => ({ code: x.code, name: x.name })),
+          apWholeLabel: s.apR ? 'Every city in ' + apRegName : 'Every city',
+          apCities: (apCityList || []).filter(c => !has(s.apC + '/' + s.apR + '/' + c)),
+          apCantAdd: !canEdit || !apKey || has(apKey), apAddOp: !canEdit || !apKey || has(apKey) ? 0.45 : 1,
+          apAdd: () => { if (!apKey || has(apKey)) return; addArea(apKey); this.setState({ apX: '' }); },
+          previewCities: pl.map(v => { const [x, r] = v.split(', '); return { v, label: v + (PRE() && wins.some(w => !w.draft && PRE().covers(w, PRE().countryOf(r), r, x)) ? ' · pre-order' : '') }; }), citySelKey: pl.join('|') + '#' + s.city,
+        };
+      })(),
+      fallbackOpts: [['ship', 'ph ph-package', 'Ship by UPS Ground', 'Shoppers can still buy, at the quoted rate (3–5 days).'], ['waitlist', 'ph ph-list-checks', 'Waitlist only', 'No checkout. Shoppers are told when the next pre-order opens.']].map(([k, icon, title, sub]) => ({ icon, title, sub, pick: () => canEdit && set({ fallback: k }), border: s.fallback === k ? 'var(--at-green-600)' : 'var(--at-color-border)' })),
+      placementRows: [['ribbon', 'Header ribbon', 'Under the header on every page', 'Ribbon text'], ['hero', 'Home hero', 'Top of the home page + pre-order page banner', 'Storefront hero'], ['badge', 'Pre-order badge', 'On product cards and search results', '—'], ['pdp', 'Product page banner', 'Below the delivery box', 'Product page banner'], ['cart', 'Cart header', 'Groups pre-order items with the delivery date', '—'], ['family', 'Send to family', 'Metro shoppers with a saved run-city address', '—']].map(([k, name, where, creative]) => ({ name, where, creative, ...tg(P[k]), toggle: () => set({ placements: { ...P, [k]: !P[k] } }) })),
+      // late add
+      ...(() => {
+        const dir = selW ? this.directory(selW) : [];
+        const cust = late && dir.find(c => c.id === late.cust);
+        const addr = cust && late.addr && late.addr !== 'new' ? cust.addrs.find(a => a.id === late.addr) : null;
+        const na = late && late.addr === 'new' ? (late.na || {}) : null;
+        const ok = !!late && !!cust && (!!addr || !!(na && na.verified)) && lateItems.length > 0 && !!late.phoneOk;
+        const up = patch => set({ late: { ...late, ...patch } });
+        return {
+          openLate: () => set({ late: { cust: '', addr: '', na: { line1: '', zip: '', verified: false }, phoneOk: false, pay: 'card', reason: 'Customer called', note: '', items: [] } }),
+          closeLate: () => set({ late: null }), lateOpen: !!late && s.tab === 'bo', late: late || { na: {} },
+          lateCustomers: dir.map(c => ({ id: c.id, label: c.name + ' · ' + c.phone + ' · ' + c.email })),
+          lateSet: { cust: e => up({ cust: e.target.value, addr: '', phoneOk: false }), addr: e => up({ addr: e.target.value }), reason: e => up({ reason: e.target.value }), note: e => up({ note: e.target.value }), pay: e => up({ pay: e.target.value }), line1: e => up({ na: { ...late.na, line1: e.target.value, verified: false } }), zip: e => up({ na: { ...late.na, zip: e.target.value, verified: false } }), phoneOk: e => up({ phoneOk: e.target.checked }) },
+          lateHasCust: !!cust, lateAddrs: cust ? cust.addrs.map(a => ({ id: a.id, label: a.label + ' · ' + a.line1 + ', ' + a.city + ' ' + a.zip })) : [],
+          lateNewAddr: !!na, lateVerifyLabel: na && na.verified ? 'Verified ✓' : 'Verify address', lateCity: cust ? cust.city + ', ' + cust.region : '',
+          lateVerify: () => { const n = late.na || {}; if (!String(n.line1 || '').trim() || String(n.zip || '').trim().length < 3) { this.flash('Enter the street and postal code first'); return; } up({ na: { ...n, verified: true } }); this.flash('Address verified with Google Places'); },
+          latePhone: cust ? cust.phone : '',
+          lateTotal: money(lateSub + (lateItems.length ? 7.99 : 0)), lateInvalid: !ok, lateOp: ok ? 1 : 0.45,
+          saveLate: () => { if (!ok) return; const a = addr || { line1: late.na.line1, city: cust.city, region: cust.region, zip: late.na.zip }; const o = { id: `${slugOf(selW)}-L${90 + s.extra.length}`, win: selW.id, customer: cust.name, phone: cust.phone, email: cust.email, addr: a.line1, city: a.city, region: a.region, zip: a.zip, dnote: late.note, placed: Date.now(), source: 'Agent (late)', srcTag: 'src=agent&po=' + selW.id, lines: lateItems.map(id => ({ id, qty: 1 })), units: lateItems.length, fulfil: 'Door', total: lateSub + 7.99, status: 'Late add', note: late.reason + (late.pay === 'link' ? ' · payment link sent by SMS' : ' · saved card charged') + ' · by ' + (role === 'cs' ? 'CS rep' : 'Manager') }; set({ extra: [...s.extra, o], late: null, dTab: 'orders', page: 0, fStatus: 'all', fSource: 'all', q: '' }); this.flash(`Late order ${o.id} added and logged`); },
+        };
+      })(),
+      lateItems: PRECAT.map(p => { const on = lateItems.includes(p.id); return { label: `${p.name} · ${money(p.price)}`, ...chip(on), toggle: () => set({ late: { ...late, items: on ? late.items.filter(x => x !== p.id) : [...late.items, p.id] } }) }; }),
+      // how
+      howSteps: [{ icon: 'ph ph-calendar-plus', title: 'Opening date', body: 'A pre-order manager opens a window for a city, uploads its creatives and publishes. Every placement, email, SMS and ad switches on at the opening time.', bar: 'var(--at-green-600)' }, { icon: 'ph ph-calendar-x', title: 'Closing date', body: 'Checkout for that city stops at the closing time. After that, only customer service can add an order, and every late add is logged.', bar: 'var(--at-gold-500)' }, { icon: 'ph ph-truck', title: 'Delivery', body: 'We deliver on the set date however many orders came in. No minimum, no extension. Picking list and order export are ready the moment it closes.', bar: 'var(--at-ink-900)' }],
+      howRules: [
+        { icon: 'ph ph-power', title: 'On/off', body: 'Master switch for the platform, a switch per city and Pause on each pre-order. Changes go live right away.' },
+        { icon: 'ph ph-credit-card', title: 'Payment', body: 'One checkout for the whole cart; pre-order items are charged at checkout like any other product. Change or cancel them for a full refund until close. If we miss the delivery date, the shopper chooses a refund or the new date.' },
+        { icon: 'ph ph-tag', title: 'Product flag', body: 'Pre-order is a flag on a product, not a separate store. Flagged products in an open window show the badge and delivery date; quantity, cart and checkout work like any other product.' },
+        { icon: 'ph ph-image', title: 'Advertorials', body: 'Five image slots plus ribbon text, headline and SMS copy. Each slot is checked against its size spec; the hero is required to publish.' },
+        { icon: 'ph ph-chart-bar', title: 'Transactional', body: 'Every order is tagged with its channel, so counts, revenue, units and performance per placement update in real time.' },
+        { icon: 'ph ph-download-simple', title: 'Exports', body: 'All orders, the filtered view, a picking list by product and the advertorial report, as CSV (opens in Excel or Sheets).' },
+        { icon: 'ph ph-headset', title: 'Late adds', body: 'Customer service adds the order with a reason. It shows as "Late add" in counts and exports.' },
+      ],
+      permRows: [['Open / edit / publish pre-order', [1, 0, 0, 0]], ['Upload creatives', [1, 0, 0, 0]], ['Pause / switch cities on or off', [1, 0, 0, 0]], ['Add late order', [1, 1, 0, 0]], ['Export orders + reports', [1, 0, 1, 0]], ['View orders + analytics', [1, 1, 1, 1]]].map(([k, c]) => ({ k, cells: c.map(v => ({ icon: v ? 'ph-fill ph-check-circle' : 'ph ph-minus', color: v ? 'var(--at-green-600)' : 'var(--at-ink-300)' })) })),
+      toast: !!s.toast, toastText: s.toast,
+    };
+  }
+}
+</script>
+</body>
+</html>
