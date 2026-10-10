@@ -32,12 +32,16 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
   notifications: {
     label: 'Notifications',
     description: 'Email, SMS, push and WhatsApp templates: live preview with production-shaped sample data, version history and new versions.'
+  },
+  preorders: {
+    label: 'Pre-orders',
+    description: 'Open pre-order windows by city with opening, closing and delivery dates. Upload advertorials, watch every pre-order live, export and add late orders.'
   }
 };
 
 export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKey[] }[] = [
   { key: 'overview', label: 'Overview', modules: ['dash', 'exports'] },
-  { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch'] },
+  { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch', 'preorders'] },
   { key: 'partners', label: 'Partners', modules: ['apps', 'support', 'rbac'] },
   { key: 'finance', label: 'Finance', modules: ['payouts', 'fees'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
@@ -71,18 +75,42 @@ export const roleLabel = (role: string): string => ROLE_LABELS[role] ?? role;
 export const PENDING_PERMISSIONS: Record<string, string[]> = {
   'platform.super_admin': ['notifications:read', 'notifications:templates:write'],
   'platform.marketing': ['notifications:templates:write'],
-  'platform.operations_manager': ['notifications:templates:write']
+  'platform.operations_manager': ['notifications:templates:write', 'preorders:manage', 'preorders:export', 'preorders:late-add'],
+  'platform.customer_support': ['delivery-runs:read', 'preorders:late-add'],
+  'platform.finance': ['delivery-runs:read', 'preorders:export'],
+  'platform.auditor': ['delivery-runs:read', 'preorders:export'],
+  'platform.product_owner': ['delivery-runs:read'],
+  'platform.fulfilment_ops': ['delivery-runs:read'],
+  'platform.retail_buyer': ['delivery-runs:read']
+};
+
+/* Pre-orders grants (identity migration V22, docs/spikes/preorder-design-implementation.md §6) until identity seeds them. */
+const PREORDER_GRANTS = ['delivery-runs:read', 'preorders:manage', 'preorders:export', 'preorders:late-add'];
+PENDING_PERMISSIONS['platform.super_admin']?.push(...PREORDER_GRANTS);
+PENDING_PERMISSIONS['platform.marketing']?.push(...PREORDER_GRANTS);
+
+/** The Pre-orders column of the Backoffice matrix (backoffice-config.js): F full · E edit · A act (approve) · V view. */
+export const PREORDER_MATRIX: Record<string, string> = {
+  'platform.super_admin': 'F',
+  'platform.marketing': 'F',
+  'platform.operations_manager': 'E',
+  'platform.customer_support': 'A',
+  'platform.finance': 'V',
+  'platform.auditor': 'V',
+  'platform.product_owner': 'V',
+  'platform.fulfilment_ops': 'V',
+  'platform.retail_buyer': 'V'
 };
 
 export function permissionsOf(roles: string[]): string[] {
   return [...new Set(roles.flatMap((r) => [...(ROLE_PERMISSIONS[r] ?? []), ...(PENDING_PERMISSIONS[r] ?? [])]))].sort();
 }
 
-function matrixLevel(roles: string[], module: MatrixModule): AccessLevel | null {
-  const idx = MATRIX_MODULES.indexOf(module);
+function matrixLevel(roles: string[], module: MatrixModule | 'preorders'): AccessLevel | null {
+  const idx = module === 'preorders' ? -1 : MATRIX_MODULES.indexOf(module);
   let best: AccessLevel | null = null;
   roles.forEach((r) => {
-    const lv = CODE[ROLE_MATRIX[r]?.[idx] ?? '-'] ?? null;
+    const lv = CODE[(module === 'preorders' ? PREORDER_MATRIX[r] : ROLE_MATRIX[r]?.[idx]) ?? '-'] ?? null;
     if (lv && (!best || RANK[lv] > RANK[best])) best = lv;
   });
   return best;

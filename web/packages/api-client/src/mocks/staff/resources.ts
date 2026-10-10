@@ -43,6 +43,8 @@ export interface MockResource {
   facets: ResourceFacet[];
   search?: string[];
   searchPlaceholder?: string;
+  /** Default row order (records keep their seed order otherwise). */
+  sort?: (a: MockRecord, b: MockRecord) => number;
   cursor?: boolean;
   exportable: boolean;
   titleOf: (r: MockRecord) => string;
@@ -56,6 +58,7 @@ export interface MockResource {
   create?: { permission: string; form: StaffForm; build: (values: Record<string, FieldValue>, id: string, ctx: ActionCtx) => MockRecord };
 }
 
+const MARKET_ORDER: Record<string, number> = { LIVE: 0, COMING_SOON: 1, PAUSED: 2, PLANNED: 3 };
 const col = (key: string, label: string, kind: ColumnKind, width: number): ResourceColumn => ({ key, label, kind, width });
 const facets = (...values: string[]): ResourceFacet[] => values.map((v) => ({ value: v, label: humanize(v) }));
 const field = (key: string, label: string, type: FormField['type'], required: boolean, extra: Partial<FormField> = {}): FormField => ({ key, label, type, required, ...extra });
@@ -395,6 +398,10 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
     columns: [col('code', 'Code', 'mono', 10), col('name', 'Country', 'strong', 30), col('liveRegions', 'Live states', 'number', 15), col('regionCount', 'States', 'number', 12), col('status', 'Status', 'status', 33)],
     statusKey: 'status',
     facets: facets('LIVE', 'COMING_SOON', 'PLANNED', 'PAUSED'),
+    // Backoffice Countries filter (mktCq / mktSf): name or exact code, status chips; Live first, then Coming soon, Paused, Planned.
+    search: ['name', 'code'],
+    searchPlaceholder: 'Filter countries',
+    sort: (a, b) => (MARKET_ORDER[str(a.fields.status)] ?? 9) - (MARKET_ORDER[str(b.fields.status)] ?? 9) || str(a.fields.name).localeCompare(str(b.fields.name)),
     exportable: false,
     titleOf: (r) => str(r.fields.name),
     subtitleOf: (r) => `${str(r.fields.liveRegions)} of ${str(r.fields.regionCount)} states live`,

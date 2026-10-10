@@ -56,6 +56,7 @@ import {
   SupportActionResultSchema,
   type SupportRefundRequest
 } from './schemas/staff';
+import { createStaffPreordersApi } from './staff-preorders';
 
 /** Server-driven table query (page-based, or cursor-based where the upstream pages with cursors). */
 export interface ResourceQuery {
@@ -145,7 +146,10 @@ export function createStaffApiClient(options: ApiClientOptions) {
     createNotificationTemplateVersion: (key: string, body: NotificationVersionDraft): Promise<NotificationTemplateVersion> =>
       request(`/v1/staff/notifications/templates/${enc(key)}/versions`, NotificationTemplateVersionSchema, { method: 'POST', body }),
     testSendNotificationTemplate: (key: string, body: NotificationPreviewRequest): Promise<NotificationTestSendResult> =>
-      request(`/v1/staff/notifications/templates/${enc(key)}/test-send`, NotificationTestSendResultSchema, { method: 'POST', body })
+      request(`/v1/staff/notifications/templates/${enc(key)}/test-send`, NotificationTestSendResultSchema, { method: 'POST', body }),
+
+    /* Pre-orders (S274): /v1/staff/preorders/** mirrors delivery-runs' staff API */
+    preorders: createStaffPreordersApi(request, options)
   };
 }
 
