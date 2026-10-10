@@ -812,3 +812,5 @@
 "S265","Story","Run economics and reporting","Per run: orders, revenue, delivery fees collected, estimated cost (road distance and drive time from geo x configurable driver cost per hour and per mile), contribution margin, and break-even orders; used to decide fees and minimums per location.","- Staff see run P&L before and after the run
 - Break-even orders shown when creating a run
 - Per-location history (orders per run, growth of subscribers)","E34","","Medium","5","delivery-runs analytics","delivery-runs","To Do"
+"S266","Story","Seed service-client relationship tuples","authz-sync writes client:<id> service platform:afrotransact tuples for first-party service clients (orders, tax-returns, retail, offers, etc.) so FGA enforce does not block service-to-service calls; then switch dev to enforce.","- Service clients have platform service tuples on startup
+- Dev runs with FGA enforce and no service call returns auth.relationship-denied","E02","","High","2","authz openfga","identity","To Do"

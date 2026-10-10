@@ -4,7 +4,7 @@ at:
     # S022 OpenFGA relationship checks. Enforced: authz-sync runs in dev and owns the store and model.
     fga:
       enabled: ${FGA_ENABLED:true}
-      enforce: ${FGA_ENFORCE:true}
+      enforce: ${FGA_ENFORCE:false}  # shadow until authz-sync seeds service-client tuples (S248)
       # In-cluster OpenFGA (infra/k8s/platform/openfga); FGA_API_TOKEN comes from the service's secret.
       api-url: ${FGA_API_URL:http://openfga.openfga.svc:8080}
   offers:
