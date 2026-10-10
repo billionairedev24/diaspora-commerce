@@ -32,3 +32,6 @@ storybook-static/
 !.vscode/extensions.json
 *.iml
 .DS_Store
+# Helm dependency builds
+**/deploy/helm/charts/
+**/deploy/helm/Chart.lock

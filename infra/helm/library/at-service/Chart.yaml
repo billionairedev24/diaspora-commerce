@@ -1,0 +1,5 @@
+apiVersion: v2
+name: at-service
+description: Library chart with every Kubernetes object an AfroTransact service needs. Each service has its own thin chart that depends on this one, so services deploy independently.
+type: library
+version: 0.1.0
