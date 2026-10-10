@@ -376,6 +376,46 @@ class IdentityFlowIT {
     }
 
     @Test
+    void customersKeepAnAddressBookWithOneDefault() {
+        BrowserSession s = new BrowserSession(base());
+        String email = "book." + UUID.randomUUID() + "@example.com";
+        registerAndVerify(s, email, "shop");
+        String token = s.exchangePublic(STOREFRONT, STOREFRONT_REDIRECT,
+                s.signIn(STOREFRONT, STOREFRONT_REDIRECT, email, PASSWORD)).accessToken();
+        String home = """
+                {"label":"Home","fullName":"Adaeze Okafor","phone":"(713) 249-0142","phoneRegion":"US",
+                 "line1":"123 Main St","line2":"Apt 4B","city":"Houston","state":"TX","postalCode":"77002",
+                 "latitude":29.7589,"longitude":-95.3677,"instructions":"Ring twice","verified":true}
+                """;
+        HttpResponse<String> first = s.api("POST", "/v1/me/addresses", token, home);
+        assertThat(first.statusCode()).as(first.body()).isEqualTo(201);
+        assertThat(BrowserSession.json(first.body()).get("isDefault").asBoolean()).isTrue();
+        assertThat(BrowserSession.json(first.body()).get("phone").asString()).isEqualTo("+17132490142");
+
+        HttpResponse<String> second = s.api("POST", "/v1/me/addresses", token,
+                home.replace("Home", "Work").replace("123 Main St", "9800 Bissonnet St").replace("77002", "77036"));
+        String secondId = BrowserSession.json(second.body()).get("id").asString();
+        assertThat(BrowserSession.json(second.body()).get("isDefault").asBoolean()).isFalse();
+        assertThat(s.api("POST", "/v1/me/addresses/" + secondId + "/default", token, null).statusCode()).isEqualTo(200);
+
+        JsonNode list = BrowserSession.json(s.api("GET", "/v1/me/addresses", token, null).body());
+        assertThat(list.size()).isEqualTo(2);
+        assertThat(list.get(0).get("id").asString()).isEqualTo(secondId);
+        assertThat(list.get(0).get("isDefault").asBoolean()).isTrue();
+        assertThat(list.get(1).get("isDefault").asBoolean()).isFalse();
+
+        assertThat(s.api("DELETE", "/v1/me/addresses/" + secondId, token, null).statusCode()).isEqualTo(204);
+        JsonNode after = BrowserSession.json(s.api("GET", "/v1/me/addresses", token, null).body());
+        assertThat(after.size()).isEqualTo(1);
+        assertThat(after.get(0).get("isDefault").asBoolean()).isTrue();
+
+        HttpResponse<String> invalid = s.api("POST", "/v1/me/addresses", token,
+                home.replace("\"TX\"", "\"ZZ\"").replace("77002", "770"));
+        assertThat(invalid.statusCode()).isEqualTo(422);
+        assertThat(invalid.body()).contains("state").contains("postalCode");
+    }
+
+    @Test
     void resendIsRateLimitedAndStaffDomainsCannotSelfRegister() {
         BrowserSession s = new BrowserSession(base());
         String email = "femi." + UUID.randomUUID() + "@example.com";

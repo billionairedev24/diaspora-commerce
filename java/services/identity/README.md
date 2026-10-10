@@ -241,3 +241,11 @@ trusted browser, resend rate limit.
 - TOTP secrets are stored unencrypted in `mfa_totp` (protected by database access controls); envelope encryption with
   a KMS key is a follow-up.
 - Token Exchange (RFC 8693), DPoP for mobile and the device-code grant from the architecture document are not enabled yet.
+
+## Address book
+
+Customers keep up to 20 delivery addresses (`GET/POST /v1/me/addresses`, `PATCH/DELETE /v1/me/addresses/{id}`,
+`POST /v1/me/addresses/{id}/default`). Addresses are filled from geo-service autocomplete and carry its `verified`
+result and coordinates, the recipient's phone (validated and stored in E.164) and delivery instructions for drivers.
+The first address becomes the default; exactly one default is enforced by a partial unique index, and deleting the
+default promotes the most recently updated address. The gateway-bff serves these to checkout and the account pages.

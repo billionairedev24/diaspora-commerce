@@ -8,7 +8,9 @@ import com.afrotransact.identity.adapter.in.web.LoginPageSettings;
 import com.afrotransact.identity.adapter.out.notification.LoggingVerificationCodeSender;
 import com.afrotransact.identity.adapter.out.notification.OutboxVerificationCodeSender;
 import com.afrotransact.identity.domain.AccessPolicy;
+import com.afrotransact.identity.domain.AddressBookPolicy;
 import com.afrotransact.identity.domain.DefaultAccessPolicy;
+import com.afrotransact.identity.domain.DefaultAddressBookPolicy;
 import com.afrotransact.identity.domain.DefaultLandingPolicy;
 import com.afrotransact.identity.domain.DefaultMfaPolicy;
 import com.afrotransact.identity.domain.DefaultPasswordPolicy;
@@ -39,6 +41,11 @@ class IdentityConfiguration {
     @Bean
     PasswordPolicy passwordPolicy() {
         return new DefaultPasswordPolicy();
+    }
+
+    @Bean
+    AddressBookPolicy addressBookPolicy() {
+        return new DefaultAddressBookPolicy();
     }
 
     @Bean

@@ -21,6 +21,8 @@ security:
 tags:
 - name: Two-step verification
   description: Authenticator app, SMS codes and recovery codes
+- name: Address book
+  description: The signed-in customer's saved delivery addresses
 - name: Login & security
   description: Password, active sessions, linked social accounts and passkeys
 - name: Access control
@@ -620,6 +622,100 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/Me'
+  /v1/me/addresses:
+    get:
+      tags:
+      - Address book
+      summary: List saved addresses (default first)
+      operationId: list
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Address'
+    post:
+      tags:
+      - Address book
+      summary: Add an address; the first one becomes the default
+      operationId: add
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddressRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Address'
+  /v1/me/addresses/{id}:
+    delete:
+      tags:
+      - Address book
+      summary: Remove an address (the next most recent becomes default if needed)
+      operationId: remove
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+    patch:
+      tags:
+      - Address book
+      summary: Edit an address
+      operationId: update_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddressRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Address'
+  /v1/me/addresses/{id}/default:
+    post:
+      tags:
+      - Address book
+      summary: Make an address the default
+      operationId: makeDefault
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Address'
   /v1/me/linked-accounts:
     get:
       tags:
@@ -1224,6 +1320,97 @@ components:
         codeExpiresAt:
           type: string
           format: date-time
+    AddressRequest:
+      type: object
+      description: Fill from address autocomplete (geo service); verified = geo validation passed
+      properties:
+        label:
+          type: string
+          maxLength: 30
+          minLength: 0
+        fullName:
+          type: string
+          maxLength: 100
+          minLength: 0
+        phone:
+          type: string
+          minLength: 1
+        phoneRegion:
+          type: string
+        line1:
+          type: string
+          maxLength: 120
+          minLength: 0
+        line2:
+          type: string
+          maxLength: 60
+          minLength: 0
+        city:
+          type: string
+          minLength: 1
+        state:
+          type: string
+        postalCode:
+          type: string
+          minLength: 1
+        country:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        instructions:
+          type: string
+          maxLength: 300
+          minLength: 0
+        verified:
+          type: boolean
+        makeDefault:
+          type: boolean
+      required:
+      - city
+      - fullName
+      - line1
+      - phone
+      - postalCode
+    Address:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        label:
+          type: string
+        fullName:
+          type: string
+        phone:
+          type: string
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        postalCode:
+          type: string
+        country:
+          type: string
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        instructions:
+          type: string
+        verified:
+          type: boolean
+        isDefault:
+          type: boolean
     CreateStaffUserRequest:
       type: object
       properties:
