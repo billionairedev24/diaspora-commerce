@@ -1,0 +1,240 @@
+# AsyncAPI 3.0 fragment for trust-ops-service. Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+channels:
+  trustOpsEvents:
+    address: at.trustops.events
+    description: >-
+      Trust & safety decisions and the audit stream from trust-ops-service (transactional outbox). Key = product id
+      (moderation), claim id (claims, notification requests), seller org id (seller events), support case id, or
+      "audit-log" for trustops.audit.recorded (one key, so the audit stream keeps its order). Headers event-id,
+      event-type, occurred-at.
+    messages:
+      trustOpsModerationQueued: {$ref: '#/components/messages/trustOpsModerationQueued'}
+      trustOpsModerationEscalated: {$ref: '#/components/messages/trustOpsModerationEscalated'}
+      trustOpsModerationDecided: {$ref: '#/components/messages/trustOpsModerationDecided'}
+      trustOpsClaimOpened: {$ref: '#/components/messages/trustOpsClaimOpened'}
+      trustOpsClaimSellerResponded: {$ref: '#/components/messages/trustOpsClaimSellerResponded'}
+      trustOpsClaimEscalated: {$ref: '#/components/messages/trustOpsClaimEscalated'}
+      trustOpsClaimDecided: {$ref: '#/components/messages/trustOpsClaimDecided'}
+      trustOpsClaimWithdrawn: {$ref: '#/components/messages/trustOpsClaimWithdrawn'}
+      trustOpsSellerSuspended: {$ref: '#/components/messages/trustOpsSellerSuspended'}
+      trustOpsSellerReinstated: {$ref: '#/components/messages/trustOpsSellerReinstated'}
+      trustOpsSellerHealthComputed: {$ref: '#/components/messages/trustOpsSellerHealthComputed'}
+      trustOpsSupportCaseOpened: {$ref: '#/components/messages/trustOpsSupportCaseOpened'}
+      trustOpsAuditRecorded: {$ref: '#/components/messages/trustOpsAuditRecorded'}
+      trustOpsNotificationRequested: {$ref: '#/components/messages/notificationsRequested'}
+operations:
+  publishTrustOpsEvents:
+    action: send
+    channel: {$ref: '#/channels/trustOpsEvents'}
+    summary: >-
+      trust-ops-service publishes moderation, claim, seller-enforcement, seller-health, support-case and audit events
+      via its transactional outbox, plus notification.requested (templates claim.opened, claim.decided,
+      claim.withdrawn; recipient id = customer subject or seller org id) so both parties of a claim are notified.
+  consumeTrustOpsCatalogProductEvents:
+    action: receive
+    channel: {$ref: '#/channels/catalogProductEvents'}
+    summary: >-
+      Consumer group trust-ops-service-moderation (inbox consumer trust-ops:catalog-products):
+      catalog.product.created with status IN_REVIEW is queued for moderation (AI triage hint attached when
+      ai-gateway answers; fail-open); catalog.product.approved / rejected close an item decided directly in catalog.
+  consumeTrustOpsOrderEvents:
+    action: receive
+    channel: {$ref: '#/channels/ordersOrderEvents'}
+    summary: >-
+      Consumer group trust-ops-service-seller-health: orders.order.placed (shipments, promisedBy),
+      orders.shipment.delivered, orders.shipment.cancelled and orders.shipment.status_changed feed the per-shipment
+      projection behind seller health (late shipment, seller cancellation and order defect rates).
+  consumeTrustOpsAiHandoffEvents:
+    action: receive
+    channel: {$ref: '#/channels/aiHandoffEvents'}
+    summary: >-
+      Consumer group trust-ops-service-support: every ai.handoff.requested opens one support case (deduplicated by
+      handoffId) with a first-response SLA.
+  consumeTrustOpsAuditIdentityEvents:
+    action: receive
+    channel: {$ref: '#/channels/identityEvents'}
+    summary: >-
+      Audit log (consumer group trust-ops-service-audit, topics configurable with TRUSTOPS_AUDIT_TOPICS):
+      identity.role.granted|revoked, identity.permission.granted|revoked, identity.user.disabled|enabled.
+  consumeTrustOpsAuditSellerApplicationEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerApplicationEvents'}
+    summary: 'Audit log: seller.application.flagged|info_requested|approved|rejected (reviewer decisions).'
+  consumeTrustOpsAuditSellerComplianceEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerComplianceEvents'}
+    summary: 'Audit log: seller.payouts.paused|resumed, seller.listings.hidden|restored.'
+  consumeTrustOpsAuditPayoutEvents:
+    action: receive
+    channel: {$ref: '#/channels/paymentsPayoutEvents'}
+    summary: 'Audit log: payments.payout.requested|approved|paid|failed.'
+  consumeTrustOpsAuditMcpToolEvents:
+    action: receive
+    channel: {$ref: '#/channels/mcpToolEvents'}
+    summary: 'Audit log: every mcp.tool.invoked (actor = token subject, entity = tool).'
+  consumeTrustOpsAuditOrderEvents:
+    action: receive
+    channel: {$ref: '#/channels/ordersOrderEvents'}
+    summary: >-
+      Audit log: orders.shipment.status_changed and orders.shipment.cancelled only when actorType is PLATFORM_ADMIN
+      or FULFILMENT_OPS (staff status overrides).
+components:
+  messages:
+    trustOpsModerationQueued:
+      name: trustops.moderation.queued
+      title: A listing entered the moderation queue
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsModerationEvent'}
+    trustOpsModerationEscalated:
+      name: trustops.moderation.escalated
+      title: A listing was escalated (by a reviewer, or automatically when its SLA was breached)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsModerationEvent'}
+    trustOpsModerationDecided:
+      name: trustops.moderation.decided
+      title: A listing was approved or rejected through trust-ops (or closed because catalog decided it)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsModerationEvent'}
+    trustOpsClaimOpened:
+      name: trustops.claim.opened
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsClaimEvent'}
+    trustOpsClaimSellerResponded:
+      name: trustops.claim.seller_responded
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsClaimEvent'}
+    trustOpsClaimEscalated:
+      name: trustops.claim.escalated
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsClaimEvent'}
+    trustOpsClaimDecided:
+      name: trustops.claim.decided
+      title: Staff decided a claim (refund through payments-service, or denial)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsClaimEvent'}
+    trustOpsClaimWithdrawn:
+      name: trustops.claim.withdrawn
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsClaimEvent'}
+    trustOpsSellerSuspended:
+      name: trustops.seller.suspended
+      title: >-
+        Staff suspended a seller. Payouts are held (seller-service) and the seller is restricted in the buy box
+        (offers). Listings are NOT hidden yet (no catalog / seller endpoint): catalog should consume this event.
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsSellerEnforcement'}
+    trustOpsSellerReinstated:
+      name: trustops.seller.reinstated
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsSellerEnforcement'}
+    trustOpsSellerHealthComputed:
+      name: trustops.seller.health_computed
+      title: Seller health computed (daily job or on demand) and pushed to offers
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsSellerHealth'}
+    trustOpsSupportCaseOpened:
+      name: trustops.support_case.opened
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsSupportCase'}
+    trustOpsAuditRecorded:
+      name: trustops.audit.recorded
+      title: An entry was appended to the immutable, hash-chained audit log
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/TrustOpsAuditRecorded'}
+  schemas:
+    TrustOpsModerationEvent:
+      type: object
+      required: [itemId, productId, sellerOrgId, status, priority, dueAt]
+      properties:
+        itemId: {type: string, format: uuid}
+        productId: {type: string, format: uuid}
+        atin: {type: [string, 'null']}
+        sellerOrgId: {type: string}
+        title: {type: string}
+        status: {type: string, enum: [PENDING, ESCALATED, APPROVED, REJECTED, CLOSED]}
+        priority: {type: string, enum: [NORMAL, HIGH]}
+        reasonCode:
+          type: [string, 'null']
+          enum: [PROHIBITED_ITEM, UNAPPROVED_HEALTH_CLAIM, RESTRICTED_INGREDIENT, COUNTERFEIT, IMAGE_POLICY,
+                 MISLEADING_CONTENT, LABELLING, SHIPPING_METHOD, DUPLICATE_LISTING, WRONG_CATEGORY, OTHER, null]
+        note: {type: [string, 'null']}
+        escalationReason: {type: [string, 'null']}
+        aiRiskLevel: {type: [string, 'null'], description: AI triage risk level when a hint was attached}
+        decidedBy: {type: [string, 'null']}
+        dueAt: {type: string, format: date-time}
+    TrustOpsClaimEvent:
+      type: object
+      required: [claimId, reference, type, status, orderId, sellerOrgId, customerId, amountMinor, currency]
+      properties:
+        claimId: {type: string, format: uuid}
+        reference: {type: string, examples: [AZ-10001]}
+        type: {type: string, enum: [ITEM_NOT_RECEIVED, DAMAGED_ITEM, WRONG_ITEM, NOT_AS_DESCRIBED, BOOKING_NO_SHOW, OTHER]}
+        status: {type: string, enum: [AWAITING_SELLER, UNDER_REVIEW, ESCALATED, RESOLVED_REFUND, RESOLVED_DENIED, WITHDRAWN]}
+        orderId: {type: string}
+        orderNumber: {type: [string, 'null']}
+        shipmentId: {type: [string, 'null']}
+        sellerOrgId: {type: string}
+        customerId: {type: string}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string}
+        outcome: {type: [string, 'null'], enum: [REFUND, DENY, null]}
+        refundMinor: {type: [integer, 'null'], format: int64}
+        refundId: {type: [string, 'null'], description: payments-service refund id}
+        dueAt: {type: string, format: date-time, description: Seller response or decision deadline}
+        escalated: {type: boolean}
+    TrustOpsSellerEnforcement:
+      type: object
+      required: [orgId, status, payoutsHeld, buyBoxRestricted, changedAt]
+      properties:
+        orgId: {type: string}
+        status: {type: string, enum: [ACTIVE, SUSPENDED]}
+        reason:
+          type: [string, 'null']
+          enum: [POOR_PERFORMANCE, PROHIBITED_ITEMS, COUNTERFEIT, FRAUD_RISK, POLICY_VIOLATION, COMPLIANCE, OTHER, null]
+        note: {type: [string, 'null']}
+        actorId: {type: [string, 'null']}
+        payoutsHeld: {type: boolean}
+        buyBoxRestricted: {type: boolean}
+        listingsHidden: {type: boolean, description: Always false until catalog can hide a seller's listings on request}
+        changedAt: {type: string, format: date-time}
+    TrustOpsSellerHealth:
+      type: object
+      required: [orgId, status, shipments, pushedToOffers, computedAt]
+      properties:
+        orgId: {type: string}
+        status: {type: string, enum: [GOOD, AT_RISK, UNKNOWN]}
+        shipments: {type: integer}
+        lateShipmentRate: {type: [number, 'null']}
+        cancellationRate: {type: [number, 'null']}
+        defectRate: {type: [number, 'null']}
+        breaches: {type: array, items: {type: string}}
+        pushedToOffers: {type: boolean}
+        computedAt: {type: string, format: date-time}
+    TrustOpsSupportCase:
+      type: object
+      required: [caseId, reference, handoffId, customerId, reason, dueAt]
+      properties:
+        caseId: {type: string, format: uuid}
+        reference: {type: string, examples: [SC-1001]}
+        handoffId: {type: string, format: uuid}
+        sessionId: {type: [string, 'null']}
+        customerId: {type: string}
+        reason: {type: string}
+        dueAt: {type: string, format: date-time}
+    TrustOpsAuditRecorded:
+      type: object
+      required: [seq, id, eventType, actorId, action, entityType, entityId, occurredAt, hash, prevHash]
+      properties:
+        seq: {type: integer, format: int64, description: Position in the chain (1, 2, 3 …)}
+        id: {type: string, format: uuid}
+        eventType: {type: string}
+        actorId: {type: string}
+        actorType: {type: [string, 'null']}
+        action: {type: string, examples: [identity.role.granted, trustops.claim.decided]}
+        entityType: {type: string}
+        entityId: {type: string}
+        orgId: {type: [string, 'null']}
+        summary: {type: [string, 'null']}
+        occurredAt: {type: string, format: date-time}
+        hash: {type: string, description: 'SHA-256 hex of prevHash, seq and the record content'}
+        prevHash: {type: string}

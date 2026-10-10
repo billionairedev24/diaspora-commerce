@@ -1,0 +1,11 @@
+# Local developer profile: docker compose stack from infra/local, security off, human-readable logs.
+# The other services run locally without security too, so no client-credentials token is requested.
+at:
+  security:
+    enabled: false
+  trustops:
+    client:
+      client-secret: ${TRUSTOPS_CLIENT_SECRET:}
+logging:
+  level:
+    com.afrotransact: DEBUG

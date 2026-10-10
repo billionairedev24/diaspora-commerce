@@ -1,0 +1,131 @@
+spring:
+  application:
+    name: trust-ops-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/trustops}
+    username: ${DB_USER:trustops}
+    password: ${DB_PASSWORD:trustops}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:10}
+  flyway:
+    locations: classpath:db/platform,classpath:db/migration
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+    consumer:
+      group-id: ${KAFKA_GROUP:trust-ops-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+
+server:
+  port: ${PORT:8110}
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  tracing:
+    sampling:
+      probability: ${TRACE_SAMPLING:1.0}
+  opentelemetry:
+    resource-attributes:
+      service.namespace: afrotransact
+      deployment.environment: ${APP_ENV:local}
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318}/v1/traces
+  metrics:
+    tags:
+      service: trust-ops-service
+      env: ${APP_ENV:local}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+at:
+  consumers:
+    # Kafka listeners for other services' events (off in tests that have no broker).
+    enabled: ${CONSUMERS_ENABLED:true}
+  api-docs:
+    title: Trust & Safety Ops API
+    description: >-
+      Listing moderation queue, disputes and A-to-z claims, the immutable hash-chained audit log, seller health,
+      suspension and reinstatement, and the support-case queue for Lola hand-offs.
+    version: v1
+  events:
+    relay-enabled: true
+  trustops:
+    sla:
+      moderation: ${TRUSTOPS_SLA_MODERATION:24h}
+      moderation-high-risk: ${TRUSTOPS_SLA_MODERATION_HIGH_RISK:4h}
+      moderation-escalated: ${TRUSTOPS_SLA_MODERATION_ESCALATED:8h}
+      seller-response: ${TRUSTOPS_SLA_SELLER_RESPONSE:72h}
+      claim-decision: ${TRUSTOPS_SLA_CLAIM_DECISION:120h}
+      claim-escalated: ${TRUSTOPS_SLA_CLAIM_ESCALATED:48h}
+      support-first-response: ${TRUSTOPS_SLA_SUPPORT_FIRST_RESPONSE:4h}
+    # OAuth2 client-credentials client used for every service-to-service call (identity: trust-ops-service).
+    client:
+      token-uri: ${AUTH_TOKEN_URI:http://localhost:8100/oauth2/token}
+      client-id: ${TRUSTOPS_CLIENT_ID:trust-ops-service}
+      # Only from the environment (identity's trust-ops-service client secret). Blank = no token (local profile).
+      client-secret: ${TRUSTOPS_CLIENT_SECRET}
+      scopes: catalog:moderate payments:service compliance:hold offers:write ai:triage
+      timeout: ${UPSTREAM_TIMEOUT:10s}
+    catalog:
+      base-url: ${CATALOG_URL:http://localhost:8101}
+    payments:
+      base-url: ${PAYMENTS_URL:http://localhost:8105}
+    seller:
+      base-url: ${SELLER_URL:http://localhost:8106}
+    offers:
+      base-url: ${OFFERS_URL:http://localhost:8102}
+    ai:
+      # Optional AI triage hints (fail-open: moderation works when this is off or ai-gateway is down).
+      enabled: ${AI_TRIAGE_ENABLED:true}
+      base-url: ${AI_GATEWAY_URL:http://localhost:8113}
+      timeout: ${AI_TRIAGE_TIMEOUT:5s}
+    audit:
+      # Topics whose audit-worthy events are copied into the hash-chained audit log (comma-separated).
+      topics: ${TRUSTOPS_AUDIT_TOPICS:at.identity.events,at.seller-application.events,at.seller-compliance.events,at.payout.events,at.mcp-tool.events,at.order.events}
+      event-types: ${TRUSTOPS_AUDIT_EVENT_TYPES:identity.role.granted,identity.role.revoked,identity.permission.granted,identity.permission.revoked,identity.user.disabled,identity.user.enabled,seller.application.flagged,seller.application.info_requested,seller.application.approved,seller.application.rejected,seller.payouts.paused,seller.payouts.resumed,seller.listings.hidden,seller.listings.restored,payments.payout.requested,payments.payout.approved,payments.payout.paid,payments.payout.failed,mcp.tool.invoked,orders.shipment.status_changed,orders.shipment.cancelled}
+      # Publish trustops.audit.recorded for every appended entry (the audit stream on at.trustops.events).
+      stream-enabled: ${TRUSTOPS_AUDIT_STREAM:true}
+      export-max-rows: ${TRUSTOPS_AUDIT_EXPORT_MAX_ROWS:50000}
+    seller-health:
+      window: ${SELLER_HEALTH_WINDOW:90d}
+      cron: ${SELLER_HEALTH_CRON:0 15 3 * * *}
+      push-to-offers: ${SELLER_HEALTH_PUSH:true}
+      late-shipment-threshold: 0.04
+      cancellation-threshold: 0.025
+      defect-threshold: 0.01
+    consumers:
+      product-topic: at.product.events
+      order-topic: at.order.events
+      handoff-topic: at.ai-handoff.events
+    jobs:
+      enabled: ${TRUSTOPS_JOBS_ENABLED:true}
+      sla-interval: ${TRUSTOPS_SLA_SWEEP_INTERVAL:60s}

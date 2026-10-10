@@ -375,9 +375,9 @@
 "S117","Story","Listing moderation queue","AI-flagged listings with allow/remove decisions.","- Queue shows AI flags with reasons
 - Decisions are audited","E18","","High","5","trust java","trust","In Progress"
 "S118","Story","Disputes and A-to-z claims","Customers open claims; staff decide with refund or deny.","- Claims have SLAs and escalation
-- Decision notifies both parties","E18","","Medium","5","trust java","trust","In Progress"
+- Decision notifies both parties","E18","","Medium","5","trust java","trust","Done"
 "S119","Story","Immutable audit log","Every privileged action recorded and streamed to Kafka.","- Audit records cannot be edited or deleted
-- Filter by actor, entity and date","E18","","High","3","trust java","trust","In Progress"
+- Filter by actor, entity and date","E18","","High","3","trust java","trust","Done"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
 - Reinstatement restores them","E18","","Medium","5","trust","trust","In Progress"
 "E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","Done"
@@ -648,7 +648,7 @@
 - Checkout validates, redeems and releases coupons idempotently","E05","","Highest","5","bff offers cart orders","offers","To Do"
 "S223","Story","Seller performance feed for the buy box","A seller-health job computes late shipment, cancellation and defect rates from orders and fulfilment events and updates offers' seller performance.","- Metrics computed daily per seller from order events
 - Offers seller performance updated via API
-- Buy box weights reviewed with product owner","E05","","Medium","5","offers orders","offers","In Progress"
+- Buy box weights reviewed with product owner","E05","","Medium","5","offers orders","offers","Done"
 "S224","Story","GTIN lookup readable by service tokens","Catalog makes /v1/identifiers/gtin/{code} callable by service clients (offers) without requiring the seller to hold catalog:write.","- Service token with catalog:read can look up GTINs
 - Offers GTIN lookup works for sellers without catalog:write","E03","","Medium","1","catalog offers","catalog","To Do"
 "S225","Story","Send purchase orders to suppliers (PDF, email, EDI)","Render a PO PDF, email it to the supplier contact via notifications, and transmit EDI 850 where the supplier is EDI-enabled; store ASN documents in media.","- PO PDF rendered with lines, terms and totals
@@ -663,3 +663,14 @@
 "S227","Story","Fix contract lint findings","Make every contract pass tools/contracts/lint_contracts.sh: tags, summaries and explicit security on all operations; fix YAML flow-mapping commas that truncate descriptions; align notifications topic names with producers.","- lint_contracts.sh passes for every contract
 - CI runs the lint on contract changes
 - No consumer subscribes to a topic without a producer","E27","","High","3","contracts docs","docs","To Do"
+"S228","Story","Seller suspension hides listings; live listing takedown","Seller service gets suspend/reinstate endpoints (separate from payout compliance holds) that publish seller.listings.hidden/restored; catalog publishes a flagged-listing event and supports staff takedown of live listings; seller account-health lookup is callable by service tokens.","- Suspend and reinstate endpoints on seller, callable by trust-ops-service
+- Reinstating does not release unrelated compliance payout holds
+- Suspension hides catalog, offers, bookings and search listings via events
+- Catalog emits catalog.product.flagged and supports takedown of a live listing with reason
+- trust-ops moderation queue handles flagged live listings","E18","","High","8","trust-ops seller catalog","trust","To Do"
+"S229","Story","Claims resolve payment and ownership automatically","Orders exposes a service lookup of an order with its payment id, line ids and customer id so trust-ops verifies ownership and refunds without staff supplying ids; fulfilment publishes events for seller health.","- trust-ops verifies the claimant owns the order
+- Refund lines are derived from the order automatically
+- Seller health uses fulfilment ship-by events for lateness","E18","","Medium","5","trust-ops orders fulfilment","trust","To Do"
+"S230","Story","Notifications for trust-ops events","Notifications subscribes to at.trustops.events and maps claim, moderation and enforcement events to templates for customers and seller owners.","- Claim opened/seller response due/decided notify the right parties
+- Moderation decisions notify the seller owners
+- Contract test covers the new rules","E19","","Medium","3","notifications trust-ops","notifications","To Do"

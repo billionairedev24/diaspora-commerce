@@ -29,5 +29,6 @@
         <module>services/payments</module>
         <module>services/retail</module>
         <module>services/seller</module>
+        <module>services/trust-ops</module>
     </modules>
 </project>

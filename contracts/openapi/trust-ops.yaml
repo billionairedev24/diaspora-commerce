@@ -1,0 +1,1733 @@
+openapi: 3.1.0
+info:
+  title: Trust & Safety Ops API
+  description: Listing moderation queue, disputes and A-to-z claims, the immutable hash-chained audit log, seller health,
+    suspension and reinstatement, and the support-case queue for Lola hand-offs.
+  contact:
+    name: AfroTransact Platform
+    url: https://developers.afrotransact.com
+  version: v1
+servers:
+- url: http://localhost:8110
+  description: local
+- url: https://api.dev.afrotransact.com/trust-ops
+  description: dev
+- url: https://api.uat.afrotransact.com/trust-ops
+  description: uat
+- url: https://api.afrotransact.com/trust-ops
+  description: prod
+security:
+- bearer: []
+tags:
+- name: Audit log
+  description: Immutable, hash-chained record of every privileged action (audit:read)
+- name: Listing moderation
+  description: Queue of listings awaiting a human decision, with SLA timers, assignment, AI triage hints, allow / remove with
+    reason codes and escalation (catalog:moderate)
+- name: Support cases
+  description: Conversations Lola handed to human support (support:respond)
+- name: Disputes & A-to-z claims
+  description: Customers open claims on orders or shipments, sellers respond within the response window, staff decide with
+    a refund (payments) or a denial
+- name: Seller health & enforcement
+  description: Late shipment, cancellation and defect rates; suspend and reinstate sellers
+paths:
+  /v1/audit/entries:
+    get:
+      tags:
+      - Audit log
+      summary: 'Search the audit log, newest first: filter by actor, entity, action, org and date [from, to)'
+      operationId: search
+      parameters:
+      - name: actorId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: entityType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: entityId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: action
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseAuditEntryResponse'
+  /v1/audit/entries/{seq}:
+    get:
+      tags:
+      - Audit log
+      summary: One audit entry by sequence number
+      operationId: get_3
+      parameters:
+      - name: seq
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/AuditEntryResponse'
+  /v1/audit/export.csv:
+    get:
+      tags:
+      - Audit log
+      summary: CSV export of matching entries, oldest first (same filters; capped)
+      operationId: export
+      parameters:
+      - name: actorId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: entityType
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: entityId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: action
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            text/csv:
+              schema:
+                type: string
+  /v1/audit/verify:
+    get:
+      tags:
+      - Audit log
+      summary: 'Verify the hash chain (default: the whole log); detects edited, re-hashed or missing entries'
+      operationId: verify
+      parameters:
+      - name: fromSeq
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - name: toSeq
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/VerificationResponse'
+  /v1/claims:
+    get:
+      tags:
+      - Disputes & A-to-z claims
+      summary: Staff queue (disputes:manage), soonest due first; default open claims
+      operationId: queue
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - AWAITING_SELLER
+          - UNDER_REVIEW
+          - ESCALATED
+          - RESOLVED_REFUND
+          - RESOLVED_DENIED
+          - WITHDRAWN
+      - name: sellerOrgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: orderId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseClaimResponse'
+    post:
+      tags:
+      - Disputes & A-to-z claims
+      summary: Open a claim (customer; staff with disputes:manage on a customer's behalf)
+      operationId: open
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenClaimRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+  /v1/claims/mine:
+    get:
+      tags:
+      - Disputes & A-to-z claims
+      summary: My claims (customer)
+      operationId: mine
+      parameters:
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseClaimResponse'
+  /v1/claims/seller/{orgId}:
+    get:
+      tags:
+      - Disputes & A-to-z claims
+      summary: Claims against a seller organisation (its members with support:respond, or staff)
+      operationId: forSeller
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - AWAITING_SELLER
+          - UNDER_REVIEW
+          - ESCALATED
+          - RESOLVED_REFUND
+          - RESOLVED_DENIED
+          - WITHDRAWN
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseClaimResponse'
+  /v1/claims/{id}:
+    get:
+      tags:
+      - Disputes & A-to-z claims
+      summary: One claim (customer, seller or staff)
+      operationId: get_2
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+  /v1/claims/{id}/decision:
+    post:
+      tags:
+      - Disputes & A-to-z claims
+      summary: 'Decide: refund through payments or deny (disputes:manage); notifies both parties'
+      operationId: decide
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DecisionRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+  /v1/claims/{id}/escalate:
+    post:
+      tags:
+      - Disputes & A-to-z claims
+      summary: Escalate (disputes:manage)
+      operationId: escalate_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscalateClaimRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+  /v1/claims/{id}/evidence:
+    post:
+      tags:
+      - Disputes & A-to-z claims
+      summary: Add evidence (media asset id) while the claim is open
+      operationId: evidence
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+  /v1/claims/{id}/history:
+    get:
+      tags:
+      - Disputes & A-to-z claims
+      summary: Claim timeline
+      operationId: history
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HistoryResponse'
+  /v1/claims/{id}/seller-response:
+    post:
+      tags:
+      - Disputes & A-to-z claims
+      summary: Seller response within the response window (support:respond for the seller org)
+      operationId: sellerResponse
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SellerResponseRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+  /v1/claims/{id}/withdraw:
+    post:
+      tags:
+      - Disputes & A-to-z claims
+      summary: Withdraw (the customer)
+      operationId: withdraw
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+  /v1/moderation/items:
+    get:
+      tags:
+      - Listing moderation
+      summary: 'Moderation queue, soonest due first (default: open items)'
+      operationId: queue_2
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - PENDING
+          - ESCALATED
+          - APPROVED
+          - REJECTED
+          - CLOSED
+      - name: assignee
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: mine
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseModerationItemResponse'
+  /v1/moderation/items/{id}:
+    get:
+      tags:
+      - Listing moderation
+      summary: One queue item
+      operationId: get_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ModerationItemResponse'
+  /v1/moderation/items/{id}/approve:
+    post:
+      tags:
+      - Listing moderation
+      summary: 'Allow: approves the product in catalog, then closes the item (audited)'
+      operationId: approve
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ModerationItemResponse'
+  /v1/moderation/items/{id}/assign:
+    post:
+      tags:
+      - Listing moderation
+      summary: 'Assign to a reviewer (default: me)'
+      operationId: assign_1
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ModerationItemResponse'
+  /v1/moderation/items/{id}/escalate:
+    post:
+      tags:
+      - Listing moderation
+      summary: Escalate to senior review (new escalation SLA)
+      operationId: escalate
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EscalateRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ModerationItemResponse'
+  /v1/moderation/items/{id}/reject:
+    post:
+      tags:
+      - Listing moderation
+      summary: 'Remove: rejects the product in catalog with the reason code, then closes the item (audited)'
+      operationId: reject
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ModerationItemResponse'
+  /v1/moderation/items/{id}/triage:
+    post:
+      tags:
+      - Listing moderation
+      summary: Re-run AI triage (fail-open)
+      operationId: retriage
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/ModerationItemResponse'
+  /v1/moderation/reason-codes:
+    get:
+      tags:
+      - Listing moderation
+      summary: Reason codes for removing a listing
+      operationId: reasonCodes
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ReasonCodeResponse'
+  /v1/seller-enforcement:
+    get:
+      tags:
+      - Seller health & enforcement
+      summary: Suspended sellers (orgs:read)
+      operationId: suspended
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StandingResponse'
+  /v1/seller-enforcement/{orgId}:
+    get:
+      tags:
+      - Seller health & enforcement
+      summary: Seller standing (orgs:read)
+      operationId: standing
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StandingResponse'
+  /v1/seller-enforcement/{orgId}/reinstate:
+    post:
+      tags:
+      - Seller health & enforcement
+      summary: 'Reinstate: release the payout hold and the buy-box restriction; audited (sellers:enforce)'
+      operationId: reinstate
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReinstateRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StandingResponse'
+  /v1/seller-enforcement/{orgId}/suspend:
+    post:
+      tags:
+      - Seller health & enforcement
+      summary: 'Suspend: hold payouts (seller-service) and restrict in the buy box (offers); audited. Calling again retries
+        steps that failed (sellers:enforce)'
+      operationId: suspend
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SuspendRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/StandingResponse'
+  /v1/seller-health/{orgId}:
+    get:
+      tags:
+      - Seller health & enforcement
+      summary: Seller health over the rolling window, with standing (orgs:read)
+      operationId: health
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SellerHealthResponse'
+  /v1/seller-health/{orgId}/recompute:
+    post:
+      tags:
+      - Seller health & enforcement
+      summary: Recompute now, store a snapshot and push performance to offers (sellers:enforce)
+      operationId: recompute
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /v1/support-cases:
+    get:
+      tags:
+      - Support cases
+      summary: 'Support queue, soonest due first (default: not resolved)'
+      operationId: queue_1
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - OPEN
+          - IN_PROGRESS
+          - RESOLVED
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PageResponseSupportCaseResponse'
+  /v1/support-cases/{id}:
+    get:
+      tags:
+      - Support cases
+      summary: One support case
+      operationId: get
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupportCaseResponse'
+  /v1/support-cases/{id}/assign:
+    post:
+      tags:
+      - Support cases
+      summary: 'Assign (default: me)'
+      operationId: assign
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignCaseRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupportCaseResponse'
+  /v1/support-cases/{id}/resolve:
+    post:
+      tags:
+      - Support cases
+      summary: Resolve
+      operationId: resolve
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupportCaseResponse'
+components:
+  schemas:
+    ResolveRequest:
+      type: object
+      description: Resolve with what was done
+      properties:
+        resolution:
+          type: string
+          maxLength: 2000
+          minLength: 0
+      required:
+      - resolution
+    SlaResponse:
+      type: object
+      description: 'SLA timer: due time, ON_TRACK / AT_RISK (last quarter) / BREACHED, seconds left or overdue'
+      properties:
+        startedAt:
+          type: string
+          format: date-time
+        dueAt:
+          type: string
+          format: date-time
+        state:
+          type: string
+          enum:
+          - ON_TRACK
+          - AT_RISK
+          - BREACHED
+        remainingSeconds:
+          type: integer
+          format: int64
+        overdueSeconds:
+          type: integer
+          format: int64
+    SupportCaseResponse:
+      type: object
+      description: A support case opened from a Lola hand-off (summary redacted by ai-gateway)
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        source:
+          type: string
+        handoffId:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+        customerId:
+          type: string
+        reason:
+          type: string
+        summary:
+          type: string
+        status:
+          type: string
+          enum:
+          - OPEN
+          - IN_PROGRESS
+          - RESOLVED
+        assignee:
+          type: string
+        sla:
+          $ref: '#/components/schemas/SlaResponse'
+        openedAt:
+          type: string
+          format: date-time
+        resolvedAt:
+          type: string
+          format: date-time
+        resolution:
+          type: string
+        version:
+          type: integer
+          format: int64
+    AssignCaseRequest:
+      type: object
+      description: Assign; omit assignee to take it yourself
+      properties:
+        assignee:
+          type: string
+          maxLength: 120
+          minLength: 0
+    HealthResponse:
+      type: object
+      description: Seller health over the rolling window (rates null when unknown)
+      properties:
+        orgId:
+          type: string
+        status:
+          type: string
+          enum:
+          - GOOD
+          - AT_RISK
+          - UNKNOWN
+        breaches:
+          type: array
+          items:
+            type: string
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time
+        shipments:
+          type: integer
+          format: int32
+        delivered:
+          type: integer
+          format: int32
+        lateDeliveries:
+          type: integer
+          format: int32
+        sellerCancellations:
+          type: integer
+          format: int32
+        claims:
+          type: integer
+          format: int32
+        lateShipmentRate:
+          type: number
+          format: double
+        onTimeRate:
+          type: number
+          format: double
+        cancellationRate:
+          type: number
+          format: double
+        defectRate:
+          type: number
+          format: double
+        computedAt:
+          type: string
+          format: date-time
+    SuspendRequest:
+      type: object
+      description: 'Suspend a seller: holds payouts and restricts it in the buy box'
+      properties:
+        reason:
+          type: string
+          enum:
+          - POOR_PERFORMANCE
+          - PROHIBITED_ITEMS
+          - COUNTERFEIT
+          - FRAUD_RISK
+          - POLICY_VIOLATION
+          - COMPLIANCE
+          - OTHER
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - note
+      - reason
+    StandingResponse:
+      type: object
+      description: Seller standing and which upstream effects are applied
+      properties:
+        orgId:
+          type: string
+        status:
+          type: string
+          enum:
+          - ACTIVE
+          - SUSPENDED
+        reason:
+          type: string
+          enum:
+          - POOR_PERFORMANCE
+          - PROHIBITED_ITEMS
+          - COUNTERFEIT
+          - FRAUD_RISK
+          - POLICY_VIOLATION
+          - COMPLIANCE
+          - OTHER
+        note:
+          type: string
+        actorId:
+          type: string
+        changedAt:
+          type: string
+          format: date-time
+        payoutsHeld:
+          type: boolean
+        buyBoxRestricted:
+          type: boolean
+        stepsPending:
+          type: boolean
+    ReinstateRequest:
+      type: object
+      description: 'Reinstate a seller: releases the payout hold and the buy-box restriction'
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - note
+    AiFlag:
+      type: object
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        citedFields:
+          type: array
+          items:
+            type: string
+    ModerationItemResponse:
+      type: object
+      description: A listing in the moderation queue
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        atin:
+          type: string
+        sellerOrgId:
+          type: string
+        ownerKind:
+          type: string
+        title:
+          type: string
+        productTypeCode:
+          type: string
+        status:
+          type: string
+          enum:
+          - PENDING
+          - ESCALATED
+          - APPROVED
+          - REJECTED
+          - CLOSED
+        priority:
+          type: string
+          enum:
+          - NORMAL
+          - HIGH
+        triageStatus:
+          type: string
+          enum:
+          - COMPLETED
+          - UNAVAILABLE
+        triage:
+          $ref: '#/components/schemas/TriageResponse'
+        enqueuedAt:
+          type: string
+          format: date-time
+        sla:
+          $ref: '#/components/schemas/SlaResponse'
+        assignee:
+          type: string
+        assignedAt:
+          type: string
+          format: date-time
+        escalated:
+          type: boolean
+        escalationReason:
+          type: string
+        escalatedAt:
+          type: string
+          format: date-time
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        reasonCode:
+          type: string
+          enum:
+          - PROHIBITED_ITEM
+          - UNAPPROVED_HEALTH_CLAIM
+          - RESTRICTED_INGREDIENT
+          - COUNTERFEIT
+          - IMAGE_POLICY
+          - MISLEADING_CONTENT
+          - LABELLING
+          - SHIPPING_METHOD
+          - DUPLICATE_LISTING
+          - WRONG_CATEGORY
+          - OTHER
+        decisionNote:
+          type: string
+        version:
+          type: integer
+          format: int64
+    TriageResponse:
+      type: object
+      description: AI triage hint (advisory; absent when AI is off or unavailable)
+      properties:
+        riskLevel:
+          type: string
+        summary:
+          type: string
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiFlag'
+        model:
+          type: string
+    RejectRequest:
+      type: object
+      description: 'Remove the listing: reason code required, note required for OTHER'
+      properties:
+        reasonCode:
+          type: string
+          enum:
+          - PROHIBITED_ITEM
+          - UNAPPROVED_HEALTH_CLAIM
+          - RESTRICTED_INGREDIENT
+          - COUNTERFEIT
+          - IMAGE_POLICY
+          - MISLEADING_CONTENT
+          - LABELLING
+          - SHIPPING_METHOD
+          - DUPLICATE_LISTING
+          - WRONG_CATEGORY
+          - OTHER
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - reasonCode
+    EscalateRequest:
+      type: object
+      description: Escalate to senior review
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - reason
+    AssignRequest:
+      type: object
+      description: Assign to a reviewer; omit assignee to take it yourself
+      properties:
+        assignee:
+          type: string
+          maxLength: 120
+          minLength: 0
+    ApproveRequest:
+      type: object
+      description: Allow the listing (optional note)
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+          minLength: 0
+    OpenClaimRequest:
+      type: object
+      description: Open a claim on an order or one of its shipments. customerId only when staff open it for a customer; evidence
+        are media asset ids.
+      properties:
+        type:
+          type: string
+          enum:
+          - ITEM_NOT_RECEIVED
+          - DAMAGED_ITEM
+          - WRONG_ITEM
+          - NOT_AS_DESCRIBED
+          - BOOKING_NO_SHOW
+          - OTHER
+        orderId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        orderNumber:
+          type: string
+          maxLength: 40
+          minLength: 0
+        shipmentId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        sellerOrgId:
+          type: string
+          maxLength: 80
+          minLength: 0
+        customerId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        amountMinor:
+          type: integer
+          format: int64
+          exclusiveMinimum: 0
+        currency:
+          type: string
+          maxLength: 3
+          minLength: 3
+        description:
+          type: string
+          maxLength: 4000
+          minLength: 0
+        evidenceAssetIds:
+          type: array
+          items:
+            type: string
+            maxLength: 120
+            minLength: 0
+          maxItems: 20
+          minItems: 0
+      required:
+      - currency
+      - description
+      - orderId
+      - sellerOrgId
+      - type
+    ClaimResponse:
+      type: object
+      description: A dispute / A-to-z claim
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        type:
+          type: string
+          enum:
+          - ITEM_NOT_RECEIVED
+          - DAMAGED_ITEM
+          - WRONG_ITEM
+          - NOT_AS_DESCRIBED
+          - BOOKING_NO_SHOW
+          - OTHER
+        status:
+          type: string
+          enum:
+          - AWAITING_SELLER
+          - UNDER_REVIEW
+          - ESCALATED
+          - RESOLVED_REFUND
+          - RESOLVED_DENIED
+          - WITHDRAWN
+        orderId:
+          type: string
+        orderNumber:
+          type: string
+        shipmentId:
+          type: string
+        sellerOrgId:
+          type: string
+        customerId:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        description:
+          type: string
+        evidence:
+          type: array
+          items:
+            $ref: '#/components/schemas/Evidence'
+        sellerResponse:
+          type: string
+        sellerRespondedAt:
+          type: string
+          format: date-time
+        sla:
+          $ref: '#/components/schemas/SlaResponse'
+        escalated:
+          type: boolean
+        escalationReason:
+          type: string
+        outcome:
+          type: string
+          enum:
+          - REFUND
+          - DENY
+        refundMinor:
+          type: integer
+          format: int64
+        refundId:
+          type: string
+        decidedBy:
+          type: string
+        decidedAt:
+          type: string
+          format: date-time
+        decisionNote:
+          type: string
+        openedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          format: int64
+    Evidence:
+      type: object
+      properties:
+        assetId:
+          type: string
+        party:
+          type: string
+          enum:
+          - CUSTOMER
+          - SELLER
+          - STAFF
+        addedBy:
+          type: string
+        note:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+    SellerResponseRequest:
+      type: object
+      description: The seller's answer, with optional evidence asset ids
+      properties:
+        message:
+          type: string
+          maxLength: 4000
+          minLength: 0
+        evidenceAssetIds:
+          type: array
+          items:
+            type: string
+            maxLength: 120
+            minLength: 0
+          maxItems: 20
+          minItems: 0
+      required:
+      - message
+    EvidenceRequest:
+      type: object
+      description: Add a media asset id as evidence
+      properties:
+        assetId:
+          type: string
+          maxLength: 120
+          minLength: 0
+        note:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - assetId
+    EscalateClaimRequest:
+      type: object
+      description: Escalate a claim
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          minLength: 0
+      required:
+      - reason
+    DecisionRequest:
+      type: object
+      description: 'Decision: REFUND (paymentId + refundLines, sum ≤ claimed amount) or DENY (note required)'
+      properties:
+        outcome:
+          type: string
+          enum:
+          - REFUND
+          - DENY
+        note:
+          type: string
+          maxLength: 2000
+          minLength: 0
+        paymentId:
+          type: string
+          format: uuid
+        refundLines:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundLineRequest'
+          maxItems: 200
+          minItems: 0
+      required:
+      - outcome
+    RefundLineRequest:
+      type: object
+      description: One order line to refund (minor units)
+      properties:
+        lineId:
+          type: string
+          minLength: 1
+        itemsMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        shippingMinor:
+          type: integer
+          format: int64
+          minimum: 0
+        taxMinor:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - lineId
+    PageResponseSupportCaseResponse:
+      type: object
+      description: A page of results
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupportCaseResponse'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    SellerHealthResponse:
+      type: object
+      description: Health, last push to offers and standing
+      properties:
+        health:
+          $ref: '#/components/schemas/HealthResponse'
+        lastPushedToOffers:
+          type: boolean
+        standing:
+          $ref: '#/components/schemas/StandingResponse'
+    ReasonCodeResponse:
+      type: object
+      description: Reason code with its label
+      properties:
+        code:
+          type: string
+          enum:
+          - PROHIBITED_ITEM
+          - UNAPPROVED_HEALTH_CLAIM
+          - RESTRICTED_INGREDIENT
+          - COUNTERFEIT
+          - IMAGE_POLICY
+          - MISLEADING_CONTENT
+          - LABELLING
+          - SHIPPING_METHOD
+          - DUPLICATE_LISTING
+          - WRONG_CATEGORY
+          - OTHER
+        label:
+          type: string
+    PageResponseModerationItemResponse:
+      type: object
+      description: A page of results
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModerationItemResponse'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    PageResponseClaimResponse:
+      type: object
+      description: A page of results
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClaimResponse'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+    HistoryResponse:
+      type: object
+      description: Timeline entry
+      properties:
+        at:
+          type: string
+          format: date-time
+        actorId:
+          type: string
+        action:
+          type: string
+        fromStatus:
+          type: string
+          enum:
+          - AWAITING_SELLER
+          - UNDER_REVIEW
+          - ESCALATED
+          - RESOLVED_REFUND
+          - RESOLVED_DENIED
+          - WITHDRAWN
+        toStatus:
+          type: string
+          enum:
+          - AWAITING_SELLER
+          - UNDER_REVIEW
+          - ESCALATED
+          - RESOLVED_REFUND
+          - RESOLVED_DENIED
+          - WITHDRAWN
+        note:
+          type: string
+    VerificationResponse:
+      type: object
+      description: 'Chain verification: valid, entries checked, first broken entry and the head checked'
+      properties:
+        valid:
+          type: boolean
+        checked:
+          type: integer
+          format: int64
+        brokenAtSeq:
+          type: integer
+          format: int64
+        problem:
+          type: string
+        lastSeq:
+          type: integer
+          format: int64
+        lastHash:
+          type: string
+    AuditEntryResponse:
+      type: object
+      description: An immutable audit record; hash = SHA-256(prevHash, seq, content)
+      properties:
+        seq:
+          type: integer
+          format: int64
+        id:
+          type: string
+          format: uuid
+        eventType:
+          type: string
+        actorId:
+          type: string
+        actorType:
+          type: string
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        orgId:
+          type: string
+        summary:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        recordedAt:
+          type: string
+          format: date-time
+        sourceTopic:
+          type: string
+        sourceEventId:
+          type: string
+          format: uuid
+        payload:
+          type: string
+        prevHash:
+          type: string
+        hash:
+          type: string
+    PageResponseAuditEntryResponse:
+      type: object
+      description: A page of results
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntryResponse'
+        total:
+          type: integer
+          format: int64
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

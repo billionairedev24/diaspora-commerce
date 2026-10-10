@@ -1,0 +1,28 @@
+env: dev
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 2
+  cpu: 70
+rollout:
+  enabled: false
+resources:
+  requests: {cpu: 100m, memory: 512Mi}
+  limits: {memory: 1Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+tolerations:
+  - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
+  AUTH_TOKEN_URI: https://auth.dev.afrotransact.com/oauth2/token
+  CATALOG_URL: http://catalog:8080
+  PAYMENTS_URL: http://payments:8080
+  SELLER_URL: http://seller:8080
+  OFFERS_URL: http://offers:8080
+  AI_GATEWAY_URL: http://ai-gateway:8080
+  AI_TRIAGE_ENABLED: "true"
+  TRUSTOPS_SLA_SELLER_RESPONSE: 72h
+  SELLER_HEALTH_WINDOW: 90d

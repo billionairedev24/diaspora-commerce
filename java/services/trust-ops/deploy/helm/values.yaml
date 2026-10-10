@@ -1,0 +1,57 @@
+# Base values for trust-ops. Environment files override; Argo CD adds platform-values.yaml (cloud, identity, store).
+service:
+  name: trust-ops
+  runtime: java
+  port: 8080
+env: dev
+cloud: none            # aws | gcp | azure | none (kind / local clusters)
+image:
+  registry: ghcr.io/billionairedev24/diaspora-commerce
+  repository: trust-ops-service
+  tag: latest
+replicas: 1
+autoscaling:
+  enabled: false
+  min: 1
+  max: 3
+  cpu: 70
+rollout:
+  enabled: false
+  pause: 2m
+  maxErrorRate: "0.01"
+resources:
+  requests: {cpu: 100m, memory: 512Mi}
+  limits: {memory: 1Gi}
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampling: "1.0"
+monitoring:
+  serviceMonitor: true
+  prometheusUrl: http://kube-prometheus-stack-prometheus.observability:9090
+# Secret keys expected at afrotransact/<env>/trust-ops in the cloud secret store:
+#   - DB_URL
+#   - DB_USER
+#   - DB_PASSWORD
+#   - KAFKA_BOOTSTRAP
+#   - TRUSTOPS_CLIENT_SECRET
+secrets:
+  enabled: true
+  store: platform-secrets
+  keySeparator: "/"     # "-" on GCP Secret Manager and Azure Key Vault (set in platform-values.yaml)
+workloadIdentity:
+  aws: {roleArn: ""}
+  gcp: {serviceAccount: ""}
+  azure: {clientId: ""}
+extraEnv:
+  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
+  AUTH_TOKEN_URI: https://auth.dev.afrotransact.com/oauth2/token
+  CATALOG_URL: http://catalog:8080
+  PAYMENTS_URL: http://payments:8080
+  SELLER_URL: http://seller:8080
+  OFFERS_URL: http://offers:8080
+  AI_GATEWAY_URL: http://ai-gateway:8080
+  AI_TRIAGE_ENABLED: "true"
+  TRUSTOPS_SLA_SELLER_RESPONSE: 72h
+  SELLER_HEALTH_WINDOW: 90d
+nodeSelector: {}
+tolerations: []
