@@ -51,7 +51,7 @@ jobs:
     outputs:
       exists: ${{ steps.check.outputs.exists }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: check
         run: |
           if [[ -f "$SERVICE_DIR/pom.xml" ]]; then
@@ -68,8 +68,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "25"
@@ -84,7 +84,7 @@ jobs:
         run: ./mvnw -B -ntp -f "services/${SERVICE}/pom.xml" verify
       - name: Test reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: reports-${{ inputs.service }}
           path: |
@@ -100,7 +100,7 @@ jobs:
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Breaking changes vs base branch
@@ -130,7 +130,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: gitleaks
@@ -165,7 +165,7 @@ jobs:
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/helm-check
         with:
           chart: ${{ env.SERVICE_DIR }}/deploy/helm
@@ -185,7 +185,7 @@ jobs:
       tag: ${{ steps.publish.outputs.tag }}
       digest: ${{ steps.publish.outputs.digest }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: publish
         uses: ./.github/actions/publish-image
         with:

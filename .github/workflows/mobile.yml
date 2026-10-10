@@ -47,7 +47,7 @@ jobs:
       action: ${{ steps.p.outputs.action }}
       profile: ${{ steps.p.outputs.profile }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: p
         env:
           EVENT: ${{ github.event_name }}
@@ -98,16 +98,16 @@ jobs:
         if: env.HAS_EXPO != 'true'
         working-directory: .
         run: echo "::notice::EXPO_TOKEN is not set; EAS ${{ needs.plan.outputs.action }} skipped."
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: env.HAS_EXPO == 'true'
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: env.HAS_EXPO == 'true'
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         if: env.HAS_EXPO == 'true'
         with:
           node-version: "22"
           cache: pnpm
-      - uses: expo/expo-github-action@v8
+      - uses: expo/expo-github-action@v9
         if: env.HAS_EXPO == 'true'
         with:
           eas-version: latest

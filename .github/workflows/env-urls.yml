@@ -17,6 +17,6 @@ jobs:
     name: environment URL guard
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: No hard-coded environment hosts
         run: python3 tools/ci/check_env_urls.py --format github

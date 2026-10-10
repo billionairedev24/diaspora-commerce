@@ -76,12 +76,12 @@ jobs:
       - name: GitOps token
         id: token
         if: env.skip != 'true' && env.HAS_GITOPS_APP == 'true'
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.GITOPS_APP_ID }}
           private-key: ${{ secrets.GITOPS_APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         if: env.skip != 'true'
         with:
           ref: ${{ env.GITOPS_BRANCH }}
@@ -92,7 +92,7 @@ jobs:
 
       - name: Log in to GHCR
         if: env.skip != 'true'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -131,7 +131,7 @@ jobs:
 
       - name: Registry login (Artifact Registry)
         if: env.CLOUD == 'gcp'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ vars.GCP_REGISTRY_HOST }}
           username: oauth2accesstoken

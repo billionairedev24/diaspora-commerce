@@ -70,9 +70,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -85,7 +85,7 @@ jobs:
           n="$(jq '[.entries[] | select(.type == "story")] | length' "$UI_DIR/storybook-static/index.json")"
           echo "Storybook: $n stories" | tee -a "$GITHUB_STEP_SUMMARY"
           [[ "$n" -gt 0 ]] || { echo "::error::index.json has no stories"; exit 1; }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: storybook-static
           path: ${{ env.UI_DIR }}/storybook-static
@@ -102,15 +102,15 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.56.1-noble
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - name: Install (root pnpm workspace)
         run: pnpm install --frozen-lockfile
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: storybook-static
           path: ${{ env.UI_DIR }}/storybook-static
@@ -122,7 +122,7 @@ jobs:
         run: tools/quality/coverage_report.sh --service ui-storybook
       - name: Upload coverage
         if: ${{ !cancelled() && steps.stories.outcome != 'skipped' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: storybook-coverage
           path: ${{ env.UI_DIR }}/coverage/storybook
@@ -134,7 +134,7 @@ jobs:
         run: pnpm --filter @afrotransact/ui visual
       - name: Upload visual diffs
         if: ${{ failure() && steps.visual.outcome == 'failure' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: visual-diffs
           path: |
@@ -172,7 +172,7 @@ jobs:
       - name: Cloudflare not configured
         if: env.HAS_CF != 'true'
         run: echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set; Storybook is not deployed."
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         if: env.HAS_CF == 'true'
         with:
           name: storybook-static
@@ -185,7 +185,7 @@ jobs:
       - name: Deploy to Cloudflare Pages
         id: pages
         if: env.HAS_CF == 'true'
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -231,11 +231,11 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.head_ref || github.ref_name }}
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm

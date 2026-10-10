@@ -46,7 +46,7 @@ jobs:
     outputs:
       exists: ${{ steps.check.outputs.exists }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: check
         run: |
           if [[ -f "$APP_DIR/package.json" ]]; then echo "exists=true" >> "$GITHUB_OUTPUT"
@@ -62,9 +62,9 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -80,7 +80,7 @@ jobs:
       - name: OpenNext build (Cloudflare Workers)
         working-directory: ${{ env.APP_DIR }}
         run: pnpm exec opennextjs-cloudflare build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web-${{ inputs.app }}
           path: |
@@ -107,8 +107,8 @@ jobs:
       - name: Cloudflare not configured
         if: env.HAS_CF != 'true'
         run: echo "::notice::CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID are not set for this environment; not deployed."
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: web-${{ inputs.app }}
           path: ${{ env.APP_DIR }}
@@ -134,7 +134,7 @@ jobs:
       - name: Deploy
         id: deploy
         if: env.HAS_CF == 'true'
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -170,9 +170,9 @@ jobs:
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_ENV: ${{ inputs.target == 'prod' && 'production' || 'preview' }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Build and deploy (prebuilt)

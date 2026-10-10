@@ -47,7 +47,7 @@ jobs:
     outputs:
       exists: ${{ steps.check.outputs.exists }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: check
         run: |
           if [[ -f "$SERVICE_DIR/go.mod" ]]; then
@@ -64,15 +64,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: |
             ${{ env.SERVICE_DIR }}/go.sum
             go/pkg/go.sum
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v2.14.0
           # Build the linter with the job's Go 1.27.2 so it understands the module's go directive.
@@ -88,7 +88,7 @@ jobs:
       - name: Coverage summary
         working-directory: ${{ env.SERVICE_DIR }}
         run: go tool cover -func=coverage.out | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-${{ inputs.service }}
@@ -102,7 +102,7 @@ jobs:
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Service copy matches contracts/
@@ -139,8 +139,8 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache-dependency-path: ${{ env.SERVICE_DIR }}/go.sum
@@ -182,7 +182,7 @@ jobs:
     if: needs.meta.outputs.exists == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/helm-check
         with:
           chart: ${{ env.SERVICE_DIR }}/deploy/helm
@@ -202,7 +202,7 @@ jobs:
       tag: ${{ steps.publish.outputs.tag }}
       digest: ${{ steps.publish.outputs.digest }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: publish
         uses: ./.github/actions/publish-image
         with:
