@@ -4,11 +4,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/httpserver"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
@@ -85,7 +84,8 @@ func (h *handlersImpl) registerShopper(route func(pattern string, fn http.Handle
 	route("POST /v1/account/bookings/{bookingId}/review", h.reviewBooking)
 	route("POST /v1/account/bookings/{bookingId}/payment/sync", h.syncBookingPayment)
 	// Lola
-	route("POST /v1/lola/chat", h.lolaChat)
+	// SSE: exempt from the shared server's write timeout (a Lola turn outlasts it).
+	route("POST /v1/lola/chat", httpserver.Stream(http.HandlerFunc(h.lolaChat)).ServeHTTP)
 	route("GET /v1/lola/sessions/{sessionId}/messages", h.lolaHistory)
 }
 
@@ -398,34 +398,6 @@ func (h *handlersImpl) syncBookingPayment(w http.ResponseWriter, r *http.Request
 
 // ---------------------------------------------------------------- Lola (SSE relay)
 
-// flusherOf finds a Flusher behind wrapping ResponseWriters: through Unwrap(), or an exported embedded
-// "ResponseWriter" field (go/pkg/httpserver's status recorder embeds the writer but neither flushes nor unwraps).
-func flusherOf(w http.ResponseWriter) (http.Flusher, http.ResponseWriter) {
-	for range 8 {
-		if f, ok := w.(http.Flusher); ok {
-			return f, w
-		}
-		if u, ok := w.(interface{ Unwrap() http.ResponseWriter }); ok {
-			w = u.Unwrap()
-			continue
-		}
-		v := reflect.ValueOf(w)
-		if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
-			return nil, w
-		}
-		f := v.Elem().FieldByName("ResponseWriter")
-		if !f.IsValid() || !f.CanInterface() {
-			return nil, w
-		}
-		inner, ok := f.Interface().(http.ResponseWriter)
-		if !ok || inner == nil {
-			return nil, w
-		}
-		w = inner
-	}
-	return nil, w
-}
-
 func (h *handlersImpl) lolaChat(w http.ResponseWriter, r *http.Request) {
 	var b domain.LolaChatRequest
 	if err := decode(r, &b, false); err != nil {
@@ -445,9 +417,7 @@ func (h *handlersImpl) lolaChat(w http.ResponseWriter, r *http.Request) {
 	hd.Set("Cache-Control", "no-cache, no-transform")
 	hd.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-	flusher, inner := flusherOf(w)
-	// The server's write timeout is shorter than a Lola turn: lift it for this stream.
-	_ = http.NewResponseController(inner).SetWriteDeadline(time.Time{})
+	rc := http.NewResponseController(w)
 	buf := make([]byte, 8<<10)
 	for {
 		n, rerr := stream.Read(buf)
@@ -455,17 +425,13 @@ func (h *handlersImpl) lolaChat(w http.ResponseWriter, r *http.Request) {
 			if _, werr := w.Write(buf[:n]); werr != nil {
 				return // the shopper went away; closing the stream cancels the upstream turn
 			}
-			if flusher != nil {
-				flusher.Flush()
-			}
+			_ = rc.Flush()
 		}
 		if rerr != nil {
 			if !errors.Is(rerr, io.EOF) && r.Context().Err() == nil {
 				h.log.WarnContext(r.Context(), "lola stream interrupted", "error", rerr)
 				_, _ = io.WriteString(w, "event: error\ndata: {\"code\":\"UPSTREAM_UNAVAILABLE\",\"detail\":\"Lola stopped answering. Please try again.\"}\n\n")
-				if flusher != nil {
-					flusher.Flush()
-				}
+				_ = rc.Flush()
 			}
 			return
 		}

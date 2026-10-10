@@ -1,13 +1,14 @@
 'use client';
 
-import { type AvailableSlot, bookingKeys, type CustomerBooking, formatMoney, isApiError } from '@afrotransact/api-client';
+import { type AvailableSlot, bookingKeys, type CustomerBooking, isApiError } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, Skeleton, Star, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
 import { AccountCrumb } from '@/components/account/AccountCrumb';
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
@@ -17,6 +18,8 @@ import { slotDay, SlotPicker, slotTime } from './SlotPicker';
 type Mode = 'idle' | 'cancel' | 'reschedule' | 'review';
 
 function BookingCard({ b }: { b: CustomerBooking }) {
+  const fmt = useFormatters();
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -29,7 +32,7 @@ function BookingCard({ b }: { b: CustomerBooking }) {
   const fail = (e: unknown) => toast.show(isApiError(e) ? (Object.values(e.fieldErrors)[0] ?? e.message) : t('auth.genericError'));
   const cancel = useMutation({
     mutationFn: () => api.cancelBooking(b.id),
-    onSuccess: async (r) => { setMode('idle'); await refresh(); toast.show(t('bk.cancelledRefund', { amount: formatMoney(r.applied.refundMinor) })); },
+    onSuccess: async (r) => { setMode('idle'); await refresh(); toast.show(t('bk.cancelledRefund', { amount: fmt.money(r.applied.refundMinor) })); },
     onError: fail
   });
   const reschedule = useMutation({ mutationFn: () => api.rescheduleBooking(b.id, slot?.start ?? ''), onSuccess: async () => { setMode('idle'); await refresh(); toast.show(t('bk.rescheduleSent')); }, onError: fail });
@@ -45,10 +48,10 @@ function BookingCard({ b }: { b: CustomerBooking }) {
           <strong>
             {b.service.name} · {b.service.providerName}
           </strong>
-          <span>{t('bk.when', { day: slotDay(b.startAt), time: slotTime(b.startAt) })}</span>
-          {b.proposedStartAt && <span className={styles.success}>{t('bk.proposed', { day: slotDay(b.proposedStartAt), time: slotTime(b.proposedStartAt) })}</span>}
+          <span>{t('bk.when', { day: slotDay(fmt.tag, b.startAt), time: slotTime(fmt.tag, b.startAt) })}</span>
+          {b.proposedStartAt && <span className={styles.success}>{t('bk.proposed', { day: slotDay(fmt.tag, b.proposedStartAt), time: slotTime(fmt.tag, b.proposedStartAt) })}</span>}
           <span className={styles.muted}>
-            {t('bk.money', { deposit: formatMoney(b.service.depositMinor), balance: formatMoney(b.service.balanceMinor) })} · {b.reference}
+            {t('bk.money', { deposit: fmt.money(b.service.depositMinor), balance: fmt.money(b.service.balanceMinor) })} · {b.reference}
           </span>
         </div>
         <div className={styles.actions}>
@@ -93,7 +96,7 @@ function BookingCard({ b }: { b: CustomerBooking }) {
             <Skeleton height={32} />
           ) : quote.data ? (
             <>
-              <strong>{t('bk.refundQuote', { amount: formatMoney(quote.data.refundMinor) })}</strong>
+              <strong>{t('bk.refundQuote', { amount: fmt.money(quote.data.refundMinor) })}</strong>
               <span>{quote.data.explanation}</span>
             </>
           ) : (
@@ -142,6 +145,7 @@ function BookingCard({ b }: { b: CustomerBooking }) {
 
 /** Your appointments (S150): live status, exact refund before cancelling, reschedule, answer a proposed time, review. */
 export function BookingsView() {
+  const t = useT();
   const q = useQuery(shopperQueries.bookings(browserApi()));
   const now = Date.now();
   const upcoming = (q.data ?? []).filter((b) => new Date(b.endAt).getTime() >= now && !b.status.startsWith('CANCELLED') && b.status !== 'DECLINED');

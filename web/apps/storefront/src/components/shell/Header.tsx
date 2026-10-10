@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries, cartQueries, DEPARTMENTS_LIST, searchHref, siteQueries } from '@/lib/api/queries';
 
@@ -18,6 +18,7 @@ import { useLolaLauncher } from './LolaLauncher';
 import { SearchBox } from './SearchBox';
 
 export function Header() {
+  const t = useT();
   const api = browserApi();
   const { data: location } = useQuery(siteQueries.deliveryLocation(api));
   const { data: cart } = useQuery(cartQueries.current(api));

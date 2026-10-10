@@ -24,6 +24,16 @@ const formOf = (p: PublicPage): Form => ({
 });
 
 /** Public page (providers) / Storefront & theme (sellers): layout, colours, links (pending until approved) and publish. */
+/** Text colour with the higher contrast on a seller colour (preview of their button; WCAG 1.4.3). */
+function readableOn(bg: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(bg.trim());
+  if (!m?.[1]) return 'var(--at-color-text)';
+  const n = parseInt(m[1], 16);
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const l = 0.2126 * lin(((n >> 16) & 255) / 255) + 0.7152 * lin(((n >> 8) & 255) / 255) + 0.0722 * lin((n & 255) / 255);
+  return (l + 0.05) / 0.05 >= 1.05 / (l + 0.05) ? 'var(--at-color-text)' : 'var(--at-color-text-inverse)';
+}
+
 export function PublicPageView() {
   const api = sellerApi();
   const qc = useQueryClient();
@@ -110,7 +120,7 @@ export function PublicPageView() {
           <div className="flex flex-col gap-2 px-4 pb-4">
             <strong className="text-xl">{form.name}</strong>
             <span className="text-sm text-muted">{form.tagline}</span>
-            <span className={cx('self-start px-4 py-2 text-sm font-bold', form.buttonShape === 'ROUNDED' ? 'rounded-pill' : 'rounded-xs')} style={{ background: form.accentColor, color: 'var(--at-color-text-inverse)' }}>
+            <span className={cx('self-start px-4 py-2 text-sm font-bold', form.buttonShape === 'ROUNDED' ? 'rounded-pill' : 'rounded-xs')} style={{ background: form.accentColor, color: readableOn(form.accentColor) }}>
               {isProvider ? 'Book now' : 'Shop the store'}
             </span>
             {isProvider && page.featured.length ? (

@@ -1,15 +1,21 @@
 'use client';
 
 import { type ProductSummary } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { ProductCard } from '@afrotransact/ui';
+import { useMemo } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { lineForOffer, useCart, useCartMutation } from '@/lib/cart/useCart';
 import { productHref } from '@/lib/links';
 
 import { ProductLink } from './ProductLink';
 
-export const cardLabels = {
+/** Product card labels in the active language. */
+export function useCardLabels() {
+  const t = useT();
+  return useMemo(
+    () => ({
   addToCart: t('card.addToCart'),
   inCart: (n: number) => t('card.inCart', { n }),
   unavailable: t('card.unavailable'),
@@ -18,11 +24,17 @@ export const cardLabels = {
   brand: t('card.brand'),
   onlyLeft: (n: number) => t('card.onlyLeft', { n }),
   offers: (count: number, from: string) => t('card.offers', { count, from }),
-  soldBy: (seller: string) => t('card.soldBy', { seller })
-};
+  soldBy: (seller: string) => t('card.soldBy', { seller }),
+      rating: (rating: string) => t('card.rating', { rating })
+    }),
+    [t]
+  );
+}
 
 /** Product card wired to the cart: "Add to cart" becomes a −/+ stepper capped by stock. */
 export function CartAwareProductCard({ product, variant = 'grid' }: { product: ProductSummary; variant?: 'grid' | 'rail' }) {
+  const cardLabels = useCardLabels();
+  const fmt = useFormatters();
   const { data: cart } = useCart();
   const m = useCartMutation();
   const line = lineForOffer(cart, product.offerId);
@@ -33,6 +45,7 @@ export function CartAwareProductCard({ product, variant = 'grid' }: { product: P
       variant={variant}
       linkAs={ProductLink}
       labels={cardLabels}
+      locale={fmt.tag}
       quantityInCart={line?.quantity ?? 0}
       busy={m.isPending}
       onAdd={() => m.mutate({ kind: 'add', offerId: product.offerId, quantity: 1, title: product.title })}

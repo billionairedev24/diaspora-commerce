@@ -5,22 +5,23 @@ import { Button, TextField } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries } from '@/lib/api/queries';
 
 import styles from './Account.module.css';
 
-const message = (e: unknown) => (isApiError(e) ? e.message : t('auth.genericError'));
+const message = (e: unknown, t: Translator<MessageKey>) => (isApiError(e) ? e.message : t('auth.genericError'));
 
 /** Account phone verification (identity S234): text a 6-digit code to the account phone, then confirm it. */
 export function PhoneVerificationCard() {
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const me = useQuery(accountQueries.me(api));
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const send = useMutation({ mutationFn: () => api.startPhoneVerification(), onMutate: () => setError(null), onError: (e) => setError(message(e)) });
+  const send = useMutation({ mutationFn: () => api.startPhoneVerification(), onMutate: () => setError(null), onError: (e) => setError(message(e, t)) });
   const confirm = useMutation({
     mutationFn: (c: string) => api.confirmPhoneVerification(c),
     onSuccess: () => void qc.invalidateQueries({ queryKey: accountKeys.me() }),

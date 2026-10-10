@@ -1,11 +1,12 @@
-// Metro config: Expo defaults (monorepo-aware) plus one rule — React and TanStack Query always resolve to this app's
+// Metro config: Expo defaults (monorepo-aware, via Sentry's wrapper) plus one rule — React and TanStack Query always resolve to this app's
 // copies. Workspace packages such as @afrotransact/api-client carry their own (web, React 19.3) dev install; without
 // this rule a second React could be bundled through them.
 const path = require('node:path');
 
-const { getDefaultConfig } = require('expo/metro-config');
+// Sentry's Expo config = Expo defaults + debug IDs in bundles and source maps, so errors map back to source per release (S178).
+const { getSentryExpoConfig } = require('@sentry/react-native/metro');
 
-const config = getDefaultConfig(__dirname);
+const config = getSentryExpoConfig(__dirname);
 const SINGLETONS = ['react', 'react-dom', 'react-native', '@tanstack/react-query'];
 const appOrigin = path.join(__dirname, 'package.json');
 

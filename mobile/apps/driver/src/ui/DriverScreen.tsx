@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { syncStatus } from '@/domain/outbox';
 import { type SosKind } from '@/domain/types';
+import { type MessageKey, useT } from '@/i18n';
 import { useDriver } from '@/session/DriverProvider';
 import { c, sp, t } from '@/theme';
 
@@ -16,21 +17,22 @@ import { AppText, Button } from './primitives';
 import { Sheet } from './Sheet';
 import { useToast } from './Toast';
 
-const SOS: Array<{ kind: SosKind; label: string; icon: typeof Wrench }> = [
-  { kind: 'BREAKDOWN', label: 'Vehicle breakdown', icon: Wrench },
-  { kind: 'ACCIDENT', label: 'Accident', icon: CarProfile },
-  { kind: 'UNSAFE', label: 'I feel unsafe', icon: ShieldWarning },
-  { kind: 'MEDICAL', label: 'Medical issue', icon: FirstAid }
+const SOS: Array<{ kind: SosKind; label: MessageKey; icon: typeof Wrench }> = [
+  { kind: 'BREAKDOWN', label: 'dr.sos.breakdown', icon: Wrench },
+  { kind: 'ACCIDENT', label: 'dr.sos.accident', icon: CarProfile },
+  { kind: 'UNSAFE', label: 'dr.sos.unsafe', icon: ShieldWarning },
+  { kind: 'MEDICAL', label: 'dr.sos.medical', icon: FirstAid }
 ];
 
 export function SyncPill() {
+  const tr = useT();
   const router = useRouter();
   const { sync } = useDriver();
   const s = syncStatus(sync.online, sync.outbox.events.length, sync.syncing);
   const Icon = s.kind === 'offline' ? CloudSlash : s.kind === 'syncing' ? CircleNotch : CloudCheck;
   const bg = s.kind === 'offline' ? t.ink['300'] : s.kind === 'syncing' ? t.gold['300'] : t.gold['500'];
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`Sync status: ${s.label}`} onPress={() => router.navigate('/profile')} style={[styles.pill, { backgroundColor: bg }]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={tr('dr.sync.status', { label: s.label })} onPress={() => router.navigate('/profile')} style={[styles.pill, { backgroundColor: bg }]}>
       <Icon size={14} weight={s.kind === 'synced' ? 'fill' : 'bold'} color={c.text} />
       <AppText variant="caption" style={{ fontWeight: t.fontWeight.bold }}>{s.label}</AppText>
     </Pressable>
@@ -38,6 +40,7 @@ export function SyncPill() {
 }
 
 export function SosButton() {
+  const tr = useT();
   const { engine, sync } = useDriver();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -45,21 +48,21 @@ export function SosButton() {
     setOpen(false);
     try {
       await engine.record({ type: 'sos.raised', sos: kind });
-      toast(sync.online ? 'Dispatch notified — they’ll call you now. Remaining stops can be reassigned.' : 'No signal — SOS will send the moment you’re back online. Call 911 if you’re in danger.');
+      toast(sync.online ? tr('dr.sos.notified') : tr('dr.sos.queued'));
     } catch {
-      toast('Couldn’t raise SOS. Call dispatch or 911.');
+      toast(tr('dr.sos.failed'));
     }
   };
   return (
     <>
-      <Pressable accessibilityRole="button" accessibilityLabel="Emergency or incident" onPress={() => setOpen(true)} style={styles.sos}>
-        <AppText variant="caption" color={c.textInverse} style={{ fontWeight: t.fontWeight.black }}>SOS</AppText>
+      <Pressable accessibilityRole="button" accessibilityLabel={tr('dr.sos.button')} onPress={() => setOpen(true)} style={styles.sos}>
+        <AppText variant="caption" color={c.textInverse} style={{ fontWeight: t.fontWeight.black }}>{tr('dr.driverScreen.sos')}</AppText>
       </Pressable>
       <Sheet visible={open} onClose={() => setOpen(false)}>
-        <AppText variant="heading">Report an incident</AppText>
-        <AppText variant="small" color={c.danger}>In an emergency call 911 first.</AppText>
-        {SOS.map((o) => <Button key={o.kind} kind="outline" icon={o.icon} label={o.label} onPress={() => void raise(o.kind)} />)}
-        <Button kind="ghost" label="Cancel" onPress={() => setOpen(false)} />
+        <AppText variant="heading">{tr('dr.driverScreen.reportAnIncident')}</AppText>
+        <AppText variant="small" color={c.danger}>{tr('dr.driverScreen.inAnEmergencyCall911')}</AppText>
+        {SOS.map((o) => <Button key={o.kind} kind="outline" icon={o.icon} label={tr(o.label)} onPress={() => void raise(o.kind)} />)}
+        <Button kind="ghost" label={tr('dr.driverScreen.cancel')} onPress={() => setOpen(false)} />
       </Sheet>
     </>
   );
@@ -111,7 +114,7 @@ export function DriverScreen({ title, back, footer, body = 'scroll', inTabs = fa
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: c.canvas, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: sp['2'], paddingHorizontal: sp['4'], paddingVertical: sp['2'], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border, backgroundColor: c.canvas },
-  back: { width: 40, height: 40, borderRadius: 20, backgroundColor: c.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
+  back: { width: 44, height: 44, borderRadius: 22, backgroundColor: c.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
   sos: { height: 32, paddingHorizontal: sp['3'], borderRadius: t.radius.pill, backgroundColor: c.danger, alignItems: 'center', justifyContent: 'center' },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 32, paddingHorizontal: sp['2'], borderRadius: t.radius.pill },
   content: { padding: sp['4'], gap: sp['4'] },

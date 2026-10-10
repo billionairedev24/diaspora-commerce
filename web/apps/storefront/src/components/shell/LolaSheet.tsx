@@ -1,13 +1,14 @@
 'use client';
 
-import { cartKeys, formatMoney, isApiError, type LolaProductCard, type LolaProposal } from '@afrotransact/api-client';
+import { cartKeys, isApiError, type LolaProductCard, type LolaProposal } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, CircleNotch, Headset, PaperPlaneRight, Sheet, Sparkle, useToast } from '@afrotransact/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { productHref, signInHref } from '@/lib/links';
 import { type LolaMessage, useLola } from '@/lib/lola/useLola';
@@ -24,6 +25,7 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
 /** Carries out a confirmed proposal through the normal BFF routes (Lola never acts on her own). */
 function useProposalAction() {
+  const t = useT();
   const qc = useQueryClient();
   const router = useRouter();
   return async (p: LolaProposal): Promise<string | null> => {
@@ -54,6 +56,8 @@ function useProposalAction() {
 }
 
 function ProductCard({ p }: { p: LolaProductCard }) {
+  const fmt = useFormatters();
+  const t = useT();
   const qc = useQueryClient();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -75,7 +79,7 @@ function ProductCard({ p }: { p: LolaProductCard }) {
         {p.title}
       </Link>
       <span className={styles.productMeta}>
-        {formatMoney(p.priceMinor)}
+        {fmt.money(p.priceMinor)}
         {p.deliveryDays !== undefined ? ` · ${t('lola.days', { n: p.deliveryDays })}` : ''}
       </span>
       <Button size="sm" onClick={() => void add()} loading={busy} disabled={p.inStock === false} aria-label={`${t('card.addToCart')}: ${p.title}`}>
@@ -86,6 +90,7 @@ function ProductCard({ p }: { p: LolaProductCard }) {
 }
 
 function Answer({ m, onSettle }: { m: LolaMessage; onSettle: (proposalId: string, state: 'done' | 'dismissed') => void }) {
+  const t = useT();
   const run = useProposalAction();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
@@ -159,6 +164,7 @@ function Answer({ m, onSettle }: { m: LolaMessage; onSettle: (proposalId: string
 
 /** Lola drawer (S135): streamed answers, visible tool calls, product cards, confirmable proposals, suggestion chips. */
 export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: boolean; onOpenChange: (o: boolean) => void; prompt?: string | null; onPromptSent?: () => void }) {
+  const t = useT();
   const { messages, suggestions, busy, needsSignIn, send, settle } = useLola();
   const [input, setInput] = useState('');
   const pathname = usePathname();

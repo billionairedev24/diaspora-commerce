@@ -16,8 +16,11 @@ export interface ImagePlaceholderProps {
 
 /** Product/campaign image, falling back to the design's striped placeholder until photography exists. */
 export function ImagePlaceholder({ src, alt, caption, ratio = '1 / 1', className, style }: ImagePlaceholderProps) {
+  // Decorative when alt is empty (WCAG 1.1.1): hidden from assistive tech instead of an unnamed role="img".
+  const decorative = !alt.trim();
+  const a11y = src ? {} : decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': alt };
   return (
-    <span className={cx(styles.placeholder, className)} style={{ aspectRatio: ratio, ...style }} role={src ? undefined : 'img'} aria-label={src ? undefined : alt}>
+    <span className={cx(styles.placeholder, className)} style={{ aspectRatio: ratio, ...style }} {...a11y}>
       {src && <img src={src} alt={alt} loading="lazy" />}
       {caption && <span className={styles.placeholderCaption} aria-hidden>{caption}</span>}
     </span>

@@ -13,7 +13,7 @@
   --at-green-500:#0A8264; --at-green-600:#067457; --at-green-700:#055E47; --at-green-800:#044836; --at-green-900:#033226;
 
   --at-ink-0:#FFFFFF; --at-ink-25:#FCFBF8; --at-ink-50:#F6F4EF; --at-ink-100:#EEEBE4; --at-ink-200:#E0DCD2; --at-ink-300:#C8C3B8;
-  --at-ink-400:#A29D92; --at-ink-500:#7C776D; --at-ink-600:#5D5951; --at-ink-700:#44413B; --at-ink-800:#2D2B27; --at-ink-900:#191816; --at-ink-1000:#000000;
+  --at-ink-400:#A29D92; --at-ink-500:#7C776D; --at-ink-550:#69645B; --at-ink-600:#5D5951; --at-ink-700:#44413B; --at-ink-800:#2D2B27; --at-ink-900:#191816; --at-ink-1000:#000000;
 
   --at-red-50:#FDEDEC; --at-red-100:#FAD1CE; --at-red-500:#D92D20; --at-red-600:#B42318; --at-red-700:#912018;
   --at-sand-100:#F6F0E4; --at-sand-200:#EDE3CF; --at-sand-700:#5E4B2C;
@@ -33,8 +33,8 @@
   --at-color-surface-hover: var(--at-ink-50);
   --at-color-surface-brand: var(--at-sand-100);
   --at-color-text: var(--at-ink-900);
-  --at-color-text-muted: var(--at-ink-600);     /* 7.0:1 on surface */
-  --at-color-text-subtle: var(--at-ink-500);    /* 4.6:1 — meta only */
+  --at-color-text-muted: var(--at-ink-600);     /* 7.0:1 on white, ≥5.8:1 on light surfaces */
+  --at-color-text-subtle: var(--at-ink-550);    /* 5.9:1 on white, ≥4.9:1 on every light surface (WCAG 1.4.3) — meta only */
   --at-color-text-inverse: var(--at-ink-0);
   --at-color-border: var(--at-ink-200);
   --at-color-border-strong: var(--at-ink-300);
@@ -67,7 +67,7 @@
   --at-color-price: var(--at-ink-900);
   --at-color-deal: var(--at-red-600);
   --at-color-rating: var(--at-gold-500);
-  --at-color-rating-text: var(--at-gold-500);
+  --at-color-rating-text: var(--at-gold-800);   /* 5.8:1 on white: rating value and review count (stars stay brand gold) */
   --at-color-in-stock: var(--at-green-700);
   --at-color-low-stock: var(--at-red-600);
   --at-color-success: var(--at-green-700);  --at-color-success-bg: var(--at-green-50);
@@ -115,15 +115,26 @@
   --store-text: var(--at-color-text);
 }
 
-html, body { margin: 0; background: var(--at-color-canvas); color: var(--at-color-text); font-family: var(--at-font-sans); font-size: var(--at-text-base); line-height: var(--at-leading-normal); -webkit-font-smoothing: antialiased; }
-*, *::before, *::after { box-sizing: border-box; }
-a { color: var(--at-color-link); text-decoration: none; }
-a:hover { color: var(--at-color-link-hover); text-decoration: underline; }
-:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
-::selection { background: var(--at-gold-200); }
-button, input, select, textarea { font-family: inherit; }
+/* Element defaults live in the `base` cascade layer so component styles (CSS modules, Tailwind utilities) always win
+   over them — an unlayered `a { color }` used to override Tailwind's text-* utilities on links (WCAG 1.4.3). */
+@layer base {
+  html, body { margin: 0; background: var(--at-color-canvas); color: var(--at-color-text); font-family: var(--at-font-sans); font-size: var(--at-text-base); line-height: var(--at-leading-normal); -webkit-font-smoothing: antialiased; }
+  *, *::before, *::after { box-sizing: border-box; }
+  /* Keyboard focus and in-page links are never hidden under the sticky header (WCAG 2.4.11 Focus Not Obscured). */
+  html { scroll-padding-top: var(--at-space-16); }
+  a { color: var(--at-color-link); text-decoration: none; }
+  a:hover { color: var(--at-color-link-hover); text-decoration: underline; }
+  /* Links inside running text are underlined, not told apart by colour alone (WCAG 1.4.1). */
+  :where(p, li, label, small, dd, td, figcaption) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; }
+  ::selection { background: var(--at-gold-200); }
+  button, input, select, textarea { font-family: inherit; }
+}
 
-/* No visible scrollbars anywhere (content still scrolls by wheel, touch, keyboard). No horizontal page scroll. */
+/* Visible keyboard focus everywhere (WCAG 2.4.7 / 2.4.11): unlayered so no component can remove it by accident. */
+:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
+
+/* No visible scrollbars anywhere (content still scrolls by wheel, touch, keyboard: scrollable regions that hold no
+   focusable control get tabindex="0" and a label so keyboard users can reach and scroll them). No horizontal page scroll. */
 html, body { overflow-x: hidden; }
 * { scrollbar-width: none; -ms-overflow-style: none; }
 *::-webkit-scrollbar { display: none; width: 0; height: 0; }

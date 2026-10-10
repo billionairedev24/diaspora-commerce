@@ -1,12 +1,13 @@
 'use client';
 
-import { formatMoney, isApiError, orderKeys, RETURN_REASONS, type ReturnableLine, returnKeys, type ReturnMethod, type ReturnReason, type ReturnSummary, SELLER_FAULT_REASONS } from '@afrotransact/api-client';
+import { isApiError, orderKeys, RETURN_REASONS, type ReturnableLine, returnKeys, type ReturnMethod, type ReturnReason, type ReturnSummary, SELLER_FAULT_REASONS } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, QrCode, Skeleton } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type FormEvent, useMemo, useState } from 'react';
 
-import { type MessageKey, t } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
@@ -25,6 +26,8 @@ const methodKey = (m: ReturnMethod) => `ret.method.${m}` as MessageKey;
 
 /** Start a return (S148, tax-returns): pick delivered items, a reason each and a method; food can only be reported. */
 export function StartReturnView({ orderNumber }: { orderNumber: string }) {
+  const fmt = useFormatters();
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const elig = useQuery(shopperQueries.returnable(api, orderNumber));
@@ -84,8 +87,8 @@ export function StartReturnView({ orderNumber }: { orderNumber: string }) {
           <h1 className={styles.h2}>
             <CheckCircle weight="fill" aria-hidden /> {t('ret.started', { number: done.number ?? done.rmaId })}
           </h1>
-          <p className={styles.success}>{t('ret.refund', { amount: formatMoney(done.refundMinor) })}</p>
-          <p className={styles.muted}>{nextStep(done)}</p>
+          <p className={styles.success}>{t('ret.refund', { amount: fmt.money(done.refundMinor) })}</p>
+          <p className={styles.muted}>{nextStep(done, t, (iso) => (iso ? fmt.date(iso, 'dayMonthShort') : ''))}</p>
           {done.qrPayload && (
             <p className={styles.muted}>
               <QrCode aria-hidden /> {t('ret.qr')} <span className={styles.code}>{done.qrPayload}</span>
@@ -138,7 +141,7 @@ export function StartReturnView({ orderNumber }: { orderNumber: string }) {
                     <span className={styles.form} style={{ gap: 'var(--at-space-1)' }}>
                       <strong>{l.title}</strong>
                       <span className={styles.muted}>
-                        {formatMoney(l.unitPriceMinor)} · {l.eligible ? (l.reportProblemOnly ? t('ret.reportOnly') : t('ret.until', { date: l.windowEndsAt ? new Date(l.windowEndsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '' })) : (l.ineligibleReason ?? t('ret.notReturnable'))}
+                        {fmt.money(l.unitPriceMinor)} · {l.eligible ? (l.reportProblemOnly ? t('ret.reportOnly') : t('ret.until', { date: l.windowEndsAt ? new Date(l.windowEndsAt).toLocaleDateString(fmt.tag, { month: 'short', day: 'numeric' }) : '' })) : (l.ineligibleReason ?? t('ret.notReturnable'))}
                       </span>
                       {p?.on && (
                         <span className={styles.actions}>
@@ -187,7 +190,7 @@ export function StartReturnView({ orderNumber }: { orderNumber: string }) {
             {t('ret.comment')}
             <textarea rows={2} maxLength={500} value={comment} onChange={(e) => setComment(e.target.value)} />
           </label>
-          {chosen.length > 0 && <p className={styles.muted}>{t('ret.estimate', { amount: formatMoney(estimate) })}</p>}
+          {chosen.length > 0 && <p className={styles.muted}>{t('ret.estimate', { amount: fmt.money(estimate) })}</p>}
           {error && <p className={styles.error} role="alert">{error}</p>}
           <div className={styles.actions}>
             <Button type="submit" loading={start.isPending}>

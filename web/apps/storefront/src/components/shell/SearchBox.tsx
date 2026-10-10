@@ -1,12 +1,13 @@
 'use client';
 
-import { formatMoney, type ProductSummary } from '@afrotransact/api-client';
+import { type ProductSummary } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { ImagePlaceholder, MagnifyingGlass } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { type FormEvent, type KeyboardEvent, useEffect, useId, useMemo, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { DEPARTMENTS_LIST, searchHref, searchQueries } from '@/lib/api/queries';
 import { productHref } from '@/lib/links';
@@ -26,6 +27,8 @@ function useDebounced<T>(value: T, ms: number): T {
 
 /** Header search with typeahead: phrases (the first scoped to a department) plus up to five products. */
 export function SearchBox() {
+  const fmt = useFormatters();
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -193,7 +196,7 @@ export function SearchBox() {
                     {p.community} · {meta}
                   </span>
                 </span>
-                <strong className={styles.price}>{formatMoney(p.priceMinor, p.currency)}</strong>
+                <strong className={styles.price}>{fmt.money(p.priceMinor, p.currency)}</strong>
               </li>
             );
           })}

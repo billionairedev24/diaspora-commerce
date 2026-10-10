@@ -11,6 +11,7 @@ import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { dateTime, idempotencyKey, money } from '@/lib/format';
 import { moduleCopy } from '@/lib/modules';
@@ -32,6 +33,7 @@ const STATUS_FILTERS: { value: ShipmentStatus | ''; label: string }[] = [
 
 /** Orders: server-driven table (status filter, cursor pages); rows open in a sheet; sellers confirm, pack and mark ready only. */
 export function OrdersView() {
+  const t = useT();
   const api = sellerApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -107,7 +109,7 @@ export function OrdersView() {
     [editable, advance]
   );
 
-  const copy = moduleCopy('orders', { provider: isProvider, orgName: session.activeOrg?.name ?? '' });
+  const copy = moduleCopy('orders', { provider: isProvider, orgName: session.activeOrg?.name ?? '' }, t);
   return (
     <>
       <PageHeader title={copy.title} description={copy.description} />

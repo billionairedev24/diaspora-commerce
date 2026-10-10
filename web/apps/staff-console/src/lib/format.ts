@@ -1,29 +1,38 @@
-/* Display formatting (en-US, USD; amounts are minor units). */
+/* Display formatting (amounts are minor units). Formats follow the back office's active language: Providers sets the
+   Intl tag from the locale (en-US, fr-FR, es-US, ar, yo-NG) before any page renders. Back-office data loads in the
+   browser after the session check, so these run client side. */
+
+let tag = 'en-US';
+
+/** Called by Providers with the active locale's Intl tag. */
+export function setFormatLocale(next: string): void {
+  tag = next;
+}
 
 export function money(minor: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(minor / 100);
+  return new Intl.NumberFormat(tag, { style: 'currency', currency }).format(minor / 100);
 }
 
 export function dollars(major: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: major % 1 ? 2 : 0 }).format(major);
+  return new Intl.NumberFormat(tag, { style: 'currency', currency: 'USD', maximumFractionDigits: major % 1 ? 2 : 0 }).format(major);
 }
 
 export function shortDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString(tag, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function dateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return d.toLocaleString(tag, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 export function percent(rate: number): string {
-  return `${(rate * 100).toLocaleString('en-US', { maximumFractionDigits: 3 })} %`;
+  return `${(rate * 100).toLocaleString(tag, { maximumFractionDigits: 3 })} %`;
 }
 
 /** "AWAITING_FINAL_APPROVAL" → "Awaiting final approval". */

@@ -4,7 +4,7 @@ import { type Cart, cartQueries, isApiError } from '@afrotransact/api-client';
 import { useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 
 import { browserApi } from '../api/browser';
 import { useAnnounce } from './announcer';
@@ -34,6 +34,7 @@ type CartMutation =
 
 /** All cart mutations: server is the source of truth (stock caps); errors become toasts + announcements. */
 export function useCartMutation() {
+  const t = useT();
   const qc = useQueryClient();
   const toast = useToast();
   const announce = useAnnounce();

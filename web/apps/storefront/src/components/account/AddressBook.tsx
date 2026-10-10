@@ -5,7 +5,7 @@ import { Plus, Skeleton, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
@@ -15,6 +15,7 @@ import styles from './Pages.module.css';
 
 /** Your Addresses (S148): add (autocomplete + verification), edit, remove, set default. */
 export function AddressBook() {
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const toast = useToast();

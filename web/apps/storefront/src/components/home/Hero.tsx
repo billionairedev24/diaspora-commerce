@@ -1,25 +1,28 @@
 'use client';
 
 import { type HeroSlide } from '@afrotransact/api-client';
-import { CaretLeft, CaretRight, ImagePlaceholder } from '@afrotransact/ui';
+import { CaretLeft, CaretRight, ImagePlaceholder, Pause, Play } from '@afrotransact/ui';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 
 import styles from './Home.module.css';
 
 /** Hero carousel from placements: auto-advances every 7 s, pauses on hover/focus, honours reduced motion. */
 export function Hero({ slides }: { slides: HeroSlide[] }) {
+  const t = useT();
   const [idx, setIdx] = useState(0);
   const [paused, setPaused] = useState(false);
+  // Explicit pause (WCAG 2.2.2): stays paused until the shopper presses play.
+  const [stopped, setStopped] = useState(false);
   const n = slides.length;
   useEffect(() => {
-    if (n < 2 || paused) return;
+    if (n < 2 || paused || stopped) return;
     if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
     const id = setInterval(() => setIdx((i) => (i + 1) % n), 7000);
     return () => clearInterval(id);
-  }, [n, paused]);
+  }, [n, paused, stopped]);
   const h = slides[((idx % n) + n) % n];
   if (!h) return null;
   return (
@@ -53,6 +56,9 @@ export function Hero({ slides }: { slides: HeroSlide[] }) {
             <CaretRight size={24} aria-hidden />
           </button>
           <div className={styles.dots}>
+            <button type="button" className={styles.pause} onClick={() => setStopped((v) => !v)} aria-label={stopped ? t('home.heroPlay') : t('home.heroPause')}>
+              {stopped ? <Play size={16} weight="fill" aria-hidden /> : <Pause size={16} weight="fill" aria-hidden />}
+            </button>
             {slides.map((s, i) => (
               <button
                 key={s.id}

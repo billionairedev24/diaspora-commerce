@@ -24,9 +24,12 @@
 .prev { left: var(--at-space-2); }
 .next { right: var(--at-space-2); }
 .dots { position: absolute; left: 50%; bottom: 132px; transform: translateX(-50%); display: flex; gap: var(--at-space-2); align-items: center; }
-.dot { position: relative; width: 8px; height: 8px; border: 0; border-radius: var(--at-radius-pill); background: var(--at-ink-400); cursor: pointer; padding: 0; }
-.dot::after { content: ''; position: absolute; inset: -12px -4px; }
-.dotOn { width: 28px; background: currentColor; }
+.dots button { color: inherit; }
+/* 24×24 px targets (WCAG 2.5.8); the visible dot is drawn inside. Inactive dots are outlined in the text colour (3:1+ on every hero theme). */
+.dot { position: relative; min-width: 24px; height: 24px; border: 0; background: none; cursor: pointer; padding: 0; display: grid; place-items: center; }
+.dot::before { content: ''; width: 10px; height: 10px; border: 2px solid currentColor; border-radius: var(--at-radius-pill); }
+.dotOn { min-width: 36px; }
+.dotOn::before { width: 28px; background: currentColor; }
 .pause { position: relative; width: 24px; height: 24px; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; display: grid; place-items: center; }
 
 .tiles { position: relative; margin-top: -120px; display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: var(--at-space-5); }

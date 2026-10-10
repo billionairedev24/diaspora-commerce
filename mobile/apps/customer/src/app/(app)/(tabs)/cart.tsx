@@ -1,26 +1,28 @@
 /* Cart grouped by who ships it (design: CART). Pinned title; lines scroll; checkout bar pinned above the tab bar. */
-import { formatMoney } from '@afrotransact/api-client';
 import { useRouter } from 'expo-router';
 import { LockSimpleIcon as LockSimple, ShoppingCartIcon as ShoppingCart } from 'phosphor-react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { useCart, useCartActions } from '@/api/queries';
 import { ProductImage, QtyStepper } from '@/features/shop/components';
+import { useFormatters, useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { AppText, Button, Empty, KeyValue, Loading, SectionLabel } from '@/ui/primitives';
 import { Screen } from '@/ui/Screen';
 
 export default function CartScreen() {
+  const fmt = useFormatters();
+  const tr = useT();
   const router = useRouter();
   const cart = useCart();
   const { update, remove } = useCartActions();
   const data = cart.data;
-  const header = <View style={styles.header}><AppText variant="display" accessibilityRole="header">Cart</AppText></View>;
+  const header = <View style={styles.header}><AppText variant="display" accessibilityRole="header">{tr('cu.cart.cart')}</AppText></View>;
   if (cart.isLoading) return <Screen inTabs header={header}><Loading /></Screen>;
   if (!data || data.itemCount === 0) {
     return (
       <Screen inTabs header={header}>
-        <Empty icon={ShoppingCart} title="Your cart is empty" action={{ label: 'Start shopping', onPress: () => router.navigate('/') }} />
+        <Empty icon={ShoppingCart} title={tr('cu.cart.yourCartIsEmpty')} action={{ label: 'Start shopping', onPress: () => router.navigate('/') }} />
       </Screen>
     );
   }
@@ -29,7 +31,7 @@ export default function CartScreen() {
     <Screen
       inTabs
       header={header}
-      footer={<Button icon={LockSimple} label={`Checkout · ${formatMoney(data.subtotalMinor, data.currency)}`} onPress={() => router.push('/checkout')} disabled={data.selectedCount === 0} />}
+      footer={<Button icon={LockSimple} label={tr('cu.cart.checkout', { amount: fmt.money(data.subtotalMinor, data.currency) })} onPress={() => router.push('/checkout')} disabled={data.selectedCount === 0} />}
     >
       {data.packages.map((pkg) => (
         <View key={pkg.packageId} style={styles.group}>
@@ -39,7 +41,7 @@ export default function CartScreen() {
               <ProductImage title={l.title} size={72} />
               <View style={{ flex: 1, gap: 4 }}>
                 <AppText numberOfLines={2}>{l.title}</AppText>
-                <AppText variant="bodyStrong">{formatMoney(l.lineTotalMinor, data.currency)}</AppText>
+                <AppText variant="bodyStrong">{fmt.money(l.lineTotalMinor, data.currency)}</AppText>
                 <View style={styles.lineFoot}>
                   <QtyStepper qty={l.quantity} trashAtOne onChange={(n) => (n <= 0 ? remove.mutate(l.lineId) : update.mutate({ lineId: l.lineId, quantity: Math.min(n, l.maxQuantity) }))} />
                   <AppText variant="caption" color={c.success}>{pkg.delivery.label}</AppText>
@@ -51,9 +53,9 @@ export default function CartScreen() {
         </View>
       ))}
       <View style={styles.summary}>
-        <KeyValue k={`Subtotal (${data.itemCount} items)`} v={formatMoney(data.subtotalMinor, data.currency)} strong />
-        <KeyValue k="Delivery" v={nudge ? 'Calculated at checkout' : 'Free'} />
-        <AppText variant="caption" color={c.textMuted}>{nudge ? `Add ${formatMoney(nudge.remainingMinor, data.currency)} for free delivery` : 'You get free same-day delivery'}</AppText>
+        <KeyValue k={tr('cu.cart.subtotal', { count: data.itemCount })} v={fmt.money(data.subtotalMinor, data.currency)} strong />
+        <KeyValue k={tr('cu.cart.delivery')} v={nudge ? tr('cu.cart.calculatedAtCheckout') : tr('cu.cart.free')} />
+        <AppText variant="caption" color={c.textMuted}>{nudge ? tr('cu.cart.addForFree', { amount: fmt.money(nudge.remainingMinor, data.currency) }) : tr('cu.cart.freeSameDay')}</AppText>
       </View>
     </Screen>
   );

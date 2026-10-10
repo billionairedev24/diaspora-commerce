@@ -8,6 +8,7 @@ import { ModulePage } from '@/components/module/ModulePage';
 import { FilterChips } from '@/components/resources/ResourceTable';
 import { KpiTile } from '@/components/ui/Kpi';
 import { ErrorState, Spinner } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime } from '@/lib/format';
 
@@ -15,6 +16,7 @@ import { ChartCard } from './ChartCard';
 
 /** Platform dashboard: KPIs and four charts from one dashboard feed, each exportable as PDF, Excel or CSV. */
 export function DashboardView() {
+  const t = useT();
   const [range, setRange] = useState<'7' | '30' | '90'>('30');
   const q = useQuery(staffQueries.dashboard(staffApi(), Number(range)));
   return (
@@ -22,7 +24,7 @@ export function DashboardView() {
       module="dash"
       actions={
         <FilterChips
-          label="Period"
+          label={t('st.dashboardView.period')}
           value={range}
           onChange={(v) => setRange(v === '' ? '30' : v)}
           options={[

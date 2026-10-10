@@ -2,7 +2,7 @@
   "name": "@afrotransact/customer-app",
   "version": "2.0.0",
   "private": true,
-  "description": "AfroTransact customer app (Expo / React Native, expo-router). Epic E26, stories S163\u2013S168.",
+  "description": "AfroTransact customer app (Expo / React Native, expo-router). Epic E26, stories S163–S168.",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -20,8 +20,11 @@
   },
   "dependencies": {
     "@afrotransact/api-client": "workspace:*",
+    "@afrotransact/i18n": "workspace:*",
+    "@afrotransact/telemetry": "workspace:*",
     "@afrotransact/tokens": "workspace:*",
     "@expo/metro-runtime": "~57.0.16",
+    "@sentry/react-native": "8.27.0",
     "@stripe/stripe-react-native": "0.64.0",
     "@tanstack/react-query": "^5.104.1",
     "expo": "~57.0.27",

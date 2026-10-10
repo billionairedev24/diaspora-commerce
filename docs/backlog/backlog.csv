@@ -566,7 +566,7 @@
 - Arabic flips to RTL
 - Dates and currency localised","E31","","Medium","8","legal i18n","legal","In Progress"
 "S194","Story","Accessibility WCAG 2.2 AA","Skip links, focus management, live regions, 44px targets and reduced motion.","- axe checks pass in CI with no serious violations
-- Every form lists errors and links to fields","E31","","High","5","legal a11y","legal","In Progress"
+- Every form lists errors and links to fields","E31","","High","5","legal a11y","legal","Done"
 "E32","Epic","Dashboards, charts & exports","Charts for platform, sellers and providers with PDF, CSV and Excel exports.","","","Dashboards, charts & exports","High","","exports","exports","To Do"
 "S195","Story","Dashboard data feeds per portal","One dashboard endpoint per portal returning chart series.","- Feeds are cached for 60 seconds
 - Respect the caller's org and permissions","E32","","Medium","5","exports","exports","To Do"
@@ -726,7 +726,7 @@
 - BFF payment-sheet route works","E07","","Highest","3","payments security mobile","payments","Done"
 "S242","Story","Streaming support in go/pkg/httpserver","Shared Go HTTP server supports flushing through its response recorder and per-route write timeouts for long-lived streams (SSE), removing BFF workarounds.","- Recorder implements http.Flusher
 - SSE routes are exempt from the 30s write timeout
-- BFF Lola relay uses the shared server without workarounds","E01","","Medium","2","go platform","foundation","In Progress"
+- BFF Lola relay uses the shared server without workarounds","E01","","Medium","2","go platform","foundation","Done"
 "S243","Story","Review moderation, PO emails and media purposes","trust-ops queues booking.review.submitted and approves/rejects via bookings; notifications consumes at.retail.events with a retail.purchase_order.sent template; media adds purchase-order and shipping-document purposes, accepts retail-service tokens and supports 14-day signed links.","- Reviews appear in the trust-ops moderation queue and decisions publish them
 - Suppliers receive PO emails with a working PDF link
 - Media issues long-lived links only for these purposes","E18","","Medium","5","trust-ops notifications media","trust","Done"
@@ -763,3 +763,7 @@
 - No settlement transfer, payout or reversal for Retail
 - Seller billing and metering skip Retail
 - Enforcement never suspends Retail","E07","","Highest","5","payments retail seller","payments","Done"
+"S253","Story","Finish translations and native review","Translate the remaining back-office forms (ProductBuilder, Billing, PolicyEditor), secondary mobile screens and API schema validation messages; native-speaker review of fr, es, ar and yo; mobile screen-reader and device a11y pass; verify Sentry against a real project and the storefront Cloudflare bundle size.","- No hard-coded user-facing strings remain in apps
+- needsReview cleared by native reviewers
+- VoiceOver and TalkBack pass on key mobile journeys
+- Sentry receives grouped errors with source maps from dev","E31","","Medium","8","i18n a11y telemetry","legal","To Do"

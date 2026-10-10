@@ -1,21 +1,21 @@
 'use client';
 
-import { formatMoney, isApiError, returnKeys, type ReturnSummary } from '@afrotransact/api-client';
+import { isApiError, returnKeys, type ReturnSummary } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, QrCode, Skeleton, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
 import { AccountCrumb } from './AccountCrumb';
 import styles from './Pages.module.css';
 
-const day = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '');
 
-export function nextStep(r: ReturnSummary): string {
+export function nextStep(r: ReturnSummary, t: Translator<MessageKey>, day: (iso: string | null | undefined) => string): string {
   if (r.status === 'cancelled') return t('ret.nextCancelled');
   if (r.status === 'refunded') return t('ret.nextRefunded');
   if (r.method === 'DROP_OFF') return r.dropOffBy ? t('ret.nextDropOff', { date: day(r.dropOffBy) }) : t('ret.nextDropOffSoon');
@@ -24,6 +24,8 @@ export function nextStep(r: ReturnSummary): string {
 }
 
 function ReturnRow({ r }: { r: ReturnSummary }) {
+  const fmt = useFormatters();
+  const t = useT();
   const qc = useQueryClient();
   const toast = useToast();
   const [open, setOpen] = useState(false);
@@ -43,10 +45,10 @@ function ReturnRow({ r }: { r: ReturnSummary }) {
           <span className={styles.muted}>
             {t('ret.meta', { number: r.number ?? r.rmaId, order: r.orderNumber })}
           </span>
-          <span className={styles.muted}>{nextStep(r)}</span>
+          <span className={styles.muted}>{nextStep(r, t, (iso) => (iso ? fmt.date(iso, 'dayMonthShort') : ''))}</span>
         </div>
         <div className={styles.form} style={{ alignItems: 'flex-end', gap: 'var(--at-space-2)' }}>
-          <strong>{t('ret.refund', { amount: formatMoney(r.refundMinor) })}</strong>
+          <strong>{t('ret.refund', { amount: fmt.money(r.refundMinor) })}</strong>
           <span className={styles.actions}>
             <button type="button" className="link-button" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
               {open ? t('ret.hide') : t('ret.details')}
@@ -85,26 +87,26 @@ function ReturnRow({ r }: { r: ReturnSummary }) {
           {q && (
             <dl className={styles.dl}>
               <dt>{t('ret.items')}</dt>
-              <dd>{formatMoney(q.itemsMinor)}</dd>
+              <dd>{fmt.money(q.itemsMinor)}</dd>
               <dt>{t('ret.tax')}</dt>
-              <dd>{formatMoney(q.taxMinor)}</dd>
+              <dd>{fmt.money(q.taxMinor)}</dd>
               {q.shippingMinor > 0 && (
                 <>
                   <dt>{t('ret.shipping')}</dt>
-                  <dd>{formatMoney(q.shippingMinor)}</dd>
+                  <dd>{fmt.money(q.shippingMinor)}</dd>
                 </>
               )}
               {q.restockingFeeMinor > 0 && (
                 <>
                   <dt>{t('ret.restocking')}</dt>
-                  <dd>−{formatMoney(q.restockingFeeMinor)}</dd>
+                  <dd>−{fmt.money(q.restockingFeeMinor)}</dd>
                 </>
               )}
               <dt>
                 <strong>{t('ret.total')}</strong>
               </dt>
               <dd>
-                <strong>{formatMoney(q.totalMinor)}</strong>
+                <strong>{fmt.money(q.totalMinor)}</strong>
               </dd>
             </dl>
           )}
@@ -116,6 +118,7 @@ function ReturnRow({ r }: { r: ReturnSummary }) {
 
 /** Returns & refunds (S148): your returns with drop-off QR / label, refund estimate and cancel; delivered orders to return from. */
 export function ReturnsView({ orderNumber }: { orderNumber?: string } = {}) {
+  const t = useT();
   const api = browserApi();
   const returns = useQuery(shopperQueries.returns(api, orderNumber));
   const orders = useQuery(shopperQueries.orders(api));

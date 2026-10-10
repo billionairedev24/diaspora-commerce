@@ -8,7 +8,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { type ReactNode, useEffect, useMemo, useState } from 'react';
 
 import { CartAwareProductCard } from '@/components/common/CartAwareProductCard';
-import { type MessageKey, t } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { searchHref, searchQueries, siteQueries } from '@/lib/api/queries';
 
@@ -20,6 +20,7 @@ const countOf = (buckets: FacetBucket[] | undefined, value: string) => buckets?.
 
 /** Search results: URL-synced filters and sort, facet counts from the API, pagination with keepPreviousData. */
 export function SearchResults() {
+  const t = useT();
   const params = useSearchParams();
   const router = useRouter();
   const api = browserApi();

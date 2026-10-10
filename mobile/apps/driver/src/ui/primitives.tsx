@@ -15,8 +15,11 @@ import {
 
 import { c, sp, t, type as typeRamp, type TypeVariant } from '@/theme';
 
+/** Largest text scale honoured (Dynamic Type / Android font size); layouts use min heights so they grow with it. */
+export const MAX_FONT_SCALE = 2;
+
 export function AppText({ variant = 'body', color, style, ...rest }: TextProps & { variant?: TypeVariant; color?: string }) {
-  return <Text {...rest} style={[typeRamp[variant], { color: color ?? c.text }, style]} />;
+  return <Text allowFontScaling maxFontSizeMultiplier={MAX_FONT_SCALE} {...rest} style={[typeRamp[variant], { color: color ?? c.text }, style]} />;
 }
 
 export type ButtonKind = 'primary' | 'dark' | 'outline' | 'danger' | 'ghost' | 'muted';
@@ -53,12 +56,12 @@ export function Button({ label, onPress, kind = 'primary', icon: Icon, disabled,
       onPress={off ? undefined : onPress}
       style={({ pressed }) => [
         styles.btn,
-        { height: size === 'lg' ? t.size.controlLg + 4 : t.size.control, backgroundColor: k.bg, borderColor: k.border, opacity: off ? 0.5 : pressed ? 0.85 : 1 },
+        { minHeight: Math.max(size === 'lg' ? t.size.controlLg + 4 : t.size.control, t.size.touch), backgroundColor: k.bg, borderColor: k.border, opacity: off ? 0.5 : pressed ? 0.85 : 1 },
         style
       ]}
     >
       {loading ? <ActivityIndicator color={k.fg} /> : Icon ? <Icon size={20} color={k.fg} /> : null}
-      <Text style={[typeRamp.bodyStrong, { color: k.fg, textDecorationLine: kind === 'ghost' ? 'underline' : 'none' }]}>{label}</Text>
+      <Text maxFontSizeMultiplier={MAX_FONT_SCALE} style={[typeRamp.bodyStrong, { color: k.fg, textDecorationLine: kind === 'ghost' ? 'underline' : 'none' }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -66,7 +69,7 @@ export function Button({ label, onPress, kind = 'primary', icon: Icon, disabled,
 export function IconButton({ icon: Icon, onPress, label, tone = 'muted', size = 44, badge }: { icon: PhosphorIcon; onPress: () => void; label: string; tone?: 'muted' | 'clear' | 'dark'; size?: number; badge?: number }) {
   const bg = tone === 'muted' ? c.surfaceMuted : tone === 'dark' ? t.ink['1000'] : 'transparent';
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={6} onPress={onPress} style={[styles.iconBtn, { width: size, height: size, borderRadius: size / 2, backgroundColor: bg }]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={badge ? `${label} (${badge})` : label} hitSlop={6} onPress={onPress} style={[styles.iconBtn, { width: size, height: size, borderRadius: size / 2, backgroundColor: bg }]}>
       <Icon size={22} color={tone === 'dark' ? c.textInverse : c.text} />
       {badge ? (
         <View style={styles.badge}>
@@ -96,10 +99,12 @@ export function Field({ label, error, hint, style, ...input }: TextInputProps & 
       <TextInput
         placeholderTextColor={c.textSubtle}
         accessibilityLabel={label}
+        accessibilityHint={error ?? hint}
+        maxFontSizeMultiplier={MAX_FONT_SCALE}
         {...input}
         style={[styles.input, error ? { borderColor: c.danger } : null, style]}
       />
-      {error ? <AppText variant="caption" color={c.danger}>{error}</AppText> : hint ? <AppText variant="caption" color={c.textMuted}>{hint}</AppText> : null}
+      {error ? <AppText variant="caption" color={c.danger} accessibilityRole="alert" accessibilityLiveRegion="polite">{error}</AppText> : hint ? <AppText variant="caption" color={c.textMuted}>{hint}</AppText> : null}
     </View>
   );
 }
@@ -121,6 +126,7 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ selected: !!selected }}
       onPress={onPress}
       style={[styles.chip, selected ? { borderColor: t.ink['1000'], backgroundColor: c.warningBg } : null]}
@@ -134,7 +140,7 @@ export function Chip({ label, selected, onPress }: { label: string; selected?: b
 
 export function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <AppText variant="label" color={c.textMuted}>
+    <AppText variant="label" color={c.textMuted} accessibilityRole="header">
       {children}
     </AppText>
   );
@@ -151,7 +157,7 @@ export function KeyValue({ k, v, strong }: { k: string; v: string; strong?: bool
 
 export function Loading() {
   return (
-    <View style={styles.center}>
+    <View style={styles.center} accessibilityRole="progressbar" accessibilityState={{ busy: true }}>
       <ActivityIndicator color={c.text} />
     </View>
   );
@@ -161,7 +167,7 @@ export function Empty({ icon: Icon, title, body, action }: { icon: PhosphorIcon;
   return (
     <View style={[styles.center, { gap: sp['3'], paddingVertical: sp['12'] }]}>
       <Icon size={48} color={c.textSubtle} />
-      <AppText variant="heading">{title}</AppText>
+      <AppText variant="heading" accessibilityRole="header">{title}</AppText>
       {body ? <AppText variant="small" color={c.textMuted} style={{ textAlign: 'center' }}>{body}</AppText> : null}
       {action ? <Button label={action.label} onPress={action.onPress} size="md" style={{ paddingHorizontal: sp['6'] }} /> : null}
     </View>
@@ -174,9 +180,9 @@ export const styles = StyleSheet.create({
   badge: { position: 'absolute', top: 4, right: 4, minWidth: 16, height: 16, paddingHorizontal: 4, borderRadius: 8, backgroundColor: c.cartBadge, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: c.cartBadgeText, fontSize: 10, fontWeight: t.fontWeight.bold },
   card: { borderWidth: 1, borderColor: c.border, borderRadius: t.radius.lg, padding: sp['4'], backgroundColor: c.surface, gap: sp['2'] },
-  input: { height: t.size.controlLg, borderWidth: 1, borderColor: c.borderStrong, borderRadius: t.radius.md, paddingHorizontal: sp['3'], fontSize: t.fontSize.base, color: c.text, backgroundColor: c.surface },
+  input: { minHeight: t.size.controlLg, borderWidth: 1, borderColor: c.borderStrong, borderRadius: t.radius.md, paddingHorizontal: sp['3'], fontSize: t.fontSize.base, color: c.text, backgroundColor: c.surface },
   banner: { flexDirection: 'row', alignItems: 'center', gap: sp['2'], paddingVertical: 10, paddingHorizontal: sp['3'], borderRadius: t.radius.md },
-  chip: { paddingHorizontal: sp['3'], paddingVertical: sp['2'], borderRadius: t.radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
+  chip: { minHeight: t.size.touch, justifyContent: 'center', paddingHorizontal: sp['3'], paddingVertical: sp['2'], borderRadius: t.radius.pill, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
   kv: { flexDirection: 'row', justifyContent: 'space-between', gap: sp['3'] },
   center: { alignItems: 'center', justifyContent: 'center', padding: sp['6'] }
 });

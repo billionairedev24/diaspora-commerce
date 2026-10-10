@@ -1,12 +1,14 @@
 import { buttonClassName } from '@afrotransact/ui';
 import Link from 'next/link';
 
-import { type MessageKey, t } from '@/i18n/t';
+import { getT } from '@/i18n/server';
+import { type MessageKey } from '@/i18n/t';
 
 import styles from './Content.module.css';
 
 /** Placeholder for routes delivered in the next phase (account, orders, checkout, services, help, legal). */
-export function ComingSoon({ page }: { page: MessageKey }) {
+export async function ComingSoon({ page }: { page: MessageKey }) {
+  const t = await getT();
   return (
     <section className={styles.soon} aria-labelledby="soon-title">
       <span className={styles.kicker}>{t(page)}</span>

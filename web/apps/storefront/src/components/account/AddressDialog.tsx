@@ -5,8 +5,9 @@ import { AddressAutocomplete, type AddressSuggestionItem, Button, Dialog, Select
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useState } from 'react';
 
+import { FormErrors } from '@/components/common/FormErrors';
 import { bffAddressSearch } from '@/components/shell/DeliverToDialog';
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 
 import styles from './Pages.module.css';
@@ -42,6 +43,7 @@ export function AddressDialog({
   address?: Address | null;
   onSaved?: (a: Address) => void;
 }) {
+  const t = useT();
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -98,11 +100,13 @@ export function AddressDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={address ? t('addr.editTitle') : t('addr.addTitle')} width={520}>
       <form className={styles.form} onSubmit={submit} noValidate>
+        <FormErrors errors={errors} ids={{ name: 'addr-name', phone: 'addr-phone', line1: 'addr-line1', line2: 'addr-line2', city: 'addr-city', state: 'addr-state', zip: 'addr-zip' }} />
         <Select label={t('addr.country')} options={[{ value: 'US', label: 'United States' }]} value="US" disabled onChange={() => undefined} />
-        <TextField label={t('addr.name')} value={draft.name} onChange={(e) => set('name')(e.target.value)} error={errors.name} autoComplete="name" required />
-        <TextField label={t('addr.phone')} value={draft.phone} onChange={(e) => set('phone')(e.target.value)} error={errors.phone} autoComplete="tel" inputMode="tel" required
+        <TextField id="addr-name" label={t('addr.name')} value={draft.name} onChange={(e) => set('name')(e.target.value)} error={errors.name} autoComplete="name" required />
+        <TextField id="addr-phone" label={t('addr.phone')} value={draft.phone} onChange={(e) => set('phone')(e.target.value)} error={errors.phone} autoComplete="tel" inputMode="tel" required
           help={t('addr.phoneHelp')} />
         <AddressAutocomplete
+          id="addr-line1"
           label={t('addr.line1')}
           value={draft.line1}
           onChange={(v) => { set('line1')(v); setUnverified(null); }}
@@ -112,11 +116,11 @@ export function AddressDialog({
           error={errors.line1}
           name="line1"
         />
-        <TextField label={t('addr.line2')} value={draft.line2} onChange={(e) => set('line2')(e.target.value)} error={errors.line2} autoComplete="address-line2" />
+        <TextField id="addr-line2" label={t('addr.line2')} value={draft.line2} onChange={(e) => set('line2')(e.target.value)} error={errors.line2} autoComplete="address-line2" />
         <div className={styles.three}>
-          <TextField label={t('addr.city')} value={draft.city} onChange={(e) => set('city')(e.target.value)} error={errors.city} autoComplete="address-level2" required />
-          <Select label={t('addr.state')} options={STATES} placeholder={t('addr.statePlaceholder')} value={draft.state} onChange={(e) => set('state')(e.target.value)} error={errors.state} required />
-          <TextField label={t('addr.zip')} value={draft.zip} onChange={(e) => set('zip')(e.target.value)} error={errors.zip} inputMode="numeric" autoComplete="postal-code" maxLength={10} required />
+          <TextField id="addr-city" label={t('addr.city')} value={draft.city} onChange={(e) => set('city')(e.target.value)} error={errors.city} autoComplete="address-level2" required />
+          <Select id="addr-state" label={t('addr.state')} options={STATES} placeholder={t('addr.statePlaceholder')} value={draft.state} onChange={(e) => set('state')(e.target.value)} error={errors.state} required />
+          <TextField id="addr-zip" label={t('addr.zip')} value={draft.zip} onChange={(e) => set('zip')(e.target.value)} error={errors.zip} inputMode="numeric" autoComplete="postal-code" maxLength={10} required />
         </div>
         {unverified && (
           <div className={styles.callout} role="alert">

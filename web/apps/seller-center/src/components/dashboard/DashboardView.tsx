@@ -10,6 +10,7 @@ import { FilterChips } from '@/components/ui/DataTable';
 import { KpiTile } from '@/components/ui/Kpi';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, Spinner } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { moduleCopy } from '@/lib/modules';
 import { hrefOf } from '@/lib/routes';
@@ -21,10 +22,11 @@ const TODO_DOT: Record<string, string> = { info: 'bg-info', warning: 'bg-warning
 
 /** Home: KPIs, to-dos and the four dashboard charts (seller or provider) with PDF / Excel / CSV export. */
 export function DashboardView() {
+  const t = useT();
   const { orgId, isProvider, session, can } = useSeller();
   const [range, setRange] = useState<'7' | '30' | '90'>('30');
   const q = useQuery(sellerQueries.dashboard(sellerApi(), orgId, Number(range)));
-  const copy = moduleCopy('home', { provider: isProvider, orgName: session.activeOrg?.name ?? '' });
+  const copy = moduleCopy('home', { provider: isProvider, orgName: session.activeOrg?.name ?? '' }, t);
   return (
     <>
       <PageHeader
@@ -32,7 +34,7 @@ export function DashboardView() {
         description={copy.description}
         actions={
           <FilterChips
-            label="Period"
+            label={t('sc.dashboardView.period')}
             value={range}
             onChange={(v) => setRange(v === '' ? '30' : v)}
             options={[
@@ -55,7 +57,7 @@ export function DashboardView() {
           {q.data.todo.length ? (
             <section aria-labelledby="todo-h" className="rounded-md border border-border p-4">
               <h2 id="todo-h" className="m-0 mb-2 text-md font-semibold">
-                To do
+                {t('sc.dashboardView.toDo')}
               </h2>
               <ul className="m-0 flex list-none flex-col gap-1 p-0">
                 {q.data.todo.map((t) => (

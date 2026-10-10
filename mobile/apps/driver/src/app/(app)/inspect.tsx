@@ -115,7 +115,7 @@ export default function Inspect() {
 
 const styles = StyleSheet.create({
   check: { flexDirection: 'row', alignItems: 'center', gap: sp['2'], padding: sp['3'], borderRadius: t.radius.md, borderWidth: 1, borderColor: c.border },
-  pf: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
+  pf: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
   readings: { flexDirection: 'row', gap: sp['2'] },
   photos: { flexDirection: 'row', gap: sp['2'] },
   photo: { flex: 1, aspectRatio: 1, borderRadius: t.radius.md, borderWidth: 1, borderStyle: 'dashed', borderColor: c.borderStrong, alignItems: 'center', justifyContent: 'center', gap: 2, overflow: 'hidden' },

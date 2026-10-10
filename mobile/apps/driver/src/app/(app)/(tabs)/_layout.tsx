@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { loadOutDone } from '@/domain/shift';
+import { type MessageKey, useT } from '@/i18n';
 import { useDriver } from '@/session/DriverProvider';
 import { c, sp, t } from '@/theme';
 import { AppText } from '@/ui/primitives';
@@ -13,27 +14,28 @@ import { useToast } from '@/ui/Toast';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
-const TABS: Record<string, { label: string; icon: Icon }> = {
-  index: { label: 'Today', icon: House },
-  route: { label: 'Route', icon: Path },
-  scan: { label: 'Scan', icon: Barcode },
-  profile: { label: 'Profile', icon: UserCircle }
+const TABS: Record<string, { label: MessageKey; icon: Icon }> = {
+  index: { label: 'dr.tabs.today', icon: House },
+  route: { label: 'dr.tabs.route', icon: Path },
+  scan: { label: 'dr.tabs.scan', icon: Barcode },
+  profile: { label: 'dr.tabs.profile', icon: UserCircle }
 };
 
 function TabBar({ state, navigation }: TabBarProps) {
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const toast = useToast();
   const { sync } = useDriver();
   const route = sync.route;
   const open = (name: string) => {
-    if (name === 'route' && route?.status !== 'IN_PROGRESS') return toast('Pass inspection and load-out first');
+    if (name === 'route' && route?.status !== 'IN_PROGRESS') return toast(tr('dr.tabs.passInspectionFirst'));
     if (name === 'scan') {
-      if (!route || route.inspection !== 'PASSED') return toast('Nothing to scan right now');
+      if (!route || route.inspection !== 'PASSED') return toast(tr('dr.tabs.nothingToScan'));
       if (!loadOutDone(route)) return router.push('/scan/loadout');
       const here = route.stops.find((s) => s.status === 'ARRIVED');
       if (here) return router.push(`/scan/${here.kind === 'PICKUP' ? 'pickup' : 'drop'}-${here.id}`);
-      return toast('Nothing to scan right now');
+      return toast(tr('dr.tabs.nothingToScan'));
     }
     navigation.navigate(name);
   };
@@ -44,9 +46,9 @@ function TabBar({ state, navigation }: TabBarProps) {
         if (!meta) return null;
         const focused = state.index === i;
         return (
-          <Pressable key={r.key} accessibilityRole="tab" accessibilityState={{ selected: focused }} accessibilityLabel={meta.label} onPress={() => open(r.name)} style={styles.tab}>
+          <Pressable key={r.key} accessibilityRole="tab" accessibilityState={{ selected: focused }} accessibilityLabel={tr(meta.label)} onPress={() => open(r.name)} style={styles.tab}>
             <meta.icon size={24} color={focused ? c.text : c.textMuted} weight={focused ? 'fill' : 'regular'} />
-            <AppText variant="caption" color={focused ? c.text : c.textMuted} style={{ fontWeight: focused ? t.fontWeight.bold : t.fontWeight.medium }}>{meta.label}</AppText>
+            <AppText variant="caption" color={focused ? c.text : c.textMuted} style={{ fontWeight: focused ? t.fontWeight.bold : t.fontWeight.medium }}>{tr(meta.label)}</AppText>
           </Pressable>
         );
       })}

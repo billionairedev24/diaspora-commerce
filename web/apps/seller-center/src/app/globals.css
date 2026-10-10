@@ -1,6 +1,19 @@
 /* Seller Center styles: Tailwind CSS 4 utilities bound to the AfroTransact design tokens (--at-*). The default
    Tailwind palette is removed, so only token colours exist (no raw colours in components). */
 @import "tailwindcss";
+/* Scan this app's sources explicitly (relative to this file), so utilities are generated wherever the CSS is
+   compiled from — e.g. Storybook in web/packages/ui, whose working directory is not this app. */
+@source "..";
+/* Stories of this app's components (web/packages/ui/stories/apps/seller-center) use utilities too. */
+@source "../../../../packages/ui/stories/apps/seller-center";
+
+/* Tailwind's preflight (base layer) resets links to inherit; restore the token link style there so utilities still
+   override it (see @afrotransact/tokens: element defaults are in the base layer). */
+@layer base {
+  a { color: var(--at-color-link); text-decoration: none; }
+  a:hover { color: var(--at-color-link-hover); text-decoration: underline; }
+  :where(p, li, label, small, dd, td, figcaption) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; }
+}
 
 @theme inline {
   --color-*: initial;

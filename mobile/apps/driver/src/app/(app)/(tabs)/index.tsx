@@ -4,6 +4,7 @@ import { CaretRightIcon as CaretRight, CheckIcon as Check, ClipboardTextIcon as 
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { type Phase, phases, primaryAction } from '@/domain/shift';
+import { useT } from '@/i18n';
 import { useDriver } from '@/session/DriverProvider';
 import { c, sp, t } from '@/theme';
 import { DriverScreen } from '@/ui/DriverScreen';
@@ -13,14 +14,15 @@ import { useToast } from '@/ui/Toast';
 const ICON: Record<Phase, typeof Check> = { inspect: ClipboardText, loadout: Package, route: Path, end: FlagCheckered };
 
 export default function Today() {
+  const tr = useT();
   const router = useRouter();
   const toast = useToast();
   const { user, sync, engine } = useDriver();
   const r = sync.route;
   if (!r) {
     return (
-      <DriverScreen title="Today" inTabs>
-        {sync.online ? <Loading /> : <Empty icon={Path} title="No route on this phone yet" body="Connect to the internet to download today’s route." />}
+      <DriverScreen title={tr('dr.index.today')} inTabs>
+        {sync.online ? <Loading /> : <Empty icon={Path} title={tr('dr.index.noRouteOnThisPhone')} body="Connect to the internet to download today’s route." />}
       </DriverScreen>
     );
   }
@@ -35,7 +37,7 @@ export default function Today() {
     if (primary.target === 'start-route') {
       await engine.record({ type: 'loadout.completed' }).catch(() => undefined);
       await engine.record({ type: 'route.started' });
-      toast('Route started — tap “I’ve arrived” when you get there');
+      toast(tr('dr.index.routeStarted'));
       router.navigate('/route');
       return;
     }
@@ -43,13 +45,13 @@ export default function Today() {
   };
   const pkgs = r.packages.length;
   return (
-    <DriverScreen title="Today" inTabs footer={<Button label={primary.label} disabled={primary.disabled} onPress={() => void onPrimary()} />}>
+    <DriverScreen title={tr('dr.index.today')} inTabs footer={<Button label={primary.label} disabled={primary.disabled} onPress={() => void onPrimary()} />}>
       <View style={styles.hello}>
         <AppText variant="title">Hi {user?.name.split(' ')[0]}</AppText>
         <AppText color={c.textMuted}>{r.zone} · {r.window} · {r.stops.length} stops · {pkgs} packages</AppText>
         <AppText variant="small" color={c.textMuted}>Vehicle {r.vehicleLabel} · from {r.depotName}</AppText>
       </View>
-      {r.blocked ? <Banner tone="danger" icon={WarningCircle}>Defect sent to dispatch — a replacement vehicle will be assigned. You can’t start this route.</Banner> : null}
+      {r.blocked ? <Banner tone="danger" icon={WarningCircle}>{tr('dr.index.defectSentToDispatchA')}</Banner> : null}
       {sync.outbox.issues.length ? (
         <Pressable accessibilityRole="button" onPress={() => router.navigate('/profile')}>
           <Banner tone="danger" icon={WarningCircle}>{sync.outbox.issues.length} action{sync.outbox.issues.length === 1 ? ' was' : 's were'} refused by dispatch. Tap to review.</Banner>

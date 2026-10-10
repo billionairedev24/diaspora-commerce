@@ -8,6 +8,7 @@ import { type ColumnDef } from '@tanstack/react-table';
 import { useMemo, useState } from 'react';
 
 import { DataTable } from '@/components/ui/DataTable';
+import { FormErrors } from '@/components/ui/FormErrors';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
@@ -180,8 +181,9 @@ export function TeamView() {
             inviteM.mutate();
           }}
         >
-          <TextField label="Email" type="email" autoComplete="email" value={form.email} error={errors.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <Select label="Role" options={roleOptions} value={form.roleKey} error={errors.roleKey} onChange={(e) => setForm({ ...form, roleKey: e.target.value })} />
+          <FormErrors errors={errors} ids={{ email: 'invite-email', roleKey: 'invite-role' }} />
+          <TextField id="invite-email" label="Email" type="email" autoComplete="email" value={form.email} error={errors.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          <Select id="invite-role" label="Role" options={roleOptions} value={form.roleKey} error={errors.roleKey} onChange={(e) => setForm({ ...form, roleKey: e.target.value })} />
           <Button type="submit" loading={inviteM.isPending}>Send invitation</Button>
         </form>
       </Dialog>

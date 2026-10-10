@@ -26,7 +26,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode } from 'react';
 
-import { type MessageKey, t } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 
 import styles from './AccountMenu.module.css';
@@ -56,6 +56,7 @@ export interface AccountMenuProps {
 
 /** Circular avatar with a dropdown: "Welcome, Guest" (sign in / create account) or the signed-in account menu. */
 export function AccountMenu({ me, onAskLola, inline, defaultOpen }: AccountMenuProps) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const qc = useQueryClient();

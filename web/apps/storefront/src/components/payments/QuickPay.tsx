@@ -4,7 +4,7 @@ import { type Wallet } from '@afrotransact/api-client';
 import { AppleGlyph, GooglePlayLogo, Lightning } from '@afrotransact/ui';
 import { useEffect, useRef, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { type ConfirmResult, getStripe, isMockKey, stripeAppearance,type StripeElements, type StripeInstance } from '@/lib/payments/stripe';
 
 import styles from './Payments.module.css';
@@ -23,6 +23,7 @@ const WALLETS: Record<string, Wallet> = { apple_pay: 'apple_pay', google_pay: 'g
 
 /** Apple Pay, Google Pay and Link (S047): Stripe's Express Checkout Element; mock mode shows the three buttons. */
 export function QuickPay({ publishableKey, amountMinor, disabled, onPay, onConfirmed }: QuickPayProps) {
+  const t = useT();
   const mount = useRef<HTMLDivElement>(null);
   const handlers = useRef({ onPay, onConfirmed });
   handlers.current = { onPay, onConfirmed };
@@ -57,7 +58,7 @@ export function QuickPay({ publishableKey, amountMinor, disabled, onPay, onConfi
       disposed = true;
       el?.unmount();
     };
-  }, [mock, publishableKey, amountMinor]);
+  }, [mock, publishableKey, amountMinor, t]);
 
   if (!mock) return unavailable ? null : <div ref={mount} className={styles.express} aria-label={t('co.quickPay')} />;
 

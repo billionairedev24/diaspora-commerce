@@ -3,7 +3,7 @@
 import { isApiError, type LolaEvent, type LolaProductCard, type LolaProposal } from '@afrotransact/api-client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 
 export interface LolaTool {
@@ -46,12 +46,13 @@ const store = {
 let seq = 0;
 const nextId = () => `m${(seq += 1)}`;
 
+/** Template message; the greeting's text is set in the shopper's language by useLola. */
 export const GREETING: LolaMessage = {
-  id: 'greeting', role: 'lola', text: t('lola.greeting'), tools: [], products: [], proposals: [], handoff: null, streaming: false, error: null
+  id: 'greeting', role: 'lola', text: '', tools: [], products: [], proposals: [], handoff: null, streaming: false, error: null
 };
 
 /** Applies one SSE event to the streaming answer (pure; exported for tests). */
-export function applyLolaEvent(m: LolaMessage, e: LolaEvent): LolaMessage {
+export function applyLolaEvent(m: LolaMessage, e: LolaEvent, t: Translator<MessageKey>): LolaMessage {
   switch (e.type) {
     case 'tool_call':
       return { ...m, tools: [...m.tools, { id: e.data.id ?? e.data.tool, label: e.data.label, done: false }] };
@@ -91,7 +92,8 @@ export function applyLolaEvent(m: LolaMessage, e: LolaEvent): LolaMessage {
  * turn's suggestion chips are offered next.
  */
 export function useLola() {
-  const [messages, setMessages] = useState<LolaMessage[]>([GREETING]);
+  const t = useT();
+  const [messages, setMessages] = useState<LolaMessage[]>(() => [{ ...GREETING, text: t('lola.greeting') }]);
   const [suggestions, setSuggestions] = useState<string[]>([t('lola.chip1'), t('lola.chip2'), t('lola.chip3')]);
   const [busy, setBusy] = useState(false);
   const [needsSignIn, setNeedsSignIn] = useState(false);
@@ -121,7 +123,7 @@ export function useLola() {
             store.set(e.data.sessionId);
             setSuggestions(e.data.suggestions);
           }
-          update(answerId, (m) => applyLolaEvent(m, e));
+          update(answerId, (m) => applyLolaEvent(m, e, t));
         },
         abort.current.signal
       );
@@ -133,7 +135,7 @@ export function useLola() {
       update(answerId, (m) => ({ ...m, streaming: false }));
       setBusy(false);
     }
-  }, [busy]);
+  }, [busy, t]);
 
   const settle = (messageId: string, proposalId: string, state: 'done' | 'dismissed') =>
     update(messageId, (m) => ({ ...m, proposals: m.proposals.map((p) => (p.id === proposalId ? { ...p, state } : p)) }));

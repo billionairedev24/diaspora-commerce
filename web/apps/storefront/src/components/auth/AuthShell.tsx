@@ -2,12 +2,13 @@ import { ArrowUUpLeft, ImagePlaceholder, LogoMark, SealCheck, Truck, wordmarkCla
 import Link from 'next/link';
 import { type ReactNode } from 'react';
 
-import { t } from '@/i18n/t';
+import { getT } from '@/i18n/server';
 
 import styles from './Auth.module.css';
 
 /** Two-column sign-in / sign-up card: advertorial panel (left) and the form (right). No header, nav or footer. */
-export function AuthShell({ mode, children }: { mode: 'signin' | 'signup'; children: ReactNode }) {
+export async function AuthShell({ mode, children }: { mode: 'signin' | 'signup'; children: ReactNode }) {
+  const t = await getT();
   const signup = mode === 'signup';
   const points = [
     { Icon: Truck, title: t('auth.point1Title'), text: t('auth.point1') },

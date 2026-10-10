@@ -74,7 +74,7 @@ export default function Services() {
 
 const styles = StyleSheet.create({
   list: { padding: sp['4'], gap: sp['3'] },
-  search: { flexDirection: 'row', alignItems: 'center', gap: sp['2'], height: t.size.controlLg, paddingHorizontal: sp['3'], borderRadius: t.radius.pill, backgroundColor: c.surfaceMuted },
+  search: { flexDirection: 'row', alignItems: 'center', gap: sp['2'], minHeight: t.size.controlLg, paddingHorizontal: sp['3'], borderRadius: t.radius.pill, backgroundColor: c.surfaceMuted },
   input: { flex: 1, fontSize: t.fontSize.base, color: c.text },
   upcoming: { flexDirection: 'row', alignItems: 'center', gap: sp['3'], padding: 14, borderRadius: t.radius.md, backgroundColor: t.ink['1000'] },
   pro: { flexDirection: 'row', gap: sp['3'], padding: sp['3'], borderRadius: t.radius.lg, borderWidth: 1, borderColor: c.border },

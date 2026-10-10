@@ -6,6 +6,7 @@ import { CaretDown, CaretUp, CaretUpDown, Check } from '@phosphor-icons/react/ss
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { useT } from '@/i18n/t';
 import { MODULE_ICONS } from '@/lib/modules';
 import { hrefOf } from '@/lib/routes';
 
@@ -16,6 +17,7 @@ function orgSub(o: OrgSummary): string {
 
 /** Org switcher: every seller and provider organisation of the member (sellers vs providers vs both). */
 export function OrgSwitcher({ session, onSwitch, busy }: { session: SellerSession; onSwitch: (orgId: string) => void; busy: boolean }) {
+  const t = useT();
   const active = session.activeOrg;
   if (!active) return null;
   const sellers = session.orgs.filter((o) => o.kind === 'SELLER');
@@ -44,16 +46,16 @@ export function OrgSwitcher({ session, onSwitch, busy }: { session: SellerSessio
     </MenuItem>
   );
   return (
-    <Menu trigger={trigger} align="start" width={260} label="Organisations">
+    <Menu trigger={trigger} align="start" width={260} label={t('sc.sidebar.organisations')}>
       {sellers.length ? (
-        <MenuGroup label="Seller Center">
-          <div className="px-3 pt-1 pb-0.5 text-2xs font-bold tracking-[0.08em] text-muted uppercase">Seller Center</div>
+        <MenuGroup label={t('sc.sidebar.sellerCenter')}>
+          <div className="px-3 pt-1 pb-0.5 text-2xs font-bold tracking-[0.08em] text-muted uppercase">{t('sc.sidebar.sellerCenter')}</div>
           {sellers.map(item)}
         </MenuGroup>
       ) : null}
       {providers.length ? (
-        <MenuGroup label="Provider Hub">
-          <div className="px-3 pt-1 pb-0.5 text-2xs font-bold tracking-[0.08em] text-muted uppercase">Provider Hub</div>
+        <MenuGroup label={t('sc.sidebar.providerHub')}>
+          <div className="px-3 pt-1 pb-0.5 text-2xs font-bold tracking-[0.08em] text-muted uppercase">{t('sc.sidebar.providerHub')}</div>
           {providers.map(item)}
         </MenuGroup>
       ) : null}
@@ -62,6 +64,7 @@ export function OrgSwitcher({ session, onSwitch, busy }: { session: SellerSessio
 }
 
 function NavGroupSection({ group, active, single, onNavigate }: { group: NavGroup; active: ModuleKey | null; single: boolean; onNavigate?: () => void }) {
+  const t = useT();
   const holdsActive = group.modules.some((m) => m.key === active);
   // Collapsed by default except the group holding the current page; every group folds on click.
   const [openState, setOpen] = useState<boolean | null>(null);
@@ -79,7 +82,7 @@ function NavGroupSection({ group, active, single, onNavigate }: { group: NavGrou
           className="flex h-8 items-center gap-2 rounded-sm px-2 text-left text-2xs font-bold tracking-[0.08em] text-muted uppercase hover:bg-surface-hover"
         >
           <span className="flex-1">{group.label}</span>
-          {!open && hasBadge ? <span aria-label="Needs attention" className="size-1.5 rounded-pill bg-gold-500" /> : null}
+          {!open && hasBadge ? <span aria-label={t('sc.sidebar.needsAttention')} className="size-1.5 rounded-pill bg-gold-500" /> : null}
           {open ? <CaretUp size={12} aria-hidden /> : <CaretDown size={12} aria-hidden />}
         </button>
       )}
@@ -112,9 +115,10 @@ function NavGroupSection({ group, active, single, onNavigate }: { group: NavGrou
 
 /** Grouped sidebar: collapsible groups, role-aware entries, org switcher on top, access note at the bottom. */
 export function Sidebar({ session, active, onSwitch, switching, onNavigate }: { session: SellerSession; active: ModuleKey | null; onSwitch: (orgId: string) => void; switching: boolean; onNavigate?: () => void }) {
+  const t = useT();
   const single = session.navGroups.length === 1;
   return (
-    <nav aria-label="Back office" className="flex h-full flex-col gap-0.5 px-3 py-4">
+    <nav aria-label={t('sc.sidebar.backOffice')} className="flex h-full flex-col gap-0.5 px-3 py-4">
       <div className="pb-3">
         <OrgSwitcher session={session} onSwitch={onSwitch} busy={switching} />
       </div>
@@ -122,7 +126,7 @@ export function Sidebar({ session, active, onSwitch, switching, onNavigate }: { 
         <NavGroupSection key={`${session.activeOrg?.id}-${g.key}`} group={g} active={active} single={single} onNavigate={onNavigate} />
       ))}
       <p className="mt-auto px-2 pt-3 text-2xs leading-normal text-subtle">
-        Access: <strong>{session.activeOrg?.roleLabel ?? '—'}</strong>
+        {t('sc.sidebar.access')} <strong>{session.activeOrg?.roleLabel ?? '—'}</strong>
         <br />
         {session.accessNote}
       </p>

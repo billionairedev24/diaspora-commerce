@@ -7,7 +7,7 @@ import { useState } from 'react';
 
 import { AddPaymentMethodDialog } from '@/components/payments/AddPaymentMethodDialog';
 import { PaymentChip } from '@/components/payments/PaymentChip';
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
@@ -16,6 +16,7 @@ import styles from './Pages.module.css';
 
 /** Your Payments (S148): add card or US bank account (Stripe), remove, set default. */
 export function PaymentsView() {
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const toast = useToast();

@@ -1,0 +1,31 @@
+{
+  "name": "@afrotransact/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AfroTransact i18n: supported locales (LTR/RTL), flat JSON message catalogues with {var} interpolation, locale negotiation, Intl formatters and catalogue checks. Shared by the web apps and the Expo apps.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./react": "./src/react.tsx",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "react": ">=19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.3.0",
+    "react": "19.3.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  }
+}

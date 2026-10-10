@@ -1,5 +1,4 @@
 import { dehydrate, HydrationBoundary } from '@tanstack/react-query';
-import { cookies } from 'next/headers';
 import { type ReactNode, Suspense } from 'react';
 
 import { Footer } from '@/components/shell/Footer';
@@ -19,7 +18,6 @@ export default async function ShopLayout({ children }: { children: ReactNode }) 
     qc.prefetchQuery(accountQueries.me(api)),
     qc.prefetchQuery(cartQueries.current(api))
   ]);
-  const locale = (await cookies()).get('at_locale')?.value ?? 'en';
   return (
     <HydrationBoundary state={dehydrate(qc)}>
       <Suspense>
@@ -28,7 +26,7 @@ export default async function ShopLayout({ children }: { children: ReactNode }) 
       <main id="main" tabIndex={-1} className="page">
         {children}
       </main>
-      <Footer locale={locale} />
+      <Footer />
     </HydrationBoundary>
   );
 }

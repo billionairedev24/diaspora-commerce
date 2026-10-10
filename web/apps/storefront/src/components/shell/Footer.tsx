@@ -1,13 +1,15 @@
 'use client';
 
 import { NewsletterRequestSchema, type SiteConfig } from '@afrotransact/api-client';
+import { isLocale, localeCookie, LOCALES } from '@afrotransact/i18n';
+import { useLocale } from '@afrotransact/i18n/react';
 import { AppleGlyph, Globe, GooglePlayLogo, Logo, Phone, SocialIconLink, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, type ReactNode, useState } from 'react';
 
-import { type MessageKey, t } from '@/i18n/t';
+import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { searchHref, siteQueries } from '@/lib/api/queries';
 
@@ -55,9 +57,10 @@ export const FOOTER_COLUMNS: Array<{ title: MessageKey; links: FooterLink[] }> =
   }
 ];
 
-const label = (l: string) => (l.includes('.') ? t(l as MessageKey) : l);
+const label = (t: Translator<MessageKey>, l: string) => (l.includes('.') ? t(l as MessageKey) : l);
 
 function Newsletter() {
+  const t = useT();
   const [email, setEmail] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const m = useMutation({ mutationFn: (e: string) => browserApi().subscribeNewsletter(e) });
@@ -114,7 +117,9 @@ export interface FooterViewProps {
 }
 
 /** Footer per design; social links, phone, legal links, locales and payment chips come from site config. */
-export function FooterView({ config, locale = 'en', year = new Date().getFullYear() }: FooterViewProps) {
+export function FooterView({ config, locale, year = new Date().getFullYear() }: FooterViewProps) {
+  const active = useLocale();
+  const t = useT();
   const router = useRouter();
   const toast = useToast();
   const phone = config?.contacts.phone ?? '';
@@ -174,11 +179,11 @@ export function FooterView({ config, locale = 'en', year = new Date().getFullYea
                 <li key={l.href + l.label}>
                   {l.external ? (
                     <a className={styles.link} href={l.href}>
-                      {label(l.label)}
+                      {label(t, l.label)}
                     </a>
                   ) : (
                     <Link className={styles.link} href={l.href}>
-                      {label(l.label)}
+                      {label(t, l.label)}
                     </Link>
                   )}
                 </li>
@@ -207,14 +212,15 @@ export function FooterView({ config, locale = 'en', year = new Date().getFullYea
             <span className="at-visually-hidden">{t('footer.language')}</span>
             <select
               className={styles.langSelect}
-              value={locale}
+              value={locale ?? active}
               onChange={(e) => {
-                document.cookie = `at_locale=${e.target.value}; path=/; max-age=31536000; samesite=lax`;
+                if (!isLocale(e.target.value)) return;
+                document.cookie = localeCookie(e.target.value);
                 router.refresh();
               }}
             >
-              {(config?.locales ?? [{ code: 'en', name: 'English', dir: 'ltr' as const }]).map((l) => (
-                <option key={l.code} value={l.code} lang={l.code}>
+              {LOCALES.map((l) => (
+                <option key={l.code} value={l.code} lang={l.code} dir={l.dir}>
                   {l.name}
                 </option>
               ))}
@@ -240,7 +246,7 @@ export function FooterView({ config, locale = 'en', year = new Date().getFullYea
   );
 }
 
-export function Footer({ locale }: { locale?: string }) {
+export function Footer() {
   const { data } = useQuery(siteQueries.config(browserApi()));
-  return <FooterView config={data} locale={locale} />;
+  return <FooterView config={data} />;
 }

@@ -1,11 +1,13 @@
 'use client';
 
 import { isApiError, type NotificationPreferences, type RecoveryCodes, securityKeys, type TotpSetup } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, DeviceMobile, Fingerprint, Key, LockSimple, ShieldCheck, Skeleton, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { FormErrors } from '@/components/common/FormErrors';
+import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
@@ -13,10 +15,11 @@ import { AccountCrumb } from './AccountCrumb';
 import styles from './Pages.module.css';
 import { PhoneVerificationCard } from './PhoneVerificationCard';
 
-const when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
-const errorOf = (e: unknown, field?: string) => (isApiError(e) ? ((field && e.fieldErrors[field]) || e.message) : t('auth.genericError'));
+const when = (tag: string, iso: string | null) => (iso ? new Date(iso).toLocaleDateString(tag, { month: 'short', day: 'numeric', year: 'numeric' }) : '—');
+const errorOf = (t: Translator<MessageKey>, e: unknown, field?: string) => (isApiError(e) ? ((field && e.fieldErrors[field]) || e.message) : t('auth.genericError'));
 
 function Codes({ codes }: { codes: RecoveryCodes }) {
+  const t = useT();
   if (!codes.recoveryCodes.length) return null;
   return (
     <div className={styles.callout} role="status">
@@ -29,6 +32,7 @@ function Codes({ codes }: { codes: RecoveryCodes }) {
 }
 
 function PasswordBlock() {
+  const t = useT();
   const toast = useToast();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -36,7 +40,7 @@ function PasswordBlock() {
   const change = useMutation({
     mutationFn: () => browserApi().changePassword({ currentPassword: current, newPassword: next }),
     onSuccess: () => { setCurrent(''); setNext(''); setErrors({}); toast.show(t('sec.passwordChanged')); },
-    onError: (e) => setErrors(isApiError(e) && Object.keys(e.fieldErrors).length ? e.fieldErrors : { _: errorOf(e) })
+    onError: (e) => setErrors(isApiError(e) && Object.keys(e.fieldErrors).length ? e.fieldErrors : { _: errorOf(t, e) })
   });
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -49,9 +53,10 @@ function PasswordBlock() {
         <LockSimple aria-hidden /> {t('sec.password')}
       </h2>
       <form className={styles.form} onSubmit={submit} noValidate>
+        <FormErrors errors={errors} ids={{ currentPassword: 'pwd-currentPassword', newPassword: 'pwd-newPassword' }} />
         <div className={styles.two}>
-          <TextField label={t('sec.currentPassword')} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} error={errors.currentPassword} />
-          <TextField label={t('sec.newPassword')} type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} error={errors.newPassword} help={t('sec.passwordRule')} />
+          <TextField id="pwd-currentPassword" label={t('sec.currentPassword')} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} error={errors.currentPassword} />
+          <TextField id="pwd-newPassword" label={t('sec.newPassword')} type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} error={errors.newPassword} help={t('sec.passwordRule')} />
         </div>
         {errors._ && <p className={styles.error} role="alert">{errors._}</p>}
         <div className={styles.actions}>
@@ -65,6 +70,7 @@ function PasswordBlock() {
 }
 
 function TwoStep({ totp, sms, smsPhone, recoveryLeft, mayDisable }: { totp: boolean; sms: boolean; smsPhone: string | null; recoveryLeft: number; mayDisable: boolean }) {
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -74,7 +80,7 @@ function TwoStep({ totp, sms, smsPhone, recoveryLeft, mayDisable }: { totp: bool
   const [error, setError] = useState<string | null>(null);
   const [codes, setCodes] = useState<RecoveryCodes | null>(null);
   const refresh = () => qc.invalidateQueries({ queryKey: securityKeys.overview() });
-  const fail = (e: unknown) => setError(errorOf(e, 'code'));
+  const fail = (e: unknown) => setError(errorOf(t, e, 'code'));
   const startTotp = useMutation({ mutationFn: () => api.startTotp(), onSuccess: (s) => { setSetup(s); setSmsPending(false); setCode(''); setError(null); }, onError: fail });
   const startSms = useMutation({ mutationFn: () => api.startSmsMfa(), onSuccess: () => { setSmsPending(true); setSetup(null); setCode(''); setError(null); }, onError: fail });
   const confirm = useMutation({
@@ -82,8 +88,8 @@ function TwoStep({ totp, sms, smsPhone, recoveryLeft, mayDisable }: { totp: bool
     onSuccess: async (rc) => { setCodes(rc); setSetup(null); setSmsPending(false); await refresh(); toast.show(t('sec.twoStepOn')); },
     onError: fail
   });
-  const off = useMutation({ mutationFn: (which: 'totp' | 'sms') => (which === 'totp' ? api.disableTotp() : api.disableSmsMfa()), onSuccess: () => refresh(), onError: (e) => toast.show(errorOf(e)) });
-  const regenerate = useMutation({ mutationFn: () => api.regenerateRecoveryCodes(), onSuccess: async (rc) => { setCodes(rc); await refresh(); }, onError: (e) => toast.show(errorOf(e)) });
+  const off = useMutation({ mutationFn: (which: 'totp' | 'sms') => (which === 'totp' ? api.disableTotp() : api.disableSmsMfa()), onSuccess: () => refresh(), onError: (e) => toast.show(errorOf(t, e)) });
+  const regenerate = useMutation({ mutationFn: () => api.regenerateRecoveryCodes(), onSuccess: async (rc) => { setCodes(rc); await refresh(); }, onError: (e) => toast.show(errorOf(t, e)) });
 
   return (
     <section className={styles.card} aria-labelledby="sec-2sv">
@@ -162,6 +168,7 @@ function TwoStep({ totp, sms, smsPhone, recoveryLeft, mayDisable }: { totp: bool
 }
 
 function Notifications() {
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -169,7 +176,7 @@ function Notifications() {
   const save = useMutation({
     mutationFn: (p: NotificationPreferences) => api.saveNotificationPreferences(p),
     onSuccess: (p) => { qc.setQueryData(securityKeys.preferences(), p); toast.show(t('sec.prefsSaved')); },
-    onError: (e) => toast.show(errorOf(e))
+    onError: (e) => toast.show(errorOf(t, e))
   });
   const p = prefs.data;
   const rows: Array<[keyof NotificationPreferences, string]> = [
@@ -197,6 +204,8 @@ function Notifications() {
 
 /** Login & security (S148): password, two-step verification, passkeys, linked accounts, signed-in devices, push devices, notifications. */
 export function SecurityView() {
+  const fmt = useFormatters();
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -211,7 +220,7 @@ export function SecurityView() {
       else toast.show(t('sec.othersSignedOut', { n: (await api.revokeOtherSessions()).revoked }));
     },
     onSuccess: () => refresh(),
-    onError: (e) => toast.show(errorOf(e))
+    onError: (e) => toast.show(errorOf(t, e))
   });
   const s = sec.data;
 
@@ -242,7 +251,7 @@ export function SecurityView() {
                   <span>
                     <strong>{p.label}</strong>
                     <br />
-                    <span className={styles.muted}>{t('sec.passkeyMeta', { created: when(p.createdAt), used: when(p.lastUsedAt) })}</span>
+                    <span className={styles.muted}>{t('sec.passkeyMeta', { created: when(fmt.tag, p.createdAt), used: when(fmt.tag, p.lastUsedAt) })}</span>
                   </span>
                   <button type="button" className="link-button" onClick={() => act.mutate({ kind: 'passkey', id: p.credentialId })}>
                     {t('common.remove')}
@@ -288,7 +297,7 @@ export function SecurityView() {
                   <span>
                     <strong>{x.clientName}</strong>
                     <br />
-                    <span className={styles.muted}>{x.current ? t('sec.thisDevice') : t('sec.lastActive', { date: when(x.lastActiveAt) })}</span>
+                    <span className={styles.muted}>{x.current ? t('sec.thisDevice') : t('sec.lastActive', { date: when(fmt.tag, x.lastActiveAt) })}</span>
                   </span>
                   {!x.current && (
                     <button type="button" className="link-button" onClick={() => act.mutate({ kind: 'session', id: x.id })}>
@@ -308,7 +317,7 @@ export function SecurityView() {
                       <span>
                         <strong>{d.deviceName}</strong>
                         <br />
-                        <span className={styles.muted}>{t('sec.lastActive', { date: when(d.lastSeenAt) })}</span>
+                        <span className={styles.muted}>{t('sec.lastActive', { date: when(fmt.tag, d.lastSeenAt) })}</span>
                       </span>
                       <button type="button" className="link-button" onClick={() => act.mutate({ kind: 'device', id: d.id })}>
                         {t('sec.stopPush')}

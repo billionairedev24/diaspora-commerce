@@ -7,6 +7,8 @@ import { type FormEvent, useState } from 'react';
 import { Notice } from '@/components/ui/Notice';
 import { toLocalInput, toMinor } from '@/lib/format';
 
+import { FormErrors } from '../ui/FormErrors';
+
 type Draft = Record<string, string | boolean | string[]>;
 
 /** Draft (what the inputs hold) from the form's initial values: money as dollars, date-times in local time. */
@@ -59,8 +61,10 @@ const inputType = (f: FormField): string => {
   }
 };
 
+const fieldId = (key: string) => `fld-${key.replace(/[^a-z0-9]/gi, '-')}`;
+
 function Input({ f, value, error, onChange }: { f: FormField; value: string | boolean | string[] | undefined; error?: string; onChange: (v: string | boolean | string[]) => void }) {
-  const id = `fld-${f.key.replace(/[^a-z0-9]/gi, '-')}`;
+  const id = fieldId(f.key);
   const label = `${f.label}${f.required && f.type !== 'toggle' ? '' : ' (optional)'}`;
   switch (f.type) {
     case 'toggle':
@@ -128,16 +132,19 @@ export function FormFields({
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(form));
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [attempts, setAttempts] = useState(0);
   const shown = { ...serverErrors, ...errors };
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const values = valuesOf(form, draft);
     const found = validateStaffForm(form, values);
     setErrors(found);
+    setAttempts((n) => n + 1);
     if (Object.keys(found).length === 0) onSubmit(values);
   };
   return (
     <form noValidate onSubmit={submit} className="flex flex-col gap-3">
+      <FormErrors errors={shown} ids={Object.fromEntries(form.fields.map((f) => [f.key, fieldId(f.key)]))} submitCount={attempts} />
       {form.fields.map((f) => (
         <Input key={f.key} f={f} value={draft[f.key]} error={shown[f.key]} onChange={(v) => setDraft((d) => ({ ...d, [f.key]: v }))} />
       ))}

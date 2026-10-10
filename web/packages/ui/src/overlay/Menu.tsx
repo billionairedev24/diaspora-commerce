@@ -15,6 +15,7 @@ export interface MenuProps {
   onOpenChange?: (open: boolean) => void;
   align?: 'start' | 'end';
   width?: number;
+  /** Accessible name of the menu. Radix names the menu after its trigger (aria-labelledby); a label replaces that. */
   label?: string;
   /** Render inline instead of in a portal (tests, stories). */
   inline?: boolean;
@@ -23,7 +24,7 @@ export interface MenuProps {
 /** Dropdown menu (roving focus, arrow keys, Esc, type-ahead) built on Radix. */
 export function Menu({ trigger, children, open, defaultOpen, onOpenChange, align = 'end', width = 290, label, inline }: MenuProps) {
   const content = (
-    <Content className={styles.menu} align={align} sideOffset={8} style={{ width }} aria-label={label} loop>
+    <Content className={styles.menu} align={align} sideOffset={8} style={{ width }} loop {...(label ? { 'aria-label': label, 'aria-labelledby': undefined } : {})}>
       {children}
     </Content>
   );

@@ -99,7 +99,7 @@ export default function Scan() {
 
 const styles = StyleSheet.create({
   manual: { flexDirection: 'row', alignItems: 'center', gap: sp['2'] },
-  input: { flex: 1, height: t.size.controlLg, borderWidth: 1, borderColor: c.borderStrong, borderRadius: t.radius.md, paddingHorizontal: sp['3'], fontSize: t.fontSize.base, color: c.text, fontFamily: mono },
+  input: { flex: 1, minHeight: t.size.controlLg, borderWidth: 1, borderColor: c.borderStrong, borderRadius: t.radius.md, paddingHorizontal: sp['3'], fontSize: t.fontSize.base, color: c.text, fontFamily: mono },
   between: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   pkg: { gap: 4, padding: sp['3'], borderRadius: t.radius.md, borderWidth: 1, borderColor: c.border },
   state: { flexDirection: 'row', alignItems: 'center', gap: 4 }

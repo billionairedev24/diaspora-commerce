@@ -7,8 +7,8 @@ import { defineConfig, devices } from '@playwright/test';
  *   pnpm --filter @afrotransact/e2e test            # from the repo root
  *
  * Env:
- *   E2E_STOREFRONT_PORT / E2E_SELLER_PORT  ports for the app servers (default 3410 / 3411)
- *   E2E_STOREFRONT_URL / E2E_SELLER_URL    point at already-running apps or a per-PR preview; no server is started
+ *   E2E_STOREFRONT_PORT / E2E_SELLER_PORT / E2E_STAFF_PORT  ports for the app servers (default 3410 / 3411 / 3412)
+ *   E2E_STOREFRONT_URL / E2E_SELLER_URL / E2E_STAFF_URL     point at already-running apps or a per-PR preview; no server is started
  *   E2E_SERVER=prod|dev                    prod (default): `next build` into .next-e2e + `next start` — stable and close to
  *                                          production; dev: `next dev` (faster to start, but Fast Refresh reloads the page
  *                                          whenever someone edits app or package sources, which makes journeys flaky)
@@ -22,9 +22,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 const SF_PORT = Number(process.env.E2E_STOREFRONT_PORT ?? 3410);
 const SC_PORT = Number(process.env.E2E_SELLER_PORT ?? 3411);
+const ST_PORT = Number(process.env.E2E_STAFF_PORT ?? 3412);
 const STOREFRONT_URL = process.env.E2E_STOREFRONT_URL ?? `http://localhost:${SF_PORT}`;
 const SELLER_URL = process.env.E2E_SELLER_URL ?? `http://localhost:${SC_PORT}`;
-const external = Boolean(process.env.E2E_STOREFRONT_URL || process.env.E2E_SELLER_URL);
+const STAFF_URL = process.env.E2E_STAFF_URL ?? `http://localhost:${ST_PORT}`;
+const external = Boolean(process.env.E2E_STOREFRONT_URL || process.env.E2E_SELLER_URL || process.env.E2E_STAFF_URL);
 
 const engines = (process.env.E2E_BROWSERS ?? 'chromium').split(',').map((s) => s.trim()).filter(Boolean);
 const deviceOf: Record<string, (typeof devices)[string]> = {
@@ -65,13 +67,15 @@ export default defineConfig({
   projects: engines.flatMap((engine) => [
     { name: `storefront-${engine}`, testMatch: /storefront\..*spec\.ts/, use: { ...deviceOf[engine], baseURL: STOREFRONT_URL } },
     // Seller mock state (active organisation) is process-wide, so seller journeys run one at a time.
-    { name: `seller-center-${engine}`, testMatch: /seller-center\..*spec\.ts/, fullyParallel: false, use: { ...deviceOf[engine], baseURL: SELLER_URL, viewport: { width: 1440, height: 900 } } }
+    { name: `seller-center-${engine}`, testMatch: /seller-center\..*spec\.ts/, fullyParallel: false, use: { ...deviceOf[engine], baseURL: SELLER_URL, viewport: { width: 1440, height: 900 } } },
+    { name: `staff-console-${engine}`, testMatch: /staff-console\..*spec\.ts/, fullyParallel: false, use: { ...deviceOf[engine], baseURL: STAFF_URL, viewport: { width: 1440, height: 900 } } }
   ]),
   webServer: external
     ? undefined
     : [
         // The site-config route is the seller app's BFF proxy too, but only the storefront mocks answer it; use the session for Seller Center.
         appServer('storefront', SF_PORT),
-        { ...appServer('seller-center', SC_PORT, { NEXT_PUBLIC_STOREFRONT_URL: STOREFRONT_URL }), url: `http://localhost:${SC_PORT}/api/bff/v1/seller/session` }
+        { ...appServer('seller-center', SC_PORT, { NEXT_PUBLIC_STOREFRONT_URL: STOREFRONT_URL }), url: `http://localhost:${SC_PORT}/api/bff/v1/seller/session` },
+        { ...appServer('staff-console', ST_PORT, { NEXT_PUBLIC_STOREFRONT_URL: STOREFRONT_URL }), url: `http://localhost:${ST_PORT}/api/bff/v1/staff/session` }
       ]
 });

@@ -3,14 +3,18 @@ import { type Metadata } from 'next';
 import Link from 'next/link';
 
 import styles from '@/components/common/Content.module.css';
-import { t } from '@/i18n/t';
+import { getT } from '@/i18n/server';
 import { siteQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
 
-export const metadata: Metadata = { title: 'About AfroTransact', description: t('about.intro') };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('title.about'), description: t('about.intro') };
+}
 
 export default async function AboutPage() {
+  const t = await getT();
   const config = await getQueryClient()
     .fetchQuery(siteQueries.config(await serverApi()))
     .catch(() => null);

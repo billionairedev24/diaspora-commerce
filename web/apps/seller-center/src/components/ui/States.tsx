@@ -5,6 +5,8 @@ import { Button } from '@afrotransact/ui';
 import { CloudSlash, LockSimple, WarningCircle } from '@phosphor-icons/react/ssr';
 import { type ReactNode } from 'react';
 
+import { useT } from '../../i18n/t';
+
 export function Spinner({ label = 'Loading…' }: { label?: string }) {
   return (
     <div role="status" aria-live="polite" className="flex min-h-40 items-center justify-center rounded-md bg-surface-muted text-sm text-muted">
@@ -25,11 +27,12 @@ export function EmptyState({ title, children, action }: { title: string; childre
 
 /** Error panel: 503 UPSTREAM_UNAVAILABLE (a service still being built or down), 403 and generic failures. */
 export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const t = useT();
   const unavailable = isApiError(error) && (error.status === 503 || error.code === 'UPSTREAM_UNAVAILABLE');
   const forbidden = isApiError(error) && error.status === 403;
   const Icon = unavailable ? CloudSlash : forbidden ? LockSimple : WarningCircle;
-  const title = unavailable ? 'This part of AfroTransact is temporarily unavailable' : forbidden ? 'You don’t have access to this' : 'Something went wrong';
-  const detail = isApiError(error) ? error.problem.detail : 'Please try again.';
+  const title = unavailable ? t('sc.states.unavailable') : forbidden ? t('sc.states.forbidden') : t('sc.states.failed');
+  const detail = isApiError(error) ? error.problem.detail : t('sc.states.retryHint');
   return (
     <div role="alert" className="flex flex-col items-center gap-3 rounded-md border border-border bg-surface px-6 py-10 text-center">
       <Icon size={36} aria-hidden className="text-muted" />
@@ -37,7 +40,7 @@ export function ErrorState({ error, onRetry }: { error: unknown; onRetry?: () =>
       {detail ? <p className="m-0 max-w-[60ch] text-sm text-muted">{detail}</p> : null}
       {onRetry && !forbidden ? (
         <Button variant="neutral" size="sm" onClick={onRetry}>
-          Try again
+          {t('sc.states.tryAgain')}
         </Button>
       ) : null}
     </div>
@@ -52,11 +55,12 @@ export function problemMessage(error: unknown): string {
 }
 
 export function NoAccess({ role }: { role: string }) {
+  const t = useT();
   return (
     <div role="alert" className="flex flex-col items-center gap-3 rounded-md border border-border bg-surface px-6 py-10 text-center">
       <LockSimple size={36} aria-hidden className="text-muted" />
-      <strong className="text-lg">You don’t have access to this page</strong>
-      <p className="m-0 max-w-[60ch] text-sm text-muted">Your role ({role}) can’t open it. Ask the owner if you need access.</p>
+      <strong className="text-lg">{t('sc.states.youDonTHaveAccess')}</strong>
+      <p className="m-0 max-w-[60ch] text-sm text-muted">{t('sc.states.noAccessRole', { role })}</p>
     </div>
   );
 }

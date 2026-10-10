@@ -6,6 +6,7 @@ import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { useSearch } from '@/api/queries';
 import { ProductRow } from '@/features/shop/components';
+import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { AppText, Chip, Loading } from '@/ui/primitives';
 import { Screen } from '@/ui/Screen';
@@ -22,6 +23,7 @@ function useDebounced(v: string, ms = 250) {
 }
 
 export default function Search() {
+  const tr = useT();
   const router = useRouter();
   const params = useLocalSearchParams<{ q?: string }>();
   const [q, setQ] = useState(params.q ?? '');
@@ -34,10 +36,10 @@ export default function Search() {
     <View style={styles.header}>
       <View style={styles.field}>
         <MagnifyingGlass size={20} color={c.textMuted} />
-        <TextInput value={q} onChangeText={setQ} placeholder="Search AfroTransact" placeholderTextColor={c.textSubtle} accessibilityLabel="Search" returnKeyType="search" autoCorrect={false} style={styles.input} />
+        <TextInput value={q} onChangeText={setQ} placeholder={tr('cu.search.searchAfrotransact')} placeholderTextColor={c.textSubtle} accessibilityLabel={tr('cu.search.searchAfrotransact')} returnKeyType="search" autoCorrect={false} style={styles.input} />
         <Barcode size={20} color={c.textMuted} />
       </View>
-      <AppText variant="bodyStrong" accessibilityRole="button" onPress={() => { setQ(''); router.navigate('/'); }}>Cancel</AppText>
+      <AppText variant="bodyStrong" accessibilityRole="button" onPress={() => { setQ(''); router.navigate('/'); }}>{tr('cu.search.cancel')}</AppText>
     </View>
   );
 
@@ -51,10 +53,10 @@ export default function Search() {
         keyboardDismissMode="on-drag"
         ListHeaderComponent={
           dq ? (
-            <AppText variant="small" color={c.textMuted}>{results.isFetching ? 'Searching…' : `${results.data?.total ?? 0} results for “${dq}”`}</AppText>
+            <AppText variant="small" color={c.textMuted}>{results.isFetching ? tr('cu.search.searching') : tr('cu.search.resultsFor', { count: results.data?.total ?? 0, q: dq })}</AppText>
           ) : (
             <View style={{ gap: sp['2'] }}>
-              <AppText variant="bodyStrong">Recent</AppText>
+              <AppText variant="bodyStrong">{tr('cu.search.recent')}</AppText>
               <View style={styles.chips}>
                 {RECENT.map((r) => (
                   <Pressable key={r} onPress={() => setQ(r)} accessibilityRole="button" style={styles.recent}>
@@ -63,11 +65,11 @@ export default function Search() {
                   </Pressable>
                 ))}
               </View>
-              <AppText variant="bodyStrong">All products</AppText>
+              <AppText variant="bodyStrong">{tr('cu.search.allProducts')}</AppText>
             </View>
           )
         }
-        ListEmptyComponent={results.isLoading ? <Loading /> : dq ? <View style={{ paddingTop: sp['6'], gap: sp['2'] }}><AppText>No matches yet.</AppText><Chip label="Ask Lola instead" onPress={() => router.push('/lola')} /></View> : null}
+        ListEmptyComponent={results.isLoading ? <Loading /> : dq ? <View style={{ paddingTop: sp['6'], gap: sp['2'] }}><AppText>{tr('cu.search.noMatchesYet')}</AppText><Chip label={tr('cu.search.askLolaInstead')} onPress={() => router.push('/lola')} /></View> : null}
         renderItem={({ item }) => <ProductRow p={item} onPress={() => router.push(`/product/${item.atin}`)} />}
       />
     </Screen>
@@ -76,7 +78,7 @@ export default function Search() {
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: sp['3'], paddingHorizontal: sp['4'], paddingVertical: sp['2'], backgroundColor: c.canvas },
-  field: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: sp['2'], height: t.size.controlLg, paddingHorizontal: sp['3'], borderRadius: t.radius.pill, backgroundColor: c.surfaceMuted },
+  field: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: sp['2'], minHeight: t.size.controlLg, paddingHorizontal: sp['3'], borderRadius: t.radius.pill, backgroundColor: c.surfaceMuted },
   input: { flex: 1, fontSize: t.fontSize.base, color: c.text },
   list: { paddingHorizontal: sp['4'], paddingBottom: sp['6'], gap: sp['1'] },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: sp['2'] },

@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
 
 import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { storefrontUrl } from '@/lib/config';
 import { hrefOf, moduleOf } from '@/lib/routes';
@@ -21,25 +22,27 @@ function Centered({ children }: { children: ReactNode }) {
 }
 
 function SignInPrompt() {
+  const t = useT();
   const returnTo = typeof window !== 'undefined' ? window.location.href : '/';
   return (
     <Centered>
-      <h1 className="m-0 text-2xl font-bold">Sign in to Seller Central</h1>
-      <p className="m-0 text-muted">Use the same AfroTransact account you shop with. Seller Center and Provider Hub open after your application is approved.</p>
+      <h1 className="m-0 text-2xl font-bold">{t('sc.portalShell.signInToSellerCentral')}</h1>
+      <p className="m-0 text-muted">{t('sc.portalShell.useTheSameAfrotransactAccount')}</p>
       <a className="rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={`${storefrontUrl()}/signin?returnTo=${encodeURIComponent(returnTo)}`}>
-        Sign in
+        {t('sc.portalShell.signIn')}
       </a>
     </Centered>
   );
 }
 
 function NoOrganisation() {
+  const t = useT();
   return (
     <Centered>
-      <h1 className="m-0 text-2xl font-bold">Start selling on AfroTransact</h1>
-      <p className="m-0 text-muted">You don’t belong to a seller or service-provider organisation yet. Apply in a few steps — you can save and finish later.</p>
+      <h1 className="m-0 text-2xl font-bold">{t('sc.portalShell.startSellingOnAfrotransact')}</h1>
+      <p className="m-0 text-muted">{t('sc.portalShell.youDonTBelongTo')}</p>
       <a className="rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={`${storefrontUrl()}/sell`}>
-        Start selling
+        {t('sc.portalShell.startSelling')}
       </a>
     </Centered>
   );
@@ -55,6 +58,7 @@ function allowed(session: SellerSession, key: ModuleKey | null): boolean {
  * open show an access notice.
  */
 export function PortalShell({ children }: { children: ReactNode }) {
+  const t = useT();
   const api = sellerApi();
   const qc = useQueryClient();
   const router = useRouter();
@@ -71,10 +75,10 @@ export function PortalShell({ children }: { children: ReactNode }) {
       qc.setQueryData(sellerKeys.session(), s);
       void qc.invalidateQueries({ queryKey: sellerKeys.all, predicate: (query) => query.queryKey[1] !== 'session' });
       setMenuOpen(false);
-      toast.show(`Switched to ${s.activeOrg?.name ?? 'organisation'}`);
+      toast.show(t('sc.portalShell.switched', { org: s.activeOrg?.name ?? t('sc.portalShell.organisation') }));
       router.push(hrefOf(s.landing));
     },
-    onError: () => toast.show('Couldn’t switch organisation. Please try again.', 'error')
+    onError: () => toast.show(t('sc.portalShell.switchFailed'), 'error')
   });
 
   const needsOnboarding = !!session?.activeOrg && !session.approved && active !== 'onboarding';
@@ -89,7 +93,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       <>
         <Header session={null} />
         <div className="p-8">
-          <Spinner label="Loading your back office…" />
+          <Spinner label={t('sc.portalShell.loadingYourBackOffice')} />
         </div>
       </>
     );
@@ -132,7 +136,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
         <aside className="sticky top-14 hidden h-[calc(100vh-56px)] self-start overflow-y-auto overscroll-contain border-r border-border bg-surface lg:block">
           {sidebar()}
         </aside>
-        <Sheet open={menuOpen} onOpenChange={setMenuOpen} title="Menu" side="left">
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen} title={t('sc.portalShell.menu')} side="left">
           {sidebar(() => setMenuOpen(false))}
         </Sheet>
         <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-12 outline-none sm:px-8">

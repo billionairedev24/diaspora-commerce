@@ -5,6 +5,7 @@ import { Button, Dialog, Field, fieldStyles, Select, TextField, useToast } from 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
 
+import { FormErrors } from '@/components/ui/FormErrors';
 import { Notice } from '@/components/ui/Notice';
 import { problemMessage } from '@/components/ui/States';
 import { staffApi } from '@/lib/api';
@@ -49,6 +50,7 @@ export function RefundDialog({ c360, open, onOpenChange, caseId, preset }: { c36
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title="Refund the customer" description={limit === null ? 'Your roles have no refund limit.' : `Your roles can refund up to ${money(limit)}.`} width={480}>
       <form noValidate onSubmit={submit} className="flex flex-col gap-3">
+        <FormErrors errors={errors} ids={{ orderNumber: 'refund-order', claimId: 'refund-claim', amountMinor: 'refund-amount', reason: 'refund-reason' }} />
         <Select
           label="Refund through"
           value={via}
@@ -58,9 +60,10 @@ export function RefundDialog({ c360, open, onOpenChange, caseId, preset }: { c36
             { value: 'CLAIM', label: 'An open A-to-z claim', disabled: openClaims.length === 0 }
           ]}
         />
-        <Select label="Order" value={orderNumber} placeholder="Choose…" onChange={(e) => setOrderNumber(e.currentTarget.value)} error={errors.orderNumber} options={c360.orders.map((o) => ({ value: o.orderNumber, label: `${o.orderNumber} · ${money(o.totalMinor)}` }))} />
+        <Select id="refund-order" label="Order" value={orderNumber} placeholder="Choose…" onChange={(e) => setOrderNumber(e.currentTarget.value)} error={errors.orderNumber} options={c360.orders.map((o) => ({ value: o.orderNumber, label: `${o.orderNumber} · ${money(o.totalMinor)}` }))} />
         {via === 'CLAIM' ? (
           <Select
+            id="refund-claim"
             label="Claim"
             value={claimId}
             placeholder="Choose…"
@@ -77,8 +80,8 @@ export function RefundDialog({ c360, open, onOpenChange, caseId, preset }: { c36
             options={openClaims.map((c) => ({ value: c.id, label: `${c.reference} · ${money(c.amountMinor)}` }))}
           />
         ) : null}
-        <TextField label="Amount ($)" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.currentTarget.value)} error={errors.amountMinor} help={via === 'CLAIM' ? 'A claim refund is for the claimed amount.' : undefined} />
-        <Field label="Reason (the customer sees it)" error={errors.reason}>
+        <TextField id="refund-amount" label="Amount ($)" inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.currentTarget.value)} error={errors.amountMinor} help={via === 'CLAIM' ? 'A claim refund is for the claimed amount.' : undefined} />
+        <Field id="refund-reason" label="Reason (the customer sees it)" error={errors.reason}>
           {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={3} maxLength={500} value={reason} onChange={(e) => setReason(e.currentTarget.value)} />}
         </Field>
         {refund.isError ? (

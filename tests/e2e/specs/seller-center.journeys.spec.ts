@@ -74,6 +74,15 @@ test.describe('seller center · shell navigation by role', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'seller home' });
   });
+
+  for (const path of ['/orders', '/listings', '/listings/new', '/inventory', '/storefront', '/payouts', '/billing', '/account-health', '/team', '/onboarding']) {
+    test(`seller ${path} has no serious axe violations @a11y`, async ({ page }, testInfo) => {
+      await page.goto(path);
+      await expect(sidebar(page)).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+      await expectNoSeriousA11yViolations(page, testInfo, { page: `seller ${path}` });
+    });
+  }
 });
 
 test.describe('provider hub · calendar', () => {
@@ -91,16 +100,31 @@ test.describe('provider hub · calendar', () => {
     await expect(navLink(page, 'Calendar')).toHaveAttribute('aria-current', 'page');
     const week = page.getByRole('grid', { name: 'Week calendar' });
     await expect(week).toBeVisible();
-    await expect(week.getByRole('columnheader')).toHaveCount(7);
+    // 7 day headers plus the time column (S194: complete grid > row > cell structure).
+    await expect(week.getByRole('columnheader')).toHaveCount(8);
+    await expect(week.getByRole('row')).toHaveCount(2);
     await page.getByRole('radio', { name: 'Month' }).or(page.getByRole('button', { name: 'Month' })).first().click();
     const month = page.getByRole('grid', { name: 'Month calendar' });
     await expect(month).toBeVisible();
     await expect(month.getByRole('gridcell')).toHaveCount(42);
+    await expect(month.getByRole('row')).toHaveCount(7);
   });
 
   test('provider calendar has no serious axe violations @a11y', async ({ page }, testInfo) => {
     await page.goto('/calendar');
     await expect(page.getByRole('grid', { name: 'Week calendar' })).toBeVisible();
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'provider calendar' });
+    await page.getByRole('radio', { name: 'Month' }).or(page.getByRole('button', { name: 'Month' })).first().click();
+    await expect(page.getByRole('grid', { name: 'Month calendar' })).toBeVisible();
+    await expectNoSeriousA11yViolations(page, testInfo, { page: 'provider calendar' });
   });
+
+  for (const path of ['/requests', '/hours', '/services', '/policy', '/public-page', '/earnings']) {
+    test(`provider ${path} has no serious axe violations @a11y`, async ({ page }, testInfo) => {
+      await page.goto(path);
+      await expect(sidebar(page)).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+      await expectNoSeriousA11yViolations(page, testInfo, { page: `provider ${path}` });
+    });
+  }
 });

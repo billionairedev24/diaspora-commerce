@@ -7,6 +7,7 @@ import { CaretDown, CircleNotch, DownloadSimple, FileCsv, FilePdf, MicrosoftExce
 import { useRef, useState } from 'react';
 import { Area, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Legend, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
+import { useT } from '@/i18n/t';
 import { toCsv } from '@/lib/export/csv';
 import { toPdf } from '@/lib/export/pdf';
 import { download, sliceColour, slug, tabular, toneColour } from '@/lib/export/table';
@@ -80,6 +81,7 @@ type Format = 'pdf' | 'xlsx' | 'csv';
 
 /** One dashboard chart with its Export menu: PDF (chart + table), Excel (data + native chart) and CSV (raw data). */
 export function ChartCard({ spec }: { spec: ChartSpec }) {
+  const tr = useT();
   const ref = useRef<HTMLDivElement>(null);
   const toast = useToast();
   const [busy, setBusy] = useState<Format | null>(null);
@@ -92,7 +94,7 @@ export function ChartCard({ spec }: { spec: ChartSpec }) {
       if (f === 'xlsx') download(new Blob([toXlsx(spec)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `${name}.xlsx`);
       if (f === 'pdf') download(await toPdf(t, ref.current?.querySelector('svg.recharts-surface') ?? null), `${name}.pdf`);
     } catch {
-      toast.show('Export failed. Please try again.', 'error');
+      toast.show(tr('st.chartCard.exportFailed'), 'error');
     } finally {
       setBusy(null);
     }
@@ -116,13 +118,13 @@ export function ChartCard({ spec }: { spec: ChartSpec }) {
             }
           >
             <MenuItem icon={<FilePdf size={16} aria-hidden />} onSelect={() => void run('pdf')}>
-              PDF — chart + table
+              {tr('st.chartCard.pdfChartTable')}
             </MenuItem>
             <MenuItem icon={<MicrosoftExcelLogo size={16} aria-hidden />} onSelect={() => void run('xlsx')}>
-              Excel — data + live chart
+              {tr('st.chartCard.excelDataLiveChart')}
             </MenuItem>
             <MenuItem icon={<FileCsv size={16} aria-hidden />} onSelect={() => void run('csv')}>
-              CSV — raw data
+              {tr('st.chartCard.csvRawData')}
             </MenuItem>
           </Menu>
         ) : null}
@@ -134,7 +136,7 @@ export function ChartCard({ spec }: { spec: ChartSpec }) {
           </ResponsiveContainer>
         </div>
       ) : (
-        <div className="grid h-60 place-items-center rounded-md bg-surface-muted px-6 text-center text-sm text-muted">This chart appears once its data source is available.</div>
+        <div className="grid h-60 place-items-center rounded-md bg-surface-muted px-6 text-center text-sm text-muted">{tr('st.chartCard.thisChartAppearsOnceIts')}</div>
       )}
       <table className="at-visually-hidden">
         <caption>{spec.title}</caption>

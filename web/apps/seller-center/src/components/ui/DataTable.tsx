@@ -5,6 +5,8 @@ import { CaretLeft, CaretRight } from '@phosphor-icons/react/ssr';
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { type ReactNode } from 'react';
 
+import { useT } from '@/i18n/t';
+
 export interface ServerPage {
   /** 0-based page shown. */
   pageIndex: number;
@@ -32,6 +34,7 @@ export interface DataTableProps<T> {
  * scrolls sideways — columns have fixed widths (column `size` is a percentage) and cells wrap.
  */
 export function DataTable<T>({ label, columns, data, getRowId, page, loading, empty, activeRowId }: DataTableProps<T>) {
+  const t = useT();
   const table = useReactTable({
     data,
     columns,
@@ -90,10 +93,10 @@ export function DataTable<T>({ label, columns, data, getRowId, page, loading, em
           <span aria-live="polite">{data.length ? `Showing ${from}–${to} of ${page.total}` : `0 of ${page.total}`}</span>
           <span className="flex gap-2">
             <Button variant="neutral" size="sm" icon={<CaretLeft size={14} aria-hidden />} disabled={page.pageIndex === 0 || loading} onClick={() => page.onPage(page.pageIndex - 1)}>
-              Previous
+              {t('sc.dataTable.previous')}
             </Button>
             <Button variant="neutral" size="sm" disabled={!page.hasNext || loading} onClick={() => page.onPage(page.pageIndex + 1)}>
-              Next <CaretRight size={14} aria-hidden />
+              {t('sc.dataTable.next')} <CaretRight size={14} aria-hidden />
             </Button>
           </span>
         </div>

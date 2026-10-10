@@ -1,13 +1,14 @@
 import { type IdentityProviderId } from '@afrotransact/api-client';
 import { SocialButton } from '@afrotransact/ui';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { BFF_BASE_PATH } from '@/lib/config';
 
 import styles from './Auth.module.css';
 
 /** Social sign-in buttons at the bottom of the form — only providers the platform has enabled. */
 export function SocialSignIn({ providers, returnTo }: { providers: IdentityProviderId[]; returnTo: string }) {
+  const t = useT();
   if (!providers.length) return null;
   return (
     <>

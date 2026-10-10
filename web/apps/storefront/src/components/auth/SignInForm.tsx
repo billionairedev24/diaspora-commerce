@@ -5,7 +5,8 @@ import { Button, Fingerprint, PasswordField, TextField } from '@afrotransact/ui'
 import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { FormErrors } from '@/components/common/FormErrors';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { PasskeyError, signInWithPasskey } from '@/lib/auth/passkey';
 import { signUpHref } from '@/lib/links';
@@ -18,6 +19,7 @@ import { useAuthSuccess } from './useAuthSuccess';
 type Step = { kind: 'start' } | { kind: 'mfa'; challengeId: string; methods: string[]; destination: string };
 
 export function SignInForm({ providers, returnTo, demo }: { providers: IdentityProviderId[]; returnTo: string; demo: boolean }) {
+  const t = useT();
   const api = browserApi();
   const done = useAuthSuccess();
   const [step, setStep] = useState<Step>({ kind: 'start' });
@@ -25,6 +27,7 @@ export function SignInForm({ providers, returnTo, demo }: { providers: IdentityP
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({});
   const [busy, setBusy] = useState(false);
+  const [attempts, setAttempts] = useState(0);
   const [passkeyBusy, setPasskeyBusy] = useState(false);
   const [method, setMethod] = useState<'totp' | 'sms'>('totp');
 
@@ -38,7 +41,7 @@ export function SignInForm({ providers, returnTo, demo }: { providers: IdentityP
         fe[k] ??= i.message;
       });
       setErrors(fe);
-      document.getElementById(fe.email ? 'signin-email' : 'signin-password')?.focus();
+      setAttempts((n) => n + 1);
       return;
     }
     setBusy(true);
@@ -102,6 +105,7 @@ export function SignInForm({ providers, returnTo, demo }: { providers: IdentityP
   return (
     <form onSubmit={submit} noValidate className={styles.form} style={{ width: '100%' }}>
       <h1 className={styles.h1}>{t('auth.signinTitle')}</h1>
+      <FormErrors errors={errors} ids={{ email: 'signin-email', password: 'signin-password' }} submitCount={attempts} />
       <Button variant="dark" size="lg" icon={<Fingerprint size={20} aria-hidden />} onClick={() => void passkey()} loading={passkeyBusy}>
         {t('auth.passkey')}
       </Button>

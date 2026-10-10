@@ -4,7 +4,7 @@ import { CodeSchema } from '@afrotransact/api-client';
 import { Button, Checkbox, TextField } from '@afrotransact/ui';
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 
 import styles from './Auth.module.css';
 
@@ -21,6 +21,7 @@ export interface CodeStepProps {
 
 /** 6-digit code entry used for two-step verification and sign-up email confirmation. */
 export function CodeStep({ title, hint, onVerify, onStartAgain, onResend, showTrust, methods, demoHint }: CodeStepProps) {
+  const t = useT();
   const [code, setCode] = useState('');
   const [trust, setTrust] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 'use client';
 
-import { accountQueries, formatMoney, type Offer, productQueries } from '@afrotransact/api-client';
+import { accountQueries, type Offer, productQueries } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, CheckCircle, FulfilmentBadge, ImagePlaceholder, MapPin, Price, QuantityStepper, Sparkle, Stars, TextField } from '@afrotransact/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -9,7 +10,7 @@ import { useState } from 'react';
 
 import { DeliverToDialog } from '@/components/shell/DeliverToDialog';
 import { LolaSheet } from '@/components/shell/LolaSheet';
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { siteQueries } from '@/lib/api/queries';
 import { lineForOffer, useCart, useCartMutation } from '@/lib/cart/useCart';
@@ -18,6 +19,7 @@ import { productHref } from '@/lib/links';
 import styles from './Product.module.css';
 
 function OfferCartControl({ offer, title, label }: { offer: Offer; title: string; label: string }) {
+  const t = useT();
   const { data: cart } = useCart();
   const m = useCartMutation();
   const line = lineForOffer(cart, offer.offerId);
@@ -43,6 +45,8 @@ function OfferCartControl({ offer, title, label }: { offer: Offer; title: string
 
 /** Product detail: gallery, details, variant picker, buy box and other sellers. */
 export function ProductView({ atin }: { atin: string }) {
+  const fmt = useFormatters();
+  const t = useT();
   const api = browserApi();
   const router = useRouter();
   const { data } = useQuery(productQueries.detail(api, atin));
@@ -83,7 +87,7 @@ export function ProductView({ atin }: { atin: string }) {
 
   return (
     <div className={`${styles.wrap} full-bleed`}>
-      <nav className={styles.crumbs} aria-label="Breadcrumb">
+      <nav className={styles.crumbs} aria-label={t('acct.breadcrumb')}>
         <button type="button" className="link-button" onClick={() => router.back()}>
           {t('pdp.back')}
         </button>
@@ -92,7 +96,7 @@ export function ProductView({ atin }: { atin: string }) {
         </span>
       </nav>
       <div className={styles.grid}>
-        <ul className={styles.thumbs} aria-label="Images">
+        <ul className={styles.thumbs} aria-label={t('pdp.images')}>
           {images.map((im, i) => (
             <li key={i}>
               <button type="button" className={styles.thumb} aria-pressed={i === img} aria-label={t('pdp.image', { n: i + 1, total: images.length })} onMouseEnter={() => setImg(i)} onClick={() => setImg(i)}>
@@ -109,17 +113,17 @@ export function ProductView({ atin }: { atin: string }) {
           <span className={styles.store}>
             <Link href={`/s?q=${encodeURIComponent(p.brand)}`}>{t('pdp.visitStore', { brand: p.brand })}</Link>
           </span>
-          <Stars rating={p.rating} showValue reviewCount={p.reviewCount} reviewsLabel={(c) => t('pdp.ratings', { count: c })} />
+          <Stars rating={p.rating} showValue reviewCount={p.reviewCount} reviewsLabel={(c) => t('pdp.ratings', { count: c })} ratingLabel={(r) => t('card.rating', { rating: r })} locale={fmt.tag} />
           <hr className={styles.rule} />
           {bb && (
             <>
               <div className={styles.priceRow}>
-                <Price amountMinor={bb.priceMinor} listPriceMinor={bb.listPriceMinor} size="xl" showDeal />
+                <Price amountMinor={bb.priceMinor} listPriceMinor={bb.listPriceMinor} size="xl" showDeal locale={fmt.tag} listLabel={t('pdp.listLabel')} />
                 <span className={styles.unitPrice}>({data.unitPriceLabel})</span>
               </div>
               {bb.listPriceMinor && bb.listPriceMinor > bb.priceMinor && (
                 <span className={styles.listPrice}>
-                  {t('pdp.listPrice')} <s>{formatMoney(bb.listPriceMinor)}</s>
+                  {t('pdp.listPrice')} <s>{fmt.money(bb.listPriceMinor)}</s>
                 </span>
               )}
             </>
@@ -142,7 +146,7 @@ export function ProductView({ atin }: { atin: string }) {
                   <li key={v.atin}>
                     <Link href={productHref(v.atin)} className={styles.variant} aria-current={v.selected ? 'true' : undefined} replace>
                       <span className={v.available ? undefined : styles.variantOff}>{v.label}</span>
-                      <strong>{formatMoney(v.priceMinor)}</strong>
+                      <strong>{fmt.money(v.priceMinor)}</strong>
                     </Link>
                   </li>
                 ))}
@@ -162,7 +166,7 @@ export function ProductView({ atin }: { atin: string }) {
               {data.otherOffers.map((o) => (
                 <div key={o.offerId} className={styles.offer}>
                   <span className={styles.offerPrice}>
-                    {formatMoney(o.priceMinor)} <span className={styles.offerShip}>{t('pdp.shipping', { fee: o.delivery.free ? t('pdp.freeShipping') : formatMoney(o.delivery.feeMinor) })}</span>
+                    {fmt.money(o.priceMinor)} <span className={styles.offerShip}>{t('pdp.shipping', { fee: o.delivery.free ? t('pdp.freeShipping') : fmt.money(o.delivery.feeMinor) })}</span>
                   </span>
                   <span className={styles.offerAction}>
                     <OfferCartControl offer={o} title={p.title} label={`${t('card.addToCart')}: ${o.seller.name}`} />
@@ -175,13 +179,13 @@ export function ProductView({ atin }: { atin: string }) {
             </section>
           )}
         </div>
-        <aside className={styles.box} aria-label="Buy box">
+        <aside className={styles.box} aria-label={t('pdp.buyBox')}>
           {bb ? (
             <>
-              <Price amountMinor={bb.priceMinor} size="lg" />
+              <Price amountMinor={bb.priceMinor} size="lg" locale={fmt.tag} />
               <FulfilmentBadge fulfilment={bb.fulfilment} shipsFrom={bb.seller.city} />
               <p className={styles.promise}>
-                {bb.delivery.free ? 'FREE delivery' : `${formatMoney(bb.delivery.feeMinor)} delivery`} <strong>{bb.delivery.label}</strong>
+                {bb.delivery.free ? 'FREE delivery' : `${fmt.money(bb.delivery.feeMinor)} delivery`} <strong>{bb.delivery.label}</strong>
                 {bb.delivery.cutoff ? `. ${bb.delivery.cutoff}` : '.'}
               </p>
               {bb.delivery.expressLabel && (

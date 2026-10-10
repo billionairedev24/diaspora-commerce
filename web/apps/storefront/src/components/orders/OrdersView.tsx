@@ -1,6 +1,7 @@
 'use client';
 
-import { formatMoney, isApiError, orderKeys, type OrderSummary } from '@afrotransact/api-client';
+import { isApiError, orderKeys, type OrderSummary } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, Key, Skeleton, Sparkle, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -8,15 +9,17 @@ import { useSearchParams } from 'next/navigation';
 
 import pageStyles from '@/components/account/Pages.module.css';
 import { useLolaLauncher } from '@/components/shell/LolaLauncher';
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
 import styles from './Orders.module.css';
 
-export const placedDate = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+export const placedDate = (tag: string, iso: string) => new Date(iso).toLocaleDateString(tag, { month: 'long', day: 'numeric', year: 'numeric' });
 
 function OrderCard({ order }: { order: OrderSummary }) {
+  const fmt = useFormatters();
+  const t = useT();
   const qc = useQueryClient();
   const toast = useToast();
   const cancel = useMutation({
@@ -30,11 +33,11 @@ function OrderCard({ order }: { order: OrderSummary }) {
       <div className={styles.orderHead}>
         <span>
           {t('ord.placed')}
-          <strong>{placedDate(order.placedAt)}</strong>
+          <strong>{placedDate(fmt.tag, order.placedAt)}</strong>
         </span>
         <span>
           {t('ord.total')}
-          <strong>{formatMoney(order.totalMinor)}</strong>
+          <strong>{fmt.money(order.totalMinor)}</strong>
         </span>
         <span>
           {t('ord.shipTo')}
@@ -78,7 +81,7 @@ function OrderCard({ order }: { order: OrderSummary }) {
                 {t('ord.reportProblem')}
               </Link>
             )}
-            {s.returnable && s.returnWindowEndsAt && <span className={pageStyles.muted}>{t('ord.returnBy', { date: new Date(s.returnWindowEndsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) })}</span>}
+            {s.returnable && s.returnWindowEndsAt && <span className={pageStyles.muted}>{t('ord.returnBy', { date: new Date(s.returnWindowEndsAt).toLocaleDateString(fmt.tag, { month: 'short', day: 'numeric' }) })}</span>}
           </div>
         </div>
       ))}
@@ -89,6 +92,7 @@ function OrderCard({ order }: { order: OrderSummary }) {
 
 /** Your Orders (S148): every order with its shipments, delivery codes, track, cancel (until packed) and return. */
 export function OrdersView() {
+  const t = useT();
   const api = browserApi();
   const orders = useQuery(shopperQueries.orders(api));
   const placed = useSearchParams().get('placed');

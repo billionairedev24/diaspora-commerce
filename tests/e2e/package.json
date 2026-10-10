@@ -2,7 +2,7 @@
   "name": "@afrotransact/e2e",
   "version": "0.1.0",
   "private": true,
-  "description": "Cross-app Playwright journeys (storefront + Seller Center / Provider Hub) against the in-process MSW mock BFF, with axe a11y smoke checks.",
+  "description": "Cross-app Playwright journeys (storefront, Seller Center / Provider Hub, staff console) against the in-process MSW mock BFF, with axe a11y smoke checks.",
   "type": "module",
   "scripts": {
     "test": "playwright test",

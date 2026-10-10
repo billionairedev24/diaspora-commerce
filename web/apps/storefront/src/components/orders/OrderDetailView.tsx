@@ -1,12 +1,13 @@
 'use client';
 
-import { formatMoney, isApiError, orderKeys } from '@afrotransact/api-client';
+import { isApiError, orderKeys } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, ImagePlaceholder, Key, Skeleton, Truck, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import pageStyles from '@/components/account/Pages.module.css';
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 import { productHref } from '@/lib/links';
@@ -14,11 +15,13 @@ import { productHref } from '@/lib/links';
 import styles from './Orders.module.css';
 import { placedDate } from './OrdersView';
 
-const stamp = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-const day = (iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : null);
+const stamp = (tag: string, iso: string) => new Date(iso).toLocaleString(tag, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+const day = (tag: string, iso: string | null) => (iso ? new Date(iso.length === 10 ? `${iso}T12:00:00Z` : iso).toLocaleDateString(tag, { weekday: 'short', month: 'short', day: 'numeric' }) : null);
 
 /** One order (S148): shipments with tracking timelines, delivery codes, items, totals, cancel and return. */
 export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
+  const fmt = useFormatters();
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -42,7 +45,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
         <>
           <div className={pageStyles.head}>
             <h1 className={pageStyles.h1}>{t('ord.detailTitle', { number: o.orderNumber })}</h1>
-            <span className={pageStyles.muted}>{t('ord.placedOn', { date: placedDate(o.placedAt) })}</span>
+            <span className={pageStyles.muted}>{t('ord.placedOn', { date: placedDate(fmt.tag, o.placedAt) })}</span>
           </div>
           <div className={styles.layout}>
             <div className={pageStyles.form}>
@@ -55,7 +58,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                   <p className={pageStyles.muted}>
                     {s.label} · {t('ord.soldBy', { seller: s.sellerName })}
                   </p>
-                  {s.promisedBy && !s.deliveredAt && <p className={pageStyles.success}>{t('ord.arriving', { date: day(s.promisedBy) ?? '' })}</p>}
+                  {s.promisedBy && !s.deliveredAt && <p className={pageStyles.success}>{t('ord.arriving', { date: day(fmt.tag, s.promisedBy) ?? '' })}</p>}
                   {s.carrier && s.trackingNumber && (
                     <p className={pageStyles.muted}>
                       <Truck aria-hidden /> {t('ord.trackingNo', { carrier: s.carrier.toUpperCase(), number: s.trackingNumber })}
@@ -70,7 +73,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                     {s.timeline.map((e) => (
                       <li key={`${e.status}-${e.at}`} className={styles.step}>
                         <strong>{e.label}</strong>
-                        <span className={styles.when}>{stamp(e.at)}</span>
+                        <span className={styles.when}>{stamp(fmt.tag, e.at)}</span>
                       </li>
                     ))}
                   </ol>
@@ -80,8 +83,8 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                         <ImagePlaceholder src={l.imageUrl} alt="" />
                         <Link href={productHref(l.atin)}>{l.title}</Link>
                         <span>
-                          {l.quantity} × {formatMoney(l.unitPriceMinor)}
-                          {(l.refundedMinor ?? 0) > 0 && <span className={pageStyles.success}> · {t('ord.lineRefunded', { amount: formatMoney(l.refundedMinor ?? 0) })}</span>}
+                          {l.quantity} × {fmt.money(l.unitPriceMinor)}
+                          {(l.refundedMinor ?? 0) > 0 && <span className={pageStyles.success}> · {t('ord.lineRefunded', { amount: fmt.money(l.refundedMinor ?? 0) })}</span>}
                         </span>
                       </li>
                     ))}
@@ -108,7 +111,7 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                       </Link>
                     )}
                   </div>
-                  {s.returnable && s.returnWindowEndsAt && <p className={pageStyles.muted}>{t('ord.returnBy', { date: day(s.returnWindowEndsAt) ?? '' })}</p>}
+                  {s.returnable && s.returnWindowEndsAt && <p className={pageStyles.muted}>{t('ord.returnBy', { date: day(fmt.tag, s.returnWindowEndsAt) ?? '' })}</p>}
                 </section>
               ))}
             </div>
@@ -117,34 +120,34 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                 <strong id="sum-title">{t('ord.summary')}</strong>
                 <dl className={pageStyles.dl}>
                   <dt>{t('ord.items')}</dt>
-                  <dd>{formatMoney(o.itemsMinor)}</dd>
+                  <dd>{fmt.money(o.itemsMinor)}</dd>
                   <dt>{t('ord.shipping')}</dt>
-                  <dd>{formatMoney(o.shippingMinor)}</dd>
+                  <dd>{fmt.money(o.shippingMinor)}</dd>
                   {o.discountMinor > 0 && (
                     <>
                       <dt>{t('ord.discount')}</dt>
-                      <dd>−{formatMoney(o.discountMinor)}</dd>
+                      <dd>−{fmt.money(o.discountMinor)}</dd>
                     </>
                   )}
                   <dt>{t('ord.tax')}</dt>
-                  <dd>{formatMoney(o.taxMinor)}</dd>
+                  <dd>{fmt.money(o.taxMinor)}</dd>
                   {(o.payment?.shippingTaxMinor ?? 0) > 0 && (
                     <>
                       <dt className={pageStyles.muted}>{t('ord.shippingTax')}</dt>
-                      <dd className={pageStyles.muted}>{formatMoney(o.payment?.shippingTaxMinor ?? 0)}</dd>
+                      <dd className={pageStyles.muted}>{fmt.money(o.payment?.shippingTaxMinor ?? 0)}</dd>
                     </>
                   )}
                   <dt>
                     <strong>{t('ord.total')}</strong>
                   </dt>
                   <dd>
-                    <strong>{formatMoney(o.totalMinor)}</strong>
+                    <strong>{fmt.money(o.totalMinor)}</strong>
                   </dd>
                   {o.payment && o.payment.refundedMinor > 0 && (
                     <>
                       <dt>{t('ord.refunded')}</dt>
                       <dd className={pageStyles.success} data-testid="order-refunded">
-                        −{formatMoney(o.payment.refundedMinor)}
+                        −{fmt.money(o.payment.refundedMinor)}
                       </dd>
                     </>
                   )}

@@ -1,0 +1,42 @@
+{
+  "name": "@afrotransact/telemetry",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Front-end and mobile error tracking behind one interface (Sentry-compatible SDKs: @sentry/nextjs on the web, @sentry/react-native on mobile), PII scrubbing, web-vitals and OTLP web traces.",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./react": "./src/react.tsx",
+    "./native": "./src/native.ts",
+    "./next/client": "./src/next/client.ts",
+    "./next/server": "./src/next/server.ts",
+    "./next/config": "./src/next/config.ts",
+    "./next/components": "./src/next/components.tsx"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sentry/nextjs": "10.75.3"
+  },
+  "peerDependencies": {
+    "next": ">=16.0.0",
+    "react": ">=19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": { "optional": true },
+    "react": { "optional": true }
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.3.0",
+    "next": "16.4.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
+  }
+}

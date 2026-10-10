@@ -1,6 +1,7 @@
 'use client';
 
 import { type FieldValue, isApiError, type ResourceKey, type ResourcePage, type ResourceRow, staffKeys, staffQueries } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, cx, Dialog, Menu, MenuItem, useToast } from '@afrotransact/ui';
 import { CaretDown, CaretLeft, CaretRight, DownloadSimple, FileCsv, MagnifyingGlass, MicrosoftExcelLogo, Plus } from '@phosphor-icons/react/ssr';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 import { ErrorState, problemMessage } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
 
@@ -49,6 +51,8 @@ function useDebounced<T>(value: T, ms: number): T {
 
 /** Export menu: the whole table (every page matching the filters) built as CSV or Excel on the server. */
 function ExportMenu({ resource, q, status }: { resource: ResourceKey; q: string; status: string }) {
+  const fmt = useFormatters();
+  const t = useT();
   const api = staffApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -58,8 +62,8 @@ function ExportMenu({ resource, q, status }: { resource: ResourceKey; q: string;
       void qc.invalidateQueries({ queryKey: staffKeys.exports() });
       if (job.status === 'READY' && job.downloadUrl) {
         window.location.assign(job.downloadUrl);
-        toast.show(`${job.rows.toLocaleString('en-US')} rows exported.`);
-      } else toast.show('Large export queued — it builds in the background. Find it under Exports.');
+        toast.show(t('st.resourceTable.exported', { rows: fmt.number(job.rows) }));
+      } else toast.show(t('st.resourceTable.queued'));
     },
     onError: (e) => toast.show(problemMessage(e), 'error')
   });
@@ -67,7 +71,7 @@ function ExportMenu({ resource, q, status }: { resource: ResourceKey; q: string;
     <Menu
       align="end"
       width={230}
-      label="Export"
+      label={t('st.resourceTable.export')}
       trigger={
         <button type="button" className="flex h-9 items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 text-sm font-semibold hover:bg-surface-hover" aria-busy={exp.isPending || undefined}>
           <DownloadSimple size={16} aria-hidden />
@@ -77,10 +81,10 @@ function ExportMenu({ resource, q, status }: { resource: ResourceKey; q: string;
       }
     >
       <MenuItem icon={<FileCsv size={16} aria-hidden />} onSelect={() => exp.mutate('csv')}>
-        CSV — every matching row
+        {t('st.resourceTable.csvEveryMatchingRow')}
       </MenuItem>
       <MenuItem icon={<MicrosoftExcelLogo size={16} aria-hidden />} onSelect={() => exp.mutate('xlsx')}>
-        Excel — every matching row
+        {t('st.resourceTable.excelEveryMatchingRow')}
       </MenuItem>
     </Menu>
   );
@@ -91,6 +95,7 @@ function ExportMenu({ resource, q, status }: { resource: ResourceKey; q: string;
  * come from the BFF; clicking a row opens its detail sheet (?open=<id>, so other pages can link to a record).
  */
 export function ResourceTable({ resource }: { resource: ResourceKey }) {
+  const t = useT();
   const api = staffApi();
   const qc = useQueryClient();
   const toast = useToast();
@@ -129,7 +134,7 @@ export function ResourceTable({ resource }: { resource: ResourceKey }) {
       qc.setQueryData(staffKeys.record(resource, r.id), r);
       void qc.invalidateQueries({ queryKey: staffKeys.resource(resource) });
       setCreating(false);
-      toast.show(`${r.title} created.`);
+      toast.show(t('st.resourceTable.created', { title: r.title }));
       setOpen(r.id);
     },
     onError: (e) => {
@@ -203,13 +208,13 @@ export function ResourceTable({ resource }: { resource: ResourceKey }) {
               setCreating(true);
             }}
           >
-            New
+            {t('st.resourceTable.new')}
           </Button>
         ) : null}
       </div>
       {data?.facets.length ? (
         <FilterChips
-          label="Status"
+          label={t('st.resourceTable.status')}
           value={status}
           onChange={(v) => {
             setStatus(v);
@@ -259,14 +264,14 @@ export function ResourceTable({ resource }: { resource: ResourceKey }) {
                 {query.isPending ? (
                   <tr>
                     <td colSpan={Math.max(1, columns.length)} className="px-3 py-10 text-center text-muted">
-                      <span role="status">Loading…</span>
+                      <span role="status">{t('st.resourceTable.loading')}</span>
                     </td>
                   </tr>
                 ) : null}
                 {data && data.rows.length === 0 ? (
                   <tr>
                     <td colSpan={Math.max(1, columns.length)} className="px-3 py-10 text-center text-muted">
-                      {q || status ? 'Nothing matches these filters.' : 'Nothing here yet.'}
+                      {q || status ? t('st.resourceTable.noMatches') : t('st.resourceTable.empty')}
                     </td>
                   </tr>
                 ) : null}
@@ -286,7 +291,7 @@ export function ResourceTable({ resource }: { resource: ResourceKey }) {
                   disabled={(cursorPaged ? cursors.length === 0 : page === 0) || query.isFetching}
                   onClick={() => (cursorPaged ? setCursors((c) => c.slice(0, -1)) : setPage((p) => p - 1))}
                 >
-                  Previous
+                  {t('st.resourceTable.previous')}
                 </Button>
                 <Button
                   variant="neutral"
@@ -294,7 +299,7 @@ export function ResourceTable({ resource }: { resource: ResourceKey }) {
                   disabled={!data.hasNext || query.isFetching}
                   onClick={() => (cursorPaged && data.nextCursor ? setCursors((c) => [...c, data.nextCursor ?? '']) : setPage((p) => p + 1))}
                 >
-                  Next <CaretRight size={14} aria-hidden />
+                  {t('st.resourceTable.next')} <CaretRight size={14} aria-hidden />
                 </Button>
               </span>
             </div>
@@ -309,7 +314,7 @@ export function ResourceTable({ resource }: { resource: ResourceKey }) {
       ) : null}
       {resource === 'support-cases' ? null : (
         <p className="m-0 text-xs text-subtle">
-          Large tables export on the server; finished files are listed under <Link href="/exports">Exports</Link>.
+          Large tables export on the server; finished files are listed under <Link href="/exports">{t('st.resourceTable.exports')}</Link>.
         </p>
       )}
     </div>

@@ -6,6 +6,7 @@ import { type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 
 import { AppText, IconButton } from './primitives';
@@ -53,11 +54,12 @@ export function Screen({ header, footer, body = 'scroll', inTabs = false, padded
 
 /** Pinned inner-page header: back button + title (+ optional text action). */
 export function SubHeader({ title, onBack, action }: { title: string; onBack?: () => void; action?: { label: string; onPress: () => void } }) {
+  const tr = useT();
   const router = useRouter();
   const back = onBack ?? (() => (router.canGoBack() ? router.back() : router.replace('/')));
   return (
     <View style={styles.subHeader}>
-      <IconButton icon={CaretLeft} label="Back" onPress={back} />
+      <IconButton icon={CaretLeft} label={tr('cu.screen.back')} onPress={back} />
       <AppText variant="title" style={{ flex: 1, fontSize: 22 }} numberOfLines={1} accessibilityRole="header">
         {title}
       </AppText>

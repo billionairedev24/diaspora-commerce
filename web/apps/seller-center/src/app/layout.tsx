@@ -3,30 +3,43 @@ import '@afrotransact/tokens/tokens.css';
 import '@afrotransact/ui/global.css';
 import './globals.css';
 
+import { dirOf } from '@afrotransact/i18n';
+import { I18nProvider } from '@afrotransact/i18n/react';
+import { WebVitalsReporter } from '@afrotransact/telemetry/next/components';
 import { resolvedVariables } from '@afrotransact/tokens';
 import { type Metadata, type Viewport } from 'next';
 import { type ReactNode } from 'react';
 
+import { messagesFor } from '@/i18n/catalogs';
+import { getLocale, getT } from '@/i18n/server';
 import { Providers } from '@/lib/query/Providers';
 
-export const metadata: Metadata = {
-  title: { default: 'Seller Central', template: '%s · AfroTransact Seller Central' },
-  description: 'Seller Center and Provider Hub for AfroTransact sellers and service providers.',
-  applicationName: 'AfroTransact Seller Central',
-  icons: { icon: '/logo-mark.svg' },
-  robots: { index: false, follow: false }
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: { default: t('sc.meta.title'), template: `%s · AfroTransact ${t('sc.meta.title')}` },
+    description: t('sc.meta.description'),
+    applicationName: 'AfroTransact Seller Central',
+    icons: { icon: '/logo-mark.svg' },
+    robots: { index: false, follow: false }
+  };
+}
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, themeColor: resolvedVariables['--at-color-header-bg'] };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const locale = await getLocale();
+  const t = await getT();
   return (
-    <html lang="en">
+    <html lang={locale} dir={dirOf(locale)}>
       <body>
         <a href="#main" className="at-skip-link">
-          Skip to content
+          {t('sc.layout.skip')}
         </a>
-        <Providers>{children}</Providers>
+        <I18nProvider locale={locale} messages={messagesFor(locale)}>
+          <WebVitalsReporter />
+          <Providers>{children}</Providers>
+        </I18nProvider>
       </body>
     </html>
   );

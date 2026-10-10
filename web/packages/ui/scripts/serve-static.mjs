@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /*
- * Serves the static Storybook build (storybook-static/) for the test runner and the visual tests, with no extra
+ * Serves the static Storybook build (storybook-static/) for the visual tests, with no extra
  * dependencies. Optionally runs a command against it and exits with that command's status:
  *
  *   node scripts/serve-static.mjs                         # serve until Ctrl-C
- *   node scripts/serve-static.mjs -- test-storybook ...   # serve, run the command, stop
+ *   node scripts/serve-static.mjs -- <command> ...        # serve, run the command, stop
  *
  * Env: STORYBOOK_PORT (default 6007), STORYBOOK_STATIC_DIR (default storybook-static).
  */

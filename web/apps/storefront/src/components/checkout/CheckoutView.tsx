@@ -8,13 +8,13 @@ import {
   type DeliveryMethod,
   type DeliveryPreferences,
   type DeliverySelection,
-  formatMoney,
   isApiError,
   type OrderConfirmation,
   orderKeys,
   type PaymentMethod,
   type Wallet
 } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, Circle, CircleNotch, House, Key, LockSimple, Plus, ShieldCheck, Skeleton, Storefront, Truck } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -25,7 +25,7 @@ import { AddressDialog } from '@/components/account/AddressDialog';
 import { AddPaymentMethodDialog } from '@/components/payments/AddPaymentMethodDialog';
 import { PaymentChip } from '@/components/payments/PaymentChip';
 import { QuickPay } from '@/components/payments/QuickPay';
-import { t } from '@/i18n/t';
+import { type MessageKey, type Translator, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 import { type ConfirmResult, confirmWithSavedMethod } from '@/lib/payments/stripe';
@@ -42,7 +42,7 @@ const OPTION_ICON: Record<DeliveryMethod, ReactNode> = {
 };
 
 const addressLine = (a: Address) => `${a.name}, ${a.line1}${a.line2 ? ` ${a.line2}` : ''}, ${a.city}, ${a.state} ${a.zip}`;
-const pmSub = (pm: PaymentMethod) => (pm.expires ? t('pay.expires', { date: pm.expires }) : pm.type === 'us_bank_account' ? t('pay.bankAccount') : t('pay.wallet'));
+const pmSub = (t: Translator<MessageKey>, pm: PaymentMethod) => (pm.expires ? t('pay.expires', { date: pm.expires }) : pm.type === 'us_bank_account' ? t('pay.bankAccount') : t('pay.wallet'));
 
 /** Default choice per package: the first option; AfroTransact Delivery of perishables is handed over with a code. */
 function initialChoice(p: CheckoutPackage): Choice {
@@ -50,6 +50,7 @@ function initialChoice(p: CheckoutPackage): Choice {
 }
 
 function Step({ n, title, done, onChange, children }: { n: number; title: string; done: boolean; onChange?: () => void; children: ReactNode }) {
+  const t = useT();
   return (
     <section className={styles.step} aria-labelledby={`step-${n}`}>
       <div className={styles.stepHead}>
@@ -71,6 +72,8 @@ function Step({ n, title, done, onChange, children }: { n: number; title: string
 }
 
 function PackageDelivery({ pkg, n, total, choice, onChoice }: { pkg: CheckoutPackage; n: number; total: number; choice: Choice; onChoice: (c: Choice) => void }) {
+  const fmt = useFormatters();
+  const t = useT();
   const perishable = pkg.lines.some((l) => l.perishable);
   const atd = choice.option === 'afrotransact_delivery';
   const handover = perishable && atd ? 'hand' : (choice.preferences.handover ?? 'door');
@@ -95,7 +98,7 @@ function PackageDelivery({ pkg, n, total, choice, onChoice }: { pkg: CheckoutPac
                 <br />
                 <span className={styles.muted}>{t('co.qtySoldBy', { qty: l.quantity, seller: pkg.seller.name })}</span>
               </span>
-              <strong>{formatMoney(l.lineTotalMinor)}</strong>
+              <strong>{fmt.money(l.lineTotalMinor)}</strong>
             </li>
           ))}
         </ul>
@@ -108,7 +111,7 @@ function PackageDelivery({ pkg, n, total, choice, onChoice }: { pkg: CheckoutPac
                 <span>
                   {OPTION_ICON[o.key]} <strong className={styles.eta}>{o.eta}</strong>
                   <br />
-                  {o.label} · {o.free || o.feeMinor === 0 ? t('co.free') : formatMoney(o.feeMinor)}
+                  {o.label} · {o.free || o.feeMinor === 0 ? t('co.free') : fmt.money(o.feeMinor)}
                   {o.cutoffLabel && choice.option === o.key && <span className={styles.cutoff}> · {o.cutoffLabel}</span>}
                 </span>
               </label>
@@ -189,6 +192,8 @@ const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', '
  * the PaymentIntent with Stripe and lets orders continue.
  */
 export function CheckoutView() {
+  const fmt = useFormatters();
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const router = useRouter();
@@ -355,7 +360,7 @@ export function CheckoutView() {
           {step < 2 && <p className={styles.muted}>{t('co.afterAddress')}</p>}
           {step > 2 && pm && (
             <p className={styles.summaryLine}>
-              <PaymentChip method={pm} /> {pm.label} <span className={styles.muted}>· {pmSub(pm)}</span>
+              <PaymentChip method={pm} /> {pm.label} <span className={styles.muted}>· {pmSub(t, pm)}</span>
               <br />
               <span className={styles.muted}>{t('co.billingSame')}</span>
             </p>
@@ -384,7 +389,7 @@ export function CheckoutView() {
                   <input type="radio" name="paym" checked={p.id === pmId} onChange={() => setPmId(p.id)} />
                   <PaymentChip method={p} />
                   <span className={styles.choiceText}>
-                    <strong>{p.label}</strong> <span className={styles.muted}>{pmSub(p)}</span>
+                    <strong>{p.label}</strong> <span className={styles.muted}>{pmSub(t, p)}</span>
                   </span>
                   {p.isDefault && <span className={styles.tag}>{t('pay.default')}</span>}
                 </label>
@@ -429,13 +434,13 @@ export function CheckoutView() {
         <span className={styles.muted}>{t('co.sellers', { n: s.sellerCount })}</span>
         <dl className={styles.totals}>
           <dt>{t('co.itemsTotal', { n: itemCount })}</dt>
-          <dd>{formatMoney(s.subtotalMinor)}</dd>
+          <dd>{fmt.money(s.subtotalMinor)}</dd>
           <dt>{t('co.shipping')}</dt>
-          <dd>{shipping === 0 ? t('co.free') : formatMoney(shipping)}</dd>
+          <dd>{shipping === 0 ? t('co.free') : fmt.money(shipping)}</dd>
           <dt>{t('co.tax')}</dt>
-          <dd>{s.taxMinor ? formatMoney(s.taxMinor) : s.taxRateLabel}</dd>
+          <dd>{s.taxMinor ? fmt.money(s.taxMinor) : s.taxRateLabel}</dd>
           <dt className={styles.grand}>{t('co.total')}</dt>
-          <dd className={styles.grand}>{formatMoney(total)}</dd>
+          <dd className={styles.grand}>{fmt.money(total)}</dd>
         </dl>
         {busy && (
           <ol className={styles.steps} aria-live="polite">

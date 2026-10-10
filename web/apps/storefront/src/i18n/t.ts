@@ -1,20 +1,30 @@
+import { createTranslator, type Locale, type Messages, type Translator, type Vars } from '@afrotransact/i18n';
+import { useI18n } from '@afrotransact/i18n/react';
+import { useMemo } from 'react';
+
 import en from './en.json';
 
-/* Tiny i18n helper. Messages live in en.json (one flat key space); other locales are added as
-   sibling JSON files and selected per request once translations exist. */
+/*
+ * Storefront messages (the shared @afrotransact/i18n pattern): flat dotted keys in en.json, one sibling JSON file per
+ * locale (fr, es, ar, yo). Client components call `const t = useT()`; server components `const t = await getT()`
+ * (./server). Catalogues other than English are sent to the browser only for the active locale.
+ */
 
 export type MessageKey = keyof typeof en;
-export type Vars = Record<string, string | number>;
+export type { Translator, Vars };
 
-const catalogs: Record<string, Partial<Record<MessageKey, string>>> = { en };
+export const EN_MESSAGES: Record<MessageKey, string> = en;
 
-export function translate(locale: string, key: MessageKey, vars?: Vars): string {
-  const template = catalogs[locale]?.[key] ?? en[key];
-  if (!vars) return template;
-  return template.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
+/** Translates with an explicit locale and catalogue (tests, non-React code). */
+export function translate(locale: Locale, key: MessageKey, vars?: Vars, messages?: Messages): string {
+  return createTranslator(EN_MESSAGES, locale, messages)(key, vars);
 }
 
-/** English translator (the only shipped catalogue today). */
-export function t(key: MessageKey, vars?: Vars): string {
-  return translate('en', key, vars);
+/** English translator, for tests and code that runs outside React (never for UI text). */
+export const tEn: Translator<MessageKey> = createTranslator(EN_MESSAGES, 'en');
+
+/** The active locale's translator (client components). */
+export function useT(): Translator<MessageKey> {
+  const { locale, messages } = useI18n();
+  return useMemo(() => createTranslator(EN_MESSAGES, locale, messages), [locale, messages]);
 }

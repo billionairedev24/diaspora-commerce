@@ -1,5 +1,6 @@
 import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { expect } from 'storybook/test';
 
 import { mobile, rtl } from '../stories.helpers';
 import { Skeleton } from './ImagePlaceholder';
@@ -23,11 +24,32 @@ function Interactive({ product }: { product: ProductCardData }) {
   return <ProductCard product={product} href="#p" quantityInCart={q} onAdd={() => setQ(1)} onQuantityChange={setQ} onRemove={() => setQ(0)} />;
 }
 
-export const Default: Story = { render: () => <Interactive product={jollof} /> };
+export const Default: Story = {
+  render: () => <Interactive product={jollof} />,
+  play: async ({ canvas, userEvent, step }) => {
+    await step('Add to cart turns into a quantity stepper', async () => {
+      await userEvent.click(canvas.getByRole('button', { name: `Add to cart: ${jollof.title}` }));
+      await expect(canvas.getByRole('group', { name: `Quantity of ${jollof.title}` })).toHaveTextContent('1 in cart');
+    });
+    await step('+ increases, bin at 1 removes it again', async () => {
+      await userEvent.click(canvas.getByRole('button', { name: `Increase quantity of ${jollof.title}` }));
+      await expect(canvas.getByRole('group', { name: `Quantity of ${jollof.title}` })).toHaveTextContent('2 in cart');
+      await userEvent.click(canvas.getByRole('button', { name: `Decrease quantity of ${jollof.title}` }));
+      await userEvent.click(canvas.getByRole('button', { name: `Remove from cart: ${jollof.title}` }));
+      await expect(canvas.getByRole('button', { name: `Add to cart: ${jollof.title}` })).toBeVisible();
+    });
+  }
+};
 export const SellerFulfilled: Story = { args: { product: teff } };
 export const InCartAtStock: Story = { args: { product: gele, quantityInCart: 3 } };
 export const LowStock: Story = { render: () => <Interactive product={gele} /> };
-export const Unavailable: Story = { args: { product: kente } };
+export const Unavailable: Story = {
+  args: { product: kente },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByText('Currently unavailable')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: /Add to cart/ })).toBeNull();
+  }
+};
 export const Sponsored: Story = { args: { product: { ...jollof, sponsor: { advertiser: 'Kingston Kitchen' } } } };
 export const Rail: Story = { args: { variant: 'rail' } };
 export const Loading: Story = { render: () => <div style={{ display: 'grid', gap: 8 }}><Skeleton height={220} /><Skeleton width="90%" /><Skeleton width="60%" /><Skeleton height={32} radius="999px" /></div> };

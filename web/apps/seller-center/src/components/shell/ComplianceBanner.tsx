@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 
 import { Notice } from '@/components/ui/Notice';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { useSeller } from '@/lib/session';
 
@@ -13,6 +14,7 @@ import { useSeller } from '@/lib/session';
  * Members whose role cannot open Account health still see what is wrong, without the link.
  */
 export function ComplianceBanner({ onAccountHealth }: { onAccountHealth: boolean }) {
+  const t = useT();
   const { orgId, can, session } = useSeller();
   const q = useQuery({ ...sellerQueries.compliance(sellerApi(), orgId), enabled: session.approved, retry: false });
   const c = q.data;
@@ -26,7 +28,7 @@ export function ComplianceBanner({ onAccountHealth }: { onAccountHealth: boolean
       action={
         can('account-health', 'VIEW') ? (
           <Link href="/account-health" className="text-sm font-semibold whitespace-nowrap">
-            Open Account health
+            {t('sc.complianceBanner.openAccountHealth')}
           </Link>
         ) : undefined
       }
@@ -38,6 +40,7 @@ export function ComplianceBanner({ onAccountHealth }: { onAccountHealth: boolean
 
 /** Payments compliance hold: shown on every page (to roles that see money) while payouts are paused. */
 export function PayoutsPausedBanner() {
+  const t = useT();
   const { orgId, can, session } = useSeller();
   const q = useQuery({ ...sellerQueries.payouts(sellerApi(), orgId), enabled: session.approved && can('payouts', 'VIEW'), retry: false });
   const b = q.data?.balance;
@@ -47,11 +50,11 @@ export function PayoutsPausedBanner() {
       tone="danger"
       icon="shield"
       role="alert"
-      title="Payouts are paused."
+      title={t('sc.complianceBanner.payoutsArePaused')}
       action={
         can('account-health', 'VIEW') && b.payoutsPausedReason !== 'MANUAL' ? (
           <Link href="/account-health" className="text-sm font-semibold whitespace-nowrap">
-            Resolve now
+            {t('sc.complianceBanner.resolveNow')}
           </Link>
         ) : undefined
       }

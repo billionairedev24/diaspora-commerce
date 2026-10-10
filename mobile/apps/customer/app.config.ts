@@ -39,6 +39,9 @@ const config: ExpoConfig = {
     'expo-web-browser',
     ['expo-local-authentication', { faceIDPermission: 'Use Face ID to unlock AfroTransact and confirm payments over $100.' }],
     ['expo-notifications', { enableBackgroundRemoteNotifications: false }],
+    // Source maps + native debug symbols upload during EAS builds only when SENTRY_AUTH_TOKEN is set (CI secret);
+    // SENTRY_ORG / SENTRY_PROJECT / SENTRY_URL name the (Sentry-compatible) project. Without a token nothing is uploaded.
+    ['@sentry/react-native/expo', { organization: process.env.SENTRY_ORG, project: process.env.SENTRY_PROJECT, url: process.env.SENTRY_URL }],
     ['@stripe/stripe-react-native', { merchantIdentifier: process.env.EXPO_PUBLIC_STRIPE_MERCHANT_ID ?? 'merchant.com.afrotransact', enableGooglePay: true }]
   ],
   experiments: { typedRoutes: false },

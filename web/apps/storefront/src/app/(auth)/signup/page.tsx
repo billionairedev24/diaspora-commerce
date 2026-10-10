@@ -3,8 +3,12 @@ import { type Metadata } from 'next';
 import { authPageData } from '@/components/auth/authPageData';
 import { AuthShell } from '@/components/auth/AuthShell';
 import { SignUpForm } from '@/components/auth/SignUpForm';
+import { getT } from '@/i18n/server';
 
-export const metadata: Metadata = { title: 'Create your account', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('title.signup'), robots: { index: false } };
+}
 
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 

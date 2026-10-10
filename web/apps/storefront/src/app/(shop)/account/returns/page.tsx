@@ -1,9 +1,13 @@
 import { type Metadata } from 'next';
 
 import { ReturnsView } from '@/components/account/ReturnsView';
+import { getT } from '@/i18n/server';
 import { requireCustomer } from '@/lib/auth/session';
 
-export const metadata: Metadata = { title: 'Returns & refunds', robots: { index: false } };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: t('title.accountReturns'), robots: { index: false } };
+}
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ order?: string }> }) {
   await requireCustomer('/account/returns');

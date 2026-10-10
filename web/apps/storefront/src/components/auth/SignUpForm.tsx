@@ -1,11 +1,11 @@
 'use client';
 
 import { type CountryCode, evaluatePassword, type IdentityProviderId, isApiError, isValidMobile, SignUpFormSchema, toSignUpRequest } from '@afrotransact/api-client';
-import { Button, Checkbox, PasswordField, PhoneInput, TextField, useToast } from '@afrotransact/ui';
+import { Button, Checkbox, ErrorSummary,PasswordField, PhoneInput, TextField, useToast } from '@afrotransact/ui';
 import Link from 'next/link';
 import { type FormEvent, useMemo, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { signInHref } from '@/lib/links';
 
@@ -31,6 +31,7 @@ export interface SignUpFormProps {
 
 /** Unified account creation (customers, sellers and providers share it — the role is decided server-side). */
 export function SignUpForm({ providers, returnTo, demo, smsProgram, links, invitation = '', invitedEmail = '' }: SignUpFormProps) {
+  const t = useT();
   const api = browserApi();
   const done = useAuthSuccess();
   const toast = useToast();
@@ -47,6 +48,7 @@ export function SignUpForm({ providers, returnTo, demo, smsProgram, links, invit
   const rules = useMemo(() => evaluatePassword(v.password, { firstName: v.firstName, lastName: v.lastName, email: v.email, confirm: v.confirmPassword }), [v]);
   const phoneOk = v.phone ? isValidMobile(v.phone, v.phoneCountry) : false;
 
+  const [attempts, setAttempts] = useState(0);
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const parsed = SignUpFormSchema.safeParse(v);
@@ -58,8 +60,7 @@ export function SignUpForm({ providers, returnTo, demo, smsProgram, links, invit
       });
       setErrors(fe);
       setFormError(t('auth.fixFields'));
-      const first = ORDER.find((k) => fe[k]);
-      if (first) document.getElementById(IDS[first])?.focus();
+      setAttempts((n) => n + 1);
       return;
     }
     setBusy(true);
@@ -107,18 +108,7 @@ export function SignUpForm({ providers, returnTo, demo, smsProgram, links, invit
     <form onSubmit={submit} noValidate className={styles.form} style={{ width: '100%' }}>
       <h1 className={styles.h1}>{t('auth.signupTitle')}</h1>
       {invitation ? <p className={styles.hint}>{t('auth.invitationHint')}</p> : null}
-      {errorList.length > 0 && (
-        <div className={styles.summary} role="alert">
-          {t('auth.errorSummary', { n: errorList.length })}
-          <ul>
-            {errorList.map((k) => (
-              <li key={k}>
-                <a href={`#${IDS[k]}`}>{errors[k]}</a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ErrorSummary title={t('auth.errorSummary', { n: errorList.length })} errors={errorList.map((k) => ({ fieldId: IDS[k], message: errors[k] ?? '' }))} submitCount={attempts} />
       <div className={styles.grid2}>
         <TextField id={IDS.firstName} label={t('auth.firstName')} autoComplete="given-name" value={v.firstName} onChange={(e) => set('firstName', e.target.value)} error={errors.firstName} required />
         <TextField id={IDS.lastName} label={t('auth.lastName')} autoComplete="family-name" value={v.lastName} onChange={(e) => set('lastName', e.target.value)} error={errors.lastName} required />
@@ -173,8 +163,9 @@ export function SignUpForm({ providers, returnTo, demo, smsProgram, links, invit
 }
 
 function PasswordRules({ rules }: { rules: Array<{ id: string; label: string; ok: boolean }> }) {
+  const t = useT();
   return (
-    <ul style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 12px', margin: 0, padding: 0, listStyle: 'none', fontSize: 'var(--at-text-xs)' }} aria-label="Password requirements" aria-live="polite">
+    <ul style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2px 12px', margin: 0, padding: 0, listStyle: 'none', fontSize: 'var(--at-text-xs)' }} aria-label={t('auth.passwordRules')} aria-live="polite">
       {rules.map((r) => (
         <li key={r.id} style={{ color: r.ok ? 'var(--at-color-success)' : 'var(--at-color-text-muted)' }}>
           {r.ok ? '✓' : '○'} {r.label}
@@ -186,6 +177,7 @@ function PasswordRules({ rules }: { rules: Array<{ id: string; label: string; ok
 }
 
 function TermsText({ terms, privacy }: { terms: string; privacy: string }) {
+  const t = useT();
   const [a, rest = ''] = t('auth.terms').split('{terms}');
   const [b, c = ''] = rest.split('{privacy}');
   return (
@@ -204,6 +196,7 @@ function TermsText({ terms, privacy }: { terms: string; privacy: string }) {
 }
 
 function SmsDisclosure({ program, sms, privacy }: { program: string; sms: string; privacy: string }) {
+  const t = useT();
   const text = t('auth.smsDisclosure', { program });
   const [a, rest = ''] = text.split('{sms}');
   const [b, c = ''] = rest.split('{privacy}');

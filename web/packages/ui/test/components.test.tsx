@@ -4,7 +4,7 @@ import { type CountryCode } from 'libphonenumber-js/mobile';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AddressAutocomplete, createFixtureAddressSearch, fromNominatim, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, SocialButton, Stars } from '../src';
+import { AddressAutocomplete, createFixtureAddressSearch, Dialog, ErrorSummary, fromNominatim, Menu, MenuItem, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, SocialButton, Stars } from '../src';
 
 function Phone() {
   const [country, setCountry] = useState<CountryCode>('US');
@@ -131,5 +131,47 @@ describe('AddressAutocomplete', () => {
   it('maps Nominatim results', () => {
     const s = fromNominatim({ place_id: 1, lat: '29.7', lon: '-95.5', display_name: '9800, Westheimer Road, Houston', address: { house_number: '9800', road: 'Westheimer Road', city: 'Houston', state: 'Texas', postcode: '77042', country_code: 'us' } });
     expect(s).toMatchObject({ label: '9800 Westheimer Road', secondary: 'Houston, TX 77042', source: 'osm', address: { state: 'TX', zip: '77042', country: 'US' } });
+  });
+});
+
+describe('overlays (S194)', () => {
+  function DialogHost() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)}>
+          Change location
+        </button>
+        <Dialog open={open} onOpenChange={setOpen} title="Choose your location">
+          <button type="button">Apply</button>
+        </Dialog>
+      </>
+    );
+  }
+
+  it('returns focus to the plain button that opened a dialog', async () => {
+    render(<DialogHost />);
+    const opener = screen.getByRole('button', { name: 'Change location' });
+    await userEvent.click(opener);
+    expect(await screen.findByRole('dialog', { name: 'Choose your location' })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(opener).toHaveFocus();
+  });
+
+  it('names a menu with its label instead of its trigger', async () => {
+    render(
+      <Menu trigger={<button type="button">Ada</button>} label="Account menu" inline defaultOpen>
+        <MenuItem>Orders</MenuItem>
+      </Menu>
+    );
+    expect(await screen.findByRole('menu', { name: 'Account menu' })).toBeInTheDocument();
+  });
+
+  it('lists form errors in a summary that links to each field', () => {
+    render(<ErrorSummary title="There are 2 problems with this form" errors={[{ fieldId: 'f-email', message: 'Enter an email' }, { fieldId: 'f-name', message: 'Enter a name' }]} />);
+    const summary = screen.getByRole('alert');
+    expect(summary).toHaveFocus();
+    expect(screen.getByRole('link', { name: 'Enter an email' })).toHaveAttribute('href', '#f-email');
   });
 });

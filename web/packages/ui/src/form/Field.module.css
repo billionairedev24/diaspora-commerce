@@ -71,3 +71,10 @@ select.control { padding: 0 var(--at-space-2); cursor: pointer; }
 .flag { font-size: var(--at-text-lg); line-height: 1; }
 .dial { flex: 1; }
 .countrySelect { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: var(--at-text-base); }
+
+/* Form error summary (ErrorSummary). */
+.summary { margin: 0; padding: var(--at-space-3) var(--at-space-4); border: 2px solid var(--at-color-danger); border-radius: var(--at-radius-sm); background: var(--at-color-danger-bg); color: var(--at-color-danger); font-size: var(--at-text-sm); }
+.summary:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: 2px; }
+.summaryTitle { margin: 0; font-weight: var(--at-weight-bold); }
+.summaryList { margin: var(--at-space-1) 0 0; padding-left: var(--at-space-5); }
+.summaryList a { color: var(--at-color-danger); text-decoration: underline; }

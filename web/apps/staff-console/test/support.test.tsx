@@ -27,14 +27,14 @@ describe('customer support console', () => {
     await user.type(within(dialog).getByLabelText('Amount ($)'), '300');
     await user.type(within(dialog).getByLabelText(/Reason/), 'Late delivery');
     await user.click(within(dialog).getByRole('button', { name: 'Refund' }));
-    expect(within(dialog).getByText('Your roles can refund up to $250.00')).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: 'Your roles can refund up to $250.00' })).toHaveAttribute('href', '#refund-amount');
     await user.clear(within(dialog).getByLabelText('Amount ($)'));
     await user.type(within(dialog).getByLabelText('Amount ($)'), '12.50');
     await user.click(within(dialog).getByRole('button', { name: 'Refund' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Refund the customer' })).not.toBeInTheDocument());
     const c360 = await mockApi().getCustomer('cus-1000');
     expect(c360.audit[0]?.action).toBe('refund.issued');
-  });
+  }, 20_000); // many keystrokes: generous under a parallel `pnpm -r test`
 
   it('hides actions the roles cannot run', async () => {
     asRoles('platform.auditor');

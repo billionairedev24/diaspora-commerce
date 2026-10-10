@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ReactNode } from 'react';
 
-import { type MessageKey, t } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries } from '@/lib/api/queries';
 
@@ -23,6 +23,7 @@ const TILES: Array<{ href: string; title: MessageKey; sub: MessageKey; icon: Rea
 
 /** Your Account: tiles to every section (design: ACCOUNT › acctHome). */
 export function AccountHome() {
+  const t = useT();
   const me = useQuery(accountQueries.me(browserApi()));
   const name = me.data?.user?.firstName;
   return (

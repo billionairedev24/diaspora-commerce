@@ -7,7 +7,13 @@ import (
 	"net/http"
 )
 
-const typeBase = "https://developers.afrotransact.com/problems/"
+// TypeBase is the base of every RFC 9457 problem type URI (TypeBase + code). A type is an identifier that clients
+// never fetch, so one stable base serves every environment; the developer portal documents each code under it.
+// Java services use the same base (com.afrotransact.platform.web.error.ProblemTypes.BASE).
+const TypeBase = "https://developers.afrotransact.com/problems/"
+
+// TypeURI returns the problem type URI for a stable error code, e.g. "storefront.theme-contrast".
+func TypeURI(code string) string { return TypeBase + code }
 
 // Details is an RFC 9457 problem document.
 type Details struct {
@@ -42,7 +48,7 @@ func Write(w http.ResponseWriter, r *http.Request, err error) {
 		pe = &Error{Status: http.StatusInternalServerError, Code: "internal", Detail: "Unexpected error"}
 	}
 	d := Details{
-		Type:     typeBase + pe.Code,
+		Type:     TypeURI(pe.Code),
 		Title:    http.StatusText(pe.Status),
 		Status:   pe.Status,
 		Detail:   pe.Detail,

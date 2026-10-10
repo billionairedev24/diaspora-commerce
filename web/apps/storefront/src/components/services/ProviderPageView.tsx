@@ -1,12 +1,13 @@
 'use client';
 
-import { formatMoney, isApiError, type ProviderPage } from '@afrotransact/api-client';
+import { isApiError, type ProviderPage } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { buttonClassName, CaretRight, SealCheck, ShieldCheck, Skeleton } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type CSSProperties, type ReactNode } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { shopperQueries } from '@/lib/api/queries';
 
@@ -26,6 +27,7 @@ const themeStyle = (d: Design | null): CSSProperties => {
 };
 
 function Gallery({ d }: { d: Design }) {
+  const t = useT();
   if (!d.gallery.length) return null;
   return (
     <section className={styles.card} aria-labelledby="gallery-title">
@@ -45,6 +47,8 @@ function Gallery({ d }: { d: Design }) {
 }
 
 function Featured({ d, page }: { d: Design; page: ProviderPage }) {
+  const fmt = useFormatters();
+  const t = useT();
   if (!d.featured.length) return null;
   return (
     <section className={styles.card} aria-labelledby="featured-title">
@@ -59,7 +63,7 @@ function Featured({ d, page }: { d: Design; page: ProviderPage }) {
             <p className={styles.muted}>{f.body}</p>
             {svc && (
               <Link href={`/services/${encodeURIComponent(svc.id)}`} className={buttonClassName({ size: 'sm' }, d.buttonShape === 'SQUARE' ? styles.square : undefined)}>
-                {t('prov.bookThis', { price: formatMoney(svc.priceMinor) })}
+                {t('prov.bookThis', { price: fmt.money(svc.priceMinor) })}
               </Link>
             )}
           </article>
@@ -71,6 +75,8 @@ function Featured({ d, page }: { d: Design; page: ProviderPage }) {
 
 /** A provider's page (S150): the provider's chosen layout and header, approved links only, gallery and featured work. */
 export function ProviderPageView({ orgId }: { orgId: string }) {
+  const fmt = useFormatters();
+  const t = useT();
   const q = useQuery(shopperQueries.provider(browserApi(), orgId));
   if (q.isPending) return <Skeleton height={360} />;
   if (q.isError || !q.data) return <p className={styles.error}>{isApiError(q.error) && q.error.status === 404 ? t('prov.notFound') : t('acct.loadError')}</p>;
@@ -88,10 +94,10 @@ export function ProviderPageView({ orgId }: { orgId: string }) {
             <strong>{s.name}</strong>
             <br />
             <span className={styles.muted}>
-              {t('svc.minutes', { n: s.durationMinutes })} · {t('svc.deposit', { amount: formatMoney(s.depositMinor) })}
+              {t('svc.minutes', { n: s.durationMinutes })} · {t('svc.deposit', { amount: fmt.money(s.depositMinor) })}
             </span>
           </span>
-          <strong>{formatMoney(s.priceMinor)}</strong>
+          <strong>{fmt.money(s.priceMinor)}</strong>
           <CaretRight aria-hidden />
         </Link>
       ))}

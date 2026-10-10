@@ -8,7 +8,10 @@ import { PaymentsView } from '@/components/account/PaymentsView';
 import { CheckoutView } from '@/components/checkout/CheckoutView';
 import { ServiceDetailView } from '@/components/services/ServiceDetailView';
 import { LolaSheet } from '@/components/shell/LolaSheet';
-import { applyLolaEvent, GREETING } from '@/lib/lola/useLola';
+import { tEn } from '@/i18n/t';
+import { applyLolaEvent as apply, GREETING } from '@/lib/lola/useLola';
+
+const applyLolaEvent: (m: Parameters<typeof apply>[0], e: Parameters<typeof apply>[1]) => ReturnType<typeof apply> = (m, e) => apply(m, e, tEn);
 
 import { installMockBff,signInDemo } from './mockBff';
 import { renderWithProviders } from './render';
@@ -57,7 +60,9 @@ describe('account pages (mock BFF)', () => {
     await user.click(screen.getByRole('button', { name: /Add address/ }));
     const dialog = await screen.findByRole('dialog');
     await user.click(within(dialog).getByRole('button', { name: 'Add address' }));
-    expect(within(dialog).getByText('Enter the full name')).toBeInTheDocument();
+    // Under the field and in the error summary, which links to the field (S194).
+    expect(within(dialog).getByRole('link', { name: 'Enter the full name' })).toHaveAttribute('href', '#addr-name');
+    expect(within(dialog).getAllByText('Enter the full name')).toHaveLength(2);
     await user.type(within(dialog).getByLabelText(/Full name/), 'Kofi Mensah');
     await user.type(within(dialog).getByLabelText(/Phone number/), '+17135550100');
     await user.type(within(dialog).getByRole('combobox', { name: /Street address/ }), '9800 Westheimer Rd');
@@ -80,7 +85,7 @@ describe('account pages (mock BFF)', () => {
     await user.type(within(form).getByLabelText('Security code'), '123');
     await user.type(within(form).getByLabelText('ZIP'), '77042');
     await user.click(within(form).getByRole('button', { name: 'Save payment method' }));
-    expect(within(form).getByText('Your card was declined.')).toBeInTheDocument();
+    expect(within(form).getByRole('link', { name: 'Your card was declined.' })).toHaveAttribute('href', '#pm-number');
     await user.clear(within(form).getByLabelText('Card number'));
     await user.type(within(form).getByLabelText('Card number'), '5555 5555 5555 4444');
     await user.click(within(form).getByRole('button', { name: 'Save payment method' }));

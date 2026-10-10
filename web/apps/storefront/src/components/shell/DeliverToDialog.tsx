@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useCallback, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 
 import styles from './DeliverToDialog.module.css';
@@ -16,6 +16,7 @@ export const bffAddressSearch: SearchAddresses = async (q, { signal }) => (await
 
 /** "Choose your location": current location, or an address/ZIP with autocomplete. */
 export function DeliverToDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const router = useRouter();
   const toast = useToast();
@@ -39,7 +40,7 @@ export function DeliverToDialog({ open, onOpenChange }: { open: boolean; onOpenC
         setError(isApiError(e) ? (e.fieldErrors.zip ?? e.message) : t('location.notServed'));
       }
     },
-    [qc, onOpenChange, toast, router]
+    [qc, onOpenChange, toast, router, t]
   );
 
   const applyTyped = () => {
@@ -52,6 +53,7 @@ export function DeliverToDialog({ open, onOpenChange }: { open: boolean; onOpenC
   };
 
   const useGeo = () => {
+    const t = useT();
     if (!('geolocation' in navigator)) {
       setGeoMsg(t('location.geoUnavailable'));
       return;

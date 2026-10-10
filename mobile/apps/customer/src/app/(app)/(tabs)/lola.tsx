@@ -1,5 +1,4 @@
 /* Lola chat (design: LOLA): pinned header, messages scroll, composer + suggestion chips pinned above the tab bar. */
-import { formatMoney } from '@afrotransact/api-client';
 import { useRouter } from 'expo-router';
 import { NotePencilIcon as NotePencil, PaperPlaneRightIcon as PaperPlaneRight, SparkleIcon as Sparkle } from 'phosphor-react-native';
 import { useRef, useState } from 'react';
@@ -9,6 +8,7 @@ import { useSearch } from '@/api/queries';
 import { useAuth } from '@/auth/AuthProvider';
 import { LOLA_PROMPTS, lolaGreeting, type LolaReply,lolaReply } from '@/domain/lola';
 import { useQuantity } from '@/features/shop/cartHooks';
+import { useFormatters, useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { AppText, Chip, IconButton } from '@/ui/primitives';
 import { Screen } from '@/ui/Screen';
@@ -16,11 +16,14 @@ import { Screen } from '@/ui/Screen';
 type Msg = { id: number; from: 'me' | 'lola' } & LolaReply;
 
 function CardAdd({ atin, offerId }: { atin: string; offerId: string }) {
+  const tr = useT();
   const { qty, setQty } = useQuantity(atin, offerId);
-  return <Chip label={qty ? 'In cart' : 'Add'} selected={qty > 0} onPress={() => (qty ? undefined : setQty(1))} />;
+  return <Chip label={qty ? tr('cu.lola.inCart') : tr('cu.lola.add')} selected={qty > 0} onPress={() => (qty ? undefined : setQty(1))} />;
 }
 
 export default function Lola() {
+  const fmt = useFormatters();
+  const tr = useT();
   const router = useRouter();
   const { user } = useAuth();
   const catalogue = useSearch('', 60);
@@ -47,10 +50,10 @@ export default function Lola() {
     <View style={styles.header}>
       <View style={styles.avatar}><Sparkle size={18} weight="fill" color={c.badgeAiText} /></View>
       <View style={{ flex: 1 }}>
-        <AppText variant="bodyStrong">Lola</AppText>
+        <AppText variant="bodyStrong">{tr('cu.lola.lola')}</AppText>
         <AppText variant="caption" color={c.success}>● Online · shopping assistant</AppText>
       </View>
-      <IconButton icon={NotePencil} label="New chat" onPress={() => setMsgs([])} />
+      <IconButton icon={NotePencil} label={tr('cu.lola.newChat')} onPress={() => setMsgs([])} />
     </View>
   );
 
@@ -60,8 +63,8 @@ export default function Lola() {
         {LOLA_PROMPTS.map((p) => <Chip key={p} label={p} onPress={() => send(p)} />)}
       </ScrollView>
       <View style={styles.composer}>
-        <TextInput value={draft} onChangeText={setDraft} onSubmitEditing={() => send(draft)} placeholder="Message Lola" placeholderTextColor={c.textSubtle} accessibilityLabel="Message Lola" returnKeyType="send" style={styles.input} />
-        <Pressable accessibilityRole="button" accessibilityLabel="Send" onPress={() => send(draft)} style={[styles.send, { backgroundColor: draft.trim() ? c.actionPrimary : t.ink['100'] }]}>
+        <TextInput value={draft} onChangeText={setDraft} onSubmitEditing={() => send(draft)} placeholder={tr('cu.lola.messageLola')} placeholderTextColor={c.textSubtle} accessibilityLabel={tr('cu.lola.messageLola')} returnKeyType="send" style={styles.input} />
+        <Pressable accessibilityRole="button" accessibilityLabel={tr('cu.lola.send')} onPress={() => send(draft)} style={[styles.send, { backgroundColor: draft.trim() ? c.actionPrimary : t.ink['100'] }]}>
           <PaperPlaneRight size={18} weight="fill" color={c.text} />
         </Pressable>
       </View>
@@ -78,7 +81,7 @@ export default function Lola() {
           contentContainerStyle={{ padding: sp['4'], gap: sp['3'] }}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
-          ListFooterComponent={typing ? <AppText variant="small" color={c.textMuted}>Lola is typing…</AppText> : null}
+          ListFooterComponent={typing ? <AppText variant="small" color={c.textMuted}>{tr('cu.lola.lolaIsTyping')}</AppText> : null}
           renderItem={({ item: m }) => (
             <View style={{ alignItems: m.from === 'me' ? 'flex-end' : 'flex-start', gap: sp['2'] }}>
               <View style={[styles.bubble, m.from === 'me' ? styles.me : styles.them]}>
@@ -89,7 +92,7 @@ export default function Lola() {
                 if (!p) return null;
                 return (
                   <View key={atin} style={styles.card}>
-                    <AppText variant="small" style={{ flex: 1 }} onPress={() => router.push(`/product/${atin}`)}>{p.title}{'\n'}<AppText variant="small" style={{ fontWeight: t.fontWeight.bold }}>{formatMoney(p.priceMinor, p.currency)}</AppText></AppText>
+                    <AppText variant="small" style={{ flex: 1 }} onPress={() => router.push(`/product/${atin}`)}>{p.title}{'\n'}<AppText variant="small" style={{ fontWeight: t.fontWeight.bold }}>{fmt.money(p.priceMinor, p.currency)}</AppText></AppText>
                     <CardAdd atin={atin} offerId={p.offerId} />
                   </View>
                 );
@@ -111,6 +114,6 @@ const styles = StyleSheet.create({
   them: { backgroundColor: c.surfaceMuted, borderRadius: 18, borderBottomLeftRadius: 4 },
   card: { flexDirection: 'row', alignItems: 'center', gap: sp['2'], width: '85%', padding: sp['3'], borderRadius: t.radius.md, borderWidth: 1, borderColor: c.border },
   composer: { flexDirection: 'row', alignItems: 'center', gap: sp['2'] },
-  input: { flex: 1, height: t.size.controlLg, borderRadius: t.radius.pill, paddingHorizontal: sp['4'], backgroundColor: c.surfaceMuted, fontSize: t.fontSize.base, color: c.text },
+  input: { flex: 1, minHeight: t.size.controlLg, borderRadius: t.radius.pill, paddingHorizontal: sp['4'], backgroundColor: c.surfaceMuted, fontSize: t.fontSize.base, color: c.text },
   send: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }
 });

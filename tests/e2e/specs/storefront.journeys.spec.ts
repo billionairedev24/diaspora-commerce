@@ -59,7 +59,22 @@ test.describe('storefront · a11y smoke @a11y', () => {
     ['search results', '/s?q=jollof'],
     ['product page', '/p/AT00000P18'],
     ['cart', '/cart'],
-    ['sign in', '/signin']
+    ['checkout', '/checkout'],
+    ['orders', '/orders'],
+    ['order detail', '/orders/AT-2026-104221'],
+    ['account', '/account'],
+    ['addresses', '/account/addresses'],
+    ['payments', '/account/payments'],
+    ['security', '/account/security'],
+    ['returns', '/account/returns'],
+    ['services', '/services'],
+    ['service detail', '/services/svc-braids-cornrows'],
+    ['about', '/about'],
+    ['careers', '/careers'],
+    ['help', '/help'],
+    ['not found', '/no-such-page'],
+    ['sign in', '/signin'],
+    ['sign up', '/signup']
   ] as const) {
     test(`${name} has no serious axe violations`, async ({ page }, testInfo) => {
       await page.goto(path);

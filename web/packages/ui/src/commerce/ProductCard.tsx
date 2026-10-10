@@ -32,7 +32,8 @@ export interface ProductCardData {
   delivery: { prefix: string; label: string };
   offerCount: number;
   minOfferPriceMinor: number;
-  sponsor: { advertiser: string } | null;
+  /** Sponsored products carry the advertiser and, for search ads, why the ad was shown. */
+  sponsor: { advertiser: string; reason?: { summary: string } } | null;
 }
 
 export interface LinkLikeProps {
@@ -48,11 +49,14 @@ export interface ProductCardLabels {
   inCart: (n: number) => string;
   unavailable: string;
   sponsored: (advertiser: string) => string;
+  whyAd?: string;
   brand: string;
   onlyLeft: (n: number) => string;
   offers: (count: number, from: string) => string;
   soldBy: (seller: string) => string;
   reviews: (count: string) => string;
+  /** Accessible name of the rating stars, e.g. "4.5 out of 5 stars". */
+  rating?: (value: string) => string;
 }
 
 export const defaultProductCardLabels: ProductCardLabels = {
@@ -60,6 +64,7 @@ export const defaultProductCardLabels: ProductCardLabels = {
   inCart: (n) => `${n} in cart`,
   unavailable: 'Currently unavailable',
   sponsored: (a) => `Sponsored · ${a}`,
+  whyAd: 'Why this ad?',
   brand: 'AfroTransact Brand',
   onlyLeft: (n) => `Only ${n} left — order soon`,
   offers: (c, from) => `${c} offers from ${from}`,
@@ -80,6 +85,8 @@ export interface ProductCardProps {
   /** Link component (e.g. Next.js <Link>); defaults to <a>. */
   linkAs?: ComponentType<LinkLikeProps>;
   labels?: Partial<ProductCardLabels>;
+  /** BCP 47 tag of the active language for prices and counts (default en-US). */
+  locale?: string;
   className?: string;
 }
 
@@ -91,10 +98,11 @@ function DefaultLink({ href, className, children, ...rest }: LinkLikeProps) {
   );
 }
 
-const money = (m: number) => `$${(m / 100).toFixed(2)}`;
+const moneyIn = (locale: string) => (m: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(m / 100);
 
 /** Product card for search results (grid) and home rows (rail), with the fulfilment badge and cart controls. */
-export function ProductCard({ product: p, href, variant = 'grid', quantityInCart = 0, onAdd, onQuantityChange, onRemove, busy, linkAs: Link = DefaultLink, labels, className }: ProductCardProps) {
+export function ProductCard({ product: p, href, variant = 'grid', quantityInCart = 0, onAdd, onQuantityChange, onRemove, busy, linkAs: Link = DefaultLink, labels, locale = 'en-US', className }: ProductCardProps) {
+  const money = moneyIn(locale);
   const L = { ...defaultProductCardLabels, ...labels };
   const isPlatform = p.sellerKind === 'PLATFORM';
   const delivery = (
@@ -111,8 +119,8 @@ export function ProductCard({ product: p, href, variant = 'grid', quantityInCart
         <Link href={href} className={styles.title}>
           {p.title}
         </Link>
-        <Stars rating={p.rating} reviewCount={p.reviewCount} size={12} reviewsLabel={L.reviews} />
-        <Price amountMinor={p.priceMinor} size="md" />
+        <Stars rating={p.rating} reviewCount={p.reviewCount} size={12} reviewsLabel={L.reviews} ratingLabel={L.rating} locale={locale} />
+        <Price amountMinor={p.priceMinor} size="md" locale={locale} />
         {p.fulfilment === 'AFROTRANSACT' && <FulfilmentBadge fulfilment="AFROTRANSACT" />}
         {delivery}
       </article>
@@ -125,6 +133,12 @@ export function ProductCard({ product: p, href, variant = 'grid', quantityInCart
       </Link>
       <div className={styles.body}>
         {p.sponsor && <span className={styles.sponsored}>{L.sponsored(p.sponsor.advertiser)}</span>}
+        {p.sponsor?.reason?.summary && (
+          <details className={styles.adWhy}>
+            <summary>{L.whyAd}</summary>
+            {p.sponsor.reason.summary}
+          </details>
+        )}
         {isPlatform && <Badge tone="brand">{L.brand}</Badge>}
         <h3 style={{ margin: 0, font: 'inherit' }}>
           <Link href={href} className={styles.title}>
@@ -134,8 +148,8 @@ export function ProductCard({ product: p, href, variant = 'grid', quantityInCart
         <span className={styles.meta}>
           {p.community} · {p.unit}
         </span>
-        <Stars rating={p.rating} reviewCount={p.reviewCount} reviewsLabel={L.reviews} />
-        <Price amountMinor={p.priceMinor} listPriceMinor={p.listPriceMinor} size="lg" />
+        <Stars rating={p.rating} reviewCount={p.reviewCount} reviewsLabel={L.reviews} ratingLabel={L.rating} locale={locale} />
+        <Price amountMinor={p.priceMinor} listPriceMinor={p.listPriceMinor} size="lg" locale={locale} />
         <FulfilmentBadge fulfilment={p.fulfilment} shipsFrom={p.sellerCity} />
         {p.inStock && delivery}
         {p.lowStock && <span className={styles.low}>{L.onlyLeft(p.availableQty)}</span>}

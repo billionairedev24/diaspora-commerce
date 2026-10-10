@@ -3,14 +3,15 @@ import { buttonClassName, ImagePlaceholder } from '@afrotransact/ui';
 import Link from 'next/link';
 
 import { CartAwareProductCard } from '@/components/common/CartAwareProductCard';
-import { t } from '@/i18n/t';
+import { getT } from '@/i18n/server';
 
 import styles from './Home.module.css';
 
 /** Server-rendered placement sections (tiles, sponsored banners, product rails) — indexable HTML. */
-export function Tiles({ tiles }: { tiles: Tile[] }) {
+export async function Tiles({ tiles }: { tiles: Tile[] }) {
+  const t = await getT();
   return (
-    <section className={styles.tiles} aria-label="Featured">
+    <section className={styles.tiles} aria-label={t('home.featured')}>
       {tiles.map((tile) => (
         <div key={tile.id} className={styles.tile}>
           <h2 className={styles.tileTitle}>{tile.title}</h2>
@@ -33,7 +34,8 @@ export function Tiles({ tiles }: { tiles: Tile[] }) {
   );
 }
 
-export function Banners({ banners }: { banners: Banner[] }) {
+export async function Banners({ banners }: { banners: Banner[] }) {
+  const t = await getT();
   return (
     <>
       {banners.map((b) => (
@@ -54,7 +56,8 @@ export function Banners({ banners }: { banners: Banner[] }) {
   );
 }
 
-export function Rails({ rails }: { rails: Rail[] }) {
+export async function Rails({ rails }: { rails: Rail[] }) {
+  const t = await getT();
   return (
     <>
       {rails.map((r) => (

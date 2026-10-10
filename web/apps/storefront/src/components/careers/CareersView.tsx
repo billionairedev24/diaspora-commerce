@@ -7,7 +7,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { type FormEvent, useState } from 'react';
 
 import contentStyles from '@/components/common/Content.module.css';
-import { t } from '@/i18n/t';
+import { FormErrors } from '@/components/common/FormErrors';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { careersQueries } from '@/lib/api/queries';
 
@@ -16,6 +17,7 @@ import styles from './Careers.module.css';
 type ApplyErrors = Partial<Record<'name' | 'email' | 'linkedin' | 'workAuthorization' | 'resumeFileName' | 'consent', string>>;
 
 function ApplyForm({ job }: { job: Job }) {
+  const t = useT();
   const [form, setForm] = useState({ name: '', email: '', linkedin: '', workAuthorization: '', resumeFileName: '', resumeAssetId: '', consent: false });
   const [errors, setErrors] = useState<ApplyErrors>({});
   const [upload, setUpload] = useState<'idle' | 'uploading' | 'done'>('idle');
@@ -70,6 +72,7 @@ function ApplyForm({ job }: { job: Job }) {
   }
   return (
     <form onSubmit={submit} noValidate className={styles.apply} aria-label={`${t('careers.apply')}: ${job.title}`}>
+      <FormErrors errors={errors} ids={Object.fromEntries(['name', 'email', 'linkedin', 'workAuthorization', 'resumeFileName', 'consent'].map((k) => [k, `${job.id}-${k}`]))} />
       <strong>{t('careers.apply')}</strong>
       <TextField id={`${job.id}-name`} label={t('careers.name')} value={form.name} onChange={(e) => set('name', e.target.value)} error={errors.name} autoComplete="name" />
       <TextField id={`${job.id}-email`} label={t('careers.email')} type="email" value={form.email} onChange={(e) => set('email', e.target.value)} error={errors.email} autoComplete="email" />
@@ -114,6 +117,7 @@ function ApplyForm({ job }: { job: Job }) {
 
 /** Careers: perks, open roles filtered by team/location (URL-synced), role detail and validated application. */
 export function CareersView() {
+  const t = useT();
   const { data: jobs, isPending } = useQuery(careersQueries.jobs(browserApi()));
   const params = useSearchParams();
   const router = useRouter();

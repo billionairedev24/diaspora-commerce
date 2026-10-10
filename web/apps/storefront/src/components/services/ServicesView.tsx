@@ -1,12 +1,13 @@
 'use client';
 
-import { formatMoney, isApiError, ZipSchema } from '@afrotransact/api-client';
+import { isApiError, ZipSchema } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CalendarCheck, Skeleton, Stars, TextField } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type FormEvent, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries, shopperQueries, siteQueries } from '@/lib/api/queries';
 
@@ -16,6 +17,8 @@ const KINDS = ['Hair & beauty', 'Catering', 'Tailoring', 'Tax & legal'] as const
 
 /** Services near you (S150): search by ZIP (deliver-to ZIP by default), category chips, provider listings. */
 export function ServicesView() {
+  const fmt = useFormatters();
+  const t = useT();
   const api = browserApi();
   const loc = useQuery(siteQueries.deliveryLocation(api));
   const me = useQuery(accountQueries.me(api));
@@ -79,8 +82,8 @@ export function ServicesView() {
               </span>
               <span className={styles.price}>
                 {t('svc.from')}
-                <strong>{formatMoney(s.priceFromMinor)}</strong>
-                {t('svc.deposit', { amount: formatMoney(s.depositMinor) })}
+                <strong>{fmt.money(s.priceFromMinor)}</strong>
+                {t('svc.deposit', { amount: fmt.money(s.depositMinor) })}
               </span>
             </Link>
           </li>

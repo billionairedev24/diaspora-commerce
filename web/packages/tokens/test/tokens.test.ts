@@ -10,6 +10,15 @@ import { cssVar, cssVariables, tokens } from '../src';
 const css = readFileSync(resolve(__dirname, '../src/tokens.css'), 'utf8');
 const design = readFileSync(resolve(__dirname, '../../../../design/afrotransact-tokens.css'), 'utf8');
 
+/*
+ * Deliberate deviations from the design token file, each for WCAG 2.2 AA (S194). The design values fail contrast:
+ * ink-500 is 4.45:1 on white (needs 4.5:1) and gold-500 text is 1.4:1. Keep this list short and justified.
+ */
+const A11Y_OVERRIDES: Record<string, { design: string; ours: string; why: string }> = {
+  '--at-color-text-subtle': { design: 'var(--at-ink-500)', ours: 'var(--at-ink-550)', why: '1.4.3 contrast: 4.45:1 → 5.9:1 on white' },
+  '--at-color-rating-text': { design: 'var(--at-gold-500)', ours: 'var(--at-gold-800)', why: '1.4.3 contrast: 1.4:1 → 5.8:1 on white' }
+};
+
 describe('tokens', () => {
   it('generated TypeScript is up to date with tokens.css', () => {
     const current = readFileSync(resolve(__dirname, '../src/generated/tokens.ts'), 'utf8');
@@ -22,7 +31,14 @@ describe('tokens', () => {
     for (const [, name, value] of declared) {
       const ours = (cssVariables as Record<string, string>)[name as string];
       expect(ours, name).toBeDefined();
-      expect((ours ?? '').replace(/\s+/g, ''), name).toBe((value as string).replace(/\s*\/\*.*$/, '').trim().replace(/\s+/g, ''));
+      const designValue = (value as string).replace(/\s*\/\*.*$/, '').trim().replace(/\s+/g, '');
+      const override = A11Y_OVERRIDES[name as string];
+      if (override) {
+        expect(designValue, `${name}: the design changed; revisit the a11y override`).toBe(override.design);
+        expect(ours, name).toBe(override.ours);
+        continue;
+      }
+      expect((ours ?? '').replace(/\s+/g, ''), name).toBe(designValue);
     }
   });
 

@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { siteQueries } from '@/lib/api/queries';
 
@@ -15,6 +15,7 @@ const ICONS = { truck: Truck, 'calendar-star': CalendarStar, storefront: Storefr
 
 /** Announcement bar driven by content placements; rotates every 6 s (paused on hover/focus and for reduced motion). */
 export function AnnouncementBar() {
+  const t = useT();
   const { data } = useQuery(siteQueries.home(browserApi()));
   const items = data?.announcements ?? [];
   const [idx, setIdx] = useState(0);

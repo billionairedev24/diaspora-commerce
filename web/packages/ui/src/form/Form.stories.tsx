@@ -1,6 +1,7 @@
 import { type Meta, type StoryObj } from '@storybook/react-vite';
 import { type CountryCode } from 'libphonenumber-js/mobile';
 import { useState } from 'react';
+import { expect } from 'storybook/test';
 
 import { mobile, rtl } from '../stories.helpers';
 import { Checkbox } from './Checkbox';
@@ -12,8 +13,23 @@ const meta: Meta = { title: 'Forms/Fields' };
 export default meta;
 type Story = StoryObj;
 
-export const Input: Story = { render: () => <TextField label="Email" type="email" placeholder="you@example.com" help="We’ll send your receipt here" /> };
-export const InputError: Story = { render: () => <TextField label="Email" defaultValue="adaeze@" error="Enter a valid email address" /> };
+export const Input: Story = {
+  render: () => <TextField label="Email" type="email" placeholder="you@example.com" help="We’ll send your receipt here" />,
+  play: async ({ canvas, userEvent }) => {
+    const input = canvas.getByRole('textbox', { name: 'Email' });
+    await expect(input).toHaveAccessibleDescription('We’ll send your receipt here');
+    await userEvent.type(input, 'adaeze@example.com');
+    await expect(input).toHaveValue('adaeze@example.com');
+  }
+};
+export const InputError: Story = {
+  render: () => <TextField label="Email" defaultValue="adaeze@" error="Enter a valid email address" />,
+  play: async ({ canvas }) => {
+    const input = canvas.getByRole('textbox', { name: 'Email' });
+    await expect(input).toBeInvalid();
+    await expect(input).toHaveAccessibleDescription(expect.stringContaining('Enter a valid email address'));
+  }
+};
 export const SelectField: Story = {
   render: () => <Select label="Team" options={[{ value: 'all', label: 'All teams' }, { value: 'eng', label: 'Engineering' }, { value: 'ops', label: 'Operations' }]} />
 };
@@ -38,7 +54,26 @@ function PasswordDemo() {
   ];
   return <PasswordField label="Password" value={pw} onChange={(e) => setPw(e.target.value)} rules={rules} autoComplete="new-password" />;
 }
-export const Password: Story = { render: () => <PasswordDemo /> };
+export const Password: Story = {
+  render: () => <PasswordDemo />,
+  play: async ({ canvas, userEvent, step }) => {
+    const input = canvas.getByLabelText('Password', { selector: 'input' });
+    const rules = canvas.getByRole('list', { name: 'Password requirements' });
+    await step('the checklist updates while typing', async () => {
+      await expect(rules).toHaveTextContent('12+ characters — not met');
+      await userEvent.type(input, '!Ankara');
+      await expect(rules).toHaveTextContent('12+ characters — met');
+    });
+    await step('show / hide toggle', async () => {
+      const toggle = canvas.getByRole('button', { name: 'Show password' });
+      await userEvent.click(toggle);
+      await expect(input).toHaveAttribute('type', 'text');
+      await expect(canvas.getByRole('button', { name: 'Hide password' })).toHaveAttribute('aria-pressed', 'true');
+      await userEvent.click(canvas.getByRole('button', { name: 'Hide password' }));
+      await expect(input).toHaveAttribute('type', 'password');
+    });
+  }
+};
 export const PasswordError: Story = { render: () => <PasswordField label="Confirm password" defaultValue="nope" error="Passwords don’t match" /> };
 
 export const Checkboxes: Story = {
@@ -51,7 +86,15 @@ export const Checkboxes: Story = {
       />
       <Checkbox label="Accept the terms" error="Please accept the Conditions of Use to continue." />
     </div>
-  )
+  ),
+  play: async ({ canvas, userEvent }) => {
+    const terms = canvas.getByRole('checkbox', { name: /I agree to AfroTransact’s Conditions of Use/ });
+    await expect(terms).not.toBeChecked();
+    // The whole label is the click target.
+    await userEvent.click(canvas.getByText(/I agree to AfroTransact’s Conditions of Use/));
+    await expect(terms).toBeChecked();
+    await expect(canvas.getByRole('checkbox', { name: 'Accept the terms' })).toBeInvalid();
+  }
 };
 export const RTL: Story = { ...rtl, render: () => <PhoneDemo initial="(713) 249-0142" /> };
 export const Mobile: Story = { ...mobile, render: () => <PasswordDemo /> };

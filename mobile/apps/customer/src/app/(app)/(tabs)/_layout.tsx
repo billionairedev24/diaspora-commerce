@@ -6,20 +6,22 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useCart } from '@/api/queries';
+import { type MessageKey, useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { AppText } from '@/ui/primitives';
 
 type BottomTabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
-const ICONS: Record<string, { label: string; icon: Icon }> = {
-  index: { label: 'Home', icon: House },
-  search: { label: 'Browse', icon: MagnifyingGlass },
-  lola: { label: 'Lola', icon: Sparkle },
-  cart: { label: 'Cart', icon: ShoppingCart },
-  account: { label: 'Account', icon: User }
+const ICONS: Record<string, { label: MessageKey; icon: Icon }> = {
+  index: { label: 'cu.tabs.home', icon: House },
+  search: { label: 'cu.tabs.browse', icon: MagnifyingGlass },
+  lola: { label: 'cu.tabs.lola', icon: Sparkle },
+  cart: { label: 'cu.tabs.cart', icon: ShoppingCart },
+  account: { label: 'cu.tabs.account', icon: User }
 };
 
 function TabBar({ state, navigation }: BottomTabBarProps) {
+  const tr = useT();
   const insets = useSafeAreaInsets();
   const cart = useCart();
   const count = cart.data?.itemCount ?? 0;
@@ -35,7 +37,7 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
             key={route.key}
             accessibilityRole="tab"
             accessibilityState={{ selected: focused }}
-            accessibilityLabel={route.name === 'cart' && count ? `Cart, ${count} items` : meta.label}
+            accessibilityLabel={route.name === 'cart' && count ? tr('cu.tabs.cartCount', { count }) : tr(meta.label)}
             onPress={() => {
               const e = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
               if (!focused && !e.defaultPrevented) navigation.navigate(route.name);
@@ -43,7 +45,7 @@ function TabBar({ state, navigation }: BottomTabBarProps) {
             style={styles.tab}
           >
             <meta.icon size={24} color={color} weight={focused ? 'fill' : 'regular'} />
-            <AppText variant="caption" color={color} style={{ fontWeight: focused ? t.fontWeight.bold : t.fontWeight.medium }}>{meta.label}</AppText>
+            <AppText variant="caption" color={color} style={{ fontWeight: focused ? t.fontWeight.bold : t.fontWeight.medium }}>{tr(meta.label)}</AppText>
             {route.name === 'cart' && count > 0 ? (
               <View style={styles.badge}><AppText variant="caption" color={c.cartBadgeText} style={styles.badgeText}>{count}</AppText></View>
             ) : null}

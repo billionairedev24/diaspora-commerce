@@ -139,7 +139,7 @@ export function LiveCamera({ visible, title, routeId, onClose, onCapture }: Live
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: t.ink['1000'] },
   top: { flexDirection: 'row', alignItems: 'center', gap: sp['3'], padding: sp['4'] },
-  round: { width: 40, height: 40, borderRadius: 20, backgroundColor: t.ink['800'], alignItems: 'center', justifyContent: 'center' },
+  round: { width: 44, height: 44, borderRadius: 22, backgroundColor: t.ink['800'], alignItems: 'center', justifyContent: 'center' },
   live: { paddingHorizontal: sp['2'], paddingVertical: 2, borderRadius: t.radius.sm, backgroundColor: c.danger },
   viewport: { flex: 1, overflow: 'hidden', backgroundColor: t.ink['900'] },
   msg: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: sp['4'], padding: sp['6'] },

@@ -31,6 +31,9 @@ type Server interface {
 	Run(ctx context.Context) error
 }
 
+// DefaultWriteTimeout bounds how long an ordinary response may take to write.
+const DefaultWriteTimeout = 30 * time.Second
+
 // Options configure a Server.
 type Options struct {
 	Name     string
@@ -40,6 +43,15 @@ type Options struct {
 	Checks   []ReadinessCheck
 	Logger   *slog.Logger
 	Registry *prometheus.Registry
+	// WriteTimeout bounds every response that is not a stream (default DefaultWriteTimeout).
+	WriteTimeout time.Duration
+	// StreamRoutes are mux patterns exactly as registered (e.g. "POST /v1/lola/chat") whose responses are
+	// long-lived (Server-Sent Events, chunked streams). They are exempt from WriteTimeout. Handlers registered
+	// elsewhere can opt in per route with Stream instead.
+	StreamRoutes []string
+	// StreamMaxDuration caps a stream's total write time instead of WriteTimeout (0 = no cap; the handler ends
+	// the stream, or the client disconnects).
+	StreamMaxDuration time.Duration
 }
 
 type serverImpl struct {
@@ -54,6 +66,12 @@ func New(opts Options) Server {
 	if opts.Registry == nil {
 		opts.Registry = prometheus.NewRegistry()
 		opts.Registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	}
+	if opts.WriteTimeout <= 0 {
+		opts.WriteTimeout = DefaultWriteTimeout
+	}
+	if opts.Logger == nil {
+		opts.Logger = slog.Default()
 	}
 	s := &serverImpl{opts: opts, mux: http.NewServeMux()}
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
@@ -88,7 +106,8 @@ func (s *serverImpl) ready(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *serverImpl) Run(ctx context.Context) error {
+// handler assembles the middleware chain around the mux and registers the HTTP metrics.
+func (s *serverImpl) handler() http.Handler {
 	reqs := prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "http_server_requests_total", Help: "HTTP requests by method, route and status.",
 	}, []string{"method", "route", "status"})
@@ -99,19 +118,27 @@ func (s *serverImpl) Run(ctx context.Context) error {
 	s.opts.Registry.MustRegister(reqs, dur)
 
 	var h http.Handler = s.mux
+	h = streamRoutes(s.mux, s.opts.StreamRoutes, s.opts.StreamMaxDuration, s.opts.Logger)(h)
 	h = instrument(s.opts.Logger, reqs, dur)(h)
 	h = recoverer(s.opts.Logger)(h)
 	h = correlation(h)
-	h = otelhttp.NewHandler(h, s.opts.Name)
+	return otelhttp.NewHandler(h, s.opts.Name)
+}
 
-	srv := &http.Server{
+// httpServer is the net/http server with the platform's timeouts. Stream routes lift WriteTimeout per request.
+func (s *serverImpl) httpServer(h http.Handler) *http.Server {
+	return &http.Server{
 		Addr:              s.opts.Addr,
 		Handler:           h,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
+		WriteTimeout:      s.opts.WriteTimeout,
 		IdleTimeout:       120 * time.Second,
 	}
+}
+
+func (s *serverImpl) Run(ctx context.Context) error {
+	srv := s.httpServer(s.handler())
 	errCh := make(chan error, 1)
 	go func() {
 		s.opts.Logger.Info("listening", "addr", s.opts.Addr)

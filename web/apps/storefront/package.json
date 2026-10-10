@@ -20,6 +20,8 @@
   },
   "dependencies": {
     "@afrotransact/api-client": "workspace:*",
+    "@afrotransact/i18n": "workspace:*",
+    "@afrotransact/telemetry": "workspace:*",
     "@afrotransact/tokens": "workspace:*",
     "@afrotransact/ui": "workspace:*",
     "@opennextjs/cloudflare": "^1.20.10",

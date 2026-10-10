@@ -1,4 +1,5 @@
-# Test runner and visual test outputs (storybook-static/ is ignored at the repo root).
+# Test, coverage and visual test outputs (storybook-static/ is ignored at the repo root).
 /test-results/
 /visual/test-results/
 /visual/report/
+/coverage/

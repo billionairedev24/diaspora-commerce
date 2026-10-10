@@ -1,3 +1,6 @@
+import { appendFileSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, type TestInfo } from '@playwright/test';
 
@@ -22,6 +25,13 @@ export async function expectNoSeriousA11yViolations(page: Page, testInfo: TestIn
   for (const sel of opts.exclude ?? []) builder = builder.exclude(sel);
   const results = await builder.analyze();
   await testInfo.attach('axe-results.json', { body: JSON.stringify(results.violations, null, 2), contentType: 'application/json' });
+  // E2E_A11Y_SUMMARY=<file.jsonl>: one line per scan with every violation (all impacts), for before/after reports.
+  const summary = process.env.E2E_A11Y_SUMMARY;
+  if (summary) {
+    mkdirSync(dirname(summary), { recursive: true });
+    const line = { project: testInfo.project.name, page: opts.page ?? page.url(), url: page.url(), violations: results.violations.map((v) => ({ id: v.id, impact: v.impact, nodes: v.nodes.length, targets: v.nodes.slice(0, 3).map((n) => n.target.join(' ')) })) };
+    appendFileSync(summary, `${JSON.stringify(line)}\n`);
+  }
 
   const known = KNOWN_A11Y_ISSUES.filter((k) => k.page === opts.page);
   const blocking: string[] = [];

@@ -99,7 +99,9 @@ export function CalendarView() {
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.data && mode === 'week' ? (
         <div className="grid grid-cols-[48px_repeat(7,minmax(0,1fr))] rounded-md border border-border text-xs" aria-label="Week calendar" role="grid">
-          <div />
+          {/* Rows use display: contents so the cells stay in the CSS grid (ARIA grid > row > cell, WCAG 1.3.1). */}
+          <div role="row" className="contents">
+          <div role="columnheader"><span className="sr-only">Time</span></div>
           {days.map((d) => (
             <div key={d.toISOString()} role="columnheader" tabIndex={0} className="group relative border-l border-border px-1 py-2 text-center outline-none">
               <span className={cx('font-semibold', isoDay(d) === isoDay(now) && 'rounded-pill bg-gold-500 px-2')}>{d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })}</span>
@@ -108,15 +110,17 @@ export function CalendarView() {
               </span>
             </div>
           ))}
-          <div className="relative" style={{ height: (END_H - START_H) * HOUR_PX }}>
+          </div>
+          <div role="row" className="contents">
+          <div role="rowheader" aria-label="Hours" className="relative" style={{ height: (END_H - START_H) * HOUR_PX }}>
             {Array.from({ length: END_H - START_H }, (_, i) => (
-              <span key={i} className="absolute right-1 text-2xs text-subtle" style={{ top: i * HOUR_PX - 6 }}>{((START_H + i + 11) % 12) + 1}{START_H + i < 12 ? 'a' : 'p'}</span>
+              <span key={i} aria-hidden className="absolute right-1 text-2xs text-muted" style={{ top: i * HOUR_PX - 6 }}>{((START_H + i + 11) % 12) + 1}{START_H + i < 12 ? 'a' : 'p'}</span>
             ))}
           </div>
           {days.map((d) => {
             const hours = q.data.openHours.find((h) => h.day === DAY_KEYS[d.getDay()]);
             return (
-              <div key={d.toISOString()} className="relative border-t border-l border-border" style={{ height: (END_H - START_H) * HOUR_PX }}>
+              <div key={d.toISOString()} role="gridcell" aria-label={d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} className="relative border-t border-l border-border" style={{ height: (END_H - START_H) * HOUR_PX }}>
                 {hours?.ranges.map((r) => (
                   <span key={r.start} aria-hidden className="absolute inset-x-0 bg-surface-sunken" style={{ top: ((toMin(r.start) - START_H * 60) / 60) * HOUR_PX, height: ((toMin(r.end) - toMin(r.start)) / 60) * HOUR_PX }} />
                 ))}
@@ -125,7 +129,7 @@ export function CalendarView() {
                   const s = new Date(b.startAt);
                   const top = ((s.getHours() * 60 + s.getMinutes() - START_H * 60) / 60) * HOUR_PX;
                   return (
-                    <div key={b.id} className="group absolute inset-x-0.5 z-10" style={{ top, height: Math.max(22, (b.durationMinutes / 60) * HOUR_PX - 2) }}>
+                    <div key={b.id} className="group absolute inset-x-0.5 z-10" style={{ top, height: Math.max(24, (b.durationMinutes / 60) * HOUR_PX - 2) }}>
                       <button type="button" onClick={() => setSelected(b.id)} className={cx('h-full w-full overflow-hidden rounded-xs border-l-4 px-1 text-left text-2xs', TONE[b.status] ?? 'border-border bg-surface-muted', !ACTIVE.includes(b.status) && 'opacity-60')}>
                         <strong className="block truncate">{time(b.startAt)} {b.customerName}</strong>
                         <span className="block truncate">{b.serviceName}</span>
@@ -139,19 +143,24 @@ export function CalendarView() {
               </div>
             );
           })}
+          </div>
         </div>
       ) : null}
       {q.data && mode === 'month' ? (
         <div className="grid grid-cols-7 overflow-hidden rounded-md border border-border text-xs" role="grid" aria-label="Month calendar">
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <div key={d} role="columnheader" className="bg-surface-muted p-2 font-semibold">{d}</div>)}
-          {days.map((d) => {
+          <div role="row" className="contents">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => <div key={d} role="columnheader" className="bg-surface-muted p-2 font-semibold">{d}</div>)}
+          </div>
+          {Array.from({ length: Math.ceil(days.length / 7) }, (_, w) => days.slice(w * 7, w * 7 + 7)).map((week) => (
+          <div key={week[0]?.toISOString()} role="row" className="contents">
+          {week.map((d) => {
             const s = summary(d);
             const list = byDay(d);
             return (
-              <div key={d.toISOString()} role="gridcell" tabIndex={0} className={cx('group relative min-h-20 border-t border-l border-border p-1.5 outline-none', d.getMonth() !== anchor.getMonth() && 'bg-surface-sunken text-subtle')}>
+              <div key={d.toISOString()} role="gridcell" tabIndex={0} className={cx('group relative min-h-20 border-t border-l border-border p-1.5 outline-none', d.getMonth() !== anchor.getMonth() && 'bg-surface-sunken text-muted')}>
                 <span className={cx('font-semibold', isoDay(d) === isoDay(now) && 'rounded-pill bg-gold-500 px-1.5')}>{d.getDate()}</span>
                 {list.slice(0, 3).map((b) => (
-                  <button key={b.id} type="button" onClick={() => setSelected(b.id)} className={cx('mt-0.5 block w-full truncate rounded-xs border-l-4 px-1 text-left text-2xs', TONE[b.status] ?? 'border-border bg-surface-muted')}>
+                  <button key={b.id} type="button" onClick={() => setSelected(b.id)} className={cx('mt-0.5 block min-h-6 w-full truncate rounded-xs border-l-4 px-1 text-left text-2xs', TONE[b.status] ?? 'border-border bg-surface-muted')}>
                     {time(b.startAt)} {b.customerName}
                   </button>
                 ))}
@@ -162,6 +171,8 @@ export function CalendarView() {
               </div>
             );
           })}
+          </div>
+          ))}
         </div>
       ) : null}
       {sel ? (

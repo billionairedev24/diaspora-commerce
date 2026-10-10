@@ -49,7 +49,9 @@ describe('server-driven tables and detail sheets', () => {
     const dialog = await screen.findByRole('dialog', { name: 'New local rate' });
     await user.type(within(dialog).getByLabelText('State'), 'Texas');
     await user.click(within(dialog).getByRole('button', { name: 'Add rate' }));
-    expect(within(dialog).getByText('Two-letter state code, e.g. TX')).toBeInTheDocument();
+    // The error shows under the field and in the summary at the top, which links to the field (S194).
+    expect(within(dialog).getByRole('link', { name: 'Two-letter state code, e.g. TX' })).toHaveAttribute('href', '#fld-state');
+    expect(within(dialog).getAllByText('Two-letter state code, e.g. TX')).toHaveLength(2);
     expect(within(dialog).getAllByText('Required').length).toBeGreaterThan(0);
     await user.clear(within(dialog).getByLabelText('State'));
     await user.type(within(dialog).getByLabelText('State'), 'TX');

@@ -2,12 +2,13 @@
 
 import { createContext, type ReactNode, useCallback, useContext, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 
 const Ctx = createContext<(message: string) => void>(() => undefined);
 
 /** Visually hidden polite live region announcing cart changes to screen-reader users. */
 export function CartAnnouncer({ children }: { children: ReactNode }) {
+  const t = useT();
   const [message, setMessage] = useState('');
   const announce = useCallback((m: string) => {
     // Clear first so repeating the same text is announced again.

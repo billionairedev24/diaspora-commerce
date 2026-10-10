@@ -5,7 +5,8 @@ import { Bank, Button, CreditCard, Dialog, ShieldCheck, TextField } from '@afrot
 import { useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { FormErrors } from '@/components/common/FormErrors';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { BFF_BASE_PATH } from '@/lib/config';
 import { getStripe, isMockKey, stripeAppearance,type StripeElements, type StripeInstance } from '@/lib/payments/stripe';
@@ -40,18 +41,19 @@ export function cardBrand(num: string): string {
 /** Stripe's test card that is always declined. */
 const DECLINED = '4000000000009995';
 
-async function confirmMock(clientSecret: string, body: Record<string, unknown>): Promise<PaymentMethod> {
+async function confirmMock(clientSecret: string, body: Record<string, unknown>, failed: string): Promise<PaymentMethod> {
   const res = await fetch(`${window.location.origin}${BFF_BASE_PATH}/v1/mock-stripe/setup-intents/${encodeURIComponent(clientSecret)}/confirm`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body),
     credentials: 'include'
   });
-  if (!res.ok) throw new Error(t('pay.saveFailed'));
+  if (!res.ok) throw new Error(failed);
   return PaymentMethodSchema.parse(await res.json());
 }
 
 function MockMethodForm({ clientSecret, onSaved }: { clientSecret: string; onSaved: (pm: PaymentMethod) => void }) {
+  const t = useT();
   const [tab, setTab] = useState<'card' | 'bank'>('card');
   const [f, setF] = useState({ number: '', exp: '', cvc: '', zip: '', bank: '', routing: '', account: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -82,7 +84,7 @@ function MockMethodForm({ clientSecret, onSaved }: { clientSecret: string; onSav
     if (Object.keys(next).length) return;
     setBusy(true);
     try {
-      onSaved(await confirmMock(clientSecret, body));
+      onSaved(await confirmMock(clientSecret, body, t('pay.saveFailed')));
     } catch (err) {
       setErrors({ _: err instanceof Error ? err.message : t('pay.saveFailed') });
     } finally {
@@ -92,6 +94,7 @@ function MockMethodForm({ clientSecret, onSaved }: { clientSecret: string; onSav
 
   return (
     <form className={styles.form} onSubmit={submit} noValidate data-testid="mock-payment-element">
+      <FormErrors errors={errors} ids={{ number: 'pm-number', exp: 'pm-exp', cvc: 'pm-cvc', zip: 'pm-zip', bank: 'pm-bank', routing: 'pm-routing', account: 'pm-account' }} />
       <div className={styles.tabs} role="tablist" aria-label={t('pay.methodType')}>
         <button type="button" role="tab" aria-selected={tab === 'card'} className={styles.tab} onClick={() => setTab('card')}>
           <CreditCard aria-hidden /> {t('pay.tabCard')}
@@ -102,19 +105,19 @@ function MockMethodForm({ clientSecret, onSaved }: { clientSecret: string; onSav
       </div>
       {tab === 'card' ? (
         <>
-          <TextField label={t('pay.cardNumber')} value={f.number} onChange={set('number')} error={errors.number} inputMode="numeric" autoComplete="cc-number" placeholder="1234 1234 1234 1234" />
+          <TextField id="pm-number" label={t('pay.cardNumber')} value={f.number} onChange={set('number')} error={errors.number} inputMode="numeric" autoComplete="cc-number" placeholder="1234 1234 1234 1234" />
           <div className={styles.three}>
-            <TextField label={t('pay.expiry')} value={f.exp} onChange={set('exp')} error={errors.exp} placeholder="MM / YY" autoComplete="cc-exp" />
-            <TextField label={t('pay.cvc')} value={f.cvc} onChange={set('cvc')} error={errors.cvc} inputMode="numeric" autoComplete="cc-csc" maxLength={4} />
-            <TextField label={t('pay.zip')} value={f.zip} onChange={set('zip')} error={errors.zip} inputMode="numeric" autoComplete="postal-code" maxLength={5} />
+            <TextField id="pm-exp" label={t('pay.expiry')} value={f.exp} onChange={set('exp')} error={errors.exp} placeholder={t('pay.expiryPlaceholder')} autoComplete="cc-exp" />
+            <TextField id="pm-cvc" label={t('pay.cvc')} value={f.cvc} onChange={set('cvc')} error={errors.cvc} inputMode="numeric" autoComplete="cc-csc" maxLength={4} />
+            <TextField id="pm-zip" label={t('pay.zip')} value={f.zip} onChange={set('zip')} error={errors.zip} inputMode="numeric" autoComplete="postal-code" maxLength={5} />
           </div>
         </>
       ) : (
         <>
-          <TextField label={t('pay.bankName')} value={f.bank} onChange={set('bank')} error={errors.bank} />
+          <TextField id="pm-bank" label={t('pay.bankName')} value={f.bank} onChange={set('bank')} error={errors.bank} />
           <div className={styles.two}>
-            <TextField label={t('pay.routing')} value={f.routing} onChange={set('routing')} error={errors.routing} inputMode="numeric" maxLength={9} />
-            <TextField label={t('pay.account')} value={f.account} onChange={set('account')} error={errors.account} inputMode="numeric" maxLength={17} />
+            <TextField id="pm-routing" label={t('pay.routing')} value={f.routing} onChange={set('routing')} error={errors.routing} inputMode="numeric" maxLength={9} />
+            <TextField id="pm-account" label={t('pay.account')} value={f.account} onChange={set('account')} error={errors.account} inputMode="numeric" maxLength={17} />
           </div>
           <p className={styles.fine}>{t('pay.achMandate')}</p>
         </>
@@ -131,6 +134,7 @@ function MockMethodForm({ clientSecret, onSaved }: { clientSecret: string; onSav
 /* ── Stripe Payment Element (SetupIntent from payments) ─────────────────────────────────────────── */
 
 function StripeSetupForm({ setup, onSaved }: { setup: SetupIntent; onSaved: () => void }) {
+  const t = useT();
   const mountRef = useRef<HTMLDivElement>(null);
   const stripe = useRef<{ s: StripeInstance; e: StripeElements } | null>(null);
   const [ready, setReady] = useState(false);
@@ -155,7 +159,7 @@ function StripeSetupForm({ setup, onSaved }: { setup: SetupIntent; onSaved: () =
       disposed = true;
       el?.unmount();
     };
-  }, [setup]);
+  }, [setup, t]);
 
   const submit = async (ev: FormEvent) => {
     ev.preventDefault();
@@ -184,6 +188,7 @@ function StripeSetupForm({ setup, onSaved }: { setup: SetupIntent; onSaved: () =
  * from payments; the method is saved on the shopper's Stripe Customer (AfroTransact keeps brand, last 4, expiry).
  */
 export function AddPaymentMethodDialog({ open, onOpenChange, onSaved }: { open: boolean; onOpenChange: (o: boolean) => void; onSaved?: (pm: PaymentMethod | null) => void }) {
+  const t = useT();
   const qc = useQueryClient();
   const [setup, setSetup] = useState<SetupIntent | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -196,7 +201,7 @@ export function AddPaymentMethodDialog({ open, onOpenChange, onSaved }: { open: 
       .createSetupIntent(['card', 'us_bank_account'])
       .then(setSetup)
       .catch((e: unknown) => setError(isApiError(e) ? e.message : t('pay.stripeUnavailable')));
-  }, [open]);
+  }, [open, t]);
 
   const done = async (pm: PaymentMethod | null) => {
     await Promise.all([qc.invalidateQueries({ queryKey: accountKeys.paymentMethods() }), qc.invalidateQueries({ queryKey: checkoutKeys.all }), qc.invalidateQueries({ queryKey: accountKeys.me() })]);

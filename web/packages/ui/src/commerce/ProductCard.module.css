@@ -10,6 +10,8 @@
 .title:hover { color: var(--at-color-link); text-decoration: none; }
 .meta { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .sponsored { font-size: var(--at-text-2xs); color: var(--at-color-text-muted); }
+.adWhy { font-size: var(--at-text-2xs); color: var(--at-color-text-muted); }
+.adWhy summary { cursor: pointer; text-decoration: underline; }
 .eta { font-size: var(--at-text-sm); }
 .rail .eta { font-size: var(--at-text-xs); }
 .low { font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); color: var(--at-color-low-stock); }

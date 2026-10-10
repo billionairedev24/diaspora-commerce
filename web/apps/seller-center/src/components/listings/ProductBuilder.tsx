@@ -7,6 +7,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { type ChangeEvent, useState } from 'react';
 
+import { PageHeader } from '@/components/ui/PageHeader';
 import { problemMessage } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
 import { money } from '@/lib/format';
@@ -314,9 +315,11 @@ export function ProductBuilder() {
   };
   const last = step === STEPS.length - 1;
   return (
+    <>
+    <PageHeader title="Add a product" description="Choose a category, add images and details, then set variations, price and stock." />
     <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
       <div className="flex min-w-0 flex-col gap-4">
-        <ol className="m-0 grid list-none grid-cols-4 gap-2 p-0">
+        <ol aria-label="Steps" className="m-0 grid list-none grid-cols-4 gap-2 p-0">
           {STEPS.map((st, i) => (
             <li key={st.key}>
               <button type="button" onClick={() => go(i)} aria-current={i === step ? 'step' : undefined} className="flex w-full flex-col gap-1.5 border-0 bg-transparent p-0 text-left">
@@ -347,5 +350,6 @@ export function ProductBuilder() {
       </div>
       <Preview s={s} type={type} />
     </div>
+    </>
   );
 }

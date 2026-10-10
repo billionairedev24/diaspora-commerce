@@ -1,6 +1,7 @@
 'use client';
 
-import { type AvailableSlot, type BookingCreated, bookingKeys, formatMoney, isApiError, type ServiceMode } from '@afrotransact/api-client';
+import { type AvailableSlot, type BookingCreated, bookingKeys, isApiError, type ServiceMode } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, Plus, ShieldCheck, Skeleton } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
@@ -9,7 +10,7 @@ import { type FormEvent, useEffect, useState } from 'react';
 
 import { AddPaymentMethodDialog } from '@/components/payments/AddPaymentMethodDialog';
 import { PaymentChip } from '@/components/payments/PaymentChip';
-import { type MessageKey, t } from '@/i18n/t';
+import { type MessageKey, useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries, shopperQueries } from '@/lib/api/queries';
 import { signInHref } from '@/lib/links';
@@ -25,6 +26,8 @@ const modeKey = (m: ServiceMode) => `svc.mode.${m}` as MessageKey;
  * the provider's cancellation policy; booking holds the deposit with Stripe (bookings' PaymentIntent) and syncs.
  */
 export function ServiceDetailView({ serviceId }: { serviceId: string }) {
+  const fmt = useFormatters();
+  const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
   const pathname = usePathname();
@@ -99,9 +102,9 @@ export function ServiceDetailView({ serviceId }: { serviceId: string }) {
             <dt>{t('svc.duration')}</dt>
             <dd>{t('svc.minutes', { n: s.durationMinutes })}</dd>
             <dt>{t('svc.price')}</dt>
-            <dd>{formatMoney(s.priceMinor)}</dd>
+            <dd>{fmt.money(s.priceMinor)}</dd>
             <dt>{t('svc.depositNow')}</dt>
-            <dd>{formatMoney(s.depositMinor)}</dd>
+            <dd>{fmt.money(s.depositMinor)}</dd>
           </dl>
           <div className={styles.policy}>
             <ShieldCheck aria-hidden />
@@ -117,7 +120,7 @@ export function ServiceDetailView({ serviceId }: { serviceId: string }) {
               <strong className={styles.success}>
                 <CheckCircle weight="fill" aria-hidden /> {done.status === 'CONFIRMED' ? t('bk.confirmed') : t('bk.requested')}
               </strong>
-              <span>{t('bk.doneWhen', { day: slotDay(done.startAt), time: slotTime(done.startAt), ref: done.reference })}</span>
+              <span>{t('bk.doneWhen', { day: slotDay(fmt.tag, done.startAt), time: slotTime(fmt.tag, done.startAt), ref: done.reference })}</span>
               <span className={styles.muted}>{t('bk.liveStatus')}</span>
               <Link href="/account/bookings" className={buttonClassName({ size: 'sm' })}>
                 {t('svc.yourAppointments')}
@@ -133,7 +136,7 @@ export function ServiceDetailView({ serviceId }: { serviceId: string }) {
                   {s.addOns.map((a) => (
                     <label key={a.id} className={styles.check}>
                       <input type="checkbox" checked={addOns.includes(a.id)} onChange={(e) => setAddOns((x) => (e.target.checked ? [...x, a.id] : x.filter((y) => y !== a.id)))} />
-                      {a.name} · +{formatMoney(a.priceMinor)}
+                      {a.name} · +{fmt.money(a.priceMinor)}
                     </label>
                   ))}
                 </fieldset>
@@ -165,13 +168,13 @@ export function ServiceDetailView({ serviceId }: { serviceId: string }) {
               {quote.data && (
                 <dl className={styles.dl}>
                   <dt>{t('svc.price')}</dt>
-                  <dd>{formatMoney(quote.data.priceMinor)}</dd>
+                  <dd>{fmt.money(quote.data.priceMinor)}</dd>
                   <dt>{t('bk.dueNow')}</dt>
                   <dd>
-                    <strong>{formatMoney(quote.data.depositNowMinor)}</strong>
+                    <strong>{fmt.money(quote.data.depositNowMinor)}</strong>
                   </dd>
                   <dt>{t('bk.dueAfter')}</dt>
-                  <dd>{formatMoney(quote.data.balanceLaterMinor)}</dd>
+                  <dd>{fmt.money(quote.data.balanceLaterMinor)}</dd>
                 </dl>
               )}
               {signedIn ? (
@@ -193,7 +196,7 @@ export function ServiceDetailView({ serviceId }: { serviceId: string }) {
               {error && <p className={styles.error} role="alert">{error}</p>}
               {signedIn ? (
                 <Button type="submit" variant="secondary" loading={book.isPending} block>
-                  {quote.data ? t('bk.bookCta', { amount: formatMoney(quote.data.depositNowMinor) }) : t('bk.book')}
+                  {quote.data ? t('bk.bookCta', { amount: fmt.money(quote.data.depositNowMinor) }) : t('bk.book')}
                 </Button>
               ) : (
                 <Link href={signInHref(pathname)} className={buttonClassName({ block: true })}>

@@ -1,3 +1,4 @@
+import { withTelemetryConfig } from '@afrotransact/telemetry/next/config';
 import { type NextConfig } from 'next';
 
 const securityHeaders = [
@@ -11,7 +12,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   // Workspace packages ship TypeScript source.
-  transpilePackages: ['@afrotransact/ui', '@afrotransact/api-client', '@afrotransact/tokens'],
+  transpilePackages: ['@afrotransact/ui', '@afrotransact/api-client', '@afrotransact/tokens', '@afrotransact/i18n', '@afrotransact/telemetry'],
   // Allows a separate build output (e.g. NEXT_DIST_DIR=.next-e2e) without clobbering .next.
   distDir: process.env.NEXT_DIST_DIR || '.next',
   experimental: { optimizePackageImports: ['@phosphor-icons/react'] },
@@ -21,4 +22,7 @@ const nextConfig: NextConfig = {
   }
 };
 
-export default nextConfig;
+// Source maps are uploaded only in CI release jobs (SENTRY_UPLOAD_SOURCEMAPS=1 + Sentry credentials); see @afrotransact/telemetry/next/config.
+export default async function config(): Promise<NextConfig> {
+  return withTelemetryConfig(nextConfig);
+}

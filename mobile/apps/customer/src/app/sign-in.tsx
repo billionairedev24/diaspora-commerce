@@ -8,6 +8,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useAuth } from '@/auth/AuthProvider';
 import { SignInCancelled, type SignInIntent } from '@/auth/oidc';
 import { env } from '@/config/env';
+import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { Logo } from '@/ui/Logo';
 import { AppText, Banner, Button, Field } from '@/ui/primitives';
@@ -22,6 +23,7 @@ const SOCIALS: Array<{ provider: 'google' | 'apple' | 'facebook'; label: string;
 ];
 
 export default function SignIn() {
+  const tr = useT();
   const { signIn, flash } = useAuth();
   const [email, setEmail] = useState('');
   const [err, setErr] = useState('');
@@ -33,7 +35,7 @@ export default function SignIn() {
     try {
       await signIn(intent);
     } catch (e) {
-      if (!(e instanceof SignInCancelled)) setErr(e instanceof Error ? e.message : 'Sign-in failed. Try again.');
+      if (!(e instanceof SignInCancelled)) setErr(e instanceof Error ? e.message : tr('cu.signIn.failed'));
     } finally {
       setBusy(null);
     }
@@ -41,7 +43,7 @@ export default function SignIn() {
 
   const submit = () => {
     const e = email.trim().toLowerCase();
-    if (e && !RE_EMAIL.test(e)) return setErr('Enter a valid email address.');
+    if (e && !RE_EMAIL.test(e)) return setErr(tr('cu.signIn.invalidEmail'));
     void run('email', { kind: 'sign-in', ...(e ? { loginHint: e } : {}) });
   };
 
@@ -51,41 +53,41 @@ export default function SignIn() {
     <Screen>
       <View style={styles.brand}>
         <Logo size={44} wordSize={t.fontSize['2xl']} />
-        <AppText variant="small" color={c.textMuted}>Every diaspora’s market, one cart.</AppText>
+        <AppText variant="small" color={c.textMuted}>{tr('cu.signIn.everyDiasporaSMarketOne')}</AppText>
       </View>
-      <AppText variant="display" accessibilityRole="header">Sign in</AppText>
+      <AppText variant="display" accessibilityRole="header">{tr('cu.signIn.signIn')}</AppText>
       {flash ? <Banner tone="info" icon={Info}>{flash}</Banner> : null}
-      <Field label="Email" value={email} onChangeText={(v) => { setEmail(v); setErr(''); }} placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" returnKeyType="go" onSubmitEditing={submit} />
-      <AppText variant="small" color={c.textMuted}>You’ll enter your password and 2-step code on AfroTransact’s secure sign-in page.</AppText>
+      <Field label={tr('cu.signIn.email')} value={email} onChangeText={(v) => { setEmail(v); setErr(''); }} placeholder={tr('cu.signIn.youExampleCom')} keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" returnKeyType="go" onSubmitEditing={submit} />
+      <AppText variant="small" color={c.textMuted}>{tr('cu.signIn.youLlEnterYourPassword')}</AppText>
       <Pressable accessibilityRole="link" onPress={() => open('/signin?reset=1')}>
-        <AppText variant="small" style={{ textDecorationLine: 'underline' }}>Forgot password?</AppText>
+        <AppText variant="small" style={{ textDecorationLine: 'underline' }}>{tr('cu.signIn.forgotPassword')}</AppText>
       </Pressable>
       {err ? <Banner tone="danger" icon={WarningCircle}>{err}</Banner> : null}
-      <Button label="Sign in" onPress={submit} loading={busy === 'email'} disabled={!!busy && busy !== 'email'} />
-      <Button kind="outline" icon={Fingerprint} label="Sign in with a passkey" onPress={() => void run('passkey', { kind: 'sign-in' })} loading={busy === 'passkey'} disabled={!!busy && busy !== 'passkey'} />
+      <Button label={tr('cu.signIn.signIn')} onPress={submit} loading={busy === 'email'} disabled={!!busy && busy !== 'email'} />
+      <Button kind="outline" icon={Fingerprint} label={tr('cu.signIn.signInWithAPasskey')} onPress={() => void run('passkey', { kind: 'sign-in' })} loading={busy === 'passkey'} disabled={!!busy && busy !== 'passkey'} />
       <View style={styles.divider}>
         <View style={styles.rule} />
-        <AppText variant="small" color={c.textMuted}>or continue with</AppText>
+        <AppText variant="small" color={c.textMuted}>{tr('cu.signIn.orContinueWith')}</AppText>
         <View style={styles.rule} />
       </View>
       <View style={styles.socials}>
         {SOCIALS.map((s) => (
-          <Pressable key={s.provider} accessibilityRole="button" accessibilityLabel={`Continue with ${s.label}`} disabled={!!busy} onPress={() => void run(s.provider, { kind: 'provider', provider: s.provider })} style={styles.social}>
+          <Pressable key={s.provider} accessibilityRole="button" accessibilityLabel={tr('cu.signIn.continueWith', { provider: s.label })} disabled={!!busy} onPress={() => void run(s.provider, { kind: 'provider', provider: s.provider })} style={styles.social}>
             <s.icon size={20} weight="fill" color={s.color} />
             <AppText variant="small" style={{ fontWeight: t.fontWeight.semibold }}>{s.label}</AppText>
           </Pressable>
         ))}
       </View>
       <View style={styles.newRow}>
-        <AppText variant="small" color={c.textMuted}>New to AfroTransact?</AppText>
-        <Button kind="outline" label="Create your account" onPress={() => void run('signup', { kind: 'sign-up' })} loading={busy === 'signup'} />
+        <AppText variant="small" color={c.textMuted}>{tr('cu.signIn.newToAfrotransact')}</AppText>
+        <Button kind="outline" label={tr('cu.signIn.createYourAccount')} onPress={() => void run('signup', { kind: 'sign-up' })} loading={busy === 'signup'} />
       </View>
       <AppText variant="caption" color={c.textMuted}>
-        By continuing you agree to AfroTransact’s{' '}
-        <AppText variant="caption" style={{ textDecorationLine: 'underline' }} onPress={() => open('/legal/terms')}>Conditions of Use</AppText> and{' '}
-        <AppText variant="caption" style={{ textDecorationLine: 'underline' }} onPress={() => open('/legal/privacy')}>Privacy Notice</AppText>.
+        {tr('cu.signIn.agreePrefix')}{' '}
+        <AppText variant="caption" style={{ textDecorationLine: 'underline' }} onPress={() => open('/legal/terms')}>{tr('cu.signIn.conditionsOfUse')}</AppText> {tr('cu.signIn.and')}{' '}
+        <AppText variant="caption" style={{ textDecorationLine: 'underline' }} onPress={() => open('/legal/privacy')}>{tr('cu.signIn.privacyNotice')}</AppText>.
       </AppText>
-      {env.mocks ? <AppText variant="caption" color={c.textSubtle}>Dev mocks are on: sign-in completes as adaeze@example.com.</AppText> : null}
+      {env.mocks ? <AppText variant="caption" color={c.textSubtle}>{tr('cu.signIn.devMocksAreOnSign')}</AppText> : null}
     </Screen>
   );
 }
@@ -95,6 +97,6 @@ const styles = StyleSheet.create({
   divider: { flexDirection: 'row', alignItems: 'center', gap: sp['3'] },
   rule: { flex: 1, height: 1, backgroundColor: c.border },
   socials: { flexDirection: 'row', gap: sp['2'] },
-  social: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: sp['2'], height: t.size.controlLg, borderWidth: 1, borderColor: c.borderStrong, borderRadius: t.radius.pill },
+  social: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: sp['2'], minHeight: t.size.controlLg, borderWidth: 1, borderColor: c.borderStrong, borderRadius: t.radius.pill },
   newRow: { gap: sp['2'], paddingTop: sp['2'] }
 });

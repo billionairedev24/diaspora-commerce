@@ -1,12 +1,13 @@
 'use client';
 
-import { type CartLine, type CartPackage, formatMoney, SearchQuerySchema } from '@afrotransact/api-client';
+import { type CartLine, type CartPackage, SearchQuerySchema } from '@afrotransact/api-client';
+import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, FulfilmentBadge, ImagePlaceholder, QuantityStepper, Skeleton, Stars } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useState } from 'react';
 
-import { t } from '@/i18n/t';
+import { useT } from '@/i18n/t';
 import { browserApi } from '@/lib/api/browser';
 import { searchQueries } from '@/lib/api/queries';
 import { useCart, useCartMutation } from '@/lib/cart/useCart';
@@ -15,6 +16,8 @@ import { productHref, searchHref } from '@/lib/links-search';
 import styles from './Cart.module.css';
 
 function Line({ line, pkg }: { line: CartLine; pkg: CartPackage }) {
+  const fmt = useFormatters();
+  const t = useT();
   const m = useCartMutation();
   const low = line.stockStatus === 'LOW_STOCK';
   const out = line.stockStatus === 'OUT_OF_STOCK';
@@ -66,14 +69,16 @@ function Line({ line, pkg }: { line: CartLine; pkg: CartPackage }) {
         </div>
       </div>
       <div className={styles.linePrice}>
-        <strong className={styles.linePriceMain}>{formatMoney(line.lineTotalMinor)}</strong>
-        {line.quantity > 1 && <div className={styles.each}>{t('cart.each', { price: formatMoney(line.priceMinor) })}</div>}
+        <strong className={styles.linePriceMain}>{fmt.money(line.lineTotalMinor)}</strong>
+        {line.quantity > 1 && <div className={styles.each}>{t('cart.each', { price: fmt.money(line.priceMinor) })}</div>}
       </div>
     </li>
   );
 }
 
 function Package({ pkg, n, total }: { pkg: CartPackage; n: number; total: number }) {
+  const fmt = useFormatters();
+  const t = useT();
   return (
     <section className={styles.package} aria-labelledby={`pkg-${pkg.packageId}`} data-testid="cart-package">
       <div className={styles.packageHead}>
@@ -95,7 +100,7 @@ function Package({ pkg, n, total }: { pkg: CartPackage; n: number; total: number
       </ul>
       {pkg.freeShippingNudge && (
         <p className={styles.nudge}>
-          <CheckCircle weight="fill" aria-hidden /> {t('cart.nudge', { amount: formatMoney(pkg.freeShippingNudge.remainingMinor), seller: pkg.seller.name })}
+          <CheckCircle weight="fill" aria-hidden /> {t('cart.nudge', { amount: fmt.money(pkg.freeShippingNudge.remainingMinor), seller: pkg.seller.name })}
         </p>
       )}
       <ul className={styles.lines}>
@@ -108,6 +113,8 @@ function Package({ pkg, n, total }: { pkg: CartPackage; n: number; total: number
 }
 
 function Recommendations({ exclude }: { exclude: Set<string> }) {
+  const fmt = useFormatters();
+  const t = useT();
   const { data } = useQuery(searchQueries.results(browserApi(), SearchQuerySchema.parse({ sort: 'rating', size: 12 })));
   const m = useCartMutation();
   const items = (data?.hits ?? []).filter((h) => !exclude.has(h.atin) && h.inStock).slice(0, 4);
@@ -125,7 +132,7 @@ function Recommendations({ exclude }: { exclude: Set<string> }) {
               {p.title}
             </Link>
             <Stars rating={p.rating} reviewCount={p.reviewCount} size={12} />
-            <strong className={styles.recPrice}>{formatMoney(p.priceMinor)}</strong>
+            <strong className={styles.recPrice}>{fmt.money(p.priceMinor)}</strong>
             <Button size="sm" onClick={() => m.mutate({ kind: 'add', offerId: p.offerId, quantity: 1, title: p.title })} aria-label={`${t('card.addToCart')}: ${p.title}`}>
               {t('card.addToCart')}
             </Button>
@@ -138,6 +145,8 @@ function Recommendations({ exclude }: { exclude: Set<string> }) {
 
 /** Cart: one package per seller with fulfilment info, stock-capped steppers, save for later, subtotal. */
 export function CartView() {
+  const fmt = useFormatters();
+  const t = useT();
   const { data: cart, isPending, isError, refetch } = useCart();
   const m = useCartMutation();
   const [gift, setGift] = useState(false);
@@ -197,7 +206,7 @@ export function CartView() {
                 <Package key={p.packageId} pkg={p} n={i + 1} total={cart.packages.length} />
               ))}
               <p className={styles.subtotalRow}>
-                {subtotal} <strong>{formatMoney(cart.subtotalMinor, cart.currency)}</strong>
+                {subtotal} <strong>{fmt.money(cart.subtotalMinor, cart.currency)}</strong>
               </p>
             </>
           )}
@@ -214,7 +223,7 @@ export function CartView() {
                   <Link href={productHref(s.atin)} className={styles.savedName}>
                     {s.title}
                   </Link>
-                  <strong>{formatMoney(s.priceMinor)}</strong>
+                  <strong>{fmt.money(s.priceMinor)}</strong>
                   <Button variant="neutral" size="sm" disabled={!s.available} onClick={() => m.mutate({ kind: 'moveToCart', savedId: s.savedId, title: s.title })}>
                     {s.available ? t('cart.moveToCart') : t('card.unavailable')}
                   </Button>
@@ -227,10 +236,10 @@ export function CartView() {
           </section>
         )}
       </div>
-      <aside className={styles.aside} aria-label="Order summary">
+      <aside className={styles.aside} aria-label={t('co.orderSummary')}>
         <div className={styles.summary}>
           <span style={{ fontSize: 'var(--at-text-lg)' }}>
-            {subtotal} <strong data-testid="cart-subtotal">{formatMoney(cart.subtotalMinor, cart.currency)}</strong>
+            {subtotal} <strong data-testid="cart-subtotal">{fmt.money(cart.subtotalMinor, cart.currency)}</strong>
           </span>
           <label className={styles.gift}>
             <input type="checkbox" checked={gift} onChange={(e) => setGift(e.target.checked)} />
