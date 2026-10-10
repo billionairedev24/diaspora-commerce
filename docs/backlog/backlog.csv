@@ -814,3 +814,6 @@
 - Per-location history (orders per run, growth of subscribers)","E34","","Medium","5","delivery-runs analytics","delivery-runs","To Do"
 "S266","Story","Seed service-client relationship tuples","authz-sync writes client:<id> service platform:afrotransact tuples for first-party service clients (orders, tax-returns, retail, offers, etc.) so FGA enforce does not block service-to-service calls; then switch dev to enforce.","- Service clients have platform service tuples on startup
 - Dev runs with FGA enforce and no service call returns auth.relationship-denied","E02","","High","2","authz openfga","identity","To Do"
+"S267","Story","Spike: how pre-order delivery runs work end to end","Decision document with flows per actor, sequence and state diagrams, payment (authorise vs saved card + charge at cutoff), WhatsApp community and Business API options and costs, preorder inventory, batched routing, Bastrop economics with a break-even calculator, data model, risks, open questions and a phased rollout.","- Report in docs/spikes/preorder-delivery-runs.md with diagrams and cited sources
+- Economics calculator in tools/spikes with a Bastrop example
+- Product owner decisions recorded before S261-S264 are finalised","E34","","Highest","5","delivery-runs spike","delivery-runs","In Progress"
