@@ -3,6 +3,7 @@ package com.afrotransact.payments.adapter.in.web;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.DeliveredRequest;
@@ -21,6 +22,8 @@ import com.afrotransact.payments.application.PayoutService;
 import com.afrotransact.payments.application.ProviderFeeService;
 import com.afrotransact.payments.application.SellerStatementService;
 import com.afrotransact.payments.application.SettlementService;
+import com.afrotransact.payments.domain.JournalType;
+import com.afrotransact.payments.domain.LabelChargeStatus;
 import com.afrotransact.payments.domain.PayoutStatus;
 import com.afrotransact.payments.domain.SettlementKind;
 import io.swagger.v3.oas.annotations.Operation;
@@ -118,25 +121,31 @@ class SettlementPayoutController {
                     + "carrier-gateway is debited from the payable at the carrier's cost plus handling (CHARGED) and "
                     + "credited back once if voided (CREDITED). AfroTransact Retail and FBA / AfroTransact Delivery "
                     + "labels are never charged. Outstanding charges reduce availableMinor until a transfer recovers "
-                    + "them.")
+                    + "them. Filters: status (CHARGED | CREDITED), purchased in [from, to), limit (≤ 200).")
     @GetMapping("/v1/payouts/label-charges")
-    List<LabelChargeResponse> labelCharges(@RequestParam(required = false) String orgId) {
-        return labelCharges.ofOrg(orgId).stream().map(LabelChargeResponse::of).toList();
+    List<LabelChargeResponse> labelCharges(@RequestParam(required = false) String orgId,
+                                           @RequestParam(required = false) LabelChargeStatus status,
+                                           @RequestParam(required = false) Instant from,
+                                           @RequestParam(required = false) Instant to,
+                                           @RequestParam(defaultValue = "200") int limit) {
+        return labelCharges.ofOrg(orgId, status, from, to, limit).stream().map(LabelChargeResponse::of).toList();
     }
 
     @Operation(summary = "Seller statement: movements of the organisation's payable, newest first",
             description = "Sales (captures), refunds, transfers, chargebacks and shipping labels as their own lines "
                     + "(LABEL_CHARGE / LABEL_CREDIT with labelId, shipmentId and trackingNumber). Amounts are signed: "
                     + "credit to the seller positive. Default period: the last 90 days. Org members see their own; "
-                    + "staff pass orgId.")
+                    + "staff pass orgId. kind (repeatable) narrows the lines, e.g. kind=LABEL_CHARGE&kind=LABEL_CREDIT "
+                    + "for the label charges of the period.")
     @GetMapping("/v1/payouts/statement")
     List<StatementLineResponse> statement(@RequestParam(required = false) String orgId,
                                           @RequestParam(required = false) String currency,
                                           @RequestParam(required = false) Instant from,
                                           @RequestParam(required = false) Instant to,
-                                          @RequestParam(defaultValue = "200") int limit) {
-        return statements.statement(orgId, currency, from, to, limit).stream().map(StatementLineResponse::of)
-                .toList();
+                                          @RequestParam(defaultValue = "200") int limit,
+                                          @RequestParam(required = false) Set<JournalType> kind) {
+        return statements.statement(orgId, currency, from, to, limit, kind).stream()
+                .map(StatementLineResponse::of).toList();
     }
 
     @Operation(summary = "Request a payout (owner / finance roles, payouts:request)",

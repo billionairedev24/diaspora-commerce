@@ -129,6 +129,18 @@ class IdentityFlowIT {
                 "inventory:receive");
         assertThat(retail.status()).as(retail.body()).isEqualTo(200);
         assertThat(strings(retail.accessClaims().get("perms"))).containsExactly("inventory:receive");
+        assertThat(new BrowserSession(base()).clientCredentials("retail-service", "local-retail-service-secret",
+                "inventory:adjust").status()).as("retail-service no longer holds inventory:adjust").isEqualTo(400);
+
+        Tokens inventory = new BrowserSession(base()).clientCredentials("inventory-service",
+                "local-inventory-service-secret", "catalog:read catalog:write shipping:label");
+        assertThat(inventory.status()).as(inventory.body()).isEqualTo(200);
+        assertThat(inventory.accessClaims().get("pt").asString()).isEqualTo("SERVICE");
+        assertThat(strings(inventory.accessClaims().get("perms")))
+                .containsExactlyInAnyOrder("catalog:read", "catalog:write", "shipping:label");
+        Tokens orders = new BrowserSession(base()).clientCredentials("orders-service", "local-orders-service-secret",
+                "offers:read");
+        assertThat(orders.status()).as(orders.body()).isEqualTo(200);
     }
 
     @Test
@@ -322,6 +334,54 @@ class IdentityFlowIT {
                 + "('identity.role.granted','identity.role.revoked','identity.permission.granted','identity.user.disabled')")
                 .param("id", userId).query(Long.class).single();
         assertThat(events).isEqualTo(4);
+    }
+
+    @Test
+    void staffRolesScopedToMarketsPublishTheMarketOnRoleEvents() {
+        BrowserSession user = new BrowserSession(base());
+        String userId = registerAndVerify(user, "ama." + UUID.randomUUID() + "@example.com", "shop");
+        String admin = adminToken();
+        String role = "/v1/admin/users/" + userId + "/roles/platform.customer_support";
+
+        HttpResponse<String> gb = user.api("PUT", role + "?market=uk&reason=GB%20desk", admin, null);
+        assertThat(gb.statusCode()).as(gb.body()).isEqualTo(200);
+        HttpResponse<String> us = user.api("PUT", role + "?market=US", admin, null);
+        assertThat(us.statusCode()).as(us.body()).isEqualTo(200);
+        JsonNode view = BrowserSession.json(us.body());
+        assertThat(strings(view.get("roleMarkets").get("platform.customer_support"))).containsExactly("GB", "US");
+        assertThat(strings(view.get("roles"))).contains("platform.customer_support");
+        assertThat(roleEventMarkets(userId, "identity.role.granted")).containsExactly("GB", "US");
+
+        // A role is either platform-wide or market-scoped; Super Admin and account roles never are.
+        assertThat(problemCode(user.api("PUT", role, admin, null))).isEqualTo("identity.role-market-scoped");
+        assertThat(problemCode(user.api("PUT", "/v1/admin/users/" + userId + "/roles/platform.super_admin?market=GB",
+                admin, null))).isEqualTo("identity.role-not-market-scoped");
+        assertThat(problemCode(user.api("PUT", role + "?market=G1", admin, null))).isEqualTo("identity.invalid-market");
+
+        // Removing one market keeps the role for the other; removing the last removes the role.
+        assertThat(user.api("DELETE", role + "?market=GB", admin, null).statusCode()).isEqualTo(200);
+        HttpResponse<String> last = user.api("DELETE", role + "?market=US", admin, null);
+        assertThat(strings(BrowserSession.json(last.body()).get("roles"))).doesNotContain("platform.customer_support");
+        assertThat(roleEventMarkets(userId, "identity.role.revoked")).containsExactly("GB", "US");
+
+        // Platform-wide again: no market on the event, and the role can't then be scoped without removing it first.
+        assertThat(user.api("PUT", role, admin, null).statusCode()).isEqualTo(200);
+        assertThat(problemCode(user.api("PUT", role + "?market=GB", admin, null)))
+                .isEqualTo("identity.role-platform-wide");
+        assertThat(jdbc.sql("select count(*) from platform_outbox where aggregate_id = :id and type = "
+                + "'identity.role.granted' and payload->>'market' is null").param("id", userId).query(Long.class)
+                .single()).isEqualTo(1);
+    }
+
+    private List<String> roleEventMarkets(String userId, String type) {
+        return jdbc.sql("select payload->>'market' from platform_outbox where aggregate_id = :id and type = :t "
+                        + "and payload->>'market' is not null order by occurred_at, payload->>'market'")
+                .param("id", userId).param("t", type).query(String.class).list();
+    }
+
+    private static String problemCode(HttpResponse<String> response) {
+        assertThat(response.statusCode()).as(response.body()).isGreaterThanOrEqualTo(400);
+        return BrowserSession.json(response.body()).get("code").asString();
     }
 
     @Test

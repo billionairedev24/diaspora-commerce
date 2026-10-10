@@ -128,7 +128,8 @@ class SellerOrgSyncServiceImpl implements SellerOrgSyncService {
         if (orgs.setMember(org.id(), userId, roleKey)) {
             changeLog.append(ACTOR, "org.member.set", userId, roleKey, org.id(), org.name());
             events.publish(IdentityEvents.ROLE_GRANTED, IdentityEvents.AGGREGATE, userId.toString(),
-                    new RoleChanged(userId.toString(), roleKey, org.id(), ACTOR, "seller.org.approved", now));
+                    new RoleChanged(userId.toString(), roleKey, org.id(), ACTOR, "seller.org.approved", now,
+                            org.market()));
         }
         if (user.get().activeOrgId() == null) {
             users.update(user.get().withActiveOrg(org.id(), now));

@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.afrotransact.payments.application.PaymentsSettings;
+import com.afrotransact.payments.application.SupplierPaymentSettings;
 import com.afrotransact.payments.domain.DefaultPaymentSplitter;
 import com.afrotransact.payments.domain.DefaultPayoutPolicy;
 import com.afrotransact.payments.domain.DefaultReconciler;
@@ -14,6 +15,7 @@ import com.afrotransact.payments.domain.PayoutPolicy;
 import com.afrotransact.payments.domain.Reconciler;
 import com.afrotransact.payments.domain.RefundAllocator;
 import com.stripe.StripeClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -49,6 +51,13 @@ class PaymentsConfiguration {
     PaymentsSettings paymentsSettings(PaymentsProperties props) {
         return new PaymentsSettings(props.retailOrgId(), props.settlementHold(), ZoneId.of(props.zone()),
                 props.currency(), props.webhooks().maxAttempts(), props.jobs().settlementRecheck());
+    }
+
+    /** Net terms for AfroTransact Retail supplier payments (S226), {@code SUPPLIER_PAYMENT_TERMS_DAYS} (30). */
+    @Bean
+    SupplierPaymentSettings supplierPaymentSettings(
+            @Value("${at.payments.supplier-payments.terms-days:30}") int termsDays) {
+        return new SupplierPaymentSettings(termsDays);
     }
 
     @Bean

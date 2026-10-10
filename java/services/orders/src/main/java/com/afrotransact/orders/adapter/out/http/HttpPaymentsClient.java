@@ -39,6 +39,9 @@ class HttpPaymentsClient implements PaymentsClient {
         body.put("currency", r.currency());
         body.put("placedAt", r.placedAt() == null ? null : r.placedAt().toString());
         body.put("metadata", r.metadata());
+        if (r.shopperId() != null && !r.shopperId().isBlank()) {
+            body.put("shopperId", r.shopperId());
+        }
         body.put("lines", r.lines().stream().map(l -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("lineId", l.lineId());
@@ -176,7 +179,8 @@ class HttpPaymentsClient implements PaymentsClient {
             recipients.add(new Recipient(r.path("recipient").asString(), r.path("kind").asString(null),
                     r.path("itemsMinor").asLong(), r.path("shippingMinor").asLong(), r.path("taxMinor").asLong(),
                     r.path("commissionMinor").asLong(), r.path("fbaFeesMinor").asLong(),
-                    r.path("stripeFeeMinor").asLong(), r.path("netMinor").asLong()));
+                    r.path("deliveryFeesMinor").asLong(), r.path("stripeFeeMinor").asLong(),
+                    r.path("netMinor").asLong()));
         }
         return new Split(orderId, s.path("chargeMinor").asLong(), s.path("stripeFeeMinor").asLong(),
                 s.path("taxCollectedMinor").asLong(), s.path("currency").asString(null), recipients);

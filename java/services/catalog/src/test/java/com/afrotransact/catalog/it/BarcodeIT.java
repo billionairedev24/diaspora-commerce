@@ -328,6 +328,17 @@ class BarcodeIT {
                 .isInstanceOf(ForbiddenActionException.class);
         assertThatThrownBy(() -> labels.unitLabel(variantAtin, null, LabelFormat.SVG, 0))
                 .isInstanceOf(CatalogRuleViolation.class);
+
+        // The AT-FN code is returned as data; inventory-service reads it with catalog:read (S226 / FBA inbound).
+        assertThat(labels.unitLabel(variantAtin, null, LabelFormat.SVG, 1).unitCode()).isEqualTo(sellerCode);
+        CURRENT.set(new Actor("inventory-service", PrincipalType.SERVICE, Optional.empty(), Set.of(),
+                Set.of("catalog:read")));
+        assertThat(labels.unitLabel(variantAtin, "org_seller_b", LabelFormat.SVG, 1).unitCode()).isEqualTo(sellerCode);
+        assertThat(labels.unitLabel(variantAtin, null, LabelFormat.ZPL, 1).unitCode())
+                .as("Retail's manufacturer barcode has no AT-FN code").isNull();
+        CURRENT.set(seller("org_seller_b", "catalog:read"));
+        assertThatThrownBy(() -> labels.unitLabel(variantAtin, null, LabelFormat.SVG, 1))
+                .isInstanceOf(ForbiddenActionException.class);
     }
 
     // -------------------------------------------------------------------------------------------------- helpers

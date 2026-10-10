@@ -48,15 +48,21 @@ final class AdminDtos {
     record UserAccessResponse(UUID id, String name, String email, boolean enabled, boolean emailVerified,
                               String principalType, List<String> roles, List<String> directGrants,
                               List<MeDtos.OrgResponse> orgs, List<String> effectivePermissions,
-                              boolean driverAppAccess) {
+                              boolean driverAppAccess,
+                              @Schema(description = "S248: markets a staff role is scoped to, by role key; roles not "
+                                      + "listed are platform-wide", example = "{\"platform.customer_support\": [\"GB\"]}")
+                              Map<String, List<String>> roleMarkets) {
 
         static UserAccessResponse of(UserAccessView v) {
             UserAccount u = v.user();
+            Map<String, List<String>> markets = new TreeMap<>();
+            v.roleMarkets().forEach((role, m) -> markets.put(role, List.copyOf(new TreeSet<>(m))));
             return new UserAccessResponse(u.id(), u.displayName(), u.email(), u.enabled(), u.emailVerified(),
                     v.effective().principalType().name(), List.copyOf(new TreeSet<>(v.roles())),
                     List.copyOf(new TreeSet<>(v.directGrants())),
                     v.memberships().stream().map(MeDtos.OrgResponse::of).toList(),
-                    List.copyOf(new TreeSet<>(v.effective().permissions())), v.effective().can("delivery:operate"));
+                    List.copyOf(new TreeSet<>(v.effective().permissions())), v.effective().can("delivery:operate"),
+                    markets);
         }
     }
 

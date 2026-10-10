@@ -22,7 +22,7 @@ channels:
     address: at.payout.events
     description: >-
       Payout requests on manual Connect payout schedules and provider fees debited from connected accounts
-      (key = organisation id).
+      (key = organisation id), and AfroTransact Retail supplier payments (key = supplier id, S226).
     messages:
       paymentsPayoutRequested: {$ref: '#/components/messages/paymentsPayoutRequested'}
       paymentsPayoutApproved: {$ref: '#/components/messages/paymentsPayoutApproved'}
@@ -30,6 +30,9 @@ channels:
       paymentsPayoutFailed: {$ref: '#/components/messages/paymentsPayoutFailed'}
       paymentsProviderFeeRecorded: {$ref: '#/components/messages/paymentsProviderFeeRecorded'}
       paymentsProviderFeeCollected: {$ref: '#/components/messages/paymentsProviderFeeCollected'}
+      paymentsSupplierPaymentScheduled: {$ref: '#/components/messages/paymentsSupplierPaymentScheduled'}
+      paymentsSupplierPaymentPaid: {$ref: '#/components/messages/paymentsSupplierPaymentPaid'}
+      paymentsSupplierPaymentUpdated: {$ref: '#/components/messages/paymentsSupplierPaymentUpdated'}
 operations:
   consumePaymentsSellerComplianceEvents:
     action: receive
@@ -61,6 +64,17 @@ operations:
       AfroTransact Retail (RETAIL_ORG_ID) and FBA / AFROTRANSACT_DELIVERY labels are never charged, whatever billTo says.
       Outstanding charges reserve the payout balance and are recovered from the organisation's next Connect transfer.
       Tracking and pickup events are ignored.
+  consumePaymentsRetailEvents:
+    action: receive
+    channel: {$ref: '#/channels/retailEvents'}
+    summary: >-
+      payments-service (consumer group payments-service, listener payments-retail-events, inbox consumer
+      payments.retail-events) handles retail.payment.released (S226): AfroTransact Retail (merchant of record) owes the
+      supplier the released invoices, so payments books Dr 1400 Retail purchases released / Cr 2500:<supplierId> once
+      per purchase order (inbox on event-id plus a unique PO id) and schedules the supplier payment for dueOn (when
+      sent) or the release date plus SUPPLIER_PAYMENT_TERMS_DAYS (30). Finance pays it from the operating bank account
+      (POST /v1/supplier-payments/{id}/paid: Dr 2500:<supplierId> / Cr 1050). Supplier money never touches a seller
+      payable, a Connect transfer or Retail's payout balance. Every other retail event is ignored.
   publishPaymentsPaymentEvents:
     action: send
     channel: {$ref: '#/channels/paymentsPaymentEvents'}
@@ -73,7 +87,9 @@ operations:
   publishPaymentsPayoutEvents:
     action: send
     channel: {$ref: '#/channels/paymentsPayoutEvents'}
-    summary: Seller / provider payouts and provider fees for the portals, notifications and Finance.
+    summary: >-
+      Seller / provider payouts and provider fees for the portals, notifications and Finance; AfroTransact Retail
+      supplier payments (scheduled, paid, held / released) for retail-service and Finance.
 components:
   messages:
     paymentsIntentCreated:
@@ -161,6 +177,21 @@ components:
       title: 'Provider fee debited from the connected account (Stripe account debit)'
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/PaymentsProviderFee'}
+    paymentsSupplierPaymentScheduled:
+      name: payments.supplier_payment.scheduled
+      title: 'AfroTransact Retail supplier payment booked (Dr 1400 / Cr 2500:supplier) and scheduled for dueOn'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsSupplierPayment'}
+    paymentsSupplierPaymentPaid:
+      name: payments.supplier_payment.paid
+      title: 'Finance paid the supplier from the operating bank account (Dr 2500:supplier / Cr 1050)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsSupplierPayment'}
+    paymentsSupplierPaymentUpdated:
+      name: payments.supplier_payment.updated
+      title: 'Supplier payment put on hold (ON_HOLD) or released back to the schedule (SCHEDULED)'
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/PaymentsSupplierPayment'}
   schemas:
     PaymentsIntentEvent:
       type: object
@@ -332,3 +363,19 @@ components:
         status: {type: string, enum: [OUTSTANDING, COLLECTED]}
         stripeDebitId: {type: [string, 'null'], description: 'Stripe account debit (py_…) once collected'}
         lastError: {type: [string, 'null'], description: Why the last collection attempt failed}
+    PaymentsSupplierPayment:
+      type: object
+      required: [supplierPaymentId, poId, supplierId, amountMinor, currency, status, dueOn]
+      properties:
+        supplierPaymentId: {type: string, format: uuid}
+        poId: {type: string, format: uuid}
+        poNumber: {type: [string, 'null']}
+        supplierId: {type: string, format: uuid}
+        supplierCode: {type: [string, 'null']}
+        amountMinor: {type: integer, format: int64}
+        currency: {type: string, description: Supplier currency}
+        status: {type: string, enum: [SCHEDULED, ON_HOLD, PAID]}
+        dueOn: {type: string, format: date}
+        paymentReference: {type: [string, 'null'], description: Bank transfer / ACH reference once paid}
+        holdReason: {type: [string, 'null']}
+        paidAt: {type: [string, 'null'], format: date-time}

@@ -208,6 +208,15 @@ components:
         actorId: {type: string, description: User id of the administrator, the user themself, or a client id}
         reason: {type: [string, 'null']}
         at: {type: string, format: date-time}
+        market:
+          type: [string, 'null']
+          pattern: '^[A-Z]{2}$'
+          examples: [GB, US]
+          description: >-
+            S248. Platform (staff) role: the market the grant is scoped to (ISO 3166-1 alpha-2; null = platform-wide),
+            so authz-sync writes market:<code>#<relation> instead of platform:afrotransact#<relation>. A staff role
+            scoped to several markets publishes one event per market. Organisation role: the organisation's market
+            (informational).
     IdentityPermissionChanged:
       type: object
       required: [permissionKey, actorId, at]

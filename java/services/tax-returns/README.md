@@ -174,41 +174,27 @@ Consumed (group `tax-returns-service`, inbox-deduplicated; listeners tested by c
 Jobs (`ReturnsJobs`, every 60 s, idempotent): seller-SLA auto-approval, label / handover-code retries, refunds that
 could not be prepared or issued, inventory postings.
 
-## What orders-service should change
+## Integration status (S235)
 
-1. **Tax quote at checkout** — replace `StateRateTaxCalculator` (per-state table in `at.orders.tax`) with an HTTP
-   adapter of its `TaxCalculator` port calling `POST /v1/tax/quotes` with the `orders-service` token (add scope
-   `tax:quote`): `currency`, `shipTo {country, state, postalCode, city}` and one line per order line
-   `{lineId, atin, sellerOrgId, productType, quantity, unitPriceMinor, discountMinor, shippingMinor}`. Store each
-   line's `taxMinor` and `jurisdiction` / `localJurisdiction` (today one `Rate` per order and `taxOf` per line; the
-   port should become per line because the category changes the rate). Fall back to the current table when the
-   service is unavailable, as for promises.
-2. **Richer `orders.order.placed` lines** — add `category`/`productType`, `perishable`, `discountMinor`,
-   `taxJurisdiction` and the shipment's `shippingMinor`; and the ship-to street so return labels need no address from
-   the app. Until then this service derives shipping (total − items − tax) for estimates and asks catalog for
-   perishables.
-3. **Link returns** — orders has no returns endpoints (by design): order views can show a "Return or replace items"
-   action calling `GET /v1/returns/eligibility?orderId=` and list `GET /v1/returns?orderId=`; consume
-   `returns.rma.refunded` / `returns.refund.issued` for the order timeline ("Refunded Oct 6"). The shipment status
-   `returned` stays for return-to-sender; post-delivery returns live here.
+| Piece | State |
+|---|---|
+| Checkout tax | **Done.** orders-service calls `POST /v1/tax/quotes` in the checkout's prepare step (`orders-service` token, `tax:quote`) and stores `taxMinor`, `jurisdiction`, `localJurisdiction` and `shippingTaxMinor` per line; `dev` falls back to orders' interim table when this service is down, `uat` / `prod` retry instead |
+| `orders.order.placed` lines | **Done.** Product type, perishable, discount, tax jurisdictions, shipping tax, the shipment's shipping and the ship-to street (V3 columns); `GET /v1/lookup/orders/{id}` (`orders:lookup`, `OrderLookup` port) backfills orders placed before this service consumed them |
+| Eligibility from order data | **Done.** Eligibility and labels use the order snapshot (or the lookup) — the app sends no address; `returnFrom` only overrides it |
+| Refunded amounts per line | **Done.** payments `GET /v1/payments?orderId=` lines carry `refundedItemsMinor`, `refundedShippingMinor`, `refundedTaxMinor` and `refundableMinor`; refunds made elsewhere (cancellations) are subtracted |
+| Return pickups | **This side done.** DRIVER_PICKUP returns are scheduled with fulfilment-service `POST /v1/return-pickups` (`ReturnPickupScheduler`, client scope `delivery:returns`, retried by the job, cancelled with the RMA); fulfilment's endpoint and the driver app belong to the fulfilment / mobile teams |
+| Order timeline | orders may consume `returns.rma.refunded` / `returns.refund.issued` ("Refunded Oct 6") |
 
-## Upstream gaps
+Remaining outside this service:
 
-- **orders**: `orders.order.placed` lacks product type / perishable / discount / jurisdiction per line, shipment
-  shipping and street address (see above); deliveries before this service started need a backfill.
-- **payments**: `PaymentResponse` lines don't expose what was already refunded per line, so refunds made elsewhere
-  (cancellations) are only known through `payments.refunded`; payments must keep rejecting over-refunds. The tax part
-  of shipping isn't separated on lines.
-- **inventory**: `POST /v1/returns` needs `inventory:adjust` (a staff key) for a service client and takes no receiving
-  node — returns go back to the original lot's node, not necessarily the return centre.
-- **carrier-gateway**: no return / label-less QR drop-off ("show this code at any UPS Store"), no return rate choice;
-  `shipping:label` / `shipping:rate` are not in identity's permission catalogue.
-- **fulfilment / driver app**: no API to schedule a return pickup stop; it should consume `returns.rma.label_issued`
-  with `method=DRIVER_PICKUP` and call `POST /v1/returns/{id}/pickup`.
+- **inventory**: `POST /v1/returns` with a receiving node / service scope (inventory team).
+- **carrier-gateway**: label-less QR drop-off and return rate choice; `shipping:label` / `shipping:rate` keys.
+- **storefront / mobile**: return screens (pick items, reason, method; return number, drop-off QR, refund amount,
+  cancel before drop-off; food shows "report a problem").
 - **media**: evidence asset ids are stored as given (no ownership check).
 - **catalog**: product types carry no tax category; mapped here by configuration.
-- **contracts**: `contracts/asyncapi/events.yaml` must be regenerated with `tools/contracts/merge_asyncapi.py` (the
-  fragment merges cleanly).
+- **Finance**: confirm the seeded rates (`V2__seed_tax_rates.sql`) before production (S235 acceptance criterion).
+- **contracts**: `contracts/asyncapi/events.yaml` is regenerated from the fragments by the platform tooling.
 
 ## Configuration
 

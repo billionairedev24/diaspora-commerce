@@ -134,6 +134,14 @@ class LabelChargesIT extends PaymentsIntegrationTest {
         assertThat(statement.get(0).path("trackingNumber").asString()).isEqualTo(tracking);
         assertThat(statement.get(0).path("shipmentId").asString()).isEqualTo("shp-" + tracking);
         assertThat(statement.get(0).path("labelId").asString()).isEqualTo(labelId);
+        // Filters for the Seller Center label-charge and statement tabs (S256).
+        assertThat(ok(send("GET", "/v1/payouts/label-charges?status=CREDITED", null, null)).size()).isZero();
+        assertThat(ok(send("GET", "/v1/payouts/label-charges?status=CHARGED&from=2000-01-01T00:00:00Z", null, null))
+                .size()).isEqualTo(1);
+        assertThat(ok(send("GET", "/v1/payouts/label-charges?to=2000-01-01T00:00:00Z", null, null)).size()).isZero();
+        assertThat(ok(send("GET", "/v1/payouts/statement?kind=CAPTURE", null, null)).size()).isZero();
+        assertThat(ok(send("GET", "/v1/payouts/statement?kind=LABEL_CHARGE&kind=LABEL_CREDIT", null, null)).size())
+                .isEqualTo(1);
 
         TestSupport.as(TestSupport.seller(org("org_other"), "seller.owner"));
         assertThat(ok(send("GET", "/v1/payouts/label-charges?orgId=" + org, null, null)).size())

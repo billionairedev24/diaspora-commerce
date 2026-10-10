@@ -312,7 +312,9 @@ paths:
       summary: Unit label of a product or variant ATIN
       description: 'Platform (AfroTransact Retail) stock with a vendor GTIN keeps the manufacturer barcode; every other unit
         gets the stock owner''s AT-FN code (ATF + 7, Code 128), issued once per owner and variant. Sellers print for their
-        own organisation; staff and service clients may pass orgId (default: the product''s owner). Needs catalog:write.'
+        own organisation; staff and service clients may pass orgId (default: the product''s owner). Needs catalog:write; service
+        clients (inventory-service) and staff may use catalog:read. The AT-FN code is returned as data in the X-Unit-Label-Code
+        header (absent for manufacturer barcodes).'
       operationId: unitLabel
       parameters:
       - name: atin
@@ -347,6 +349,13 @@ paths:
       responses:
         '200':
           description: The unit label
+          headers:
+            X-Unit-Label-Code:
+              description: AT-FN code of the unit label (absent for a manufacturer barcode)
+              style: simple
+              schema:
+                type: string
+                pattern: ^ATF[0-9A-Z]{7}$
           content:
             image/svg+xml:
               schema:
@@ -741,6 +750,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/PublicVariant'
       security: []
+  /v1/variants/{atin}:
+    get:
+      tags:
+      - Products
+      summary: A variant in any status with its product, by variant ATIN
+      description: Service clients and staff with catalog:read (retail-service links draft AfroTransact Retail products before
+        they go live); members of the owning organisation with catalog:write. Unlike GET /v1/public/variants/{atin}, drafts,
+        products in review, paused, rejected, taken-down and hidden products are returned with their status. 404 catalog.variant-not-found.
+      operationId: variantAnyStatus
+      parameters:
+      - name: atin
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/VariantLookup'
 components:
   schemas:
     ReportListingRequest:
@@ -1221,6 +1252,13 @@ components:
       required:
       - parentCategoryId
       - productType
+    VariantLookup:
+      type: object
+      properties:
+        product:
+          $ref: '#/components/schemas/Product'
+        variant:
+          $ref: '#/components/schemas/Variant'
     PublicProduct:
       type: object
       properties:

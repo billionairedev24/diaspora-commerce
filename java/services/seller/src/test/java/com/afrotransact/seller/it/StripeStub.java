@@ -60,6 +60,12 @@ final class StripeStub {
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/billing/meter_events"))
                 .willReturn(json("{\"object\":\"billing.meter_event\",\"event_name\":\"x\","
                         + "\"identifier\":\"x\",\"payload\":{},\"timestamp\":0,\"livemode\":false}")));
+        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/setup_intents"))
+                .willReturn(json("{\"id\":\"seti_" + RANDOM + "\",\"object\":\"setup_intent\",\"client_secret\":"
+                        + "\"seti_" + RANDOM + "_secret_test\",\"status\":\"requires_payment_method\"}")));
+        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/invoices/create_preview"))
+                .willReturn(json("{\"object\":\"invoice\",\"amount_due\":1734,\"total\":1734,"
+                        + "\"currency\":\"usd\"}")));
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/subscription_items"))
                 .willReturn(json("{\"id\":\"si_" + RANDOM + "\",\"object\":\"subscription_item\"}")));
         wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/assets/[A-Za-z0-9-]+"))

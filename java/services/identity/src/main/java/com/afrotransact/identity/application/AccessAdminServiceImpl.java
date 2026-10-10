@@ -5,8 +5,10 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.identity.application.IdentityEventPayloads.PermissionChanged;
@@ -26,6 +28,7 @@ import com.afrotransact.identity.domain.PhoneCheck;
 import com.afrotransact.identity.domain.PhoneNumberPolicy;
 import com.afrotransact.identity.domain.Portal;
 import com.afrotransact.identity.domain.Role;
+import com.afrotransact.identity.domain.RoleKeys;
 import com.afrotransact.identity.domain.SignUpPolicy;
 import com.afrotransact.identity.domain.UserAccount;
 import com.afrotransact.identity.port.AccessChangeLog;
@@ -200,6 +203,12 @@ class AccessAdminServiceImpl implements AccessAdminService {
     @Override
     @Transactional
     public UserAccessView setRole(UUID userId, String roleKey, boolean granted, String reason) {
+        return setRole(userId, roleKey, granted, reason, null);
+    }
+
+    @Override
+    @Transactional
+    public UserAccessView setRole(UUID userId, String roleKey, boolean granted, String reason, String market) {
         Actor actor = permissions.require(IdentityPermissions.ACCESS_ADMIN);
         UserAccount user = find(userId);
         Role role = role(roleKey);
@@ -207,12 +216,48 @@ class AccessAdminServiceImpl implements AccessAdminService {
             throw new IdentityRuleViolation("identity.org-role",
                     "Organisation roles are managed through the organisation's team settings");
         }
+        String scoped = market == null || market.isBlank() ? null : marketCode(market);
+        if (scoped != null && (role.portal() != Portal.PLATFORM || RoleKeys.SUPER_ADMIN.equals(roleKey))) {
+            throw new IdentityRuleViolation("identity.role-not-market-scoped", "Only staff roles other than Super "
+                    + "Admin can be scoped to a market", Map.of("market", "Not for " + roleKey));
+        }
+        Set<String> markets = access.roleMarkets(userId).getOrDefault(roleKey, Set.of());
+        boolean holds = access.roleKeys(userId).contains(roleKey);
         if (granted) {
-            grantRoleInternal(actor.subject(), userId, roleKey, reason);
-        } else if (access.revokeRole(userId, roleKey)) {
-            changeLog.append(actor.subject(), "role.revoked", userId, roleKey, roleKey, reason);
+            if (scoped == null) {
+                if (holds && !markets.isEmpty()) {
+                    throw new ConflictException("identity.role-market-scoped", roleKey + " is scoped to "
+                            + String.join(", ", markets) + "; remove those markets before granting it platform-wide");
+                }
+                grantRoleInternal(actor.subject(), userId, roleKey, reason);
+            } else {
+                if (holds && markets.isEmpty()) {
+                    throw new ConflictException("identity.role-platform-wide", roleKey + " is held platform-wide; "
+                            + "remove it before scoping it to " + scoped);
+                }
+                grantMarketRole(actor.subject(), userId, roleKey, scoped, reason);
+            }
+        } else if (scoped == null) {
+            if (access.revokeRole(userId, roleKey)) {
+                changeLog.append(actor.subject(), "role.revoked", userId, roleKey, roleKey, reason);
+                Instant now = Instant.now(clock);
+                if (markets.isEmpty()) {
+                    events.publish(IdentityEvents.ROLE_REVOKED, IdentityEvents.AGGREGATE, userId.toString(),
+                            new RoleChanged(userId.toString(), roleKey, null, actor.subject(), reason, now));
+                }
+                for (String m : markets) {
+                    events.publish(IdentityEvents.ROLE_REVOKED, IdentityEvents.AGGREGATE, userId.toString(),
+                            new RoleChanged(userId.toString(), roleKey, null, actor.subject(), reason, now, m));
+                }
+            }
+        } else if (access.removeRoleMarket(userId, roleKey, scoped)) {
+            if (markets.size() <= 1) {
+                access.revokeRole(userId, roleKey);
+            }
+            changeLog.append(actor.subject(), "role.revoked", userId, roleKey, roleKey + "@" + scoped, reason);
             events.publish(IdentityEvents.ROLE_REVOKED, IdentityEvents.AGGREGATE, userId.toString(),
-                    new RoleChanged(userId.toString(), roleKey, null, actor.subject(), reason, Instant.now(clock)));
+                    new RoleChanged(userId.toString(), roleKey, null, actor.subject(), reason, Instant.now(clock),
+                            scoped));
         }
         return view(user);
     }
@@ -298,6 +343,27 @@ class AccessAdminServiceImpl implements AccessAdminService {
         return new PageView<>(items, p, s, -1);
     }
 
+    /** Grants {@code roleKey} for one market (adds the role, scoped, when the user does not hold it yet). */
+    private void grantMarketRole(String actorId, UUID userId, String roleKey, String market, String reason) {
+        access.grantRole(userId, roleKey, actorId);
+        if (access.addRoleMarket(userId, roleKey, market, actorId)) {
+            changeLog.append(actorId, "role.granted", userId, roleKey, roleKey + "@" + market, reason);
+            events.publish(IdentityEvents.ROLE_GRANTED, IdentityEvents.AGGREGATE, userId.toString(),
+                    new RoleChanged(userId.toString(), roleKey, null, actorId, reason, Instant.now(clock), market));
+        }
+    }
+
+    /** Content's market code: ISO 3166-1 alpha-2, upper case, UK → GB. */
+    private static String marketCode(String raw) {
+        String c = raw.trim().toUpperCase(Locale.ROOT);
+        c = "UK".equals(c) ? "GB" : c;
+        if (!c.matches("[A-Z]{2}")) {
+            throw new IdentityRuleViolation("identity.invalid-market", "Use a two-letter market code such as GB or US",
+                    Map.of("market", "Invalid"));
+        }
+        return c;
+    }
+
     private void grantRoleInternal(String actorId, UUID userId, String roleKey, String reason) {
         if (access.grantRole(userId, roleKey, actorId)) {
             changeLog.append(actorId, "role.granted", userId, roleKey, roleKey, reason);
@@ -333,7 +399,7 @@ class AccessAdminServiceImpl implements AccessAdminService {
     private UserAccessView view(UserAccount user) {
         AccessProfile profile = profiles.load(user);
         return new UserAccessView(user, profile.roleKeys(), profile.directGrants(), profile.memberships(),
-                accessPolicy.resolve(profile));
+                accessPolicy.resolve(profile), access.roleMarkets(user.id()));
     }
 
     private static String trim(String s) {

@@ -42,7 +42,7 @@ class ShipmentServiceImpl implements ShipmentService {
     public ShipmentActionResult transition(String shipmentId, String to, String reason, String idempotencyKey) {
         ShipmentStatus target = status(to);
         ShipmentTransitions.Outcome outcome = transitions.apply(new ShipmentTransitions.Request(shipmentId, target,
-                (o, s) -> access.transitionActor(s), reason, TransitionSource.API, idempotencyKey, null, null, null));
+                (o, s) -> access.transitionActor(o, s), reason, TransitionSource.API, idempotencyKey, null, null, null));
         return result(outcome);
     }
 
@@ -86,7 +86,7 @@ class ShipmentServiceImpl implements ShipmentService {
         }
         Order order = lock(shipmentId);
         Shipment shipment = order.shipment(shipmentId);
-        TransitionActor actor = access.transitionActor(shipment);
+        TransitionActor actor = access.transitionActor(order, shipment);
         if (actor.kind() == ActorKind.SELLER && shipment.fulfilmentType().afrotransactFulfilled()) {
             throw new OrdersRuleViolation("orders.not-seller-shipment", "AfroTransact ships this order");
         }

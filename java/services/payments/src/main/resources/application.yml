@@ -82,6 +82,18 @@ at:
       methods.
     version: v1
   security:
+    # S248 fine-grained authorisation (OpenFGA, docs/engineering/authorisation.md). Off unless FGA_ENABLED=true;
+    # enforce=false is shadow mode: relationship denials are logged ("FGA shadow:"), not enforced.
+    fga:
+      enabled: ${FGA_ENABLED:false}
+      enforce: ${FGA_ENFORCE:true}
+      api-url: ${FGA_API_URL:http://localhost:8091}
+      store-id: ${FGA_STORE_ID:}
+      store-name: ${FGA_STORE_NAME:afrotransact}
+      model-id: ${FGA_MODEL_ID:}
+      api-token: ${FGA_API_TOKEN:}
+      timeout: ${FGA_TIMEOUT:500ms}
+      cache-ttl: ${FGA_CACHE_TTL:5s}
     # Stripe calls the webhook without a JWT; the Stripe-Signature header is verified instead.
     public-paths:
       - /v1/webhooks/stripe
@@ -94,6 +106,10 @@ at:
     zone: ${PAYMENTS_ZONE:America/New_York}
     payout:
       minimum-minor: ${PAYOUT_MINIMUM_MINOR:2500}
+    # S226: AfroTransact Retail supplier payments (retail.payment.released) are due this many days after release
+    # unless retail-service sends a due date.
+    supplier-payments:
+      terms-days: ${SUPPLIER_PAYMENT_TERMS_DAYS:30}
     stripe:
       # Keys only from the environment. No default here: every profile must provide them.
       secret-key: ${STRIPE_SECRET_KEY}

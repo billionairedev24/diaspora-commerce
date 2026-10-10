@@ -29,6 +29,7 @@ import com.afrotransact.orders.port.CartClient;
 import com.afrotransact.orders.port.CouponsClient;
 import com.afrotransact.orders.port.HandoverCodeVault;
 import com.afrotransact.orders.port.InventoryClient;
+import com.afrotransact.orders.port.OfferInventory;
 import com.afrotransact.orders.port.MarketEligibility;
 import com.afrotransact.orders.port.OrderCouponRepository;
 import com.afrotransact.orders.port.OrderRepository;
@@ -60,6 +61,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final HandoverPolicy handover;
     private final HandoverCodeVault vault;
     private final InventoryClient inventory;
+    private final OfferInventory offerInventory;
     private final PaymentsClient payments;
     private final CartClient cart;
     private final CouponsClient coupons;
@@ -73,7 +75,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     CheckoutActivitiesImpl(MarketEligibility markets, ProductFactsClient catalog, PromiseClient promises,
                            TaxCalculator tax, CheckoutTax checkoutTax, ShippingPolicy shipping,
                            HandoverPolicy handover, HandoverCodeVault vault, InventoryClient inventory,
-                           PaymentsClient payments, CartClient cart, CouponsClient coupons,
+                           OfferInventory offerInventory, PaymentsClient payments, CartClient cart, CouponsClient coupons,
                            OrderCouponRepository orderCoupons, OrderRepository orderRepository,
                            OrderPlacementService placement, LocalDeliveryQuotes localDelivery,
                            OrdersSettings settings, Clock clock) {
@@ -86,6 +88,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.handover = handover;
         this.vault = vault;
         this.inventory = inventory;
+        this.offerInventory = offerInventory;
         this.payments = payments;
         this.cart = cart;
         this.coupons = coupons;
@@ -206,6 +209,15 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
 
     // ------------------------------------------------------------------ reserve + split
 
+    /**
+     * What inventory holds the line's stock under: the offer's {@code inventorySku} (FBA stock is received under the
+     * seller's AT-FN code by default, Retail's under its own SKU), else the variant ATIN (catalog-only lines and
+     * offers without an inventory SKU).
+     */
+    private String reservationSku(CheckoutPlan.Line l) {
+        return offerInventory.inventorySku(l.offerId()).orElse(l.variantAtin());
+    }
+
     @Override
     public OrderDraft reserve(CheckoutInput in, CheckoutPlan plan) {
         return guard(() -> draft(in, plan));
@@ -215,7 +227,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         List<InventoryClient.Item> tracked = new ArrayList<>();
         for (CheckoutPlan.Package p : plan.packages()) {
             if (p.fulfilmentType().inventoryTracked()) {
-                p.lines().forEach(l -> tracked.add(new InventoryClient.Item(l.variantAtin(), l.quantity(),
+                p.lines().forEach(l -> tracked.add(new InventoryClient.Item(reservationSku(l), l.quantity(),
                         l.lineId())));
             }
         }
@@ -384,7 +396,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             PaymentsClient.Intent intent = payments.createIntent(new PaymentsClient.NewIntent(order.id(),
                     order.totals().grandTotalMinor(), order.currency(), Instant.now(clock),
                     Map.of("order_number", order.number(), "customer_id", order.customerId()),
-                    PaymentLines.of(order)));
+                    PaymentLines.of(order), order.customerId()));
             return new PaymentRef(intent.paymentId(), intent.clientSecret(), intent.status());
         });
     }

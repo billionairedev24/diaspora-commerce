@@ -1,6 +1,7 @@
 package com.afrotransact.payments.application;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,6 +14,7 @@ import com.afrotransact.payments.domain.PayoutRequest;
 import com.afrotransact.payments.domain.ProviderFee;
 import com.afrotransact.payments.domain.Refund;
 import com.afrotransact.payments.domain.SettlementTransfer;
+import com.afrotransact.payments.domain.SupplierPayment;
 
 /** JSON payloads of payments events (schemas in contracts/asyncapi/fragments/payments.yaml). */
 public final class PaymentsEventPayloads {
@@ -70,6 +72,19 @@ public final class PaymentsEventPayloads {
         static ProviderFeePayload of(ProviderFee f) {
             return new ProviderFeePayload(f.id(), f.orgId(), f.bookingId(), f.bookingReference(), f.amount().minor(),
                     f.amount().currency(), f.reason(), f.status().name(), f.stripeDebitId(), f.lastError());
+        }
+    }
+
+    /** payments.supplier_payment.scheduled / paid / updated (S226). */
+    public record SupplierPaymentPayload(UUID supplierPaymentId, UUID poId, String poNumber, UUID supplierId,
+                                         String supplierCode, long amountMinor, String currency, String status,
+                                         LocalDate dueOn, String paymentReference, String holdReason,
+                                         Instant paidAt) {
+
+        static SupplierPaymentPayload of(SupplierPayment p) {
+            return new SupplierPaymentPayload(p.id(), p.poId(), p.poNumber(), p.supplierId(), p.supplierCode(),
+                    p.amount().minor(), p.amount().currency(), p.status().name(), p.dueOn(), p.paymentReference(),
+                    p.holdReason(), p.paidAt());
         }
     }
 

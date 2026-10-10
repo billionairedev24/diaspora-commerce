@@ -11,6 +11,7 @@ import java.util.UUID;
 import com.afrotransact.payments.application.LabelChargeNotice;
 import com.afrotransact.payments.application.LabelChargeService;
 import com.afrotransact.payments.domain.LabelCharge;
+import com.afrotransact.payments.domain.LabelChargeStatus;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
@@ -33,7 +34,8 @@ class CarrierShipmentEventListenerTest {
         }
 
         @Override
-        public List<LabelCharge> ofOrg(String orgId) {
+        public List<LabelCharge> ofOrg(String orgId, LabelChargeStatus status, Instant from, Instant to,
+                                       int limit) {
             return List.of();
         }
     }, JsonMapper.builder().build());

@@ -99,9 +99,10 @@ class LabelServiceImpl implements LabelService {
     @Transactional
     public RenderedLabel unitLabel(String atin, String ownerOrgId, LabelFormat format, int copies) {
         Actor actor = actors.current();
-        if (!actor.can(CatalogPermissions.WRITE)) {
+        boolean service = actor.type() == PrincipalType.SERVICE || actor.type() == PrincipalType.STAFF;
+        if (!actor.can(CatalogPermissions.WRITE) && !(service && actor.can(CatalogPermissions.READ))) {
             throw new ForbiddenActionException("auth.missing-permission",
-                    "Missing permission " + CatalogPermissions.WRITE);
+                    "Missing permission " + CatalogPermissions.WRITE + " (services: " + CatalogPermissions.READ + ")");
         }
         Atin id = new Atin(atin == null ? "" : atin.strip().toUpperCase(Locale.ROOT));
         Product product = products.findByVariantAtin(id).or(() -> products.findByAtin(id))
@@ -111,6 +112,7 @@ class LabelServiceImpl implements LabelService {
         String gtin = variant.gtin();
         boolean vendorGtin = gtin != null && Gtin.isValid(gtin);
         LabelDraft draft;
+        String unitCode = null;
         if (owner.equals(settings.retailOrgId()) && vendorGtin) {
             draft = new LabelDraft(LabelKind.UNIT, null, null, gtin, null, null, null, null, null, null, null,
                     "MANUFACTURER BARCODE", product.title(), lines(variant), copies);
@@ -120,9 +122,11 @@ class LabelServiceImpl implements LabelService {
                             Instant.now(clock)));
             draft = new LabelDraft(LabelKind.UNIT, null, code.value(), null, null, null, null, null, null, null,
                     null, "AFROTRANSACT UNIT LABEL", product.title(), lines(variant), copies);
+            unitCode = code.value();
         }
         Label label = policy.build(draft);
-        return output(List.of(label), format, SheetLayout.LABEL_PAGES, "unit-" + variant.atin().value());
+        return output(List.of(label), format, SheetLayout.LABEL_PAGES, "unit-" + variant.atin().value())
+                .withUnitCode(unitCode);
     }
 
     private RenderedLabel output(List<Label> labels, LabelFormat format, SheetLayout layout, String name) {

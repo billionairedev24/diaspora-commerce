@@ -27,7 +27,7 @@ class LedgerServiceImpl implements LedgerService {
 
     @Override
     public List<AccountBalance> balancesOfOrg(String orgId) {
-        access.reader();
+        access.orgReader(orgId);
         return ledger.balances(Optional.of(orgId));
     }
 

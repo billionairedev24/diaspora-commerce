@@ -17,6 +17,12 @@ public interface OrgTeamService {
     List<OrgMember> members(String orgId);
 
     /**
+     * Roles that can be granted or invited in this organisation, for Seller Center's role pickers (S245): seller roles
+     * for SELLER, provider roles for PROVIDER, both sets for BOTH. Same readers as {@link #members}.
+     */
+    AssignableRoles assignableRoles(String orgId);
+
+    /**
      * Changes a member's role. The seller service and staff ({@code orgs:manage}) may also add a member directly;
      * members with {@code team:manage} invite instead and cannot change their own role.
      */

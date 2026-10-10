@@ -27,6 +27,9 @@ tags:
 - name: Payments
   description: Order payment lifecycle for the orders saga (SERVICE principals with payments:service; Idempotency-Key on every
     write)
+- name: Supplier payments
+  description: AfroTransact Retail (merchant of record) supplier payables released by retail-service after the three-way match,
+    scheduled by payment terms and paid by Finance from the operating bank account (never through Stripe Connect)
 - name: Stripe webhooks
   description: Signed, idempotent inbox for Stripe events
 - name: Saved payment methods
@@ -789,10 +792,10 @@ paths:
       tags:
       - Settlement & payouts
       summary: Shipping label charges of an organisation (labels bought through AfroTransact), newest first
-      description: Org members see their own; staff pass orgId. Each seller-shipped label bought through carrier-gateway is
-        debited from the payable at the carrier's cost plus handling (CHARGED) and credited back once if voided (CREDITED).
+      description: 'Org members see their own; staff pass orgId. Each seller-shipped label bought through carrier-gateway
+        is debited from the payable at the carrier''s cost plus handling (CHARGED) and credited back once if voided (CREDITED).
         AfroTransact Retail and FBA / AfroTransact Delivery labels are never charged. Outstanding charges reduce availableMinor
-        until a transfer recovers them.
+        until a transfer recovers them. Filters: status (CHARGED | CREDITED), purchased in [from, to), limit (≤ 200).'
       operationId: labelCharges
       parameters:
       - name: orgId
@@ -800,6 +803,34 @@ paths:
         required: false
         schema:
           type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - CHARGED
+          - CREDITED
+          - VOIDED
+      - name: from
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 200
       responses:
         '200':
           description: OK
@@ -990,7 +1021,8 @@ paths:
       summary: 'Seller statement: movements of the organisation''s payable, newest first'
       description: 'Sales (captures), refunds, transfers, chargebacks and shipping labels as their own lines (LABEL_CHARGE
         / LABEL_CREDIT with labelId, shipmentId and trackingNumber). Amounts are signed: credit to the seller positive. Default
-        period: the last 90 days. Org members see their own; staff pass orgId.'
+        period: the last 90 days. Org members see their own; staff pass orgId. kind (repeatable) narrows the lines, e.g. kind=LABEL_CHARGE&kind=LABEL_CREDIT
+        for the label charges of the period.'
       operationId: statement
       parameters:
       - name: orgId
@@ -1022,6 +1054,30 @@ paths:
           type: integer
           format: int32
           default: 200
+      - name: kind
+        in: query
+        required: false
+        schema:
+          type: array
+          items:
+            type: string
+            enum:
+            - CAPTURE
+            - REFUND
+            - REFUND_SETTLED
+            - TRANSFER
+            - TRANSFER_REVERSAL
+            - DISPUTE_OPENED
+            - DISPUTE_WON
+            - DISPUTE_LOST
+            - PROVIDER_FEE
+            - PROVIDER_FEE_COLLECTED
+            - LABEL_CHARGE
+            - LABEL_CREDIT
+            - LABEL_RECOVERY
+            - SUPPLIER_PAYABLE
+            - SUPPLIER_PAYMENT
+          uniqueItems: true
       responses:
         '200':
           description: OK
@@ -1170,6 +1226,145 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/ShipmentSettlement'
+  /v1/supplier-payments:
+    get:
+      tags:
+      - Supplier payments
+      summary: AfroTransact Retail supplier payments (payments:read, platform-wide staff)
+      description: Newest due date first. dueBy lists the payment run (SCHEDULED, due on or before the day).
+      operationId: listSupplierPayments
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - SCHEDULED
+          - ON_HOLD
+          - PAID
+      - name: supplierId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: dueBy
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 200
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SupplierPayment'
+  /v1/supplier-payments/{id}:
+    get:
+      tags:
+      - Supplier payments
+      summary: One supplier payment (payments:read)
+      operationId: getSupplierPayment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierPayment'
+  /v1/supplier-payments/{id}/hold:
+    post:
+      tags:
+      - Supplier payments
+      summary: Hold a supplier payment (payouts:approve)
+      operationId: holdSupplierPayment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupplierHoldRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierPayment'
+  /v1/supplier-payments/{id}/paid:
+    post:
+      tags:
+      - Supplier payments
+      summary: Record that Finance paid the supplier (payouts:approve)
+      description: Posts Dr 2500:<supplier> / Cr 1050 Operating bank. Repeating the same reference is a no-op; a held payment
+        must be released first (409 payments.supplier-payment-on-hold).
+      operationId: markSupplierPaymentPaid
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MarkPaidRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierPayment'
+  /v1/supplier-payments/{id}/release:
+    post:
+      tags:
+      - Supplier payments
+      summary: Release a held supplier payment back to the schedule (payouts:approve)
+      operationId: releaseSupplierPayment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/SupplierPayment'
   /v1/webhooks/stripe:
     post:
       tags:
@@ -1229,6 +1424,98 @@ components:
           type: boolean
         handled:
           type: boolean
+    SupplierPayment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        poId:
+          type: string
+          format: uuid
+        poNumber:
+          type: string
+        supplierId:
+          type: string
+          format: uuid
+        supplierCode:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        invoices:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupplierPaymentInvoice'
+        status:
+          type: string
+          enum:
+          - SCHEDULED
+          - ON_HOLD
+          - PAID
+        dueOn:
+          type: string
+          format: date
+          description: Payment date by the supplier's terms
+        due:
+          type: boolean
+          description: Scheduled and due on or before today
+        paymentReference:
+          type: string
+        holdReason:
+          type: string
+        paidBy:
+          type: string
+        scheduledAt:
+          type: string
+          format: date-time
+        paidAt:
+          type: string
+          format: date-time
+        payableJournalId:
+          type: string
+          format: uuid
+        paymentJournalId:
+          type: string
+          format: uuid
+    SupplierPaymentInvoice:
+      type: object
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        invoiceNumber:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+    MarkPaidRequest:
+      type: object
+      properties:
+        paymentReference:
+          type: string
+          description: Bank transfer / ACH reference
+          maxLength: 120
+          minLength: 0
+        paidAt:
+          type: string
+          format: date-time
+          description: When the transfer was made (default now)
+      required:
+      - paymentReference
+    SupplierHoldRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
+      required:
+      - reason
     DeliveredRequest:
       type: object
       properties:
@@ -2419,6 +2706,11 @@ components:
           format: int64
           description: 'Shipping labels bought through AfroTransact and not yet recovered from a transfer; deducted from availableMinor,
             which may go negative. Negative when voided labels are owed back (paid with the next transfer). Details: GET /v1/payouts/label-charges'
+        deliveryFeesMinor:
+          type: integer
+          format: int64
+          description: AfroTransact Delivery pickup fees paid on captured lines, net of fees given back by customer-fault
+            refunds (S259); already deducted from the order nets, shown for earnings
         minimumPayoutMinor:
           type: integer
           format: int64

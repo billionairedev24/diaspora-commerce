@@ -1,7 +1,10 @@
 package com.afrotransact.identity.adapter.out.persistence;
 
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.UUID;
 
 import com.afrotransact.identity.port.UserAccessRepository;
@@ -34,6 +37,31 @@ class JdbcUserAccessRepository implements UserAccessRepository {
     public boolean revokeRole(UUID userId, String roleKey) {
         return jdbc.sql("delete from user_role where user_id = :u and role_key = :r")
                 .param("u", userId).param("r", roleKey).update() == 1;
+    }
+
+    @Override
+    public Map<String, Set<String>> roleMarkets(UUID userId) {
+        Map<String, Set<String>> out = new TreeMap<>();
+        jdbc.sql("select role_key, market from user_role_market where user_id = :u order by role_key, market")
+                .param("u", userId)
+                .query(rs -> {
+                    out.computeIfAbsent(rs.getString("role_key"), k -> new TreeSet<>()).add(rs.getString("market"));
+                });
+        return out;
+    }
+
+    @Override
+    public boolean addRoleMarket(UUID userId, String roleKey, String market, String grantedBy) {
+        return jdbc.sql("""
+                insert into user_role_market (user_id, role_key, market, granted_by) values (:u, :r, :m, :by)
+                on conflict do nothing
+                """).param("u", userId).param("r", roleKey).param("m", market).param("by", grantedBy).update() == 1;
+    }
+
+    @Override
+    public boolean removeRoleMarket(UUID userId, String roleKey, String market) {
+        return jdbc.sql("delete from user_role_market where user_id = :u and role_key = :r and market = :m")
+                .param("u", userId).param("r", roleKey).param("m", market).update() == 1;
     }
 
     @Override

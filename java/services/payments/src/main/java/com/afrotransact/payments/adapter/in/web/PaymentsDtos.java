@@ -523,6 +523,10 @@ final class PaymentsDtos {
                                          + "negative. Negative when voided labels are owed back (paid with the next "
                                          + "transfer). Details: GET /v1/payouts/label-charges")
                                  long labelChargesMinor,
+                                 @Schema(description = "AfroTransact Delivery pickup fees paid on captured lines, net "
+                                         + "of fees given back by customer-fault refunds (S259); already deducted from "
+                                         + "the order nets, shown for earnings")
+                                 long deliveryFeesMinor,
                                  long minimumPayoutMinor, boolean canRequestToday,
                                  @Schema(description = "Payouts are on a compliance hold: requests and approvals fail "
                                          + "with 422 payments.payouts_paused; the balance keeps accruing")
@@ -536,7 +540,8 @@ final class PaymentsDtos {
             return new PayoutBalanceResponse(b.orgId(), b.currency(), b.available().minor(), b.onHoldTotal().minor(),
                     b.onHold().stream().map(h -> new HeldOrderResponse(h.orderId(), h.amount().minor(),
                             h.releaseAt())).toList(), b.inFlight().minor(), b.paid().minor(),
-                    b.providerFees().minor(), b.labelCharges().minor(), b.minimum().minor(), b.canRequestToday(),
+                    b.providerFees().minor(), b.labelCharges().minor(), b.deliveryFees().minor(),
+                    b.minimum().minor(), b.canRequestToday(),
                     b.payoutsPaused(),
                     b.payoutsPausedReason());
         }

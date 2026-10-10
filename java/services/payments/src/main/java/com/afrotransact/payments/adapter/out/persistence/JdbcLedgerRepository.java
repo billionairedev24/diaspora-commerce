@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.payments.domain.AccountBalance;
@@ -161,8 +162,19 @@ class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
-    public List<StatementLine> statement(String orgId, String currency, Instant from, Instant to, int limit) {
-        return jdbc.sql("""
+    public long deliveryFeesPaid(String orgId, String currency) {
+        return jdbc.sql("select coalesce(sum(-(" + SIGNED + ")), 0) from journal_line l "
+                        + "where l.account_code = :code and l.org_id = :org and l.currency = :currency")
+                .param("code", Chart.LOCAL_DELIVERY_FEE_REVENUE.code()).param("org", orgId)
+                .param("currency", currency)
+                .query(Long.class).single();
+    }
+
+    @Override
+    public List<StatementLine> statement(String orgId, String currency, Instant from, Instant to, int limit,
+                                         Set<JournalType> kinds) {
+        String kindFilter = kinds == null || kinds.isEmpty() ? "" : "and e.type in (:kinds)";
+        JdbcClient.StatementSpec spec = jdbc.sql("""
                 select e.id, e.type, e.occurred_at, e.order_id, e.description, l.currency,
                        sum(case l.side when 'C' then l.amount_minor else -l.amount_minor end) as amount,
                        c.label_id, c.shipment_id, c.tracking_number, c.carrier
@@ -170,16 +182,19 @@ class JdbcLedgerRepository implements LedgerRepository {
                 join journal_entry e on e.id = l.journal_id
                 left join label_charge c on c.charge_journal_id = e.id or c.credit_journal_id = e.id
                 where l.account_code = :code and l.account_key = :org and l.currency = :currency
-                  and e.posted_at >= :from and e.posted_at < :to
+                  and e.posted_at >= :from and e.posted_at < :to %s
                 group by e.id, e.type, e.occurred_at, e.order_id, e.description, e.posted_at, l.currency,
                          c.label_id, c.shipment_id, c.tracking_number, c.carrier
                 having sum(case l.side when 'C' then l.amount_minor else -l.amount_minor end) <> 0
                 order by e.posted_at desc, e.id
                 limit :limit
-                """)
+                """.formatted(kindFilter))
                 .param("code", Chart.SELLER_PAYABLE.code()).param("org", orgId).param("currency", currency)
-                .param("from", Sql.ts(from)).param("to", Sql.ts(to)).param("limit", limit)
-                .query((rs, n) -> new StatementLine(rs.getObject("id", UUID.class),
+                .param("from", Sql.ts(from)).param("to", Sql.ts(to)).param("limit", limit);
+        if (!kindFilter.isEmpty()) {
+            spec = spec.param("kinds", kinds.stream().map(Enum::name).toList());
+        }
+        return spec.query((rs, n) -> new StatementLine(rs.getObject("id", UUID.class),
                         JournalType.valueOf(rs.getString("type")), Sql.instant(rs, "occurred_at"),
                         rs.getString("order_id"), rs.getString("description"),
                         Money.of(rs.getLong("amount"), rs.getString("currency")), rs.getString("label_id"),

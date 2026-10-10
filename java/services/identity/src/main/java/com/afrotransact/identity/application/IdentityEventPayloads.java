@@ -36,9 +36,20 @@ public final class IdentityEventPayloads {
     public record Recipient(String id, String email, String phone) {
     }
 
-    /** {@code identity.role.granted} / {@code identity.role.revoked}. */
+    /**
+     * {@code identity.role.granted} / {@code identity.role.revoked}.
+     *
+     * @param market S248: for a platform (staff) role, the market it is scoped to (ISO 3166-1 alpha-2; null =
+     *               platform-wide), so authz-sync writes {@code market:<code>} grants; for an organisation role, the
+     *               organisation's market (informational)
+     */
     public record RoleChanged(String userId, String roleKey, String orgId, String actorId, String reason,
-                              Instant at) {
+                              Instant at, String market) {
+
+        /** A role change without a market (platform-wide staff role, account role). */
+        public RoleChanged(String userId, String roleKey, String orgId, String actorId, String reason, Instant at) {
+            this(userId, roleKey, orgId, actorId, reason, at, null);
+        }
     }
 
     /**

@@ -54,10 +54,10 @@ class MembershipWriter {
             changeLog.append(actorId, "org.member.role-changed", user.id(), roleKey, org.id(),
                     org.name() + " (was " + previousRole + ")");
             events.publish(IdentityEvents.ROLE_REVOKED, IdentityEvents.AGGREGATE, userId,
-                    new RoleChanged(userId, previousRole, org.id(), actorId, reason, now));
+                    new RoleChanged(userId, previousRole, org.id(), actorId, reason, now, org.market()));
         }
         events.publish(IdentityEvents.ROLE_GRANTED, IdentityEvents.AGGREGATE, userId,
-                new RoleChanged(userId, roleKey, org.id(), actorId, reason, now));
+                new RoleChanged(userId, roleKey, org.id(), actorId, reason, now, org.market()));
         if (user.activeOrgId() == null) {
             users.findById(user.id()).filter(u -> u.activeOrgId() == null)
                     .ifPresent(u -> users.update(u.withActiveOrg(org.id(), now)));
@@ -73,7 +73,7 @@ class MembershipWriter {
         Instant now = Instant.now(clock);
         changeLog.append(actorId, "org.member.removed", userId, role, org.id(), null);
         events.publish(IdentityEvents.ROLE_REVOKED, IdentityEvents.AGGREGATE, userId.toString(),
-                new RoleChanged(userId.toString(), role, org.id(), actorId, reason, now));
+                new RoleChanged(userId.toString(), role, org.id(), actorId, reason, now, org.market()));
         users.findById(userId).filter(u -> org.id().equals(u.activeOrgId()))
                 .ifPresent(u -> users.update(u.withActiveOrg(null, now)));
         return true;

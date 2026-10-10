@@ -96,18 +96,27 @@ class AccessAdminController {
         return UserAccessResponse.of(admin.user(userId));
     }
 
-    @Operation(summary = "Assign an account or platform role")
+    @Operation(summary = "Assign an account or platform role",
+            description = "S248: market (ISO 3166-1 alpha-2, e.g. GB) scopes a staff role to one market; repeat for more "
+                    + "markets. Without market the role is platform-wide. A role is either platform-wide or "
+                    + "market-scoped (409 identity.role-platform-wide / identity.role-market-scoped). Super Admin and "
+                    + "account roles are never market-scoped (422 identity.role-not-market-scoped). "
+                    + "identity.role.granted carries the market for authz-sync.")
     @PutMapping("/v1/admin/users/{userId}/roles/{roleKey}")
     UserAccessResponse assignRole(@PathVariable UUID userId, @PathVariable String roleKey,
-                                  @RequestParam(required = false) String reason) {
-        return UserAccessResponse.of(admin.setRole(userId, roleKey, true, reason));
+                                  @RequestParam(required = false) String reason,
+                                  @RequestParam(required = false) String market) {
+        return UserAccessResponse.of(admin.setRole(userId, roleKey, true, reason, market));
     }
 
-    @Operation(summary = "Remove a role (takes effect on the user's next token)")
+    @Operation(summary = "Remove a role (takes effect on the user's next token)",
+            description = "With market, removes only that market's scope (the role goes when its last market does); "
+                    + "without market, removes the role with every market.")
     @DeleteMapping("/v1/admin/users/{userId}/roles/{roleKey}")
     UserAccessResponse removeRole(@PathVariable UUID userId, @PathVariable String roleKey,
-                                  @RequestParam(required = false) String reason) {
-        return UserAccessResponse.of(admin.setRole(userId, roleKey, false, reason));
+                                  @RequestParam(required = false) String reason,
+                                  @RequestParam(required = false) String market) {
+        return UserAccessResponse.of(admin.setRole(userId, roleKey, false, reason, market));
     }
 
     @Operation(summary = "Grant a permission directly (for example delivery:operate)")

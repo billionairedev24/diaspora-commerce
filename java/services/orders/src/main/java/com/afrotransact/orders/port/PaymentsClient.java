@@ -53,9 +53,19 @@ public interface PaymentsClient {
                          int scheduleVersion) {
     }
 
-    /** Intent to create. */
+    /**
+     * Intent to create.
+     *
+     * @param shopperId the customer's AfroTransact id (token subject): payments puts the shopper's Stripe Customer on
+     *                  the PaymentIntent so the mobile PaymentSheet lists their saved cards (S245); null for none
+     */
     record NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
-                     Map<String, String> metadata, List<Line> lines) {
+                     Map<String, String> metadata, List<Line> lines, String shopperId) {
+
+        public NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
+                         Map<String, String> metadata, List<Line> lines) {
+            this(orderId, amountMinor, currency, placedAt, metadata, lines, null);
+        }
     }
 
     /**
@@ -104,8 +114,14 @@ public interface PaymentsClient {
                  List<Recipient> recipients) {
     }
 
-    /** One recipient of the split. */
+    /**
+     * One recipient of the split.
+     *
+     * @param deliveryFeesMinor AfroTransact Delivery pickup fees (S255/S259): what the seller paid for the trips of its
+     *                          AFROTRANSACT_DELIVERY lines; on the AfroTransact row, the total earned (4250)
+     */
     record Recipient(String recipient, String kind, long itemsMinor, long shippingMinor, long taxMinor,
-                     long commissionMinor, long fbaFeesMinor, long stripeFeeMinor, long netMinor) {
+                     long commissionMinor, long fbaFeesMinor, long deliveryFeesMinor, long stripeFeeMinor,
+                     long netMinor) {
     }
 }

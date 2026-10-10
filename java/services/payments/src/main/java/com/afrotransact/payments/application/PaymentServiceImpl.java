@@ -112,8 +112,7 @@ class PaymentServiceImpl implements PaymentService {
                     new PaymentsStateConflict("payments.no-fee-schedule", "No fee schedule is in force at "
                             + placedAt));
             UUID paymentId = Fingerprint.id("payment", cmd.orderId());
-            String stripeCustomer = cmd.saveForOffSession()
-                    ? wallet.ensureCustomer(cmd.shopperId()).stripeCustomerId() : cmd.customerId();
+            String stripeCustomer = stripeCustomerFor(cmd);
             Payment payment = Payment.create(paymentId, cmd.orderId(), stripeCustomer, cmd.amount(), schedule.id(),
                     placedAt, cmd.metadata(), cmd.lines(), now);
             if (!payments.claim(payment)) {
@@ -123,7 +122,7 @@ class PaymentServiceImpl implements PaymentService {
             Map<String, String> metadata = new LinkedHashMap<>(cmd.metadata());
             metadata.put("order_id", cmd.orderId());
             metadata.put("payment_id", paymentId.toString());
-            if (cmd.saveForOffSession()) {
+            if (cmd.shopperId() != null && !cmd.shopperId().isBlank()) {
                 metadata.put("afrotransact_customer_id", cmd.shopperId());
             }
             IntentSnapshot intent = stripe.createIntent(new StripeGateway.CreateIntent(cmd.amount(),
@@ -533,6 +532,24 @@ class PaymentServiceImpl implements PaymentService {
 
     private static NotFoundException notFound(String what) {
         return new NotFoundException("payments.payment-not-found", "No payment " + what);
+    }
+
+    /**
+     * The Stripe Customer on the PaymentIntent: created for off-session saving; otherwise the one given, else the
+     * shopper's existing Customer (S245), so the mobile PaymentSheet (ephemeral key for that Customer) lists their
+     * saved cards. Checkout never creates a Customer just to show an empty wallet.
+     */
+    private String stripeCustomerFor(CreatePaymentCommand cmd) {
+        if (cmd.saveForOffSession()) {
+            return wallet.ensureCustomer(cmd.shopperId()).stripeCustomerId();
+        }
+        if (cmd.customerId() != null && !cmd.customerId().isBlank()) {
+            return cmd.customerId();
+        }
+        if (cmd.shopperId() != null && !cmd.shopperId().isBlank()) {
+            return wallet.stripeCustomerOf(cmd.shopperId()).orElse(null);
+        }
+        return null;
     }
 
     /** Stripe fee of a capture. */

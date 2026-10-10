@@ -38,7 +38,8 @@ import tools.jackson.databind.JsonNode;
     "at.events.relay-enabled=false",
     "at.consumers.enabled=false",
     "spring.kafka.bootstrap-servers=localhost:1",
-    "at.identity.verification.sender=outbox"})
+    "at.identity.verification.sender=outbox",
+    "at.identity.webauthn.app-origins=" + PasskeyCeremonyIT.ANDROID_ORIGIN})
 @ActiveProfiles("local")
 @Testcontainers
 class PasskeyCeremonyIT {
@@ -59,6 +60,8 @@ class PasskeyCeremonyIT {
     private static final String BFF_REDIRECT = "http://localhost:3000/api/bff/v1/auth/oidc/callback";
     private static final String CLIENT = "\"clientIp\":\"198.51.100.30\",\"userAgent\":\"VirtualAuthenticator/1.0\"";
     private static final String PASSWORD = "Plantain-Jollof-2026";
+    /** S016: the customer app's Android origin (base64url SHA-256 of its signing certificate). */
+    static final String ANDROID_ORIGIN = "android:apk-key-hash:Sxm7AqJ9uVt8bX0bYk1pLZ4Qe3oW2nHcR6dF5gT7yU8";
 
     @LocalServerPort
     private int port;
@@ -235,7 +238,100 @@ class PasskeyCeremonyIT {
         assertThat(password.code()).as("the password still works").isNotBlank();
     }
 
+    @Test
+    void registersRenamesAndListsPasskeysOverTheApiForTheAppsAndSignsInWithThem() {
+        Account account = newAccount();
+
+        // A foreign origin is refused, and that registration can't be retried.
+        Registration phishing = startApiRegistration(account, "Phished");
+        HttpResponse<String> phished = completeApiRegistration(account, phishing.id(),
+                new VirtualAuthenticator(RP_ID).credential(phishing.challenge(), phishing.userHandle(),
+                        PHISHING_ORIGIN), null);
+        assertThat(phished.statusCode()).as(phished.body()).isEqualTo(422);
+        assertThat(BrowserSession.json(phished.body()).get("code").asString()).isEqualTo("identity.passkey-rejected");
+        HttpResponse<String> retried = completeApiRegistration(account, phishing.id(),
+                new VirtualAuthenticator(RP_ID).credential(phishing.challenge(), phishing.userHandle(),
+                        IDENTITY_ORIGIN), null);
+        assertThat(retried.statusCode()).isEqualTo(409);
+        assertThat(passkeyCount(account)).isZero();
+
+        // The storefront (through gateway-bff) registers a passkey.
+        VirtualAuthenticator web = new VirtualAuthenticator(RP_ID);
+        Registration first = startApiRegistration(account, "MacBook");
+        HttpResponse<String> registered = completeApiRegistration(account, first.id(),
+                web.credential(first.challenge(), first.userHandle(), STOREFRONT_ORIGIN), null);
+        assertThat(registered.statusCode()).as(registered.body()).isEqualTo(201);
+        assertThat(BrowserSession.json(registered.body()).get("credentialId").asString())
+                .isEqualTo(web.credentialId());
+        assertThat(BrowserSession.json(registered.body()).get("label").asString()).isEqualTo("MacBook");
+        assertThat(completeApiRegistration(account, first.id(), web.credential(first.challenge(),
+                first.userHandle(), STOREFRONT_ORIGIN), null).statusCode()).as("one registration per challenge")
+                .isEqualTo(409);
+
+        // The Android app registers a platform passkey (fingerprint) with its own origin; the existing one is
+        // excluded so the same authenticator isn't registered twice.
+        Registration second = startApiRegistration(account, null);
+        assertThat(second.excluded()).containsExactly(web.credentialId());
+        VirtualAuthenticator phone = new VirtualAuthenticator(RP_ID);
+        HttpResponse<String> mobile = completeApiRegistration(account, second.id(),
+                phone.credential(second.challenge(), second.userHandle(), ANDROID_ORIGIN), "Pixel 9");
+        assertThat(mobile.statusCode()).as(mobile.body()).isEqualTo(201);
+        assertThat(passkeyCount(account)).isEqualTo(2);
+
+        // Another account can't use this account's registration.
+        Account other = newAccount();
+        Registration mine = startApiRegistration(account, null);
+        assertThat(completeApiRegistration(other, mine.id(), new VirtualAuthenticator(RP_ID).credential(
+                mine.challenge(), mine.userHandle(), STOREFRONT_ORIGIN), null).statusCode()).isEqualTo(409);
+
+        // Both passkeys sign in through the first-party API (no second factor), the hosted page too.
+        assertThat(apiSignIn(web).accessClaims().get("sub").asString()).isEqualTo(account.userId());
+        assertThat(hostedSignIn(phone).accessClaims().get("sub").asString()).isEqualTo(account.userId());
+
+        // Rename one (Login & security on web and mobile).
+        HttpResponse<String> renamed = account.session().api("PATCH", "/v1/me/passkeys/" + phone.credentialId(),
+                account.token(), "{\"label\":\"Work phone\"}");
+        assertThat(renamed.statusCode()).as(renamed.body()).isEqualTo(200);
+        assertThat(BrowserSession.json(renamed.body()).get("label").asString()).isEqualTo("Work phone");
+        assertThat(other.session().api("PATCH", "/v1/me/passkeys/" + phone.credentialId(), other.token(),
+                "{\"label\":\"Mine now\"}").statusCode()).isEqualTo(404);
+        JsonNode list = BrowserSession.json(account.session().api("GET", "/v1/me/passkeys", account.token(), null)
+                .body());
+        List<String> labels = new ArrayList<>();
+        list.forEach(p -> labels.add(p.get("label").asString()));
+        assertThat(labels).containsExactlyInAnyOrder("MacBook", "Work phone");
+    }
+
     // ------------------------------------------------------------------------------------------------- ceremonies
+
+    private record Registration(String id, String challenge, String userHandle, List<String> excluded) {
+    }
+
+    /** POST /v1/me/passkeys/registrations with the account's bearer token (the BFF or the mobile app). */
+    private Registration startApiRegistration(Account account, String label) {
+        HttpResponse<String> r = account.session().api("POST", "/v1/me/passkeys/registrations", account.token(),
+                label == null ? "{}" : "{\"label\":\"" + label + "\"}");
+        assertThat(r.statusCode()).as(r.body()).isEqualTo(201);
+        JsonNode o = BrowserSession.json(r.body());
+        JsonNode pk = o.get("publicKey");
+        assertThat(pk.get("rp").get("id").asString()).isEqualTo(RP_ID);
+        assertThat(pk.get("authenticatorSelection").get("userVerification").asString()).isEqualTo("required");
+        assertThat(pk.get("authenticatorSelection").get("residentKey").asString()).isEqualTo("required");
+        List<String> excluded = new ArrayList<>();
+        if (pk.has("excludeCredentials")) {
+            pk.get("excludeCredentials").forEach(c -> excluded.add(c.get("id").asString()));
+        }
+        return new Registration(o.get("registrationId").asString(), pk.get("challenge").asString(),
+                pk.get("user").get("id").asString(), excluded);
+    }
+
+    private HttpResponse<String> completeApiRegistration(Account account, String registrationId, String credential,
+                                                         String label) {
+        return account.session().api("POST", "/v1/me/passkeys", account.token(), "{\"registrationId\":\""
+                + registrationId + "\",\"credential\":" + credential
+                + (label == null ? "" : ",\"label\":\"" + label + "\"") + "}");
+    }
+
 
     private record Account(BrowserSession session, String userId, String email, String token) {
     }

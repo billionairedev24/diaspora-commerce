@@ -31,6 +31,16 @@ public final class PaymentsEvents {
     /** A provider fee was debited from the provider's connected account. */
     public static final String PROVIDER_FEE_COLLECTED = "payments.provider_fee.collected";
 
+    /**
+     * An AfroTransact Retail supplier payment was booked and scheduled (retail.payment.released, S226): topic
+     * at.payout.events, key = supplier id.
+     */
+    public static final String SUPPLIER_PAYMENT_SCHEDULED = "payments.supplier_payment.scheduled";
+    /** Finance paid a supplier payment from the operating bank account (key = supplier id). */
+    public static final String SUPPLIER_PAYMENT_PAID = "payments.supplier_payment.paid";
+    /** Finance put a supplier payment on hold or released it (status ON_HOLD / SCHEDULED, key = supplier id). */
+    public static final String SUPPLIER_PAYMENT_UPDATED = "payments.supplier_payment.updated";
+
     private PaymentsEvents() {
     }
 }

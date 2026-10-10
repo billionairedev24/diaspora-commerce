@@ -1,5 +1,12 @@
 # UAT / staging: production-like, anonymised data, API reference pages on for testers.
 at:
+  security:
+    # S248 OpenFGA relationship checks. Shadow mode: denials are logged (FGA shadow) and reviewed before FGA_ENFORCE=true.
+    fga:
+      enabled: ${FGA_ENABLED:true}
+      enforce: ${FGA_ENFORCE:false}
+      # In-cluster OpenFGA (infra/k8s/platform/openfga); FGA_API_TOKEN comes from the service's secret.
+      api-url: ${FGA_API_URL:http://openfga.openfga.svc:8080}
   api-docs:
     enabled: true
 spring:

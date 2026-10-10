@@ -76,7 +76,9 @@ class SecurityController {
         return LinkedAccountsResponse.of(security.unlink(provider));
     }
 
-    @Operation(summary = "Registered passkeys (register at /webauthn/register on the authorization server)")
+    @Operation(summary = "Registered passkeys",
+            description = "Register on the hosted page (/webauthn/register) or over the API: POST "
+                    + "/v1/me/passkeys/registrations, then POST /v1/me/passkeys (first-party apps, mobile).")
     @GetMapping("/v1/me/passkeys")
     List<PasskeyResponse> passkeys() {
         return passkeys.list().stream().map(PasskeyResponse::of).toList();

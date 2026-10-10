@@ -64,8 +64,10 @@ class OrderController {
     }
 
     @Operation(summary = "Payment split of an order (staff: all recipients; seller: own row)",
-            description = "One charge, many recipients: items, shipping, tax, commission, FBA fees, Stripe fee share "
-                    + "and net per recipient, from payments-service.")
+            description = "One charge, many recipients: items, shipping, tax, commission, FBA fees, AfroTransact "
+                    + "Delivery pickup fees (deliveryFeesMinor: what the seller pays for its pickup-delivery trips; on "
+                    + "the AfroTransact row the total earned), Stripe fee share and net per recipient, from "
+                    + "payments-service.")
     @GetMapping("/v1/orders/{number}/payment-split")
     PaymentsClient.Split split(@PathVariable String number) {
         return queries.paymentSplit(number);

@@ -14,6 +14,8 @@ public final class PaymentsPermissions {
     public static final String FEES_READ = "payments:fees.read";
     /** Seller / provider owner and finance roles (org-scoped) or Finance staff: request a payout. */
     public static final String PAYOUTS_REQUEST = "payouts:request";
+    /** Payouts and statements of the organisation (owner, admin, manager, finance; Finance staff). */
+    public static final String PAYOUTS_READ = "payouts:read";
     /** Finance staff: approve, hold and release payout requests. */
     public static final String PAYOUTS_APPROVE = "payouts:approve";
 

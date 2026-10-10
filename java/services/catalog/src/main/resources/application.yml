@@ -75,6 +75,18 @@ at:
     description: Products (ATIN/GTIN), variants, category tree, product-type schemas and category requests.
     version: v1
   security:
+    # S248 fine-grained authorisation (OpenFGA, docs/engineering/authorisation.md). Off unless FGA_ENABLED=true;
+    # enforce=false is shadow mode: relationship denials are logged ("FGA shadow:"), not enforced.
+    fga:
+      enabled: ${FGA_ENABLED:false}
+      enforce: ${FGA_ENFORCE:true}
+      api-url: ${FGA_API_URL:http://localhost:8091}
+      store-id: ${FGA_STORE_ID:}
+      store-name: ${FGA_STORE_NAME:afrotransact}
+      model-id: ${FGA_MODEL_ID:}
+      api-token: ${FGA_API_TOKEN:}
+      timeout: ${FGA_TIMEOUT:500ms}
+      cache-ttl: ${FGA_CACHE_TTL:5s}
     public-paths:
       - /v1/categories
       - /v1/product-types

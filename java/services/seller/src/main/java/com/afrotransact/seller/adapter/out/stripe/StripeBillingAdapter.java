@@ -9,15 +9,19 @@ import com.afrotransact.seller.port.StripeBillingGateway;
 import com.afrotransact.seller.port.SubscriptionSnapshot;
 import com.stripe.StripeClient;
 import com.stripe.model.Customer;
+import com.stripe.model.Invoice;
 import com.stripe.model.Price;
+import com.stripe.model.SetupIntent;
 import com.stripe.model.StripeCollection;
 import com.stripe.model.Subscription;
 import com.stripe.model.SubscriptionItem;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerUpdateParams;
+import com.stripe.param.InvoiceCreatePreviewParams;
 import com.stripe.param.PaymentMethodAttachParams;
 import com.stripe.param.PriceListParams;
+import com.stripe.param.SetupIntentCreateParams;
 import com.stripe.param.billing.MeterEventCreateParams;
 import com.stripe.param.SubscriptionCreateParams;
 import com.stripe.param.SubscriptionItemCreateParams;
@@ -124,6 +128,30 @@ public class StripeBillingAdapter implements StripeBillingGateway {
         SubscriptionItem item = StripeCalls.call("metered subscription item",
                 () -> client.v1().subscriptionItems().create(params, options));
         return item.getId();
+    }
+
+    @Override
+    public SetupIntentSecret createSetupIntent(String customerId, String idempotencyKey) {
+        SetupIntentCreateParams params = SetupIntentCreateParams.builder().setCustomer(customerId)
+                .setUsage(SetupIntentCreateParams.Usage.OFF_SESSION).putMetadata("purpose", "seller_billing").build();
+        RequestOptions options = RequestOptions.builder().setIdempotencyKey(idempotencyKey).build();
+        SetupIntent si = StripeCalls.call("setup intent", () -> client.v1().setupIntents().create(params, options));
+        return new SetupIntentSecret(si.getId(), si.getClientSecret());
+    }
+
+    @Override
+    public long previewProratedChange(String customerId, String subscriptionId, String itemId, String lookupKey) {
+        InvoiceCreatePreviewParams params = InvoiceCreatePreviewParams.builder().setCustomer(customerId)
+                .setSubscription(subscriptionId)
+                .setSubscriptionDetails(InvoiceCreatePreviewParams.SubscriptionDetails.builder()
+                        .addItem(InvoiceCreatePreviewParams.SubscriptionDetails.Item.builder().setId(itemId)
+                                .setPrice(price(lookupKey)).build())
+                        .setProrationBehavior(InvoiceCreatePreviewParams.SubscriptionDetails.ProrationBehavior
+                                .ALWAYS_INVOICE)
+                        .build())
+                .build();
+        Invoice preview = StripeCalls.call("proration preview", () -> client.v1().invoices().createPreview(params));
+        return preview.getAmountDue() == null ? 0 : preview.getAmountDue();
     }
 
     private String price(String lookupKey) {

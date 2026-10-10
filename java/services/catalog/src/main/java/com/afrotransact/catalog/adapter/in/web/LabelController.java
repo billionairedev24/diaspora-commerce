@@ -10,6 +10,7 @@ import com.afrotransact.catalog.domain.barcode.LabelFormat;
 import com.afrotransact.catalog.domain.barcode.SheetLayout;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -32,6 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/v1/labels")
 class LabelController {
 
+    /** The AT-FN code of a unit label, as data (inventory reads it instead of parsing the label). */
+    static final String UNIT_LABEL_CODE = "X-Unit-Label-Code";
     private static final String FORMATS = "SVG (vector label), PNG (bare symbol, no text), ZPL (Zebra, 203 dpi), "
             + "PDF (one page per label, or a sheet)";
 
@@ -76,8 +79,12 @@ class LabelController {
             description = "Platform (AfroTransact Retail) stock with a vendor GTIN keeps the manufacturer barcode; "
                     + "every other unit gets the stock owner's AT-FN code (ATF + 7, Code 128), issued once per owner "
                     + "and variant. Sellers print for their own organisation; staff and service clients may pass "
-                    + "orgId (default: the product's owner). Needs catalog:write.")
-    @ApiResponse(responseCode = "200", description = "The unit label", content = {
+                    + "orgId (default: the product's owner). Needs catalog:write; service clients (inventory-service) "
+                    + "and staff may use catalog:read. The AT-FN code is returned as data in the X-Unit-Label-Code "
+                    + "header (absent for manufacturer barcodes).")
+    @ApiResponse(responseCode = "200", description = "The unit label", headers = {
+        @Header(name = UNIT_LABEL_CODE, description = "AT-FN code of the unit label (absent for a manufacturer "
+                + "barcode)", schema = @Schema(type = "string", pattern = "^ATF[0-9A-Z]{7}$"))}, content = {
         @Content(mediaType = "image/svg+xml", schema = @Schema(type = "string")),
         @Content(mediaType = "image/png", schema = @Schema(type = "string", format = "binary")),
         @Content(mediaType = "text/plain", schema = @Schema(type = "string", description = "ZPL")),
@@ -100,11 +107,14 @@ class LabelController {
     }
 
     private static ResponseEntity<byte[]> response(RenderedLabel r) {
-        return ResponseEntity.ok()
+        ResponseEntity.BodyBuilder b = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(r.contentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline().filename(r.fileName()).build()
                         .toString())
-                .header("X-Label-Count", String.valueOf(r.labels()))
-                .body(r.content());
+                .header("X-Label-Count", String.valueOf(r.labels()));
+        if (r.unitCode() != null) {
+            b = b.header(UNIT_LABEL_CODE, r.unitCode());
+        }
+        return b.body(r.content());
     }
 }

@@ -2,6 +2,7 @@ package com.afrotransact.payments.adapter.out.persistence;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -70,12 +71,29 @@ class JdbcLabelChargeRepository implements LabelChargeRepository {
     }
 
     @Override
-    public List<LabelCharge> ofOrg(String orgId, int limit) {
-        return jdbc.sql("""
-                select * from label_charge where org_id = :org and status <> 'VOIDED'
-                order by purchased_at desc, id limit :limit
-                """)
-                .param("org", orgId).param("limit", limit).query(JdbcLabelChargeRepository::charge).list();
+    public List<LabelCharge> ofOrg(String orgId, LabelChargeStatus status, Instant from, Instant to, int limit) {
+        StringBuilder sql = new StringBuilder("select * from label_charge where org_id = :org and status <> 'VOIDED'");
+        if (status != null) {
+            sql.append(" and status = :status");
+        }
+        if (from != null) {
+            sql.append(" and purchased_at >= :from");
+        }
+        if (to != null) {
+            sql.append(" and purchased_at < :to");
+        }
+        sql.append(" order by purchased_at desc, id limit :limit");
+        JdbcClient.StatementSpec spec = jdbc.sql(sql.toString()).param("org", orgId).param("limit", limit);
+        if (status != null) {
+            spec = spec.param("status", status.name());
+        }
+        if (from != null) {
+            spec = spec.param("from", Sql.ts(from));
+        }
+        if (to != null) {
+            spec = spec.param("to", Sql.ts(to));
+        }
+        return spec.query(JdbcLabelChargeRepository::charge).list();
     }
 
     private static LabelCharge charge(ResultSet rs, int n) throws SQLException {

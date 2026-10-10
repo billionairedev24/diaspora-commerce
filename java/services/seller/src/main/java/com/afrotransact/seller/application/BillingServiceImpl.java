@@ -1,6 +1,7 @@
 package com.afrotransact.seller.application;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -230,6 +231,74 @@ class BillingServiceImpl implements BillingService {
     public List<Invoice> invoices(String orgId) {
         access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
         return invoices.list(orgId, 100);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Invoice invoice(String orgId, String invoiceId) {
+        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        return invoices.find(orgId, invoiceId).orElseThrow(() -> new NotFoundException("seller.invoice-not-found",
+                "Invoice " + invoiceId + " not found"));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PlanChangePreview previewPlanChange(String orgId, String planCode, Cadence cadence) {
+        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, SellerPermissions.BILLING);
+        requireNotRetail(orgId);
+        Subscription sub = subscription(orgId);
+        requireActive(sub);
+        Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
+        Plan target = plans.find(planCode).filter(p -> p.kind() == org.kind()).orElseThrow(() ->
+                new SellerRuleViolation("seller.unknown-plan", "Plan " + planCode + " isn't available",
+                        Map.of("planCode", "Unknown")));
+        Cadence targetCadence = cadence == null ? sub.cadence() : cadence;
+        Plan current = plan(sub.planCode());
+        PlanChange decision = current.isFree() && !target.isFree() ? PlanChange.IMMEDIATE_UPGRADE
+                : PlanChange.decide(current, sub.cadence(), target, targetCadence);
+        Instant now = Instant.now(clock);
+        boolean trialing = sub.status() == SubscriptionStatus.TRIALING;
+        long targetCharge = PlanPricing.quote(target, targetCadence).totalCents();
+        return switch (decision) {
+            case NO_CHANGE -> new PlanChangePreview(decision, target.code(), target.name(), targetCadence, now, 0,
+                    target.isFree() ? 0 : targetCharge, sub.renewalAt(), trialing);
+            case IMMEDIATE_UPGRADE -> {
+                long dueNow;
+                Instant next;
+                if (sub.stripeSubscriptionId() == null) {
+                    boolean trial = target.trialDays() > 0;
+                    dueNow = trial ? 0 : targetCharge;
+                    next = trial ? now.plus(Duration.ofDays(target.trialDays())) : null;
+                } else if (trialing) {
+                    dueNow = 0;
+                    next = sub.renewalAt();
+                } else {
+                    dueNow = stripe.previewProratedChange(sub.stripeCustomerId(), sub.stripeSubscriptionId(),
+                            sub.stripeItemId(), plans.stripeLookupKey(target.code(), targetCadence));
+                    next = sub.currentPeriodEnd();
+                }
+                yield new PlanChangePreview(decision, target.code(), target.name(), targetCadence, now, dueNow,
+                        targetCharge, next, trialing);
+            }
+            default -> {
+                Instant effective = sub.renewalAt() == null ? now : sub.renewalAt();
+                yield new PlanChangePreview(decision, target.code(), target.name(), targetCadence, effective, 0,
+                        target.isFree() ? 0 : targetCharge, effective, trialing);
+            }
+        };
+    }
+
+    @Override
+    @Transactional
+    public SetupIntentView setupIntent(String orgId) {
+        access.orgRole(orgId, AccessGuard.OWNER, null);
+        requireNotRetail(orgId);
+        Subscription sub = subs.lock(orgId).orElseThrow(() -> noSubscription(orgId));
+        Organisation org = orgs.findById(orgId).orElseThrow(() -> noSubscription(orgId));
+        String customer = ensureCustomer(sub, org);
+        StripeBillingGateway.SetupIntentSecret si = stripe.createSetupIntent(customer,
+                "billing-setup-" + orgId + "-" + UUID.randomUUID());
+        return new SetupIntentView(customer, si.id(), si.clientSecret());
     }
 
     @Override

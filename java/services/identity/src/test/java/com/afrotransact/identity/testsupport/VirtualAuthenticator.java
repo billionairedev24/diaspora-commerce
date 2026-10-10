@@ -72,6 +72,15 @@ public final class VirtualAuthenticator {
      * @param origin     origin the "browser" reports in clientDataJSON
      */
     public String create(String challenge, String userHandle, String origin, String label) {
+        return "{\"publicKey\":{\"credential\":" + credential(challenge, userHandle, origin) + ",\"label\":\"" + label
+                + "\"}}";
+    }
+
+    /**
+     * {@code navigator.credentials.create()} as {@code PublicKeyCredential.toJSON()}: the credential alone, as the
+     * first-party API ({@code POST /v1/me/passkeys}) and the mobile platform passkey APIs send it.
+     */
+    public String credential(String challenge, String userHandle, String origin) {
         this.userHandle = B64URL_DECODER.decode(userHandle);
         byte[] clientDataJson = clientData("webauthn.create", challenge, origin);
         byte[] authData = concat(rpIdHash(), new byte[] {(byte) (FLAG_UP | FLAG_UV | FLAG_AT)}, counter(signCount),
@@ -82,11 +91,11 @@ public final class VirtualAuthenticator {
         attestation.put("attStmt", Map.of());
         attestation.put("authData", authData);
         String id = credentialId();
-        return "{\"publicKey\":{\"credential\":{\"id\":\"" + id + "\",\"rawId\":\"" + id + "\",\"response\":{"
+        return "{\"id\":\"" + id + "\",\"rawId\":\"" + id + "\",\"response\":{"
                 + "\"attestationObject\":\"" + B64URL.encodeToString(Cbor.encode(attestation)) + "\","
                 + "\"clientDataJSON\":\"" + B64URL.encodeToString(clientDataJson) + "\","
                 + "\"transports\":[\"internal\"]},\"type\":\"public-key\",\"clientExtensionResults\":{},"
-                + "\"authenticatorAttachment\":\"platform\"},\"label\":\"" + label + "\"}}";
+                + "\"authenticatorAttachment\":\"platform\"}";
     }
 
     /** {@code navigator.credentials.get()} with the next signature counter. */

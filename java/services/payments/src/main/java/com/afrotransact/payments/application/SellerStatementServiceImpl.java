@@ -5,7 +5,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
+import com.afrotransact.payments.domain.JournalType;
 import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.domain.StatementLine;
 import com.afrotransact.payments.port.LedgerRepository;
@@ -34,6 +36,12 @@ class SellerStatementServiceImpl implements SellerStatementService {
 
     @Override
     public List<StatementLine> statement(String orgId, String currency, Instant from, Instant to, int limit) {
+        return statement(orgId, currency, from, to, limit, Set.of());
+    }
+
+    @Override
+    public List<StatementLine> statement(String orgId, String currency, Instant from, Instant to, int limit,
+                                         Set<JournalType> kinds) {
         String org = access.orgOf(orgId);
         access.balanceViewer(org);
         Instant end = to == null ? Instant.now(clock) : to;
@@ -44,6 +52,7 @@ class SellerStatementServiceImpl implements SellerStatementService {
         String cur = currency == null || currency.isBlank() ? settings.currency()
                 : currency.trim().toUpperCase(Locale.ROOT);
         int max = Math.max(1, Math.min(limit, MAX_LINES));
-        return tx.serializable(() -> ledger.statement(org, cur, start, end, max));
+        Set<JournalType> only = kinds == null ? Set.of() : Set.copyOf(kinds);
+        return tx.serializable(() -> ledger.statement(org, cur, start, end, max, only));
     }
 }

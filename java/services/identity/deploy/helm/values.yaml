@@ -49,7 +49,8 @@ monitoring:
 #   - ORDERS_CLIENT_SECRET, BOOKINGS_CLIENT_SECRET, FULFILMENT_CLIENT_SECRET, PAYMENTS_CLIENT_SECRET,
 #     NOTIFICATIONS_CLIENT_SECRET
 #   - SEARCH_CLIENT_SECRET (search-service, scopes ai:use ads:serve)
-#   - RETAIL_CLIENT_SECRET (retail-service, scopes inventory:receive inventory:adjust inventory:read)
+#   - RETAIL_CLIENT_SECRET (retail-service, scopes catalog:read inventory:receive inventory:read media:write)
+#   - INVENTORY_CLIENT_SECRET (inventory-service, scopes catalog:read catalog:write shipping:label)
 #   - GATEWAY_BFF_CLIENT_SECRET, OFFERS_CLIENT_SECRET, INDEXER_CLIENT_SECRET, TRUSTOPS_CLIENT_SECRET,
 #     TAX_RETURNS_CLIENT_SECRET
 #   - BOOTSTRAP_ADMIN_EMAIL

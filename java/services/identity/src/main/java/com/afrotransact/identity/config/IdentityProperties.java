@@ -1,6 +1,7 @@
 package com.afrotransact.identity.config;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -49,7 +50,7 @@ public record IdentityProperties(
         signing = signing == null ? new Signing(null, null, false, null) : signing;
         verification = verification == null ? new Verification(null) : verification;
         mfa = mfa == null ? new Mfa(null, null) : mfa;
-        webauthn = webauthn == null ? new WebAuthn(null, null, null) : webauthn;
+        webauthn = webauthn == null ? new WebAuthn(null, null, null, null) : webauthn;
         corsAllowedOrigins = corsAllowedOrigins == null ? List.of() : List.copyOf(corsAllowedOrigins);
         social = social == null ? Map.of() : Map.copyOf(social);
         bootstrapAdmin = bootstrapAdmin == null ? new BootstrapAdmin(null, null, null, null, null) : bootstrapAdmin;
@@ -157,13 +158,23 @@ public record IdentityProperties(
         }
     }
 
-    /** Passkey relying party: id (registrable domain), display name and the origins allowed to use it. */
-    public record WebAuthn(String rpId, String rpName, List<String> allowedOrigins) {
+    /**
+     * Passkey relying party: id (registrable domain), display name and the origins allowed to use it.
+     *
+     * @param appOrigins S016: native app origins for platform passkeys (Face ID / fingerprint), e.g.
+     *                   {@code android:apk-key-hash:<base64url SHA-256 of the signing certificate>}; merged into
+     *                   {@code allowedOrigins}. iOS apps sign with the web origin of their associated domain.
+     */
+    public record WebAuthn(String rpId, String rpName, List<String> allowedOrigins, List<String> appOrigins) {
 
         public WebAuthn {
             rpId = rpId == null ? "localhost" : rpId;
             rpName = rpName == null ? "AfroTransact" : rpName;
-            allowedOrigins = allowedOrigins == null ? List.of() : List.copyOf(allowedOrigins);
+            appOrigins = appOrigins == null ? List.of() : appOrigins.stream().filter(o -> o != null && !o.isBlank())
+                    .map(String::trim).toList();
+            List<String> all = new ArrayList<>(allowedOrigins == null ? List.of() : allowedOrigins);
+            appOrigins.stream().filter(o -> !all.contains(o)).forEach(all::add);
+            allowedOrigins = List.copyOf(all);
         }
     }
 

@@ -79,7 +79,30 @@ suggested correction) or exemption, ISBN-13 for books, price > 0.
 | GET | `/v1/identifiers/gtin/{code}/prefill` (S031) | `catalog:write` or `catalog:read` |
 | POST | `/v1/labels?format=svg\|png\|zpl\|pdf&layout=&paper=` (one label) | `catalog:write` or `catalog:read` |
 | POST | `/v1/labels/batch?format=pdf\|zpl {labels[≤500], layout: LABEL\|SHEET, paper: LETTER\|A4}` | `catalog:write` or `catalog:read` |
-| GET | `/v1/labels/units/{atin}?format=&copies=&orgId=` | `catalog:write` (sellers: own org, own or live pages; staff/services: any `orgId`) |
+| GET | `/v1/labels/units/{atin}?format=&copies=&orgId=` | `catalog:write` (sellers: own org, own or live pages; staff/services: any `orgId`); service clients and staff also with `catalog:read` (inventory-service). The AT-FN code is returned as data in `X-Unit-Label-Code` (absent for a manufacturer barcode) |
+| GET | `/v1/variants/{atin}` (S226) | `catalog:read` (service clients such as retail-service, staff) or `catalog:write` (members of the owning org): the variant and its product in **any** status (draft, in review, paused, rejected, taken down, hidden), `{product, variant}`; 404 `catalog.variant-not-found`. `GET /v1/public/variants/{atin}` stays live-only |
+
+### Relationship checks (S248, OpenFGA)
+
+Product reads and owner actions use `ResourceAccessChecker` (`CatalogRelations`, see
+`docs/engineering/authorisation.md`): the RBAC permission **and** a relation in OpenFGA, with the product's owner read
+from catalog's database and passed as a contextual `product#org` tuple, so a forged `org` claim never reaches another
+organisation's products (403 `auth.relationship-denied`).
+
+| Use case | Relation |
+|---|---|
+| `GET /v1/products/{id}`, `/atin/{atin}`, `/v1/variants/{atin}` | `can_view` on `product:<id>` (members, staff of the org's market, first-party services; delegated viewers) |
+| `POST /v1/products/{id}/pause`, `/resume` | `can_edit` on `product:<id>` (catalog role and above, catalog staff of the market) |
+| `POST /v1/products` | `can_manage_products` on `organization:<owner>` (the org must sell products) |
+| `GET /v1/products?orgId=` | `can_view_products` on the organisation; without `orgId` (staff, every org) `can_view_all` on `platform:afrotransact` |
+
+Moderation, takedowns, flags and the taxonomy stay RBAC-only (`catalog:moderate`, `catalog:taxonomy`): they are
+platform staff actions (catalog managers, Trust and Safety, the trust-ops client) and the model has no market-scoped
+Trust and Safety relation on products yet. AfroTransact Retail's staff list through `platform.retail_buyer`, which
+authz-sync maps to `catalog` on Retail's organisation (Retail's organisation needs its `sells_products` flag in the
+store). Profiles: `local` off, `dev` enforced, `uat` shadow (`FGA_ENFORCE=false`, review `FGA shadow:` logs), `prod`
+off until uat enforces. Secret `FGA_API_TOKEN`. `ProductRelationshipsIT` runs against the local
+`openfga/openfga:v1.10.0` image.
 
 Contract: [`contracts/openapi/catalog.yaml`](../../../contracts/openapi/catalog.yaml).
 Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
@@ -131,6 +154,7 @@ Known gaps:
 | `KAFKA_BOOTSTRAP` | Kafka for the outbox relay |
 | `AUTH_ISSUER_URL` | identity service issuer (JWT validation) |
 | `RETAIL_ORG_ID` | organisation id of AfroTransact Retail |
+| `FGA_ENABLED`, `FGA_ENFORCE`, `FGA_API_URL`, `FGA_STORE_ID`, `FGA_STORE_NAME`, `FGA_MODEL_ID`, `FGA_API_TOKEN` (secret), `FGA_TIMEOUT`, `FGA_CACHE_TTL` | OpenFGA relationship checks (S248) |
 | `LISTING_ENFORCEMENT_PAGE_SIZE` | products per hide / restore page (500) |
 | `PRODUCT_DATA_ORDER`, `PRODUCT_DATA_CACHE_TTL`, `PRODUCT_DATA_MISS_TTL` | GTIN prefill provider order (`GS1,OPEN_FOOD_FACTS`) and cache (7d / 1d) |
 | `GS1_ENABLED`, `GS1_API_KEY` (secret), `GS1_BASE_URL`, `GS1_TIMEOUT` | Verified by GS1 (off by default; needs a key) |

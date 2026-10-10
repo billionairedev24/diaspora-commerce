@@ -142,6 +142,29 @@ public final class Postings {
                 .build(id, at);
     }
 
+    /**
+     * AfroTransact Retail supplier invoices released for payment (S226): Dr 1400 Retail purchases released / Cr
+     * 2500:supplier. Lines carry the Retail organisation for attribution; nothing touches a seller payable.
+     */
+    public static Journal supplierPayable(UUID id, Instant at, String key, SupplierPayment p, String retailOrgId) {
+        return Journal.builder(JournalType.SUPPLIER_PAYABLE, key)
+                .description("Supplier payment released for purchase order " + p.poNumber() + " (supplier "
+                        + (p.supplierCode() == null ? p.supplierId() : p.supplierCode()) + ")")
+                .debit(LedgerAccount.of(Chart.RETAIL_PURCHASES_RELEASED), p.amount(), retailOrgId)
+                .credit(LedgerAccount.supplierPayable(p.supplierId().toString()), p.amount(), retailOrgId)
+                .build(id, at);
+    }
+
+    /** A supplier paid from the operating bank account: Dr 2500:supplier / Cr 1050. */
+    public static Journal supplierPayment(UUID id, Instant at, String key, SupplierPayment p, String reference,
+                                          String retailOrgId) {
+        return Journal.builder(JournalType.SUPPLIER_PAYMENT, key)
+                .description("Supplier payment for purchase order " + p.poNumber() + " paid, reference " + reference)
+                .debit(LedgerAccount.supplierPayable(p.supplierId().toString()), p.amount(), retailOrgId)
+                .credit(LedgerAccount.of(Chart.OPERATING_BANK), p.amount(), retailOrgId)
+                .build(id, at);
+    }
+
     /** Voided label credited back to the seller: the exact reverse of {@link #labelCharge}. */
     public static Journal labelCredit(UUID id, Instant at, String key, LabelCharge c) {
         return Journal.builder(JournalType.LABEL_CREDIT, key)

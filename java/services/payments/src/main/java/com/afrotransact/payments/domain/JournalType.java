@@ -14,5 +14,9 @@ public enum JournalType {
     PROVIDER_FEE_COLLECTED,
     LABEL_CHARGE,
     LABEL_CREDIT,
-    LABEL_RECOVERY
+    LABEL_RECOVERY,
+    /** AfroTransact Retail supplier invoices released for payment (retail.payment.released, S226). */
+    SUPPLIER_PAYABLE,
+    /** A released supplier payment paid from the operating bank account. */
+    SUPPLIER_PAYMENT
 }

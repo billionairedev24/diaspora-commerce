@@ -745,7 +745,7 @@
 - a11y-known-issues list is empty","E33","","Medium","5","storybook a11y","quality","Done"
 "S248","Story","Relationship checks in catalog, orders, payments; market on role events","Roll ResourceAccessChecker out to catalog, orders and payments (shadow then enforce); identity publishes market on role events so authz-sync writes market-scoped staff grants; authz-sync in docker compose; FGA enforce in uat and prod after shadow review.","- Catalog, orders and payments enforce relationships in dev
 - Market-scoped staff grants come from identity events
-- Shadow-mode denial logs reviewed before enforcing in uat/prod","E02","","High","8","authz openfga","identity","To Do"
+- Shadow-mode denial logs reviewed before enforcing in uat/prod","E02","","High","8","authz openfga","identity","In Progress"
 "S249","Story","First real plan and apply per cloud","Run tofu plan/apply for dev on the first chosen cloud with real credentials, create Temporal namespaces, Cloudflare Pages project and developers DNS, origin-pull or Tunnel in k8s, image-signature enforcement, per-PR preview namespaces scaling to zero, and confirm Trivy IaC passes.","- dev environment applied on the chosen cloud and services deployed by Argo CD
 - Temporal namespaces exist per environment
 - Docs portal served at developers.<domain>

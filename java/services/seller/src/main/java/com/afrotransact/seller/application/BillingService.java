@@ -31,6 +31,15 @@ public interface BillingService {
 
     List<Invoice> invoices(String orgId);
 
+    /** One invoice (same readers as {@link #invoices}), e.g. to download its PDF. */
+    Invoice invoice(String orgId, String invoiceId);
+
+    /** The effect of a plan / cadence change without making it (owner or finance; staff with seller:billing). */
+    PlanChangePreview previewPlanChange(String orgId, String planCode, Cadence cadence);
+
+    /** A SetupIntent on the organisation's Stripe customer (created on first use) for a new payment method (owner). */
+    SetupIntentView setupIntent(String orgId);
+
     /** After final approval: Stripe customer + subscription with the plan's trial (idempotent; retried by a job). */
     void activate(String orgId);
 

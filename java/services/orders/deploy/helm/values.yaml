@@ -37,6 +37,7 @@ monitoring:
 #   - TEMPORAL_TLS_CERT
 #   - TEMPORAL_TLS_KEY
 #   - HANDOVER_CODE_KEY
+#   - FGA_API_TOKEN            (one of OpenFGA's pre-shared keys, afrotransact/openfga preshared-keys; S248)
 secrets:
   enabled: true
   store: platform-secrets

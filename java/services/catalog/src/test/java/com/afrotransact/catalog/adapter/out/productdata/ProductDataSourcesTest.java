@@ -58,7 +58,7 @@ class ProductDataSourcesTest {
     void setUp() {
         WIREMOCK.resetAll();
         ProductDataProperties props = new ProductDataProperties(null, null, null,
-                new ProductDataProperties.Gs1(true, WIREMOCK.baseUrl(), "gs1-key", Duration.ofMillis(800)),
+                new ProductDataProperties.Gs1(true, WIREMOCK.baseUrl(), "gs1-key", Duration.ofSeconds(5)),
                 new ProductDataProperties.OpenFoodFacts(true, WIREMOCK.baseUrl(), "AfroTransact-Test/1.0",
                         Duration.ofMillis(800)));
         off = new OpenFoodFactsSource(RestClient.builder(), props);

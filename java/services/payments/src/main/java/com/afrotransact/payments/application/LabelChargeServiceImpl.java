@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.afrotransact.payments.domain.LabelCharge;
 import com.afrotransact.payments.domain.LabelChargeStatus;
 import com.afrotransact.payments.domain.Money;
+import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.domain.Postings;
 import com.afrotransact.payments.port.LabelChargeRepository;
 import com.afrotransact.platform.events.InboxDeduplicator;
@@ -116,10 +117,16 @@ class LabelChargeServiceImpl implements LabelChargeService {
     }
 
     @Override
-    public List<LabelCharge> ofOrg(String orgId) {
+    public List<LabelCharge> ofOrg(String orgId, LabelChargeStatus status, Instant from, Instant to, int limit) {
         String org = access.orgOf(orgId);
         access.balanceViewer(org);
-        return charges.ofOrg(org, MAX_LIST);
+        if (from != null && to != null && !from.isBefore(to)) {
+            throw new PaymentsRuleViolation("payments.invalid-request", "from must be before to");
+        }
+        if (status == LabelChargeStatus.VOIDED) {
+            return List.of();
+        }
+        return charges.ofOrg(org, status, from, to, Math.max(1, Math.min(limit, MAX_LIST)));
     }
 
     /**

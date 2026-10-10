@@ -70,6 +70,20 @@ class BillingIT extends SellerIntegrationTest {
         assertThat(overview.text("/planName")).isEqualTo("Seller Growth");
         assertThat(overview.text("/nextChargeLabel")).startsWith("Next charge $39 on ").endsWith("to Visa ••4242");
 
+        // S103: the owner sees what an upgrade costs now (Stripe's proration preview) before confirming it; a
+        // downgrade or cadence change would only apply at renewal. Nothing changes on the subscription.
+        int beforePreview = StripeStub.requests(STRIPE, "POST", "/v1/subscriptions/" + sub).size();
+        Response preview = get("/v1/orgs/" + org + "/billing/plan/preview?planCode=seller_pro&cadence=MONTHLY");
+        assertThat(preview.status()).isEqualTo(200);
+        assertThat(preview.text("/change")).isEqualTo("IMMEDIATE_UPGRADE");
+        assertThat(preview.body().path("amountDueNowCents").asLong()).isEqualTo(1734);
+        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/invoices/create_preview")).anySatisfy(b -> assertThat(b)
+                .contains("subscription=" + sub, "subscription_details[proration_behavior]=always_invoice"));
+        Response later = get("/v1/orgs/" + org + "/billing/plan/preview?planCode=seller_growth&cadence=ANNUAL");
+        assertThat(later.text("/change")).isEqualTo("AT_RENEWAL");
+        assertThat(later.body().path("amountDueNowCents").asLong()).isZero();
+        assertThat(StripeStub.requests(STRIPE, "POST", "/v1/subscriptions/" + sub)).hasSize(beforePreview);
+
         Response upgrade = post("/v1/orgs/" + org + "/billing/plan", Map.of("planCode", "seller_pro",
                 "cadence", "MONTHLY"));
         assertThat(upgrade.status()).isEqualTo(200);

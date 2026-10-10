@@ -199,6 +199,12 @@ abstract class OrdersIntegrationTest {
 
     /** A placed order (payment authorised) created through the placement use case, bypassing the saga. */
     Order placedOrder(String customerId, String paymentId, Spec... specs) {
+        return placedOrder(customerId, paymentId, new ShipTo("addr-1", "Ada Obi", "+17135550142", "1 Main St", null,
+                "Houston", "TX", "77002", "US", "Gate 4"), specs);
+    }
+
+    /** A placed order shipped to {@code shipTo} (its country is the order's market). */
+    Order placedOrder(String customerId, String paymentId, ShipTo shipTo, Spec... specs) {
         String orderId = UUID.randomUUID().toString();
         List<Shipment> shipments = new ArrayList<>();
         int seq = 0;
@@ -220,8 +226,7 @@ abstract class OrdersIntegrationTest {
         }
         Order order = new Order(orderId, "AT-2026-" + UUID.randomUUID().toString().substring(0, 6)
                 .toUpperCase(Locale.ROOT), customerId, "USD", OrderStatus.PENDING_PAYMENT,
-                OrderTotals.ofShipments(shipments), new ShipTo("addr-1", "Ada Obi", "+17135550142", "1 Main St", null,
-                "Houston", "TX", "77002", "US", "Gate 4"), paymentId, "checkout-" + orderId, null, null,
+                OrderTotals.ofShipments(shipments), shipTo, paymentId, "checkout-" + orderId, null, null,
                 Instant.now(), shipments, 0);
         placement.persistPending(order, null);
         return placement.place(orderId);

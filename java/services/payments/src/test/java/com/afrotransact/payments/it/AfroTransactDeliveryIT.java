@@ -85,6 +85,11 @@ class AfroTransactDeliveryIT extends PaymentsIntegrationTest {
                 assertThat(r.path("deliveryFeesMinor").asLong()).isEqualTo(200);
             }
         }
+        // S259: the seller's earnings show the pickup fees it paid; org_a (seller-shipped) paid none.
+        assertThat(ok(send("GET", "/v1/payouts/balance?orgId=" + orgC, null, null)).path("deliveryFeesMinor")
+                .asLong()).isEqualTo(200);
+        assertThat(ok(send("GET", "/v1/payouts/balance?orgId=org_a", null, null)).path("deliveryFeesMinor")
+                .asLong()).isZero();
         JsonNode payment = ok(send("GET", "/v1/payments/" + paymentId, null, null));
         JsonNode d1 = payment.path("lines").get(0);
         assertThat(d1.path("fulfilment").asString()).isEqualTo("AFROTRANSACT_DELIVERY");
@@ -105,6 +110,10 @@ class AfroTransactDeliveryIT extends PaymentsIntegrationTest {
         assertEveryJournalBalances();
         assertThat(balance(order, "4250", "")).isEqualTo(100);
         assertThat(balance(order, "2000", orgC)).isEqualTo(2451 - 1280);
+        TestSupport.as(TestSupport.FINANCE);
+        assertThat(ok(send("GET", "/v1/payouts/balance?orgId=" + orgC, null, null)).path("deliveryFeesMinor")
+                .asLong()).as("customer-fault refund gave half the fee back").isEqualTo(100);
+        TestSupport.as(TestSupport.ORDERS_SERVICE);
 
         // Seller at fault (default): the rest incl. the whole delivery charge back to the customer, fee kept.
         STRIPE.refund("pi_" + order, "re_s_" + order, 1500 + 1128 + 124, "succeeded");

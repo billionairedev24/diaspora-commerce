@@ -33,4 +33,20 @@ public interface StripeBillingGateway {
 
     /** Adds the metered price with {@code lookupKey} to the subscription; returns the subscription item id. */
     String addSubscriptionItem(String subscriptionId, String lookupKey, String idempotencyKey);
+
+    /**
+     * A SetupIntent on the customer for saving a card or bank account for off-session plan charges (Stripe Elements
+     * / PaymentSheet in Seller Center); the client confirms it and then registers the resulting {@code pm_…}.
+     */
+    SetupIntentSecret createSetupIntent(String customerId, String idempotencyKey);
+
+    /**
+     * What an immediate prorated price change would invoice now (Stripe invoice preview with {@code always_invoice}),
+     * in cents; nothing changes on the subscription.
+     */
+    long previewProratedChange(String customerId, String subscriptionId, String itemId, String lookupKey);
+
+    /** A SetupIntent's id and the client secret the browser / app confirms it with. */
+    record SetupIntentSecret(String id, String clientSecret) {
+    }
 }

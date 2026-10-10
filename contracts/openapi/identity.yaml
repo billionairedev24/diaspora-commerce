@@ -549,6 +549,10 @@ paths:
       tags:
       - Access control
       summary: Assign an account or platform role
+      description: 'S248: market (ISO 3166-1 alpha-2, e.g. GB) scopes a staff role to one market; repeat for more markets.
+        Without market the role is platform-wide. A role is either platform-wide or market-scoped (409 identity.role-platform-wide
+        / identity.role-market-scoped). Super Admin and account roles are never market-scoped (422 identity.role-not-market-scoped).
+        identity.role.granted carries the market for authz-sync.'
       operationId: assignRole
       parameters:
       - name: userId
@@ -567,6 +571,11 @@ paths:
         required: false
         schema:
           type: string
+      - name: market
+        in: query
+        required: false
+        schema:
+          type: string
       responses:
         '200':
           description: OK
@@ -578,6 +587,8 @@ paths:
       tags:
       - Access control
       summary: Remove a role (takes effect on the user's next token)
+      description: With market, removes only that market's scope (the role goes when its last market does); without market,
+        removes the role with every market.
       operationId: removeRole
       parameters:
       - name: userId
@@ -592,6 +603,11 @@ paths:
         schema:
           type: string
       - name: reason
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: market
         in: query
         required: false
         schema:
@@ -1185,7 +1201,9 @@ paths:
     get:
       tags:
       - Login & security
-      summary: Registered passkeys (register at /webauthn/register on the authorization server)
+      summary: Registered passkeys
+      description: 'Register on the hosted page (/webauthn/register) or over the API: POST /v1/me/passkeys/registrations,
+        then POST /v1/me/passkeys (first-party apps, mobile).'
       operationId: passkeys
       responses:
         '200':
@@ -1196,6 +1214,47 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Passkey'
+    post:
+      tags:
+      - Login & security
+      summary: Finish registering a passkey
+      description: Verifies the attestation (challenge, origin, RP id, user presence and verification) with the same relying
+        party as the hosted page. 422 identity.passkey-rejected; 409 identity.passkey-registration-expired when the registration
+        expired, was used or is another account's.
+      operationId: registerPasskey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyRegistrationRequest'
+        required: true
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Passkey'
+  /v1/me/passkeys/registrations:
+    post:
+      tags:
+      - Login & security
+      summary: Start registering a passkey for the signed-in account
+      description: Returns WebAuthn creation options valid for five minutes and one registration. Up to 20 passkeys per account
+        (422 identity.too-many-passkeys).
+      operationId: startPasskeyRegistration
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyRegistrationStartRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PasskeyRegistrationOptions'
   /v1/me/passkeys/{credentialId}:
     delete:
       tags:
@@ -1211,6 +1270,30 @@ paths:
       responses:
         '204':
           description: No Content
+    patch:
+      tags:
+      - Login & security
+      summary: Rename a passkey
+      operationId: renamePasskey
+      parameters:
+      - name: credentialId
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasskeyRenameRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/Passkey'
   /v1/me/password:
     put:
       tags:
@@ -1496,6 +1579,26 @@ paths:
       responses:
         '204':
           description: No Content
+  /v1/orgs/{orgId}/roles:
+    get:
+      tags:
+      - Organisations
+      summary: Roles assignable in the organisation (Seller Center role pickers, S245)
+      description: Same readers as the member directory. BOTH organisations get the seller and provider roles.
+      operationId: orgRoles
+      parameters:
+      - name: orgId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/OrgRoleList'
 components:
   schemas:
     UpsertOrgRequest:
@@ -1743,6 +1846,16 @@ components:
             type: string
         driverAppAccess:
           type: boolean
+        roleMarkets:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: 'S248: markets a staff role is scoped to, by role key; roles not listed are platform-wide'
+          example:
+            platform.customer_support:
+            - GB
     Role:
       type: object
       properties:
@@ -1896,6 +2009,59 @@ components:
         verifiedAt:
           type: string
           format: date-time
+    PasskeyRegistrationRequest:
+      type: object
+      properties:
+        registrationId:
+          type: string
+          format: uuid
+        credential:
+          type: object
+          description: 'PublicKeyCredential from navigator.credentials.create (JSON with base64url fields: id, rawId, type,
+            response.{attestationObject, clientDataJSON, transports}, clientExtensionResults, authenticatorAttachment), e.g.
+            credential.toJSON()'
+        label:
+          type: string
+          maxLength: 64
+          minLength: 0
+      required:
+      - credential
+      - registrationId
+    Passkey:
+      type: object
+      properties:
+        credentialId:
+          type: string
+        label:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+    PasskeyRegistrationStartRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          description: Name shown in Login & security, e.g. "iPhone"
+          maxLength: 64
+          minLength: 0
+    PasskeyRegistrationOptions:
+      type: object
+      properties:
+        registrationId:
+          type: string
+          format: uuid
+        expiresAt:
+          type: string
+          format: date-time
+        publicKey:
+          type: object
+          description: PublicKeyCredentialCreationOptions for navigator.credentials.create / ASAuthorizationPlatformPublicKeyCredentialProvider
+            / Android Credential Manager (challenge and user.id base64url, rp, pubKeyCredParams, residentKey=required, userVerification=required,
+            excludeCredentials = the account's passkeys, timeout ms)
     TotpSetup:
       type: object
       description: Render otpauthUri as a QR code; secret is for manual entry
@@ -2511,6 +2677,50 @@ components:
           type: boolean
         smsConsent:
           type: boolean
+    PasskeyRenameRequest:
+      type: object
+      properties:
+        label:
+          type: string
+          maxLength: 64
+          minLength: 0
+      required:
+      - label
+    OrgRole:
+      type: object
+      properties:
+        key:
+          type: string
+        portal:
+          type: string
+          enum:
+          - seller
+          - provider
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+    OrgRoleList:
+      type: object
+      description: 'Roles that can be granted or invited in the organisation: seller roles for SELLER, provider roles for
+        PROVIDER, both groups for BOTH (Seller Center shows both nav groups)'
+      properties:
+        orgId:
+          type: string
+        kind:
+          type: string
+          enum:
+          - SELLER
+          - PROVIDER
+          - BOTH
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgRole'
     OrgMember:
       type: object
       description: One member of the organisation's team
@@ -2585,19 +2795,6 @@ components:
           format: date-time
         current:
           type: boolean
-    Passkey:
-      type: object
-      properties:
-        credentialId:
-          type: string
-        label:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        lastUsedAt:
-          type: string
-          format: date-time
     MfaStatus:
       type: object
       properties:

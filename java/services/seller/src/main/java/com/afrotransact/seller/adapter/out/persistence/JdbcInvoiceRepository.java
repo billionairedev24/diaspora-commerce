@@ -1,9 +1,12 @@
 package com.afrotransact.seller.adapter.out.persistence;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 import com.afrotransact.seller.domain.Invoice;
 import com.afrotransact.seller.domain.InvoiceLine;
@@ -55,12 +58,24 @@ class JdbcInvoiceRepository implements InvoiceRepository {
     public List<Invoice> list(String orgId, int limit) {
         return jdbc.sql("select * from invoice where org_id = :o order by created_at desc limit :limit")
                 .param("o", orgId).param("limit", limit)
-                .query((rs, n) -> new Invoice(rs.getString("stripe_invoice_id"), rs.getString("org_id"),
-                        rs.getString("number"), Sql.instant(rs, "period_start"), Sql.instant(rs, "period_end"),
-                        rs.getLong("amount_due_cents"), rs.getLong("amount_paid_cents"), rs.getString("currency"),
-                        rs.getString("status"), rs.getString("billing_reason"), rs.getString("hosted_invoice_url"),
-                        rs.getString("invoice_pdf"), Sql.instant(rs, "created_at"),
-                        json.read(rs.getString("lines"), LINES)))
+                .query(this::row)
                 .list();
+    }
+
+    @Override
+    public Optional<Invoice> find(String orgId, String stripeInvoiceId) {
+        return jdbc.sql("select * from invoice where org_id = :o and stripe_invoice_id = :id")
+                .param("o", orgId).param("id", stripeInvoiceId)
+                .query(this::row)
+                .optional();
+    }
+
+    private Invoice row(ResultSet rs, int n) throws SQLException {
+        return new Invoice(rs.getString("stripe_invoice_id"), rs.getString("org_id"),
+                rs.getString("number"), Sql.instant(rs, "period_start"), Sql.instant(rs, "period_end"),
+                rs.getLong("amount_due_cents"), rs.getLong("amount_paid_cents"), rs.getString("currency"),
+                rs.getString("status"), rs.getString("billing_reason"), rs.getString("hosted_invoice_url"),
+                rs.getString("invoice_pdf"), Sql.instant(rs, "created_at"),
+                json.read(rs.getString("lines"), LINES));
     }
 }

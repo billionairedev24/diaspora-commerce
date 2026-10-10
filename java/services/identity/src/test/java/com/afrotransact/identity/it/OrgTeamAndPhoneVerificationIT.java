@@ -87,6 +87,22 @@ class OrgTeamAndPhoneVerificationIT {
         assertThat(first.get("status").asString()).isEqualTo("ACTIVE");
         assertThat(first.get("joinedAt").asString()).isNotBlank();
 
+        // S245: the role picker lists seller roles for a SELLER organisation, both sets once it is BOTH.
+        JsonNode sellerRoles = BrowserSession.json(s.api("GET", "/v1/orgs/" + orgId + "/roles", owner, null).body());
+        assertThat(sellerRoles.get("kind").asString()).isEqualTo("SELLER");
+        List<String> portals = new ArrayList<>();
+        sellerRoles.get("roles").forEach(r -> portals.add(r.get("portal").asString()));
+        assertThat(portals).isNotEmpty().containsOnly("seller");
+        assertThat(s.api("PUT", "/v1/orgs/" + orgId, seller, "{\"kind\":\"BOTH\",\"name\":\"Mama Put\","
+                + "\"status\":\"APPROVED\"}").statusCode()).isEqualTo(200);
+        JsonNode bothRoles = BrowserSession.json(s.api("GET", "/v1/orgs/" + orgId + "/roles", owner, null).body());
+        assertThat(bothRoles.get("kind").asString()).isEqualTo("BOTH");
+        List<String> keys = new ArrayList<>();
+        bothRoles.get("roles").forEach(r -> keys.add(r.get("key").asString()));
+        assertThat(keys).contains("seller.owner", "seller.catalog", "provider.owner", "provider.practitioner");
+        assertThat(s.api("PUT", "/v1/orgs/" + orgId, seller, "{\"kind\":\"SELLER\",\"name\":\"Mama Put\","
+                + "\"status\":\"APPROVED\"}").statusCode()).isEqualTo(200);
+
         // Invite an existing customer as catalog manager; only the token hash is stored.
         String bolaEmail = "bola." + UUID.randomUUID() + "@example.com";
         String bolaId = registerAndVerify(s, bolaEmail, "Bola", null);
@@ -183,6 +199,8 @@ class OrgTeamAndPhoneVerificationIT {
         assertThat(s.api("GET", "/v1/orgs/" + orgId + "/members", payments, null).statusCode())
                 .as("services with orgs:read").isEqualTo(200);
         assertThat(s.api("GET", "/v1/orgs/org_unknown0000000000/members", owner, null).statusCode()).isEqualTo(404);
+        assertThat(s.api("GET", "/v1/orgs/" + orgId + "/roles", userToken(s, otherEmail), null).statusCode())
+                .as("role list: same readers as the directory").isEqualTo(403);
 
         // Role changes: the owner makes Bola an admin (revoked + granted events); admins cannot touch owners.
         assertThat(s.api("PUT", "/v1/orgs/" + orgId + "/members/" + bolaId, owner,

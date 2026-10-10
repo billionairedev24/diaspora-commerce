@@ -4,9 +4,11 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import com.afrotransact.payments.domain.AccountBalance;
 import com.afrotransact.payments.domain.Journal;
+import com.afrotransact.payments.domain.JournalType;
 import com.afrotransact.payments.domain.StatementLine;
 
 /** Append-only journal store (UPDATE / DELETE are rejected by database triggers). */
@@ -36,10 +38,17 @@ public interface LedgerRepository {
     long unattributedPayable(String orgId, String currency);
 
     /**
+     * AfroTransact Delivery pickup fees the organisation paid (S259): credits to 4250 attributed to it at capture minus
+     * the fees given back by customer-fault refunds.
+     */
+    long deliveryFeesPaid(String orgId, String currency);
+
+    /**
      * The seller statement: movements of 2000:org in [from, to) by posting time, newest first, with the label, shipment
      * and tracking number of label lines.
      */
-    List<StatementLine> statement(String orgId, String currency, Instant from, Instant to, int limit);
+    List<StatementLine> statement(String orgId, String currency, Instant from, Instant to, int limit,
+                                  Set<JournalType> kinds);
 
     /** Net movement (debit positive) on 1000 Stripe clearing per Stripe reference for journals posted in [from, to). */
     Map<String, Long> clearingByRef(Instant from, Instant to, String currency);

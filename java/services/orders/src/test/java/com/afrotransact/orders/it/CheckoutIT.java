@@ -3,6 +3,7 @@ package com.afrotransact.orders.it;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.http.HttpResponse;
+import java.util.Locale;
 import java.util.UUID;
 
 import com.afrotransact.orders.application.PaymentEventService;
@@ -164,6 +165,34 @@ class CheckoutIT extends OrdersIntegrationTest {
         // The same key replays the same failure.
         problem(send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\"}", "Idempotency-Key", "k-" + customer,
                 "Authorization", "Bearer " + bearer), 409, "orders.insufficient-stock");
+    }
+
+    @Test
+    void fulfilledByAfroTransactLinesReserveTheOffersInventorySku() {
+        String customer = id("cust");
+        String bearer = "tok-" + customer;
+        String atin = id("ATF");
+        String org = id("org");
+        String offerId = UUID.randomUUID().toString();
+        String atFn = "ATF" + UUID.randomUUID().toString().replace("-", "").substring(0, 7).toUpperCase(Locale.ROOT);
+        String line = Upstreams.line(atin, org, "AFROTRANSACT", 1000, 2);
+        UPSTREAMS.cart(bearer, Upstreams.pkg(org, "Lagos Foods", "AFROTRANSACT",
+                line.substring(0, line.length() - 1) + ",\"offerId\":\"" + offerId + "\"}"));
+        UPSTREAMS.addresses(bearer, "addr-1", "TX");
+        UPSTREAMS.json(WireMock.get(WireMock.urlPathEqualTo("/v1/offers/" + offerId))
+                .withHeader("Authorization", WireMock.equalTo("Bearer " + Upstreams.SERVICE_TOKEN)), 200,
+                "{\"id\":\"" + offerId + "\",\"atin\":\"" + atin + "\",\"sellerOrgId\":\"" + org
+                        + "\",\"fulfilment\":\"AFROTRANSACT\",\"inventorySku\":\"" + atFn + "\"}");
+        UPSTREAMS.insufficient(atFn);
+        TestSupport.as(TestSupport.customer(customer));
+
+        HttpResponse<String> r = send("POST", "/v1/checkout", "{\"addressId\":\"addr-1\"}", "Idempotency-Key",
+                "k-" + customer, "Authorization", "Bearer " + bearer);
+
+        // FBA stock is held under the seller's AT-FN code (the offer's inventorySku), not the variant ATIN.
+        assertThat(problem(r, 409, "orders.insufficient-stock").path("detail").asString()).contains(atFn);
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/reservations"))
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[0].sku", WireMock.equalTo(atFn))));
     }
 
     @Test

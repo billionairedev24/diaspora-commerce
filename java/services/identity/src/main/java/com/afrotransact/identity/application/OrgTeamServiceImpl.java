@@ -1,13 +1,16 @@
 package com.afrotransact.identity.application;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.identity.application.OrgTeamAccess.TeamCaller;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
+import com.afrotransact.identity.domain.OrgKind;
 import com.afrotransact.identity.domain.OrgMember;
 import com.afrotransact.identity.domain.Organization;
+import com.afrotransact.identity.domain.Portal;
 import com.afrotransact.identity.domain.Role;
 import com.afrotransact.identity.domain.TeamPolicy;
 import com.afrotransact.identity.domain.UserAccount;
@@ -45,6 +48,20 @@ class OrgTeamServiceImpl implements OrgTeamService {
         Organization org = access.org(orgId);
         access.requireRead(org);
         return orgs.members(org.id());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public AssignableRoles assignableRoles(String orgId) {
+        Organization org = access.org(orgId);
+        access.requireRead(org);
+        List<Portal> portals = org.kind() == OrgKind.BOTH ? List.of(Portal.SELLER, Portal.PROVIDER)
+                : List.of(policy.portalOf(org.kind()));
+        List<Role> result = new ArrayList<>();
+        for (Portal portal : portals) {
+            result.addAll(roles.roles(portal));
+        }
+        return new AssignableRoles(org.id(), org.kind(), result);
     }
 
     @Override

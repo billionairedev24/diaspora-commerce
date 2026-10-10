@@ -30,13 +30,19 @@ on its first payments line, so captures and refunds use the same allocation.
 
 1. **prepare** — cart non-empty, every line checkoutable, one currency; address state eligible
    (`GET /v1/markets/eligibility`, content — unreachable ⇒ allowed; `deliveryAllowed=false` ⇒ 422
-   `orders.market-disabled`, S050); price snapshot from the cart view; tax per line from the `TaxCalculator` port
-   (per-state table until the tax service exists); perishables from catalog `GET /v1/public/variants/{atin}`
+   `orders.market-disabled`, S050); price snapshot from the cart view; tax per line from tax-returns'
+   `POST /v1/tax/quotes` (S235: one quote line per order line with its discount, the shipment's shipping on its first
+   line; `taxMinor`, `jurisdiction`, `localJurisdiction` and `shippingTaxMinor` stored per line). `dev` falls back to
+   the interim per-state table when tax-returns is down; `uat` and `prod` don't (`ORDERS_TAX_FALLBACK_TO_TABLE=false`:
+   the step fails and the saga retries it); perishables from catalog `GET /v1/public/variants/{atin}`
    (product type `perishable`); delivery estimate from `POST /v1/promises` (unreachable ⇒ stored estimates).
 2. **reserve** — AfroTransact-fulfilled lines, all or nothing, `POST /v1/reservations` with `Idempotency-Key` =
-   order id; packages split into shipments per node; shipping fees; 4-digit handover codes.
+   order id, each line under the offer's **`inventorySku`** (offers `GET /v1/offers/{id}` with the orders-service
+   token, `offers:read`): FBA stock is received under the seller's AT-FN code by default and Retail's under its own
+   SKU; lines without an offer or inventory SKU fall back to the variant ATIN; packages split into shipments per node; shipping fees; 4-digit handover codes.
 3. **createPayment** — `POST /v1/payments` (manual capture, `Idempotency-Key` = order id, one line per order line,
-   `fulfilment` FBA / SELF).
+   `fulfilment` FBA / SELF, `shopperId` = the customer id so payments puts the shopper's Stripe Customer on the
+   PaymentIntent and the mobile PaymentSheet lists their saved cards, S245).
 4. **persistPending** — order + shipments `PENDING_PAYMENT`; the HTTP call returns
    `{orderNumber, clientSecret, status: awaiting_payment, totalMinor, shipments[{deliveryCode}]}` (201; 202 if slow).
 5. **wait** for `paymentAuthorized` / `paymentFailed` signals — from `payments.intent.succeeded|failed|canceled`
@@ -150,7 +156,7 @@ RFC 9457 problems with `code` `orders.*`. Reference pages `/swagger-ui.html`, `/
 | `GET /v1/orders?customer=me&cursor=&limit=` | customer | Your orders: shipments, timelines, tracking, codes |
 | `GET /v1/orders/{number}` | customer / seller / staff `orders:read` | per-viewer view (sellers: own shipments only) |
 | `POST /v1/orders/{number}/shipments/{id}/cancel` | customer | until packed |
-| `GET /v1/orders/{number}/payment-split` | staff / seller (own row) | from payments `GET /v1/orders/{id}/split` |
+| `GET /v1/orders/{number}/payment-split` | staff / seller (own row) | from payments `GET /v1/orders/{id}/split`; per recipient items, shipping, tax, commission, FBA fees, **`deliveryFeesMinor`** (S259: AfroTransact Delivery pickup fees the seller paid; on the AfroTransact row the total earned), Stripe fee share, net |
 | `GET /v1/seller/shipments?status=` | seller `orders:read` (staff: `org=`) | queue with next actions |
 | `GET /v1/admin/orders?number&customer&seller&status&shipmentStatus&from&to` | staff `orders:read` | search |
 | `POST /v1/shipments/{id}/transitions {to, reason}` | seller / staff / fulfilment service | actor rules above |
@@ -158,6 +164,25 @@ RFC 9457 problems with `code` `orders.*`. Reference pages `/swagger-ui.html`, `/
 | `POST /v1/shipments/{id}/courier-events` · `GET …/delivery-brief` | driver `delivery:operate`; fulfilment SERVICE with `delivery:relay` (actor = body `driverId`); brief also `delivery:dispatch` | proof of delivery |
 | `GET /v1/seller/analytics?from=&to=` (`org=` for staff) | seller `orders:read` | sales, orders, checkouts and conversion by day, totals, top products |
 | `GET /v1/shipments/stream` | staff / seller `orders:read` | SSE live feed |
+
+## Relationship checks (S248, OpenFGA)
+
+`OrdersAccess` checks the RBAC permission **and** a relationship through `ResourceAccessChecker` (`OrdersRelations`,
+`docs/engineering/authorisation.md`). Orders' own database supplies the context as contextual tuples: the order's
+market (ship-to country, `UK` → `GB`) with its platform link, and for a shipment its order and seller organisation.
+
+| Caller / use case | Relation |
+|---|---|
+| Staff and services reading an order (`GET /v1/orders/{number}`, payment split) | `can_view` on `order:<id>` (support, operations, finance of the order's market, platform-wide staff, first-party services) |
+| Sellers reading an order | `can_view` on their `shipment:<id>` (`member` of the shipment's organisation) |
+| `POST /v1/shipments/{id}/transitions`, `/tracking` (sellers, staff, services) | `can_update_status` on `shipment:<id>` (seller's fulfilment / support roles, operations staff of the market, services) |
+| `GET /v1/seller/shipments`, `/v1/seller/analytics`, live feed for sellers | `can_view` on `organization:<org>` |
+| `GET /v1/admin/orders`, live feed for staff, `GET /v1/lookup/orders/{id}` | `can_view_all` on `platform:afrotransact` (platform-wide staff and first-party services only) |
+
+Customers stay matched by the order's customer id (exact, from the database) and drivers by `delivery:operate`.
+Denials are `403 auth.relationship-denied`. Profiles: `local` off, `dev` enforced, `uat` shadow, `prod` off until uat
+enforces; secret `FGA_API_TOKEN`. `OrderRelationshipsIT` runs against the local `openfga/openfga:v1.10.0` image (forged
+`org` claim, market-scoped staff on US vs GB orders, revocation).
 
 ## Events
 
@@ -180,7 +205,7 @@ pods out of service. `LiveFeedFanoutIT` runs two application contexts against on
 ## Upstreams (ports → RestClient adapters)
 
 Service calls use the `orders-service` client-credentials token (`/oauth2/token`, scopes
-`payments:service inventory:reserve cart:service tax:quote sellers:ship-from.read`, cached until a minute before
+`payments:service inventory:reserve cart:service tax:quote sellers:ship-from.read offers:read`, cached until a minute before
 expiry). geo-service (`GEO_URL`) and offers' public offer endpoint are called without a token. Cart and address book are
 read with the customer's token. 4xx = refusal (not retried), 5xx / 408 / 429 / I/O = retried.
 
@@ -192,7 +217,8 @@ read with the customer's token. 4xx = refusal (not retried), 5xx / 408 / 429 / I
 environment, `afrotransact-<env>` on Temporal Cloud with mTLS in dev / uat / prod), `TEMPORAL_START_WORKERS`.
 Other knobs: `CHECKOUT_PAYMENT_TIMEOUT` (15m), upstream URLs (`CART_URL`, `INVENTORY_URL`, `PAYMENTS_URL`, `OFFERS_URL`,
 `SELLER_URL`, `GEO_URL`, …),
-`ORDERS_JOBS_ENABLED`, `ORDERS_CONSUMERS_ENABLED`, per-state tax table and shipping fees under `at.orders.*`.
+`ORDERS_JOBS_ENABLED`, `ORDERS_CONSUMERS_ENABLED`, `ORDERS_TAX_FALLBACK_TO_TABLE`, per-state tax table and shipping fees
+under `at.orders.*`; OpenFGA `FGA_ENABLED`, `FGA_ENFORCE`, `FGA_API_URL`, `FGA_STORE_ID`, `FGA_API_TOKEN` (secret).
 
 ## Run and test
 

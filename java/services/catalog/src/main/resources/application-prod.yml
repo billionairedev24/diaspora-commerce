@@ -1,5 +1,12 @@
 # Production: reference pages off (published on developers.afrotransact.com), sampled traces.
 at:
+  security:
+    # S248 OpenFGA relationship checks. Off until uat has run enforced; flip FGA_ENABLED (shadow) then FGA_ENFORCE per runbook.
+    fga:
+      enabled: ${FGA_ENABLED:false}
+      enforce: ${FGA_ENFORCE:false}
+      # In-cluster OpenFGA (infra/k8s/platform/openfga); FGA_API_TOKEN comes from the service's secret.
+      api-url: ${FGA_API_URL:http://openfga.openfga.svc:8080}
   api-docs:
     enabled: false
 springdoc:

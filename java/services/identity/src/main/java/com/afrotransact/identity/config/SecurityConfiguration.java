@@ -20,12 +20,14 @@ import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAut
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
 import com.afrotransact.identity.adapter.out.passkey.SignCountVerifyingRelyingParty;
 import com.afrotransact.identity.adapter.out.passkey.WebAuthnPasskeyAssertions;
+import com.afrotransact.identity.adapter.out.passkey.WebAuthnPasskeyRegistrations;
 import com.afrotransact.identity.application.FederatedLoginService;
 import com.afrotransact.identity.application.FirstPartySignInService;
 import com.afrotransact.identity.application.IdentityProviderService;
 import com.afrotransact.identity.application.SignInProtectionService;
 import com.afrotransact.identity.application.SignInService;
 import com.afrotransact.identity.port.PasskeyAssertions;
+import com.afrotransact.identity.port.PasskeyRegistrations;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -215,6 +217,16 @@ class SecurityConfiguration {
     @Bean
     PasskeyAssertions passkeyAssertions(WebAuthnRelyingPartyOperations relyingParty, IdentityProperties props) {
         return new WebAuthnPasskeyAssertions(relyingParty, props.webauthn().rpId());
+    }
+
+    /** S016: passkey registration over the API (first-party apps, mobile platform passkeys), same relying party. */
+    @Bean
+    PasskeyRegistrations passkeyRegistrations(WebAuthnRelyingPartyOperations relyingParty,
+                                              PublicKeyCredentialUserEntityRepository userEntities,
+                                              UserCredentialRepository credentials, IdentityProperties props) {
+        return new WebAuthnPasskeyRegistrations(relyingParty, userEntities, credentials,
+                PublicKeyCredentialRpEntity.builder().id(props.webauthn().rpId()).name(props.webauthn().rpName())
+                        .build());
     }
 
     /** Browser apps call the token endpoint (public PKCE clients) and the /v1 API cross-origin. */

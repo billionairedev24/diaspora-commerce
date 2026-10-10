@@ -32,6 +32,11 @@ public record LedgerAccount(Chart chart, String key) {
         return new LedgerAccount(Chart.RETAIL_SALES, "");
     }
 
+    /** {@code 2500:<supplierId>}: what AfroTransact Retail owes one supplier. */
+    public static LedgerAccount supplierPayable(String supplierId) {
+        return new LedgerAccount(Chart.SUPPLIER_PAYABLE, supplierId);
+    }
+
     public static LedgerAccount chargebackReserve(String orgId) {
         return new LedgerAccount(Chart.CHARGEBACK_RESERVE, orgId);
     }

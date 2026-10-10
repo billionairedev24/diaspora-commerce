@@ -3,8 +3,10 @@ package com.afrotransact.identity.adapter.in.web;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.TreeSet;
 import java.util.UUID;
 
+import com.afrotransact.identity.application.AssignableRoles;
 import com.afrotransact.identity.application.InvitationView;
 import com.afrotransact.identity.application.OrgInvitationService;
 import com.afrotransact.identity.application.OrgTeamService;
@@ -120,6 +122,26 @@ class OrganizationController {
     @GetMapping("/v1/orgs/{orgId}/members")
     MemberList members(@PathVariable String orgId) {
         return new MemberList(orgId, team.members(orgId).stream().map(MemberResponse::of).toList());
+    }
+
+    @Schema(name = "OrgRole")
+    record OrgRoleResponse(String key, @Schema(allowableValues = {"seller", "provider"}) String portal, String name,
+                           String description, List<String> permissions) {
+    }
+
+    @Schema(name = "OrgRoleList", description = "Roles that can be granted or invited in the organisation: seller roles "
+            + "for SELLER, provider roles for PROVIDER, both groups for BOTH (Seller Center shows both nav groups)")
+    record OrgRoleList(String orgId, @Schema(allowableValues = {"SELLER", "PROVIDER", "BOTH"}) String kind,
+                       List<OrgRoleResponse> roles) {
+    }
+
+    @Operation(summary = "Roles assignable in the organisation (Seller Center role pickers, S245)",
+            description = "Same readers as the member directory. BOTH organisations get the seller and provider roles.")
+    @GetMapping("/v1/orgs/{orgId}/roles")
+    OrgRoleList orgRoles(@PathVariable String orgId) {
+        AssignableRoles a = team.assignableRoles(orgId);
+        return new OrgRoleList(a.orgId(), a.kind().name(), a.roles().stream().map(r -> new OrgRoleResponse(r.key(),
+                r.portal().wire(), r.name(), r.description(), List.copyOf(new TreeSet<>(r.permissions())))).toList());
     }
 
     @Operation(summary = "Change a member's organisation role (seller.* / provider.*)",

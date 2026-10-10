@@ -3,7 +3,7 @@
 Stripe PaymentIntents, captures, refunds, Connect transfers and payouts, the immutable double-entry ledger,
 multi-seller settlement, fee schedules, chargebacks, reconciliation and shoppers' saved payment methods.
 Spring Boot 4.1 · Java 25 · PostgreSQL `payments` · port **8105**. Architecture §5 (Transactions, Ledger), §7
-(Stripe), §17b (Settlement & fees), §17d (webhooks). Stories S051–S057, S205, S214, S220, S256.
+(Stripe), §17b (Settlement & fees), §17d (webhooks). Stories S051–S057, S205, S214, S220, S226, S245, S248, S256, S259.
 
 Wording: funds wait in a **settlement hold** (7 days after delivery / service completion). Stripe Connect accounts
 use the **manual payout schedule**; sellers are paid **on request**.
@@ -25,14 +25,15 @@ use the **manual payout schedule**; sellers are paid **on request**.
 | `stripe_customer`, `customer_payment_method` | Stripe Customer per AfroTransact customer; saved methods (display data only) |
 | `connected_account` | Stripe Connect account per organisation |
 | `provider_fee` | Fees providers owe (late provider cancellations), one per booking: OUTSTANDING → COLLECTED by a Stripe account debit (V5) |
+| `supplier_payment` | AfroTransact Retail supplier payments (S226, V10), one per purchase order released by retail-service: supplier, amount in the supplier's currency, invoices, `SCHEDULED → ON_HOLD ⇄ SCHEDULED → PAID`, due date, payable / payment journals, bank reference |
 | `label_charge` | Shipping labels bought through AfroTransact and charged to the seller (S256, V8), one per carrier-gateway label id: carrier cost, handling, tracking number, shipment, CHARGED → CREDITED (or VOIDED when the void arrived first), charge / credit journals |
 | `idempotency_record`, `reconciliation_run` | Idempotency-Key responses; daily reconciliation reports |
 
 ### Chart of accounts
 
-`1000` Stripe clearing · `1100` Chargeback receivable · `1200:<org>` Provider fees receivable · `2000:<org>` Seller payable · `2100:<jurisdiction>` Sales tax
+`1000` Stripe clearing · `1050` Operating bank · `1100` Chargeback receivable · `1200:<org>` Provider fees receivable · `1400` Retail purchases released for payment · `2000:<org>` Seller payable · `2100:<jurisdiction>` Sales tax
 payable (attributed to the seller) · `2200` Customer refunds payable · `2300:<org>` Chargeback reserve · `2400` Carrier
-labels payable · `4000` Commission · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA and
+labels payable · `2500:<supplier>` Retail supplier payables · `4000` Commission · `4100` FBA fees · `4200` AfroTransact shipping (marketplace sellers' FBA and
 AfroTransact Delivery lines) · `4250` Local delivery fees (sellers' AfroTransact Delivery pickup fees, S255) ·
 `4300` Provider late-cancellation fees · `4400` AfroTransact Retail sales · `4500` Shipping label handling · `5000`
 Stripe fees · `5100` Chargeback losses.
@@ -54,6 +55,8 @@ a transfer, a reversal or a payout for it. Staff see Retail revenue as its own `
 | Shipping label charged to a seller (S256) | Dr 2000:<org> (cost + handling, no order) / Cr 2400 (carrier cost), Cr 4500 (handling) |
 | Label voided | Dr 2400, Dr 4500 / Cr 2000:<org> (once per label) |
 | Label balance settled at a transfer | Dr 2000:<org> on the order / Cr 2000:<org> unattributed (recovery; the opposite for a credit owed back) |
+| Retail supplier invoices released (S226) | Dr 1400 / Cr 2500:<supplier> (lines attributed to Retail's org) |
+| Supplier paid by Finance | Dr 2500:<supplier> / Cr 1050 |
 | Authorisation released | — (authorisations never reach the ledger; 1000 moves only at capture) |
 
 Every money-moving use case runs in a **SERIALIZABLE** transaction retried on SQLSTATE 40001/40P01 and optimistic
@@ -204,15 +207,17 @@ RFC 9457 problems with `code` `payments.*`. Reference pages `/swagger-ui.html`, 
 | `POST /v1/fee-schedules/{id}/cancel {reason}` | `payments:configure`: only before `effectiveFrom` (`409 payments.fee-schedule-in-force` after, `409 payments.fee-schedule-cancelled` twice). Marks the version cancelled (`cancelledAt/By`, `cancelReason`), never deletes it; cancelled versions never apply and don't block the next version's date. Audited (row + `audit.payments.fee-schedules` log) |
 | `POST /v1/delivery-pricing/quote` | orders (`payments:service`), services `payments:fees.read`, staff `payments:read`: AfroTransact Delivery customer charge + seller fee (S255) |
 | `GET /v1/fee-schedules/effective?category=&orgId=&at=` | services (`payments:service`) or staff `payments:read`: commission bps (override / category / default / retail), card fee estimate |
-| `GET /v1/payouts/balance` · `POST /v1/payouts/requests` | org members / owner & finance roles with `payouts:request` |
+| `GET /v1/payouts/balance` · `POST /v1/payouts/requests` | org members / owner & finance roles with `payouts:request`. The balance carries `deliveryFeesMinor` (S259): AfroTransact Delivery pickup fees the organisation paid on captured lines, net of fees given back by customer-fault refunds (from 4250 lines attributed to it), next to `labelChargesMinor` and `providerFeesMinor` |
 | `GET /v1/payouts/provider-fees?orgId=` | org members (own org) / staff |
-| `GET /v1/payouts/label-charges?orgId=` | org members (own org) / staff: shipping labels charged to the organisation (S256) with tracking number, shipment, order, cost, handling, status |
-| `GET /v1/payouts/statement?orgId=&currency=&from=&to=&limit=` | org members (own org) / staff: the seller statement — movements of `2000:<org>` (captures, refunds, transfers, chargebacks, `LABEL_CHARGE` / `LABEL_CREDIT` with labelId, shipmentId, trackingNumber), signed (credit to the seller positive), newest first, default last 90 days |
+| `GET /v1/payouts/label-charges?orgId=&status=&from=&to=&limit=` | org members (own org) / staff: shipping labels charged to the organisation (S256) with tracking number, shipment, order, cost, handling, status; filters `status` CHARGED / CREDITED, purchased in `[from, to)`, `limit` ≤ 200 |
+| `GET /v1/payouts/statement?orgId=&currency=&from=&to=&limit=&kind=` | org members (own org) / staff: the seller statement (`kind` repeatable, e.g. `kind=LABEL_CHARGE&kind=LABEL_CREDIT`) — movements of `2000:<org>` (captures, refunds, transfers, chargebacks, `LABEL_CHARGE` / `LABEL_CREDIT` with labelId, shipmentId, trackingNumber), signed (credit to the seller positive), newest first, default last 90 days |
 | `GET /v1/payouts/requests?status=&orgId=` · `POST …/{id}/approve` · `/hold` · `/release` | Finance `payouts:approve` |
 | `GET /v1/reconciliation/runs` · `POST /v1/reconciliation/runs {date}` | `payments:read` / `payments:configure` |
 | `PUT/GET /v1/connected-accounts/{orgId}` | seller service or `payments:configure` |
 | `GET /v1/customers/me/payment-methods` · `POST /v1/customers/me/setup-intents` · `POST …/{id}/default` · `DELETE …/{id}` | the shopper (CUSTOMER token relayed by gateway-bff) |
-| `POST /v1/customers/me/ephemeral-keys {stripeVersion?}` → `{customerId, ephemeralKeySecret, expiresAt}` | the shopper: PaymentSheet (S241) for the shopper's Stripe Customer, created on first use; gateway-bff `POST /v1/account/payment-sheet` calls it |
+| `POST /v1/customers/me/ephemeral-keys {stripeVersion?}` → `{customerId, ephemeralKeySecret, expiresAt}` | the shopper: PaymentSheet (S241) for the shopper's Stripe Customer, created on first use; gateway-bff `POST /v1/account/payment-sheet` calls it. Checkout intents carry the same Customer (orders sends `shopperId`; payments attaches the shopper's existing Customer, S245), so the mobile PaymentSheet lists the saved cards |
+| `GET /v1/supplier-payments?status=&supplierId=&dueBy=&limit=` · `GET …/{id}` | staff `payments:read` (platform-wide) and services: AfroTransact Retail supplier payments (S226); `dueBy` lists Finance's payment run |
+| `POST /v1/supplier-payments/{id}/paid {paymentReference, paidAt?}` · `/hold {reason}` · `/release` | Finance `payouts:approve` (platform-wide): record the bank transfer (Dr 2500 / Cr 1050; same reference = replay; 409 `payments.supplier-payment-on-hold` while held) |
 | `POST /v1/webhooks/stripe` | Stripe (public; `Stripe-Signature` verified) |
 
 Payout rules: minimum USD 25, one request per day (failed payouts don't count), never more than available, only
@@ -297,6 +302,24 @@ dependency on payments and replays are safe.
   outstanding charges, and larger by credits for labels voided after their charge was recovered. If the whole payable
   goes to labels, no Stripe transfer is made.
 
+## Relationship checks (S248, OpenFGA)
+
+`PaymentsAccess` checks the RBAC permission **and** a relationship through `ResourceAccessChecker`
+(`PaymentsRelations`, `docs/engineering/authorisation.md`) when `at.security.fga.enabled=true`:
+
+| Use case | Relation |
+|---|---|
+| Balance, statement, label charges, provider fees, `GET /v1/payouts/requests/{id}` | `can_view_payouts` on `organization:<org>` — members need `payouts:read` (owner, admin, manager, finance; catalog / ads / support members never see payouts), staff a Finance grant covering the org's market |
+| `POST /v1/payouts/requests` | `can_request_payouts` (the org's finance role; owners inherit it); staff on behalf: `can_view_payouts` |
+| Payout queue `?orgId=` / approve, hold, release one payout | `can_view_payouts` on the org / `can_view` on `payout:<id>` with the payout's org as a contextual tuple (Finance staff of the market) |
+| Payout queue of every org, ledger balances / journals, order splits, reconciliation, supplier payments | `can_view_all` on `platform:afrotransact` (platform-wide staff, first-party services) |
+| `GET /v1/ledger/orgs/{orgId}/balances` | `can_view_payouts` on the organisation |
+
+Intents, captures, refunds and settlement stay service-only (`payments:service`, principal type `SERVICE`), saved
+methods customer-only, fee schedules RBAC (platform configuration). With FGA off, behaviour is unchanged (RBAC and the
+token's `org`). Profiles: `local` off, `dev` enforced, `uat` shadow, `prod` off until uat enforces; secret
+`FGA_API_TOKEN`. `PayoutRelationshipsIT` runs against the local `openfga/openfga:v1.10.0` image.
+
 ## Webhooks (S052)
 
 `POST /v1/webhooks/stripe` verifies the signature with `Webhook.constructEvent` (tolerance 300 s), stores the event
@@ -326,6 +349,18 @@ CHARGES_DISABLED; null when not paused).
 `carrier.label.purchased|voided` on `at.carrier-shipment.events` (shipping labels charged to sellers, see above; tracking
 and pickup events on that topic are ignored).
 
+`retail.payment.released` on `at.retail.events` (S226, listener `payments-retail-events`, inbox consumer
+`payments.retail-events`, one `supplier_payment` per PO): AfroTransact Retail's purchase order passed the three-way
+match. Retail is the **merchant of record**, so the debt is AfroTransact's own: Dr `1400` Retail purchases released
+(the counterpart of retail-service's GL `2100 Accounts payable — suppliers`; inventory and AP stay in retail's GL) /
+Cr `2500:<supplierId>`. The payment is scheduled for the event's `dueOn`, else the release date + 30 days
+(`SUPPLIER_PAYMENT_TERMS_DAYS`). Finance pays suppliers from the **operating bank account** (`1050`, bank transfer /
+ACH outside Stripe — suppliers are not Connect accounts) and records the reference with
+`POST /v1/supplier-payments/{id}/paid`. Supplier money never touches a seller payable (`2000`), a Connect transfer, a
+payout or Retail's `4400` sales. Events `payments.supplier_payment.scheduled|paid|updated` on `at.payout.events`
+(key = supplier id). An automated bank-payment rail (e.g. Stripe Treasury / bank API) can be added behind a port
+later; today the payment run is Finance's.
+
 ## Jobs & metrics
 
 Webhook inbox (`WEBHOOK_INTERVAL`, 1 s) · settlement transfers, then outstanding provider fees (`SETTLEMENT_CRON`,
@@ -342,6 +377,8 @@ of yesterday (`RECONCILIATION_CRON`, 03:10): ledger 1000 per Stripe object vs St
 | `STRIPE_API_BASE` | default `https://api.stripe.com` (tests point it at WireMock) |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `AUTH_ISSUER_URL` | infrastructure |
 | `RETAIL_ORG_ID` | AfroTransact Retail org (merchant of record: no commission, FBA fee, transfer or payout; sales to 4400) |
+| `SUPPLIER_PAYMENT_TERMS_DAYS` | days from `retail.payment.released` to a supplier payment's due date when retail sends none (30) |
+| `FGA_ENABLED`, `FGA_ENFORCE`, `FGA_API_URL`, `FGA_STORE_ID`, `FGA_STORE_NAME`, `FGA_MODEL_ID`, `FGA_API_TOKEN` (secret), `FGA_TIMEOUT`, `FGA_CACHE_TTL` | OpenFGA relationship checks (S248) |
 | `SETTLEMENT_HOLD` (7d), `PAYOUT_MINIMUM_MINOR` (2500), `PAYMENTS_ZONE` | business settings |
 
 Local: `local` profile uses Stripe **test mode** on api.stripe.com — export a real `sk_test_…` key and run

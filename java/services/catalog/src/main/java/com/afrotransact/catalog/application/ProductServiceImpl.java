@@ -29,8 +29,11 @@ import com.afrotransact.catalog.port.CategoryRequestRepository;
 import com.afrotransact.catalog.port.IdentifierIssuer;
 import com.afrotransact.catalog.port.ProductRepository;
 import com.afrotransact.platform.security.Actor;
+import com.afrotransact.platform.security.ActorResolver;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.PrincipalType;
+import com.afrotransact.platform.security.relationship.FgaObject;
+import com.afrotransact.platform.security.relationship.ResourceAccessChecker;
 import com.afrotransact.platform.web.error.ConflictException;
 import com.afrotransact.platform.web.error.NotFoundException;
 import org.springframework.stereotype.Service;
@@ -45,19 +48,24 @@ class ProductServiceImpl implements ProductService {
     private final IdentifierIssuer ids;
     private final ProductDraftPolicy policy;
     private final PermissionChecker permissions;
+    private final ResourceAccessChecker access;
+    private final ActorResolver actors;
     private final OwnerResolver owners;
     private final ProductEvents events;
     private final Clock clock;
 
     ProductServiceImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                        IdentifierIssuer ids, ProductDraftPolicy policy, PermissionChecker permissions,
-                       OwnerResolver owners, ProductEvents events, Clock clock) {
+                       ResourceAccessChecker access, ActorResolver actors, OwnerResolver owners,
+                       ProductEvents events, Clock clock) {
         this.products = products;
         this.categories = categories;
         this.requests = requests;
         this.ids = ids;
         this.policy = policy;
         this.permissions = permissions;
+        this.access = access;
+        this.actors = actors;
         this.owners = owners;
         this.events = events;
         this.clock = clock;
@@ -68,6 +76,7 @@ class ProductServiceImpl implements ProductService {
     public Product create(CreateProductCommand cmd) {
         Actor actor = permissions.require(CatalogPermissions.WRITE);
         ListingOwner owner = owners.ownerFor(actor);
+        access.requireForOrg(CatalogPermissions.WRITE, CatalogRelations.ORG_MANAGE_PRODUCTS, owner.orgId());
         Placement placement = placement(cmd, owner);
 
         ProductDraft draft = new ProductDraft(placement.type(), cmd.title(), cmd.attributes(), cmd.images(),
@@ -113,9 +122,32 @@ class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
+    public VariantLookup variant(String variantAtin) {
+        Actor actor = actors.current();
+        String permission = actor.can(CatalogPermissions.READ) ? CatalogPermissions.READ : CatalogPermissions.WRITE;
+        permissions.require(permission);
+        Atin wanted = parseAtin(variantAtin);
+        Product p = products.findByVariantAtin(wanted).orElseThrow(() -> variantNotFound(variantAtin));
+        if (CatalogPermissions.WRITE.equals(permission)) {
+            ensureOwnerOrStaff(actor, p);
+        }
+        access.requireOwned(permission, CatalogRelations.CAN_VIEW, CatalogRelations.product(p.id()),
+                p.owner().orgId());
+        Variant variant = p.variants().stream().filter(v -> v.atin().equals(wanted)).findFirst()
+                .orElseThrow(() -> variantNotFound(variantAtin));
+        return new VariantLookup(p, variant);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PageView<Product> list(String ownerOrgId, ProductStatus status, String text, int page, int size) {
         Actor actor = permissions.require(CatalogPermissions.WRITE);
-        String org = isStaff(actor) ? ownerOrgId : owners.ownerFor(actor).orgId();
+        String org = isStaff(actor) ? blankToNull(ownerOrgId) : owners.ownerFor(actor).orgId();
+        if (org == null) {
+            access.require(CatalogPermissions.WRITE, CatalogRelations.PLATFORM_VIEW_ALL, FgaObject.PLATFORM);
+        } else {
+            access.requireForOrg(CatalogPermissions.WRITE, CatalogRelations.ORG_VIEW_PRODUCTS, org);
+        }
         ProductRepository.ProductPage result = products.search(new ProductRepository.ProductQuery(org, status, text,
                 Math.max(page, 0), Math.clamp(size, 1, 100)));
         return new PageView<>(result.items(), result.total(), result.page(), result.size());
@@ -141,16 +173,14 @@ class ProductServiceImpl implements ProductService {
     @Override
     @Transactional
     public Product pause(UUID id) {
-        Actor actor = permissions.require(CatalogPermissions.WRITE);
-        ensureOwnerOrStaff(actor, products.findById(id).orElseThrow(() -> notFound(id.toString())));
+        requireEditable(id);
         return transition(id, p -> p.pause(Instant.now(clock)), CatalogEvents.PRODUCT_PAUSED);
     }
 
     @Override
     @Transactional
     public Product resume(UUID id) {
-        Actor actor = permissions.require(CatalogPermissions.WRITE);
-        ensureOwnerOrStaff(actor, products.findById(id).orElseThrow(() -> notFound(id.toString())));
+        requireEditable(id);
         return transition(id, p -> p.resume(Instant.now(clock)), CatalogEvents.PRODUCT_RESUMED);
     }
 
@@ -213,6 +243,33 @@ class ProductServiceImpl implements ProductService {
     private void ensureVisible(Product p) {
         Actor actor = permissions.require(CatalogPermissions.WRITE);
         ensureOwnerOrStaff(actor, p);
+        access.requireOwned(CatalogPermissions.WRITE, CatalogRelations.CAN_VIEW, CatalogRelations.product(p.id()),
+                p.owner().orgId());
+    }
+
+    /** Owner or staff by the token (404 otherwise), then the relationship: catalog role of the owner, market staff. */
+    private void requireEditable(UUID id) {
+        Actor actor = permissions.require(CatalogPermissions.WRITE);
+        Product p = products.findById(id).orElseThrow(() -> notFound(id.toString()));
+        ensureOwnerOrStaff(actor, p);
+        access.requireOwned(CatalogPermissions.WRITE, CatalogRelations.CAN_EDIT, CatalogRelations.product(p.id()),
+                p.owner().orgId());
+    }
+
+    private static Atin parseAtin(String raw) {
+        try {
+            return new Atin(raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            throw variantNotFound(raw);
+        }
+    }
+
+    private static String blankToNull(String s) {
+        return s == null || s.isBlank() ? null : s.trim();
+    }
+
+    private static NotFoundException variantNotFound(String atin) {
+        return new NotFoundException("catalog.variant-not-found", "Variant " + atin + " not found");
     }
 
     private void ensureOwnerOrStaff(Actor actor, Product p) {

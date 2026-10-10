@@ -35,6 +35,7 @@ monitoring:
 #   - KAFKA_BOOTSTRAP
 #   - STRIPE_SECRET_KEY
 #   - STRIPE_WEBHOOK_SECRET
+#   - FGA_API_TOKEN            (one of OpenFGA's pre-shared keys, afrotransact/openfga preshared-keys; S248)
 secrets:
   enabled: true
   store: platform-secrets

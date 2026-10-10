@@ -154,10 +154,21 @@ subscription; failures are retried by a job). Billing page (owner / finance read
 | `POST …/billing/cancel` · `POST …/billing/resume` | cancel / resume at period end |
 | `GET/POST …/billing/payment-methods`, `POST …/{id}/default`, `DELETE …/{id}` | default can't be removed (`409 seller.default-payment-method`) |
 | `GET …/billing/invoices` | from `invoice.*` webhooks, with hosted page and PDF links |
+| `GET …/billing/invoices/{invoiceId}/pdf` | owner / finance: `302` to the invoice's Stripe PDF (`404 seller.invoice-pdf-missing` until finalised) |
+| `GET …/billing/plan/preview?planCode=&cadence=` | owner / finance: what `POST …/billing/plan` would do — `IMMEDIATE_UPGRADE` with `amountDueNowCents` from Stripe's invoice preview (`proration_behavior=always_invoice`; 0 during a trial or from a free plan with a trial), or `AT_RENEWAL` with `effectiveAt` = the renewal; nothing changes |
+| `POST …/billing/setup-intents` | owner: a Stripe SetupIntent (`usage=off_session`) on the organisation's customer (created on first use) → `{customerId, setupIntentId, clientSecret}`; Seller Center confirms it with the Payment Element, then registers the `pm_…` with `POST …/billing/payment-methods` |
 
 `POST /v1/webhooks/stripe-billing` (secret `STRIPE_BILLING_WEBHOOK_SECRET`): `invoice.paid`,
 `invoice.payment_failed` (dunning `RETRYING` / `FINAL_ATTEMPT_FAILED`, status `PAST_DUE`),
 `customer.subscription.updated` / `deleted`.
+
+**S103 acceptance criteria.** Upgrades prorate immediately (`always_invoice`, previewable), downgrades and cadence
+changes apply at renewal (pending change + `Pending plan changes` job, `proration_behavior=none`); trials come from the
+plan (`trial_period_days`, no proration during a trial); dunning follows Stripe Smart Retries (`invoice.payment_failed`
+→ `PAST_DUE` / `RETRYING` → `FINAL_ATTEMPT_FAILED`; `invoice.paid` clears it; Stripe's own retry / cancel settings end
+it with `customer.subscription.updated|deleted`); cancellation and resume at period end; invoices listed with PDF
+download; metered usage below (S206). Stripe products, prices (`<plan>_<cadence>` lookup keys) and the three metered
+prices / meters must exist in each Stripe account (S245; the platform team's setup).
 
 ## Metered usage (S206)
 

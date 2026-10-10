@@ -18,7 +18,7 @@ claims with `JwtActorResolver` (java/libs/platform-security) or `auth.Require` (
 | Landing | `GET /v1/me` → `landing` = `shop` / `seller-onboarding` / `seller-center` / `provider-onboarding` / `provider-hub` / `staff-console` / `driver-app`, from roles and org approval status. |
 | RBAC | Permissions, roles per portal (account, platform, seller, provider), multiple roles + direct grants per user, enable/disable, module access matrix (none/view/edit/approve/full), append-only change log (DB trigger rejects UPDATE/DELETE). |
 | MFA | TOTP (RFC 6238, otpauth URI for the QR code, replay-protected; secrets encrypted at rest, see [Data protection](#data-protection-s202)), SMS codes (outbox event), 10 hashed recovery codes, "trust this browser" for 30 days. Staff always need a second factor (SMS to the phone on file if nothing is enrolled) and cannot turn MFA off. Passkey sign-ins skip the prompt (phishing-resistant). |
-| Passkeys | Spring Security 7 `webAuthn()` with JDBC repositories (`user_entities`, `user_credentials`): `/webauthn/register/options`, `/webauthn/register`, `/webauthn/authenticate/options`, `/login/webauthn`, management page `/webauthn/register`. `PasskeyService` lists/removes them over the API and refuses to remove the last sign-in method. The signature counter is enforced (a counter that does not increase is rejected as a cloned authenticator). |
+| Passkeys | Spring Security 7 `webAuthn()` with JDBC repositories (`user_entities`, `user_credentials`): `/webauthn/register/options`, `/webauthn/register`, `/webauthn/authenticate/options`, `/login/webauthn`, management page `/webauthn/register`. The first-party apps and the mobile apps register over the API with the user's bearer token (S016, see [Passkeys over the API](#passkeys-over-the-api-s016)). `PasskeyService` lists, renames and removes them and refuses to remove the last sign-in method. The signature counter is enforced (a counter that does not increase is rejected as a cloned authenticator). |
 | Social login | Google (OIDC) via its own consent page; Apple (OIDC, form_post) and Facebook registrations exist but are disabled by default. A provider is offered only when it has client credentials **and** is enabled in `identity_provider` (`PUT /v1/admin/identity-providers/{id}`). Accounts created from provider-verified emails skip email verification; a verified email matching an existing account links to it; signing in with a provider while already signed in links it. |
 | First-party sign-in | `gateway-bff` only: password, TOTP/SMS/recovery-code and passkey steps as JSON (`/v1/auth/*`), ending in a one-time **login ticket** that the BFF redeems on the normal authorization-code flow (`/oauth2/authorize?…&login_ticket=…`). See [First-party sign-in](#first-party-sign-in-s209). |
 | Brute-force protection | Per account (normalised email, also for unknown emails) and per IP: 5 / 30 failures within 15 min lock for 15 min, doubling per consecutive lockout up to 4 h (`at.identity.sign-in-protection`). Applies to the first-party API **and** the hosted `/login` and `/login/mfa` pages. 429 `identity.sign-in-locked` + `Retry-After`; append-only `sign_in_audit`; `identity.sign-in.locked` events. |
@@ -35,6 +35,47 @@ owner role granted on approval follows `primaryKind`, the team module is `sTeam`
 `SELLER_MEMBER` or `PROVIDER_MEMBER` from the member's role, and landing is Seller Center. `GET /v1/me` organisations
 and `/v1/orgs/*` responses return kind `BOTH`. `organization.market` holds content-service market codes (ISO 3166-1
 alpha-2, `UK` → `GB`; V15 normalises existing rows and adds a check constraint); other values are not stored.
+
+## Passkeys over the API (S016)
+
+Login & security in the storefront (through gateway-bff) and in the mobile apps manages passkeys with the user's
+token; the hosted `/webauthn/register` page stays for identity's own pages. One relying party, one credential store:
+a passkey registered either way signs in on the hosted page and through `POST /v1/auth/passkey/*`.
+
+1. `POST /v1/me/passkeys/registrations {label?}` → `201 {registrationId, expiresAt, publicKey}`: WebAuthn creation
+   options (`rp`, `user.id` = the account's WebAuthn handle, `challenge`, ES256 / EdDSA / RS256,
+   `residentKey: required`, `userVerification: required`, `excludeCredentials` = the account's passkeys), valid five
+   minutes for one registration; at most 20 passkeys (`422 identity.too-many-passkeys`).
+2. The client runs `navigator.credentials.create({publicKey})` (web), `ASAuthorizationPlatformPublicKeyCredentialProvider`
+   (iOS: Face ID / Touch ID) or Credential Manager `CreatePublicKeyCredentialRequest` (Android: fingerprint / face).
+3. `POST /v1/me/passkeys {registrationId, credential, label?}` → `201 Passkey`. `credential` is the
+   `PublicKeyCredential` JSON (`credential.toJSON()`, base64url fields). The attestation is verified by the same
+   Spring Security / WebAuthn4J relying party (challenge, origin, RP id, user presence **and verification**); a
+   rejected one is `422 identity.passkey-rejected` and uses up the registration; an expired, used or foreign
+   registration is `409 identity.passkey-registration-expired`.
+4. `PATCH /v1/me/passkeys/{credentialId} {label}` renames; `GET /v1/me/passkeys` and `DELETE …/{credentialId}` as before.
+
+**Mobile origins.** Android passkeys report `android:apk-key-hash:<base64url SHA-256 of the signing certificate>` as
+the origin: list each app's (debug, release, Play signing) in `WEBAUTHN_APP_ORIGINS` (comma-separated,
+`at.identity.webauthn.app-origins`, merged into the allowed origins). iOS apps report the web origin of their
+associated domain, which needs `webcredentials:<PLATFORM_DOMAIN>` in the app and the storefront's
+`/.well-known/apple-app-site-association`; Android needs `/.well-known/assetlinks.json` with
+`delegate_permission/common.get_login_creds`. The RP id stays the registrable domain (`PLATFORM_DOMAIN`), so web and
+app passkeys are the same credentials. Sign-in on mobile uses the same first-party passkey flow as the storefront
+(gateway-bff `POST /v1/auth/passkey/options` → platform assertion → `/verify`). The create-account screen offers no
+passkey sign-in (UI rule); registration needs a signed-in account.
+
+## Market-scoped staff roles (S248)
+
+`PUT /v1/admin/users/{id}/roles/{role}?market=GB` grants a platform (staff) role for one market (content's market
+codes, ISO 3166-1 alpha-2, `UK` → `GB`; repeat for more markets); `DELETE …?market=GB` removes that market (the role
+goes with its last market); without `market` the role is platform-wide. A role is either platform-wide or
+market-scoped (`409 identity.role-platform-wide` / `identity.role-market-scoped`); Super Admin and account roles
+are never market-scoped (`422 identity.role-not-market-scoped`). Stored in `user_role_market` (V18); user views carry
+`roleMarkets` (`{"platform.customer_support": ["GB", "US"]}`). RBAC permissions are unchanged (the token's `perms`);
+the scope is enforced through OpenFGA: `identity.role.granted` / `revoked` carry `market`, one event per market, so
+authz-sync writes `market:<code>#<relation>` instead of `platform:afrotransact#<relation>`. Organisation role events
+carry the organisation's market for information.
 
 ## Organisation teams and invitations (S231)
 
@@ -298,7 +339,8 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `PUT /v1/me/password` | user | Change password (current password required) |
 | `GET /v1/me/sessions`, `DELETE /v1/me/sessions/{id}`, `POST /v1/me/sessions/revoke-others` | user | Active sessions / sign out other devices |
 | `GET /v1/me/linked-accounts`, `DELETE /v1/me/linked-accounts/{provider}` | user | Linked social accounts (cannot unlink the last sign-in method) |
-| `GET /v1/me/passkeys`, `DELETE /v1/me/passkeys/{credentialId}` | user | Passkeys |
+| `GET /v1/me/passkeys`, `DELETE /v1/me/passkeys/{credentialId}`, `PATCH …/{credentialId} {label}` | user | Passkeys |
+| `POST /v1/me/passkeys/registrations`, `POST /v1/me/passkeys` | user | Register a passkey over the API (S016, above) |
 | `GET /v1/me/mfa`; `POST /v1/me/mfa/totp`, `…/totp/confirm`, `DELETE …/totp`; `POST /v1/me/mfa/sms`, `…/sms/confirm`, `DELETE …/sms`; `POST /v1/me/mfa/recovery-codes` | user | Two-step verification |
 | `GET /v1/me/devices`, `POST /v1/me/devices`, `DELETE /v1/me/devices` (body `{token}`), `DELETE /v1/me/devices/{id}` | user (driver app: `delivery:operate`) | Push tokens: `platform` ios/android/web, `app` customer/driver, optional `provider` fcm/apns (default apns for iOS, else fcm), `deviceName`. A token belongs to one account (re-registering moves it); 10 per app, least recently seen evicted. Responses show only `tokenSuffix`. |
 | `GET/PUT /v1/me/notification-preferences` | user | `email`, `sms`, `push` (default on), `marketingOptIn` (default off, `marketingOptInAt` recorded), optional `locale` (BCP 47) and `timeZone` (IANA) |
@@ -308,7 +350,7 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `GET /v1/admin/permissions`, `GET /v1/admin/roles?portal=` | `access:read` | Permission catalogue, roles with permissions |
 | `PUT/DELETE /v1/admin/roles/{role}/permissions/{perm}` | `access:admin` | Capabilities tab |
 | `GET /v1/admin/users?q=`, `GET /v1/admin/users/{id}`, `POST /v1/admin/users` | read / admin | People tab, provision staff/driver accounts |
-| `PUT/DELETE /v1/admin/users/{id}/roles/{role}` | `access:admin` | Assign/remove account and platform roles |
+| `PUT/DELETE /v1/admin/users/{id}/roles/{role}?market=` | `access:admin` | Assign/remove account and platform roles; `market` scopes a staff role (S248) |
 | `PUT/DELETE /v1/admin/users/{id}/permissions/{perm}` | `access:admin` | Direct grants (e.g. `delivery:operate`) |
 | `POST /v1/admin/users/{id}/disable`, `…/enable` | `access:admin` | Disable ends every session immediately |
 | `GET /v1/admin/module-access?portal=`, `PUT /v1/admin/module-access/{portal}/{module}/{role}` | read / admin | Module access matrix |
@@ -316,6 +358,7 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 | `GET /v1/admin/identity-providers`, `PUT /v1/admin/identity-providers/{id}` | read / admin | Identity provider switches |
 | `GET /v1/admin/data-protection`, `POST /v1/admin/data-protection/rotate` | STAFF + `platform.super_admin` | Encryption-key status, re-encrypt MFA secrets under the current key ([Data protection](#data-protection-s202)) |
 | `PUT /v1/orgs/{orgId}` | `orgs:manage` (seller service) | Mirror seller/provider orgs and approval status |
+| `GET /v1/orgs/{orgId}/roles` | team reader | S245: roles assignable in the organisation `{orgId, kind, roles: [{key, portal, name, description, permissions}]}` — seller roles for SELLER, provider roles for PROVIDER, both for BOTH (Seller Center role pickers and nav groups) |
 | `GET /v1/orgs/{orgId}/members` | team reader (below) | Member directory `{orgId, items: [{userId, firstName, lastName, name, email, roleKey, roleLabel, status ACTIVE/DISABLED, joinedAt}]}` |
 | `PUT /v1/orgs/{orgId}/members/{userId}` `{roleKey}`, `DELETE …` | team manager, staff/service `orgs:manage` | Change a member's role / remove a member (204). The seller service and staff may also add members directly |
 | `POST /v1/orgs/{orgId}/invitations` `{email, roleKey}` → 201, `GET …/invitations`, `DELETE …/invitations/{id}` | team manager (list: team reader) | Invite by email, pending invitations `{orgId, items}`, revoke |
@@ -387,6 +430,13 @@ name, status APPROVED, market = country) and makes `applicantUserId` and every `
   plaintext `secret` column becomes nullable, is no longer written and is emptied by the start-up migrator
   ([Data protection](#data-protection-s202)).
 
+## Service clients added for FBA and checkout
+
+`inventory-service` (confidential, client credentials, secret `INVENTORY_CLIENT_SECRET`; tokens have `pt=SERVICE`):
+`catalog:read catalog:write shipping:label` (AT-FN unit labels, inbound shipping labels). `retail-service`:
+`catalog:read` (any-status variant lookup, S226) and `inventory:read`; `inventory:adjust` was removed (retail-service
+never requests it). `orders-service`: `offers:read` (reads the offer's `inventorySku` to reserve FBA stock).
+
 ## Permission catalogue
 
 | Permission | Module | Description |
@@ -411,6 +461,7 @@ name, status APPROVED, market = country) and makes `applicantUserId` and every `
 | `inventory:adjust` | inventory | Adjust stock and cycle count |
 | `inventory:scan` | inventory | Warehouse scanner: receive, pick and pack |
 | `inventory:receive` | inventory | Receive inbound shipments and post goods receipts |
+| `inventory:inbound` | inventory | Create and track FBA inbound shipments to AfroTransact FCs (V19): `seller.owner`, `seller.admin`, `seller.fulfilment`, `platform.super_admin`, `platform.inventory_manager`, `platform.fulfilment_ops` |
 | `fulfilment:operate` | fulfilment | Run fulfilment-centre pick, pack and dispatch |
 | `delivery:operate` | delivery | Use the driver app |
 | `delivery:dispatch` | delivery | Plan routes and assign drivers |
@@ -506,6 +557,7 @@ Module access matrix: 27 platform modules × 15 platform roles, 10 Seller Center
 | `IDENTITY_DATA_KEY` (+ optional `IDENTITY_DATA_KEY_ID`, `IDENTITY_DATA_KEYS_PREVIOUS`, `IDENTITY_DATA_PROVIDER`) | AES-256 key-encryption key for MFA secrets at rest; required outside `local` ([Data protection](#data-protection-s202)) |
 | `AUTH_ISSUER_URL`, `HOME_URL` | issuer URL (`http://localhost:8100` locally), post-login fallback (default `PUBLIC_WEB_URL`) |
 | `PUBLIC_WEB_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`, `API_BASE_URL`, `PLATFORM_DOMAIN` | shared platform settings injected per environment by the Helm library chart (`docs/engineering/environments.md`): OAuth client redirect URIs, CORS origins, WebAuthn origins; the WebAuthn RP id defaults to `PLATFORM_DOMAIN` (`WEBAUTHN_RP_ID` overrides) |
+| `WEBAUTHN_APP_ORIGINS` | S016: native app origins allowed for passkeys, comma-separated (`android:apk-key-hash:…` per Android app signing key); empty by default |
 | `IDENTITY_STAFF_EMAIL_DOMAINS` | comma-separated email domains reserved for staff (default `afrotransact.com`) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (+ `APPLE_*`, `FACEBOOK_*`) | social sign-in; unset → provider not registered |
 | `GATEWAY_BFF_CLIENT_SECRET` (or `BFF_CLIENT_SECRET`), `SELLER_SERVICE_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET`, `TAX_RETURNS_CLIENT_SECRET`, … | confidential client secrets (hashed with BCrypt before storage) |
@@ -615,8 +667,6 @@ counter was never enforced (Spring Security 7.1 verifies against the registratio
 - Spring Security's WebAuthn registration filter lets verification errors (e.g. a foreign origin) surface as a 5xx
   instead of a 400; the ceremony is still rejected.
 - Token Exchange (RFC 8693), DPoP for mobile and the device-code grant from the architecture document are not enabled yet.
-- Team changes made here are not pushed to the seller service's own member list; it should consume
-  `identity.role.granted` / `identity.role.revoked` with `orgId` (or Seller Center should read identity's directory).
 - Phone verification is not part of the sign-up form; apps prompt for it from the account page.
 - Lockout notices to the account owner (security email on `identity.sign-in.locked`) need a notifications rule.
 

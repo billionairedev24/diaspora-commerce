@@ -90,7 +90,7 @@ class PayoutServiceImpl implements PayoutService {
         if (isRetail(org)) {
             // AfroTransact Retail is the merchant of record: its sales are AfroTransact revenue (4400), nothing is
             // held, transferred or paid out, and compliance holds do not apply.
-            return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, zero,
+            return new PayoutBalance(org, currency, zero, List.of(), zero, zero, zero, zero, zero, zero,
                     policy.minimum(currency), false, false, null);
         }
         Money transferred = settlements.transferredTo(org, currency);
@@ -126,7 +126,7 @@ class PayoutServiceImpl implements PayoutService {
         Optional<PayoutHold> hold = holds.find(org).filter(PayoutHold::paused);
         return new PayoutBalance(org, currency, available, held, heldTotal, Money.of(inFlight, currency),
                 Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), fees, labelCharges,
-                policy.minimum(currency),
+                Money.of(ledger.deliveryFeesPaid(org, currency), currency), policy.minimum(currency),
                 policy.canRequestToday(today), hold.isPresent(), hold.map(PayoutHold::reason).orElse(null));
     }
 
@@ -163,7 +163,7 @@ class PayoutServiceImpl implements PayoutService {
 
     @Override
     public List<PayoutRequest> queue(PayoutStatus status, String orgId, int limit) {
-        access.approver();
+        access.queueReader(orgId);
         return payouts.list(Optional.ofNullable(status), Optional.ofNullable(orgId).filter(s -> !s.isBlank()),
                 Math.max(1, Math.min(limit, MAX_LIST)));
     }
@@ -180,6 +180,7 @@ class PayoutServiceImpl implements PayoutService {
         Actor actor = access.approver();
         return tx.serializable(() -> {
             PayoutRequest r = payouts.lock(id).orElseThrow(() -> notFound(id));
+            access.payoutApprover(r.id(), r.orgId());
             if (r.status() == PayoutStatus.IN_TRANSIT || r.status() == PayoutStatus.PAID) {
                 return r;
             }
@@ -203,15 +204,21 @@ class PayoutServiceImpl implements PayoutService {
             throw new PaymentsRuleViolation("payments.reason-required", "A hold needs a reason",
                     Map.of("reason", "Required"));
         }
-        return tx.serializable(() -> payouts.update(payouts.lock(id).orElseThrow(() -> notFound(id))
-                .hold(actor.subject(), Instant.now(clock), reason.trim())));
+        return tx.serializable(() -> {
+            PayoutRequest r = payouts.lock(id).orElseThrow(() -> notFound(id));
+            access.payoutApprover(r.id(), r.orgId());
+            return payouts.update(r.hold(actor.subject(), Instant.now(clock), reason.trim()));
+        });
     }
 
     @Override
     public PayoutRequest release(UUID id) {
         Actor actor = access.approver();
-        return tx.serializable(() -> payouts.update(payouts.lock(id).orElseThrow(() -> notFound(id))
-                .release(actor.subject(), Instant.now(clock))));
+        return tx.serializable(() -> {
+            PayoutRequest r = payouts.lock(id).orElseThrow(() -> notFound(id));
+            access.payoutApprover(r.id(), r.orgId());
+            return payouts.update(r.release(actor.subject(), Instant.now(clock)));
+        });
     }
 
     private boolean isRetail(String org) {

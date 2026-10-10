@@ -25,6 +25,10 @@ at:
       allowed-origins:
         - ${AUTH_ISSUER_URL:http://localhost:8100}
         - ${PUBLIC_WEB_URL:http://localhost:3000}
+      # S016: native app origins for platform passkeys (Face ID / fingerprint), comma-separated. Android:
+      # android:apk-key-hash:<base64url SHA-256 of the app signing certificate>, one per app and signing key. iOS apps
+      # sign with the web origin of their associated domain (apple-app-site-association on the storefront).
+      app-origins: ${WEBAUTHN_APP_ORIGINS:}
     cors-allowed-origins:
       - ${PUBLIC_WEB_URL:http://localhost:3000}
       - ${SELLER_CENTER_URL:http://localhost:3001}
@@ -96,7 +100,7 @@ at:
         secret: ${ORDERS_CLIENT_SECRET:local-orders-service-secret}
         grant-types: [client_credentials]
         scopes: [payments:service, inventory:reserve, cart:service, orders:manage, users:read, "tax:quote",
-                 "sellers:ship-from.read"]
+                 "sellers:ship-from.read", offers:read]
       - client-id: tax-returns-service
         name: Tax returns service
         type: confidential
@@ -156,7 +160,14 @@ at:
         type: confidential
         secret: ${RETAIL_CLIENT_SECRET:local-retail-service-secret}
         grant-types: [client_credentials]
-        scopes: [inventory:receive, inventory:adjust, inventory:read, "media:write"]
+        scopes: [catalog:read, inventory:receive, inventory:read, "media:write"]
+      - client-id: inventory-service
+        name: Inventory service
+        type: confidential
+        secret: ${INVENTORY_CLIENT_SECRET:local-inventory-service-secret}
+        grant-types: [client_credentials]
+        # FBA inbound: AT-FN unit labels (catalog), inbound shipping labels (carrier-gateway)
+        scopes: [catalog:read, catalog:write, "shipping:label"]
       - client-id: mcp-client
         name: AI agents (MCP)
         type: public

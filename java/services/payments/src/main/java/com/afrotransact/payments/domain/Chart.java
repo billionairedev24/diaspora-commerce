@@ -2,12 +2,27 @@ package com.afrotransact.payments.domain;
 
 /**
  * AfroTransact's payments chart of accounts. Some accounts are scoped: one sub-account per seller / provider
- * organisation ({@link Scope#ORG}) or per tax jurisdiction ({@link Scope#JURISDICTION}).
+ * organisation ({@link Scope#ORG}), per tax jurisdiction ({@link Scope#JURISDICTION}) or per AfroTransact Retail
+ * supplier ({@link Scope#SUPPLIER}).
  */
 public enum Chart {
     STRIPE_CLEARING("1000", "Stripe clearing (platform balance)", AccountType.ASSET, Scope.NONE),
+    /**
+     * AfroTransact's operating bank account. AfroTransact Retail pays its suppliers from it (bank transfer / ACH by
+     * Finance's AP run), never from the Stripe platform balance and never through Connect: suppliers are not
+     * connected accounts.
+     */
+    OPERATING_BANK("1050", "Operating bank account", AccountType.ASSET, Scope.NONE),
     CHARGEBACK_RECEIVABLE("1100", "Chargeback receivable", AccountType.ASSET, Scope.NONE),
     PROVIDER_FEES_RECEIVABLE("1200", "Provider fees receivable", AccountType.ASSET, Scope.ORG),
+    /**
+     * AfroTransact Retail purchases released for payment (S226): the counterpart, in this ledger, of retail-service's
+     * GL {@code 2100 Accounts payable — suppliers} for three-way-matched invoices. Retail is the merchant of record, so
+     * its stock and supplier debts are AfroTransact's own (inventory and AP live in retail-service's GL); this account
+     * reconciles the released amounts against it.
+     */
+    RETAIL_PURCHASES_RELEASED("1400", "AfroTransact Retail purchases released for payment", AccountType.ASSET,
+            Scope.NONE),
     SELLER_PAYABLE("2000", "Seller / provider payable", AccountType.LIABILITY, Scope.ORG),
     SALES_TAX_PAYABLE("2100", "Sales tax payable (marketplace facilitator)", AccountType.LIABILITY,
             Scope.JURISDICTION),
@@ -20,6 +35,12 @@ public enum Chart {
      */
     CARRIER_LABELS_PAYABLE("2400", "Carrier labels payable (carrier invoices AfroTransact)", AccountType.LIABILITY,
             Scope.NONE),
+    /**
+     * What AfroTransact (Retail, as merchant of record) owes each supplier for released invoices, one sub-account per
+     * supplier id: credited when retail-service releases the payment, debited when Finance pays it. Never a seller
+     * payable, never transferred or paid out through Stripe Connect.
+     */
+    SUPPLIER_PAYABLE("2500", "AfroTransact Retail supplier payables", AccountType.LIABILITY, Scope.SUPPLIER),
     COMMISSION_REVENUE("4000", "Commission revenue", AccountType.REVENUE, Scope.NONE),
     FBA_FEE_REVENUE("4100", "FBA fee revenue", AccountType.REVENUE, Scope.NONE),
     SHIPPING_REVENUE("4200", "AfroTransact shipping revenue", AccountType.REVENUE, Scope.NONE),
@@ -41,7 +62,7 @@ public enum Chart {
     CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE);
 
     /** Whether the account has one sub-account per organisation or jurisdiction. */
-    public enum Scope { NONE, ORG, JURISDICTION }
+    public enum Scope { NONE, ORG, JURISDICTION, SUPPLIER }
 
     private final String code;
     private final String title;

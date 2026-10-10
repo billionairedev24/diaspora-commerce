@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.seller.application.BillingOverview;
+import com.afrotransact.seller.application.PlanChangePreview;
 import com.afrotransact.seller.application.PlanOffer;
 import com.afrotransact.seller.domain.FirstCharge;
 import com.afrotransact.seller.domain.Invoice;
@@ -131,5 +132,25 @@ final class BillingDtos {
                     i.lines().stream().map(InvoiceLineResponse::of).toList(),
                     i.meteredLines().stream().mapToLong(InvoiceLine::amountCents).sum());
         }
+    }
+
+    @Schema(name = "PlanChangePreview")
+    record PlanChangePreviewResponse(@Schema(allowableValues = {"IMMEDIATE_UPGRADE", "AT_RENEWAL", "NO_CHANGE"})
+                                     String change, String planCode, String planName, String cadence,
+                                     Instant effectiveAt,
+                                     @Schema(description = "Invoiced now: the proration of an upgrade (0 in a trial)")
+                                     long amountDueNowCents,
+                                     @Schema(description = "The new plan's charge at the next renewal")
+                                     long nextChargeCents, Instant nextChargeAt, boolean trialing) {
+
+        static PlanChangePreviewResponse of(PlanChangePreview p) {
+            return new PlanChangePreviewResponse(p.change().name(), p.planCode(), p.planName(), p.cadence().name(),
+                    p.effectiveAt(), p.amountDueNowCents(), p.nextChargeCents(), p.nextChargeAt(), p.trialing());
+        }
+    }
+
+    @Schema(name = "BillingSetupIntent")
+    record SetupIntentResponse(String customerId, String setupIntentId,
+                               @Schema(description = "Confirm with Stripe.js / PaymentSheet") String clientSecret) {
     }
 }

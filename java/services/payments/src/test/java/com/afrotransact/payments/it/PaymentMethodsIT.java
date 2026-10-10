@@ -100,5 +100,17 @@ class PaymentMethodsIT extends PaymentsIntegrationTest {
         assertThat(ok(send("GET", "/v1/customers/me/payment-methods", null, null)).size()).isZero();
         TestSupport.as(TestSupport.ORDERS_SERVICE);
         problem(send("GET", "/v1/customers/me/payment-methods", null, null), 403, "payments.customer-only");
+
+        // S245: checkout passes the shopper; the PaymentIntent carries their Stripe Customer so the mobile
+        // PaymentSheet (ephemeral key for that Customer) lists the saved cards. No Customer is created for it.
+        String order = id("ORD");
+        STRIPE.createIntent(order, "pi_" + order, 2124);
+        ok(send("POST", "/v1/payments", Map.of("orderId", order, "amountMinor", 2124, "currency", "USD",
+                "shopperId", subject, "lines", List.of(line("L1", "org_a", "Groceries", "SELF", 1, 1500, 500, 124))),
+                "create-" + order), 201);
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withRequestBody(WireMock.containing(order)).withRequestBody(WireMock.containing("customer=" + cus)));
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/customers"))
+                .withRequestBody(WireMock.containing(subject)));
     }
 }

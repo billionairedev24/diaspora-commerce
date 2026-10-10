@@ -1,23 +1,30 @@
 package com.afrotransact.seller.adapter.in.web;
 
+import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 
+import com.afrotransact.platform.web.error.NotFoundException;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.AddPaymentMethodRequest;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.BillingResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.ChangePlanRequest;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.ChangePlanResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.InvoiceResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PaymentMethodResponse;
+import com.afrotransact.seller.adapter.in.web.BillingDtos.PlanChangePreviewResponse;
 import com.afrotransact.seller.adapter.in.web.BillingDtos.PlanResponse;
+import com.afrotransact.seller.adapter.in.web.BillingDtos.SetupIntentResponse;
 import com.afrotransact.seller.application.AddPaymentMethodCommand;
 import com.afrotransact.seller.application.BillingService;
 import com.afrotransact.seller.application.PlanChangeResult;
 import com.afrotransact.seller.application.PlanService;
+import com.afrotransact.seller.application.SetupIntentView;
+import com.afrotransact.seller.domain.Invoice;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -105,5 +112,37 @@ class BillingController {
     @GetMapping("/v1/orgs/{orgId}/billing/invoices")
     List<InvoiceResponse> listInvoices(@PathVariable String orgId) {
         return billing.invoices(orgId).stream().map(InvoiceResponse::of).toList();
+    }
+
+    @Operation(summary = "Download an invoice PDF (owner / finance)",
+            description = "302 to the invoice's Stripe PDF; 404 seller.invoice-not-found, 404 seller.invoice-pdf-missing "
+                    + "while Stripe has not finalised the invoice.")
+    @GetMapping("/v1/orgs/{orgId}/billing/invoices/{invoiceId}/pdf")
+    ResponseEntity<Void> downloadInvoicePdf(@PathVariable String orgId, @PathVariable String invoiceId) {
+        Invoice invoice = billing.invoice(orgId, invoiceId);
+        if (invoice.invoicePdf() == null || invoice.invoicePdf().isBlank()) {
+            throw new NotFoundException("seller.invoice-pdf-missing", "Invoice " + invoiceId + " has no PDF yet");
+        }
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(invoice.invoicePdf())).build();
+    }
+
+    @Operation(summary = "Preview a plan or cadence change (owner / finance)",
+            description = "What POST /billing/plan would do: IMMEDIATE_UPGRADE (amountDueNowCents = Stripe's proration "
+                    + "preview, 0 during a trial), AT_RENEWAL (effectiveAt = renewal) or NO_CHANGE. Nothing changes.")
+    @GetMapping("/v1/orgs/{orgId}/billing/plan/preview")
+    PlanChangePreviewResponse previewPlanChange(@PathVariable String orgId, @RequestParam String planCode,
+                                                @RequestParam(required = false) String cadence) {
+        return PlanChangePreviewResponse.of(billing.previewPlanChange(orgId, planCode,
+                cadence == null ? null : Inputs.cadence(cadence)));
+    }
+
+    @Operation(summary = "Start adding a card or bank account (owner): Stripe SetupIntent",
+            description = "Confirm the clientSecret with Stripe.js (Payment Element) or the mobile PaymentSheet, then "
+                    + "register the resulting pm_… with POST /billing/payment-methods.")
+    @PostMapping("/v1/orgs/{orgId}/billing/setup-intents")
+    @ResponseStatus(HttpStatus.CREATED)
+    SetupIntentResponse createSetupIntent(@PathVariable String orgId) {
+        SetupIntentView v = billing.setupIntent(orgId);
+        return new SetupIntentResponse(v.customerId(), v.setupIntentId(), v.clientSecret());
     }
 }
