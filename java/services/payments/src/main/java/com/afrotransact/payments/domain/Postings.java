@@ -92,6 +92,32 @@ public final class Postings {
     }
 
     /**
+     * Late provider-cancellation fee accrued: Dr 1200 provider fees receivable (per organisation) / Cr 4300 provider
+     * fee revenue. No money moves yet, so the platform clearing account (and reconciliation) is untouched.
+     */
+    public static Journal providerFee(UUID id, Instant at, String key, ProviderFee fee) {
+        return Journal.builder(JournalType.PROVIDER_FEE, key).order(fee.bookingReference())
+                .description("Late cancellation fee of " + fee.orgId() + " for booking " + fee.bookingReference())
+                .debit(LedgerAccount.providerFeesReceivable(fee.orgId()), fee.amount(), fee.orgId())
+                .credit(LedgerAccount.of(Chart.PROVIDER_FEE_REVENUE), fee.amount(), fee.orgId())
+                .build(id, at);
+    }
+
+    /**
+     * Fee collected with a Stripe account debit of the provider's connected account: the platform balance grows
+     * (Dr 1000 Stripe clearing, matched to the debit's balance transaction by reconciliation) / Cr 1200.
+     */
+    public static Journal providerFeeCollected(UUID id, Instant at, String key, ProviderFee fee,
+                                               String stripeDebitId) {
+        return Journal.builder(JournalType.PROVIDER_FEE_COLLECTED, key).order(fee.bookingReference())
+                .stripeRef(stripeDebitId)
+                .description("Late cancellation fee debited from " + fee.orgId() + "'s connected account")
+                .debit(LedgerAccount.of(Chart.STRIPE_CLEARING), fee.amount())
+                .credit(LedgerAccount.providerFeesReceivable(fee.orgId()), fee.amount(), fee.orgId())
+                .build(id, at);
+    }
+
+    /**
      * Dispute opened: Stripe withdraws the amount (Dr 1100 chargeback receivable / Cr 1000) and each responsible
      * seller's payable is debited into a chargeback reserve (Dr 2000 / Cr 2300) until the outcome. Stripe's dispute fee
      * is AfroTransact's cost (Dr 5100).

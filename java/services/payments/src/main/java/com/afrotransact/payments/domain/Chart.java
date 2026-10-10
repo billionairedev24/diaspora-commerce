@@ -7,6 +7,7 @@ package com.afrotransact.payments.domain;
 public enum Chart {
     STRIPE_CLEARING("1000", "Stripe clearing (platform balance)", AccountType.ASSET, Scope.NONE),
     CHARGEBACK_RECEIVABLE("1100", "Chargeback receivable", AccountType.ASSET, Scope.NONE),
+    PROVIDER_FEES_RECEIVABLE("1200", "Provider fees receivable", AccountType.ASSET, Scope.ORG),
     SELLER_PAYABLE("2000", "Seller / provider payable", AccountType.LIABILITY, Scope.ORG),
     SALES_TAX_PAYABLE("2100", "Sales tax payable (marketplace facilitator)", AccountType.LIABILITY,
             Scope.JURISDICTION),
@@ -15,6 +16,7 @@ public enum Chart {
     COMMISSION_REVENUE("4000", "Commission revenue", AccountType.REVENUE, Scope.NONE),
     FBA_FEE_REVENUE("4100", "FBA fee revenue", AccountType.REVENUE, Scope.NONE),
     SHIPPING_REVENUE("4200", "AfroTransact shipping revenue", AccountType.REVENUE, Scope.NONE),
+    PROVIDER_FEE_REVENUE("4300", "Provider late-cancellation fees", AccountType.REVENUE, Scope.NONE),
     STRIPE_FEES("5000", "Stripe processing fees", AccountType.EXPENSE, Scope.NONE),
     CHARGEBACK_LOSSES("5100", "Chargeback losses", AccountType.EXPENSE, Scope.NONE);
 

@@ -205,6 +205,39 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/FeeScheduleResponse'
+  /v1/fee-schedules/effective:
+    get:
+      tags:
+      - Finance
+      summary: Effective fees for an organisation and category (payments:service or payments:read)
+      description: Commission (seller override, then category, then default; none for AfroTransact Retail), card-fee estimate
+        (cardPctBps + cardFixedMinor per charge) and FBA fee of the version in force at `at` (default now). Callers such as
+        bookings use it instead of hard-coding fees. Fee schedules are per currency; there is no market dimension.
+      operationId: effectiveFees
+      parameters:
+      - name: category
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: at
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/EffectiveFeesResponse'
   /v1/ledger/balances:
     get:
       tags:
@@ -362,6 +395,7 @@ paths:
       tags:
       - Payments
       summary: Cancel an uncaptured payment (releases the authorisation)
+      description: 'Refused (409 payments.already-captured) once something was captured: use /release.'
       operationId: cancel
       parameters:
       - name: id
@@ -447,6 +481,65 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CaptureResponse'
+  /v1/payments/{id}/off-session-charges:
+    get:
+      tags:
+      - Payments
+      summary: Off-session charges of a payment, oldest first
+      operationId: offSessionCharges
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PaymentResponse'
+    post:
+      tags:
+      - Payments
+      summary: Charge lines off-session on the customer's saved card (long-dated bookings)
+      description: 'After the order''s authorisation was released or lapsed (cards hold ~7 days), creates and confirms a manual-capture
+        PaymentIntent off_session on a saved card of the customer: a new payment of the same order (parentPaymentId = this
+        payment), captured / refunded / settled through the usual endpoints. Status AUTHORIZED = ready to capture; REQUIRES_ACTION
+        = the bank requires authentication (SCA): payments.intent.action_required is published and the customer confirms on-session
+        with clientSecret; FAILED = declined (retry with another card and a new Idempotency-Key). Idempotent per Idempotency-Key.'
+      operationId: chargeOffSession
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OffSessionChargeRequest'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
   /v1/payments/{id}/refunds:
     get:
       tags:
@@ -503,11 +596,50 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/RefundResponse'
+  /v1/payments/{id}/release:
+    post:
+      tags:
+      - Payments
+      summary: Release the remaining authorisation after a partial (deposit) capture
+      description: 'For a booking cancelled or a no-show after the deposit capture: the uncaptured rest of the hold is released
+        (Stripe: cancelling a requires_capture multicapture intent with captures releases the remainder; nothing to do at
+        Stripe when the card already released it at the partial capture). The payment becomes CAPTURED for what was captured
+        (releasedMinor = the rest); without captures it is cancelled. Uncaptured lines can later be charged off-session. No
+        journal is posted: authorisations never reach the ledger. Idempotent (Idempotency-Key; a payment already released
+        replays 200).'
+      operationId: releaseAuthorization
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          maxLength: 160
+          minLength: 0
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReleaseRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
   /v1/payouts/balance:
     get:
       tags:
       - Settlement & payouts
-      summary: 'Your balance: available to request, on hold per order (with release date), requested / on the way'
+      summary: 'Your balance: available to request, on hold per order (with release date), requested / on the way, provider
+        fees, and whether payouts are paused (payoutsPaused + payoutsPausedReason)'
       operationId: balance
       parameters:
       - name: orgId
@@ -527,6 +659,29 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/PayoutBalanceResponse'
+  /v1/payouts/provider-fees:
+    get:
+      tags:
+      - Settlement & payouts
+      summary: Provider fees of an organisation (late provider cancellations), newest first
+      description: Org members see their own; staff pass orgId. Fees are debited from the connected account (Stripe account
+        debit) and reduce availableMinor; OUTSTANDING ones are retried.
+      operationId: providerFees
+      parameters:
+      - name: orgId
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProviderFeeResponse'
   /v1/payouts/requests:
     get:
       tags:
@@ -998,6 +1153,15 @@ components:
             $ref: '#/components/schemas/LineRequest'
           maxItems: 200
           minItems: 0
+        shopperId:
+          type: string
+          description: AfroTransact customer id (token subject) of the shopper; required with saveForOffSession
+          maxLength: 120
+          minLength: 0
+        saveForOffSession:
+          type: boolean
+          description: Save the confirmed payment method on the shopper's Stripe Customer (setup_future_usage=off_session)
+            so a later balance can be charged off-session; customerId is then the shopper's Stripe Customer
       required:
       - amountMinor
       - currency
@@ -1100,7 +1264,8 @@ components:
           type: string
         clientSecret:
           type: string
-          description: For Stripe.js / PaymentSheet confirmation; only returned to the calling service
+          description: For Stripe.js / PaymentSheet confirmation (also to complete authentication of an off-session charge
+            in REQUIRES_ACTION); only returned to the calling service
         amountMinor:
           type: integer
           format: int64
@@ -1110,6 +1275,10 @@ components:
         refundedMinor:
           type: integer
           format: int64
+        releasedMinor:
+          type: integer
+          format: int64
+          description: Authorised but released without capture (final capture, release or cancellation)
         currency:
           type: string
         feeScheduleId:
@@ -1123,12 +1292,27 @@ components:
           format: date-time
         failureMessage:
           type: string
+          description: Decline message; authentication_required while an off-session charge waits for the customer
+        parentPaymentId:
+          type: string
+          format: uuid
+          description: 'Set for an off-session charge: the order''s primary payment'
+        offSession:
+          type: boolean
         replayed:
           type: boolean
         lines:
           type: array
           items:
             $ref: '#/components/schemas/LineResponse'
+    ReleaseRequest:
+      type: object
+      description: Release the uncaptured rest of the authorisation (e.g. booking cancelled or no-show after the deposit capture)
+      properties:
+        reason:
+          type: string
+          maxLength: 500
+          minLength: 0
     RefundLineRequest:
       type: object
       properties:
@@ -1234,6 +1418,28 @@ components:
         amountMinor:
           type: integer
           format: int64
+    OffSessionChargeRequest:
+      type: object
+      description: 'Charge lines of the order off-session on the customer''s saved card (manual capture: capture with POST
+        /v1/payments/{newId}/capture)'
+      properties:
+        customerId:
+          type: string
+          description: AfroTransact customer id (token subject)
+          maxLength: 120
+          minLength: 0
+        paymentMethodId:
+          type: string
+          description: Saved card pm_…; default = the customer's default method
+          maxLength: 80
+          minLength: 0
+        lineIds:
+          type: array
+          description: Lines of the primary payment; empty = every line not captured yet
+          items:
+            type: string
+      required:
+      - customerId
     CaptureRequest:
       type: object
       description: Capture one shipment (carrier acceptance)
@@ -1459,6 +1665,47 @@ components:
           description: false = bank account pending verification
         isDefault:
           type: boolean
+    ProviderFeeResponse:
+      type: object
+      description: A fee a provider owes (late provider cancellation), collected by a Stripe account debit
+      properties:
+        id:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        bookingId:
+          type: string
+        bookingReference:
+          type: string
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        reason:
+          type: string
+        status:
+          type: string
+          enum:
+          - OUTSTANDING
+          - COLLECTED
+        stripeDebitId:
+          type: string
+        attempts:
+          type: integer
+          format: int32
+        lastError:
+          type: string
+        nextAttemptAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        collectedAt:
+          type: string
+          format: date-time
     HeldOrderResponse:
       type: object
       description: Net on settlement hold for one order; releaseAt null until delivered / completed
@@ -1494,11 +1741,27 @@ components:
         paidMinor:
           type: integer
           format: int64
+        providerFeesMinor:
+          type: integer
+          format: int64
+          description: Provider fees (late cancellations) debited from or reserved in the balance
         minimumPayoutMinor:
           type: integer
           format: int64
         canRequestToday:
           type: boolean
+        payoutsPaused:
+          type: boolean
+          description: 'Payouts are on a compliance hold: requests and approvals fail with 422 payments.payouts_paused; the
+            balance keeps accruing'
+        payoutsPausedReason:
+          type: string
+          description: Why payouts are paused (null when not paused)
+          enum:
+          - AUTO_PAST_DUE
+          - MANUAL
+          - DEAUTHORIZED
+          - CHARGES_DISABLED
     LineSplitResponse:
       type: object
       properties:
@@ -1649,6 +1912,49 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/JournalLineResponse'
+    EffectiveFeesResponse:
+      type: object
+      description: Fees payments applies to one organisation and category (fee-schedule version in force)
+      properties:
+        feeScheduleId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int32
+        effectiveFrom:
+          type: string
+          format: date-time
+        currency:
+          type: string
+        category:
+          type: string
+        orgId:
+          type: string
+        commissionBps:
+          type: integer
+          format: int32
+          description: Commission in basis points (1000 = 10 %)
+        commissionSource:
+          type: string
+          enum:
+          - OVERRIDE
+          - CATEGORY
+          - DEFAULT
+          - RETAIL
+        cardPctBps:
+          type: integer
+          format: int32
+          description: 'Card fee estimate per charge: percentage part in bps'
+        cardFixedMinor:
+          type: integer
+          format: int64
+          description: 'Card fee estimate per charge: fixed part'
+        fbaPerUnitMinor:
+          type: integer
+          format: int64
+        reverseCommissionOnRefund:
+          type: boolean
   securitySchemes:
     bearer:
       type: http

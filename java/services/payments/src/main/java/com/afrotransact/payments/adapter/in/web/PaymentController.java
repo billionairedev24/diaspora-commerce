@@ -7,16 +7,21 @@ import com.afrotransact.payments.adapter.in.web.PaymentsDtos.CancelRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.CaptureRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.CaptureResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.CreatePaymentRequest;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.OffSessionChargeRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PaymentResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.RefundRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.RefundResponse;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ReleaseRequest;
 import com.afrotransact.payments.application.CaptureCommand;
 import com.afrotransact.payments.application.CaptureResult;
 import com.afrotransact.payments.application.CreatePaymentCommand;
+import com.afrotransact.payments.application.OffSessionChargeService;
+import com.afrotransact.payments.application.OffSessionCommand;
 import com.afrotransact.payments.application.PaymentResult;
 import com.afrotransact.payments.application.PaymentService;
 import com.afrotransact.payments.application.RefundCommand;
 import com.afrotransact.payments.application.RefundResult;
+import com.afrotransact.payments.application.ReleaseResult;
 import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.Payment;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,9 +47,11 @@ class PaymentController {
     static final String IDEMPOTENCY_KEY = "Idempotency-Key";
 
     private final PaymentService payments;
+    private final OffSessionChargeService offSession;
 
-    PaymentController(PaymentService payments) {
+    PaymentController(PaymentService payments, OffSessionChargeService offSession) {
         this.payments = payments;
+        this.offSession = offSession;
     }
 
     @Operation(summary = "Create the order's PaymentIntent (manual capture) and return its client secret",
@@ -57,7 +64,8 @@ class PaymentController {
         String currency = body.currency();
         PaymentResult result = payments.create(new CreatePaymentCommand(body.orderId(), body.customerId(),
                 Money.of(body.amountMinor(), currency), body.paymentMethodTypes(), body.placedAt(), body.metadata(),
-                body.lines().stream().map(l -> l.toLine(currency)).toList()), idempotencyKey);
+                body.lines().stream().map(l -> l.toLine(currency)).toList(), body.shopperId(),
+                Boolean.TRUE.equals(body.saveForOffSession())), idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
                 .body(PaymentResponse.of(result.payment(), result.replayed()));
     }
@@ -95,13 +103,56 @@ class PaymentController {
                 .body(CaptureResponse.of(result));
     }
 
-    @Operation(summary = "Cancel an uncaptured payment (releases the authorisation)")
+    @Operation(summary = "Cancel an uncaptured payment (releases the authorisation)",
+            description = "Refused (409 payments.already-captured) once something was captured: use /release.")
     @PostMapping("/v1/payments/{id}/cancel")
     PaymentResponse cancel(@PathVariable UUID id,
                            @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
                            @Valid @RequestBody(required = false) CancelRequest body) {
         Payment p = payments.cancel(id, body == null ? null : body.reason(), idempotencyKey);
         return PaymentResponse.of(p, false);
+    }
+
+    @Operation(summary = "Release the remaining authorisation after a partial (deposit) capture",
+            description = "For a booking cancelled or a no-show after the deposit capture: the uncaptured rest of the "
+                    + "hold is released (Stripe: cancelling a requires_capture multicapture intent with captures "
+                    + "releases the remainder; nothing to do at Stripe when the card already released it at the "
+                    + "partial capture). The payment becomes CAPTURED for what was captured (releasedMinor = the "
+                    + "rest); without captures it is cancelled. Uncaptured lines can later be charged off-session. "
+                    + "No journal is posted: authorisations never reach the ledger. Idempotent (Idempotency-Key; a "
+                    + "payment already released replays 200).")
+    @PostMapping("/v1/payments/{id}/release")
+    ResponseEntity<PaymentResponse> releaseAuthorization(
+            @PathVariable UUID id,
+            @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
+            @Valid @RequestBody(required = false) ReleaseRequest body) {
+        ReleaseResult result = payments.release(id, body == null ? null : body.reason(), idempotencyKey);
+        return ResponseEntity.status(HttpStatus.OK).body(PaymentResponse.of(result.payment(), result.replayed()));
+    }
+
+    @Operation(summary = "Charge lines off-session on the customer's saved card (long-dated bookings)",
+            description = "After the order's authorisation was released or lapsed (cards hold ~7 days), creates and "
+                    + "confirms a manual-capture PaymentIntent off_session on a saved card of the customer: a new "
+                    + "payment of the same order (parentPaymentId = this payment), captured / refunded / settled "
+                    + "through the usual endpoints. Status AUTHORIZED = ready to capture; REQUIRES_ACTION = the bank "
+                    + "requires authentication (SCA): payments.intent.action_required is published and the customer "
+                    + "confirms on-session with clientSecret; FAILED = declined (retry with another card and a new "
+                    + "Idempotency-Key). Idempotent per Idempotency-Key.")
+    @PostMapping("/v1/payments/{id}/off-session-charges")
+    ResponseEntity<PaymentResponse> chargeOffSession(
+            @PathVariable UUID id,
+            @RequestHeader(IDEMPOTENCY_KEY) @NotBlank @Size(max = 160) String idempotencyKey,
+            @Valid @RequestBody OffSessionChargeRequest body) {
+        PaymentResult result = offSession.charge(id, new OffSessionCommand(body.customerId(), body.paymentMethodId(),
+                body.lineIds()), idempotencyKey);
+        return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
+                .body(PaymentResponse.of(result.payment(), result.replayed()));
+    }
+
+    @Operation(summary = "Off-session charges of a payment, oldest first")
+    @GetMapping("/v1/payments/{id}/off-session-charges")
+    List<PaymentResponse> offSessionCharges(@PathVariable UUID id) {
+        return payments.offSessionCharges(id).stream().map(p -> PaymentResponse.of(p, false)).toList();
     }
 
     @Operation(summary = "Refund captured lines (partially)",

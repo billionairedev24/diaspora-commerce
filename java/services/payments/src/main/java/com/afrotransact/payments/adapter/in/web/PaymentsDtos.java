@@ -14,6 +14,7 @@ import com.afrotransact.payments.application.WalletMethod;
 import com.afrotransact.payments.domain.AccountBalance;
 import com.afrotransact.payments.domain.Capture;
 import com.afrotransact.payments.domain.CommissionOverride;
+import com.afrotransact.payments.domain.EffectiveFees;
 import com.afrotransact.payments.domain.FeeSchedule;
 import com.afrotransact.payments.domain.Fulfilment;
 import com.afrotransact.payments.domain.Journal;
@@ -24,6 +25,7 @@ import com.afrotransact.payments.domain.Payment;
 import com.afrotransact.payments.domain.PaymentLine;
 import com.afrotransact.payments.domain.PayoutBalance;
 import com.afrotransact.payments.domain.PayoutRequest;
+import com.afrotransact.payments.domain.ProviderFee;
 import com.afrotransact.payments.domain.ReconciliationReport;
 import com.afrotransact.payments.domain.RecipientShare;
 import com.afrotransact.payments.domain.Refund;
@@ -59,7 +61,12 @@ final class PaymentsDtos {
                     + "payment methods") List<String> paymentMethodTypes,
             @Schema(description = "When the order was placed; selects the fee schedule version") Instant placedAt,
             Map<String, String> metadata,
-            @NotEmpty @Size(max = 200) List<@Valid LineRequest> lines) {
+            @NotEmpty @Size(max = 200) List<@Valid LineRequest> lines,
+            @Size(max = 120) @Schema(description = "AfroTransact customer id (token subject) of the shopper; required "
+                    + "with saveForOffSession") String shopperId,
+            @Schema(description = "Save the confirmed payment method on the shopper's Stripe Customer "
+                    + "(setup_future_usage=off_session) so a later balance can be charged off-session; customerId is "
+                    + "then the shopper's Stripe Customer") Boolean saveForOffSession) {
     }
 
     @Schema(description = "One order line: who sells it and what the shopper pays for it")
@@ -82,16 +89,24 @@ final class PaymentsDtos {
     }
 
     record PaymentResponse(UUID id, String orderId, String status, String stripePaymentIntentId,
-                           @Schema(description = "For Stripe.js / PaymentSheet confirmation; only returned to the "
-                                   + "calling service") String clientSecret,
-                           long amountMinor, long capturedMinor, long refundedMinor, String currency,
-                           UUID feeScheduleId, Instant placedAt, Instant authorizedAt,
-                           String failureMessage, boolean replayed, List<LineResponse> lines) {
+                           @Schema(description = "For Stripe.js / PaymentSheet confirmation (also to complete "
+                                   + "authentication of an off-session charge in REQUIRES_ACTION); only returned to "
+                                   + "the calling service") String clientSecret,
+                           long amountMinor, long capturedMinor, long refundedMinor,
+                           @Schema(description = "Authorised but released without capture (final capture, release "
+                                   + "or cancellation)") long releasedMinor,
+                           String currency, UUID feeScheduleId, Instant placedAt, Instant authorizedAt,
+                           @Schema(description = "Decline message; authentication_required while an off-session "
+                                   + "charge waits for the customer") String failureMessage,
+                           @Schema(description = "Set for an off-session charge: the order's primary payment")
+                           UUID parentPaymentId,
+                           boolean offSession, boolean replayed, List<LineResponse> lines) {
 
         static PaymentResponse of(Payment p, boolean replayed) {
             return new PaymentResponse(p.id(), p.orderId(), p.status().name(), p.stripePaymentIntentId(),
-                    p.clientSecret(), p.amount().minor(), p.captured().minor(), p.refunded().minor(), p.currency(),
-                    p.feeScheduleId(), p.placedAt(), p.authorizedAt(), p.failureMessage(), replayed,
+                    p.clientSecret(), p.amount().minor(), p.captured().minor(), p.refunded().minor(),
+                    p.released().minor(), p.currency(), p.feeScheduleId(), p.placedAt(), p.authorizedAt(),
+                    p.failureMessage(), p.parentPaymentId(), p.isOffSession(), replayed,
                     p.lines().stream().map(LineResponse::of).toList());
         }
     }
@@ -133,6 +148,22 @@ final class PaymentsDtos {
     }
 
     record CancelRequest(@Size(max = 500) String reason) {
+    }
+
+    @Schema(description = "Release the uncaptured rest of the authorisation (e.g. booking cancelled or no-show after "
+            + "the deposit capture)")
+    record ReleaseRequest(@Size(max = 500) String reason) {
+    }
+
+    @Schema(description = "Charge lines of the order off-session on the customer's saved card (manual capture: "
+            + "capture with POST /v1/payments/{newId}/capture)")
+    record OffSessionChargeRequest(
+            @NotBlank @Size(max = 120) @Schema(description = "AfroTransact customer id (token subject)")
+            String customerId,
+            @Size(max = 80) @Schema(description = "Saved card pm_…; default = the customer's default method")
+            String paymentMethodId,
+            @Schema(description = "Lines of the primary payment; empty = every line not captured yet")
+            List<String> lineIds) {
     }
 
     @Schema(description = "Line-level partial refund")
@@ -238,6 +269,24 @@ final class PaymentsDtos {
         }
     }
 
+    @Schema(description = "Fees payments applies to one organisation and category (fee-schedule version in force)")
+    record EffectiveFeesResponse(UUID feeScheduleId, int version, Instant effectiveFrom, String currency,
+                                 String category, String orgId,
+                                 @Schema(description = "Commission in basis points (1000 = 10 %)") int commissionBps,
+                                 @Schema(allowableValues = {"OVERRIDE", "CATEGORY", "DEFAULT", "RETAIL"})
+                                 String commissionSource,
+                                 @Schema(description = "Card fee estimate per charge: percentage part in bps")
+                                 int cardPctBps,
+                                 @Schema(description = "Card fee estimate per charge: fixed part") long cardFixedMinor,
+                                 long fbaPerUnitMinor, boolean reverseCommissionOnRefund) {
+
+        static EffectiveFeesResponse of(EffectiveFees f) {
+            return new EffectiveFeesResponse(f.feeScheduleId(), f.version(), f.effectiveFrom(), f.currency(),
+                    f.category(), f.orgId(), f.commissionBps(), f.commissionSource(), f.cardPctBps(),
+                    f.cardFixed().minor(), f.fbaPerUnit().minor(), f.reverseCommissionOnRefund());
+        }
+    }
+
     // ------------------------------------------------------------------ ledger
 
     record BalanceResponse(String account, String code, String key, String title, String type, String currency,
@@ -283,13 +332,37 @@ final class PaymentsDtos {
 
     record PayoutBalanceResponse(String orgId, String currency, long availableMinor, long onHoldMinor,
                                  List<HeldOrderResponse> onHold, long requestedOrInTransitMinor, long paidMinor,
-                                 long minimumPayoutMinor, boolean canRequestToday) {
+                                 @Schema(description = "Provider fees (late cancellations) debited from or reserved "
+                                         + "in the balance") long providerFeesMinor,
+                                 long minimumPayoutMinor, boolean canRequestToday,
+                                 @Schema(description = "Payouts are on a compliance hold: requests and approvals fail "
+                                         + "with 422 payments.payouts_paused; the balance keeps accruing")
+                                 boolean payoutsPaused,
+                                 @Schema(description = "Why payouts are paused (null when not paused)",
+                                         allowableValues = {"AUTO_PAST_DUE", "MANUAL", "DEAUTHORIZED",
+                                             "CHARGES_DISABLED"})
+                                 String payoutsPausedReason) {
 
         static PayoutBalanceResponse of(PayoutBalance b) {
             return new PayoutBalanceResponse(b.orgId(), b.currency(), b.available().minor(), b.onHoldTotal().minor(),
                     b.onHold().stream().map(h -> new HeldOrderResponse(h.orderId(), h.amount().minor(),
-                            h.releaseAt())).toList(), b.inFlight().minor(), b.paid().minor(), b.minimum().minor(),
-                    b.canRequestToday());
+                            h.releaseAt())).toList(), b.inFlight().minor(), b.paid().minor(),
+                    b.providerFees().minor(), b.minimum().minor(), b.canRequestToday(), b.payoutsPaused(),
+                    b.payoutsPausedReason());
+        }
+    }
+
+    @Schema(description = "A fee a provider owes (late provider cancellation), collected by a Stripe account debit")
+    record ProviderFeeResponse(UUID id, String orgId, String bookingId, String bookingReference, long amountMinor,
+                               String currency, String reason,
+                               @Schema(allowableValues = {"OUTSTANDING", "COLLECTED"}) String status,
+                               String stripeDebitId, int attempts, String lastError, Instant nextAttemptAt,
+                               Instant createdAt, Instant collectedAt) {
+
+        static ProviderFeeResponse of(ProviderFee f) {
+            return new ProviderFeeResponse(f.id(), f.orgId(), f.bookingId(), f.bookingReference(), f.amount().minor(),
+                    f.amount().currency(), f.reason(), f.status().name(), f.stripeDebitId(), f.attempts(),
+                    f.lastError(), f.nextAttemptAt(), f.createdAt(), f.collectedAt());
         }
     }
 

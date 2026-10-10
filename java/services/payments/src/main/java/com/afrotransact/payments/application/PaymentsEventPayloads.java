@@ -7,8 +7,10 @@ import java.util.UUID;
 import com.afrotransact.payments.domain.Capture;
 import com.afrotransact.payments.domain.Dispute;
 import com.afrotransact.payments.domain.Payment;
+import com.afrotransact.payments.domain.PaymentLine;
 import com.afrotransact.payments.domain.PaymentSplit;
 import com.afrotransact.payments.domain.PayoutRequest;
+import com.afrotransact.payments.domain.ProviderFee;
 import com.afrotransact.payments.domain.Refund;
 import com.afrotransact.payments.domain.SettlementTransfer;
 
@@ -18,15 +20,56 @@ public final class PaymentsEventPayloads {
     private PaymentsEventPayloads() {
     }
 
-    /** payments.intent.*. */
+    /**
+     * payments.intent.*. {@code parentPaymentId} is set for off-session follow-up charges (same order id), so
+     * consumers can tell them from the order's primary payment.
+     */
     public record IntentPayload(UUID paymentId, String orderId, String stripePaymentIntentId, String status,
                                 long amountMinor, long capturedMinor, long refundedMinor, String currency,
-                                String failureMessage) {
+                                String failureMessage, UUID parentPaymentId, boolean offSession) {
 
         static IntentPayload of(Payment p) {
             return new IntentPayload(p.id(), p.orderId(), p.stripePaymentIntentId(), p.status().name(),
                     p.amount().minor(), p.captured().minor(), p.refunded().minor(), p.currency(),
-                    p.failureMessage());
+                    p.failureMessage(), p.parentPaymentId(), p.isOffSession());
+        }
+    }
+
+    /** payments.authorization.released. */
+    public record ReleasedPayload(UUID paymentId, String orderId, String stripePaymentIntentId, String status,
+                                  long amountMinor, long capturedMinor, long releasedMinor, String currency,
+                                  String reason, UUID parentPaymentId) {
+
+        static ReleasedPayload of(Payment p, String reason) {
+            return new ReleasedPayload(p.id(), p.orderId(), p.stripePaymentIntentId(), p.status().name(),
+                    p.amount().minor(), p.captured().minor(), p.released().minor(), p.currency(), reason,
+                    p.parentPaymentId());
+        }
+    }
+
+    /**
+     * payments.intent.action_required: notifications asks the customer to confirm the payment in the app; the
+     * calling service reads the client secret with GET /v1/payments/{paymentId}.
+     */
+    public record ActionRequiredPayload(UUID paymentId, String orderId, UUID parentPaymentId, String customerId,
+                                        String stripePaymentIntentId, long amountMinor, String currency,
+                                        String reason, List<String> lineIds) {
+
+        static ActionRequiredPayload of(Payment p, String customerId, String reason) {
+            return new ActionRequiredPayload(p.id(), p.orderId(), p.parentPaymentId(), customerId,
+                    p.stripePaymentIntentId(), p.amount().minor(), p.currency(), reason,
+                    p.lines().stream().map(PaymentLine::lineId).toList());
+        }
+    }
+
+    /** payments.provider_fee.*. */
+    public record ProviderFeePayload(UUID feeId, String orgId, String bookingId, String bookingReference,
+                                     long amountMinor, String currency, String reason, String status,
+                                     String stripeDebitId, String lastError) {
+
+        static ProviderFeePayload of(ProviderFee f) {
+            return new ProviderFeePayload(f.id(), f.orgId(), f.bookingId(), f.bookingReference(), f.amount().minor(),
+                    f.amount().currency(), f.reason(), f.status().name(), f.stripeDebitId(), f.lastError());
         }
     }
 

@@ -26,6 +26,7 @@ import com.afrotransact.payments.port.IdempotencyStore;
 import com.afrotransact.payments.port.LedgerRepository;
 import com.afrotransact.payments.port.PayoutHoldRepository;
 import com.afrotransact.payments.port.PayoutRepository;
+import com.afrotransact.payments.port.ProviderFeeRepository;
 import com.afrotransact.payments.port.SettlementRepository;
 import com.afrotransact.payments.port.StripeGateway;
 import com.afrotransact.platform.events.DomainEventPublisher;
@@ -45,6 +46,7 @@ class PayoutServiceImpl implements PayoutService {
     private final LedgerRepository ledger;
     private final ConnectedAccountRepository accounts;
     private final PayoutHoldRepository holds;
+    private final ProviderFeeRepository providerFees;
     private final StripeGateway stripe;
     private final PayoutPolicy policy;
     private final IdempotencyStore idempotency;
@@ -55,8 +57,8 @@ class PayoutServiceImpl implements PayoutService {
     private final Clock clock;
 
     PayoutServiceImpl(PayoutRepository payouts, SettlementRepository settlements, LedgerRepository ledger,
-                      ConnectedAccountRepository accounts, PayoutHoldRepository holds, StripeGateway stripe,
-                      PayoutPolicy policy,
+                      ConnectedAccountRepository accounts, PayoutHoldRepository holds,
+                      ProviderFeeRepository providerFees, StripeGateway stripe, PayoutPolicy policy,
                       IdempotencyStore idempotency, MoneyTransactions tx, PaymentsAccess access,
                       DomainEventPublisher events, PaymentsSettings settings, Clock clock) {
         this.payouts = payouts;
@@ -64,6 +66,7 @@ class PayoutServiceImpl implements PayoutService {
         this.ledger = ledger;
         this.accounts = accounts;
         this.holds = holds;
+        this.providerFees = providerFees;
         this.stripe = stripe;
         this.policy = policy;
         this.idempotency = idempotency;
@@ -91,7 +94,9 @@ class PayoutServiceImpl implements PayoutService {
             consumed += e.getKey().consumesBalance() ? e.getValue() : 0;
             inFlight += e.getKey().inFlight() ? e.getValue() : 0;
         }
-        Money available = transferred.minus(Money.of(consumed, currency)).max(zero);
+        // Provider fees are debited from (or, while outstanding, reserved in) the connected account balance.
+        Money fees = providerFees.totalOf(org, currency);
+        Money available = transferred.minus(Money.of(consumed, currency)).minus(fees).max(zero);
         List<HeldOrder> held = new ArrayList<>();
         Money heldTotal = zero;
         for (Map.Entry<String, Long> e : ledger.payableByOrder(org, currency).entrySet()) {
@@ -106,9 +111,10 @@ class PayoutServiceImpl implements PayoutService {
         held.sort(Comparator.comparing(HeldOrder::releaseAt, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(HeldOrder::orderId));
         List<PayoutRequest> today = payouts.requestsOn(org, today());
+        Optional<PayoutHold> hold = holds.find(org).filter(PayoutHold::paused);
         return new PayoutBalance(org, currency, available, held, heldTotal, Money.of(inFlight, currency),
-                Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), policy.minimum(currency),
-                policy.canRequestToday(today));
+                Money.of(totals.getOrDefault(PayoutStatus.PAID, 0L), currency), fees, policy.minimum(currency),
+                policy.canRequestToday(today), hold.isPresent(), hold.map(PayoutHold::reason).orElse(null));
     }
 
     @Override

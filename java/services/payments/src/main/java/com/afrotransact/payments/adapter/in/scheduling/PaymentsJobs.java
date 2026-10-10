@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 
+import com.afrotransact.payments.application.ProviderFeeService;
 import com.afrotransact.payments.application.ReconciliationService;
 import com.afrotransact.payments.application.SettlementService;
 import com.afrotransact.payments.application.WebhookService;
@@ -26,18 +27,20 @@ class PaymentsJobs {
 
     private final WebhookService webhooks;
     private final SettlementService settlements;
+    private final ProviderFeeService providerFees;
     private final ReconciliationService reconciliation;
     private final Clock clock;
     private final int webhookBatch;
     private final int settlementBatch;
     private final ZoneId zone;
 
-    PaymentsJobs(WebhookService webhooks, SettlementService settlements, ReconciliationService reconciliation,
-                 Clock clock, @Value("${at.payments.jobs.webhook-batch:100}") int webhookBatch,
+    PaymentsJobs(WebhookService webhooks, SettlementService settlements, ProviderFeeService providerFees,
+                 ReconciliationService reconciliation, Clock clock, @Value("${at.payments.jobs.webhook-batch:100}") int webhookBatch,
                  @Value("${at.payments.jobs.settlement-batch:200}") int settlementBatch,
                  @Value("${at.payments.zone:UTC}") String zone) {
         this.webhooks = webhooks;
         this.settlements = settlements;
+        this.providerFees = providerFees;
         this.reconciliation = reconciliation;
         this.clock = clock;
         this.webhookBatch = webhookBatch;
@@ -56,6 +59,13 @@ class PaymentsJobs {
             int created = settlements.releaseMatured(settlementBatch);
             if (created > 0) {
                 LOG.info("Created {} settlement transfers", created);
+            }
+        });
+        // New transfers fund connected accounts: retry provider fees that could not be debited yet.
+        run("provider-fees", () -> {
+            int collected = providerFees.collectOutstanding(settlementBatch);
+            if (collected > 0) {
+                LOG.info("Collected {} outstanding provider fees", collected);
             }
         });
     }

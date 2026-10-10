@@ -25,6 +25,29 @@ public interface StripeGateway {
 
     IntentSnapshot cancel(String intentId, String idempotencyKey);
 
+    /**
+     * Releases what is still authorised but uncaptured after one or more partial captures. Stripe models this as
+     * cancelling a {@code requires_capture} PaymentIntent that already has captures (multicapture): the remainder
+     * is released and the intent ends {@code succeeded} for the captured amount. (The alternative, a final capture,
+     * needs a positive amount to capture.)
+     */
+    IntentSnapshot releaseUncaptured(String intentId, String idempotencyKey);
+
+    /**
+     * Creates and confirms a manual-capture PaymentIntent off-session on a saved payment method of the customer.
+     * Never throws for card errors that leave an intent behind (e.g. {@code authentication_required},
+     * {@code card_declined}): they come back as the attempt's error with the intent's state.
+     */
+    OffSessionAttempt createOffSessionIntent(OffSessionIntent request, String idempotencyKey);
+
+    /**
+     * Account debit: moves {@code amount} from a connected account's Stripe balance to the platform balance
+     * (a Charge whose source is the connected account, {@code acct_…}). Used for fees a provider owes that are not
+     * tied to one transfer.
+     */
+    AccountDebitSnapshot debitConnectedAccount(String connectedAccount, Money amount, String description,
+                                               Map<String, String> metadata, String idempotencyKey);
+
     /** Partial refund of a PaymentIntent; transfer reversals are done separately by AfroTransact. */
     RefundSnapshot refund(String intentId, Money amount, Map<String, String> metadata, String idempotencyKey);
 
@@ -69,9 +92,14 @@ public interface StripeGateway {
                                  Integer expMonth, Integer expYear, String bankName, String accountType) {
     }
 
-    /** PaymentIntent creation parameters. */
+    /**
+     * PaymentIntent creation parameters.
+     *
+     * @param saveForOffSession {@code setup_future_usage=off_session}: the confirmed method is attached to the
+     *                          customer for later off-session charges (needs a customer)
+     */
     record CreateIntent(Money amount, String customerId, List<String> paymentMethodTypes, String description,
-                        Map<String, String> metadata, String transferGroup) {
+                        Map<String, String> metadata, String transferGroup, boolean saveForOffSession) {
 
         public CreateIntent {
             paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
@@ -82,6 +110,35 @@ public interface StripeGateway {
     /** What AfroTransact needs from a PaymentIntent. */
     record IntentSnapshot(String id, String status, String clientSecret, long amount, long amountCapturable,
                           long amountReceived, String latestChargeId, String failureMessage, String nextActionType) {
+    }
+
+    /** Off-session PaymentIntent parameters (confirm=true, off_session=true, capture_method=manual). */
+    record OffSessionIntent(Money amount, String customerId, String paymentMethodId, String description,
+                            Map<String, String> metadata, String transferGroup) {
+
+        public OffSessionIntent {
+            metadata = Map.copyOf(metadata);
+        }
+    }
+
+    /**
+     * Result of an off-session confirmation.
+     *
+     * @param errorCode   Stripe error code when the confirmation failed, e.g. {@code authentication_required}
+     * @param declineCode card decline code, if any
+     */
+    record OffSessionAttempt(IntentSnapshot intent, String errorCode, String declineCode, String errorMessage) {
+
+        public static final String AUTHENTICATION_REQUIRED = "authentication_required";
+
+        public boolean authenticationRequired() {
+            return AUTHENTICATION_REQUIRED.equals(errorCode) || AUTHENTICATION_REQUIRED.equals(declineCode)
+                    || intent != null && "requires_action".equals(intent.status());
+        }
+    }
+
+    /** A Stripe account debit (py_…). */
+    record AccountDebitSnapshot(String id, long amount, String status) {
     }
 
     record RefundSnapshot(String id, String status, long amount) {

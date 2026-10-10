@@ -6,6 +6,7 @@ import java.util.List;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.BalanceResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ConnectedAccountRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ConnectedAccountResponse;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.EffectiveFeesResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.FeeScheduleRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.FeeScheduleResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.JournalResponse;
@@ -71,6 +72,18 @@ class FinanceController {
     @GetMapping("/v1/fee-schedules/active")
     FeeScheduleResponse activeFeeSchedule(@RequestParam(required = false) Instant at) {
         return FeeScheduleResponse.of(fees.activeAt(at));
+    }
+
+    @Operation(summary = "Effective fees for an organisation and category (payments:service or payments:read)",
+            description = "Commission (seller override, then category, then default; none for AfroTransact Retail), "
+                    + "card-fee estimate (cardPctBps + cardFixedMinor per charge) and FBA fee of the version in force "
+                    + "at `at` (default now). Callers such as bookings use it instead of hard-coding fees. "
+                    + "Fee schedules are per currency; there is no market dimension.")
+    @GetMapping("/v1/fee-schedules/effective")
+    EffectiveFeesResponse effectiveFees(@RequestParam String category,
+                                        @RequestParam(required = false) String orgId,
+                                        @RequestParam(required = false) Instant at) {
+        return EffectiveFeesResponse.of(fees.effective(category, orgId, at));
     }
 
     @Operation(summary = "Create a fee schedule version (Super Admin / Finance, payments:configure)",

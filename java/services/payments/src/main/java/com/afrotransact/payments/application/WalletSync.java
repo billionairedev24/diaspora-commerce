@@ -49,6 +49,17 @@ class WalletSync {
         return Optional.of(method);
     }
 
+    /** The shopper's Stripe Customer, created (idempotently per shopper) on first use; locked. */
+    StripeCustomer ensureCustomer(String customerId) {
+        Optional<StripeCustomer> existing = wallet.lockCustomer(customerId);
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+        String stripeId = stripe.createCustomer(customerId, "customer:" + customerId);
+        wallet.insertCustomer(customerId, stripeId, Instant.now(clock));
+        return wallet.lockCustomer(customerId).orElseThrow();
+    }
+
     /** A detached default is replaced by the oldest remaining method (or none). */
     void detached(String paymentMethodId) {
         Optional<SavedPaymentMethod> method = wallet.findMethod(paymentMethodId);

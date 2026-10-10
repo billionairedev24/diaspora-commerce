@@ -61,6 +61,7 @@ class PaymentServiceImpl implements PaymentService {
     private final LedgerPoster ledger;
     private final IdempotencyStore idempotency;
     private final PaymentStatusUpdater statuses;
+    private final WalletSync wallet;
     private final MoneyTransactions tx;
     private final PaymentsAccess access;
     private final DomainEventPublisher events;
@@ -69,7 +70,8 @@ class PaymentServiceImpl implements PaymentService {
     PaymentServiceImpl(PaymentRepository payments, FeeScheduleRepository feeSchedules,
                        SettlementRepository settlements, StripeGateway stripe, PaymentSplitter splitter,
                        LedgerPoster ledger, IdempotencyStore idempotency, PaymentStatusUpdater statuses,
-                       MoneyTransactions tx, PaymentsAccess access, DomainEventPublisher events, Clock clock) {
+                       WalletSync wallet, MoneyTransactions tx, PaymentsAccess access, DomainEventPublisher events,
+                       Clock clock) {
         this.payments = payments;
         this.feeSchedules = feeSchedules;
         this.settlements = settlements;
@@ -78,6 +80,7 @@ class PaymentServiceImpl implements PaymentService {
         this.ledger = ledger;
         this.idempotency = idempotency;
         this.statuses = statuses;
+        this.wallet = wallet;
         this.tx = tx;
         this.access = access;
         this.events = events;
@@ -105,7 +108,9 @@ class PaymentServiceImpl implements PaymentService {
                     new PaymentsStateConflict("payments.no-fee-schedule", "No fee schedule is in force at "
                             + placedAt));
             UUID paymentId = Fingerprint.id("payment", cmd.orderId());
-            Payment payment = Payment.create(paymentId, cmd.orderId(), cmd.customerId(), cmd.amount(), schedule.id(),
+            String stripeCustomer = cmd.saveForOffSession()
+                    ? wallet.ensureCustomer(cmd.shopperId()).stripeCustomerId() : cmd.customerId();
+            Payment payment = Payment.create(paymentId, cmd.orderId(), stripeCustomer, cmd.amount(), schedule.id(),
                     placedAt, cmd.metadata(), cmd.lines(), now);
             if (!payments.claim(payment)) {
                 throw new PaymentsStateConflict("payments.payment-in-flight", "The payment of order "
@@ -114,9 +119,12 @@ class PaymentServiceImpl implements PaymentService {
             Map<String, String> metadata = new LinkedHashMap<>(cmd.metadata());
             metadata.put("order_id", cmd.orderId());
             metadata.put("payment_id", paymentId.toString());
+            if (cmd.saveForOffSession()) {
+                metadata.put("afrotransact_customer_id", cmd.shopperId());
+            }
             IntentSnapshot intent = stripe.createIntent(new StripeGateway.CreateIntent(cmd.amount(),
-                    cmd.customerId(), cmd.paymentMethodTypes(), "AfroTransact order " + cmd.orderId(), metadata,
-                    cmd.orderId()), cmd.orderId() + ":create-intent");
+                    payment.customerId(), cmd.paymentMethodTypes(), "AfroTransact order " + cmd.orderId(), metadata,
+                    cmd.orderId(), cmd.saveForOffSession()), cmd.orderId() + ":create-intent");
             Payment stored = payments.update(payment.withIntent(intent.id(), intent.clientSecret(),
                     PaymentStatus.fromStripe(intent.status()), now));
             statuses.publish(PaymentsEvents.INTENT_CREATED, stored);
@@ -147,6 +155,9 @@ class PaymentServiceImpl implements PaymentService {
                 return p;
             }
             IntentSnapshot intent = stripe.retrieveIntent(p.stripePaymentIntentId());
+            if (statuses.awaitingCustomer(p, intent.status())) {
+                return p;
+            }
             PaymentStatus reported = intent.failureMessage() != null
                     && "requires_payment_method".equals(intent.status()) ? PaymentStatus.FAILED
                     : PaymentStatus.fromStripe(intent.status());
@@ -200,7 +211,7 @@ class PaymentServiceImpl implements PaymentService {
             }
             IntentSnapshot captured = stripe.capture(p.stripePaymentIntentId(), amount, finalCapture,
                     Map.of("order_id", p.orderId(), "shipment_id", cmd.shipmentId()),
-                    p.orderId() + ":capture:" + cmd.shipmentId());
+                    p.stripeKeyPrefix() + ":capture:" + cmd.shipmentId());
             FeeSchedule schedule = schedule(p);
             Fee fee = captureFee(p, captured.latestChargeId(), amount, schedule);
             PaymentSplit split = splitter.split(lines, schedule, fee.amount());
@@ -271,12 +282,65 @@ class PaymentServiceImpl implements PaymentService {
             }
             Payment canceled = p.cancel(Instant.now(clock));
             if (p.stripePaymentIntentId() != null) {
-                stripe.cancel(p.stripePaymentIntentId(), p.orderId() + ":cancel");
+                stripe.cancel(p.stripePaymentIntentId(), p.stripeKeyPrefix() + ":cancel");
             }
             Payment stored = payments.update(canceled);
             statuses.publish(PaymentsEvents.INTENT_CANCELED, stored);
             return stored;
         });
+    }
+
+    @Override
+    public ReleaseResult release(UUID paymentId, String reason, String idempotencyKey) {
+        access.service();
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new PaymentsRuleViolation("payments.idempotency-key-required",
+                    "Releasing an authorisation needs an Idempotency-Key");
+        }
+        String fingerprint = Fingerprint.of(paymentId + "|release");
+        String scope = "release";
+        return tx.serializable(() -> {
+            Optional<StoredRef> prior = idempotency.claim(scope, idempotencyKey, fingerprint, StoredRef.class);
+            if (prior.isPresent()) {
+                return new ReleaseResult(requirePayment(prior.get().id()), true);
+            }
+            Payment p = payments.lockById(paymentId).orElseThrow(() -> notFound(paymentId.toString()));
+            if (p.status().isFinal()) {
+                idempotency.complete(scope, idempotencyKey, new StoredRef(p.id()));
+                return new ReleaseResult(p, true);
+            }
+            Instant now = Instant.now(clock);
+            Payment released = p.releaseRemaining(now);
+            if (p.stripePaymentIntentId() != null) {
+                IntentSnapshot intent = stripe.retrieveIntent(p.stripePaymentIntentId());
+                if (p.captured().isZero()) {
+                    if (!"canceled".equals(intent.status())) {
+                        stripe.cancel(p.stripePaymentIntentId(), p.stripeKeyPrefix() + ":cancel");
+                    }
+                } else if ("requires_capture".equals(intent.status()) && intent.amountCapturable() > 0) {
+                    // Multicapture intent with captures: cancelling releases the uncaptured rest. A card without
+                    // multicapture already released it at the first (partial) capture.
+                    stripe.releaseUncaptured(p.stripePaymentIntentId(), p.stripeKeyPrefix() + ":release");
+                }
+            }
+            // An authorisation never reaches the ledger (1000 Stripe clearing moves only at capture), so releasing
+            // its rest posts no journal: a memo journal would not match any Stripe balance transaction.
+            Payment stored = payments.update(released);
+            if (stored.status() == PaymentStatus.CANCELED) {
+                statuses.publish(PaymentsEvents.INTENT_CANCELED, stored);
+            }
+            events.publish(PaymentsEvents.AUTHORIZATION_RELEASED, PaymentsEvents.AGGREGATE_PAYMENT, stored.orderId(),
+                    PaymentsEventPayloads.ReleasedPayload.of(stored, reason));
+            idempotency.complete(scope, idempotencyKey, new StoredRef(stored.id()));
+            return new ReleaseResult(stored, false);
+        });
+    }
+
+    @Override
+    public List<Payment> offSessionCharges(UUID paymentId) {
+        access.reader();
+        requirePayment(paymentId);
+        return payments.children(paymentId);
     }
 
     @Override
@@ -320,7 +384,7 @@ class PaymentServiceImpl implements PaymentService {
             Instant now = Instant.now(clock);
             StripeGateway.RefundSnapshot stripeRefund = stripe.refund(p.stripePaymentIntentId(), amount,
                     Map.of("order_id", p.orderId(), "refund_id", refundId.toString()),
-                    p.orderId() + ":refund:" + refundId);
+                    p.stripeKeyPrefix() + ":refund:" + refundId);
             Refund refund = new Refund(refundId, p.id(), p.orderId(), stripeRefund.id(), amount,
                     RefundStatus.PENDING, cmd.reason(), lines, now, null);
             ledger.post(Postings.refund(Fingerprint.id("journal", "refund", refundId.toString()), now,
@@ -370,7 +434,7 @@ class PaymentServiceImpl implements PaymentService {
                 }
                 StripeGateway.ReversalSnapshot rev = stripe.reverseTransfer(t.stripeTransferId(), amount,
                         Map.of("order_id", p.orderId(), "refund_id", refund.id().toString()),
-                        p.orderId() + ":reversal:" + refund.id() + ":" + t.id());
+                        p.stripeKeyPrefix() + ":reversal:" + refund.id() + ":" + t.id());
                 settlements.insertReversal(t.id(), rev.id(), amount, refund.id(), now);
                 settlements.updateTransfer(t.reversedBy(amount));
                 ledger.post(Postings.transferReversal(Fingerprint.id("journal", "reversal", rev.id()), now,
@@ -423,11 +487,15 @@ class PaymentServiceImpl implements PaymentService {
                 errors.put("lines", "Every line must be in " + cmd.amount().currency());
             }
         }
+        if (cmd.saveForOffSession() && (cmd.shopperId() == null || cmd.shopperId().isBlank())) {
+            errors.put("shopperId", "Required to save the payment method for off-session charges");
+        }
         if (!errors.isEmpty()) {
             throw new PaymentsRuleViolation("payments.invalid-request", "Invalid payment request", errors);
         }
         return new CreatePaymentCommand(cmd.orderId().trim(), cmd.customerId(), cmd.amount(),
-                cmd.paymentMethodTypes(), cmd.placedAt(), cmd.metadata(), cmd.lines());
+                cmd.paymentMethodTypes(), cmd.placedAt(), cmd.metadata(), cmd.lines(),
+                cmd.shopperId() == null ? null : cmd.shopperId().trim(), cmd.saveForOffSession());
     }
 
     private static NotFoundException notFound(String what) {

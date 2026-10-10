@@ -4,11 +4,14 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.afrotransact.payments.domain.EffectiveFees;
 import com.afrotransact.payments.domain.FeeSchedule;
 import com.afrotransact.payments.domain.Money;
+import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.port.FeeScheduleRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -20,13 +23,15 @@ class FeeScheduleServiceImpl implements FeeScheduleService {
     private final FeeScheduleRepository schedules;
     private final MoneyTransactions tx;
     private final PaymentsAccess access;
+    private final PaymentsSettings settings;
     private final Clock clock;
 
     FeeScheduleServiceImpl(FeeScheduleRepository schedules, MoneyTransactions tx, PaymentsAccess access,
-                           Clock clock) {
+                           PaymentsSettings settings, Clock clock) {
         this.schedules = schedules;
         this.tx = tx;
         this.access = access;
+        this.settings = settings;
         this.clock = clock;
     }
 
@@ -42,6 +47,17 @@ class FeeScheduleServiceImpl implements FeeScheduleService {
         Instant when = at == null ? Instant.now(clock) : at;
         return FeeSchedule.activeAt(schedules.all(), when).orElseThrow(() -> new NotFoundException(
                 "payments.no-fee-schedule", "No fee schedule in force at " + when));
+    }
+
+    @Override
+    public EffectiveFees effective(String category, String orgId, Instant at) {
+        if (category == null || category.isBlank()) {
+            throw new PaymentsRuleViolation("payments.invalid-request", "category is required",
+                    Map.of("category", "Required"));
+        }
+        FeeSchedule schedule = activeAt(at);
+        String org = orgId == null || orgId.isBlank() ? null : orgId.trim();
+        return schedule.effectiveFor(org, category, settings.retailOrgId());
     }
 
     @Override

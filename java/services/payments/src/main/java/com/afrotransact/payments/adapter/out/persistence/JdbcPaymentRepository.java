@@ -30,7 +30,7 @@ class JdbcPaymentRepository implements PaymentRepository {
     private static final String SELECT = """
             select id, order_id, customer_id, currency, amount_minor, status, stripe_payment_intent_id,
                    client_secret, fee_schedule_id, placed_at, captured_minor, refunded_minor, authorized_at,
-                   failure_message, metadata::text as metadata, created_at, updated_at, version
+                   failure_message, metadata::text as metadata, created_at, updated_at, version, parent_payment_id
             from payment
             """;
     private static final TypeReference<List<RefundLineRow>> REFUND_LINES = new TypeReference<>() { };
@@ -45,15 +45,19 @@ class JdbcPaymentRepository implements PaymentRepository {
 
     @Override
     public boolean claim(Payment p) {
+        String conflict = p.isOffSession() ? "on conflict (id) do nothing"
+                : "on conflict (order_id) where parent_payment_id is null do nothing";
         int inserted = jdbc.sql("""
                 insert into payment (id, order_id, customer_id, currency, amount_minor, status,
                     stripe_payment_intent_id, client_secret, fee_schedule_id, placed_at, captured_minor,
-                    refunded_minor, authorized_at, failure_message, metadata, created_at, updated_at, version)
+                    refunded_minor, authorized_at, failure_message, metadata, created_at, updated_at, version,
+                    parent_payment_id)
                 values (:id, :orderId, :customerId, :currency, :amount, :status, :pi, :secret, :schedule, :placedAt,
-                    :captured, :refunded, :authorizedAt, :failure, cast(:metadata as jsonb), :createdAt, :updatedAt, 0)
-                on conflict (order_id) do nothing
-                """)
-                .param("id", p.id()).param("orderId", p.orderId()).param("customerId", p.customerId())
+                    :captured, :refunded, :authorizedAt, :failure, cast(:metadata as jsonb), :createdAt, :updatedAt, 0,
+                    :parent)
+                """ + conflict)
+                .param("id", p.id()).param("parent", p.parentPaymentId()).param("orderId", p.orderId())
+                .param("customerId", p.customerId())
                 .param("currency", p.currency()).param("amount", p.amount().minor())
                 .param("status", p.status().name()).param("pi", p.stripePaymentIntentId())
                 .param("secret", p.clientSecret()).param("schedule", p.feeScheduleId())
@@ -92,7 +96,13 @@ class JdbcPaymentRepository implements PaymentRepository {
 
     @Override
     public Optional<Payment> findByOrderId(String orderId) {
-        return one(SELECT + " where order_id = :v", orderId);
+        return one(SELECT + " where order_id = :v and parent_payment_id is null", orderId);
+    }
+
+    @Override
+    public List<Payment> children(UUID parentPaymentId) {
+        return jdbc.sql(SELECT + " where parent_payment_id = :v order by created_at, id").param("v", parentPaymentId)
+                .query(this::header).list().stream().map(h -> h.toPayment(lines(h.id(), h.currency()))).toList();
     }
 
     @Override
@@ -149,7 +159,8 @@ class JdbcPaymentRepository implements PaymentRepository {
         }
         return new Payment(p.id(), p.orderId(), p.customerId(), p.amount(), p.status(), p.stripePaymentIntentId(),
                 p.clientSecret(), p.feeScheduleId(), p.placedAt(), p.captured(), p.refunded(), p.authorizedAt(),
-                p.failureMessage(), p.metadata(), p.lines(), p.createdAt(), p.updatedAt(), p.version() + 1);
+                p.failureMessage(), p.metadata(), p.lines(), p.createdAt(), p.updatedAt(), p.version() + 1,
+                p.parentPaymentId());
     }
 
     private List<PaymentLine> lines(UUID paymentId, String currency) {
@@ -180,7 +191,8 @@ class JdbcPaymentRepository implements PaymentRepository {
                 rs.getObject("fee_schedule_id", UUID.class), Sql.instant(rs, "placed_at"),
                 rs.getLong("captured_minor"), rs.getLong("refunded_minor"), Sql.instant(rs, "authorized_at"),
                 rs.getString("failure_message"), json.stringMap(rs.getString("metadata")),
-                Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"), rs.getLong("version"));
+                Sql.instant(rs, "created_at"), Sql.instant(rs, "updated_at"), rs.getLong("version"),
+                rs.getObject("parent_payment_id", UUID.class));
     }
 
     @Override
@@ -298,12 +310,12 @@ class JdbcPaymentRepository implements PaymentRepository {
                           PaymentStatus status, String intentId, String clientSecret, UUID scheduleId,
                           Instant placedAt, long captured, long refunded, Instant authorizedAt,
                           String failure, Map<String, String> metadata, Instant createdAt,
-                          Instant updatedAt, long version) {
+                          Instant updatedAt, long version, UUID parentId) {
 
         Payment toPayment(List<PaymentLine> lines) {
             return new Payment(id, orderId, customerId, Money.of(amount, currency), status, intentId, clientSecret,
                     scheduleId, placedAt, Money.of(captured, currency), Money.of(refunded, currency), authorizedAt,
-                    failure, metadata, lines, createdAt, updatedAt, version);
+                    failure, metadata, lines, createdAt, updatedAt, version, parentId);
         }
     }
 }

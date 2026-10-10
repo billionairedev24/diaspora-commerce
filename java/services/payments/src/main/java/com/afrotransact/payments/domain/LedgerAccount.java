@@ -31,6 +31,10 @@ public record LedgerAccount(Chart chart, String key) {
         return new LedgerAccount(Chart.CHARGEBACK_RESERVE, orgId);
     }
 
+    public static LedgerAccount providerFeesReceivable(String orgId) {
+        return new LedgerAccount(Chart.PROVIDER_FEES_RECEIVABLE, orgId);
+    }
+
     public static LedgerAccount salesTax(String jurisdiction) {
         return new LedgerAccount(Chart.SALES_TAX_PAYABLE, jurisdiction);
     }

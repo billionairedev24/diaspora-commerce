@@ -9,9 +9,11 @@ import com.afrotransact.payments.adapter.in.web.PaymentsDtos.HoldRequest;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutBalanceResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutRequestBody;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.PayoutResponse;
+import com.afrotransact.payments.adapter.in.web.PaymentsDtos.ProviderFeeResponse;
 import com.afrotransact.payments.adapter.in.web.PaymentsDtos.SettlementResponse;
 import com.afrotransact.payments.application.PayoutCommand;
 import com.afrotransact.payments.application.PayoutService;
+import com.afrotransact.payments.application.ProviderFeeService;
 import com.afrotransact.payments.application.SettlementService;
 import com.afrotransact.payments.domain.PayoutStatus;
 import com.afrotransact.payments.domain.SettlementKind;
@@ -35,10 +37,13 @@ class SettlementPayoutController {
 
     private final SettlementService settlements;
     private final PayoutService payouts;
+    private final ProviderFeeService providerFees;
 
-    SettlementPayoutController(SettlementService settlements, PayoutService payouts) {
+    SettlementPayoutController(SettlementService settlements, PayoutService payouts,
+                               ProviderFeeService providerFees) {
         this.settlements = settlements;
         this.payouts = payouts;
+        this.providerFees = providerFees;
     }
 
     @Operation(summary = "Order delivered / service completed: start the settlement hold (payments:service)",
@@ -59,11 +64,19 @@ class SettlementPayoutController {
     }
 
     @Operation(summary = "Your balance: available to request, on hold per order (with release date), requested / "
-            + "on the way")
+            + "on the way, provider fees, and whether payouts are paused (payoutsPaused + payoutsPausedReason)")
     @GetMapping("/v1/payouts/balance")
     PayoutBalanceResponse balance(@RequestParam(required = false) String orgId,
                                   @RequestParam(required = false) String currency) {
         return PayoutBalanceResponse.of(payouts.balance(orgId, currency));
+    }
+
+    @Operation(summary = "Provider fees of an organisation (late provider cancellations), newest first",
+            description = "Org members see their own; staff pass orgId. Fees are debited from the connected account "
+                    + "(Stripe account debit) and reduce availableMinor; OUTSTANDING ones are retried.")
+    @GetMapping("/v1/payouts/provider-fees")
+    List<ProviderFeeResponse> providerFees(@RequestParam(required = false) String orgId) {
+        return providerFees.ofOrg(orgId).stream().map(ProviderFeeResponse::of).toList();
     }
 
     @Operation(summary = "Request a payout (owner / finance roles, payouts:request)",

@@ -338,6 +338,10 @@ channels:
         $ref: '#/components/messages/paymentsIntentFailed'
       paymentsIntentCanceled:
         $ref: '#/components/messages/paymentsIntentCanceled'
+      paymentsIntentActionRequired:
+        $ref: '#/components/messages/paymentsIntentActionRequired'
+      paymentsAuthorizationReleased:
+        $ref: '#/components/messages/paymentsAuthorizationReleased'
       paymentsCaptured:
         $ref: '#/components/messages/paymentsCaptured'
       paymentsRefunded:
@@ -350,7 +354,8 @@ channels:
         $ref: '#/components/messages/paymentsDisputeClosed'
   paymentsPayoutEvents:
     address: at.payout.events
-    description: Payout requests on manual Connect payout schedules (key = organisation id).
+    description: Payout requests on manual Connect payout schedules and provider fees debited from connected accounts (key
+      = organisation id).
     messages:
       paymentsPayoutRequested:
         $ref: '#/components/messages/paymentsPayoutRequested'
@@ -360,6 +365,10 @@ channels:
         $ref: '#/components/messages/paymentsPayoutPaid'
       paymentsPayoutFailed:
         $ref: '#/components/messages/paymentsPayoutFailed'
+      paymentsProviderFeeRecorded:
+        $ref: '#/components/messages/paymentsProviderFeeRecorded'
+      paymentsProviderFeeCollected:
+        $ref: '#/components/messages/paymentsProviderFeeCollected'
   retailEvents:
     address: at.retail.events
     description: 'AfroTransact Retail (1P) purchasing events from retail-service (key = aggregate id: item, supplier, PO,
@@ -988,6 +997,20 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/PaymentsIntentEvent'
+    paymentsIntentActionRequired:
+      name: payments.intent.action_required
+      title: Off-session charge needs the customer to authenticate (SCA); confirm on-session with the client secret
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsIntentActionRequired'
+    paymentsAuthorizationReleased:
+      name: payments.authorization.released
+      title: Uncaptured rest of an authorisation released (e.g. booking cancelled or no-show after the deposit capture)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsAuthorizationReleased'
     paymentsCaptured:
       name: payments.captured
       title: One shipment captured and its journal posted
@@ -1051,6 +1074,20 @@ components:
         $ref: '#/components/schemas/EventHeaders'
       payload:
         $ref: '#/components/schemas/PaymentsPayout'
+    paymentsProviderFeeRecorded:
+      name: payments.provider_fee.recorded
+      title: Provider fee (late provider cancellation) recorded and accrued; status OUTSTANDING or COLLECTED
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsProviderFee'
+    paymentsProviderFeeCollected:
+      name: payments.provider_fee.collected
+      title: Provider fee debited from the connected account (Stripe account debit)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/PaymentsProviderFee'
     retailItemCreated:
       name: retail.item.created
       title: 1P item added to the product master (SKU and GTIN issued, listing DRAFT)
@@ -3423,6 +3460,102 @@ components:
           - string
           - 'null'
           description: Decline message and code for intent.failed
+        parentPaymentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: Set for an off-session follow-up charge of the order (the order's primary payment)
+        offSession:
+          type: boolean
+          description: True for an off-session follow-up charge
+    PaymentsIntentActionRequired:
+      type: object
+      required:
+      - paymentId
+      - orderId
+      - parentPaymentId
+      - customerId
+      - amountMinor
+      - currency
+      - reason
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+          description: The off-session charge
+        orderId:
+          type: string
+          description: Order / booking reference (BK-…)
+        parentPaymentId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          description: AfroTransact customer id (token subject) to notify
+        stripePaymentIntentId:
+          type:
+          - string
+          - 'null'
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        reason:
+          type: string
+          examples:
+          - authentication_required
+        lineIds:
+          type: array
+          items:
+            type: string
+    PaymentsAuthorizationReleased:
+      type: object
+      required:
+      - paymentId
+      - orderId
+      - status
+      - amountMinor
+      - capturedMinor
+      - releasedMinor
+      - currency
+      properties:
+        paymentId:
+          type: string
+          format: uuid
+        orderId:
+          type: string
+        stripePaymentIntentId:
+          type:
+          - string
+          - 'null'
+        status:
+          type: string
+          enum:
+          - CAPTURED
+          - CANCELED
+        amountMinor:
+          type: integer
+          format: int64
+        capturedMinor:
+          type: integer
+          format: int64
+        releasedMinor:
+          type: integer
+          format: int64
+          description: Authorised amount released without capture
+        currency:
+          type: string
+        reason:
+          type:
+          - string
+          - 'null'
+        parentPaymentId:
+          type:
+          - string
+          - 'null'
+          format: uuid
     PaymentsCaptured:
       type: object
       required:
@@ -3677,6 +3810,52 @@ components:
         requestedAt:
           type: string
           format: date-time
+    PaymentsProviderFee:
+      type: object
+      required:
+      - feeId
+      - orgId
+      - bookingId
+      - amountMinor
+      - currency
+      - reason
+      - status
+      properties:
+        feeId:
+          type: string
+          format: uuid
+        orgId:
+          type: string
+        bookingId:
+          type: string
+        bookingReference:
+          type:
+          - string
+          - 'null'
+        amountMinor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        reason:
+          type: string
+          enum:
+          - LATE_PROVIDER_CANCELLATION
+        status:
+          type: string
+          enum:
+          - OUTSTANDING
+          - COLLECTED
+        stripeDebitId:
+          type:
+          - string
+          - 'null'
+          description: Stripe account debit (py_…) once collected
+        lastError:
+          type:
+          - string
+          - 'null'
+          description: Why the last collection attempt failed
     RetailItemEvent:
       type: object
       required:
@@ -4828,17 +5007,29 @@ operations:
     summary: 'payments-service (consumer group payments-service, inbox-deduplicated) handles seller.payouts.paused / resumed:
       the organisation''s payout_hold is set or cleared (older decisions never override newer ones). While paused, POST /v1/payouts/requests
       and approvals fail with 422 payments.payouts_paused; balances keep accruing.'
+  consumePaymentsBookingsEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/bookingsEvents'
+    summary: 'payments-service (consumer group payments-service, listener payments-bookings-events, inbox consumer payments.bookings-events)
+      handles booking.cancelled with cancelledBy = PROVIDER and providerFeeMinor > 0: the late provider-cancellation fee is
+      recorded once per booking (inbox on event-id plus a unique booking id), accrued in the ledger (Dr 1200:<org> / Cr 4300)
+      and debited from the provider''s Stripe connected account with an account debit (Dr 1000 / Cr 1200:<org>). Fees that
+      cannot be debited yet stay OUTSTANDING, are retried after settlement transfers and are reserved out of the payout balance.
+      Every other booking event is ignored.'
   publishPaymentsPaymentEvents:
     action: send
     channel:
       $ref: '#/channels/paymentsPaymentEvents'
     summary: payments-service publishes via its transactional outbox. The orders saga confirms on intent.succeeded and compensates
-      on intent.failed; notifications tells sellers about chargebacks; finance reporting reads captures.
+      on intent.failed; notifications tells sellers about chargebacks; finance reporting reads captures. Off-session follow-up
+      charges of an order (long-dated bookings) publish intent events with the same key and parentPaymentId set; payments.intent.action_required
+      asks notifications to bring the customer back to confirm the charge (3-D Secure / SCA).
   publishPaymentsPayoutEvents:
     action: send
     channel:
       $ref: '#/channels/paymentsPayoutEvents'
-    summary: Seller / provider payouts for the portals, notifications and Finance.
+    summary: Seller / provider payouts and provider fees for the portals, notifications and Finance.
   publishRetailEvents:
     action: send
     channel:

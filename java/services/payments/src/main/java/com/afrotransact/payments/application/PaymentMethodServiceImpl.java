@@ -95,13 +95,7 @@ class PaymentMethodServiceImpl implements PaymentMethodService {
     }
 
     private StripeCustomer ensureCustomer(String customerId) {
-        Optional<StripeCustomer> existing = wallet.lockCustomer(customerId);
-        if (existing.isPresent()) {
-            return existing.get();
-        }
-        String stripeId = stripe.createCustomer(customerId, "customer:" + customerId);
-        wallet.insertCustomer(customerId, stripeId, Instant.now(clock));
-        return wallet.lockCustomer(customerId).orElseThrow();
+        return sync.ensureCustomer(customerId);
     }
 
     private SavedPaymentMethod owned(String customerId, String paymentMethodId) {

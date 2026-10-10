@@ -110,6 +110,11 @@ class StripeEventHandlers {
             LOG.info("PaymentIntent {} is not an AfroTransact order payment; ignored", text(pi, "id"));
             return;
         }
+        if (reported == PaymentStatus.FAILED && "authentication_required".equals(text(pi.path("last_payment_error"),
+                "code")) && statuses.awaitingCustomer(payment.get(), text(pi, "status"))) {
+            LOG.info("Off-session PaymentIntent {} waits for customer authentication", text(pi, "id"));
+            return;
+        }
         statuses.apply(payment.get(), reported, failure);
     }
 

@@ -27,6 +27,15 @@ public interface PaymentService {
     /** Cancels an uncaptured intent (releases the authorisation). Idempotent. */
     Payment cancel(UUID paymentId, String reason, String idempotencyKey);
 
+    /**
+     * Releases the uncaptured rest of the authorisation (after a deposit capture, or all of it without captures).
+     * Idempotent per Idempotency-Key and per payment (a released payment replays).
+     */
+    ReleaseResult release(UUID paymentId, String reason, String idempotencyKey);
+
+    /** Off-session follow-up charges of a payment, oldest first. */
+    List<Payment> offSessionCharges(UUID paymentId);
+
     /** Refunds captured lines (partially), reversing seller payables, commission and transfers. */
     RefundResult refund(UUID paymentId, RefundCommand command, String idempotencyKey);
 

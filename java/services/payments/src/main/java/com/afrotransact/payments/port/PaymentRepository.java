@@ -11,12 +11,17 @@ import com.afrotransact.payments.domain.Refund;
 /** Payments with their lines, captures and refunds. */
 public interface PaymentRepository {
 
-    /** Inserts the payment and its lines; false when the order already has a payment. */
+    /** Inserts the payment and its lines; false when the order already has a (primary) payment, or an off-session
+     *  charge with the same id exists. */
     boolean claim(Payment payment);
 
     Optional<Payment> findById(UUID id);
 
+    /** The order's primary payment (not its off-session follow-up charges). */
     Optional<Payment> findByOrderId(String orderId);
+
+    /** Off-session follow-up charges of a payment, oldest first. */
+    List<Payment> children(UUID parentPaymentId);
 
     Optional<Payment> findByIntentId(String intentId);
 

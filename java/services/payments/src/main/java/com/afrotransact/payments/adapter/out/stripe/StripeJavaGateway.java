@@ -10,8 +10,10 @@ import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.port.StripeGateway;
 import com.afrotransact.payments.port.StripeGatewayException;
 import com.stripe.StripeClient;
+import com.stripe.exception.CardException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.BalanceTransaction;
+import com.stripe.model.Charge;
 import com.stripe.model.Customer;
 import com.stripe.model.PaymentIntent;
 import com.stripe.model.PaymentMethod;
@@ -23,6 +25,7 @@ import com.stripe.model.Transfer;
 import com.stripe.model.TransferReversal;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.BalanceTransactionListParams;
+import com.stripe.param.ChargeCreateParams;
 import com.stripe.param.CustomerCreateParams;
 import com.stripe.param.CustomerUpdateParams;
 import com.stripe.param.PaymentIntentCancelParams;
@@ -66,6 +69,9 @@ class StripeJavaGateway implements StripeGateway {
                         .build());
         if (request.customerId() != null && !request.customerId().isBlank()) {
             params.setCustomer(request.customerId());
+            if (request.saveForOffSession()) {
+                params.setSetupFutureUsage(PaymentIntentCreateParams.SetupFutureUsage.OFF_SESSION);
+            }
         }
         if (request.paymentMethodTypes().isEmpty()) {
             params.setAutomaticPaymentMethods(PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
@@ -99,6 +105,54 @@ class StripeJavaGateway implements StripeGateway {
     public IntentSnapshot cancel(String intentId, String idempotencyKey) {
         return call(() -> intent(client.v1().paymentIntents().cancel(intentId,
                 PaymentIntentCancelParams.builder().build(), key(idempotencyKey))));
+    }
+
+    @Override
+    public IntentSnapshot releaseUncaptured(String intentId, String idempotencyKey) {
+        return call(() -> intent(client.v1().paymentIntents().cancel(intentId,
+                PaymentIntentCancelParams.builder().build(), key(idempotencyKey))));
+    }
+
+    @Override
+    public OffSessionAttempt createOffSessionIntent(OffSessionIntent request, String idempotencyKey) {
+        PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
+                .setAmount(request.amount().minor())
+                .setCurrency(lower(request.amount().currency()))
+                .setCaptureMethod(PaymentIntentCreateParams.CaptureMethod.MANUAL)
+                .setCustomer(request.customerId())
+                .setPaymentMethod(request.paymentMethodId())
+                .addAllowedPaymentMethodType(PaymentIntentCreateParams.AllowedPaymentMethodType.CARD)
+                .setOffSession(true)
+                .setConfirm(true)
+                .setDescription(request.description())
+                .setTransferGroup(request.transferGroup())
+                .putAllMetadata(request.metadata())
+                .build();
+        try {
+            return new OffSessionAttempt(intent(client.v1().paymentIntents().create(params, key(idempotencyKey))),
+                    null, null, null);
+        } catch (CardException e) {
+            StripeError error = e.getStripeError();
+            PaymentIntent pi = error == null ? null : error.getPaymentIntent();
+            if (pi == null) {
+                throw gatewayError(e);
+            }
+            return new OffSessionAttempt(intent(pi), e.getCode(), error.getDeclineCode(), error.getMessage());
+        } catch (StripeException e) {
+            throw gatewayError(e);
+        }
+    }
+
+    @Override
+    public AccountDebitSnapshot debitConnectedAccount(String connectedAccount, Money amount, String description,
+                                                      Map<String, String> metadata, String idempotencyKey) {
+        ChargeCreateParams params = ChargeCreateParams.builder().setAmount(amount.minor())
+                .setCurrency(lower(amount.currency())).setSource(connectedAccount).setDescription(description)
+                .putAllMetadata(metadata).build();
+        return call(() -> {
+            Charge c = client.v1().charges().create(params, key(idempotencyKey));
+            return new AccountDebitSnapshot(c.getId(), nz(c.getAmount()), c.getStatus());
+        });
     }
 
     @Override
@@ -261,11 +315,14 @@ class StripeJavaGateway implements StripeGateway {
         try {
             return body.run();
         } catch (StripeException e) {
-            StripeError error = e.getStripeError();
-            throw new StripeGatewayException("Stripe: " + e.getMessage(), e.getCode(),
-                    error == null ? null : error.getDeclineCode(), e.getStatusCode() == null ? 0 : e.getStatusCode(),
-                    e);
+            throw gatewayError(e);
         }
+    }
+
+    private static StripeGatewayException gatewayError(StripeException e) {
+        StripeError error = e.getStripeError();
+        return new StripeGatewayException("Stripe: " + e.getMessage(), e.getCode(),
+                error == null ? null : error.getDeclineCode(), e.getStatusCode() == null ? 0 : e.getStatusCode(), e);
     }
 
     /** A Stripe call that may throw a checked {@link StripeException}. */

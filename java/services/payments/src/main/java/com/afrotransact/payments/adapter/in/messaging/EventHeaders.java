@@ -12,6 +12,7 @@ final class EventHeaders {
 
     static final String EVENT_ID = "event-id";
     static final String EVENT_TYPE = "event-type";
+    static final String OCCURRED_AT = "occurred-at";
 
     private EventHeaders() {
     }

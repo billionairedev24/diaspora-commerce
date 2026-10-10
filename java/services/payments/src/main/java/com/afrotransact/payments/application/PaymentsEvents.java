@@ -13,6 +13,10 @@ public final class PaymentsEvents {
     public static final String INTENT_SUCCEEDED = "payments.intent.succeeded";
     public static final String INTENT_FAILED = "payments.intent.failed";
     public static final String INTENT_CANCELED = "payments.intent.canceled";
+    /** An off-session charge needs the customer to authenticate (SCA / 3-D Secure) on-session. */
+    public static final String INTENT_ACTION_REQUIRED = "payments.intent.action_required";
+    /** The uncaptured rest of an authorisation was released after a partial (deposit) capture. */
+    public static final String AUTHORIZATION_RELEASED = "payments.authorization.released";
     public static final String CAPTURED = "payments.captured";
     public static final String REFUNDED = "payments.refunded";
     public static final String TRANSFER_CREATED = "payments.transfer.created";
@@ -22,6 +26,10 @@ public final class PaymentsEvents {
     public static final String PAYOUT_FAILED = "payments.payout.failed";
     public static final String DISPUTE_OPENED = "payments.dispute.opened";
     public static final String DISPUTE_CLOSED = "payments.dispute.closed";
+    /** A provider fee (late provider cancellation) was recorded: topic at.payout.events, key = organisation. */
+    public static final String PROVIDER_FEE_RECORDED = "payments.provider_fee.recorded";
+    /** A provider fee was debited from the provider's connected account. */
+    public static final String PROVIDER_FEE_COLLECTED = "payments.provider_fee.collected";
 
     private PaymentsEvents() {
     }

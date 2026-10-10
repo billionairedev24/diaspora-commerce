@@ -41,6 +41,32 @@ final class StripeStubs {
                 intent(piId, amount, "canceled", null, 0));
     }
 
+    /** Off-session PaymentIntent of an off-session charge of {@code parentPaymentId}, confirmed with {@code status}. */
+    void offSessionIntent(String parentPaymentId, String piId, long amount, String status) {
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withRequestBody(WireMock.containing("metadata[parent_payment_id]=" + parentPaymentId)),
+                intent(piId, amount, status, null, 0));
+    }
+
+    /** The bank requires authentication: Stripe answers 402 card_error with the intent left in requires_payment_method. */
+    void offSessionAuthenticationRequired(String parentPaymentId, String piId, long amount) {
+        server.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withRequestBody(WireMock.containing("metadata[parent_payment_id]=" + parentPaymentId))
+                .willReturn(WireMock.aResponse().withStatus(402).withHeader("Content-Type", "application/json")
+                        .withBody("{\"error\":{\"type\":\"card_error\",\"code\":\"authentication_required\","
+                                + "\"decline_code\":\"authentication_required\",\"message\":\"Your card was "
+                                + "declined. This transaction requires authentication.\",\"payment_intent\":"
+                                + intent(piId, amount, "requires_payment_method", null, 0) + "}}")));
+    }
+
+    /** Account debit (Charge with source = the connected account). */
+    void accountDebit(String account, String debitId, long amount) {
+        json(WireMock.post(WireMock.urlPathEqualTo("/v1/charges"))
+                .withRequestBody(WireMock.containing("source=" + account)),
+                "{\"id\":\"" + debitId + "\",\"object\":\"charge\",\"amount\":" + amount
+                        + ",\"currency\":\"usd\",\"status\":\"succeeded\"}");
+    }
+
     /** Balance transactions of a charge: one per capture as {amount, fee} pairs. */
     void chargeFees(String chargeId, long[]... captures) {
         StringBuilder data = new StringBuilder();

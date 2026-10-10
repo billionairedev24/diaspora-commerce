@@ -13,7 +13,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
                       String stripePaymentIntentId, String clientSecret, UUID feeScheduleId, Instant placedAt,
                       Money captured, Money refunded, Instant authorizedAt, String failureMessage,
                       Map<String, String> metadata, List<PaymentLine> lines, Instant createdAt, Instant updatedAt,
-                      long version) {
+                      long version, UUID parentPaymentId) {
 
     public Payment {
         Objects.requireNonNull(id, "id");
@@ -46,11 +46,73 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, PaymentStatus.REQUIRES_PAYMENT_METHOD, null, null,
                 feeScheduleId, placedAt, Money.zero(amount.currency()), Money.zero(amount.currency()), null, null,
-                metadata, pls, now, now, 0);
+                metadata, pls, now, now, 0, null);
+    }
+
+    /**
+     * An off-session follow-up charge of {@code lines} of {@code parent} (same order, fee schedule and placement
+     * time) on a saved payment method, used once the parent's authorisation was released or lapsed.
+     */
+    public static Payment offSession(UUID id, Payment parent, String stripeCustomerId, List<OrderLine> lines,
+                                     Map<String, String> metadata, Instant now) {
+        Money total = Money.zero(parent.currency());
+        for (OrderLine l : lines) {
+            total = total.plus(l.total());
+        }
+        Payment p = create(id, parent.orderId(), stripeCustomerId, total, parent.feeScheduleId(), parent.placedAt(),
+                metadata, lines, now);
+        return new Payment(p.id, p.orderId, p.customerId, p.amount, p.status, null, null, p.feeScheduleId,
+                p.placedAt, p.captured, p.refunded, null, null, p.metadata, p.lines, now, now, 0, parent.id());
     }
 
     public String currency() {
         return amount.currency();
+    }
+
+    /** A follow-up off-session charge (has a parent payment of the same order). */
+    public boolean isOffSession() {
+        return parentPaymentId != null;
+    }
+
+    /**
+     * Prefix of the Stripe idempotency keys of this payment: the order id for the order's primary payment,
+     * {@code <orderId>:os:<paymentId>} for an off-session charge so its keys never collide with the parent's.
+     */
+    public String stripeKeyPrefix() {
+        return parentPaymentId == null ? orderId : orderId + ":os:" + id;
+    }
+
+    /** Authorised but never captured and no longer capturable (final capture, release or cancellation). */
+    public Money released() {
+        return status.isFinal() ? amount.minus(captured) : Money.zero(amount.currency());
+    }
+
+    /**
+     * Releases the authorisation that was not captured: after a partial (deposit) capture the payment becomes
+     * CAPTURED for what was captured; without captures it is cancelled. Uncaptured lines stay uncaptured and can
+     * later be charged off-session.
+     */
+    public Payment releaseRemaining(Instant now) {
+        if (status.isFinal()) {
+            return this;
+        }
+        if (captured.isZero()) {
+            return cancel(now);
+        }
+        if (status != PaymentStatus.PARTIALLY_CAPTURED) {
+            throw new PaymentsStateConflict("payments.not-releasable", "Payment of order " + orderId + " is "
+                    + status + "; only authorised payments can release their remaining authorisation");
+        }
+        return new Payment(id, orderId, customerId, amount, PaymentStatus.CAPTURED, stripePaymentIntentId,
+                clientSecret, feeScheduleId, placedAt, captured, refunded, authorizedAt, failureMessage, metadata,
+                lines, createdAt, now, version, parentPaymentId);
+    }
+
+    /** Off-session confirmation needs the customer (3-D Secure / SCA): the intent waits for them on-session. */
+    public Payment awaitingCustomer(String reason, Instant now) {
+        return new Payment(id, orderId, customerId, amount, PaymentStatus.REQUIRES_ACTION, stripePaymentIntentId,
+                clientSecret, feeScheduleId, placedAt, captured, refunded, authorizedAt, reason, metadata, lines,
+                createdAt, now, version, parentPaymentId);
     }
 
     public Optional<PaymentLine> line(String lineId) {
@@ -63,7 +125,8 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
 
     public Payment withIntent(String intentId, String secret, PaymentStatus newStatus, Instant now) {
         return new Payment(id, orderId, customerId, amount, newStatus, intentId, secret, feeScheduleId, placedAt,
-                captured, refunded, authorizedAt, failureMessage, metadata, lines, createdAt, now, version);
+                captured, refunded, authorizedAt, failureMessage, metadata, lines, createdAt, now, version,
+                parentPaymentId);
     }
 
     /**
@@ -86,7 +149,8 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         String failureText = reported == PaymentStatus.FAILED ? failure : null;
         return new Payment(id, orderId, customerId, amount, next, stripePaymentIntentId, clientSecret, feeScheduleId,
-                placedAt, captured, refunded, authorised, failureText, metadata, lines, createdAt, now, version);
+                placedAt, captured, refunded, authorised, failureText, metadata, lines, createdAt, now, version,
+                parentPaymentId);
     }
 
     /** Records a capture of {@code lineIds}; the payment becomes CAPTURED when everything (or the final one) is. */
@@ -109,7 +173,8 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         PaymentStatus next = finalCapture || total.equals(amount) ? PaymentStatus.CAPTURED
                 : PaymentStatus.PARTIALLY_CAPTURED;
         return new Payment(id, orderId, customerId, amount, next, stripePaymentIntentId, clientSecret, feeScheduleId,
-                placedAt, total, refunded, authorizedAt, failureMessage, metadata, updated, createdAt, now, version);
+                placedAt, total, refunded, authorizedAt, failureMessage, metadata, updated, createdAt, now, version,
+                parentPaymentId);
     }
 
     public Payment cancel(Instant now) {
@@ -118,11 +183,12 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         if (!captured.isZero()) {
             throw new PaymentsStateConflict("payments.already-captured", "Payment of order " + orderId
-                    + " has captures; refund instead of cancelling");
+                    + " has captures; release the remaining authorisation (POST /v1/payments/{id}/release) or "
+                    + "refund instead of cancelling");
         }
         return new Payment(id, orderId, customerId, amount, PaymentStatus.CANCELED, stripePaymentIntentId,
                 clientSecret, feeScheduleId, placedAt, captured, refunded, authorizedAt, failureMessage, metadata,
-                lines, createdAt, now, version);
+                lines, createdAt, now, version, parentPaymentId);
     }
 
     public Payment refund(Refund refund, Instant now) {
@@ -138,6 +204,6 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, status, stripePaymentIntentId, clientSecret,
                 feeScheduleId, placedAt, captured, refunded.plus(refund.amount()), authorizedAt, failureMessage,
-                metadata, updated, createdAt, now, version);
+                metadata, updated, createdAt, now, version, parentPaymentId);
     }
 }

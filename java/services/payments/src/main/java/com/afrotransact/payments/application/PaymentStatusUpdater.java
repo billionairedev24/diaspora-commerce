@@ -41,6 +41,17 @@ class PaymentStatusUpdater {
         return stored;
     }
 
+    /**
+     * An off-session charge waiting for the customer to authenticate: Stripe leaves the intent in
+     * {@code requires_payment_method} after {@code authentication_required}; it is not a decline, so the payment stays
+     * REQUIRES_ACTION until the customer confirms on-session (or the caller cancels it).
+     */
+    boolean awaitingCustomer(Payment p, String stripeStatus) {
+        return p.isOffSession() && p.status() == PaymentStatus.REQUIRES_ACTION
+                && ("requires_payment_method".equals(stripeStatus) || "requires_action".equals(stripeStatus)
+                || "requires_confirmation".equals(stripeStatus));
+    }
+
     void publish(String type, Payment p) {
         events.publish(type, PaymentsEvents.AGGREGATE_PAYMENT, p.orderId(),
                 PaymentsEventPayloads.IntentPayload.of(p));
