@@ -44,7 +44,6 @@ workloadIdentity:
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
   CATALOG_URL: http://catalog:8080
 nodeSelector: {}
 tolerations: []

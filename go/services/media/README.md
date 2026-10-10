@@ -55,7 +55,7 @@ Contract: [`contracts/openapi/media.yaml`](../../../contracts/openapi/media.yaml
 ## Configuration
 
 `DB_URL`, `UPLOADTHING_API_KEY`, `UPLOADTHING_APP_ID`, `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, `AZURE_STORAGE_KEY`,
-`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` (local), `AUTH_ENABLED`, `AUTH_ISSUER_URI`, `AUTH_AUDIENCE`,
+`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY` (local), `AUTH_ENABLED`, `AUTH_ISSUER_URL`, `AUTH_AUDIENCE`,
 `SIGNED_URL_DEFAULT_TTL` (5m), `SIGNED_URL_MAX_TTL` (336h). AWS credentials come from the default
 chain (IRSA on EKS).
 

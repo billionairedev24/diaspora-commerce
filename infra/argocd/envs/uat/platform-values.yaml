@@ -11,6 +11,15 @@ cloud: none
 image:
   registry: ghcr.io/billionairedev24/diaspora-commerce
 
+# Public base domain of this environment (infra/cloudflare: "<env>." prefix outside prod). The at-service library
+# derives every public URL from it and injects PLATFORM_ENV, PLATFORM_DOMAIN, PUBLIC_WEB_URL, SELLER_CENTER_URL,
+# STAFF_CONSOLE_URL, API_BASE_URL, AUTH_ISSUER_URL and MEDIA_PUBLIC_URL into every service
+# (docs/engineering/environments.md). global.urls overrides one derived value env-wide; a service's extraEnv wins.
+global:
+  domain: uat.afrotransact.com
+  # urls:
+  #   MEDIA_PUBLIC_URL: https://cdn.example.net
+
 secrets:
   enabled: true
   keySeparator: "/"               # AWS Secrets Manager path; "-" on GCP and Azure (see examples below)

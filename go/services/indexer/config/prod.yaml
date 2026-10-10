@@ -14,10 +14,12 @@ synonymsSet: diaspora-synonyms
 catalogUrl: http://catalog
 sellerNames:
   org_afrotransact_retail: AfroTransact Retail
+# Shared AUTH_ISSUER_URL (Helm library); the seller directory token endpoint is <authIssuer>/oauth2/token
+# unless AUTH_TOKEN_URL / sellerDirectory.tokenUrl is set.
+authIssuer: https://auth.afrotransact.com
 sellerDirectory:
   enabled: true
   baseUrl: http://seller
-  tokenUrl: https://auth.afrotransact.com/oauth2/token
   clientId: indexer-service
   scopes: ["sellers:directory"]
   pageSize: 500

@@ -30,7 +30,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
 
 server:
   port: ${PORT:8102}
@@ -104,7 +104,7 @@ at:
       timeout: ${CATALOG_TIMEOUT:3s}
     # offers-service's own client-credentials token (GTIN lookups at catalog need catalog:read).
     oauth:
-      issuer-url: ${AUTH_ISSUER_URI:http://localhost:8100}
+      issuer-url: ${AUTH_ISSUER_URL:http://localhost:8100}
       token-path: /oauth2/token
       client-id: ${OFFERS_CLIENT_ID:offers-service}
       client-secret: ${OFFERS_CLIENT_SECRET:local-offers-service-secret}

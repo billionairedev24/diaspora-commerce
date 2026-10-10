@@ -15,6 +15,4 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  AUTH_ISSUER: https://auth.afrotransact.com
-  HOME_URL: https://afrotransact.com
   SIGNING_KEY_ID: identity-prod-1

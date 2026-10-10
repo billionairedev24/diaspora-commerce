@@ -23,7 +23,7 @@ type Config struct {
 	} `yaml:"smarty"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
-		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URI"`
+		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`
 	} `yaml:"auth"`
 	Telemetry struct {

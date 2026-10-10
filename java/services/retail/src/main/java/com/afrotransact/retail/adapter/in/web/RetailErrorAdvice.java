@@ -1,7 +1,6 @@
 package com.afrotransact.retail.adapter.in.web;
 
-import java.net.URI;
-
+import com.afrotransact.platform.web.error.ProblemTypes;
 import com.afrotransact.retail.domain.RetailRuleViolation;
 import com.afrotransact.retail.domain.RetailStateConflict;
 import com.afrotransact.retail.port.CatalogUnavailableException;
@@ -18,8 +17,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class RetailErrorAdvice {
-
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     @ExceptionHandler(RetailRuleViolation.class)
     ProblemDetail rule(RetailRuleViolation ex) {
@@ -63,7 +60,7 @@ class RetailErrorAdvice {
 
     private static ProblemDetail problem(HttpStatus status, String code, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setType(URI.create(TYPE_BASE + code));
+        pd.setType(ProblemTypes.of(code));
         pd.setTitle(title);
         pd.setProperty("code", code);
         return pd;

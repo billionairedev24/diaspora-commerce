@@ -3,8 +3,8 @@ at:
   api-docs:
     enabled: true
   identity:
-    issuer: ${AUTH_ISSUER:https://auth.uat.afrotransact.com}
-    home-url: ${HOME_URL:https://uat.afrotransact.com}
+    issuer: ${AUTH_ISSUER_URL:https://auth.uat.afrotransact.com}
+    home-url: ${HOME_URL:${PUBLIC_WEB_URL:https://uat.afrotransact.com}}
     invitations:
       accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}/invitations/accept}
     signing:
@@ -19,24 +19,24 @@ at:
       key: ${IDENTITY_DATA_KEY:}
       previous-keys: ${IDENTITY_DATA_KEYS_PREVIOUS:}
     webauthn:
-      rp-id: uat.afrotransact.com
+      rp-id: ${WEBAUTHN_RP_ID:${PLATFORM_DOMAIN:uat.afrotransact.com}}
       rp-name: AfroTransact
       # identity's own pages and the storefront origins whose sign-in forms run the passkey ceremony
       allowed-origins:
-        - https://auth.uat.afrotransact.com
-        - https://uat.afrotransact.com
+        - ${AUTH_ISSUER_URL:https://auth.uat.afrotransact.com}
+        - ${PUBLIC_WEB_URL:https://uat.afrotransact.com}
     cors-allowed-origins:
-      - https://uat.afrotransact.com
-      - https://seller.uat.afrotransact.com
-      - https://staff.uat.afrotransact.com
+      - ${PUBLIC_WEB_URL:https://uat.afrotransact.com}
+      - ${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}
+      - ${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}
     clients:
       - client-id: storefront
         name: Storefront (web)
         type: public
         grant-types: [authorization_code, refresh_token]
         public-refresh-tokens: true
-        redirect-uris: ["${STOREFRONT_URL:https://uat.afrotransact.com}/auth/callback"]
-        post-logout-redirect-uris: ["${STOREFRONT_URL:https://uat.afrotransact.com}/"]
+        redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/auth/callback"]
+        post-logout-redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/"]
         scopes: [openid, profile, email, phone, offline_access]
       - client-id: seller-center
         name: Seller Center & Provider Hub
@@ -52,8 +52,8 @@ at:
         grant-types: [authorization_code, refresh_token]
         public-refresh-tokens: true
         refresh-token-ttl: 12h
-        redirect-uris: ["${STAFF_CONSOLE_URL:https://staff.uat.afrotransact.com}/auth/callback"]
-        post-logout-redirect-uris: ["${STAFF_CONSOLE_URL:https://staff.uat.afrotransact.com}/"]
+        redirect-uris: ["${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}/auth/callback"]
+        post-logout-redirect-uris: ["${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}/"]
         scopes: [openid, profile, email, offline_access]
       - client-id: customer-app
         name: AfroTransact app
@@ -78,7 +78,7 @@ at:
         # scope auth:first-party call the first-party sign-in API (/v1/auth/*) and redeem its login tickets.
         secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:}}
         grant-types: [authorization_code, refresh_token, client_credentials]
-        redirect-uris: ["${STOREFRONT_URL:https://uat.afrotransact.com}/api/bff/v1/auth/oidc/callback", "${BFF_URL:https://api.uat.afrotransact.com}/login/oauth2/code/afrotransact"]
+        redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/api/bff/v1/auth/oidc/callback", "${API_BASE_URL:https://api.uat.afrotransact.com}/login/oauth2/code/afrotransact"]
         scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote"]
       - client-id: seller-service
         name: Seller service

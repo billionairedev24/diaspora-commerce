@@ -86,7 +86,7 @@ Micrometer: `ai_model_latency_seconds{task,model,outcome}`, `ai_tokens_total{tas
 | `OPENROUTER_REFERER`, `OPENROUTER_TITLE` | OpenRouter attribution headers `HTTP-Referer` / `X-Title` |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL |
 | `KAFKA_BOOTSTRAP` | outbox relay |
-| `AUTH_ISSUER_URI` | identity issuer (JWT validation) |
+| `AUTH_ISSUER_URL` | identity issuer (JWT validation) |
 | `SEARCH_URL`, `CATALOG_URL`, `OFFERS_URL`, `PROMISE_URL`, `ORDERS_URL`, `BOOKINGS_URL` | downstream APIs |
 | `EMBEDDING_DIMENSIONS` | vector size (must match the search index) |
 

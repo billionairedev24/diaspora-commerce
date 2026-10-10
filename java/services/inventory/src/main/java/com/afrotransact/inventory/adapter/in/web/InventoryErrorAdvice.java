@@ -1,10 +1,9 @@
 package com.afrotransact.inventory.adapter.in.web;
 
-import java.net.URI;
-
 import com.afrotransact.inventory.domain.InsufficientStockException;
 import com.afrotransact.inventory.domain.InventoryRuleViolation;
 import com.afrotransact.inventory.domain.InventoryStateConflict;
+import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -16,8 +15,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class InventoryErrorAdvice {
-
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     /** 409 with one entry per short SKU: {sku, nodeId, requested, available, missing}. */
     @ExceptionHandler(InsufficientStockException.class)
@@ -49,7 +46,7 @@ class InventoryErrorAdvice {
 
     private static ProblemDetail problem(HttpStatus status, String code, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setType(URI.create(TYPE_BASE + code));
+        pd.setType(ProblemTypes.of(code));
         pd.setTitle(title);
         pd.setProperty("code", code);
         return pd;

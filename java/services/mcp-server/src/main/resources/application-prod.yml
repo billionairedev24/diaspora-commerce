@@ -3,7 +3,7 @@ at:
   api-docs:
     enabled: false
   mcp:
-    allowed-origins: ${MCP_ALLOWED_ORIGINS:https://afrotransact.com,https://developers.afrotransact.com}
+    allowed-origins: ${MCP_ALLOWED_ORIGINS:${PUBLIC_WEB_URL:https://afrotransact.com},https://developers.${PLATFORM_DOMAIN:afrotransact.com}}
     rate-limit:
       capacity: ${MCP_RATE_CAPACITY:30}
       refill-per-minute: ${MCP_RATE_PER_MINUTE:30}

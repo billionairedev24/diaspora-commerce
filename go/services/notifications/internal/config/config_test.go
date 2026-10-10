@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -21,6 +22,10 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 			var c config.Config
 			if err := pkgconfig.NewLoaderFor(notifications.Files, env, lookup).Load(&c); err != nil {
 				t.Fatal(err)
+			}
+			c.Resolve()
+			if c.PublicBaseURL == "" || c.Links.ProviderHub != c.Links.SellerCenter {
+				t.Fatalf("derived public URL / Provider Hub link: %q %+v", c.PublicBaseURL, c.Links)
 			}
 			if c.Providers.Resend.APIKey != "re_x" || c.Providers.Twilio.AuthToken != "tok" || c.Database.URL != "postgres://x" {
 				t.Fatal("secrets must come from env")
@@ -68,5 +73,40 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 				t.Fatal("docs off in prod")
 			}
 		})
+	}
+}
+
+// The shared platform URLs injected by the Helm library chart drive the links; explicit settings still win.
+func TestSharedPlatformURLsDriveLinks(t *testing.T) {
+	env := map[string]string{
+		"API_BASE_URL": "https://api.uat.afrotransact.com", "PUBLIC_WEB_URL": "https://uat.afrotransact.com",
+		"SELLER_CENTER_URL": "https://seller.uat.afrotransact.com", "MEDIA_PUBLIC_URL": "https://media.uat.afrotransact.com",
+		"AUTH_ISSUER_URL": "https://auth.uat.afrotransact.com",
+	}
+	lookup := func(k string) (string, bool) { v, ok := env[k]; return v, ok }
+	var c config.Config
+	if err := pkgconfig.NewLoaderFor(notifications.Files, pkgconfig.EnvUAT, lookup).Load(&c); err != nil {
+		t.Fatal(err)
+	}
+	c.Resolve()
+	if c.PublicBaseURL != "https://api.uat.afrotransact.com/notifications" || c.Auth.Issuer != "https://auth.uat.afrotransact.com" {
+		t.Fatalf("public base / issuer: %q %q", c.PublicBaseURL, c.Auth.Issuer)
+	}
+	if c.Links.Storefront != "https://uat.afrotransact.com" || c.Links.ProviderHub != "https://seller.uat.afrotransact.com" {
+		t.Fatalf("links: %+v", c.Links)
+	}
+	if !slices.Contains(c.Attachments.AllowedHosts, "media.uat.afrotransact.com") {
+		t.Fatalf("media CDN host must be allowed: %v", c.Attachments.AllowedHosts)
+	}
+
+	env["PUBLIC_BASE_URL"] = "https://hooks.example.test/notifications"
+	env["PROVIDER_HUB_URL"] = "https://providers.example.test"
+	var o config.Config
+	if err := pkgconfig.NewLoaderFor(notifications.Files, pkgconfig.EnvUAT, lookup).Load(&o); err != nil {
+		t.Fatal(err)
+	}
+	o.Resolve()
+	if o.PublicBaseURL != env["PUBLIC_BASE_URL"] || o.Links.ProviderHub != env["PROVIDER_HUB_URL"] {
+		t.Fatalf("explicit settings must win: %q %q", o.PublicBaseURL, o.Links.ProviderHub)
 	}
 }

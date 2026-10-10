@@ -15,7 +15,6 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.afrotransact.com
   # External URL MCP clients use (resource indicator in the OAuth protected-resource metadata).
   MCP_PUBLIC_URL: https://mcp.afrotransact.com
   SEARCH_URL: http://search:8080

@@ -125,7 +125,7 @@ Consumers de-duplicate on `event-id` with the platform inbox. See
 |---|---|
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL (`offers`) |
 | `KAFKA_BOOTSTRAP`, `KAFKA_GROUP` | Kafka outbox relay and consumers (group `offers-service`) |
-| `AUTH_ISSUER_URI` | identity service issuer (JWT validation) |
+| `AUTH_ISSUER_URL` | identity service issuer (JWT validation) |
 | `CATALOG_URL`, `CATALOG_TIMEOUT` | catalog-service base URL (local `http://localhost:8101`, cluster `http://catalog:8080`) |
 | `OFFERS_CLIENT_ID`, `OFFERS_CLIENT_SECRET` | client credentials for catalog GTIN lookups (`offers-service`, scope `catalog:read`; `at.offers.oauth.*`) |
 | `RETAIL_ORG_ID` | organisation id of AfroTransact Retail (seller kind `PLATFORM`) |

@@ -107,7 +107,7 @@ flash-sale drill; everyone else must be a SERVICE principal.
 ## Configuration
 
 `application.yml` + `application-{local,dev,uat,prod}.yml`. Secrets only from env: `DB_URL`, `DB_USER`,
-`DB_PASSWORD`, `KAFKA_BOOTSTRAP` (`AUTH_ISSUER_URI` per env). Tunables (`at.inventory.*`): `retail-org-id`
+`DB_PASSWORD`, `KAFKA_BOOTSTRAP` (`AUTH_ISSUER_URL` per env). Tunables (`at.inventory.*`): `retail-org-id`
 (`RETAIL_ORG_ID`), `reservation-ttl` (`RESERVATION_TTL`, 15m), `fefo-min-remaining-days` (7),
 `shelf-life.min-days` (90), `shelf-life.min-fraction` (0.5), `jobs.enabled`, `jobs.*-cron`, `jobs.zone`.
 

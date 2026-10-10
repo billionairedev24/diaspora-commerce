@@ -21,11 +21,41 @@ import java.util.UUID;
  * @param cardFixed                 card-processing fee, fixed part per charge
  * @param fbaPerUnit                FBA pick, pack and ship fee per unit
  * @param reverseCommissionOnRefund refunds give the seller back the matching commission (otherwise retained)
+ * @param cancellation              set when a scheduled version was withdrawn before it took effect (the version
+ *                                  stays in the history but never applies); null otherwise
  */
 public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String currency,
                           Map<String, Integer> categoryBps, int defaultCommissionBps,
                           List<CommissionOverride> overrides, int cardPctBps, Money cardFixed, Money fbaPerUnit,
-                          boolean reverseCommissionOnRefund, String note, String createdBy, Instant createdAt) {
+                          boolean reverseCommissionOnRefund, String note, String createdBy, Instant createdAt,
+                          Cancellation cancellation) {
+
+    /**
+     * Withdrawal of a scheduled version: who, when and why (append-only, like the version itself).
+     *
+     * @param reason why the version was withdrawn (required)
+     */
+    public record Cancellation(Instant at, String by, String reason) {
+
+        public Cancellation {
+            Objects.requireNonNull(at, "at");
+            Objects.requireNonNull(by, "by");
+            if (reason == null || reason.isBlank()) {
+                throw new PaymentsRuleViolation("payments.invalid-request", "A reason is required",
+                        Map.of("reason", "Required"));
+            }
+            reason = reason.trim();
+        }
+    }
+
+    /** A version that has not been cancelled. */
+    public FeeSchedule(UUID id, int version, Instant effectiveFrom, String currency, Map<String, Integer> categoryBps,
+                       int defaultCommissionBps, List<CommissionOverride> overrides, int cardPctBps, Money cardFixed,
+                       Money fbaPerUnit, boolean reverseCommissionOnRefund, String note, String createdBy,
+                       Instant createdAt) {
+        this(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides, cardPctBps, cardFixed,
+                fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt, null);
+    }
 
     public FeeSchedule {
         Objects.requireNonNull(id, "id");
@@ -102,10 +132,45 @@ public record FeeSchedule(UUID id, int version, Instant effectiveFrom, String cu
         return charge.basisPoints(cardPctBps).plus(cardFixed);
     }
 
-    /** The version in force at {@code at}: the latest effectiveFrom ≤ at (highest version on ties). */
+    public boolean isCancelled() {
+        return cancellation != null;
+    }
+
+    /**
+     * Withdraws this scheduled version. Only a version that has not taken effect yet can be cancelled, so no order
+     * was ever placed under it; the row is kept (marked cancelled) and never rewritten.
+     */
+    public FeeSchedule cancel(Instant now, String by, String reason) {
+        if (isCancelled()) {
+            throw new PaymentsStateConflict("payments.fee-schedule-cancelled",
+                    "Version " + version + " was already cancelled");
+        }
+        if (!effectiveFrom.isAfter(now)) {
+            throw new PaymentsStateConflict("payments.fee-schedule-in-force",
+                    "Version " + version + " took effect at " + effectiveFrom + " and can no longer be cancelled");
+        }
+        return new FeeSchedule(id, version, effectiveFrom, currency, categoryBps, defaultCommissionBps, overrides,
+                cardPctBps, cardFixed, fbaPerUnit, reverseCommissionOnRefund, note, createdBy, createdAt,
+                new Cancellation(now, by, reason));
+    }
+
+    /**
+     * The version in force at {@code at}: the latest effectiveFrom ≤ at (highest version on ties); cancelled
+     * versions never apply.
+     */
     public static Optional<FeeSchedule> activeAt(List<FeeSchedule> history, Instant at) {
-        return history.stream().filter(s -> !s.effectiveFrom().isAfter(at))
+        return history.stream().filter(s -> !s.isCancelled() && !s.effectiveFrom().isAfter(at))
                 .max(Comparator.comparing(FeeSchedule::effectiveFrom).thenComparingInt(FeeSchedule::version));
+    }
+
+    /** The newest version that is not cancelled (what a new version must follow). */
+    public static Optional<FeeSchedule> latestLive(List<FeeSchedule> history) {
+        return history.stream().filter(s -> !s.isCancelled()).max(Comparator.comparingInt(FeeSchedule::version));
+    }
+
+    /** The next version number (cancelled versions keep theirs). */
+    public static int nextVersion(List<FeeSchedule> history) {
+        return history.stream().mapToInt(FeeSchedule::version).max().orElse(0) + 1;
     }
 
     /**

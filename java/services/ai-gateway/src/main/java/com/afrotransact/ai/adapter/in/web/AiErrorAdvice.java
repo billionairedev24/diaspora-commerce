@@ -1,6 +1,5 @@
 package com.afrotransact.ai.adapter.in.web;
 
-import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -9,6 +8,7 @@ import java.time.ZonedDateTime;
 import com.afrotransact.ai.domain.AiRuleViolation;
 import com.afrotransact.ai.domain.BudgetExceededException;
 import com.afrotransact.ai.port.ModelUnavailableException;
+import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
@@ -23,8 +23,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class AiErrorAdvice {
-
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     @ExceptionHandler(BudgetExceededException.class)
     ResponseEntity<ProblemDetail> budget(BudgetExceededException ex) {
@@ -63,7 +61,7 @@ class AiErrorAdvice {
 
     private static ProblemDetail problem(HttpStatus status, String code, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setType(URI.create(TYPE_BASE + code));
+        pd.setType(ProblemTypes.of(code));
         pd.setTitle(title);
         pd.setProperty("code", code);
         return pd;

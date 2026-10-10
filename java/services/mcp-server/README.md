@@ -106,7 +106,7 @@ register a public MCP client, for example:
 
 | Env var | Purpose |
 |---|---|
-| `AUTH_ISSUER_URI` | identity issuer (JWT validation, advertised authorization server) |
+| `AUTH_ISSUER_URL` | identity issuer (JWT validation, advertised authorization server) |
 | `MCP_PUBLIC_URL` | external URL of this server (resource indicator) |
 | `MCP_ALLOWED_ORIGINS` | browser origins allowed to call `/mcp` (DNS-rebinding protection) |
 | `MCP_RATE_CAPACITY`, `MCP_RATE_PER_MINUTE` | token bucket |

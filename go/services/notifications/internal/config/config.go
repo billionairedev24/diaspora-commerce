@@ -2,16 +2,25 @@
 // Secrets are never in YAML: they come from env vars only (fields without a yaml tag).
 package config
 
-import "time"
+import (
+	"net/url"
+	"slices"
+	"time"
+
+	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
+)
 
 // Routes are ordered provider names per market ("default" is the fallback) for one channel.
 type Routes map[string][]string
 
 // Config for the notifications service.
 type Config struct {
-	Port          int    `yaml:"port" env:"PORT"`
-	DocsEnabled   bool   `yaml:"docsEnabled" env:"DOCS_ENABLED"`
+	Port        int  `yaml:"port" env:"PORT"`
+	DocsEnabled bool `yaml:"docsEnabled" env:"DOCS_ENABLED"`
+	// PublicBaseURL is this service's public URL (webhook signatures, unsubscribe links). Unset, it is
+	// APIBaseURL + "/notifications"; APIBaseURL is the shared API_BASE_URL (docs/engineering/environments.md).
 	PublicBaseURL string `yaml:"publicBaseUrl" env:"PUBLIC_BASE_URL"`
+	APIBaseURL    string `yaml:"apiBaseUrl" env:"API_BASE_URL"`
 	Database      struct {
 		URL     string `yaml:"url" env:"DB_URL"`
 		Migrate bool   `yaml:"migrate" env:"DB_MIGRATE"`
@@ -28,7 +37,7 @@ type Config struct {
 	Identity struct {
 		Enabled      bool          `yaml:"enabled" env:"IDENTITY_ENABLED"`
 		BaseURL      string        `yaml:"baseUrl" env:"IDENTITY_URL"`
-		TokenURL     string        `yaml:"tokenUrl" env:"AUTH_TOKEN_URI"`
+		TokenURL     string        `yaml:"tokenUrl" env:"AUTH_TOKEN_URL"`
 		ClientID     string        `yaml:"clientId" env:"IDENTITY_CLIENT_ID"`
 		ClientSecret string        `env:"NOTIFICATIONS_CLIENT_SECRET"`
 		Timeout      time.Duration `yaml:"timeout" env:"IDENTITY_TIMEOUT"`
@@ -36,26 +45,29 @@ type Config struct {
 		NotFoundTTL  time.Duration `yaml:"notFoundTtl"`
 		CacheMax     int           `yaml:"cacheMaxEntries"`
 	} `yaml:"identity"`
-	// Links are the public base URLs templates link to.
+	// Links are the public base URLs templates link to: the shared PUBLIC_WEB_URL and SELLER_CENTER_URL. Provider
+	// Hub is served by the Seller Center app, so ProviderHub defaults to SellerCenter (PROVIDER_HUB_URL overrides).
 	Links struct {
-		Storefront   string `yaml:"storefront" env:"LINKS_STOREFRONT"`
-		SellerCenter string `yaml:"sellerCenter" env:"LINKS_SELLER_CENTER"`
-		ProviderHub  string `yaml:"providerHub" env:"LINKS_PROVIDER_HUB"`
+		Storefront   string `yaml:"storefront" env:"PUBLIC_WEB_URL"`
+		SellerCenter string `yaml:"sellerCenter" env:"SELLER_CENTER_URL"`
+		ProviderHub  string `yaml:"providerHub" env:"PROVIDER_HUB_URL"`
 	} `yaml:"links"`
 	// Attachments are email attachments fetched from signed media links at send time (S243). Only hosts in the
 	// allow-list (the media base URL's host plus allowedHosts, e.g. the object-storage host that signs the links)
 	// are fetched; files over maxBytes, or over maxTotalBytes per email, stay links. Disabled = links only.
 	Attachments struct {
-		Enabled       bool          `yaml:"enabled" env:"ATTACHMENTS_ENABLED"`
-		MediaBaseURL  string        `yaml:"mediaBaseUrl" env:"MEDIA_BASE_URL"`
-		AllowedHosts  []string      `yaml:"allowedHosts" env:"ATTACHMENTS_ALLOWED_HOSTS"`
-		MaxBytes      int64         `yaml:"maxBytes" env:"ATTACHMENTS_MAX_BYTES"`
-		MaxTotalBytes int64         `yaml:"maxTotalBytes" env:"ATTACHMENTS_MAX_TOTAL_BYTES"`
-		Timeout       time.Duration `yaml:"timeout" env:"ATTACHMENTS_TIMEOUT"`
+		Enabled      bool     `yaml:"enabled" env:"ATTACHMENTS_ENABLED"`
+		MediaBaseURL string   `yaml:"mediaBaseUrl" env:"MEDIA_BASE_URL"`
+		AllowedHosts []string `yaml:"allowedHosts" env:"ATTACHMENTS_ALLOWED_HOSTS"`
+		// MediaPublicURL is the shared public media CDN (MEDIA_PUBLIC_URL); its host is added to AllowedHosts.
+		MediaPublicURL string        `yaml:"mediaPublicUrl" env:"MEDIA_PUBLIC_URL"`
+		MaxBytes       int64         `yaml:"maxBytes" env:"ATTACHMENTS_MAX_BYTES"`
+		MaxTotalBytes  int64         `yaml:"maxTotalBytes" env:"ATTACHMENTS_MAX_TOTAL_BYTES"`
+		Timeout        time.Duration `yaml:"timeout" env:"ATTACHMENTS_TIMEOUT"`
 	} `yaml:"attachments"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
-		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URI"`
+		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`
 	} `yaml:"auth"`
 	Telemetry struct {
@@ -169,4 +181,14 @@ type Providers struct {
 		Token         string `env:"WHATSAPP_TOKEN"`
 		APIVersion    string `yaml:"apiVersion"`
 	} `yaml:"whatsapp"`
+}
+
+// Resolve fills the settings derived from the shared platform URLs; call it after Load. Explicit values win.
+func (c *Config) Resolve() {
+	c.PublicBaseURL = pkgconfig.FirstNonEmpty(c.PublicBaseURL, pkgconfig.JoinURL(c.APIBaseURL, "/notifications"))
+	c.Links.ProviderHub = pkgconfig.FirstNonEmpty(c.Links.ProviderHub, c.Links.SellerCenter)
+	if u, err := url.Parse(c.Attachments.MediaPublicURL); err == nil && u.Host != "" &&
+		!slices.Contains(c.Attachments.AllowedHosts, u.Host) {
+		c.Attachments.AllowedHosts = append(slices.Clone(c.Attachments.AllowedHosts), u.Host)
+	}
 }

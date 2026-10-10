@@ -31,7 +31,7 @@ ads:
   cacheTtl: 15s
   content:
     baseUrl: http://content
-    tokenUrl: https://auth.uat.afrotransact.com/oauth2/token
+    # tokenUrl: defaults to <auth.issuer>/oauth2/token (AUTH_TOKEN_URL overrides)
     clientId: search-service
     scopes: ["ads:serve"]
 telemetry:

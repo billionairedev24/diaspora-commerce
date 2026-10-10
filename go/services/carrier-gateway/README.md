@@ -40,8 +40,8 @@ paths and API versions are in `config/<env>.yaml`** (`usps.paths`, `ups.paths`, 
 `USPS_PAYMENT_TOKEN`, `UPS_CLIENT_ID`, `UPS_CLIENT_SECRET`, `UPS_ACCOUNT`, `UPS_WEBHOOK_CREDENTIAL`, `FEDEX_CLIENT_ID`,
 `FEDEX_CLIENT_SECRET`, `FEDEX_ACCOUNT`, `FEDEX_WEBHOOK_SECRET`, `DHL_USERNAME`, `DHL_PASSWORD`, `DHL_ACCOUNT`,
 `DHL_WEBHOOK_SECRET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` (empty → default chain / workload identity).
-Other overrides: `PUBLIC_BASE_URL`, `KAFKA_BROKERS`, `RATE_BUDGET`, `QUOTE_TTL`, `LABEL_STORE`, `S3_BUCKET`,
-`<CARRIER>_ENABLED`, `<CARRIER>_BASE_URL`, `AUTH_ENABLED`, `AUTH_ISSUER_URI`. Local/dev/uat use carrier sandboxes,
+Other overrides: `PUBLIC_BASE_URL` (webhook base; defaults to `<API_BASE_URL>/carrier-gateway`, the shared setting injected by the Helm library), `KAFKA_BROKERS`, `RATE_BUDGET`, `QUOTE_TTL`, `LABEL_STORE`, `S3_BUCKET`,
+`<CARRIER>_ENABLED`, `<CARRIER>_BASE_URL`, `AUTH_ENABLED`, `AUTH_ISSUER_URL`. Local/dev/uat use carrier sandboxes,
 prod the production hosts. A carrier that is enabled but has no credentials is skipped at start-up with a warning.
 Carrier accounts and negotiated-rate settings per FC/seller live under `accounts` (empty numbers use the platform
 account from env).

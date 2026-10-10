@@ -43,7 +43,6 @@ workloadIdentity:
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
   ORDERS_URL: http://orders:8080
   INVENTORY_URL: http://inventory:8080
   GEO_URL: http://geo:8080

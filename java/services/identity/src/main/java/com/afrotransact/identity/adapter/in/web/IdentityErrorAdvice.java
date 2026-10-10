@@ -1,10 +1,9 @@
 package com.afrotransact.identity.adapter.in.web;
 
-import java.net.URI;
-
 import com.afrotransact.identity.domain.IdentityRuleViolation;
 import com.afrotransact.identity.domain.RateLimitExceeded;
 import com.afrotransact.identity.domain.SignInFailed;
+import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -23,12 +22,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 class IdentityErrorAdvice {
 
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
-
     @ExceptionHandler(IdentityRuleViolation.class)
     ProblemDetail ruleViolation(IdentityRuleViolation ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
-        pd.setType(URI.create(TYPE_BASE + ex.code()));
+        pd.setType(ProblemTypes.of(ex.code()));
         pd.setTitle("Identity rule violated");
         pd.setProperty("code", ex.code());
         pd.setProperty("fieldErrors", ex.fieldErrors());
@@ -38,7 +35,7 @@ class IdentityErrorAdvice {
     @ExceptionHandler(RateLimitExceeded.class)
     ResponseEntity<ProblemDetail> rateLimited(RateLimitExceeded ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage());
-        pd.setType(URI.create(TYPE_BASE + ex.code()));
+        pd.setType(ProblemTypes.of(ex.code()));
         pd.setTitle("Too many requests");
         pd.setProperty("code", ex.code());
         long seconds = Math.max(1, ex.retryAfter().toSeconds());
@@ -51,7 +48,7 @@ class IdentityErrorAdvice {
     @ExceptionHandler(SignInFailed.class)
     ProblemDetail signInFailed(SignInFailed ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
-        pd.setType(URI.create(TYPE_BASE + ex.code()));
+        pd.setType(ProblemTypes.of(ex.code()));
         pd.setTitle("Sign-in failed");
         pd.setProperty("code", ex.code());
         if (ex.attemptsLeft() != null) {
@@ -63,7 +60,7 @@ class IdentityErrorAdvice {
     @ExceptionHandler(IllegalArgumentException.class)
     ProblemDetail badRequest(IllegalArgumentException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        pd.setType(URI.create(TYPE_BASE + "identity.invalid-input"));
+        pd.setType(ProblemTypes.of("identity.invalid-input"));
         pd.setProperty("code", "identity.invalid-input");
         return pd;
     }
@@ -72,7 +69,7 @@ class IdentityErrorAdvice {
     ProblemDetail conflict(OptimisticLockingFailureException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
                 "The record was changed by someone else; reload and try again");
-        pd.setType(URI.create(TYPE_BASE + "identity.concurrent-update"));
+        pd.setType(ProblemTypes.of("identity.concurrent-update"));
         pd.setProperty("code", "identity.concurrent-update");
         return pd;
     }

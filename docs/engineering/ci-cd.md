@@ -39,13 +39,44 @@ Testcontainers ITs + JaCoCo; image from `java/Dockerfile` with `SERVICE=<svc>`).
 | `security.yml` | main, weekly, manual | CodeQL (java-kotlin, go, js/ts, actions), Trivy repo SARIF (CRITICAL fails), gitleaks full history, ZAP baseline vs dev |
 | `backlog.yml` | `docs/backlog/**` | CSV parses, header, unique ids, valid status/type/priority, parents are epics |
 | `docs.yml` | `docs/**`, `contracts/**` | build `docs/portal` and deploy to Cloudflare Pages (skips until it exists) |
-| `storybook.yml` (hand-written) | `web/packages/{ui,tokens,i18n}/**`, `web/apps/*/src/**/*.stories.tsx`, Seller Center components/styles used by app stories, root `package.json`/lockfile/workspace | `storybook build`; test runner (render + `play` + axe serious/critical) and Playwright visual diffs vs committed baselines in the pinned Playwright image; Cloudflare Pages `afrotransact-storybook` (PR preview comment, production on main); `update-visual-baselines` label regenerates baselines |
+| `storybook.yml` (hand-written) | `web/packages/{ui,tokens,i18n}/**`, `web/apps/*/src/**/*.stories.tsx`, Seller Center components/styles used by app stories, root `package.json`/lockfile/workspace | `storybook build`; Vitest addon (`test:storybook`: render + `play` + axe serious/critical, v8 coverage gated and uploaded) and Playwright visual diffs vs committed baselines in the pinned Playwright image; Cloudflare Pages `afrotransact-storybook` (PR preview comment, production on main); `update-visual-baselines` label regenerates baselines |
 | `mobile.yml` | tags `mobile-v*`, main (`mobile/**`), manual | EAS build (production, auto-submit) on tags; EAS Update OTA to `preview` on main; dev/preview/production profiles |
 | `workflows.yml` | `.github/**`, `tools/ci/**`, PORTS.md | generated workflows up to date + actionlint |
+| env-urls step (to add, see below) | `java/**`, `go/**`, `web/**`, `mobile/**`, `infra/**` | `tools/ci/check_env_urls.py`: no hard-coded environment hosts |
 
 Generated workflows: `python3 tools/ci/gen_workflows.py` reads the service table in
 `infra/local/PORTS.md`; add a service there and re-run. Workflows for services that do not exist yet are
 harmless (their path filters never match and the `meta` job skips everything).
+
+## Environment URL guard
+
+`tools/ci/check_env_urls.py` (Python 3.10+, standard library only) fails when an environment-specific host is
+hard-coded where it does not belong: any `*.afrotransact.com` host in shared defaults or non-test source, a prod
+or other-environment host in dev/uat config, a dev/uat host in prod config, a host the edge does not serve, or a
+problem type outside `https://developers.afrotransact.com/problems/`. Hosts, settings and rules are in
+[environments.md](environments.md). Exit status 0 = clean, 1 = violations, 2 = usage error;
+`--format github` prints `::error file=…,line=…` annotations.
+
+CI step to add (by the workflow owners; `.github/` is not edited from here). It needs nothing beyond the
+runner's Python, so it fits next to the small repo-wide checks (`contracts.yml`, `workflows.yml`) or in a new
+`env-urls.yml` triggered on `java/**`, `go/**`, `web/**`, `mobile/**`, `infra/**` and
+`tools/ci/check_env_urls.py`:
+
+```yaml
+  env-urls:
+    name: environment URL guard
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: No hard-coded environment hosts
+        run: |
+          python3 tools/ci/check_env_urls.py --format github \
+            --exclude web --exclude mobile --exclude go/services/gateway-bff
+```
+
+The three `--exclude` flags are temporary: web, mobile and gateway-bff still hard-code hosts (the follow-up to
+the environment-URL change). Drop them once `python3 tools/ci/check_env_urls.py` passes for the whole
+repository; from then on the step guards everything.
 
 ## Security of the pipeline
 
@@ -129,9 +160,12 @@ Seller Center components those stories render:
 ```
 build             root `pnpm install --frozen-lockfile` -> `pnpm --filter @afrotransact/ui build-storybook`
                   (a story that does not compile fails here) -> artifact storybook-static
-test              container mcr.microsoft.com/playwright:v1.56.1-noble (MCR, not Docker Hub; = @playwright/test 1.56.1)
-                  test-storybook:static   every story rendered from the static build; play functions; axe
-                                          WCAG 2.2 A/AA serious/critical fail (known issues -> job summary warnings)
+test              container mcr.microsoft.com/playwright:v1.56.1-noble (MCR, not Docker Hub; = @playwright/test and
+                  playwright 1.56.1, the Vitest browser provider's)
+                  test:storybook          `storybook` Vitest project (@storybook/addon-vitest, headless Chromium):
+                                          every story rendered; play functions; axe WCAG 2.2 A/AA serious/critical
+                                          fail; v8 coverage -> coverage_report.sh --service ui-storybook (gate),
+                                          artifact `storybook-coverage`
                   visual                  Playwright screenshot per story vs web/packages/ui/visual-baselines;
                                           diffs -> artifact `visual-diffs` (+ HTML report)
 deploy            wrangler pages deploy storybook-static --project-name=afrotransact-storybook --branch=<branch>

@@ -2,7 +2,7 @@
 port: 8080
 docsEnabled: false
 databaseUrl: ""
-publicBaseUrl: https://www.afrotransact.com
+publicBaseUrl: https://afrotransact.com   # canonical storefront origin (shared PUBLIC_WEB_URL); www. is the same Worker
 maxSections: 10
 maxFeatured: 6
 maxTagline: 120

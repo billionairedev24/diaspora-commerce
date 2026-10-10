@@ -16,9 +16,7 @@ telemetry:
 tolerations:
   - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.uat.afrotransact.com
   # Client-credentials token of retail-service (secret RETAIL_CLIENT_SECRET) for inventory calls.
-  AUTH_TOKEN_URI: https://auth.uat.afrotransact.com/oauth2/token
   # In-cluster service names; every service listens on 8080 in Kubernetes.
   CATALOG_BASE_URL: http://catalog:8080
   INVENTORY_BASE_URL: http://inventory:8080

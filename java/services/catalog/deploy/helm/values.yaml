@@ -41,7 +41,6 @@ workloadIdentity:
   aws: {roleArn: ""}
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
-extraEnv:
-  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
+extraEnv: {}
 nodeSelector: {}
 tolerations: []

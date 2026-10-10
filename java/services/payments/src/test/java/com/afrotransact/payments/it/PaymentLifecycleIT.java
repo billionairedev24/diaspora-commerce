@@ -1,6 +1,7 @@
 package com.afrotransact.payments.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.http.HttpResponse;
 import java.time.Instant;
@@ -11,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -22,6 +24,7 @@ import com.afrotransact.platform.security.PrincipalType;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataAccessException;
 import tools.jackson.databind.JsonNode;
 
 /** S051 PaymentIntents, S053 ledger, S054 split, S055 fees, S057 refunds — against PostgreSQL and WireMock Stripe. */
@@ -263,5 +266,50 @@ class PaymentLifecycleIT extends PaymentsIntegrationTest {
         assertThat(oldSplit.path("feeScheduleVersion").asInt()).isEqualTo(1);
         assertThat(oldSplit.path("lines").get(0).path("commissionBps").asInt()).isEqualTo(800);
         assertThat(oldSplit.path("feeSource").asString()).isEqualTo("ESTIMATED");
+    }
+    @Test
+    void scheduledFeeScheduleVersionsCanBeCancelledBeforeTheyTakeEffect() {
+        Map<String, Object> future = Map.of("effectiveFrom", "2040-01-01T00:00:00Z", "categoryBps",
+                Map.of("groceries", 100), "defaultCommissionBps", 200, "cardPctBps", 290, "cardFixedMinor", 30,
+                "fbaPerUnitMinor", 300, "reverseCommissionOnRefund", true, "note", "Typo version", "currency", "USD");
+        TestSupport.as(TestSupport.FINANCE);
+        JsonNode created = ok(send("POST", "/v1/fee-schedules", future, null), 201);
+        String id = created.path("id").asString();
+        assertThat(created.path("cancelledAt").isNull()).isTrue();
+
+        TestSupport.as(TestSupport.seller("org_g", "seller.owner", "payouts:request"));
+        problem(send("POST", "/v1/fee-schedules/" + id + "/cancel", Map.of("reason", "x"), null), 403,
+                "auth.missing-permission");
+        TestSupport.as(TestSupport.FINANCE);
+        assertThat(send("POST", "/v1/fee-schedules/" + id + "/cancel", Map.of("reason", " "), null).statusCode())
+                .isEqualTo(400);
+        JsonNode cancelled = ok(send("POST", "/v1/fee-schedules/" + id + "/cancel",
+                Map.of("reason", "Wrong grocery rate"), null), 200);
+        assertThat(cancelled.path("cancelledBy").asString()).isEqualTo("fin-1");
+        assertThat(cancelled.path("cancelReason").asString()).isEqualTo("Wrong grocery rate");
+        assertThat(cancelled.path("version").asInt()).isEqualTo(created.path("version").asInt());
+        problem(send("POST", "/v1/fee-schedules/" + id + "/cancel", Map.of("reason", "again"), null), 409,
+                "payments.fee-schedule-cancelled");
+        problem(send("POST", "/v1/fee-schedules/00000000-0000-0000-0000-00000000fee1/cancel",
+                Map.of("reason", "too late"), null), 409, "payments.fee-schedule-in-force");
+        assertThat(send("POST", "/v1/fee-schedules/" + UUID.randomUUID() + "/cancel", Map.of("reason", "nope"), null)
+                .statusCode()).isEqualTo(404);
+
+        // Kept in the history, marked cancelled, and never in force.
+        JsonNode history = ok(send("GET", "/v1/fee-schedules", null, null));
+        boolean listed = false;
+        for (JsonNode s : history) {
+            if (s.path("id").asString().equals(id)) {
+                listed = true;
+                assertThat(s.path("cancelledAt").isNull()).isFalse();
+            }
+        }
+        assertThat(listed).isTrue();
+        assertThat(ok(send("GET", "/v1/fee-schedules/active?at=2041-01-01T00:00:00Z", null, null)).path("id")
+                .asString()).isNotEqualTo(id);
+        assertThatThrownBy(() -> jdbc.sql("update fee_schedule_cancellation set reason = 'x' where schedule_id = :id")
+                .param("id", UUID.fromString(id)).update()).isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> jdbc.sql("delete from fee_schedule where id = :id")
+                .param("id", UUID.fromString(id)).update()).isInstanceOf(DataAccessException.class);
     }
 }

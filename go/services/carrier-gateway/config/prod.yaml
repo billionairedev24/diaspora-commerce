@@ -6,7 +6,8 @@ port: 8080
 docsEnabled: false
 databaseUrl: ""
 redisUrl: ""
-publicBaseUrl: https://api.afrotransact.com/carrier-gateway
+# Public API base (shared API_BASE_URL, injected by the Helm library); publicBaseUrl defaults to <apiBaseUrl>/carrier-gateway.
+apiBaseUrl: https://api.afrotransact.com
 kafka:
   enabled: true
   brokers: [kafka.kafka:9092]

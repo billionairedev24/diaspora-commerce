@@ -16,5 +16,4 @@ telemetry:
 tolerations:
   - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.uat.afrotransact.com
   CATALOG_URL: http://catalog:8080

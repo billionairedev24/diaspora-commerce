@@ -45,6 +45,32 @@ class FeeScheduleTest {
     }
 
     @Test
+    void onlyScheduledVersionsCanBeCancelledAndCancelledVersionsNeverApply() {
+        Instant now = Instant.parse("2026-07-01T00:00:00Z");
+        FeeSchedule v1 = Fixtures.schedule(1, V1, List.of());
+        FeeSchedule v2 = Fixtures.schedule(2, now.plusSeconds(3600), List.of());
+        FeeSchedule cancelled = v2.cancel(now, "fin-1", "  Wrong rate  ");
+        assertThat(cancelled.isCancelled()).isTrue();
+        assertThat(cancelled.cancellation().reason()).isEqualTo("Wrong rate");
+        assertThat(cancelled.version()).isEqualTo(2);
+        assertThat(FeeSchedule.activeAt(List.of(v1, cancelled), now.plusSeconds(7200))).contains(v1);
+        assertThat(FeeSchedule.latestLive(List.of(v1, cancelled))).contains(v1);
+        assertThat(FeeSchedule.nextVersion(List.of(v1, cancelled))).isEqualTo(3);
+        // A new version may now take effect before the withdrawn one.
+        FeeSchedule.requireValidSuccessor(now.plusSeconds(60), FeeSchedule.latestLive(List.of(v1, cancelled)), now);
+
+        assertThatThrownBy(() -> cancelled.cancel(now, "fin-1", "again"))
+                .isInstanceOfSatisfying(PaymentsStateConflict.class,
+                        e -> assertThat(e.code()).isEqualTo("payments.fee-schedule-cancelled"));
+        assertThatThrownBy(() -> v1.cancel(now, "fin-1", "too late"))
+                .isInstanceOfSatisfying(PaymentsStateConflict.class,
+                        e -> assertThat(e.code()).isEqualTo("payments.fee-schedule-in-force"));
+        assertThatThrownBy(() -> v2.cancel(v2.effectiveFrom(), "fin-1", "at the boundary"))
+                .isInstanceOf(PaymentsStateConflict.class);
+        assertThatThrownBy(() -> v2.cancel(now, "fin-1", " ")).isInstanceOf(PaymentsRuleViolation.class);
+    }
+
+    @Test
     void ratesAreValidatedAndCategoriesCaseInsensitive() {
         FeeSchedule s = Fixtures.schedule();
         assertThat(s.commissionBps("org_x", "GROCERIES")).isEqualTo(800);

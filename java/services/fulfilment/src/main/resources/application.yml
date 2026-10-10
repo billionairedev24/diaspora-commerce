@@ -30,7 +30,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
   mvc:
     async:
       # Server-sent event streams (dispatch console, driver app) stay open up to 30 minutes, then reconnect.
@@ -94,7 +94,7 @@ at:
     relay:
       max-attempts: ${ORDERS_RELAY_MAX_ATTEMPTS:20}
     oauth:
-      issuer-url: ${AUTH_ISSUER_URI:http://localhost:8100}
+      issuer-url: ${AUTH_ISSUER_URL:http://localhost:8100}
       token-path: /oauth2/token
       client-id: ${FULFILMENT_CLIENT_ID:fulfilment-service}
       client-secret: ${FULFILMENT_CLIENT_SECRET:}

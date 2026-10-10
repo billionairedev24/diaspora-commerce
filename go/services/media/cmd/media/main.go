@@ -116,10 +116,10 @@ func buildStore(sc config.Store, cfg config.Config, client *http.Client) (port.O
 	case "s3":
 		return s3store.New(s3store.Options{Name: sc.Name, Endpoint: sc.Endpoint, Region: sc.Region, Bucket: sc.Bucket,
 			AccessKey: os.Getenv(sc.AccessKeyEnv), SecretKey: os.Getenv(sc.SecretKeyEnv),
-			PublicBaseURL: sc.PublicBaseURL, PathStyle: sc.PathStyle}), nil
+			PublicBaseURL: sc.ResolvedPublicBaseURL(os.Getenv), PathStyle: sc.PathStyle}), nil
 	case "azure-blob":
 		st, err := azblobstore.New(azblobstore.Options{Account: sc.Account, AccountKey: os.Getenv(sc.SecretKeyEnv),
-			Container: sc.Bucket, PublicBaseURL: sc.PublicBaseURL})
+			Container: sc.Bucket, PublicBaseURL: sc.ResolvedPublicBaseURL(os.Getenv)})
 		if err != nil {
 			return nil, fmt.Errorf("azure: %w", err)
 		}

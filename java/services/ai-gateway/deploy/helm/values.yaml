@@ -43,7 +43,6 @@ workloadIdentity:
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
   # Platform APIs Lola calls (in-cluster service names; every service listens on 8080 in Kubernetes).
   SEARCH_URL: http://search:8080
   CATALOG_URL: http://catalog:8080
@@ -51,7 +50,6 @@ extraEnv:
   PROMISE_URL: http://promise:8080
   ORDERS_URL: http://orders:8080
   BOOKINGS_URL: http://bookings:8080
-  OPENROUTER_REFERER: https://dev.afrotransact.com
   # Lola streams answers; keep proxies from buffering or timing out the event stream.
   LOLA_SSE_TIMEOUT: 120s
 nodeSelector: {}

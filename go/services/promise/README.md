@@ -36,7 +36,7 @@ Contract: [`contracts/openapi/promise.yaml`](../../../contracts/openapi/promise.
 ## Configuration
 
 `config/<APP_ENV>.yaml` + env: `REDIS_URL` (secret outside local), `SNAPSHOT_TTL`, `MAX_OFFERS`, `AUTH_ENABLED`,
-`AUTH_ISSUER_URI`, `DOCS_ENABLED`. FCs (`fulfilmentCentres`: ZIP, time zone, cutoff, Saturday work, pickup counter
+`AUTH_ISSUER_URL`, `DOCS_ENABLED`. FCs (`fulfilmentCentres`: ZIP, time zone, cutoff, Saturday work, pickup counter
 hours, same-day/next-day ZIP3 zones), service levels and seller defaults are YAML. Transit and ZIP regions are CSV
 data in `data/` — the ZIP3 centroids are coarse regional points and the FC lanes were seeded from centroid distances;
 replace them with carrier zone/transit charts and Census ZCTA centroids without code changes.

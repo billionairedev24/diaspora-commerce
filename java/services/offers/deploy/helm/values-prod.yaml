@@ -15,5 +15,4 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.afrotransact.com
   CATALOG_URL: http://catalog:8080

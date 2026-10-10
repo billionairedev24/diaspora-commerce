@@ -129,7 +129,7 @@ Known gaps:
 |---|---|
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL |
 | `KAFKA_BOOTSTRAP` | Kafka for the outbox relay |
-| `AUTH_ISSUER_URI` | identity service issuer (JWT validation) |
+| `AUTH_ISSUER_URL` | identity service issuer (JWT validation) |
 | `RETAIL_ORG_ID` | organisation id of AfroTransact Retail |
 | `LISTING_ENFORCEMENT_PAGE_SIZE` | products per hide / restore page (500) |
 | `PRODUCT_DATA_ORDER`, `PRODUCT_DATA_CACHE_TTL`, `PRODUCT_DATA_MISS_TTL` | GTIN prefill provider order (`GS1,OPEN_FOOD_FACTS`) and cache (7d / 1d) |

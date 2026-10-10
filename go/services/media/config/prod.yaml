@@ -15,6 +15,7 @@ stores:
     region: auto
     bucket: afrotransact-prod-media
     publicBaseUrl: https://media.afrotransact.com
+    publicBaseUrlEnv: MEDIA_PUBLIC_URL   # shared media CDN URL from the Helm library wins when set
     accessKeyEnv: R2_ACCESS_KEY_ID
     secretKeyEnv: R2_SECRET_ACCESS_KEY
   private:

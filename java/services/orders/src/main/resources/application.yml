@@ -29,7 +29,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
   # Temporal (temporal-spring-boot-starter). The checkout worker polls task queue "orders-checkout" in the namespace
   # of the environment. Cloud environments add mTLS (Temporal Cloud) in application-<env>.yml.
   data:
@@ -163,7 +163,7 @@ at:
       # AES key material for sealing customer handover codes (HANDOVER_CODE_KEY in cloud).
       key: ${HANDOVER_CODE_KEY:local-only-handover-code-key-change-me}
     oauth:
-      issuer-url: ${AUTH_ISSUER_URI:http://localhost:8100}
+      issuer-url: ${AUTH_ISSUER_URL:http://localhost:8100}
       token-path: /oauth2/token
       client-id: ${ORDERS_CLIENT_ID:orders-service}
       client-secret: ${ORDERS_CLIENT_SECRET:local-orders-service-secret}

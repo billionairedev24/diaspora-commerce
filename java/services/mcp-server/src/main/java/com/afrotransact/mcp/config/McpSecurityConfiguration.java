@@ -3,6 +3,7 @@ package com.afrotransact.mcp.config;
 import java.util.List;
 
 import com.afrotransact.platform.security.PlatformSecurityProperties;
+import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -77,7 +78,7 @@ class McpSecurityConfiguration {
             response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer resource_metadata=\"" + metadata + "\""
                     + (request.getHeader(HttpHeaders.AUTHORIZATION) == null ? "" : ", error=\"invalid_token\""));
             response.setContentType(MediaType.APPLICATION_PROBLEM_JSON_VALUE);
-            response.getWriter().write("{\"type\":\"https://developers.afrotransact.com/problems/auth.unauthenticated\","
+            response.getWriter().write("{\"type\":\"" + ProblemTypes.BASE + "auth.unauthenticated\","
                     + "\"title\":\"Unauthorized\",\"status\":401,\"code\":\"auth.unauthenticated\","
                     + "\"detail\":\"A bearer token from the AfroTransact identity service is required\"}");
         };

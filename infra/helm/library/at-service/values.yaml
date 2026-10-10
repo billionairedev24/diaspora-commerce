@@ -5,3 +5,12 @@
 #                 Service charts ship the sentinel "dev" until their first deploy (and for local renders).
 #   image.digest  sha256:<64 hex>; rendered as <registry>/<repository>[:<tag>]@<digest>.
 # A missing tag and digest, or tag "latest", fails `helm template` with a message naming the service.
+#
+# global (set ONCE per environment in infra/argocd/envs/<env>/platform-values.yaml, never in a service chart):
+#   global.domain  the environment's public base domain: dev.<zone> | uat.<zone> | <zone> (prod); <zone> is the
+#                  Cloudflare zone of infra/cloudflare.
+#                  Every container gets PLATFORM_ENV, PLATFORM_DOMAIN and the derived PUBLIC_WEB_URL,
+#                  SELLER_CENTER_URL, STAFF_CONSOLE_URL, API_BASE_URL, AUTH_ISSUER_URL and MEDIA_PUBLIC_URL
+#                  (templates/_helpers.tpl "at-service.platformEnvVars"; docs/engineering/environments.md).
+#   global.urls    optional {ENV_NAME: value} overrides of a derived URL for the whole environment.
+# A service's extraEnv entry of the same name wins over both. Unset global.domain renders PLATFORM_ENV only.

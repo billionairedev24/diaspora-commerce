@@ -3,7 +3,7 @@ at:
   api-docs:
     enabled: true
   mcp:
-    allowed-origins: ${MCP_ALLOWED_ORIGINS:https://dev.afrotransact.com,https://developers.dev.afrotransact.com}
+    allowed-origins: ${MCP_ALLOWED_ORIGINS:${PUBLIC_WEB_URL:https://dev.afrotransact.com},https://developers.${PLATFORM_DOMAIN:dev.afrotransact.com}}
 management:
   tracing:
     sampling:

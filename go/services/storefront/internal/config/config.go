@@ -11,7 +11,7 @@ type Config struct {
 	Port          int             `yaml:"port" env:"PORT"`
 	DocsEnabled   bool            `yaml:"docsEnabled" env:"DOCS_ENABLED"`
 	DatabaseURL   string          `yaml:"databaseUrl" env:"DB_URL"`
-	PublicBaseURL string          `yaml:"publicBaseUrl" env:"PUBLIC_BASE_URL"`
+	PublicBaseURL string          `yaml:"publicBaseUrl" env:"PUBLIC_WEB_URL"` // storefront origin (shared PUBLIC_WEB_URL)
 	MaxSections   int             `yaml:"maxSections"`
 	MaxFeatured   int             `yaml:"maxFeatured"`
 	MaxTagline    int             `yaml:"maxTagline"`
@@ -22,7 +22,7 @@ type Config struct {
 	} `yaml:"cloudflare"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
-		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URI"`
+		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`
 	} `yaml:"auth"`
 	Telemetry struct {

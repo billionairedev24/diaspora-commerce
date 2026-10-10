@@ -1,7 +1,10 @@
 // Package config is the media service configuration (config/<APP_ENV>.yaml + env overrides).
 package config
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Store configures one object store.
 type Store struct {
@@ -12,9 +15,22 @@ type Store struct {
 	Bucket        string `yaml:"bucket"`
 	PathStyle     bool   `yaml:"pathStyle"`
 	PublicBaseURL string `yaml:"publicBaseUrl"`
-	AccessKeyEnv  string `yaml:"accessKeyEnv"` // names of env vars holding credentials
-	SecretKeyEnv  string `yaml:"secretKeyEnv"`
-	Account       string `yaml:"account"` // azure
+	// PublicBaseURLEnv names an env var that, when set, replaces PublicBaseURL: deployed public stores use
+	// MEDIA_PUBLIC_URL, the shared media CDN URL injected by the Helm library (docs/engineering/environments.md).
+	PublicBaseURLEnv string `yaml:"publicBaseUrlEnv"`
+	AccessKeyEnv     string `yaml:"accessKeyEnv"` // names of env vars holding credentials
+	SecretKeyEnv     string `yaml:"secretKeyEnv"`
+	Account          string `yaml:"account"` // azure
+}
+
+// ResolvedPublicBaseURL is the value of PublicBaseURLEnv when that variable is set and not blank, else PublicBaseURL.
+func (s Store) ResolvedPublicBaseURL(getenv func(string) string) string {
+	if s.PublicBaseURLEnv != "" {
+		if v := strings.TrimSpace(getenv(s.PublicBaseURLEnv)); v != "" {
+			return v
+		}
+	}
+	return s.PublicBaseURL
 }
 
 // Config for media.
@@ -37,7 +53,7 @@ type Config struct {
 	} `yaml:"links"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
-		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URI"`
+		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`
 	} `yaml:"auth"`
 	Telemetry struct {

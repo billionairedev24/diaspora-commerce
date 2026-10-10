@@ -89,7 +89,7 @@ Auth is optional (public reads); when a bearer token is present it is verified a
 ## Configuration
 
 `config/<APP_ENV>.yaml` (local, dev, uat, prod) with env overrides: `PORT`, `ES_URLS`, `ES_USERNAME`,
-`ES_PASSWORD`, `ES_API_KEY`, `AUTH_ENABLED`, `AUTH_ISSUER_URI`, `AI_GATEWAY_URL`,
+`ES_PASSWORD`, `ES_API_KEY`, `AUTH_ENABLED`, `AUTH_ISSUER_URL`, `AI_GATEWAY_URL`,
 `OTEL_EXPORTER_OTLP_ENDPOINT_HOST`, `TRACE_SAMPLING`, `DOCS_ENABLED`, `MARKETS`, `KAFKA_BOOTSTRAP` (search and ads
 events; empty = dropped and counted in `search_events_total`), `SYNONYMS_FILE`, `SYNONYMS_OVERWRITE`,
 `SYNONYMS_MIGRATE_INDEX`, `ANALYTICS_ENABLED`, `ANALYTICS_FLUSH_INTERVAL`, `ANALYTICS_RETENTION_DAYS`,

@@ -30,7 +30,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
   ai:
     mcp:
       server:
@@ -106,7 +106,7 @@ at:
     public-url: ${MCP_PUBLIC_URL:http://localhost:8114}
     scopes-supported: mcp:shopper,mcp:seller,mcp:staff
     # Browser-based MCP clients must be listed (Origin check against DNS rebinding); server-side agents send no Origin.
-    allowed-origins: ${MCP_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:6274}
+    allowed-origins: ${MCP_ALLOWED_ORIGINS:${PUBLIC_WEB_URL:http://localhost:3000},http://localhost:6274}
     rate-limit:
       capacity: ${MCP_RATE_CAPACITY:60}
       refill-per-minute: ${MCP_RATE_PER_MINUTE:60}

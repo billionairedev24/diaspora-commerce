@@ -504,7 +504,9 @@ Module access matrix: 27 platform modules × 15 platform roles, 10 Seller Center
 | `KAFKA_BOOTSTRAP` | outbox relay |
 | `SIGNING_KEY_PEM`, `SIGNING_KEY_ID` | RS256 private key (PKCS#8 PEM) and `kid`; required outside `local` |
 | `IDENTITY_DATA_KEY` (+ optional `IDENTITY_DATA_KEY_ID`, `IDENTITY_DATA_KEYS_PREVIOUS`, `IDENTITY_DATA_PROVIDER`) | AES-256 key-encryption key for MFA secrets at rest; required outside `local` ([Data protection](#data-protection-s202)) |
-| `AUTH_ISSUER`, `HOME_URL` | issuer URL (`http://localhost:8100` locally), post-login fallback |
+| `AUTH_ISSUER_URL`, `HOME_URL` | issuer URL (`http://localhost:8100` locally), post-login fallback (default `PUBLIC_WEB_URL`) |
+| `PUBLIC_WEB_URL`, `SELLER_CENTER_URL`, `STAFF_CONSOLE_URL`, `API_BASE_URL`, `PLATFORM_DOMAIN` | shared platform settings injected per environment by the Helm library chart (`docs/engineering/environments.md`): OAuth client redirect URIs, CORS origins, WebAuthn origins; the WebAuthn RP id defaults to `PLATFORM_DOMAIN` (`WEBAUTHN_RP_ID` overrides) |
+| `IDENTITY_STAFF_EMAIL_DOMAINS` | comma-separated email domains reserved for staff (default `afrotransact.com`) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (+ `APPLE_*`, `FACEBOOK_*`) | social sign-in; unset → provider not registered |
 | `GATEWAY_BFF_CLIENT_SECRET` (or `BFF_CLIENT_SECRET`), `SELLER_SERVICE_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET`, `TAX_RETURNS_CLIENT_SECRET`, … | confidential client secrets (hashed with BCrypt before storage) |
 | `INVITATION_ACCEPT_URL` | Seller Center invitation page (default `${SELLER_CENTER_URL}/invitations/accept`; locally `http://localhost:3001/invitations/accept`) |

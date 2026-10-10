@@ -20,7 +20,7 @@ Seller storefronts and service-provider public pages. Go 1.27.2 · PostgreSQL ·
   Unique store address (`slug`).
 
 Contract: [`contracts/openapi/storefront.yaml`](../../../contracts/openapi/storefront.yaml).
-Config: `DB_URL`, `PUBLIC_BASE_URL`, `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_API_TOKEN`, `AUTH_*`; limits and plan gallery sizes
+Config: `DB_URL`, `PUBLIC_WEB_URL` (storefront origin for cache purges; shared setting injected by the Helm library), `CLOUDFLARE_ZONE_ID`, `CLOUDFLARE_API_TOKEN`, `AUTH_*`; limits and plan gallery sizes
 in `config/<env>.yaml`.
 
 ```bash

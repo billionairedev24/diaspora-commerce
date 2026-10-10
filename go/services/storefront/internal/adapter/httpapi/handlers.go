@@ -88,7 +88,7 @@ func (h *handlersImpl) publish(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/problem+json")
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"type": "https://developers.afrotransact.com/problems/storefront.theme-contrast", "status": 422,
+			"type": problem.TypeURI("storefront.theme-contrast"), "status": 422,
 			"title": "Unprocessable Entity", "code": "storefront.theme-contrast",
 			"detail": "Button labels or body text would be unreadable; adjust the colours.", "checks": vet.Checks,
 		})

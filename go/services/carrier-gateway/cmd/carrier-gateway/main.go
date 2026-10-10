@@ -60,6 +60,7 @@ func run() error {
 	if err := loader.Load(&cfg); err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	cfg.Resolve()
 	log := logging.New(serviceName, loader.Env())
 	slog.SetDefault(log)
 	shutdownTracing, err := telemetry.Setup(ctx, serviceName, loader.Env(), cfg.Telemetry.OTLPEndpoint, cfg.Telemetry.SampleRatio)

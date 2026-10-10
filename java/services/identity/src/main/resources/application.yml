@@ -86,13 +86,15 @@ at:
   events:
     relay-enabled: true
   identity:
-    issuer: ${AUTH_ISSUER:http://localhost:8100}
-    home-url: ${HOME_URL:http://localhost:3000}
+    # Shared platform settings (docs/engineering/environments.md): AUTH_ISSUER_URL, PUBLIC_WEB_URL, SELLER_CENTER_URL,
+    # STAFF_CONSOLE_URL, API_BASE_URL and PLATFORM_DOMAIN are injected per environment by the Helm library chart.
+    issuer: ${AUTH_ISSUER_URL:http://localhost:8100}
+    home-url: ${HOME_URL:${PUBLIC_WEB_URL:http://localhost:3000}}
     invitations:
       # Seller Center page that accepts organisation invitations; ?token=… is appended (identity.invitation.created)
-      accept-url: ${INVITATION_ACCEPT_URL:http://localhost:3001/invitations/accept}
-    staff-email-domains:
-      - afrotransact.com
+      accept-url: ${INVITATION_ACCEPT_URL:${SELLER_CENTER_URL:http://localhost:3001}/invitations/accept}
+    # Email domains reserved for staff (comma-separated; cannot self-register).
+    staff-email-domains: ${IDENTITY_STAFF_EMAIL_DOMAINS:afrotransact.com}
     signing:
       key-id: ${SIGNING_KEY_ID:identity-1}
       private-key-pem: ${SIGNING_KEY_PEM:}

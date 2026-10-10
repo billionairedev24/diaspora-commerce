@@ -16,7 +16,7 @@ Contract: [`contracts/openapi/geo.yaml`](../../../contracts/openapi/geo.yaml); d
 ## Configuration
 
 `config/<APP_ENV>.yaml` + env: `DB_URL`, `GEO_PROVIDERS` (comma list), `GOOGLE_PLACES_API_KEY`, `NOMINATIM_URL`,
-`NOMINATIM_USER_AGENT`, `SMARTY_AUTH_ID`, `SMARTY_AUTH_TOKEN`, `AUTH_ENABLED`, `AUTH_ISSUER_URI`, `DOCS_ENABLED`.
+`NOMINATIM_USER_AGENT`, `SMARTY_AUTH_ID`, `SMARTY_AUTH_TOKEN`, `AUTH_ENABLED`, `AUTH_ISSUER_URL`, `DOCS_ENABLED`.
 Local uses the fixture list first so typing works offline. For production volume, self-host Nominatim or rely on Places.
 
 ## Run and test

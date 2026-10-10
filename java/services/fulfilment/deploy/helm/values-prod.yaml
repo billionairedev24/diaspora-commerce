@@ -15,7 +15,6 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.afrotransact.com
   ORDERS_URL: http://orders:8080
   INVENTORY_URL: http://inventory:8080
   GEO_URL: http://geo:8080

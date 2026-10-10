@@ -29,7 +29,7 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8100}
+          issuer-uri: ${AUTH_ISSUER_URL:http://localhost:8100}
   ai:
     # OpenRouter speaks the OpenAI API. The OpenAI Java SDK appends /chat/completions and /embeddings to this URL.
     openai:
@@ -40,7 +40,7 @@ spring:
       max-retries: 0
       timeout: 60s
       custom-headers:
-        "[HTTP-Referer]": ${OPENROUTER_REFERER:https://afrotransact.com}
+        "[HTTP-Referer]": ${OPENROUTER_REFERER:${PUBLIC_WEB_URL:http://localhost:3000}}
         "[X-Title]": ${OPENROUTER_TITLE:AfroTransact}
       chat:
         options:

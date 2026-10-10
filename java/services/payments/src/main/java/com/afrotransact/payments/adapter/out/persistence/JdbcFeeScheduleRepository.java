@@ -50,6 +50,15 @@ class JdbcFeeScheduleRepository implements FeeScheduleRepository {
     }
 
     @Override
+    public void insertCancellation(UUID scheduleId, FeeSchedule.Cancellation c) {
+        jdbc.sql("""
+                insert into fee_schedule_cancellation (schedule_id, reason, cancelled_by, cancelled_at)
+                values (:id, :reason, :by, :at)
+                """).param("id", scheduleId).param("reason", c.reason()).param("by", c.by())
+                .param("at", Sql.ts(c.at())).update();
+    }
+
+    @Override
     public List<FeeSchedule> all() {
         Map<UUID, Map<String, Integer>> rates = new HashMap<>();
         jdbc.sql("select schedule_id, category, commission_bps from fee_schedule_rate").query(rs -> {
@@ -62,6 +71,11 @@ class JdbcFeeScheduleRepository implements FeeScheduleRepository {
                     .add(new CommissionOverride(rs.getString("org_id"), rs.getString("category"),
                             rs.getInt("commission_bps")));
         });
+        Map<UUID, FeeSchedule.Cancellation> cancellations = new HashMap<>();
+        jdbc.sql("select schedule_id, reason, cancelled_by, cancelled_at from fee_schedule_cancellation").query(rs -> {
+            cancellations.put(rs.getObject("schedule_id", UUID.class), new FeeSchedule.Cancellation(
+                    Sql.instant(rs, "cancelled_at"), rs.getString("cancelled_by"), rs.getString("reason")));
+        });
         return jdbc.sql("select * from fee_schedule order by version")
                 .query((rs, n) -> {
                     UUID id = rs.getObject("id", UUID.class);
@@ -72,7 +86,7 @@ class JdbcFeeScheduleRepository implements FeeScheduleRepository {
                             Money.of(rs.getLong("card_fixed_minor"), currency),
                             Money.of(rs.getLong("fba_per_unit_minor"), currency),
                             rs.getBoolean("reverse_commission_on_refund"), rs.getString("note"),
-                            rs.getString("created_by"), Sql.instant(rs, "created_at"));
+                            rs.getString("created_by"), Sql.instant(rs, "created_at"), cancellations.get(id));
                 })
                 .list();
     }

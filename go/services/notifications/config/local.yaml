@@ -45,7 +45,6 @@ attachments:
 links:
   storefront: http://localhost:3000
   sellerCenter: http://localhost:3001
-  providerHub: http://localhost:3001
 auth:
   enabled: false
   issuer: http://localhost:8100

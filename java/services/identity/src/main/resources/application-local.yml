@@ -5,7 +5,7 @@ logging:
     com.afrotransact: DEBUG
 at:
   identity:
-    issuer: ${AUTH_ISSUER:http://localhost:8100}
+    issuer: ${AUTH_ISSUER_URL:http://localhost:8100}
     signing:
       generate-if-missing: true
     verification:
@@ -19,16 +19,16 @@ at:
       key: ${IDENTITY_DATA_KEY:sshryzvJNZkej8pi+fHGy3bSux3JTUPQbYBooxVpSN0=}
       previous-keys: ${IDENTITY_DATA_KEYS_PREVIOUS:}
     webauthn:
-      rp-id: localhost
+      rp-id: ${WEBAUTHN_RP_ID:localhost}
       rp-name: AfroTransact (local)
       # identity's own pages and the storefront origins whose sign-in forms run the passkey ceremony
       allowed-origins:
-        - http://localhost:8100
-        - http://localhost:3000
+        - ${AUTH_ISSUER_URL:http://localhost:8100}
+        - ${PUBLIC_WEB_URL:http://localhost:3000}
     cors-allowed-origins:
-      - http://localhost:3000
-      - http://localhost:3001
-      - http://localhost:3002
+      - ${PUBLIC_WEB_URL:http://localhost:3000}
+      - ${SELLER_CENTER_URL:http://localhost:3001}
+      - ${STAFF_CONSOLE_URL:http://localhost:3002}
     bootstrap-admin:
       email: ${BOOTSTRAP_ADMIN_EMAIL:admin@afrotransact.com}
       password: ${BOOTSTRAP_ADMIN_PASSWORD:LocalAdmin2026!}
@@ -39,16 +39,16 @@ at:
         type: public
         grant-types: [authorization_code, refresh_token]
         public-refresh-tokens: true
-        redirect-uris: [http://localhost:3000/auth/callback]
-        post-logout-redirect-uris: [http://localhost:3000/]
+        redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/auth/callback"]
+        post-logout-redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/"]
         scopes: [openid, profile, email, phone, offline_access]
       - client-id: seller-center
         name: Seller Center & Provider Hub
         type: public
         grant-types: [authorization_code, refresh_token]
         public-refresh-tokens: true
-        redirect-uris: [http://localhost:3001/auth/callback]
-        post-logout-redirect-uris: [http://localhost:3001/]
+        redirect-uris: ["${SELLER_CENTER_URL:http://localhost:3001}/auth/callback"]
+        post-logout-redirect-uris: ["${SELLER_CENTER_URL:http://localhost:3001}/"]
         scopes: [openid, profile, email, phone, offline_access]
       - client-id: staff-console
         name: Staff console
@@ -56,8 +56,8 @@ at:
         grant-types: [authorization_code, refresh_token]
         public-refresh-tokens: true
         refresh-token-ttl: 12h
-        redirect-uris: [http://localhost:3002/auth/callback]
-        post-logout-redirect-uris: [http://localhost:3002/]
+        redirect-uris: ["${STAFF_CONSOLE_URL:http://localhost:3002}/auth/callback"]
+        post-logout-redirect-uris: ["${STAFF_CONSOLE_URL:http://localhost:3002}/"]
         scopes: [openid, profile, email, offline_access]
       - client-id: customer-app
         name: AfroTransact app
@@ -82,7 +82,7 @@ at:
         # scope auth:first-party call the first-party sign-in API (/v1/auth/*) and redeem its login tickets.
         secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:local-bff-secret}}
         grant-types: [authorization_code, refresh_token, client_credentials]
-        redirect-uris: [http://localhost:3000/api/bff/v1/auth/oidc/callback, http://localhost:8200/login/oauth2/code/afrotransact]
+        redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/api/bff/v1/auth/oidc/callback", "${API_BASE_URL:http://localhost:8200}/login/oauth2/code/afrotransact"]
         scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote"]
       - client-id: seller-service
         name: Seller service

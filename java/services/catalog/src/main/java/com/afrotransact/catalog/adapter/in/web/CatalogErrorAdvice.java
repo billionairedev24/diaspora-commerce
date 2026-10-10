@@ -1,8 +1,7 @@
 package com.afrotransact.catalog.adapter.in.web;
 
-import java.net.URI;
-
 import com.afrotransact.catalog.domain.CatalogRuleViolation;
+import com.afrotransact.platform.web.error.ProblemTypes;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
@@ -18,7 +17,7 @@ class CatalogErrorAdvice {
     @ExceptionHandler(CatalogRuleViolation.class)
     ProblemDetail ruleViolation(CatalogRuleViolation ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, ex.getMessage());
-        pd.setType(URI.create("https://developers.afrotransact.com/problems/catalog.rule-violation"));
+        pd.setType(ProblemTypes.of("catalog.rule-violation"));
         pd.setTitle("Catalog rule violated");
         pd.setProperty("code", "catalog.rule-violation");
         pd.setProperty("fieldErrors", ex.fieldErrors());
@@ -28,7 +27,7 @@ class CatalogErrorAdvice {
     @ExceptionHandler(IllegalStateException.class)
     ProblemDetail illegalState(IllegalStateException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
-        pd.setType(URI.create("https://developers.afrotransact.com/problems/catalog.invalid-transition"));
+        pd.setType(ProblemTypes.of("catalog.invalid-transition"));
         pd.setProperty("code", "catalog.invalid-transition");
         return pd;
     }
@@ -36,7 +35,7 @@ class CatalogErrorAdvice {
     @ExceptionHandler(IllegalArgumentException.class)
     ProblemDetail illegalArgument(IllegalArgumentException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-        pd.setType(URI.create("https://developers.afrotransact.com/problems/catalog.invalid-input"));
+        pd.setType(ProblemTypes.of("catalog.invalid-input"));
         pd.setProperty("code", "catalog.invalid-input");
         return pd;
     }

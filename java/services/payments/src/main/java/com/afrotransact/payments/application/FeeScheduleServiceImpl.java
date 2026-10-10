@@ -15,10 +15,14 @@ import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.port.FeeScheduleRepository;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.NotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 class FeeScheduleServiceImpl implements FeeScheduleService {
+
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.payments.fee-schedules");
 
     private final FeeScheduleRepository schedules;
     private final MoneyTransactions tx;
@@ -66,16 +70,33 @@ class FeeScheduleServiceImpl implements FeeScheduleService {
         return tx.serializable(() -> {
             Instant now = Instant.now(clock);
             Instant effective = cmd.effectiveFrom() == null ? now : cmd.effectiveFrom();
-            Optional<FeeSchedule> latest = schedules.latest();
+            List<FeeSchedule> history = schedules.all();
+            Optional<FeeSchedule> latest = FeeSchedule.latestLive(history);
             FeeSchedule.requireValidSuccessor(effective, latest, now);
             String currency = cmd.currency() == null ? "USD" : cmd.currency();
-            FeeSchedule schedule = new FeeSchedule(UUID.randomUUID(), latest.map(FeeSchedule::version).orElse(0) + 1,
+            FeeSchedule schedule = new FeeSchedule(UUID.randomUUID(), FeeSchedule.nextVersion(history),
                     effective, currency, cmd.categoryBps(), cmd.defaultCommissionBps(), cmd.overrides(),
                     cmd.cardPctBps(), Money.of(cmd.cardFixedMinor(), currency),
                     Money.of(cmd.fbaPerUnitMinor(), currency), cmd.reverseCommissionOnRefund(), cmd.note(),
                     actor.subject(), now);
             schedules.insert(schedule);
+            AUDIT.info("fee schedule v{} ({}) created by {}, effective {}", schedule.version(), schedule.id(),
+                    actor.subject(), schedule.effectiveFrom());
             return schedule;
+        });
+    }
+
+    @Override
+    public FeeSchedule cancel(UUID id, String reason) {
+        Actor actor = access.configure();
+        return tx.serializable(() -> {
+            FeeSchedule schedule = schedules.findById(id).orElseThrow(() -> new NotFoundException(
+                    "payments.fee-schedule-not-found", "No fee schedule " + id));
+            FeeSchedule cancelled = schedule.cancel(Instant.now(clock), actor.subject(), reason);
+            schedules.insertCancellation(id, cancelled.cancellation());
+            AUDIT.info("fee schedule v{} ({}) cancelled by {} before {}: {}", cancelled.version(), id,
+                    actor.subject(), cancelled.effectiveFrom(), cancelled.cancellation().reason());
+            return cancelled;
         });
     }
 }

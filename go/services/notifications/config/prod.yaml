@@ -4,7 +4,8 @@
 # Messaging) uses the default credential chain (workload identity).
 port: 8080
 docsEnabled: false
-publicBaseUrl: https://api.afrotransact.com/notifications
+# Public API base (shared API_BASE_URL, injected by the Helm library); publicBaseUrl defaults to <apiBaseUrl>/notifications.
+apiBaseUrl: https://api.afrotransact.com
 database:
   url: ""
   migrate: true
@@ -41,14 +42,15 @@ identity:
 attachments:
   enabled: true
   mediaBaseUrl: http://media
-  allowedHosts: [media.afrotransact.com, afrotransact-prod-kyc-evidence.s3.us-east-1.amazonaws.com]
+  mediaPublicUrl: https://media.afrotransact.com
+  allowedHosts: [afrotransact-prod-kyc-evidence.s3.us-east-1.amazonaws.com]
   maxBytes: 10485760
   maxTotalBytes: 20971520
   timeout: 10s
+# Shared PUBLIC_WEB_URL / SELLER_CENTER_URL (Helm library); Provider Hub is the Seller Center app.
 links:
   storefront: https://afrotransact.com
   sellerCenter: https://seller.afrotransact.com
-  providerHub: https://provider.afrotransact.com
 auth:
   enabled: true
   issuer: https://auth.afrotransact.com

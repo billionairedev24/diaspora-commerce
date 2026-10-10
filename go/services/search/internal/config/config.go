@@ -1,7 +1,11 @@
 // Package config is the search service configuration (config/<APP_ENV>.yaml + env overrides).
 package config
 
-import "time"
+import (
+	"time"
+
+	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
+)
 
 // Config for the search service.
 type Config struct {
@@ -16,7 +20,7 @@ type Config struct {
 	} `yaml:"elasticsearch"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
-		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URI"`
+		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`
 	} `yaml:"auth"`
 	AIGatewayURL string `yaml:"aiGatewayUrl" env:"AI_GATEWAY_URL"`
@@ -61,4 +65,13 @@ type Config struct {
 		OTLPEndpoint string  `yaml:"otlpEndpoint" env:"OTEL_EXPORTER_OTLP_ENDPOINT_HOST"`
 		SampleRatio  float64 `yaml:"sampleRatio" env:"TRACE_SAMPLING"`
 	} `yaml:"telemetry"`
+}
+
+// Resolve fills the settings derived from the shared platform URLs; call it after Load. Explicit values win.
+// Outside local, the content client's token endpoint defaults to the issuer's (AUTH_ISSUER_URL); locally an empty
+// token URL means "no token", so nothing is derived there.
+func (c *Config) Resolve(env string) {
+	if env != pkgconfig.EnvLocal {
+		c.Ads.Content.TokenURL = pkgconfig.FirstNonEmpty(c.Ads.Content.TokenURL, pkgconfig.TokenURL(c.Auth.Issuer))
+	}
 }

@@ -1,13 +1,12 @@
 package com.afrotransact.orders.adapter.in.web;
 
-import java.net.URI;
-
 import com.afrotransact.orders.application.CheckoutCodes;
 import com.afrotransact.orders.application.CheckoutFailed;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.OrdersStateConflict;
 import com.afrotransact.orders.domain.TransitionRefused;
 import com.afrotransact.orders.port.UpstreamFailure;
+import com.afrotransact.platform.web.error.ProblemTypes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -24,7 +23,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 class OrdersErrorAdvice {
 
     private static final Logger LOG = LoggerFactory.getLogger(OrdersErrorAdvice.class);
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     @ExceptionHandler(OrdersRuleViolation.class)
     ProblemDetail rule(OrdersRuleViolation ex) {
@@ -84,7 +82,7 @@ class OrdersErrorAdvice {
 
     private static ProblemDetail problem(HttpStatus status, String code, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setType(URI.create(TYPE_BASE + code));
+        pd.setType(ProblemTypes.of(code));
         pd.setTitle(title);
         pd.setProperty("code", code);
         return pd;

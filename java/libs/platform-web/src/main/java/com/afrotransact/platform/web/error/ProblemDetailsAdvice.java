@@ -1,6 +1,5 @@
 package com.afrotransact.platform.web.error;
 
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
@@ -18,7 +17,6 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class ProblemDetailsAdvice {
 
     private static final Logger LOG = LoggerFactory.getLogger(ProblemDetailsAdvice.class);
-    private static final String TYPE_BASE = "https://developers.afrotransact.com/problems/";
 
     @ExceptionHandler(NotFoundException.class)
     public ProblemDetail notFound(NotFoundException ex) {
@@ -43,7 +41,7 @@ public class ProblemDetailsAdvice {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ProblemDetail invalid(MethodArgumentNotValidException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, "Request validation failed");
-        pd.setType(URI.create(TYPE_BASE + "validation"));
+        pd.setType(ProblemTypes.of("validation"));
         pd.setTitle("Invalid request");
         List<Map<String, String>> errors = ex.getBindingResult().getFieldErrors().stream()
                 .map(ProblemDetailsAdvice::fieldError)
@@ -60,7 +58,7 @@ public class ProblemDetailsAdvice {
     private static ProblemDetail problem(HttpStatus status, DomainException ex) {
         LOG.debug("Domain error {}: {}", ex.code(), ex.getMessage());
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
-        pd.setType(URI.create(TYPE_BASE + ex.code()));
+        pd.setType(ProblemTypes.of(ex.code()));
         pd.setTitle(status.getReasonPhrase());
         pd.setProperty("code", ex.code());
         return pd;

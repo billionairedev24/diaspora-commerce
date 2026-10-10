@@ -253,7 +253,13 @@ Secrets (env only): `DB_URL`, `RESEND_API_KEY`, `SENDGRID_API_KEY`, `TWILIO_ACCO
 identity lookups are disabled with an error log rather than stopping OTP delivery). AWS (SES, End User
 Messaging) uses the default credential chain / workload identity. Other env overrides: `PUBLIC_BASE_URL`, `MEDIA_BASE_URL`, `ATTACHMENTS_ENABLED`, `ATTACHMENTS_ALLOWED_HOSTS`
 (comma-separated), `ATTACHMENTS_MAX_BYTES`, `ATTACHMENTS_MAX_TOTAL_BYTES`, `ATTACHMENTS_TIMEOUT`,
-`KAFKA_ENABLED`, `KAFKA_BROKERS`, `IDENTITY_ENABLED`, `IDENTITY_URL`, `AUTH_TOKEN_URI`, `LINKS_*`, `DISPATCHER_*`, `BREAKER_*`, `QUIET_HOURS_START/END`, `SEND_TIMEOUT`.
+`KAFKA_ENABLED`, `KAFKA_BROKERS`, `IDENTITY_ENABLED`, `IDENTITY_URL`, `AUTH_TOKEN_URL`, `DISPATCHER_*`, `BREAKER_*`, `QUIET_HOURS_START/END`, `SEND_TIMEOUT`.
+
+Shared platform settings (injected per environment by the Helm library chart, see
+`docs/engineering/environments.md`): `PUBLIC_WEB_URL` and `SELLER_CENTER_URL` (email/SMS/push links; Provider Hub
+links default to Seller Center, override with `PROVIDER_HUB_URL`), `API_BASE_URL` (`PUBLIC_BASE_URL` defaults to
+`<API_BASE_URL>/notifications`), `MEDIA_PUBLIC_URL` (its host is always an allowed attachment host) and
+`AUTH_ISSUER_URL`.
 
 Local: email → SMTP to Mailpit (`localhost:1025`, UI http://localhost:8025), SMS/push/WhatsApp → log provider,
 auth off (local super admin), webhook signatures not checked, test-send goes to `testSend.localEmail/localPhone`.

@@ -25,7 +25,7 @@ type Options struct {
 	Bucket        string
 	AccessKey     string
 	SecretKey     string
-	PublicBaseURL string // CDN base for public buckets, e.g. https://media.afrotransact.com
+	PublicBaseURL string // CDN base for public buckets (MEDIA_PUBLIC_URL), e.g. https://media.<env domain>
 	PathStyle     bool   // MinIO
 }
 

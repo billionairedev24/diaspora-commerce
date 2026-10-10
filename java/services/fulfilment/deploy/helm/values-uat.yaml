@@ -16,7 +16,6 @@ telemetry:
 tolerations:
   - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.uat.afrotransact.com
   ORDERS_URL: http://orders:8080
   INVENTORY_URL: http://inventory:8080
   GEO_URL: http://geo:8080

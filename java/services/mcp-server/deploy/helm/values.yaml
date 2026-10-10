@@ -40,9 +40,6 @@ workloadIdentity:
   gcp: {serviceAccount: ""}
   azure: {clientId: ""}
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.dev.afrotransact.com
-  # External URL MCP clients use (resource indicator in the OAuth protected-resource metadata).
-  MCP_PUBLIC_URL: https://mcp.dev.afrotransact.com
   SEARCH_URL: http://search:8080
   CATALOG_URL: http://catalog:8080
   CART_URL: http://cart:8080

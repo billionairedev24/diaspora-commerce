@@ -1,7 +1,11 @@
 // Package config is the indexer configuration (config/<APP_ENV>.yaml + env overrides).
 package config
 
-import "time"
+import (
+	"time"
+
+	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
+)
 
 // Config for the indexer.
 type Config struct {
@@ -21,8 +25,10 @@ type Config struct {
 		Refresh  bool     `yaml:"refresh" env:"ES_REFRESH"`
 	} `yaml:"elasticsearch"`
 	// SynonymsSet is the Elasticsearch synonyms set new indices reference (seeded by search-service).
-	SynonymsSet string            `yaml:"synonymsSet" env:"SYNONYMS_SET"`
-	CatalogURL  string            `yaml:"catalogUrl" env:"CATALOG_URL"`
+	SynonymsSet string `yaml:"synonymsSet" env:"SYNONYMS_SET"`
+	CatalogURL  string `yaml:"catalogUrl" env:"CATALOG_URL"`
+	// AuthIssuer is the shared AUTH_ISSUER_URL; outside local, SellerDirectory.TokenURL defaults to its token endpoint.
+	AuthIssuer  string            `yaml:"authIssuer" env:"AUTH_ISSUER_URL"`
 	SellerNames map[string]string `yaml:"sellerNames"`
 	// SellerDirectory is seller-service's organisation directory (S213), read with a client-credentials token of
 	// client indexer-service (scope sellers:directory) to warm seller names before events are consumed.
@@ -47,4 +53,12 @@ type Config struct {
 		OTLPEndpoint string  `yaml:"otlpEndpoint" env:"OTEL_EXPORTER_OTLP_ENDPOINT_HOST"`
 		SampleRatio  float64 `yaml:"sampleRatio" env:"TRACE_SAMPLING"`
 	} `yaml:"telemetry"`
+}
+
+// Resolve fills the settings derived from the shared platform URLs; call it after Load. Explicit values win.
+// Locally an empty token URL means "no token" (seller runs without security), so nothing is derived there.
+func (c *Config) Resolve(env string) {
+	if env != pkgconfig.EnvLocal {
+		c.SellerDirectory.TokenURL = pkgconfig.FirstNonEmpty(c.SellerDirectory.TokenURL, pkgconfig.TokenURL(c.AuthIssuer))
+	}
 }

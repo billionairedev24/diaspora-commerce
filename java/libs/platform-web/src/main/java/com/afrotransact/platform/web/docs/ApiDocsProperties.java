@@ -12,6 +12,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param specUrl        URL of the OpenAPI document the pages load
  * @param scalarVersion  pinned @scalar/api-reference version
  * @param redocVersion   pinned redoc version
+ * @param contactUrl     contact link in the document's info block (default: the public developer portal, which is
+ *                       the same in every environment and documents the problem types)
  */
 @ConfigurationProperties(prefix = "at.api-docs")
 public record ApiDocsProperties(
@@ -21,7 +23,11 @@ public record ApiDocsProperties(
         String description,
         String specUrl,
         String scalarVersion,
-        String redocVersion) {
+        String redocVersion,
+        String contactUrl) {
+
+    /** The public developer portal: one canonical site for every environment (problem types live under it). */
+    public static final String DEVELOPER_PORTAL_URL = "https://developers.afrotransact.com";
 
     public ApiDocsProperties {
         enabled = enabled == null ? Boolean.TRUE : enabled;
@@ -31,5 +37,6 @@ public record ApiDocsProperties(
         specUrl = specUrl == null ? "/v3/api-docs" : specUrl;
         scalarVersion = scalarVersion == null ? "1.73.1" : scalarVersion;
         redocVersion = redocVersion == null ? "2.5.4" : redocVersion;
+        contactUrl = contactUrl == null || contactUrl.isBlank() ? DEVELOPER_PORTAL_URL : contactUrl;
     }
 }

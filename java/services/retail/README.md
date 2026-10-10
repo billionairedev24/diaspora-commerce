@@ -145,7 +145,7 @@ de-duplicated) for COGS. See [`contracts/asyncapi/fragments/retail.yaml`](../../
 | `MediaStore` | `HttpMediaStore` | `POST {MEDIA_BASE_URL}/v1/uploads`, `PUT` to the signed storage URL, `POST /v1/assets/{id}/complete`, `GET /v1/assets/{id}` |
 | `EdiTransport` | `RoutingEdiTransport` → `SftpEdiTransport` / `As2EdiTransport` (skeletons, off by default) | SFTP file drop / AS2 POST to the partner |
 | `PurchaseOrderPdfRenderer` | `PdfPurchaseOrderRenderer` | — (PDFBox) |
-| `ServiceTokenProvider` | `ClientCredentialsTokenProvider` | `POST {AUTH_TOKEN_URI}` client credentials as `retail-service`, scopes `inventory:receive inventory:adjust media:write` |
+| `ServiceTokenProvider` | `ClientCredentialsTokenProvider` | `POST {AUTH_TOKEN_URL}` client credentials as `retail-service`, scopes `inventory:receive inventory:adjust media:write` |
 
 Inventory 4xx answers reopen the receipt with the problem's field errors; 5xx, timeouts and auth failures leave it
 `POSTING` (HTTP 503) and the next `complete` retries with the same Idempotency-Key.
@@ -156,8 +156,8 @@ Inventory 4xx answers reopen the receipt with the problem's field errors; 5xx, t
 |---|---|
 | `DB_URL`, `DB_USER`, `DB_PASSWORD` | PostgreSQL (database `retail`) |
 | `KAFKA_BOOTSTRAP` | Kafka for the outbox relay and the COGS consumer |
-| `AUTH_ISSUER_URI` | identity service issuer (JWT validation) |
-| `AUTH_TOKEN_URI`, `RETAIL_CLIENT_ID`, `RETAIL_CLIENT_SECRET` | client-credentials token for inventory (blank secret = no token, local only) |
+| `AUTH_ISSUER_URL` | identity service issuer (JWT validation) |
+| `AUTH_TOKEN_URL`, `RETAIL_CLIENT_ID`, `RETAIL_CLIENT_SECRET` | client-credentials token for inventory (blank secret = no token, local only) |
 | `CATALOG_BASE_URL`, `INVENTORY_BASE_URL`, `INVENTORY_TIMEOUT` | downstream services |
 | `MEDIA_BASE_URL`, `MEDIA_TIMEOUT` | media-service (PO PDFs, shipment documents) |
 | `PO_DISPATCH_INTERVAL`, `PO_DISPATCH_MAX_ATTEMPTS`, `PO_PDF_LINK_TTL`, `RETAIL_BUYER_ADDRESS` | PO delivery job (30s, 5, 14d) and PDF buyer block |

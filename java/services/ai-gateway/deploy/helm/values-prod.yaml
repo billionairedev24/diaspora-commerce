@@ -15,12 +15,10 @@ telemetry:
   sampling: "0.1"
 tolerations: []
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.afrotransact.com
   SEARCH_URL: http://search:8080
   CATALOG_URL: http://catalog:8080
   OFFERS_URL: http://offers:8080
   PROMISE_URL: http://promise:8080
   ORDERS_URL: http://orders:8080
   BOOKINGS_URL: http://bookings:8080
-  OPENROUTER_REFERER: https://afrotransact.com
   LOLA_SSE_TIMEOUT: 120s

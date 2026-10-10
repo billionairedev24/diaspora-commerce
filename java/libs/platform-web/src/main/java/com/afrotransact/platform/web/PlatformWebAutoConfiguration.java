@@ -49,7 +49,7 @@ public class PlatformWebAutoConfiguration {
                         .title(props.title())
                         .version(props.version())
                         .description(props.description())
-                        .contact(new Contact().name("AfroTransact Platform").url("https://developers.afrotransact.com")))
+                        .contact(new Contact().name("AfroTransact Platform").url(props.contactUrl())))
                 .components(new Components().addSecuritySchemes("bearer",
                         new SecurityScheme().type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT")))
                 .addSecurityItem(new SecurityRequirement().addList("bearer"));

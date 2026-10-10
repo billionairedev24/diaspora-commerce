@@ -19,7 +19,6 @@ tolerations:
 # (TEMPORAL_TLS_CERT / TEMPORAL_TLS_KEY). Override TEMPORAL_TARGET / TEMPORAL_NAMESPACE with the account suffix in
 # infra/argocd/envs/uat/platform-values.yaml if it differs.
 extraEnv:
-  AUTH_ISSUER_URI: https://auth.uat.afrotransact.com
   RETAIL_ORG_ID: org_afrotransact_retail
   ORDERS_ZONE: America/Chicago
   TEMPORAL_NAMESPACE: afrotransact-uat

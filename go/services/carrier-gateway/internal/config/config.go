@@ -5,6 +5,7 @@ package config
 import (
 	"time"
 
+	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/accounts"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/dhl"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/carrier/fedex"
@@ -18,8 +19,10 @@ type Config struct {
 	DocsEnabled bool   `yaml:"docsEnabled" env:"DOCS_ENABLED"`
 	DatabaseURL string `yaml:"databaseUrl" env:"DB_URL"`
 	RedisURL    string `yaml:"redisUrl" env:"REDIS_URL"`
-	// PublicBaseURL is where carriers reach our webhooks (UPS Track Alert subscriptions need it).
+	// PublicBaseURL is where carriers reach our webhooks (UPS Track Alert subscriptions need it). Unset, it is
+	// APIBaseURL + "/carrier-gateway"; APIBaseURL is the shared API_BASE_URL (docs/engineering/environments.md).
 	PublicBaseURL string `yaml:"publicBaseUrl" env:"PUBLIC_BASE_URL"`
+	APIBaseURL    string `yaml:"apiBaseUrl" env:"API_BASE_URL"`
 
 	Kafka struct {
 		Enabled bool     `yaml:"enabled" env:"KAFKA_ENABLED"`
@@ -106,11 +109,16 @@ type Config struct {
 
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
-		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URI"`
+		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`
 		Audience string `yaml:"audience" env:"AUTH_AUDIENCE"`
 	} `yaml:"auth"`
 	Telemetry struct {
 		OTLPEndpoint string  `yaml:"otlpEndpoint" env:"OTEL_EXPORTER_OTLP_ENDPOINT_HOST"`
 		SampleRatio  float64 `yaml:"sampleRatio" env:"TRACE_SAMPLING"`
 	} `yaml:"telemetry"`
+}
+
+// Resolve fills the settings derived from the shared platform URLs; call it after Load. Explicit values win.
+func (c *Config) Resolve() {
+	c.PublicBaseURL = pkgconfig.FirstNonEmpty(c.PublicBaseURL, pkgconfig.JoinURL(c.APIBaseURL, "/carrier-gateway"))
 }

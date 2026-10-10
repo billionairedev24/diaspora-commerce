@@ -28,7 +28,7 @@ Contract: [`contracts/openapi/cart.yaml`](../../../contracts/openapi/cart.yaml).
 ## Configuration
 
 `DB_URL`, `REDIS_URL`, `CATALOG_URL`, `INVENTORY_URL`, `OFFERS_URL`, `RETAIL_ORG_ID`, `GUEST_TTL_DAYS`, `AUTH_ENABLED`,
-`AUTH_ISSUER_URI`, `DOCS_ENABLED`.
+`AUTH_ISSUER_URL`, `DOCS_ENABLED`.
 
 ## Run and test
 

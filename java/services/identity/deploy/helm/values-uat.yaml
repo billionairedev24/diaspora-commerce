@@ -16,6 +16,4 @@ telemetry:
 tolerations:
   - {key: afrotransact.com/spot, operator: Exists, effect: NoSchedule}
 extraEnv:
-  AUTH_ISSUER: https://auth.uat.afrotransact.com
-  HOME_URL: https://uat.afrotransact.com
   SIGNING_KEY_ID: identity-uat-1
