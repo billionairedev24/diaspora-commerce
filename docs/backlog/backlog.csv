@@ -380,7 +380,7 @@
 - Filter by actor, entity and date","E18","","High","3","trust java","trust","Done"
 "S120","Story","Seller health, suspend and reinstate","Health metrics (late shipment, cancellations, disputes) and account actions.","- Suspension hides listings and holds payouts
 - Reinstatement restores them","E18","","Medium","5","trust","trust","In Progress"
-"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","Done"
+"E19","Epic","Notifications: email, SMS, push, WhatsApp","Provider-agnostic ports with Resend-first email, Twilio SMS, failover, templates and compliance.","","","Notifications: email, SMS, push, WhatsApp","High","","notifications","notifications","In Progress"
 "S121","Story","Notification service with provider ports","EmailSender, SmsSender, PushSender, ChatSender interfaces with adapters.","- Email adapters: Resend (primary), SendGrid, Amazon SES
 - SMS adapters: Twilio, Vonage, AWS End User Messaging
 - Push: FCM and APNs; WhatsApp: Meta Cloud API
@@ -650,7 +650,7 @@
 - Offers seller performance updated via API
 - Buy box weights reviewed with product owner","E05","","Medium","5","offers orders","offers","Done"
 "S224","Story","GTIN lookup readable by service tokens","Catalog makes /v1/identifiers/gtin/{code} callable by service clients (offers) without requiring the seller to hold catalog:write.","- Service token with catalog:read can look up GTINs
-- Offers GTIN lookup works for sellers without catalog:write","E03","","Medium","1","catalog offers","catalog","To Do"
+- Offers GTIN lookup works for sellers without catalog:write","E03","","Medium","1","catalog offers","catalog","In Progress"
 "S225","Story","Send purchase orders to suppliers (PDF, email, EDI)","Render a PO PDF, email it to the supplier contact via notifications, and transmit EDI 850 where the supplier is EDI-enabled; store ASN documents in media.","- PO PDF rendered with lines, terms and totals
 - Approved PO is emailed to the supplier contact
 - EDI suppliers receive an 850
@@ -667,7 +667,7 @@
 - Reinstating does not release unrelated compliance payout holds
 - Suspension hides catalog, offers, bookings and search listings via events
 - Catalog emits catalog.product.flagged and supports takedown of a live listing with reason
-- trust-ops moderation queue handles flagged live listings","E18","","High","8","trust-ops seller catalog","trust","To Do"
+- trust-ops moderation queue handles flagged live listings","E18","","High","8","trust-ops seller catalog","trust","In Progress"
 "S229","Story","Claims resolve payment and ownership automatically","Orders exposes a service lookup of an order with its payment id, line ids and customer id so trust-ops verifies ownership and refunds without staff supplying ids; fulfilment publishes events for seller health.","- trust-ops verifies the claimant owns the order
 - Refund lines are derived from the order automatically
 - Seller health uses fulfilment ship-by events for lateness","E18","","Medium","5","trust-ops orders fulfilment","trust","To Do"
