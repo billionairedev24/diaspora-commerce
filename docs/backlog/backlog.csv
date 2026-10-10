@@ -147,7 +147,7 @@
 - Out-of-stock items show 'Currently unavailable'","E04","","Medium","1","search","search","In Progress"
 "S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation
 - Ranking boosts in-stock and Fulfilled-by-AfroTransact items
-- A relevance test set runs in CI","E04","","Medium","5","search","search","To Do"
+- A relevance test set runs in CI","E04","","Medium","5","search","search","In Progress"
 "E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","Done"
 "S040","Story","Offers service: create offer on existing product","Sellers attach price, stock and condition to an existing ATIN instead of duplicating the page.","- Offer created from catalog.product.created for the creating seller
 - Other sellers can add an offer by ATIN or GTIN
@@ -399,7 +399,7 @@
 - Publishing purges the CDN cache
 - Storefront renders placements server-side","E20","","High","5","content java","content","Done"
 "S127","Story","Sponsored products","Seller campaigns with budgets and CPC bids blended with organic results, always labelled Sponsored.","- Second-price auction with relevance floor
-- Impressions, clicks and attributed sales reported","E20","","Low","8","content ads","content","To Do"
+- Impressions, clicks and attributed sales reported","E20","","Low","8","content ads","content","In Progress"
 "S128","Story","Markets & locations","Activate or deactivate AfroTransact per country and state, with per-capability switches.","- Country status: Live, Paused, Coming soon, Planned
 - Per state: marketplace, services, food, pickup, tax registration
 - Turning off marketplace in a state turns off everything there","E20","","High","5","content markets","content","Done"
@@ -619,7 +619,7 @@
 - Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","Done"
 "S213","Story","Durable seller directory for the indexer","Indexer loads seller display names on startup from a seller endpoint instead of relying only on events seen since start.","- Seller exposes a paged org directory endpoint for service clients
 - Indexer warms its directory on start and refreshes on events
-- Restart does not change indexed seller names","E04","","Medium","3","indexer seller","search","To Do"
+- Restart does not change indexed seller names","E04","","Medium","3","indexer seller","search","In Progress"
 "S214","Story","Expose payout hold in payouts balance","Payments adds payoutsPaused (and reason) to the payouts balance response so Seller Center can show the hold before a request fails.","- Balance response includes payoutsPaused and reason
 - Seller Center shows a banner when paused","E14","","Medium","1","payments","billing","Done"
 "S215","Story","Org kind 'both' and market alignment","Seller emits BOTH when an org sells products and services; identity's market is aligned with content's market codes.","- Seller org events can carry BOTH
@@ -633,7 +633,7 @@
 - Contract test fails if a mapped event type is missing from events.yaml","E19","","High","5","notifications events","notifications","Done"
 "S218","Story","Returns endpoints and per-shipment inventory release","Orders adds return requests per shipment and releases or commits inventory per shipment rather than per order; payments delivered/settlement per shipment.","- Customer can request a return per shipment within policy
 - Cancelling one of several AfroTransact shipments releases only its stock
-- Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","To Do"
+- Settlement can start per shipment","E08","","High","8","orders inventory payments","orders","In Progress"
 "S219","Story","Cluster-wide shipment status stream","SSE shipment stream fans out across replicas via Kafka or Valkey pub/sub, and orders consumes carrier.pickup.ready.","- Staff on any replica see every transition within 2s
 - carrier.pickup.ready moves eligible shipments forward","E08","","Medium","3","orders","orders","To Do"
 "S220","Story","Payments support for long-dated bookings","Payments adds release of remaining authorisation after partial capture, off-session charges on saved cards for balances beyond the auth window, and debiting provider late-cancellation fees.","- Remaining authorisation can be released after a deposit capture
@@ -659,7 +659,7 @@
 - Receipt lines carry holdReason so no separate quarantine call
 - Inventory reservation events include stockOwnerOrgId
 - Payments schedules supplier payment on retail.payment.released
-- Receipt date rules use the warehouse time zone","E10","","Medium","8","retail catalog inventory payments","retail","To Do"
+- Receipt date rules use the warehouse time zone","E10","","Medium","8","retail catalog inventory payments","retail","In Progress"
 "S227","Story","Fix contract lint findings","Make every contract pass tools/contracts/lint_contracts.sh: tags, summaries and explicit security on all operations; fix YAML flow-mapping commas that truncate descriptions; align notifications topic names with producers.","- lint_contracts.sh passes for every contract
 - CI runs the lint on contract changes
 - No consumer subscribes to a topic without a producer","E27","","High","3","contracts docs","docs","Done"
@@ -670,7 +670,7 @@
 - trust-ops moderation queue handles flagged live listings","E18","","High","8","trust-ops seller catalog","trust","Done"
 "S229","Story","Claims resolve payment and ownership automatically","Orders exposes a service lookup of an order with its payment id, line ids and customer id so trust-ops verifies ownership and refunds without staff supplying ids; fulfilment publishes events for seller health.","- trust-ops verifies the claimant owns the order
 - Refund lines are derived from the order automatically
-- Seller health uses fulfilment ship-by events for lateness","E18","","Medium","5","trust-ops orders fulfilment","trust","To Do"
+- Seller health uses fulfilment ship-by events for lateness","E18","","Medium","5","trust-ops orders fulfilment","trust","In Progress"
 "S230","Story","Notifications for trust-ops events","Notifications subscribes to at.trustops.events and maps claim, moderation and enforcement events to templates for customers and seller owners.","- Claim opened/seller response due/decided notify the right parties
 - Moderation decisions notify the seller owners
 - Contract test covers the new rules","E19","","Medium","3","notifications trust-ops","notifications","Done"
@@ -697,7 +697,7 @@
 - Payments reports refunded amount per line
 - Return pickups are scheduled with fulfilment
 - Customers start returns from web and mobile order pages
-- Finance confirms seeded tax rates before production","E17","","High","13","tax-returns orders payments inventory carrier-gateway fulfilment","returns","To Do"
+- Finance confirms seeded tax rates before production","E17","","High","13","tax-returns orders payments inventory carrier-gateway fulfilment","returns","In Progress"
 "S236","Story","Team management end to end","BFF and Seller Center use identity's member directory and invitations (list, invite, revoke, accept page, remove, role change with error mapping); notifications sends invitation emails; seller service mirrors identity role events or stops keeping its own member list.","- Team page shows real names, roles and pending invitations
 - Invitation email arrives with an accept link that works for new and existing users
 - Last-owner and owner-only rules surface clear errors
