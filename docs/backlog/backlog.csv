@@ -608,7 +608,7 @@
 "S209","Story","First-party sign-in API for storefront forms","Identity exposes a first-party password, MFA and passkey sign-in API for the BFF so the storefront can keep its own two-column sign-in forms instead of hosted login.","- BFF can sign in with password and returns MFA challenge when required
 - Passkey assertion flow works via BFF
 - Brute-force protection and lockout apply
-- BFF callback URI registered for gateway-bff client in dev, uat and prod","E02","","High","8","identity bff","identity","To Do"
+- BFF callback URI registered for gateway-bff client in dev, uat and prod","E02","","High","8","identity bff","identity","In Progress"
 "S210","Story","Reverse geocoding for deliver-to by location","Geo adds GET /v1/reverse (lat/lng to ZIP and address) via Google Places or Nominatim so the deliver-to picker can use the device location.","- GET /v1/reverse returns ZIP, city, state and country
 - Provider fallback Google then Nominatim
 - BFF deliver-to by coordinates uses it","E22","","Medium","3","geo","geo","To Do"
