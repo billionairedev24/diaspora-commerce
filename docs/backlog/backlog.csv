@@ -148,18 +148,18 @@
 "S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation
 - Ranking boosts in-stock and Fulfilled-by-AfroTransact items
 - A relevance test set runs in CI","E04","","Medium","5","search","search","To Do"
-"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","To Do"
+"E05","Epic","Offers, pricing & buy box","Seller offers on shared product pages, price rules, coupons and buy-box selection.","","","Offers, pricing & buy box","High","","offers","offers","In Progress"
 "S040","Story","Offers service: create offer on existing product","Sellers attach price, stock and condition to an existing ATIN instead of duplicating the page.","- Offer created from catalog.product.created for the creating seller
 - Other sellers can add an offer by ATIN or GTIN
-- Offer price, handling time and fulfilment type are stored","E05","","Highest","5","offers java","offers","To Do"
+- Offer price, handling time and fulfilment type are stored","E05","","Highest","5","offers java","offers","In Progress"
 "S041","Story","Buy box selection","Pick the winning offer by landed price, delivery promise, seller health and stock; 1P competes under the same rules.","- Winner recomputed on price/stock/health change
 - Ineligible offers (no stock, restricted seller) never win
-- Selection rules are audited and documented","E05","","High","5","offers java","offers","To Do"
+- Selection rules are audited and documented","E05","","High","5","offers java","offers","In Progress"
 "S042","Story","Coupons & promotions","Platform- or seller-funded coupons with scope, minimum spend, limits and dates.","- Coupon types: percent, fixed, free shipping
 - Usage limits per coupon and per customer are enforced
-- Funding source (AfroTransact or seller) is recorded for settlement","E05","","Medium","5","offers java","offers","To Do"
+- Funding source (AfroTransact or seller) is recorded for settlement","E05","","Medium","5","offers java","offers","In Progress"
 "S043","Story","Other sellers on product page","Product page lists other offers for the same item with price, delivery and seller rating.","- All eligible offers listed with landed price
-- Customers can add a non-buy-box offer to cart","E05","","Medium","3","offers","offers","To Do"
+- Customers can add a non-buy-box offer to cart","E05","","Medium","3","offers","offers","In Progress"
 "E06","Epic","Cart & checkout","Amazon-style cart split per seller, stock-capped quantities, and a clean three-step checkout saga.","","","Cart & checkout","High","","checkout","checkout","In Progress"
 "S044","Story","Cart service (Redis + Postgres)","Carts with price snapshots, save for later and merge on login.","- Quantities can never exceed sellable stock
 - Lines that lose stock are flagged and excluded from checkout
@@ -464,21 +464,21 @@
 - About and Careers pages; careers application form validated","E23","","Medium","5","storefront-web web content","storefront-web","Done"
 "S150","Story","Services browsing and provider pages","Find a provider, see their designed page and book.","- Provider page renders the provider's chosen layout and approved links
 - Book flow uses live availability","E23","","High","5","storefront-web web bookings","storefront-web","To Do"
-"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","To Do"
+"E24","Epic","Seller Center & Provider Hub (web)","Back offices for sellers and service providers, available only after approval, gated by org roles.","","","Seller Center & Provider Hub (web)","High","","seller-center","seller-center","In Progress"
 "S151","Story","Seller Center app shell with grouped, fixed sidebar","Fixed sidebar grouped into collapsible sections; collapsed by default except the active group.","- Sidebar doesn't scroll with the page
-- Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","To Do"
+- Only Onboarding is shown until approved; Onboarding hidden after approval","E24","","High","5","seller-center web","seller-center","In Progress"
 "S152","Story","Orders management with labels and status updates","TanStack server-driven table; open rows in a sheet; buy labels; update allowed statuses.","- Sellers can confirm, pack and mark ready only
-- Tables never scroll horizontally; columns fixed width with wrapping","E24","","High","8","seller-center web","seller-center","To Do"
+- Tables never scroll horizontally; columns fixed width with wrapping","E24","","High","8","seller-center web","seller-center","In Progress"
 "S153","Story","Listings and product builder (4 steps)","Guided product builder: category → images → details → variations with live shopper preview.","- Each step validates before Continue
 - Category request switches the form to the requested category
-- Submit for review or save pending category approval","E24","","High","8","seller-center web catalog","seller-center","To Do"
+- Submit for review or save pending category approval","E24","","High","8","seller-center web catalog","seller-center","In Progress"
 "S154","Story","Dashboards with charts and exports","Recharts dashboards; export PDF, CSV and Excel (with native charts).","- Seller: sales and units, top products, orders by fulfilment, stock by warehouse
 - Provider: bookings and deposits, bookings by service, status donut, earnings
-- Each chart exports PDF, Excel (.xlsx with chart) and CSV","E24","","High","8","seller-center web exports","seller-center","To Do"
+- Each chart exports PDF, Excel (.xlsx with chart) and CSV","E24","","High","8","seller-center web exports","seller-center","In Progress"
 "S155","Story","Team & roles with capability cards","Invite members; cards list what each role can change, view or can't access.","- Your own role is highlighted
-- Seller roles: owner, admin, catalog, fulfilment, finance, ads, support","E24","","Medium","3","seller-center web rbac","seller-center","To Do"
+- Seller roles: owner, admin, catalog, fulfilment, finance, ads, support","E24","","Medium","3","seller-center web rbac","seller-center","In Progress"
 "S156","Story","Provider Hub: calendar, hours, services, policy, public page, earnings","Provider tools inside the portal without a second sidebar.","- Calendar shows quick views and day summaries
-- Earnings show commission, Stripe fees and late-cancel fees","E24","","High","8","seller-center web bookings","seller-center","To Do"
+- Earnings show commission, Stripe fees and late-cancel fees","E24","","High","8","seller-center web bookings","seller-center","In Progress"
 "E25","Epic","Staff console (platform back office)","All platform tools gated by RBAC: applications, sellers, moderation, orders, payouts, inventory, dispatch, config.","","","Staff console (platform back office)","High","","staff-console","staff-console","To Do"
 "S157","Story","Staff console shell with RBAC-filtered navigation","Grouped sidebar (Overview, Commerce, Partners, Finance, Growth, Trust & compliance, Settings) filtered by permissions.","- Menu items hidden when the role has no access
 - Dashboard opens by default","E25","","High","5","staff-console web","staff-console","To Do"
