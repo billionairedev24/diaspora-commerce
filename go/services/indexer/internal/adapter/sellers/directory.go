@@ -3,26 +3,44 @@ package sellers
 
 import (
 	"context"
+	"sync"
 
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/port"
 )
 
-type staticDirectory struct {
+type memoryDirectory struct {
+	mu       sync.RWMutex
 	names    map[string]string
 	fallback string
 }
 
-var _ port.SellerDirectory = (*staticDirectory)(nil)
+var _ port.SellerDirectory = (*memoryDirectory)(nil)
 
-// NewStaticDirectory resolves names from configuration (AfroTransact Retail and known orgs). The seller service
-// publishes seller.org.updated events; a projection-backed directory replaces this once that service exists.
-func NewStaticDirectory(names map[string]string, fallback string) port.SellerDirectory {
-	return &staticDirectory{names: names, fallback: fallback}
+// NewMemoryDirectory resolves names from configuration (AfroTransact Retail and known orgs) plus names learned from
+// seller.org.approved / seller.org.updated. Learned names live in memory: after a restart the projector keeps the
+// seller_name already indexed until the next seller.org.updated event (see port.UpsertOptions).
+func NewMemoryDirectory(names map[string]string, fallback string) port.SellerDirectory {
+	m := make(map[string]string, len(names))
+	for k, v := range names {
+		m[k] = v
+	}
+	return &memoryDirectory{names: m, fallback: fallback}
 }
 
-func (d *staticDirectory) DisplayName(_ context.Context, orgID string) (string, error) {
+func (d *memoryDirectory) DisplayName(_ context.Context, orgID string) (string, bool, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 	if n, ok := d.names[orgID]; ok {
-		return n, nil
+		return n, true, nil
 	}
-	return d.fallback, nil
+	return d.fallback, false, nil
+}
+
+func (d *memoryDirectory) Remember(_ context.Context, orgID, name string) {
+	if orgID == "" || name == "" {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.names[orgID] = name
 }

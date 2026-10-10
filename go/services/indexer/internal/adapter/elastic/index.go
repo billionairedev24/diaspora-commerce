@@ -30,7 +30,10 @@ ctx._source.updated_at = params.now;`
 
 const upsertScript = `
 if (ctx._source.version != null && ((Number) ctx._source.version).longValue() > params.version) { ctx.op = 'noop'; return; }
-for (def e : params.doc.entrySet()) { ctx._source[e.getKey()] = e.getValue(); }
+for (def e : params.doc.entrySet()) {
+  if (params.preserve.contains(e.getKey()) && ctx._source[e.getKey()] != null) { continue; }
+  ctx._source[e.getKey()] = e.getValue();
+}
 ctx._source.version = params.version;` + recompute
 
 const availabilityScript = `
@@ -56,7 +59,11 @@ func NewIndex(es *elasticsearch.Client, refresh bool) port.ProductIndex {
 // managed fields are owned by the index (availability) and never overwritten by product upserts.
 var managed = []string{"available_qty", "in_stock", "variant_qty", "variant_qty_version", "version", "updated_at"}
 
-func (i *indexImpl) UpsertProduct(ctx context.Context, market string, doc searchindex.ProductDocument, version int64) error {
+const renameScript = `ctx._source.seller_name = params.name; ctx._source.updated_at = params.now;`
+
+func (i *indexImpl) UpsertProduct(ctx context.Context, market string, doc searchindex.ProductDocument, version int64,
+	opts port.UpsertOptions,
+) error {
 	raw, err := json.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("encode doc: %w", err)
@@ -68,13 +75,20 @@ func (i *indexImpl) UpsertProduct(ctx context.Context, market string, doc search
 	for _, k := range managed {
 		delete(fields, k)
 	}
+	preserve := []string{}
+	if opts.PreserveSellerName {
+		preserve = append(preserve, "seller_name")
+	}
 	body := map[string]any{
 		"scripted_upsert": true,
 		"upsert":          map[string]any{},
 		"script": map[string]any{
 			"lang":   "painless",
 			"source": upsertScript,
-			"params": map[string]any{"doc": fields, "version": version, "now": time.Now().UTC().Format(time.RFC3339)},
+			"params": map[string]any{
+				"doc": fields, "version": version, "preserve": preserve,
+				"now": time.Now().UTC().Format(time.RFC3339),
+			},
 		},
 	}
 	buf, err := json.Marshal(body)
@@ -134,6 +148,48 @@ func (i *indexImpl) ApplyAvailability(ctx context.Context, market, variantATIN, 
 		return true, fmt.Errorf("version conflict updating %s; will retry", variantATIN)
 	}
 	return out.Total > 0, nil
+}
+
+func (i *indexImpl) RenameSeller(ctx context.Context, market, sellerID, name string) (int, error) {
+	body := map[string]any{
+		"query": map[string]any{"bool": map[string]any{
+			"filter":   []any{map[string]any{"term": map[string]any{"seller_id": sellerID}}},
+			"must_not": []any{map[string]any{"term": map[string]any{"seller_name": name}}},
+		}},
+		"script": map[string]any{
+			"lang":   "painless",
+			"source": renameScript,
+			"params": map[string]any{"name": name, "now": time.Now().UTC().Format(time.RFC3339)},
+		},
+	}
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return 0, fmt.Errorf("encode: %w", err)
+	}
+	res, err := i.es.UpdateByQuery([]string{searchindex.Alias(market)},
+		i.es.UpdateByQuery.WithContext(ctx),
+		i.es.UpdateByQuery.WithBody(bytes.NewReader(buf)),
+		i.es.UpdateByQuery.WithRefresh(i.refresh),
+		i.es.UpdateByQuery.WithConflicts("proceed"))
+	if err != nil {
+		return 0, fmt.Errorf("update_by_query: %w", err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.IsError() {
+		msg, _ := io.ReadAll(io.LimitReader(res.Body, 4096))
+		return 0, fmt.Errorf("update_by_query: %s: %s", res.Status(), msg)
+	}
+	var out struct {
+		Updated          int `json:"updated"`
+		VersionConflicts int `json:"version_conflicts"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&out); err != nil {
+		return 0, fmt.Errorf("decode: %w", err)
+	}
+	if out.VersionConflicts > 0 {
+		return out.Updated, fmt.Errorf("version conflict renaming seller %s; will retry", sellerID)
+	}
+	return out.Updated, nil
 }
 
 func (i *indexImpl) Ping(ctx context.Context) error {

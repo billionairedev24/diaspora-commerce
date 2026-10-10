@@ -9,6 +9,8 @@ channels:
       catalogProductRejected: {$ref: '#/components/messages/catalogProductRejected'}
       catalogProductPaused: {$ref: '#/components/messages/catalogProductPaused'}
       catalogProductResumed: {$ref: '#/components/messages/catalogProductResumed'}
+      catalogProductHidden: {$ref: '#/components/messages/catalogProductHidden'}
+      catalogProductRestored: {$ref: '#/components/messages/catalogProductRestored'}
   catalogCategoryRequestEvents:
     address: at.category-request.events
     description: New-category requests (key = request id).
@@ -24,6 +26,14 @@ operations:
   publishCatalogCategoryRequestEvents:
     action: send
     channel: {$ref: '#/channels/catalogCategoryRequestEvents'}
+  consumeCatalogSellerComplianceEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerComplianceEvents'}
+    summary: >-
+      catalog-service (consumer group catalog-service, inbox-deduplicated) handles seller.listings.hidden / restored:
+      records the organisation's suppression (org_listing_suppression), hides its products from the public catalog
+      API and publishes catalog.product.hidden / restored for every product of the organisation. Older decisions
+      never override newer ones (occurredAt).
 components:
   messages:
     catalogProductCreated:
@@ -45,6 +55,16 @@ components:
       payload: {$ref: '#/components/schemas/CatalogProductEvent'}
     catalogProductResumed:
       name: catalog.product.resumed
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogProductEvent'}
+    catalogProductHidden:
+      name: catalog.product.hidden
+      title: The owner's listings were hidden by seller-service compliance enforcement (sellerHidden = true)
+      headers: {$ref: '#/components/schemas/EventHeaders'}
+      payload: {$ref: '#/components/schemas/CatalogProductEvent'}
+    catalogProductRestored:
+      name: catalog.product.restored
+      title: The owner's listings were restored (sellerHidden = false; status is the product's own status)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/CatalogProductEvent'}
     catalogCategoryRequestCreated:
@@ -73,6 +93,11 @@ components:
         categoryId: {type: [string, 'null'], format: uuid}
         productTypeCode: {type: string}
         note: {type: [string, 'null']}
+        sellerHidden:
+          type: boolean
+          description: >-
+            The owner's listings are hidden by seller-service compliance enforcement (seller.listings.hidden). Keep
+            the product off public surfaces regardless of status; set on every catalog.product.* event while hidden.
         variants:
           type: array
           items:

@@ -3,12 +3,15 @@ package com.afrotransact.catalog.it;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import com.afrotransact.catalog.application.CategoryService;
 import com.afrotransact.catalog.application.CreateProductCommand;
+import com.afrotransact.catalog.application.ListingEnforcement;
+import com.afrotransact.catalog.application.ListingVisibilityService;
 import com.afrotransact.catalog.application.ProductService;
 import com.afrotransact.catalog.application.PublicCatalogService;
 import com.afrotransact.catalog.domain.CategoryLevel;
@@ -33,7 +36,8 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 /** End-to-end use cases against real PostgreSQL: migrations, seed taxonomy, create, moderate, category requests. */
-@SpringBootTest(properties = {"at.events.relay-enabled=false", "spring.kafka.bootstrap-servers=localhost:1"})
+@SpringBootTest(properties = {"at.events.relay-enabled=false", "at.consumers.enabled=false",
+    "spring.kafka.bootstrap-servers=localhost:1"})
 @ActiveProfiles("local")
 @Testcontainers
 class CatalogFlowIT {
@@ -48,14 +52,16 @@ class CatalogFlowIT {
     private final ProductService products;
     private final CategoryService categories;
     private final PublicCatalogService publicCatalog;
+    private final ListingVisibilityService visibility;
     private final JdbcClient jdbc;
 
     @Autowired
     CatalogFlowIT(ProductService products, CategoryService categories, PublicCatalogService publicCatalog,
-                  JdbcClient jdbc) {
+                  ListingVisibilityService visibility, JdbcClient jdbc) {
         this.products = products;
         this.categories = categories;
         this.publicCatalog = publicCatalog;
+        this.visibility = visibility;
         this.jdbc = jdbc;
     }
 
@@ -91,6 +97,59 @@ class CatalogFlowIT {
         List<String> events = jdbc.sql("select type from platform_outbox where aggregate_id = :id order by occurred_at")
                 .param("id", created.id().toString()).query(String.class).list();
         assertThat(events).containsExactly("catalog.product.created", "catalog.product.approved");
+    }
+
+    @Test
+    void sellerListingsHiddenSuppressesPublicReadsAndRepublishesProducts() {
+        CategoryNode dresses = leaf("Fashion › Women › Dresses");
+        Product created = products.create(new CreateProductCommand(dresses.id(), null,
+                "Adire Maxi Dress",
+                Map.of("brand", "Lagos Textile Hub", "material", "Cotton", "fit", "Regular",
+                        "length", "Maxi", "sleeve", "Long", "occasion", "Wedding / owambe",
+                        "care", "Cold wash", "origin", "Nigeria"),
+                List.of(IMAGE), "Size × Color",
+                List.of(new VariantDraft(Map.of("Size", "M", "Color", "Indigo"), "ADM-M-IND", null, true, 7999, 4)),
+                "USD"));
+        Product live = products.approve(created.id());
+        String org = live.owner().orgId();
+        String atin = live.atin().value();
+        String variantAtin = live.variants().getFirst().atin().value();
+        assertThat(publicCatalog.liveProduct(atin).id()).isEqualTo(live.id());
+
+        Instant t0 = Instant.parse("2026-10-01T10:00:00Z");
+        ListingEnforcement hide = new ListingEnforcement(UUID.randomUUID(), org, "CHARGES_DISABLED", t0);
+        try {
+            assertThat(visibility.hide(hide)).isPositive();
+            assertThat(visibility.hide(hide)).as("redelivery is a no-op").isZero();
+            assertThat(visibility.hidden(org)).isTrue();
+            assertThatThrownBy(() -> publicCatalog.liveProduct(atin)).isInstanceOf(NotFoundException.class);
+            assertThatThrownBy(() -> publicCatalog.liveVariant(variantAtin)).isInstanceOf(NotFoundException.class);
+            assertThat(payload("catalog.product.hidden", live.id())).contains("\"sellerHidden\": true",
+                    "\"status\": \"LIVE\"");
+
+            // The seller's own lifecycle keeps working; its events say the listing is still hidden.
+            products.pause(live.id());
+            products.resume(live.id());
+            assertThat(payload("catalog.product.resumed", live.id())).contains("\"sellerHidden\": true");
+
+            // An older restore delivered late is ignored.
+            assertThat(visibility.restore(new ListingEnforcement(UUID.randomUUID(), org, "CLEARED",
+                    t0.minusSeconds(60)))).isZero();
+            assertThat(visibility.hidden(org)).isTrue();
+        } finally {
+            assertThat(visibility.restore(new ListingEnforcement(UUID.randomUUID(), org, "CLEARED",
+                    t0.plusSeconds(60)))).isPositive();
+        }
+        assertThat(visibility.hidden(org)).isFalse();
+        assertThat(publicCatalog.liveProduct(atin).id()).isEqualTo(live.id());
+        assertThat(payload("catalog.product.restored", live.id())).contains("\"sellerHidden\": false",
+                "\"status\": \"LIVE\"");
+    }
+
+    private String payload(String type, UUID productId) {
+        return jdbc.sql("select payload::text from platform_outbox where type = :t and aggregate_id = :id "
+                        + "order by occurred_at desc limit 1")
+                .param("t", type).param("id", productId.toString()).query(String.class).single();
     }
 
     @Test

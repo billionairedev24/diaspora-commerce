@@ -93,6 +93,10 @@ transaction; failures back off exponentially and park as FAILED after 12 attempt
 `payments.refunded`, `payments.transfer.created`, `payments.dispute.opened|closed`. `at.payout.events` (key org):
 `payments.payout.requested|approved|paid|failed`.
 
+Consumed (group `payments-service`, inbox-deduplicated): `seller.payouts.paused|resumed` on `at.seller-compliance.events`
+set or clear the organisation's `payout_hold` (V4; older decisions never override newer ones). While paused, payout
+requests and approvals fail with 422 `payments.payouts_paused`; balances keep accruing.
+
 ## Jobs & metrics
 
 Webhook inbox (`WEBHOOK_INTERVAL`, 1 s) · settlement transfers (`SETTLEMENT_CRON`, every 15 min) · reconciliation

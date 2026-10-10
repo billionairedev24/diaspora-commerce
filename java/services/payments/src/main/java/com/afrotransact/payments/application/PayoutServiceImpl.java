@@ -15,6 +15,7 @@ import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.PaymentsRuleViolation;
 import com.afrotransact.payments.domain.PayoutAsk;
 import com.afrotransact.payments.domain.PayoutBalance;
+import com.afrotransact.payments.domain.PayoutHold;
 import com.afrotransact.payments.domain.PayoutPolicy;
 import com.afrotransact.payments.domain.PayoutRequest;
 import com.afrotransact.payments.domain.PayoutStatus;
@@ -23,6 +24,7 @@ import com.afrotransact.payments.domain.Settlement;
 import com.afrotransact.payments.port.ConnectedAccountRepository;
 import com.afrotransact.payments.port.IdempotencyStore;
 import com.afrotransact.payments.port.LedgerRepository;
+import com.afrotransact.payments.port.PayoutHoldRepository;
 import com.afrotransact.payments.port.PayoutRepository;
 import com.afrotransact.payments.port.SettlementRepository;
 import com.afrotransact.payments.port.StripeGateway;
@@ -34,12 +36,15 @@ import org.springframework.stereotype.Service;
 @Service
 class PayoutServiceImpl implements PayoutService {
 
+    static final String PAYOUTS_PAUSED = "payments.payouts_paused";
+
     private static final int MAX_LIST = 500;
 
     private final PayoutRepository payouts;
     private final SettlementRepository settlements;
     private final LedgerRepository ledger;
     private final ConnectedAccountRepository accounts;
+    private final PayoutHoldRepository holds;
     private final StripeGateway stripe;
     private final PayoutPolicy policy;
     private final IdempotencyStore idempotency;
@@ -50,13 +55,15 @@ class PayoutServiceImpl implements PayoutService {
     private final Clock clock;
 
     PayoutServiceImpl(PayoutRepository payouts, SettlementRepository settlements, LedgerRepository ledger,
-                      ConnectedAccountRepository accounts, StripeGateway stripe, PayoutPolicy policy,
+                      ConnectedAccountRepository accounts, PayoutHoldRepository holds, StripeGateway stripe,
+                      PayoutPolicy policy,
                       IdempotencyStore idempotency, MoneyTransactions tx, PaymentsAccess access,
                       DomainEventPublisher events, PaymentsSettings settings, Clock clock) {
         this.payouts = payouts;
         this.settlements = settlements;
         this.ledger = ledger;
         this.accounts = accounts;
+        this.holds = holds;
         this.stripe = stripe;
         this.policy = policy;
         this.idempotency = idempotency;
@@ -116,6 +123,7 @@ class PayoutServiceImpl implements PayoutService {
             if (prior.isPresent()) {
                 return payouts.find(prior.get().id()).orElseThrow();
             }
+            ensureNotPaused(org);
             PayoutBalance balance = compute(org, currency);
             PayoutAsk ask = new PayoutAsk(cmd.amountMinor() == null ? null : Money.of(cmd.amountMinor(), currency),
                     cmd.all());
@@ -155,6 +163,7 @@ class PayoutServiceImpl implements PayoutService {
             if (r.status() == PayoutStatus.IN_TRANSIT || r.status() == PayoutStatus.PAID) {
                 return r;
             }
+            ensureNotPaused(r.orgId());
             String account = accounts.find(r.orgId()).orElseThrow(() -> new PaymentsRuleViolation(
                     "payments.no-connected-account", "Organisation " + r.orgId() + " has no connected account"));
             r.approve(actor.subject(), Instant.now(clock), "pending");
@@ -182,6 +191,15 @@ class PayoutServiceImpl implements PayoutService {
         Actor actor = access.approver();
         return tx.serializable(() -> payouts.update(payouts.lock(id).orElseThrow(() -> notFound(id))
                 .release(actor.subject(), Instant.now(clock))));
+    }
+
+    /** Compliance holds from seller-service (seller.payouts.paused) block new requests and approvals. */
+    private void ensureNotPaused(String org) {
+        holds.find(org).filter(PayoutHold::paused).ifPresent(h -> {
+            throw new PaymentsRuleViolation(PAYOUTS_PAUSED, "Payouts are paused for this organisation ("
+                    + h.reason() + "). Resolve the account requirements in Seller Center; your balance keeps "
+                    + "accruing.");
+        });
     }
 
     private void publish(String type, PayoutRequest r) {

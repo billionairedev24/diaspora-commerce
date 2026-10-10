@@ -25,6 +25,11 @@ import org.springframework.security.oauth2.server.authorization.token.OAuth2Toke
  * Adds the platform claims every resource server reads ({@code JwtActorResolver}): {@code pt}, {@code org},
  * {@code roles}, {@code perms}. Claims are recomputed on every issuance, including refresh, so access changes take
  * effect on the next token (access tokens live 5 minutes). Disabled accounts cannot obtain tokens.
+ *
+ * <p>{@code org} is the seller service's organisation id ({@code org_…}), compared verbatim by every service's
+ * ownership checks. Access tokens also carry the user's profile ({@code given_name}, {@code family_name},
+ * {@code email}, {@code email_verified}, {@code phone_number} when present) so front ends and services can prefill
+ * forms without a userinfo round trip; ID tokens carry the same claims for the scopes the client was granted.
  */
 public class IdentityTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodingContext> {
 
@@ -32,6 +37,11 @@ public class IdentityTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodin
     public static final String ORG = "org";
     public static final String ROLES = "roles";
     public static final String PERMS = "perms";
+    public static final String GIVEN_NAME = "given_name";
+    public static final String FAMILY_NAME = "family_name";
+    public static final String EMAIL = "email";
+    public static final String EMAIL_VERIFIED = "email_verified";
+    public static final String PHONE_NUMBER = "phone_number";
 
     private final TokenClaimsService tokenClaims;
 
@@ -59,26 +69,42 @@ public class IdentityTokenCustomizer implements OAuth2TokenCustomizer<JwtEncodin
         }
         claims.claim(PRINCIPAL_TYPE, c.access().principalType().name());
         claims.claim(ROLES, sorted(c.access().roles()));
-        c.access().orgId().ifPresent(org -> claims.claim(ORG, org.toString()));
+        c.access().orgId().ifPresent(org -> claims.claim(ORG, org));
         if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())) {
             claims.claim(PERMS, sorted(c.access().permissions()));
+            addAccessTokenProfile(claims, c.user());
         } else if (OidcParameterNames.ID_TOKEN.equals(context.getTokenType().getValue())) {
             addProfileClaims(claims, c.user(), context.getAuthorizedScopes());
         }
     }
 
+    /** Prefill claims on every user access token, independent of the OIDC scopes requested. */
+    private static void addAccessTokenProfile(JwtClaimsSet.Builder claims, UserAccount u) {
+        putIfPresent(claims, GIVEN_NAME, u.firstName());
+        putIfPresent(claims, FAMILY_NAME, u.lastName());
+        putIfPresent(claims, EMAIL, u.email());
+        claims.claim(EMAIL_VERIFIED, u.emailVerified());
+        putIfPresent(claims, PHONE_NUMBER, u.phone());
+    }
+
     private static void addProfileClaims(JwtClaimsSet.Builder claims, UserAccount u, Collection<String> scopes) {
         if (scopes.contains(OidcScopes.EMAIL)) {
-            claims.claim("email", u.email());
-            claims.claim("email_verified", u.emailVerified());
+            putIfPresent(claims, EMAIL, u.email());
+            claims.claim(EMAIL_VERIFIED, u.emailVerified());
         }
         if (scopes.contains(OidcScopes.PROFILE)) {
-            claims.claim("name", u.displayName());
-            claims.claim("given_name", u.firstName());
-            claims.claim("family_name", u.lastName());
+            putIfPresent(claims, "name", u.displayName());
+            putIfPresent(claims, GIVEN_NAME, u.firstName());
+            putIfPresent(claims, FAMILY_NAME, u.lastName());
         }
-        if (scopes.contains(OidcScopes.PHONE) && u.phone() != null) {
-            claims.claim("phone_number", u.phone());
+        if (scopes.contains(OidcScopes.PHONE)) {
+            putIfPresent(claims, PHONE_NUMBER, u.phone());
+        }
+    }
+
+    private static void putIfPresent(JwtClaimsSet.Builder claims, String name, String value) {
+        if (value != null && !value.isBlank()) {
+            claims.claim(name, value);
         }
     }
 

@@ -9,7 +9,7 @@ import com.afrotransact.identity.application.MeView;
 import com.afrotransact.identity.domain.OrgMembership;
 import com.afrotransact.identity.domain.UserAccount;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /** Profile, landing and org selection bodies. */
@@ -19,7 +19,7 @@ final class MeDtos {
     }
 
     @Schema(name = "Org")
-    record OrgResponse(UUID id, String kind, String name, String status, String role) {
+    record OrgResponse(String id, String kind, String name, String status, String role) {
 
         static OrgResponse of(OrgMembership m) {
             return new OrgResponse(m.orgId(), m.kind().name(), m.orgName(), m.status().name(), m.roleKey());
@@ -28,7 +28,7 @@ final class MeDtos {
 
     @Schema(name = "Me", description = "Profile, roles, effective permissions, organisations and where to land")
     record MeResponse(UUID id, String firstName, String lastName, String email, boolean emailVerified, String phone,
-                      boolean smsConsent, Instant termsAcceptedAt, String principalType, UUID orgId,
+                      boolean smsConsent, Instant termsAcceptedAt, String principalType, String orgId,
                       List<String> roles, List<String> permissions, List<OrgResponse> orgs,
                       @Schema(allowableValues = {"shop", "seller-onboarding", "seller-center", "provider-onboarding",
                           "provider-hub", "staff-console", "driver-app"}) String landing,
@@ -51,6 +51,6 @@ final class MeDtos {
     }
 
     @Schema(name = "SelectOrgRequest")
-    record SelectOrgRequest(@NotNull UUID orgId) {
+    record SelectOrgRequest(@NotBlank @Size(max = 80) String orgId) {
     }
 }

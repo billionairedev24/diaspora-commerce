@@ -22,6 +22,15 @@ operations:
     action: send
     channel: {$ref: '#/channels/identityEvents'}
     summary: identity-service publishes account, verification and access-change events via its transactional outbox.
+  consumeIdentitySellerOrgEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerOrgEvents'}
+    summary: >-
+      identity-service (consumer group identity-service, inbox-deduplicated) mirrors seller organisations with the
+      seller org id (org_…) as the organisation id and token org claim. seller.org.approved: organisation APPROVED,
+      applicantUserId and ownerUserIds become members with seller.owner / provider.owner (identity.role.granted is
+      published) and get it as their active organisation when they have none. seller.org.updated: name, kind, status
+      and market (country) are refreshed.
 components:
   messages:
     identityUserRegistered:

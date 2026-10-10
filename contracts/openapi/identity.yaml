@@ -980,7 +980,6 @@ paths:
         required: true
         schema:
           type: string
-          format: uuid
       requestBody:
         content:
           application/json:
@@ -1006,7 +1005,6 @@ paths:
         required: true
         schema:
           type: string
-          format: uuid
       - name: userId
         in: path
         required: true
@@ -1033,7 +1031,6 @@ paths:
         required: true
         schema:
           type: string
-          format: uuid
       - name: userId
         in: path
         required: true
@@ -1075,12 +1072,15 @@ components:
       properties:
         id:
           type: string
-          format: uuid
+          examples:
+          - org_3k2j9x8q7w6e5r4t3y2u
         kind:
           type: string
         name:
           type: string
         status:
+          type: string
+        market:
           type: string
         updatedAt:
           type: string
@@ -1117,7 +1117,8 @@ components:
       properties:
         orgId:
           type: string
-          format: uuid
+          maxLength: 80
+          minLength: 0
       required:
       - orgId
     Me:
@@ -1146,7 +1147,6 @@ components:
           type: string
         orgId:
           type: string
-          format: uuid
         roles:
           type: array
           items:
@@ -1176,7 +1176,6 @@ components:
       properties:
         id:
           type: string
-          format: uuid
         kind:
           type: string
         name:

@@ -1,0 +1,25 @@
+# AsyncAPI 3.0 fragment for the indexer (Go). Merged into contracts/asyncapi/events.yaml by tools/contracts/merge_asyncapi.py.
+# The indexer publishes nothing except poison events on its dead-letter topic.
+channels:
+  indexerDeadLetters:
+    address: at.indexer.dlq.events
+    description: >-
+      Events the indexer could not project after its retries (same key, headers and payload as the original event).
+operations:
+  publishIndexerDeadLetters:
+    action: send
+    channel: {$ref: '#/channels/indexerDeadLetters'}
+    summary: Poison events parked so one bad event never blocks a partition.
+  consumeIndexerProductEvents:
+    action: receive
+    channel: {$ref: '#/channels/catalogProductEvents'}
+    summary: >-
+      catalog.product.* upsert the product document (version = occurred-at). Events with sellerHidden = true
+      (catalog.product.hidden, and any product event while the owner is hidden) index status SELLER_HIDDEN, which
+      search never returns; catalog.product.restored brings back the product's own status.
+  consumeIndexerSellerOrgEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerOrgEvents'}
+    summary: >-
+      seller.org.approved / updated: the seller display name (else legal name) is applied to seller_name on every
+      document of the organisation and used for documents indexed afterwards.

@@ -28,6 +28,9 @@ public interface ProductRepository {
 
     List<Product> findByCategoryRequest(UUID categoryRequestId);
 
+    /** Every product of an organisation, any status (with variants). */
+    List<Product> findByOwnerOrg(String orgId);
+
     ProductPage search(ProductQuery query);
 
     boolean sellerSkuTaken(String orgId, String sellerSku);

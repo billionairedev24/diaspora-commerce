@@ -118,7 +118,7 @@ class ProfileServiceImpl implements ProfileService {
 
     @Override
     @Transactional
-    public MeView selectOrg(UUID orgId) {
+    public MeView selectOrg(String orgId) {
         UserAccount u = user(current.id());
         AccessProfile profile = profiles.load(u);
         boolean member = profile.memberships().stream().anyMatch(m -> m.orgId().equals(orgId));

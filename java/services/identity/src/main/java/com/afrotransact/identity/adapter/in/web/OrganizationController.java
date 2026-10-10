@@ -40,7 +40,8 @@ class OrganizationController {
     }
 
     @Schema(name = "Organization")
-    record OrgResponse(UUID id, String kind, String name, String status, Instant updatedAt) {
+    record OrgResponse(@Schema(examples = "org_3k2j9x8q7w6e5r4t3y2u") String id, String kind, String name,
+                       String status, String market, Instant updatedAt) {
     }
 
     @Schema(name = "SetMemberRequest")
@@ -49,23 +50,23 @@ class OrganizationController {
 
     @Operation(summary = "Create or update an organisation and its approval status")
     @PutMapping("/v1/orgs/{orgId}")
-    OrgResponse upsert(@PathVariable UUID orgId, @Valid @RequestBody UpsertOrgRequest body) {
+    OrgResponse upsert(@PathVariable String orgId, @Valid @RequestBody UpsertOrgRequest body) {
         Organization o = orgs.upsert(orgId, OrgKind.valueOf(body.kind().toUpperCase(Locale.ROOT)), body.name(),
                 OrgStatus.valueOf(body.status().toUpperCase(Locale.ROOT)));
-        return new OrgResponse(o.id(), o.kind().name(), o.name(), o.status().name(), o.updatedAt());
+        return new OrgResponse(o.id(), o.kind().name(), o.name(), o.status().name(), o.market(), o.updatedAt());
     }
 
     @Operation(summary = "Add a member or change their organisation role (seller.* / provider.*)")
     @PutMapping("/v1/orgs/{orgId}/members/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void setMember(@PathVariable UUID orgId, @PathVariable UUID userId, @Valid @RequestBody SetMemberRequest body) {
+    void setMember(@PathVariable String orgId, @PathVariable UUID userId, @Valid @RequestBody SetMemberRequest body) {
         orgs.setMember(orgId, userId, body.roleKey());
     }
 
     @Operation(summary = "Remove a member")
     @DeleteMapping("/v1/orgs/{orgId}/members/{userId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void removeMember(@PathVariable UUID orgId, @PathVariable UUID userId) {
+    void removeMember(@PathVariable String orgId, @PathVariable UUID userId) {
         orgs.removeMember(orgId, userId);
     }
 }

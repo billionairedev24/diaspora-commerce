@@ -45,6 +45,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.events.relay-enabled=false",
+    "at.consumers.enabled=false",
     "spring.kafka.bootstrap-servers=localhost:1",
     "at.payments.jobs.enabled=false",
     "at.payments.zone=UTC",

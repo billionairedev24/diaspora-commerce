@@ -11,6 +11,8 @@ import java.util.UUID;
 
 import com.afrotransact.identity.application.FederatedLoginService;
 import com.afrotransact.identity.application.FederatedProfile;
+import com.afrotransact.identity.application.SellerOrgChange;
+import com.afrotransact.identity.application.SellerOrgSyncService;
 import com.afrotransact.identity.domain.DefaultTotpAuthenticator;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
 import com.afrotransact.identity.it.BrowserSession.AuthorizeResult;
@@ -35,6 +37,7 @@ import tools.jackson.databind.JsonNode;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.events.relay-enabled=false",
+    "at.consumers.enabled=false",
     "spring.kafka.bootstrap-servers=localhost:1",
     "at.identity.verification.sender=outbox",
     "at.identity.social.google.client-id=it-google-client",
@@ -64,11 +67,13 @@ class IdentityFlowIT {
 
     private final JdbcClient jdbc;
     private final FederatedLoginService federated;
+    private final SellerOrgSyncService sellerOrgs;
 
     @Autowired
-    IdentityFlowIT(JdbcClient jdbc, FederatedLoginService federated) {
+    IdentityFlowIT(JdbcClient jdbc, FederatedLoginService federated, SellerOrgSyncService sellerOrgs) {
         this.jdbc = jdbc;
         this.federated = federated;
+        this.sellerOrgs = sellerOrgs;
     }
 
     private String base() {
@@ -101,6 +106,30 @@ class IdentityFlowIT {
         assertThat(t.accessClaims().get("sub").asString()).isEqualTo("seller-service");
         long ttl = t.accessClaims().get("exp").asLong() - t.accessClaims().get("iat").asLong();
         assertThat(ttl).isEqualTo(300);
+
+        Tokens search = new BrowserSession(base()).clientCredentials("search-service", "local-search-service-secret",
+                "ai:use");
+        assertThat(search.status()).as(search.body()).isEqualTo(200);
+        assertThat(strings(search.accessClaims().get("perms"))).containsExactly("ai:use");
+        Tokens retail = new BrowserSession(base()).clientCredentials("retail-service", "local-retail-service-secret",
+                "inventory:receive");
+        assertThat(retail.status()).as(retail.body()).isEqualTo(200);
+        assertThat(strings(retail.accessClaims().get("perms"))).containsExactly("inventory:receive");
+    }
+
+    @Test
+    void mcpClientAndAiPermissionsAreProvisioned() {
+        String mcp = jdbc.sql("select client_authentication_methods || '|' || authorization_grant_types || '|' || "
+                + "scopes || '|' || client_settings from oauth2_registered_client where client_id = 'mcp-client'")
+                .query(String.class).single();
+        assertThat(mcp).contains("none", "authorization_code", "mcp:shopper", "mcp:seller", "mcp:staff", "openid")
+                .contains("require-proof-key\":true");
+        List<String> grants = jdbc.sql("select role_key || '>' || permission_key from role_permission "
+                + "where permission_key in ('ai:use', 'ai:triage', 'mcp:shopper', 'mcp:seller', 'mcp:staff')")
+                .query(String.class).list();
+        assertThat(grants).contains("seller.owner>ai:use", "provider.owner>ai:use", "platform.super_admin>ai:use",
+                "platform.trust_safety>ai:triage", "account.customer>mcp:shopper", "seller.owner>mcp:seller",
+                "platform.operations_manager>mcp:staff").doesNotContain("platform.driver>mcp:staff");
     }
 
     @Test
@@ -132,7 +161,7 @@ class IdentityFlowIT {
         assertThat(claims.get("sub").asString()).isEqualTo(userId);
         assertThat(claims.get("pt").asString()).isEqualTo("CUSTOMER");
         assertThat(strings(claims.get("roles"))).containsExactly("account.customer", "account.seller_applicant");
-        assertThat(strings(claims.get("perms"))).containsExactly("applications:submit");
+        assertThat(strings(claims.get("perms"))).containsExactly("applications:submit", "mcp:shopper");
         assertThat(claims.get("exp").asLong() - claims.get("iat").asLong()).isEqualTo(300);
         assertThat(BrowserSession.claims(tokens.idToken()).get("email").asString()).isEqualTo(email);
         assertThat(tokens.refreshToken()).isNotBlank();
@@ -166,7 +195,9 @@ class IdentityFlowIT {
 
         String service = new BrowserSession(base()).clientCredentials("seller-service", "local-seller-secret",
                 "orgs:manage").accessToken();
-        String orgId = UUID.randomUUID().toString();
+        String orgId = "org_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+        assertThat(s.api("PUT", "/v1/orgs/not%20an%20id", service,
+                "{\"kind\":\"SELLER\",\"name\":\"Bad\",\"status\":\"PENDING\"}").statusCode()).isEqualTo(422);
         assertThat(s.api("PUT", "/v1/orgs/" + orgId, service,
                 "{\"kind\":\"SELLER\",\"name\":\"Kemi's Pantry\",\"status\":\"PENDING\"}").statusCode()).isEqualTo(200);
         assertThat(s.api("PUT", "/v1/orgs/" + orgId + "/members/" + userId, service,
@@ -185,6 +216,51 @@ class IdentityFlowIT {
         assertThat(approved.accessClaims().get("pt").asString()).isEqualTo("SELLER_MEMBER");
         assertThat(strings(approved.accessClaims().get("perms"))).contains("catalog:write", "orders:read");
         assertThat(landing(s, approved.accessToken())).isEqualTo("seller-center");
+    }
+
+    @Test
+    void sellerOrgApprovedGrantsOwnerRoleAndOrgClaimOnNextToken() {
+        BrowserSession s = new BrowserSession(base());
+        String email = "bisi." + UUID.randomUUID() + "@example.com";
+        String userId = registerAndVerify(s, email, "sell");
+        Tokens before = s.exchangePublic(STOREFRONT, STOREFRONT_REDIRECT,
+                s.signIn(STOREFRONT, STOREFRONT_REDIRECT, email, PASSWORD));
+        assertThat(before.accessClaims().has("org")).isFalse();
+        // Profile claims for prefill are on every access token.
+        assertThat(before.accessClaims().get("given_name").asString()).isEqualTo("Adaeze");
+        assertThat(before.accessClaims().get("family_name").asString()).isEqualTo("Okafor");
+        assertThat(before.accessClaims().get("email").asString()).isEqualTo(email);
+        assertThat(before.accessClaims().get("email_verified").asBoolean()).isTrue();
+        assertThat(before.accessClaims().get("phone_number").asString()).isEqualTo("+17132490142");
+
+        String orgId = "org_" + UUID.randomUUID().toString().replace("-", "").substring(0, 20);
+        UUID eventId = UUID.randomUUID();
+        SellerOrgChange approved = new SellerOrgChange(eventId, orgId, "SELLER", "Bisi Foods LLC", "Bisi's Pantry",
+                "us", "APPROVED", List.of(userId), userId, Instant.parse("2026-10-01T10:00:00Z"));
+        assertThat(sellerOrgs.approved(approved)).isTrue();
+        assertThat(sellerOrgs.approved(approved)).as("redelivery is a no-op").isFalse();
+        assertThat(jdbc.sql("select count(*) from org_membership where org_id = :o and role_key = 'seller.owner'")
+                .param("o", orgId).query(Long.class).single()).isEqualTo(1);
+        assertThat(jdbc.sql("select market from organization where id = :o").param("o", orgId)
+                .query(String.class).single()).isEqualTo("US");
+
+        Tokens after = s.refreshPublic(STOREFRONT, before.refreshToken());
+        assertThat(after.status()).as(after.body()).isEqualTo(200);
+        assertThat(after.accessClaims().get("org").asString()).isEqualTo(orgId);
+        assertThat(after.accessClaims().get("pt").asString()).isEqualTo("SELLER_MEMBER");
+        assertThat(strings(after.accessClaims().get("roles"))).contains("seller.owner");
+        assertThat(strings(after.accessClaims().get("perms"))).contains("catalog:write");
+        assertThat(landing(s, after.accessToken())).isEqualTo("seller-center");
+
+        assertThat(sellerOrgs.updated(new SellerOrgChange(UUID.randomUUID(), orgId, "SELLER", "Bisi Foods LLC",
+                "Bisi's Kitchen", "US", "APPROVED", List.of(userId), null, Instant.now()))).isTrue();
+        assertThat(jdbc.sql("select name from organization where id = :o").param("o", orgId)
+                .query(String.class).single()).isEqualTo("Bisi's Kitchen");
+        assertThat(sellerOrgs.updated(new SellerOrgChange(UUID.randomUUID(), orgId, "SELLER", null, null, null,
+                "SUSPENDED", List.of(), null, Instant.now()))).isTrue();
+        Tokens suspended = s.refreshPublic(STOREFRONT, after.refreshToken());
+        assertThat(suspended.accessClaims().get("org").asString()).isEqualTo(orgId);
+        assertThat(strings(suspended.accessClaims().get("perms"))).doesNotContain("catalog:write");
     }
 
     @Test

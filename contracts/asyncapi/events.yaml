@@ -35,6 +35,10 @@ channels:
         $ref: '#/components/messages/catalogProductPaused'
       catalogProductResumed:
         $ref: '#/components/messages/catalogProductResumed'
+      catalogProductHidden:
+        $ref: '#/components/messages/catalogProductHidden'
+      catalogProductRestored:
+        $ref: '#/components/messages/catalogProductRestored'
   catalogCategoryRequestEvents:
     address: at.category-request.events
     description: New-category requests (key = request id).
@@ -98,6 +102,9 @@ channels:
         $ref: '#/components/messages/identityUserDisabled'
       identityUserEnabled:
         $ref: '#/components/messages/identityUserEnabled'
+  indexerDeadLetters:
+    address: at.indexer.dlq.events
+    description: Events the indexer could not project after its retries (same key, headers and payload as the original event).
   inventoryStockEvents:
     address: at.inventory.events
     description: Stock and lot changes from inventory-service (key = SKU, so one SKU's events stay in order). Headers event-id,
@@ -306,6 +313,20 @@ components:
         $ref: '#/components/schemas/CatalogProductEvent'
     catalogProductResumed:
       name: catalog.product.resumed
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductEvent'
+    catalogProductHidden:
+      name: catalog.product.hidden
+      title: The owner's listings were hidden by seller-service compliance enforcement (sellerHidden = true)
+      headers:
+        $ref: '#/components/schemas/EventHeaders'
+      payload:
+        $ref: '#/components/schemas/CatalogProductEvent'
+    catalogProductRestored:
+      name: catalog.product.restored
+      title: The owner's listings were restored (sellerHidden = false; status is the product's own status)
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -1003,6 +1024,10 @@ components:
           type:
           - string
           - 'null'
+        sellerHidden:
+          type: boolean
+          description: The owner's listings are hidden by seller-service compliance enforcement (seller.listings.hidden).
+            Keep the product off public surfaces regardless of status; set on every catalog.product.* event while hidden.
         variants:
           type: array
           items:
@@ -2418,6 +2443,14 @@ components:
           type: array
           items:
             type: string
+          description: Identity user ids of the organisation's owners
+        applicantUserId:
+          type:
+          - string
+          - 'null'
+          description: Identity user id of the applicant whose application was approved (seller.org.approved); null on seller.org.updated.
+            identity-service grants it seller.owner / provider.owner and sets it as the user's active organisation when they
+            have none.
         occurredAt:
           type: string
           format: date-time
@@ -2701,6 +2734,14 @@ operations:
     action: send
     channel:
       $ref: '#/channels/catalogCategoryRequestEvents'
+  consumeCatalogSellerComplianceEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/sellerComplianceEvents'
+    summary: 'catalog-service (consumer group catalog-service, inbox-deduplicated) handles seller.listings.hidden / restored:
+      records the organisation''s suppression (org_listing_suppression), hides its products from the public catalog API and
+      publishes catalog.product.hidden / restored for every product of the organisation. Older decisions never override newer
+      ones (occurredAt).'
   publishContentEvents:
     action: send
     channel:
@@ -2716,6 +2757,32 @@ operations:
     channel:
       $ref: '#/channels/identityEvents'
     summary: identity-service publishes account, verification and access-change events via its transactional outbox.
+  consumeIdentitySellerOrgEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/sellerOrgEvents'
+    summary: 'identity-service (consumer group identity-service, inbox-deduplicated) mirrors seller organisations with the
+      seller org id (org_…) as the organisation id and token org claim. seller.org.approved: organisation APPROVED, applicantUserId
+      and ownerUserIds become members with seller.owner / provider.owner (identity.role.granted is published) and get it as
+      their active organisation when they have none. seller.org.updated: name, kind, status and market (country) are refreshed.'
+  publishIndexerDeadLetters:
+    action: send
+    channel:
+      $ref: '#/channels/indexerDeadLetters'
+    summary: Poison events parked so one bad event never blocks a partition.
+  consumeIndexerProductEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/catalogProductEvents'
+    summary: catalog.product.* upsert the product document (version = occurred-at). Events with sellerHidden = true (catalog.product.hidden,
+      and any product event while the owner is hidden) index status SELLER_HIDDEN, which search never returns; catalog.product.restored
+      brings back the product's own status.
+  consumeIndexerSellerOrgEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/sellerOrgEvents'
+    summary: 'seller.org.approved / updated: the seller display name (else legal name) is applied to seller_name on every
+      document of the organisation and used for documents indexed afterwards.'
   publishInventoryStockEvents:
     action: send
     channel:
@@ -2758,6 +2825,13 @@ operations:
     channel:
       $ref: '#/channels/notificationsBookingsEvents'
     summary: booking.confirmed → booking.confirmed (email, sms, push).
+  consumePaymentsSellerComplianceEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/sellerComplianceEvents'
+    summary: 'payments-service (consumer group payments-service, inbox-deduplicated) handles seller.payouts.paused / resumed:
+      the organisation''s payout_hold is set or cleared (older decisions never override newer ones). While paused, POST /v1/payouts/requests
+      and approvals fail with 422 payments.payouts_paused; balances keep accruing.'
   publishPaymentsPaymentEvents:
     action: send
     channel:
@@ -2780,16 +2854,19 @@ operations:
     action: send
     channel:
       $ref: '#/channels/sellerOrgEvents'
-    summary: 'seller.org.approved: identity-service grants the owner''s seller.owner / provider.owner role with the org claim
-      (unlocking Seller Center / Provider Hub). seller.org.updated: indexer and cart refresh the seller display name; identity
-      mirrors the organisation.'
+    summary: 'seller.org.approved: identity-service (consumer group identity-service, inbox-deduplicated) mirrors the organisation
+      with the seller org id (org_…) as its id and grants applicantUserId and ownerUserIds the seller.owner / provider.owner
+      role, so the next token carries the org claim (unlocking Seller Center / Provider Hub). seller.org.updated: indexer
+      refreshes the seller display name on indexed documents, cart refreshes it; identity mirrors name, status and market.'
   publishSellerComplianceEvents:
     action: send
     channel:
       $ref: '#/channels/sellerComplianceEvents'
     summary: 'seller.compliance.changed / reminder: notifications-service sends email + SMS + in-app banner (consent and quiet
-      hours respected). seller.payouts.paused / resumed: payments-service holds or releases payouts. seller.listings.hidden
-      / restored: catalog, offers, bookings and the indexer hide or show the org''s listings and services.'
+      hours respected). seller.payouts.paused / resumed: payments-service holds or releases payouts (payout requests and approvals
+      fail with 422 payments.payouts_paused while held). seller.listings.hidden / restored: catalog suppresses the org''s
+      products from public reads and republishes them as catalog.product.hidden / restored (the indexer follows those), offers
+      and bookings hide or show the org''s listings and services.'
   publishSellerSubscriptionEvents:
     action: send
     channel:

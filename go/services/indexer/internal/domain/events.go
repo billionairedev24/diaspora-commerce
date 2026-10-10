@@ -10,8 +10,17 @@ const (
 	ProductRejected     = "catalog.product.rejected"
 	ProductPaused       = "catalog.product.paused"
 	ProductResumed      = "catalog.product.resumed"
+	ProductHidden       = "catalog.product.hidden"
+	ProductRestored     = "catalog.product.restored"
 	AvailabilityChanged = "inventory.availability.changed"
+	SellerOrgApproved   = "seller.org.approved"
+	SellerOrgUpdated    = "seller.org.updated"
 )
+
+// StatusSellerHidden marks documents of an organisation whose listings seller-service has hidden (compliance
+// enforcement). Search only returns LIVE documents, so hidden products drop out of results; catalog's
+// catalog.product.restored event brings back the product's real status.
+const StatusSellerHidden = "SELLER_HIDDEN"
 
 // ProductEvent mirrors catalog-service's ProductEventPayload.
 type ProductEvent struct {
@@ -24,6 +33,25 @@ type ProductEvent struct {
 	CategoryID      string           `json:"categoryId"`
 	ProductTypeCode string           `json:"productTypeCode"`
 	Variants        []VariantPayload `json:"variants"`
+	// SellerHidden is set while the owner's listings are hidden by seller-service compliance enforcement.
+	SellerHidden bool `json:"sellerHidden"`
+}
+
+// SellerOrgEvent mirrors seller-service's seller.org.approved / seller.org.updated payload (fields the indexer uses).
+type SellerOrgEvent struct {
+	OrgID       string `json:"orgId"`
+	Kind        string `json:"kind"`
+	LegalName   string `json:"legalName"`
+	DisplayName string `json:"displayName"`
+	Status      string `json:"status"`
+}
+
+// Name is the public seller name: the display (store) name, else the legal name.
+func (e SellerOrgEvent) Name() string {
+	if e.DisplayName != "" {
+		return e.DisplayName
+	}
+	return e.LegalName
 }
 
 // VariantPayload is one variant of a product event.

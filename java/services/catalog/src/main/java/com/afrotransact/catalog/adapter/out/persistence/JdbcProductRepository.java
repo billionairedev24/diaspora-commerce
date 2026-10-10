@@ -103,6 +103,12 @@ class JdbcProductRepository implements ProductRepository {
     }
 
     @Override
+    public List<Product> findByOwnerOrg(String orgId) {
+        return withVariants(jdbc.sql(SELECT + " where owner_org = :org order by created_at").param("org", orgId)
+                .query(this::mapProduct).list());
+    }
+
+    @Override
     public ProductPage search(ProductQuery q) {
         StringBuilder where = new StringBuilder(" where 1 = 1");
         Map<String, Object> params = new HashMap<>();

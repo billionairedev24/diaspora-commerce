@@ -20,6 +20,12 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    consumer:
+      group-id: ${KAFKA_GROUP:payments-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
   mvc:
     problemdetails:
       enabled: true
@@ -64,6 +70,9 @@ springdoc:
     path: /swagger-ui.html
 
 at:
+  consumers:
+    # Kafka listeners for other services' events (off in tests that have no broker).
+    enabled: ${CONSUMERS_ENABLED:true}
   api-docs:
     title: Payments API
     description: >-

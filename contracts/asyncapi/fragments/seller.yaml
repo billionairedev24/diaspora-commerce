@@ -46,17 +46,20 @@ operations:
     action: send
     channel: {$ref: '#/channels/sellerOrgEvents'}
     summary: >-
-      seller.org.approved: identity-service grants the owner's seller.owner / provider.owner role with the org claim
-      (unlocking Seller Center / Provider Hub). seller.org.updated: indexer and cart refresh the seller display name;
-      identity mirrors the organisation.
+      seller.org.approved: identity-service (consumer group identity-service, inbox-deduplicated) mirrors the
+      organisation with the seller org id (org_…) as its id and grants applicantUserId and ownerUserIds the
+      seller.owner / provider.owner role, so the next token carries the org claim (unlocking Seller Center / Provider
+      Hub). seller.org.updated: indexer refreshes the seller display name on indexed documents, cart refreshes it;
+      identity mirrors name, status and market.
   publishSellerComplianceEvents:
     action: send
     channel: {$ref: '#/channels/sellerComplianceEvents'}
     summary: >-
       seller.compliance.changed / reminder: notifications-service sends email + SMS + in-app banner (consent and quiet
-      hours respected). seller.payouts.paused / resumed: payments-service holds or releases payouts.
-      seller.listings.hidden / restored: catalog, offers, bookings and the indexer hide or show the org's listings
-      and services.
+      hours respected). seller.payouts.paused / resumed: payments-service holds or releases payouts (payout requests
+      and approvals fail with 422 payments.payouts_paused while held). seller.listings.hidden / restored: catalog
+      suppresses the org's products from public reads and republishes them as catalog.product.hidden / restored (the
+      indexer follows those), offers and bookings hide or show the org's listings and services.
   publishSellerSubscriptionEvents:
     action: send
     channel: {$ref: '#/channels/sellerSubscriptionEvents'}
@@ -162,7 +165,13 @@ components:
         displayName: {type: [string, 'null']}
         country: {type: [string, 'null']}
         status: {type: string, enum: [DRAFT, PENDING_REVIEW, FLAGGED, AWAITING_FINAL_APPROVAL, INFO_REQUESTED, APPROVED, REJECTED, SUSPENDED]}
-        ownerUserIds: {type: array, items: {type: string}}
+        ownerUserIds: {type: array, items: {type: string}, description: Identity user ids of the organisation's owners}
+        applicantUserId:
+          type: [string, 'null']
+          description: >-
+            Identity user id of the applicant whose application was approved (seller.org.approved); null on
+            seller.org.updated. identity-service grants it seller.owner / provider.owner and sets it as the user's
+            active organisation when they have none.
         occurredAt: {type: string, format: date-time}
     SellerComplianceChanged:
       type: object

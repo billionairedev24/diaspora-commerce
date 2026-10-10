@@ -12,10 +12,11 @@ import com.afrotransact.identity.domain.Organization;
  */
 public interface OrganizationService {
 
-    Organization upsert(UUID orgId, OrgKind kind, String name, OrgStatus status);
+    /** {@code orgId} is the seller service's id ({@code org_…}); it becomes the token {@code org} claim. */
+    Organization upsert(String orgId, OrgKind kind, String name, OrgStatus status);
 
     /** Adds the user to the organisation with a seller.* / provider.* role (or changes their role). */
-    void setMember(UUID orgId, UUID userId, String roleKey);
+    void setMember(String orgId, UUID userId, String roleKey);
 
-    void removeMember(UUID orgId, UUID userId);
+    void removeMember(String orgId, UUID userId);
 }

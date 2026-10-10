@@ -25,6 +25,12 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    consumer:
+      group-id: ${KAFKA_GROUP:identity-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
 
 server:
   port: ${PORT:8100}
@@ -68,6 +74,9 @@ springdoc:
   paths-to-match: /v1/**
 
 at:
+  consumers:
+    # Kafka listeners for other services' events (off in tests that have no broker).
+    enabled: ${CONSUMERS_ENABLED:true}
   api-docs:
     title: Identity API
     description: Accounts, sign-up and verification, role-based landing, access control administration, MFA, passkeys and social sign-in. OAuth 2.1 / OIDC endpoints are described by /.well-known/openid-configuration.

@@ -72,9 +72,10 @@ Full contract: [`contracts/openapi/identity.yaml`](../../../contracts/openapi/id
 |---|---|---|
 | `sub` | `5b0f…` (account UUID) | client id for client-credentials tokens |
 | `pt` | `CUSTOMER`, `SELLER_MEMBER`, `PROVIDER_MEMBER`, `STAFF`, `DRIVER`, `SERVICE` | STAFF = any platform role other than driver; DRIVER = driver only; *_MEMBER while acting for an org |
-| `org` | `0e2d…` | active organisation (selected, else the first approved) |
+| `org` | `org_3k2j9x8q7w6e5r4t3y2u` | seller-service org id of the active organisation (selected, else the first approved); compared verbatim by every service |
 | `roles` | `["account.customer","seller.owner"]` | account/platform roles + the active org role |
 | `perms` | `["catalog:write","orders:read"]` | org-role permissions count only while the org is APPROVED; client tokens: granted scopes |
+| `given_name`, `family_name`, `email`, `email_verified`, `phone_number` | `Adaeze`, … | on every user access token (prefill; `phone_number` only when set); ID tokens carry them per granted OIDC scope |
 
 ## Events (transactional outbox → `at.identity.events`, key = user id)
 
@@ -83,6 +84,13 @@ notifications service: `recipient`, `channel` email/sms, `code`, `expiresInMinut
 `identity.role.granted` / `identity.role.revoked`, `identity.permission.granted` / `identity.permission.revoked`
 (direct grant or role capability change, key = role key for the latter), `identity.user.disabled` /
 `identity.user.enabled`. Schemas: [`contracts/asyncapi/fragments/identity.yaml`](../../../contracts/asyncapi/fragments/identity.yaml).
+
+### Consumed (consumer group `identity-service`, inbox-deduplicated, `CONSUMERS_ENABLED`)
+
+`at.seller-org.events`: `seller.org.approved` upserts the organisation (id = seller org id `org_…`, kind, display
+name, status APPROVED, market = country) and makes `applicantUserId` and every `ownerUserIds` entry a member with
+`seller.owner` / `provider.owner`; members without an active organisation get it, so the next token (refresh) carries
+`org` and owner permissions. `seller.org.updated` refreshes name, kind, status and market.
 
 ## Data (Flyway, `db/migration`)
 
@@ -93,6 +101,10 @@ notifications service: `recipient`, `channel` email/sms, `code`, `expiresInMinut
   `user_credentials`) and Spring Session (`spring_session*`) tables. Platform outbox/inbox from `db/platform`.
 - `V2__seed_rbac.sql`: permission catalogue, roles, role permissions, back-office modules and the module access matrix
   (seeded from the design prototype), identity providers (Google on, Apple/Facebook off).
+- `V6__string_org_ids.sql`: organisation ids (`organization.id`, `org_membership.org_id`, `user_account.active_org_id`)
+  become `varchar(80)` holding seller-service ids (`org_…`); pre-existing UUID ids stay valid as text. Adds
+  `organization.market`.
+- `V7__ai_mcp_permissions.sql`: `ai:use`, `ai:triage`, `mcp:shopper`, `mcp:seller`, `mcp:staff` and their role grants.
 
 ## Permission catalogue
 

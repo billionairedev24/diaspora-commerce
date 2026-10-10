@@ -2,9 +2,13 @@
 
 Kafka → Elasticsearch projection of the product read model used by [search](../search). Go 1.27.1 · local port **8202**.
 
-- Consumes `catalog.product.created|approved|rejected|paused|resumed` (topic `at.product.events`) and
-  `inventory.availability.changed` (`at.inventory.events`) as consumer group `indexer`; offsets are committed only after
-  a batch is projected.
+- Consumes `catalog.product.created|approved|rejected|paused|resumed|hidden|restored` (topic `at.product.events`),
+  `inventory.availability.changed` (`at.inventory.events`) and `seller.org.approved|updated` (`at.seller-org.events`)
+  as consumer group `indexer`; offsets are committed only after a batch is projected.
+- Product events with `sellerHidden: true` (seller-service hid the owner's listings) are indexed with status
+  `SELLER_HIDDEN`, so search drops them; `catalog.product.restored` restores the product's own status.
+- `seller.org.*` events rename `seller_name` on every document of the organisation and teach the in-memory seller
+  directory the name. After a restart, unknown sellers keep the name already indexed instead of the fallback.
 - Product events become one document per product page (`searchindex.ProductDocument`): department and path resolved
   from catalog-service's category tree (cached), seller display name, fulfilment (`AFROTRANSACT` for AfroTransact Retail,
   `SELLER` otherwise), lowest variant price, variant ATINs and status. Only `LIVE` documents are searchable.

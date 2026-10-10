@@ -25,7 +25,7 @@ class DefaultAccessPolicyTest {
 
     private final AccessPolicy policy = new DefaultAccessPolicy();
 
-    static UserAccount user(boolean enabled, UUID activeOrg) {
+    static UserAccount user(boolean enabled, String activeOrg) {
         Instant now = Instant.parse("2026-10-01T10:00:00Z");
         return new UserAccount(UUID.randomUUID(), "Daniel", "Mensah", "daniel@example.com", true, "+17132490142",
                 "{bcrypt}x", enabled, false, now, activeOrg, now, now, 0);
@@ -54,7 +54,7 @@ class DefaultAccessPolicyTest {
 
     @Test
     void orgRolePermissionsCountOnlyWhenApproved() {
-        UUID org = UUID.randomUUID();
+        String org = "org_3k2j9x8q7w6e5r4t3y2u";
         OrgMembership pending = new OrgMembership(org, OrgKind.SELLER, "Mama Tee", OrgStatus.PENDING, OWNER.key());
         EffectiveAccess before = policy.resolve(profile(user(true, null),
                 Set.of(CUSTOMER.key(), SELLER_APPLICANT.key()), Set.of(), List.of(pending)));
@@ -71,8 +71,8 @@ class DefaultAccessPolicyTest {
 
     @Test
     void activeOrgSelectsAmongSeveralMemberships() {
-        UUID a = UUID.randomUUID();
-        UUID b = UUID.randomUUID();
+        String a = "org_alpha00000000000000";
+        String b = "org_beta000000000000000";
         List<OrgMembership> orgs = List.of(
                 new OrgMembership(a, OrgKind.SELLER, "Alpha", OrgStatus.APPROVED, OWNER.key()),
                 new OrgMembership(b, OrgKind.SELLER, "Beta", OrgStatus.APPROVED, OWNER.key()));

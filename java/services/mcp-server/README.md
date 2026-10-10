@@ -70,7 +70,7 @@ Add permissions/scopes `mcp:shopper`, `mcp:seller`, `mcp:staff` to identity and 
 register a public MCP client, for example:
 
 ```yaml
-- client-id: mcp-agents
+- client-id: mcp-client
   name: AI agents (MCP)
   type: public
   grant-types: [authorization_code, refresh_token]

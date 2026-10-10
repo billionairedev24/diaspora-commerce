@@ -13,6 +13,7 @@ import (
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/searchindex"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/elastic"
+	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/port"
 )
 
 func TestVersionGuardedProjection(t *testing.T) {
@@ -50,7 +51,7 @@ func TestVersionGuardedProjection(t *testing.T) {
 		CategoryPath: "Groceries › Pantry", SellerID: "org_r", SellerName: "AfroTransact Retail", SellerKind: "PLATFORM",
 		Fulfilment: "AFROTRANSACT", PriceMinor: 899, Currency: "USD", Status: "IN_REVIEW",
 		VariantATINs: []string{"AT0000000A", "AT0000000B"}}
-	must(t, idx.UpsertProduct(ctx, "us", doc, 100))
+	must(t, idx.UpsertProduct(ctx, "us", doc, 100, port.UpsertOptions{}))
 
 	found, err := idx.ApplyAvailability(ctx, "us", "AT0000000A", "HOU1", 7, 200)
 	must(t, err)
@@ -64,10 +65,10 @@ func TestVersionGuardedProjection(t *testing.T) {
 
 	live := doc
 	live.Status = "LIVE"
-	must(t, idx.UpsertProduct(ctx, "us", live, 300))
+	must(t, idx.UpsertProduct(ctx, "us", live, 300, port.UpsertOptions{}))
 	stale := doc
 	stale.Title = "Stale title"
-	must(t, idx.UpsertProduct(ctx, "us", stale, 250)) // older: ignored
+	must(t, idx.UpsertProduct(ctx, "us", stale, 250, port.UpsertOptions{})) // older: ignored
 
 	got := get(t, es, "AT00000001")
 	if got.Status != "LIVE" || got.Title != "Jollof Seasoning Blend" {
@@ -81,6 +82,29 @@ func TestVersionGuardedProjection(t *testing.T) {
 	must(t, err)
 	if missing {
 		t.Fatal("unknown variant should report not found")
+	}
+
+	// A seller rename reaches every document of that seller, and an upsert with only a fallback name keeps it.
+	other := doc
+	other.ATIN, other.VariantATINs = "AT00000002", []string{"AT0000000C"}
+	must(t, idx.UpsertProduct(ctx, "us", other, 100, port.UpsertOptions{}))
+	renamed, err := idx.RenameSeller(ctx, "us", "org_r", "AfroTransact Retail US")
+	must(t, err)
+	if renamed != 2 {
+		t.Fatalf("renamed %d documents, want 2", renamed)
+	}
+	again, err := idx.RenameSeller(ctx, "us", "org_r", "AfroTransact Retail US")
+	must(t, err)
+	if again != 0 {
+		t.Fatalf("second rename touched %d documents, want 0", again)
+	}
+	fallback := live
+	fallback.SellerName = "Marketplace seller"
+	fallback.Status = "SELLER_HIDDEN"
+	must(t, idx.UpsertProduct(ctx, "us", fallback, 500, port.UpsertOptions{PreserveSellerName: true}))
+	got = get(t, es, "AT00000001")
+	if got.SellerName != "AfroTransact Retail US" || got.Status != "SELLER_HIDDEN" {
+		t.Fatalf("preserve seller name failed: %+v", got)
 	}
 }
 

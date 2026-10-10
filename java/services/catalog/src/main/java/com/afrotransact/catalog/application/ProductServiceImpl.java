@@ -28,7 +28,6 @@ import com.afrotransact.catalog.port.CategoryRepository;
 import com.afrotransact.catalog.port.CategoryRequestRepository;
 import com.afrotransact.catalog.port.IdentifierIssuer;
 import com.afrotransact.catalog.port.ProductRepository;
-import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.security.PermissionChecker;
 import com.afrotransact.platform.security.PrincipalType;
@@ -47,12 +46,12 @@ class ProductServiceImpl implements ProductService {
     private final ProductDraftPolicy policy;
     private final PermissionChecker permissions;
     private final OwnerResolver owners;
-    private final DomainEventPublisher events;
+    private final ProductEvents events;
     private final Clock clock;
 
     ProductServiceImpl(ProductRepository products, CategoryRepository categories, CategoryRequestRepository requests,
                        IdentifierIssuer ids, ProductDraftPolicy policy, PermissionChecker permissions,
-                       OwnerResolver owners, DomainEventPublisher events, Clock clock) {
+                       OwnerResolver owners, ProductEvents events, Clock clock) {
         this.products = products;
         this.categories = categories;
         this.requests = requests;
@@ -227,7 +226,7 @@ class ProductServiceImpl implements ProductService {
     }
 
     private void publish(String type, Product p) {
-        events.publish(type, CatalogEvents.AGGREGATE_PRODUCT, p.id().toString(), ProductEventPayload.of(p));
+        events.publish(type, p);
     }
 
     private static NotFoundException notFound(String id) {

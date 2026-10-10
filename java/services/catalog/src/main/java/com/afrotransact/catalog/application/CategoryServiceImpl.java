@@ -34,11 +34,12 @@ class CategoryServiceImpl implements CategoryService {
     private final PermissionChecker permissions;
     private final OwnerResolver owners;
     private final DomainEventPublisher events;
+    private final ProductEvents productEvents;
     private final Clock clock;
 
     CategoryServiceImpl(CategoryRepository categories, CategoryRequestRepository requests, ProductRepository products,
                         IdentifierIssuer ids, PermissionChecker permissions, OwnerResolver owners,
-                        DomainEventPublisher events, Clock clock) {
+                        DomainEventPublisher events, ProductEvents productEvents, Clock clock) {
         this.categories = categories;
         this.requests = requests;
         this.products = products;
@@ -46,6 +47,7 @@ class CategoryServiceImpl implements CategoryService {
         this.permissions = permissions;
         this.owners = owners;
         this.events = events;
+        this.productEvents = productEvents;
         this.clock = clock;
     }
 
@@ -112,8 +114,7 @@ class CategoryServiceImpl implements CategoryService {
         CategoryRequest approved = requests.update(request.approve(leaf.id(), note, now));
         for (Product waiting : products.findByCategoryRequest(approved.id())) {
             Product moved = products.update(waiting.categoryApproved(leaf.id(), type.code(), now));
-            events.publish(CatalogEvents.PRODUCT_CREATED, CatalogEvents.AGGREGATE_PRODUCT, moved.id().toString(),
-                    ProductEventPayload.of(moved));
+            productEvents.publish(CatalogEvents.PRODUCT_CREATED, moved);
         }
         publish(CatalogEvents.CATEGORY_APPROVED, approved);
         return approved;

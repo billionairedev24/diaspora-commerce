@@ -123,7 +123,7 @@ class JdbcUserAccountRepository implements UserAccountRepository {
         return new UserAccount(rs.getObject("id", UUID.class), rs.getString("first_name"), rs.getString("last_name"),
                 rs.getString("email"), rs.getBoolean("email_verified"), rs.getString("phone_e164"),
                 rs.getString("password_hash"), rs.getBoolean("enabled"), rs.getBoolean("sms_consent"),
-                Jdbc.instant(rs, "terms_accepted_at"), rs.getObject("active_org_id", UUID.class),
+                Jdbc.instant(rs, "terms_accepted_at"), rs.getString("active_org_id"),
                 Jdbc.instant(rs, "created_at"), Jdbc.instant(rs, "updated_at"), rs.getInt("version"));
     }
 }

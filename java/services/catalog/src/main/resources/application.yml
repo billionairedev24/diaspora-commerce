@@ -20,6 +20,12 @@ spring:
       acks: all
       properties:
         enable.idempotence: true
+    consumer:
+      group-id: ${KAFKA_GROUP:catalog-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      ack-mode: record
   security:
     oauth2:
       resourceserver:
@@ -61,6 +67,9 @@ springdoc:
     path: /swagger-ui.html
 
 at:
+  consumers:
+    # Kafka listeners for other services' events (off in tests that have no broker).
+    enabled: ${CONSUMERS_ENABLED:true}
   api-docs:
     title: Catalog API
     description: Products (ATIN/GTIN), variants, category tree, product-type schemas and category requests.

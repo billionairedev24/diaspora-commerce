@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +29,7 @@ class DefaultLandingPolicyTest {
                 .isEqualTo(Landing.SELLER_ONBOARDING);
         assertThat(landingFor(Set.of(RoleKeys.CUSTOMER, RoleKeys.PROVIDER_APPLICANT), Set.of(), List.of()))
                 .isEqualTo(Landing.PROVIDER_ONBOARDING);
-        UUID org = UUID.randomUUID();
+        String org = "org_3k2j9x8q7w6e5r4t3y2u";
         assertThat(landingFor(Set.of(RoleKeys.CUSTOMER), Set.of(), List.of(
                 new OrgMembership(org, OrgKind.SELLER, "Ade's Kitchen", OrgStatus.PENDING, RoleKeys.SELLER_OWNER))))
                 .isEqualTo(Landing.SELLER_ONBOARDING);

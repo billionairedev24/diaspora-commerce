@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.afrotransact.identity.application.IdentityEventPayloads.RoleChanged;
 import com.afrotransact.identity.domain.IdentityRuleViolation;
+import com.afrotransact.identity.domain.OrgIds;
 import com.afrotransact.identity.domain.OrgKind;
 import com.afrotransact.identity.domain.OrgMembership;
 import com.afrotransact.identity.domain.OrgStatus;
@@ -49,16 +50,18 @@ class OrganizationServiceImpl implements OrganizationService {
 
     @Override
     @Transactional
-    public Organization upsert(UUID orgId, OrgKind kind, String name, OrgStatus status) {
+    public Organization upsert(String orgId, OrgKind kind, String name, OrgStatus status) {
         Actor actor = permissions.require(IdentityPermissions.ORGS_MANAGE);
-        Organization saved = orgs.upsert(new Organization(orgId, kind, name.trim(), status, Instant.now(clock)));
-        changeLog.append(actor.subject(), "org.upserted", null, null, orgId.toString(), kind + " " + status);
+        OrgIds.requireValid(orgId);
+        Organization saved = orgs.upsert(new Organization(orgId, kind, name.trim(), status, null,
+                Instant.now(clock)));
+        changeLog.append(actor.subject(), "org.upserted", null, null, orgId, kind + " " + status);
         return saved;
     }
 
     @Override
     @Transactional
-    public void setMember(UUID orgId, UUID userId, String roleKey) {
+    public void setMember(String orgId, UUID userId, String roleKey) {
         Actor actor = permissions.require(IdentityPermissions.ORGS_MANAGE);
         Organization org = orgs.findById(orgId).orElseThrow(() -> new NotFoundException("identity.org-not-found",
                 "Organisation not found"));
@@ -72,9 +75,9 @@ class OrganizationServiceImpl implements OrganizationService {
         }
         if (orgs.setMember(orgId, userId, roleKey)) {
             Instant now = Instant.now(clock);
-            changeLog.append(actor.subject(), "org.member.set", userId, roleKey, orgId.toString(), org.name());
+            changeLog.append(actor.subject(), "org.member.set", userId, roleKey, orgId, org.name());
             events.publish(IdentityEvents.ROLE_GRANTED, IdentityEvents.AGGREGATE, userId.toString(),
-                    new RoleChanged(userId.toString(), roleKey, orgId.toString(), actor.subject(), "org membership",
+                    new RoleChanged(userId.toString(), roleKey, orgId, actor.subject(), "org membership",
                             now));
             if (user.activeOrgId() == null) {
                 users.update(user.withActiveOrg(orgId, now));
@@ -84,15 +87,15 @@ class OrganizationServiceImpl implements OrganizationService {
 
     @Override
     @Transactional
-    public void removeMember(UUID orgId, UUID userId) {
+    public void removeMember(String orgId, UUID userId) {
         Actor actor = permissions.require(IdentityPermissions.ORGS_MANAGE);
         String role = orgs.memberships(userId).stream().filter(m -> m.orgId().equals(orgId))
                 .map(OrgMembership::roleKey).findFirst().orElse(null);
         if (role != null && orgs.removeMember(orgId, userId)) {
             Instant now = Instant.now(clock);
-            changeLog.append(actor.subject(), "org.member.removed", userId, role, orgId.toString(), null);
+            changeLog.append(actor.subject(), "org.member.removed", userId, role, orgId, null);
             events.publish(IdentityEvents.ROLE_REVOKED, IdentityEvents.AGGREGATE, userId.toString(),
-                    new RoleChanged(userId.toString(), role, orgId.toString(), actor.subject(), "org membership",
+                    new RoleChanged(userId.toString(), role, orgId, actor.subject(), "org membership",
                             now));
             users.findById(userId).filter(u -> orgId.equals(u.activeOrgId()))
                     .ifPresent(u -> users.update(u.withActiveOrg(null, now)));

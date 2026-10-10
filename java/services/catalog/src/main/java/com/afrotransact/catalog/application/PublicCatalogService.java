@@ -3,7 +3,10 @@ package com.afrotransact.catalog.application;
 import com.afrotransact.catalog.domain.Product;
 import com.afrotransact.catalog.domain.Variant;
 
-/** Anonymous reads of live products for the storefront, cart and search (no moderation details). */
+/**
+ * Anonymous reads of live products for the storefront, cart and search (no moderation details). Products of an
+ * organisation whose listings seller-service has hidden are not found.
+ */
 public interface PublicCatalogService {
 
     /** A LIVE product by its product ATIN. */

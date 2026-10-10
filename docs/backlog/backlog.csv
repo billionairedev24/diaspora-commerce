@@ -594,7 +594,7 @@
 "S205","Story","Cross-service org lifecycle wiring","Identity mirrors organisations owned by the seller service: string org ids (org_…), role/org claim granted on seller.org.approved, profile claims in access tokens for prefill.","- Identity accepts org_… string ids everywhere it uses org ids
 - seller.org.approved grants the owner role and org membership; next token carries the org claim
 - Access tokens carry given_name, family_name, email and phone_number for prefill
-- Payments consumes seller.payouts.paused/resumed; catalog/bookings/indexer consume seller.listings.hidden/restored","E13","","Highest","8","onboarding identity events","onboarding","In Progress"
+- Payments consumes seller.payouts.paused/resumed; catalog/bookings/indexer consume seller.listings.hidden/restored","E13","","Highest","8","onboarding identity events","onboarding","Done"
 "S206","Story","Metered billing usage (FBA storage, ads, AI credits)","Report usage to Stripe Billing meters for plan add-ons.","- Usage events aggregated daily per org
 - Stripe meter events sent idempotently
 - Invoices show metered lines","E14","","Medium","5","billing stripe","billing","To Do"
@@ -617,3 +617,13 @@
 - BFF stock-alert route works end to end","E19","","Medium","3","notifications","notifications","To Do"
 "S212","Story","Careers form uploads resume via media","The storefront careers form uploads the resume to the media service and sends resumeAssetId to the BFF.","- Resume uploads via signed media URL with type and size limits
 - Application submits with resumeAssetId and shows CAR- reference","E23","","Low","2","storefront","storefront-web","To Do"
+"S213","Story","Durable seller directory for the indexer","Indexer loads seller display names on startup from a seller endpoint instead of relying only on events seen since start.","- Seller exposes a paged org directory endpoint for service clients
+- Indexer warms its directory on start and refreshes on events
+- Restart does not change indexed seller names","E04","","Medium","3","indexer seller","search","To Do"
+"S214","Story","Expose payout hold in payouts balance","Payments adds payoutsPaused (and reason) to the payouts balance response so Seller Center can show the hold before a request fails.","- Balance response includes payoutsPaused and reason
+- Seller Center shows a banner when paused","E14","","Medium","1","payments","billing","To Do"
+"S215","Story","Org kind 'both' and market alignment","Seller emits BOTH when an org sells products and services; identity's market is aligned with content's market codes.","- Seller org events can carry BOTH
+- identity market values match content market codes
+- Navigation in Seller Center shows both groups for BOTH orgs","E13","","Low","3","seller identity","onboarding","To Do"
+"S216","Story","Page hide and restore for large seller catalogs","Catalog pages through an org's products on hide/restore instead of loading all of them in one transaction.","- Hide/restore processes products in pages of 500
+- Large catalog (50k) hide completes without timeouts","E03","","Low","2","catalog","catalog","To Do"

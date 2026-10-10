@@ -40,8 +40,14 @@ Interactive docs when running: `/swagger-ui.html`, `/docs` (Scalar), `/redoc`.
 
 ## Events (transactional outbox → `at.product.events`, `at.category-request.events`)
 
-`catalog.product.created|approved|rejected|paused|resumed`, `catalog.category-request.created|approved|rejected` —
-see [`contracts/asyncapi/fragments/catalog.yaml`](../../../contracts/asyncapi/fragments/catalog.yaml).
+`catalog.product.created|approved|rejected|paused|resumed|hidden|restored`,
+`catalog.category-request.created|approved|rejected` —
+see [`contracts/asyncapi/fragments/catalog.yaml`](../../../contracts/asyncapi/fragments/catalog.yaml). Product payloads
+carry `sellerHidden` (true while the owner's listings are hidden).
+
+Consumed (group `catalog-service`, inbox-deduplicated): `seller.listings.hidden|restored` on
+`at.seller-compliance.events` record the organisation in `org_listing_suppression` (V3), hide its products from
+`/v1/public/**` and publish `catalog.product.hidden|restored` for each of its products so search follows.
 
 ## Configuration
 

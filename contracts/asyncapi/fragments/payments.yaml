@@ -25,6 +25,13 @@ channels:
       paymentsPayoutPaid: {$ref: '#/components/messages/paymentsPayoutPaid'}
       paymentsPayoutFailed: {$ref: '#/components/messages/paymentsPayoutFailed'}
 operations:
+  consumePaymentsSellerComplianceEvents:
+    action: receive
+    channel: {$ref: '#/channels/sellerComplianceEvents'}
+    summary: >-
+      payments-service (consumer group payments-service, inbox-deduplicated) handles seller.payouts.paused / resumed:
+      the organisation's payout_hold is set or cleared (older decisions never override newer ones). While paused,
+      POST /v1/payouts/requests and approvals fail with 422 payments.payouts_paused; balances keep accruing.
   publishPaymentsPaymentEvents:
     action: send
     channel: {$ref: '#/channels/paymentsPaymentEvents'}

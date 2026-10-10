@@ -149,7 +149,7 @@ class ReviewServiceImpl implements ReviewService {
                 publish(SellerEvents.APPLICATION_APPROVED, next, entry);
                 List<String> owners = orgs.members(org.id()).stream().filter(OrgMember::isOwner)
                         .map(OrgMember::userId).toList();
-                OrgEventPayload payload = OrgEventPayload.of(org, owners, now);
+                OrgEventPayload payload = OrgEventPayload.of(org, owners, next.applicantUserId(), now);
                 events.publish(SellerEvents.ORG_APPROVED, SellerEvents.AGGREGATE_ORG, org.id(), payload);
                 events.publish(SellerEvents.ORG_UPDATED, SellerEvents.AGGREGATE_ORG, org.id(), payload);
             }

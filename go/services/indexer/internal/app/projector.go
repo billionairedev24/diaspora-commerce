@@ -40,7 +40,7 @@ func (p *projectorImpl) Handle(ctx context.Context, e events.Envelope) error {
 	version := domain.VersionOf(e.OccurredAt)
 	switch e.Type {
 	case domain.ProductCreated, domain.ProductApproved, domain.ProductRejected, domain.ProductPaused,
-		domain.ProductResumed:
+		domain.ProductResumed, domain.ProductHidden, domain.ProductRestored:
 		var pe domain.ProductEvent
 		if err := json.Unmarshal(e.Payload, &pe); err != nil {
 			p.log.WarnContext(ctx, "skipping malformed product event", "event_id", e.ID, "error", err)
@@ -64,6 +64,13 @@ func (p *projectorImpl) Handle(ctx context.Context, e events.Envelope) error {
 			p.log.InfoContext(ctx, "availability for unknown variant ignored", "sku", ae.SKU)
 		}
 		return nil
+	case domain.SellerOrgApproved, domain.SellerOrgUpdated:
+		var se domain.SellerOrgEvent
+		if err := json.Unmarshal(e.Payload, &se); err != nil {
+			p.log.WarnContext(ctx, "skipping malformed seller org event", "event_id", e.ID, "error", err)
+			return nil
+		}
+		return p.sellerName(ctx, se)
 	default:
 		return nil
 	}
@@ -78,9 +85,13 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 		}
 		cat = c
 	}
-	seller, err := p.sellers.DisplayName(ctx, pe.OwnerOrgID)
+	seller, known, err := p.sellers.DisplayName(ctx, pe.OwnerOrgID)
 	if err != nil {
 		return fmt.Errorf("seller %s: %w", pe.OwnerOrgID, err)
+	}
+	status := pe.Status
+	if pe.SellerHidden {
+		status = domain.StatusSellerHidden
 	}
 	doc := searchindex.ProductDocument{
 		ATIN:         pe.ATIN,
@@ -93,7 +104,7 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 		Fulfilment:   fulfilment(pe.OwnerKind),
 		Currency:     "USD",
 		OfferCount:   1,
-		Status:       pe.Status,
+		Status:       status,
 		DeliveryDays: deliveryDays(pe.OwnerKind),
 	}
 	for i, v := range pe.Variants {
@@ -105,8 +116,26 @@ func (p *projectorImpl) product(ctx context.Context, pe domain.ProductEvent, ver
 			}
 		}
 	}
-	if err := p.index.UpsertProduct(ctx, p.market, doc, version); err != nil {
+	if err := p.index.UpsertProduct(ctx, p.market, doc, version,
+		port.UpsertOptions{PreserveSellerName: !known}); err != nil {
 		return fmt.Errorf("upsert %s: %w", pe.ATIN, err)
+	}
+	return nil
+}
+
+// sellerName applies seller.org.approved / updated: remember the name and rename the seller's indexed documents.
+func (p *projectorImpl) sellerName(ctx context.Context, se domain.SellerOrgEvent) error {
+	name := se.Name()
+	if se.OrgID == "" || name == "" {
+		return nil
+	}
+	p.sellers.Remember(ctx, se.OrgID, name)
+	n, err := p.index.RenameSeller(ctx, p.market, se.OrgID, name)
+	if err != nil {
+		return fmt.Errorf("rename seller %s: %w", se.OrgID, err)
+	}
+	if n > 0 {
+		p.log.InfoContext(ctx, "seller renamed in index", "org_id", se.OrgID, "documents", n)
 	}
 	return nil
 }

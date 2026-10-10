@@ -21,7 +21,7 @@ public record UserAccount(
         boolean enabled,
         boolean smsConsent,
         Instant termsAcceptedAt,
-        UUID activeOrgId,
+        String activeOrgId,
         Instant createdAt,
         Instant updatedAt,
         int version) {
@@ -67,7 +67,7 @@ public record UserAccount(
                 termsAcceptedAt, activeOrgId, createdAt, now, version);
     }
 
-    public UserAccount withActiveOrg(UUID orgId, Instant now) {
+    public UserAccount withActiveOrg(String orgId, Instant now) {
         return new UserAccount(id, firstName, lastName, email, emailVerified, phone, passwordHash, enabled, smsConsent,
                 termsAcceptedAt, orgId, createdAt, now, version);
     }

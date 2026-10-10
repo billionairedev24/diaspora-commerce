@@ -84,7 +84,7 @@ func run() error {
 	index := elastic.NewIndex(es, cfg.Elasticsearch.Refresh)
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 	projector := app.NewProjector(index, catalog.NewClient(cfg.CatalogURL, httpClient),
-		sellers.NewStaticDirectory(cfg.SellerNames, "Marketplace seller"), cfg.Market, log)
+		sellers.NewMemoryDirectory(cfg.SellerNames, "Marketplace seller"), cfg.Market, log)
 
 	dlq, err := events.NewKafkaPublisher(cfg.Kafka.Brokers)
 	if err != nil {

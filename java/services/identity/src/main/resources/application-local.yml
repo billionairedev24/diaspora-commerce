@@ -69,9 +69,11 @@ at:
       - client-id: gateway-bff
         name: Gateway BFF
         type: confidential
-        secret: ${BFF_CLIENT_SECRET:local-bff-secret}
-        grant-types: [authorization_code, refresh_token, client_credentials]
-        redirect-uris: [http://localhost:8200/login/oauth2/code/afrotransact]
+        # GATEWAY_BFF_CLIENT_SECRET (BFF_CLIENT_SECRET still accepted). Authorization code + PKCE + refresh tokens;
+        # the callback lives on the storefront origin so the session cookie stays first-party.
+        secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:local-bff-secret}}
+        grant-types: [authorization_code, refresh_token]
+        redirect-uris: [http://localhost:3000/api/bff/v1/auth/oidc/callback, http://localhost:8200/login/oauth2/code/afrotransact]
         scopes: [openid, profile, email, phone, offline_access]
       - client-id: seller-service
         name: Seller service
@@ -109,3 +111,22 @@ at:
         secret: ${NOTIFICATIONS_CLIENT_SECRET:local-notifications-service-secret}
         grant-types: [client_credentials]
         scopes: [users:read]
+      - client-id: search-service
+        name: Search service
+        type: confidential
+        secret: ${SEARCH_CLIENT_SECRET:local-search-service-secret}
+        grant-types: [client_credentials]
+        scopes: [ai:use]
+      - client-id: retail-service
+        name: AfroTransact Retail service
+        type: confidential
+        secret: ${RETAIL_CLIENT_SECRET:local-retail-service-secret}
+        grant-types: [client_credentials]
+        scopes: [inventory:receive]
+      - client-id: mcp-client
+        name: AI agents (MCP)
+        type: public
+        grant-types: [authorization_code]
+        require-consent: true
+        redirect-uris: ["http://127.0.0.1:33418/callback", "https://claude.ai/api/mcp/auth_callback"]
+        scopes: [openid, mcp:shopper, mcp:seller, mcp:staff]

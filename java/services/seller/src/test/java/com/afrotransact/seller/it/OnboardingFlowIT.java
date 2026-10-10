@@ -267,6 +267,7 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(events(SellerEvents.ORG_UPDATED, orgId)).isEqualTo(1);
         JsonNode orgApproved = lastEvent(SellerEvents.ORG_APPROVED, orgId);
         assertThat(orgApproved.path("ownerUserIds").get(0).asString()).isEqualTo(user);
+        assertThat(orgApproved.path("applicantUserId").asString()).isEqualTo(user);
         assertThat(orgApproved.path("legalName").asString()).isEqualTo("Adaeze Nwosu");
 
         // Subscription created at Stripe with the plan's trial; card attached as default.
