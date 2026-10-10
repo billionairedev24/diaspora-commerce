@@ -39,6 +39,7 @@ Testcontainers ITs + JaCoCo; image from `java/Dockerfile` with `SERVICE=<svc>`).
 | `security.yml` | main, weekly, manual | CodeQL (java-kotlin, go, js/ts, actions), Trivy repo SARIF (CRITICAL fails), gitleaks full history, ZAP baseline vs dev |
 | `backlog.yml` | `docs/backlog/**` | CSV parses, header, unique ids, valid status/type/priority, parents are epics |
 | `docs.yml` | `docs/**`, `contracts/**` | build `docs/portal` and deploy to Cloudflare Pages (skips until it exists) |
+| `storybook.yml` (hand-written) | `web/packages/{ui,tokens,i18n}/**`, `web/apps/*/src/**/*.stories.tsx`, Seller Center components/styles used by app stories, root `package.json`/lockfile/workspace | `storybook build`; test runner (render + `play` + axe serious/critical) and Playwright visual diffs vs committed baselines in the pinned Playwright image; Cloudflare Pages `afrotransact-storybook` (PR preview comment, production on main); `update-visual-baselines` label regenerates baselines |
 | `mobile.yml` | tags `mobile-v*`, main (`mobile/**`), manual | EAS build (production, auto-submit) on tags; EAS Update OTA to `preview` on main; dev/preview/production profiles |
 | `workflows.yml` | `.github/**`, `tools/ci/**`, PORTS.md | generated workflows up to date + actionlint |
 
@@ -84,7 +85,7 @@ harmless (their path filters never match and the `meta` job skips everything).
 **Repository variables**: `TF_TARGETS` (below), `GITOPS_BRANCH` (default `main`), `VERCEL_FALLBACK`
 (`true` to always deploy web to Vercel too), `DEV_BASE_DOMAIN` (ZAP target), `DOCS_PAGES_PROJECT`.
 
-**Secrets**: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `EC_API_KEY`, `CONFLUENT_CLOUD_API_KEY`,
+**Secrets**: `CLOUDFLARE_API_TOKEN` (Workers, Pages: docs + Storybook), `CLOUDFLARE_ACCOUNT_ID`, `EC_API_KEY`, `CONFLUENT_CLOUD_API_KEY`,
 `CONFLUENT_CLOUD_API_SECRET`, `EXPO_TOKEN`, optional `VERCEL_TOKEN`/`VERCEL_ORG_ID`/`VERCEL_PROJECT_ID`,
 optional `GITOPS_APP_ID`/`GITOPS_APP_PRIVATE_KEY` (a GitHub App allowed to push the GitOps bump through
 branch protection; otherwise `GITHUB_TOKEN` is used and `main` must allow it, or set `GITOPS_BRANCH` to a
@@ -119,6 +120,38 @@ dispatch deploys `<app>-uat` / `<app>-prod` (prod approval). Worker names match 
 `infra/cloudflare` (`seller.dev.afrotransact.com/*` -> `seller-center-dev`). Each app needs `wrangler.jsonc`
 (or `.toml`) and the `@opennextjs/cloudflare` dev dependency (web agent). With `vercel: true` (input or
 `VERCEL_FALLBACK=true`) the same app is also deployed with the Vercel CLI.
+
+## Storybook (Cloudflare Pages)
+
+`storybook.yml` (S199/S247) runs on PRs and main pushes that touch the shared UI, tokens, i18n, app stories or the
+Seller Center components those stories render:
+
+```
+build             root `pnpm install --frozen-lockfile` -> `pnpm --filter @afrotransact/ui build-storybook`
+                  (a story that does not compile fails here) -> artifact storybook-static
+test              container mcr.microsoft.com/playwright:v1.56.1-noble (MCR, not Docker Hub; = @playwright/test 1.56.1)
+                  test-storybook:static   every story rendered from the static build; play functions; axe
+                                          WCAG 2.2 A/AA serious/critical fail (known issues -> job summary warnings)
+                  visual                  Playwright screenshot per story vs web/packages/ui/visual-baselines;
+                                          diffs -> artifact `visual-diffs` (+ HTML report)
+deploy            wrangler pages deploy storybook-static --project-name=afrotransact-storybook --branch=<branch>
+                  PR (same repo only): preview alias URL in one PR comment that is updated in place (also when
+                  tests fail, so reviewers can look); main: production (only when tests pass)
+update-baselines  PR label `update-visual-baselines` (or dispatch with update_baselines on a non-main branch):
+                  rebuild, `visual:update` in the same image, commit the PNGs to the branch, remove the label
+```
+
+Details, local commands and the font-rendering caveat: [testing.md §7](testing.md#7-storybook--webpackagesui).
+
+One-time setup:
+- Secrets: the same repository secrets as `docs.yml`, `CLOUDFLARE_API_TOKEN` (needs **Account → Cloudflare Pages →
+  Edit**) and `CLOUDFLARE_ACCOUNT_ID`. No variables are needed.
+- Create the Pages project once, with production branch `main`:
+  `npx wrangler pages project create afrotransact-storybook --production-branch=main`. `infra/cloudflare`
+  manages no Pages projects (the docs project is not there either); move both there if Pages should be under
+  Terraform.
+- Create the PR label `update-visual-baselines`. If `main` is protected, the label path pushes only to PR
+  branches, never to main.
 
 ## Mobile (EAS)
 

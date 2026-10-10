@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { dirname, resolve } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { type StorybookConfig } from '@storybook/react-vite';
@@ -22,6 +22,26 @@ async function appPostcssPlugins(): Promise<unknown[]> {
   }
 }
 
+const appsDir = resolve(here, '../../../apps');
+
+/**
+ * The Next.js apps import their own modules as `@/…` (tsconfig `paths`: `@/*` -> `./src/*`). App components rendered in
+ * stories keep that: `@/x` imported from a file under web/apps/<app>/ resolves to web/apps/<app>/src/x.
+ */
+function appAliasPlugin() {
+  return {
+    name: 'afrotransact-app-alias',
+    enforce: 'pre' as const,
+    async resolveId(this: { resolve: (id: string, importer?: string, opts?: { skipSelf: boolean }) => Promise<unknown> }, source: string, importer?: string) {
+      if (!source.startsWith('@/') || !importer) return null;
+      const rel = importer.startsWith(appsDir + sep) ? importer.slice(appsDir.length + 1) : null;
+      const app = rel?.split(sep)[0];
+      if (!app) return null;
+      return this.resolve(resolve(appsDir, app, 'src', source.slice(2)), importer, { skipSelf: true });
+    }
+  };
+}
+
 const config: StorybookConfig = {
   stories: [
     // Foundations (design tokens) and the @afrotransact/ui component stories.
@@ -37,6 +57,7 @@ const config: StorybookConfig = {
   typescript: { reactDocgen: 'react-docgen-typescript' },
   viteFinal: async (cfg) => ({
     ...cfg,
+    plugins: [appAliasPlugin(), ...(cfg.plugins ?? [])],
     css: { ...cfg.css, postcss: { plugins: (await appPostcssPlugins()) as never[] } },
     build: {
       ...cfg.build,

@@ -14,7 +14,7 @@ Most tests are fast and in-process; a few prove the wiring against real infrastr
 | **Architecture / lint** | `ArchitectureTest` → `HexagonalArchitectureRules.verify` (ArchUnit); Checkstyle | `golangci-lint` (`go/.golangci.yml`), `go vet` | ESLint (`at/no-raw-hex`, import order), Stylelint, `tsc --noEmit` | ESLint, `tsc` |
 | **Contract** | OpenAPI exported from `/v3/api-docs` must equal `contracts/openapi/<svc>.yaml` (CI `contract` job, oasdiff) | `TestEmbeddedContractIsIdentical` + response conformance (§4); AsyncAPI contract tests (§4) | `@afrotransact/api-client` `test/contract.test.ts`: Zod schemas stay assignable to the OpenAPI-generated types | shares the api-client |
 | **Integration** (some) | `*IT` with Testcontainers (Postgres, Kafka) through the real adapters, Flyway and the outbox | `*_integration_test.go` with testcontainers-go (Postgres/PostGIS, Valkey, Elasticsearch, MinIO) | — | — |
-| **Component** | `@WebMvcTest`-style slice tests for controllers + problem details where useful | `httptest` against the real router with fake ports (`internal/testkit`) | Storybook stories for every component state (RTL, mobile), a11y addon | — |
+| **Component** | `@WebMvcTest`-style slice tests for controllers + problem details where useful | `httptest` against the real router with fake ports (`internal/testkit`) | Storybook stories for every component state (RTL, mobile); test runner (`play` interactions + axe) and Playwright visual diffs on the static build (§7) | — |
 | **E2E** (few) | — | — | Playwright: `tests/e2e` (cross-app journeys + axe), `web/apps/storefront/e2e` (storefront smoke) | (planned: Maestro) |
 | **Load** | — | — | k6: `tests/load` (search, checkout) | — |
 
@@ -197,11 +197,73 @@ E2E_STOREFRONT_URL=https://pr-123.preview… E2E_SELLER_URL=… E2E_BROWSERS=chr
 - Design tokens are documented in `stories/tokens/Tokens.mdx`, rendered from the generated token map.
 - App presentational components get stories under `stories/apps/<app>/` (no app changes needed); the Storybook
   Vite config loads the Seller Center's Tailwind stylesheet for them.
-- The a11y addon runs on every story (`parameters.a11y.test = 'error'`).
+- The a11y addon runs on every story in the Storybook UI (`parameters.a11y.test = 'error'`).
 - `pnpm --filter @afrotransact/ui storybook` (dev, :6006) · `pnpm --filter @afrotransact/ui build-storybook`
-  (static; delete `storybook-static/` afterwards). Interaction tests (`play` functions via
-  `@storybook/addon-vitest`) and visual diffs (Chromatic or Playwright snapshots of the static build) are the
-  next step for S199's CI criteria.
+  (static; delete `storybook-static/` afterwards).
+- CI: `.github/workflows/storybook.yml` (see [ci-cd.md](ci-cd.md#storybook-cloudflare-pages)).
+
+### Interaction and a11y tests (test runner)
+
+`@storybook/test-runner` (Jest + Playwright Chromium) runs **against the static build** (`index.json` mode), so it
+tests exactly what is deployed:
+
+```bash
+pnpm --filter @afrotransact/ui build-storybook
+pnpm --filter @afrotransact/ui test-storybook:static   # serves storybook-static on :6007 and runs every story
+```
+
+- Every story is rendered: a render error, a console error or a failing `play` function fails it. A story that does
+  not compile already fails `storybook build`.
+- `play` functions (import `expect`, `fn`, `screen`, `waitFor`, `within` from `storybook/test`; use the `canvas` and
+  `userEvent` from the play context) cover the interactive components: Button (click, keyboard, loading), text
+  field, password (live rules, show/hide), checkboxes, address autocomplete (type, arrow keys, Enter), quantity
+  stepper (stock limit, remove), ProductCard (add to cart → stepper → remove), Dialog (Esc, reopen, Apply, focus
+  trap), Menu, Tabs (arrow keys) and Toast (auto-dismiss). Query by role and accessible name, as in Playwright.
+  Portalled content (Radix dialogs/menus) is outside the canvas: use `screen`.
+- **axe on every story** (`.storybook/test-runner.ts` `postVisit`, WCAG 2.2 A/AA tags as in `tests/e2e`): serious
+  and critical violations fail. The addon's own scan is switched off under the runner (`globals.a11y.manual`), so
+  minor/moderate findings only show in the Storybook UI panel.
+- **Known issues**: `.storybook/a11y-known-issues.ts` maps an entry of `tests/e2e/support/a11y-known-issues.ts` (rule
+  + note) to story ids. It only applies while that e2e entry exists, so fixing the issue and deleting the e2e entry
+  re-arms the story gate. Allowed and fixed-but-still-listed findings are written to
+  `test-results/storybook-a11y.log` (CI: job summary + warnings). The list is empty today (the Stars contrast finding
+  on `commerce-primitives--rating` has been fixed).
+- Opt a story out with the `skip-test` tag (and say why next to it).
+- Storybook 10 marks the test runner as no longer officially supported in favour of `@storybook/addon-vitest`. The
+  Vitest addon runs stories through Vite, not the static build, so we keep the runner while it works. It needs jest
+  30.4.x: jest-runtime 30.5 rejects the `module.register()` call Storybook makes when loading the runner config, so
+  the root `package.json` pins `@storybook/test-runner>jest*` with `pnpm.overrides`.
+
+### Visual regression (Playwright screenshots, baselines in the repo)
+
+`web/packages/ui/visual/stories.visual.ts` takes one screenshot per story listed in `storybook-static/index.json`.
+Each story loads on a fresh page and its `play` function runs. The screenshot is taken once Storybook reports the
+render `finished`, fonts and images have loaded, and animations are disabled. The viewport is fixed at 1024×720
+(375×740 for stories with the `mobile` viewport global). Baselines are PNGs (no LFS) in
+`web/packages/ui/visual-baselines/<story-id>.png`: 69 files, ~1 MB.
+
+```bash
+pnpm --filter @afrotransact/ui build-storybook
+pnpm --filter @afrotransact/ui visual:docker          # compare, in the CI image (needs Docker)
+pnpm --filter @afrotransact/ui visual:update:docker   # accept intended changes: rewrite the baselines, commit them
+pnpm --filter @afrotransact/ui visual                 # same without Docker (see the font caveat)
+pnpm --filter @afrotransact/ui visual:update
+```
+
+- Tolerance: `VISUAL_MAX_DIFF_PIXEL_RATIO` (share of pixels that may differ, default `0.002`) and `VISUAL_THRESHOLD`
+  (per-pixel colour distance 0–1, default `0.2`), in `visual/playwright.config.ts`.
+- Diffs: `visual/test-results/<test>/*-{expected,actual,diff}.png` (CI artifact `visual-diffs`, plus an HTML report).
+- In CI, add the **`update-visual-baselines`** label to the PR (same-repo branches). CI regenerates the baselines
+  in the pinned image, commits them to the branch and removes the label. On another branch, run the workflow
+  manually with `update_baselines`. The bot's commit does not start CI (GITHUB_TOKEN), so push again afterwards.
+- Opt a story out with the `skip-visual` tag, e.g. for something that cannot be made deterministic. Prefer making
+  it deterministic: fixed data, and a `play` that waits for the final state, as the Toast story does.
+- **Font rendering caveat**: baselines are rendered in `mcr.microsoft.com/playwright:v1.56.1-noble` (Chromium 1194,
+  the `@playwright/test` 1.56.1 build), which is also what CI runs. Figtree is bundled (`@fontsource`), but glyph
+  rasterisation and fallback fonts (Arabic in the RTL stories, symbols) come from the OS. Against the dev
+  container's own Chromium (same build, other system fonts), 13 of 69 stories differ by ~1% of pixels. So update
+  baselines with the `:docker` scripts or the CI label, never from macOS/Windows or a bare host. Bump the image tag
+  in `storybook.yml` and `scripts/visual-docker.sh` together with `@playwright/test`, then regenerate.
 
 ## 8. Load tests (k6) — `tests/load`
 

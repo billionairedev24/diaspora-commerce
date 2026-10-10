@@ -18,6 +18,12 @@
     "test": "vitest run",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
+    "test-storybook": "test-storybook --index-json --url ${STORYBOOK_URL:-http://127.0.0.1:6007}",
+    "test-storybook:static": "rm -rf test-results && node scripts/serve-static.mjs -- test-storybook --index-json --url http://127.0.0.1:6007 --maxWorkers=2",
+    "visual": "playwright test -c visual/playwright.config.ts",
+    "visual:update": "playwright test -c visual/playwright.config.ts --update-snapshots=all",
+    "visual:docker": "scripts/visual-docker.sh",
+    "visual:update:docker": "scripts/visual-docker.sh --update-snapshots=all",
     "build": "storybook build --quiet"
   },
   "dependencies": {
@@ -34,9 +40,12 @@
   },
   "devDependencies": {
     "@afrotransact/tokens": "workspace:*",
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.56.1",
     "@storybook/addon-a11y": "10.6.1",
     "@storybook/addon-docs": "10.6.1",
     "@storybook/react-vite": "10.6.1",
+    "@storybook/test-runner": "0.26.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",

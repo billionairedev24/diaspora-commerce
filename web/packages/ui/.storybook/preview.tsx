@@ -14,6 +14,12 @@ const withDirection: Decorator = (Story, ctx) => {
   );
 };
 
+/**
+ * Under @storybook/test-runner (it tags the user agent) the addon's automatic scan is switched off: the runner's
+ * postVisit hook (.storybook/test-runner.ts) runs axe itself and applies the serious/critical gate + known issues.
+ */
+const underTestRunner = typeof navigator !== 'undefined' && navigator.userAgent.includes('StorybookTestRunner');
+
 const preview: Preview = {
   decorators: [withDirection],
   globalTypes: {
@@ -22,7 +28,7 @@ const preview: Preview = {
       toolbar: { title: 'Direction', icon: 'transfer', items: [{ value: 'ltr', title: 'LTR' }, { value: 'rtl', title: 'RTL' }], dynamicTitle: true }
     }
   },
-  initialGlobals: { dir: 'ltr' },
+  initialGlobals: { dir: 'ltr', a11y: { manual: underTestRunner } },
   parameters: {
     layout: 'fullscreen',
     a11y: { test: 'error' },

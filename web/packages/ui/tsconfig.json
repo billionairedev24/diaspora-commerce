@@ -1,5 +1,7 @@
 {
   "extends": "../../../tsconfig.base.json",
-  "compilerOptions": { "types": ["node", "@testing-library/jest-dom"] },
-  "include": ["src", "test", ".storybook", "stories"]
+  "compilerOptions": { "types": ["node", "@testing-library/jest-dom"], "allowImportingTsExtensions": true,
+    // App components rendered by stories/apps/seller-center import their own modules as `@/…` (see .storybook/main.ts).
+    "paths": { "@/*": ["../../apps/seller-center/src/*"] } },
+  "include": ["src", "test", ".storybook", "stories", "visual"]
 }

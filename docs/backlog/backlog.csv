@@ -578,7 +578,7 @@
 "S198","Story","Playwright E2E journeys","Sign-up, search → checkout (3DS, decline), multi-seller split, returns, onboarding, listing moderation, inventory, RBAC denials.","- Runs against per-PR previews on Chromium, WebKit and Firefox
 - Flaky tests quarantined with an owner","E33","","High","8","quality e2e","quality","Done"
 "S199","Story","Storybook for UI packages and apps","Stories for every component state including RTL and mobile; a11y and visual tests.","- Interaction tests run in CI
-- Visual diffs require review","E33","","High","5","quality web","quality","In Progress"
+- Visual diffs require review","E33","","High","5","quality web","quality","Done"
 "S200","Story","Load tests (k6) for search and checkout","Flash-sale profile proves no overselling and latency budgets.","- Search p95 < 150 ms at target load
 - Exactly N of N+25 concurrent orders succeed for N units","E33","","High","5","quality performance","quality","Done"
 "S201","Story","Security scanning","CodeQL, Trivy, gitleaks, OWASP dependency check and ZAP baseline on previews.","- Critical findings fail the build
@@ -742,7 +742,7 @@
 - Helm templates never render image tag latest","E33","","Highest","5","security","quality","In Progress"
 "S247","Story","Storybook interaction tests and visual diffs in CI; fix known a11y issues","Add Storybook interaction tests and visual regression in CI, and fix the a11y issues recorded in tests/e2e/support/a11y-known-issues.ts (image alt, contrast, carousel dot size, calendar grid semantics).","- Storybook test-runner runs in CI
 - Visual diffs reviewed on PRs
-- a11y-known-issues list is empty","E33","","Medium","5","storybook a11y","quality","To Do"
+- a11y-known-issues list is empty","E33","","Medium","5","storybook a11y","quality","Done"
 "S248","Story","Relationship checks in catalog, orders, payments; market on role events","Roll ResourceAccessChecker out to catalog, orders and payments (shadow then enforce); identity publishes market on role events so authz-sync writes market-scoped staff grants; authz-sync in docker compose; FGA enforce in uat and prod after shadow review.","- Catalog, orders and payments enforce relationships in dev
 - Market-scoped staff grants come from identity events
 - Shadow-mode denial logs reviewed before enforcing in uat/prod","E02","","High","8","authz openfga","identity","To Do"
