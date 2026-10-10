@@ -247,6 +247,33 @@ type ShipFromAddress struct {
 	Country    string `json:"country"`
 	IsDefault  bool   `json:"isDefault"`
 	Version    int64  `json:"version"`
+	// Position is geo-service's geocoded position (nil until geo located the address); S255.
+	Position *ShipFromPosition `json:"position"`
+	// AfrotransactPickup is AfroTransact Delivery from this address (S255).
+	AfrotransactPickup *ShipFromPickup `json:"afrotransactPickup"`
+}
+
+// ShipFromPosition is seller's GeoPosition.
+type ShipFromPosition struct {
+	Lat        float64    `json:"lat"`
+	Lng        float64    `json:"lng"`
+	Precision  string     `json:"precision"`
+	GeocodedAt *time.Time `json:"geocodedAt"`
+}
+
+// ShipFromPickup is seller's AfrotransactPickup.
+type ShipFromPickup struct {
+	Enabled   bool                  `json:"enabled"`
+	Hours     []domain.PickupWindow `json:"hours"`
+	ZoneName  string                `json:"zoneName"`
+	EnabledAt *time.Time            `json:"enabledAt"`
+}
+
+// PickupRequest is seller's AfrotransactPickupRequest.
+type PickupRequest struct {
+	Enabled bool                  `json:"enabled"`
+	Hours   []domain.PickupWindow `json:"hours"`
+	Version *int64                `json:"version,omitempty"`
 }
 
 // ShipFromInput is seller's ShipFromAddressRequest.
@@ -272,6 +299,8 @@ type ShipFromClient interface {
 	UpdateShipFrom(ctx context.Context, bearer, orgID, id string, in ShipFromInput) (ShipFromAddress, error)
 	DefaultShipFrom(ctx context.Context, bearer, orgID, id string) ([]ShipFromAddress, error)
 	DeleteShipFrom(ctx context.Context, bearer, orgID, id string) ([]ShipFromAddress, error)
+	// SetPickup is PUT …/{id}/afrotransact-pickup (S255).
+	SetPickup(ctx context.Context, bearer, orgID, id string, in PickupRequest) (ShipFromAddress, error)
 }
 
 // SellerServiceClient calls the seller service (organisations, onboarding, compliance, plans & billing, ship-from
@@ -401,6 +430,42 @@ type StockClient interface {
 // OffersClient sets seller-managed stock (planned offers PUT /v1/offers/stock/{sellerSku}).
 type OffersClient interface {
 	SetStock(ctx context.Context, bearer, idempotencyKey, sku string, quantity int, reason string) (domain.StockAdjustment, error)
+	// List is GET /v1/offers (the token's organisation), one page.
+	List(ctx context.Context, bearer string, page, size int) (OfferPage, error)
+	// Update is PATCH /v1/offers/{id} (only the fields present change).
+	Update(ctx context.Context, bearer, id string, body map[string]any) (SellerOfferUp, error)
+}
+
+// SellerOfferUp is offers' Offer as seller center sees it.
+type SellerOfferUp struct {
+	ID           string `json:"id"`
+	ATIN         string `json:"atin"`
+	ProductATIN  string `json:"productAtin"`
+	ProductID    string `json:"productId"`
+	SellerSKU    string `json:"sellerSku"`
+	Condition    string `json:"condition"`
+	PriceMinor   int64  `json:"priceMinor"`
+	Currency     string `json:"currency"`
+	Fulfilment   string `json:"fulfilment"`
+	Quantity     int    `json:"quantity"`
+	AvailableQty int    `json:"availableQty"`
+	ShipFrom     *struct {
+		City       string `json:"city"`
+		Region     string `json:"region"`
+		PostalCode string `json:"postalCode"`
+		LocationID string `json:"locationId"`
+	} `json:"shipFrom"`
+	ShipsFrom string `json:"shipsFrom"`
+	Status    string `json:"status"`
+	Version   int64  `json:"version"`
+}
+
+// OfferPage is offers' OfferPage.
+type OfferPage struct {
+	Items []SellerOfferUp `json:"items"`
+	Total int64           `json:"total"`
+	Page  int             `json:"page"`
+	Size  int             `json:"size"`
 }
 
 // MediaAsset is media's Asset.
@@ -462,7 +527,10 @@ type OrderShipmentView struct {
 	Carrier        string   `json:"carrier"`
 	TrackingNumber string   `json:"trackingNumber"`
 	NextActions    []string `json:"nextActions"`
-	Lines          []struct {
+	// PickupLocationID and LocalDelivery: AfroTransact Delivery from the seller's store (S255).
+	PickupLocationID string             `json:"pickupLocationId"`
+	LocalDelivery    *LocalDeliveryView `json:"localDelivery"`
+	Lines            []struct {
 		VariantATIN    string `json:"variantAtin"`
 		Title          string `json:"title"`
 		ImageURL       string `json:"imageUrl"`
@@ -539,6 +607,35 @@ type SellerOrdersClient interface {
 	Transition(ctx context.Context, bearer, idempotencyKey, shipmentID, to string) (OrderView, error)
 	AttachTracking(ctx context.Context, bearer, shipmentID, carrier, trackingNumber string) (OrderView, error)
 	Analytics(ctx context.Context, bearer string, from, to time.Time) (SalesAnalytics, error)
+	// Split is GET /v1/orders/{number}/payment-split (a seller sees its own row).
+	Split(ctx context.Context, bearer, orderNumber string) (OrderSplit, error)
+}
+
+// OrderSplit is orders' Split (payments' split of one order).
+type OrderSplit struct {
+	Recipients []struct {
+		Recipient       string `json:"recipient"`
+		Kind            string `json:"kind"`
+		ItemsMinor      int64  `json:"itemsMinor"`
+		ShippingMinor   int64  `json:"shippingMinor"`
+		CommissionMinor int64  `json:"commissionMinor"`
+		FbaFeesMinor    int64  `json:"fbaFeesMinor"`
+		// DeliveryFeesMinor is payments' AfroTransact Delivery seller fees (4250); orders' Split does not relay it yet.
+		DeliveryFeesMinor *int64 `json:"deliveryFeesMinor"`
+		StripeFeeMinor    int64  `json:"stripeFeeMinor"`
+		NetMinor          int64  `json:"netMinor"`
+	} `json:"recipients"`
+}
+
+// LocalDeliveryView is orders' LocalDeliveryView (S255); the seller fee is hidden from customers.
+type LocalDeliveryView struct {
+	ShipFromLocationID  string   `json:"shipFromLocationId"`
+	RoadMiles           *float64 `json:"roadMiles"`
+	DurationMinutes     *float64 `json:"durationMinutes"`
+	DistanceMethod      string   `json:"distanceMethod"`
+	CustomerChargeMinor int64    `json:"customerChargeMinor"`
+	SellerFeeMinor      *int64   `json:"sellerFeeMinor"`
+	PricingVersion      int      `json:"pricingVersion"`
 }
 
 // ---------------------------------------------------------------- carrier-gateway
@@ -663,7 +760,9 @@ type FeeScheduleSummary struct {
 		OrgID    string `json:"orgId"`
 		Category string `json:"category"`
 	} `json:"overrides"`
-	CancelledAt *time.Time `json:"cancelledAt"`
+	// DeliveryPricing is the AfroTransact Delivery section (S255): the BFF shows the caller's own seller fee only.
+	DeliveryPricing *domain.DeliveryPricing `json:"deliveryPricing"`
+	CancelledAt     *time.Time              `json:"cancelledAt"`
 }
 
 // EffectiveFeesResponse is payments' EffectiveFeesResponse (fees for one organisation and category).

@@ -1,6 +1,7 @@
 /* In-memory state of the mock staff BFF (stored on globalThis so the route handler, server components and tests share
    it). Seeded from the Backoffice prototype (backoffice-data.js, backoffice-config.js, at-site.js) relative to today. */
 import { type ActivityEntry, type ExportJob, type ResourceKey } from '../../schemas/staff';
+import { type MockDispatch, seedDispatch } from './dispatch';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 
 export type Scalar = string | number | boolean | null;
@@ -33,6 +34,8 @@ export interface MockStaffDb {
   audit: { at: string; actor: string; action: string; summary: string; entityId: string }[];
   /** payments' fee-schedule versions (the fee-schedules table is derived from them). */
   feeSchedules: MockFeeSchedule[];
+  /** fulfilment's seller pickups (AfroTransact Delivery from the seller's store, S255). */
+  dispatch: MockDispatch;
   seq: number;
 }
 
@@ -394,6 +397,7 @@ function seed(now: Date): MockStaffDb {
     exports: [],
     audit: [],
     feeSchedules,
+    dispatch: seedDispatch(now),
     seq: 1
   };
 }

@@ -1,5 +1,5 @@
 // GENERATED from contracts/openapi/fulfilment.yaml by openapi-typescript — do not edit by hand.
-// Regenerate with: pnpm --filter @afrotransact/driver-app generate
+// Regenerate with: pnpm --filter <app> generate
 /* eslint-disable */
 
 export interface paths {
@@ -146,6 +146,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/dispatch/pickups/{id}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Override: put a seller pickup on a route
+         * @description From the pool, or from another route while it is not collected yet and its drop-off carries only this shipment (409 fulfilment.pickup-not-movable otherwise). The reason is logged (pickup assignments) and fulfilment.pickup.dispatch_assigned is published. delivery:dispatch.
+         */
+        post: operations["pickupAssign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/dispatch/pickups/{id}/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Assignments of a seller pickup (auto and overrides) */
+        get: operations["pickupAssignments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/dispatch/pickups/{id}/driver-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Nearest available drivers for a seller pickup
+         * @description Top 5: fresh position (KNN <-> on PostGIS), access active, an ASSIGNED or IN_PROGRESS route today in the pickup's delivery zone, not blocked, vehicle inspection passed, room left; ranked by geo road distance (straight line when geo is down). delivery:dispatch.
+         */
+        get: operations["pickupDriverSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/dispatch/routes": {
         parameters: {
             query?: never;
@@ -232,6 +289,23 @@ export interface paths {
         put?: never;
         /** Cancel a route that has not started (shipments go back to the pool) */
         post: operations["cancelRoute"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/dispatch/routes/{routeId}/return-pickups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add waiting return pickups to a route as RETURN_PICKUP stops (dispatch) */
+        post: operations["addReturnPickupsToRoute"];
         delete?: never;
         options?: never;
         head?: never;
@@ -357,6 +431,26 @@ export interface paths {
         get: operations["dispatchStream"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/driver/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report my current position
+         * @description Stored as the driver's last known position (PostGIS geography + time) for the nearest-driver preference of seller pickups; an older fix never overwrites a newer one. Synced events with lat/lon update it too. Positions older than DRIVER_POSITION_STALE_AFTER (10 min) are ignored. 403 like /v1/driver/me without delivery:operate.
+         */
+        post: operations["driverLocation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -611,6 +705,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/return-pickups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return pickups by status and depot (dispatch) */
+        get: operations["listReturnPickups"];
+        put?: never;
+        /**
+         * Schedule a return pickup (SERVICE with delivery:returns, i.e. tax-returns; or dispatch)
+         * @description One pickup per RMA: a retry returns the existing pickup with 200. The pickup waits in the pool (REQUESTED) until dispatch adds it to a route as a RETURN_PICKUP stop; the driver checks the RMA's handover code with tax-returns (POST /v1/returns/{id}/pickup) and syncs return_pickup.collected or return_pickup.failed.
+         */
+        post: operations["scheduleReturnPickup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/return-pickups/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One return pickup (tax-returns or dispatch) */
+        get: operations["getReturnPickup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/return-pickups/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel a return pickup (tax-returns when the RMA is cancelled, or dispatch)
+         * @description Cancels its RETURN_PICKUP stop unless the driver is already there (409). Idempotent.
+         */
+        post: operations["cancelReturnPickup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -650,6 +802,81 @@ export interface components {
             lon?: number;
             coldChain?: boolean;
             active?: boolean;
+        };
+        /** @description The customer's address (from the order) */
+        ReturnPickupAddress: {
+            name?: string;
+            phone?: string;
+            line1: string;
+            line2?: string;
+            city?: string;
+            state?: string;
+            postalCode: string;
+            country?: string;
+            /** Format: double */
+            lat?: number;
+            /** Format: double */
+            lon?: number;
+        };
+        /** @description A DRIVER_PICKUP return to collect (one per RMA) */
+        ScheduleReturnPickupRequest: {
+            rmaId: string;
+            rmaNumber: string;
+            orderId?: string;
+            orderNumber?: string;
+            shipmentId?: string;
+            customerId?: string;
+            sellerOrgId?: string;
+            address: components["schemas"]["ReturnPickupAddress"];
+            /** @description FC the parcel goes back to (return centre); default node otherwise */
+            depotNodeId?: string;
+            /**
+             * Format: date
+             * @description First day the customer is ready; default today
+             */
+            readyFrom?: string;
+            /**
+             * Format: date
+             * @description Last day of the pickup window
+             */
+            collectBy?: string;
+            /** Format: int32 */
+            units?: number;
+        };
+        ReturnPickup: {
+            id?: string;
+            rmaId?: string;
+            rmaNumber?: string;
+            orderId?: string;
+            orderNumber?: string;
+            shipmentId?: string;
+            customerId?: string;
+            sellerOrgId?: string;
+            name?: string;
+            addressLine?: string;
+            city?: string;
+            state?: string;
+            postalCode?: string;
+            country?: string;
+            depotNodeId?: string;
+            /** Format: date */
+            readyFrom?: string;
+            /** Format: date */
+            collectBy?: string;
+            /** Format: int32 */
+            units?: number;
+            /** @description REQUESTED | ROUTED | COLLECTED | FAILED | CANCELLED */
+            status?: string;
+            routeId?: string;
+            stopId?: string;
+            note?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        CancelReturnPickupRequest: {
+            reason?: string;
         };
         /** @description Pick and pack of one FBA / Retail 1P shipment */
         FulfilmentTask: {
@@ -861,6 +1088,35 @@ export interface components {
             deviceId: string;
             event: components["schemas"]["DriverEvent"];
         };
+        /** @description The device's current GPS fix */
+        DriverLocationPing: {
+            deviceId?: string;
+            /** Format: double */
+            lat: number;
+            /** Format: double */
+            lon: number;
+            /** Format: double */
+            accuracyM?: number;
+            /**
+             * Format: date-time
+             * @description Device time of the fix; default now
+             */
+            capturedAt?: string;
+        };
+        /** @description The driver's last known position */
+        DriverPosition: {
+            driverId?: string;
+            /** Format: double */
+            lat?: number;
+            /** Format: double */
+            lon?: number;
+            /** Format: double */
+            accuracyM?: number;
+            /** Format: date-time */
+            recordedAt?: string;
+            /** @enum {string} */
+            source?: "SYNC" | "PING";
+        };
         CreateRouteRequest: {
             name?: string;
             zone?: string;
@@ -971,6 +1227,10 @@ export interface components {
         AddShipmentsRequest: {
             shipmentIds: string[];
         };
+        /** @description Return pickups to add to a route as RETURN_PICKUP stops */
+        AddReturnPickupsRequest: {
+            returnPickupIds: string[];
+        };
         ReasonRequest: {
             reason?: string;
         };
@@ -986,6 +1246,11 @@ export interface components {
             /** Format: int32 */
             maxDropoffs?: number;
             window?: string;
+        };
+        /** @description Dispatch override of the nearest-driver assignment */
+        PickupAssignRequest: {
+            routeId: string;
+            reason: string;
         };
         DriverAccess: {
             driverId?: string;
@@ -1049,6 +1314,58 @@ export interface components {
             routeId?: string;
             /** Format: date */
             promisedBy?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        /** @description An available driver for a seller pickup, nearest first */
+        DriverSuggestion: {
+            driverId?: string;
+            routeId?: string;
+            routeName?: string;
+            zone?: string;
+            routeStatus?: string;
+            /**
+             * Format: double
+             * @description PostGIS geodesic miles from the driver's last position
+             */
+            straightLineMiles?: number;
+            /**
+             * Format: double
+             * @description Road miles from geo's routing provider (null when geo is down)
+             */
+            roadMiles?: number;
+            /** Format: double */
+            durationMinutes?: number;
+            /** @description ROAD_GOOGLE, ROAD_OSRM, GEODESIC_DETOUR or STRAIGHT_LINE */
+            distanceMethod?: string;
+            /** Format: date-time */
+            positionAt?: string;
+            /** Format: int32 */
+            packagesOnRoute?: number;
+            /** Format: int32 */
+            capacityLeft?: number;
+        };
+        DriverSuggestions: {
+            shipmentId?: string;
+            drivers?: components["schemas"]["DriverSuggestion"][];
+        };
+        /** @description One assignment of a seller pickup */
+        PickupAssignment: {
+            /** Format: uuid */
+            id?: string;
+            shipmentId?: string;
+            routeId?: string;
+            driverId?: string;
+            /** @enum {string} */
+            mode?: "AUTO_NEAREST" | "DISPATCH_OVERRIDE";
+            reason?: string;
+            previousRouteId?: string;
+            /** Format: double */
+            straightMiles?: number;
+            /** Format: double */
+            roadMiles?: number;
+            distanceMethod?: string;
+            actor?: string;
             /** Format: date-time */
             createdAt?: string;
         };
@@ -1309,6 +1626,76 @@ export interface operations {
             };
         };
     };
+    pickupAssign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickupAssignRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Route"];
+                };
+            };
+        };
+    };
+    pickupAssignments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["PickupAssignment"][];
+                };
+            };
+        };
+    };
+    pickupDriverSuggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DriverSuggestions"];
+                };
+            };
+        };
+    };
     listRoutes: {
         parameters: {
             query?: {
@@ -1442,6 +1829,32 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ReasonRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Route"];
+                };
+            };
+        };
+    };
+    addReturnPickupsToRoute: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                routeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddReturnPickupsRequest"];
             };
         };
         responses: {
@@ -1611,6 +2024,30 @@ export interface operations {
                 };
                 content: {
                     "text/event-stream": components["schemas"]["SseEmitter"];
+                };
+            };
+        };
+    };
+    driverLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DriverLocationPing"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DriverPosition"];
                 };
             };
         };
@@ -1909,6 +2346,102 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["FulfilmentTask"];
+                };
+            };
+        };
+    };
+    listReturnPickups: {
+        parameters: {
+            query?: {
+                status?: "REQUESTED" | "ROUTED" | "COLLECTED" | "FAILED" | "CANCELLED";
+                nodeId?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReturnPickup"][];
+                };
+            };
+        };
+    };
+    scheduleReturnPickup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleReturnPickupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReturnPickup"];
+                };
+            };
+        };
+    };
+    getReturnPickup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReturnPickup"];
+                };
+            };
+        };
+    };
+    cancelReturnPickup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CancelReturnPickupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReturnPickup"];
                 };
             };
         };

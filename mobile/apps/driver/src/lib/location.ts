@@ -30,3 +30,17 @@ export async function currentFix(fresh = false): Promise<Fix | null> {
     return null;
   }
 }
+
+/** S255: foreground-only position watch for shift pings. It never prompts (permission is asked at sign-in) and never
+    requests background location; resolves null when foreground permission is not granted. */
+export async function watchForegroundFixes(onFix: (fix: Fix & { at: number }) => void): Promise<(() => void) | null> {
+  try {
+    if (!(await Location.getForegroundPermissionsAsync()).granted) return null;
+    const sub = await Location.watchPositionAsync({ accuracy: Location.Accuracy.Balanced, timeInterval: 15_000, distanceInterval: 50 }, (pos) =>
+      onFix({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracyM: pos.coords.accuracy ?? null, at: pos.timestamp || Date.now() })
+    );
+    return () => sub.remove();
+  } catch {
+    return null;
+  }
+}

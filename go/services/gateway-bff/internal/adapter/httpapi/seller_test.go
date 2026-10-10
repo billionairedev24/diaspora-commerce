@@ -17,6 +17,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/getkin/kin-openapi/routers/gorillamux"
 
+	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/testkit"
 )
 
@@ -187,8 +188,15 @@ func TestSellerContractConformance(t *testing.T) {
 		for _, c := range v["changes"].([]any) {
 			changes = append(changes, c.(map[string]any)["field"].(string))
 		}
-		if strings.Join(changes, ",") != "category:fashion,fbaPerUnitMinor" {
+		if strings.Join(changes, ",") != "category:fashion,fbaPerUnitMinor,deliveryFee" {
 			t.Fatalf("changes = %v", v["changes"])
+		}
+		// AfroTransact Delivery seller fee (S255): the default now, the organisation's own override next (never others').
+		if df := cur["deliveryFee"].(map[string]any); df["source"] != "DEFAULT" || df["summary"] != "$2.00 per package" || num(df, "maxRadiusMiles") != 25 {
+			t.Fatalf("delivery fee = %v", df)
+		}
+		if df := up["deliveryFee"].(map[string]any); df["source"] != "OVERRIDE" || df["summary"] != "$1.50 per package" {
+			t.Fatalf("upcoming delivery fee = %v", df)
 		}
 	}
 	mustStatus(t, b.do("GET", "/v1/seller/billing", nil), 200)
@@ -242,6 +250,62 @@ func TestSellerContractConformance(t *testing.T) {
 		t.Fatalf("delete = %d %s", r.status, r.body)
 	}
 	mustStatus(t, b.do("DELETE", "/v1/seller/ship-from-addresses/nope", nil), 404)
+	// AfroTransact pickup from the store (S255): hours, geocoded position and the delivery area.
+	firstID := b.do("GET", "/v1/seller/ship-from-addresses", nil).json(t)["items"].([]any)[0].(map[string]any)["id"].(string)
+	pickup := func(id string, body map[string]any, want int) map[string]any {
+		t.Helper()
+		r := b.do("PUT", "/v1/seller/ship-from-addresses/"+id+"/afrotransact-pickup", body)
+		mustStatus(t, r, want)
+		return r.json(t)
+	}
+	hours := []map[string]any{{"day": "MONDAY", "opens": "09:00", "closes": "17:00"}, {"day": "SATURDAY", "opens": "10:00", "closes": "14:00"}}
+	if p := pickup(firstID, map[string]any{"enabled": true, "hours": []any{}}, 422); p["code"] != domain.CodePickupInvalidHours {
+		t.Fatalf("no hours = %v", p)
+	}
+	overlap := []map[string]any{{"day": "MONDAY", "opens": "09:00", "closes": "12:00"}, {"day": "monday", "opens": "11:00", "closes": "13:00"}}
+	if p := pickup(firstID, map[string]any{"enabled": true, "hours": overlap}, 422); p["errors"].(map[string]any)["hours.1.opens"] == nil {
+		t.Fatalf("overlap = %v", p)
+	}
+	on := pickup(firstID, map[string]any{"enabled": true, "hours": hours}, 200)
+	if ap := on["afrotransactPickup"].(map[string]any); ap["enabled"] != true || ap["zoneName"] != "Houston Metro" || len(ap["hours"].([]any)) != 2 ||
+		on["position"].(map[string]any)["precision"] != "ADDRESS" {
+		t.Fatalf("pickup on = %v", on)
+	}
+	home["postalCode"], home["label"] = "78701", "Austin"
+	austin := b.do("POST", "/v1/seller/ship-from-addresses", home).json(t)["id"].(string)
+	if p := pickup(austin, map[string]any{"enabled": true, "hours": hours}, 422); p["code"] != domain.CodePickupOutsideDeliveryArea {
+		t.Fatalf("outside = %v", p)
+	}
+	home["postalCode"], home["label"] = "00000", "Unlocatable"
+	zipOnly := b.do("POST", "/v1/seller/ship-from-addresses", home).json(t)["id"].(string)
+	if p := pickup(zipOnly, map[string]any{"enabled": true, "hours": hours}, 422); p["code"] != domain.CodePickupNotGeocoded {
+		t.Fatalf("not geocoded = %v", p)
+	}
+	pickup("nope", map[string]any{"enabled": false, "hours": []any{}}, 404)
+	// Offers: the fulfilment choice per listing, with the pickup location for AfroTransact Delivery.
+	mustStatus(t, b.do("GET", "/v1/seller/offers", nil), 422)
+	if items := b.do("GET", "/v1/seller/offers?productId=p-1", nil).json(t)["items"].([]any); len(items) != 1 ||
+		items[0].(map[string]any)["fulfilment"] != "SELLER" || items[0].(map[string]any)["shipsFrom"] != "Houston, TX" {
+		t.Fatalf("offers = %v", items)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/offers/of-1/fulfilment", map[string]any{"fulfilment": "AFROTRANSACT_DELIVERY"}), 422)
+	if e := b.do("PUT", "/v1/seller/offers/of-1/fulfilment", map[string]any{"fulfilment": "AFROTRANSACT_DELIVERY", "shipFromLocationId": "loc-2"}).json(t); e["errors"].(map[string]any)["shipFromLocationId"] == nil {
+		t.Fatalf("location refused = %v", e)
+	}
+	if o := b.do("PUT", "/v1/seller/offers/of-1/fulfilment", map[string]any{"fulfilment": "AFROTRANSACT_DELIVERY", "shipFromLocationId": "loc-1"}).json(t); o["fulfilment"] != "AFROTRANSACT_DELIVERY" || o["shipFromLocationId"] != "loc-1" {
+		t.Fatalf("offer = %v", o)
+	}
+	mustStatus(t, b.do("PUT", "/v1/seller/offers/of-404/fulfilment", map[string]any{"fulfilment": "SELLER"}), 404)
+	// The AfroTransact Delivery shipment shows the seller delivery fee; the order sheet the payout breakdown.
+	order := b.do("GET", "/v1/seller/orders/AT-2026-000123", nil).json(t)
+	atd := order["shipments"].([]any)[1].(map[string]any)
+	if atd["fulfilment"] != "AFROTRANSACT_DELIVERY" || atd["canBuyLabel"] != false || num(atd["localDelivery"].(map[string]any), "sellerFeeMinor") != 200 ||
+		len(atd["nextActions"].([]any)) != 1 {
+		t.Fatalf("AfroTransact Delivery shipment = %v", atd)
+	}
+	if e := order["earnings"].(map[string]any); num(e, "deliveryFeesMinor") != 200 || num(e, "netMinor") != 5588 {
+		t.Fatalf("earnings = %v", e)
+	}
 
 	// Provider Hub needs a provider organisation.
 	mustStatus(t, b.do("GET", "/v1/seller/bookings/requests", nil), 403)

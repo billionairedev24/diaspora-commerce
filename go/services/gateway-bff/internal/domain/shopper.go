@@ -59,6 +59,8 @@ type ShipmentDetail struct {
 	Returnable         bool    `json:"returnable"`
 	ReturnWindowEndsAt *string `json:"returnWindowEndsAt"`
 	ProblemReportOnly  bool    `json:"problemReportOnly"`
+	// LocalDelivery is AfroTransact Delivery from the seller's store (S255); nil for other shipments.
+	LocalDelivery *OrderLocalDelivery `json:"localDelivery"`
 }
 
 // OrderDetail is one order with its shipments, lines and tracking.

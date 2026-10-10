@@ -10,6 +10,7 @@ import { SearchClickRequestSchema } from '../schemas/search';
 import {
   AddressInputSchema,
   BookingRequestSchema,
+  type CheckoutLocalDelivery,
   type CheckoutPackage,
   type CheckoutSummary,
   LolaChatRequestSchema,
@@ -27,7 +28,7 @@ import {
   StartReturnRequestSchema
 } from '../schemas/shopper';
 import { getDb, type MockSession } from './db';
-import { addBusinessDays, locationForZip, metroOf } from './delivery';
+import { addBusinessDays, LOCAL_DELIVERY, localDeliveryQuote, locationForZip, metroOf } from './delivery';
 import { PICKUP_POINTS } from './fixtures/geo';
 import { body, type Ctx, json, problem, requireUser, route } from './http-kit';
 import { lolaStream } from './lola';
@@ -117,6 +118,22 @@ function checkoutPackages(session: MockSession, zip: string, now: Date): Checkou
     .map((p) => {
       const isAT = p.fulfilment === 'AFROTRANSACT';
       const days = (o: DeliveryOption) => (o.key === 'express' || o.key === 'afrotransact_delivery' ? 1 : o.key === 'pickup' ? 0 : Math.max(1, p.delivery.days));
+      if (p.fulfilment === 'AFROTRANSACT_DELIVERY') {
+        // AfroTransact Delivery from the seller's store (S255): road distance store → address and payments' pricing.
+        const q = localDeliveryQuote(p.seller.city, metro);
+        const fromCity = p.seller.city;
+        const localDelivery: CheckoutLocalDelivery = q.available
+          ? { available: true, chargeMinor: q.chargeMinor, roadMiles: q.roadMiles, durationMinutes: q.durationMinutes, fromCity, unavailableReason: null, message: null,
+              maxRadiusMiles: LOCAL_DELIVERY.maxRadiusMiles, offerIds: p.lines.map((l) => l.offerId) }
+          : { available: false, chargeMinor: null, roadMiles: q.roadMiles, durationMinutes: q.durationMinutes, fromCity, unavailableReason: 'OUT_OF_RANGE',
+              message: `${p.seller.name} is ${Math.round(q.roadMiles)} miles from ${metro}: too far for AfroTransact Delivery (up to ${LOCAL_DELIVERY.maxRadiusMiles} miles). Remove it or choose another address.`,
+              maxRadiusMiles: LOCAL_DELIVERY.maxRadiusMiles, offerIds: p.lines.map((l) => l.offerId) };
+        const base = withDates({ key: 'afrotransact_delivery', label: '', eta: '', feeMinor: 0, free: false }, now, 1);
+        const option: DeliveryOption = q.available
+          ? { ...base, feeMinor: q.chargeMinor, label: `$${(q.chargeMinor / 100).toFixed(2)} · AfroTransact Delivery from ${fromCity}` }
+          : { ...base, label: `Not available to this address · AfroTransact Delivery from ${fromCity}` };
+        return { ...p, deliveryOptions: [option], pickupPoints: [], localDelivery, delivery: { ...p.delivery, label: option.eta } };
+      }
       const options = p.deliveryOptions.map((o) => withDates(o, now, days(o)));
       const points: PickupPoint[] = !options.some((o) => o.key === 'pickup') ? [] : PICKUP_POINTS.filter((x) => (isAT ? x.owner === 'AT' && here(x.metro) : x.owner === p.seller.name))
         .map((x) => ({ id: x.id, name: x.name, address: x.addr, hours: x.hours, ready: x.ready, setBy: x.owner === 'AT' ? 'platform' : 'seller' }));
@@ -496,6 +513,11 @@ export const shopperHandlers = [
     if (!req.paymentMethodId && !req.wallet) errors.paymentMethodId = 'Choose a payment method';
     if (req.paymentMethodId && !a.paymentMethods.some((x) => x.id === req.paymentMethodId)) errors.paymentMethodId = 'Unknown payment method';
     const s = summary(ctx, req.addressId);
+    const far = s.packages.find((p) => p.localDelivery && !p.localDelivery.available);
+    if (far?.localDelivery)
+      throw new MockProblem(422, 'DELIVERY_OUT_OF_RANGE', 'Too far for AfroTransact Delivery', far.localDelivery.message ?? 'A seller’s store is too far from this address.', {
+        errors: { deliverySelections: far.localDelivery.message ?? 'A seller’s store is too far from this address.' }
+      });
     s.packages.forEach((p, i) => {
       const sel = req.deliverySelections.find((x) => x.packageId === p.packageId);
       if (!sel || !p.deliveryOptions.some((o) => o.key === sel.option)) errors[`deliverySelections.${i}.option`] = 'Choose a delivery option';
@@ -521,7 +543,10 @@ export const shopperHandlers = [
         carrier: null, trackingNumber: null, promisedFrom: opt?.earliestDate ?? null, promisedBy: opt?.latestDate ?? null, deliveredAt: null,
         deliveryCode: needsCode ? String(1000 + ((n * 7919) % 9000)) : null,
         lines: p.lines.map((l) => ({ lineId: l.lineId, atin: l.atin, title: l.title, imageUrl: null, quantity: l.quantity, unitPriceMinor: l.priceMinor, itemsMinor: l.lineTotalMinor })),
-        timeline: [{ status: 'placed', label: 'Order placed', at: iso(ctx.now) }] };
+        timeline: [{ status: 'placed', label: 'Order placed', at: iso(ctx.now) }],
+        localDelivery: p.localDelivery?.available
+          ? { roadMiles: p.localDelivery.roadMiles, durationMinutes: p.localDelivery.durationMinutes, chargeMinor: p.localDelivery.chargeMinor ?? 0 }
+          : null };
     });
     const order: MockOrder = { orderNumber, placedAt: iso(ctx.now), status: 'placed', currency: 'USD', itemsMinor: s.subtotalMinor, shippingMinor: shipping, taxMinor: tax,
       discountMinor: 0, totalMinor: s.subtotalMinor + shipping + tax, shipTo: `${addr?.line1}, ${addr?.city}`,

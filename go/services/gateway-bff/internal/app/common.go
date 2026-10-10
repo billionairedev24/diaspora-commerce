@@ -129,7 +129,7 @@ func (d SellerDirectory) Describe(ownerKind, sellerOrgID string) (domain.Seller,
 }
 
 func normFulfilment(f string) string {
-	if f == domain.FulfilledByAfroTransact {
+	if f == domain.FulfilledByAfroTransact || f == domain.AfroTransactDelivery {
 		return f
 	}
 	return domain.ShipsFromSeller
@@ -214,10 +214,7 @@ func summaryFromHit(h port.SearchHit, est domain.Estimator, now time.Time) domai
 	if h.LowStock && qty > 0 {
 		status = domain.LowStock
 	}
-	fulfilment := h.Fulfilment
-	if fulfilment != domain.FulfilledByAfroTransact {
-		fulfilment = domain.ShipsFromSeller
-	}
+	fulfilment := normFulfilment(h.Fulfilment)
 	kind := h.SellerKind
 	if kind != domain.SellerKindPlatform {
 		kind = domain.SellerKindSeller

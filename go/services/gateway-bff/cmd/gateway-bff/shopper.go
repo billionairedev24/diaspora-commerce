@@ -16,6 +16,7 @@ import (
 type shopperClients struct {
 	payments, orders, identity httpclient.Client
 	identityAPI                port.IdentityClient
+	offers                     port.StorefrontOffersClient
 	serviceTokens              port.ServiceTokens
 }
 
@@ -32,7 +33,9 @@ func shopperServices(cfg config.Config, client func(string, config.Upstream) htt
 		Lola:  upstreams.NewLola(ai, upstreams.LolaOptions{BaseURL: up.AIGateway.URL}),
 		Delivery: upstreams.NewDeliveryFacts(client("promise", up.Promise), client("carrier-gateway", up.Carrier), client("geo", up.Geo),
 			sc.serviceTokens),
-		Identity: sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
+		LocalDelivery: upstreams.NewLocalDelivery(client("seller", up.Seller), client("geo", up.Geo), sc.payments, sc.serviceTokens),
+		Offers:        sc.offers,
+		Identity:      sc.identityAPI, Checkout: s.Checkout, Carts: s.Cart, Location: s.Location,
 		PublishableKey: cfg.Stripe.PublishableKey, IdentityPublicURL: cfg.OIDC.PublicURL, Log: log,
 	}
 	return httpapi.ShopperServices{Wallet: app.NewWalletService(d), Orders: app.NewCustomerOrdersService(d),

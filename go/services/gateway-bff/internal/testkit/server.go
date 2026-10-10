@@ -144,6 +144,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		SellerTeam:      app.NewSellerTeamService(sellerDeps),
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
+		SellerOffers:    app.NewSellerOffersService(sellerDeps),
 	}
 	services.Shopper = shopperServices(u, client, identity, services, clock, log)
 	mux := http.NewServeMux()

@@ -12,6 +12,11 @@ import {
   validateFeeDraft
 } from '@afrotransact/api-client';
 
+import { type MessageKey, tEn, type Translator } from '@/i18n/t';
+
+import { type DeliveryForm, deliveryFormFrom, diffDelivery, toDeliveryDraft } from './delivery-model';
+import { dollarsText, parseDollars, rowId } from './money-input';
+
 /* The fee-schedule editor's model: the form keeps what people type (percentages with two decimals, dollars), converts to
    basis points / minor units for the BFF, validates with the BFF's rules and compares the draft with the current
    version (diff, $100 impact preview, sellers affected). Pure functions, tested in test/fees.test.ts. */
@@ -41,20 +46,12 @@ export interface FeeForm {
   cardFixed: string;
   fbaPerUnit: string;
   reverseOnRefund: boolean;
+  /** AfroTransact Delivery pricing (S255); left out = carried over from the latest live version. */
+  delivery: DeliveryForm;
   note: string;
 }
 
-let seq = 0;
-export const rowId = (): string => `r${(seq += 1)}`;
-
-const dollarsText = (minor: number): string => `${Math.floor(minor / 100)}.${String(minor % 100).padStart(2, '0')}`;
-
-/** Dollars typed by people ("3.25", "$3.25", "3") → minor units, exactly; null when not an amount. */
-export function parseDollars(text: string): number | null {
-  const m = /^\$?\s*(\d{1,6})(?:\.(\d{0,2}))?$/.exec(text.trim());
-  if (!m) return null;
-  return Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'));
-}
+export { parseDollars, rowId } from './money-input';
 
 /** datetime-local value (local time, minutes) for a Date. */
 export function localInput(d: Date): string {
@@ -80,6 +77,7 @@ export function formFrom(base: FeeScheduleView | null, overview: Pick<FeesOvervi
     cardFixed: dollarsText(base?.cardFixedMinor ?? 30),
     fbaPerUnit: dollarsText(base?.fbaPerUnitMinor ?? 325),
     reverseOnRefund: base?.reverseCommissionOnRefund ?? true,
+    delivery: deliveryFormFrom(base),
     note: ''
   };
 }
@@ -91,7 +89,12 @@ export interface DraftResult {
 }
 
 /** Converts the form to the BFF draft (percent → bps, dollars → minor units) and validates it with the BFF's rules. */
-export function toDraft(form: FeeForm, overview: Pick<FeesOverview, 'minEffectiveFrom' | 'immediateAllowed' | 'retail' | 'limits'>, now: Date): DraftResult {
+export function toDraft(
+  form: FeeForm,
+  overview: Pick<FeesOverview, 'minEffectiveFrom' | 'immediateAllowed' | 'retail' | 'limits'>,
+  now: Date,
+  t: Translator<MessageKey> = tEn
+): DraftResult {
   const errors: Record<string, string> = {};
   const pct = (key: string, text: string): number => {
     const v = parsePercent(text);
@@ -124,6 +127,7 @@ export function toDraft(form: FeeForm, overview: Pick<FeesOverview, 'minEffectiv
     cardFixedMinor: usd('cardFixedMinor', form.cardFixed),
     fbaPerUnitMinor: usd('fbaPerUnitMinor', form.fbaPerUnit),
     reverseCommissionOnRefund: form.reverseOnRefund,
+    deliveryPricing: toDeliveryDraft(form.delivery, errors, t),
     note: form.note
   };
   const rules = validateFeeDraft(draft, {
@@ -157,7 +161,7 @@ export function categoryLabel(key: string, categories: FeeCategory[]): string {
 }
 
 /** What the draft changes compared with the base version (every rate, fee and override). */
-export function diffDraft(base: FeeScheduleView | null, d: FeeScheduleDraft, categories: FeeCategory[], orgName: (id: string) => string): DiffRow[] {
+export function diffDraft(base: FeeScheduleView | null, d: FeeScheduleDraft, categories: FeeCategory[], orgName: (id: string) => string, t: Translator<MessageKey> = tEn): DiffRow[] {
   const rows: DiffRow[] = [];
   const cmp = (key: string, label: string, from: string | null, to: string | null) => {
     if (from === to) return;
@@ -183,6 +187,7 @@ export function diffDraft(base: FeeScheduleView | null, d: FeeScheduleDraft, cat
   cmp('cardFee', 'Card fee estimate', base ? `${formatBps(base.cardPctBps)} + ${money(base.cardFixedMinor)}` : null, `${formatBps(d.cardPctBps)} + ${money(d.cardFixedMinor)}`);
   cmp('fbaPerUnitMinor', 'FBA fee per unit', base ? money(base.fbaPerUnitMinor) : null, money(d.fbaPerUnitMinor));
   cmp('reverseCommissionOnRefund', 'Commission on refunds', base ? yesNo(base.reverseCommissionOnRefund) : null, yesNo(d.reverseCommissionOnRefund));
+  rows.push(...diffDelivery(base?.deliveryPricing ?? null, d.deliveryPricing ?? undefined, orgName, t));
   return rows;
 }
 

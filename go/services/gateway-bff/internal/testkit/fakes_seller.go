@@ -343,6 +343,12 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 		_ = json.NewDecoder(r.Body).Decode(&a)
 		a["id"] = newUUID()
 		a["version"] = 0
+		// geo-service geocodes every address (S255): street level, except the fake's "unlocatable" ZIP 00000.
+		a["position"] = map[string]any{"lat": 29.7604, "lng": -95.3698, "precision": "ADDRESS", "geocodedAt": "2026-10-10T09:00:00Z"}
+		if a["postalCode"] == "00000" {
+			a["position"] = map[string]any{"lat": 29.7, "lng": -95.3, "precision": "ZIP", "geocodedAt": "2026-10-10T09:00:00Z"}
+		}
+		a["afrotransactPickup"] = map[string]any{"enabled": false, "hours": []any{}}
 		a["isDefault"] = len(shipFrom) == 0 || a["makeDefault"] == true
 		if a["isDefault"] == true {
 			for _, x := range shipFrom {
@@ -373,6 +379,34 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 				writeJSON(w, 200, a)
 				return
 			}
+		}
+		problem(w, 404, "seller.ship-from-not-found", "not found", nil)
+	})
+	// AfroTransact pickup (S255): hours required, street-level position, inside the delivery area (Houston ZIPs 77xxx).
+	mux.HandleFunc("PUT /v1/orgs/{id}/ship-from-addresses/{aid}/afrotransact-pickup", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		for _, a := range shipFrom {
+			if a["id"] != r.PathValue("aid") {
+				continue
+			}
+			hours, _ := b["hours"].([]any)
+			pos, _ := a["position"].(map[string]any)
+			switch {
+			case b["enabled"] == true && len(hours) == 0:
+				problem(w, 422, "seller.invalid-pickup-hours", "Add at least one pickup window", nil)
+			case b["enabled"] == true && pos["precision"] != "ADDRESS":
+				problem(w, 422, "seller.ship-from-not-geocoded", "Not located at street level", nil)
+			case b["enabled"] == true && !strings.HasPrefix(fmt.Sprint(a["postalCode"]), "77"):
+				problem(w, 422, "seller.pickup-outside-delivery-area", "Katy is 31 miles from the Houston Metro delivery zone", nil)
+			default:
+				a["afrotransactPickup"] = map[string]any{"enabled": b["enabled"], "hours": hours, "zoneName": "Houston Metro", "enabledAt": "2026-10-10T09:00:00Z"}
+				a["version"] = a["version"].(int) + 1
+				writeJSON(w, 200, a)
+			}
+			return
 		}
 		problem(w, 404, "seller.ship-from-not-found", "not found", nil)
 	})
@@ -443,9 +477,17 @@ func (u *Upstreams) feeRoutes(mux *http.ServeMux) {
 				"overrides": []any{}, "cancelledAt": "2026-10-01T00:00:00Z"},
 			{"id": "fee-2", "version": 2, "effectiveFrom": FeeScheduleUpcoming, "categoryBps": map[string]any{"groceries": 800, "fashion": 1300},
 				"defaultCommissionBps": 1000, "overrides": []any{map[string]any{"orgId": SellerOrgID, "category": "groceries", "commissionBps": 600},
-					map[string]any{"orgId": "someone-else", "category": "beauty", "commissionBps": 100}}},
+					map[string]any{"orgId": "someone-else", "category": "beauty", "commissionBps": 100}},
+				"deliveryPricing": map[string]any{"enabled": true, "maxRadiusMiles": 25,
+					"customerCharge": map[string]any{"mode": "DISTANCE", "baseMinor": 499, "perMileMinor": 85, "minMinor": 599, "maxMinor": 2499},
+					"sellerFee":      map[string]any{"mode": "FLAT", "flatPerPackageMinor": 200},
+					"sellerOverrides": []any{map[string]any{"orgId": SellerOrgID, "sellerFee": map[string]any{"mode": "FLAT", "flatPerPackageMinor": 150}},
+						map[string]any{"orgId": "someone-else", "sellerFee": map[string]any{"mode": "FLAT", "flatPerPackageMinor": 0}}}}},
 			{"id": "fee-1", "version": 1, "effectiveFrom": "2020-01-01T00:00:00Z", "categoryBps": map[string]any{"groceries": 800, "fashion": 1200},
-				"defaultCommissionBps": 1000, "overrides": []any{map[string]any{"orgId": SellerOrgID, "category": "groceries", "commissionBps": 600}}},
+				"defaultCommissionBps": 1000, "overrides": []any{map[string]any{"orgId": SellerOrgID, "category": "groceries", "commissionBps": 600}},
+				"deliveryPricing": map[string]any{"enabled": true, "maxRadiusMiles": 25,
+					"customerCharge": map[string]any{"mode": "DISTANCE", "baseMinor": 499, "perMileMinor": 85, "minMinor": 599, "maxMinor": 2499},
+					"sellerFee":      map[string]any{"mode": "FLAT", "flatPerPackageMinor": 200}}},
 		})
 	})
 	mux.HandleFunc("GET /v1/fee-schedules/effective", func(w http.ResponseWriter, r *http.Request) {
@@ -517,7 +559,15 @@ func (u *Upstreams) orderJSON() map[string]any {
 		"shipments": []map[string]any{{"id": "sh-1", "shipmentId": "sh-1", "label": "Shipment 1 of 1 · Seller", "sellerOrgId": SellerOrgID, "fulfilmentType": "SELLER_FULFILLED",
 			"deliveryMethod": "CARRIER", "status": st, "items": "Ofada rice ×2", "itemsMinor": 4998, "shippingMinor": 0, "totalMinor": 5437, "carrier": nil, "trackingNumber": u.seller.tracking,
 			"nextActions": next, "lines": []map[string]any{{"variantAtin": "ATADEV0001", "title": "Ofada Rice · 5 lb", "quantity": 2, "unitPriceMinor": 2499, "itemsMinor": 4998}},
-			"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "actorType": "SYSTEM", "at": "2026-10-09T15:00:00Z"}}}}}
+			"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "actorType": "SYSTEM", "at": "2026-10-09T15:00:00Z"}}},
+			// AfroTransact Delivery from the seller's store (S255): the seller packs, a driver collects.
+			{"id": "sh-2", "shipmentId": "sh-2", "label": "Shipment 2 of 2 · AfroTransact Delivery", "sellerOrgId": SellerOrgID, "fulfilmentType": "SELLER_FULFILLED",
+				"deliveryMethod": "AFROTRANSACT_DELIVERY", "pickupLocationId": "loc-1", "status": "placed", "items": "Palm oil ×1", "itemsMinor": 1500, "shippingMinor": 1128,
+				"totalMinor": 2752, "nextActions": []string{"confirmed"},
+				"localDelivery": map[string]any{"shipFromLocationId": "loc-1", "roadMiles": 7.4, "durationMinutes": 18, "distanceMethod": "ROAD_OSRM",
+					"customerChargeMinor": 1128, "sellerFeeMinor": 200, "pricingVersion": 9},
+				"lines":    []map[string]any{{"variantAtin": "ATADEV0002", "title": "Red palm oil · 1 L", "quantity": 1, "unitPriceMinor": 1500, "itemsMinor": 1500}},
+				"timeline": []map[string]any{{"from": "pending_payment", "to": "placed", "actorType": "SYSTEM", "at": "2026-10-09T15:00:00Z"}}}}}
 }
 
 func (u *Upstreams) ordersRoutes(mux *http.ServeMux) {
@@ -562,6 +612,50 @@ func (u *Upstreams) ordersRoutes(mux *http.ServeMux) {
 		defer u.mu.Unlock()
 		u.seller.tracking = b.TrackingNumber
 		writeJSON(w, 200, u.orderJSON())
+	})
+	mux.HandleFunc("GET /v1/orders/{number}/payment-split", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, map[string]any{"orderId": "o1", "chargeMinor": 8189, "currency": "USD", "recipients": []map[string]any{
+			{"recipient": SellerOrgID, "kind": "SELLER", "itemsMinor": 6498, "shippingMinor": 0, "taxMinor": 0, "commissionMinor": 520, "fbaFeesMinor": 0,
+				"deliveryFeesMinor": 200, "stripeFeeMinor": 190, "netMinor": 5588},
+			{"recipient": "afrotransact", "kind": "PLATFORM", "itemsMinor": 0, "shippingMinor": 1128, "commissionMinor": 520, "netMinor": 1848}}})
+	})
+	// offers (seller side): the organisation's offers and the fulfilment choice (S255).
+	offers := []map[string]any{
+		{"id": "of-1", "atin": "ATADEV0001", "productAtin": "ATADE00001", "productId": "p-1", "sellerSku": "OFADA-5LB", "condition": "NEW", "priceMinor": 2499,
+			"currency": "USD", "fulfilment": "SELLER", "quantity": 40, "availableQty": 40, "shipFrom": map[string]any{"city": "Houston", "region": "TX"},
+			"shipsFrom": "Houston, TX", "status": "ACTIVE", "version": 3},
+		{"id": "of-2", "atin": "ATADEV0003", "productAtin": "ATOTHER001", "productId": "p-9", "sellerSku": "OTHER", "condition": "NEW", "priceMinor": 999,
+			"currency": "USD", "fulfilment": "AFROTRANSACT", "quantity": 0, "availableQty": 12, "status": "ACTIVE", "version": 1},
+	}
+	mux.HandleFunc("GET /v1/offers", func(w http.ResponseWriter, _ *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		writeJSON(w, 200, map[string]any{"items": offers, "total": len(offers), "page": 0, "size": 100})
+	})
+	mux.HandleFunc("PATCH /v1/offers/{id}", func(w http.ResponseWriter, r *http.Request) {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		for _, o := range offers {
+			if o["id"] != r.PathValue("id") {
+				continue
+			}
+			loc, _ := b["shipFrom"].(map[string]any)
+			if b["fulfilment"] == "AFROTRANSACT_DELIVERY" && loc["locationId"] != "loc-1" {
+				problem(w, 422, "offers.rule-violation", "Pickup location is not enabled",
+					map[string]any{"fieldErrors": map[string]any{"shipFrom.locationId": "Choose a ship-from location with AfroTransact pickup enabled"}})
+				return
+			}
+			o["fulfilment"] = b["fulfilment"]
+			if loc != nil {
+				o["shipFrom"] = map[string]any{"city": "Houston", "region": "TX", "postalCode": "77002", "locationId": loc["locationId"]}
+			}
+			o["version"] = o["version"].(int) + 1
+			writeJSON(w, 200, o)
+			return
+		}
+		problem(w, 404, "offers.offer-not-found", "not found", nil)
 	})
 	mux.HandleFunc("GET /v1/seller/analytics", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"currency": "USD", "toShip": 9,

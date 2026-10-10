@@ -17,6 +17,7 @@ import {
   type Plan,
   type ProductTypeSchema,
   type PublicPage,
+  type SellerOffer,
   type SellerOrderDetail,
   type ServiceOffer,
   type ShipFromAddress,
@@ -58,6 +59,8 @@ export interface MockSellerDb {
   pages: Record<string, PublicPage>;
   /** Saved ship-from addresses per organisation (seller service /v1/orgs/{orgId}/ship-from-addresses). */
   shipFrom: Record<string, ShipFromAddress[]>;
+  /** offers-service offers of the listings' variants: the fulfilment choice (S255). */
+  offers: SellerOffer[];
   seq: number;
 }
 
@@ -88,10 +91,18 @@ function seedOrders(now: Date): SellerOrderDetail[] {
     const qty = 1 + Math.floor(r() * 3);
     const status = flow[i % flow.length] ?? 'PLACED';
     const fba = i % 5 === 4;
+    // AfroTransact Delivery from the store (S255): the seller packs, a driver collects; the seller fee comes off the payout.
+    const local = !fba && i % 7 === 3;
+    const roadMiles = 3.2 + (i % 5) * 1.7;
+    const chargeMinor = Math.max(599, Math.min(2499, 499 + Math.floor(85 * roadMiles + 0.5)));
     const itemsMinor = qty * price;
-    const shippingMinor = fba || itemsMinor >= 4900 ? 0 : 599;
+    const shippingMinor = local ? chargeMinor : fba || itemsMinor >= 4900 ? 0 : 599;
     const placed = new Date(now.getTime() - (i * 7 + 2) * 3_600_000);
     const tracking = ['IN_TRANSIT', 'DELIVERED'].includes(status) ? `9400 1118 9922 ${String(3344556600 + i)}` : null;
+    const commission = Math.floor((itemsMinor * 800 + 5000) / 10_000);
+    const stripe = Math.floor(((itemsMinor + shippingMinor) * 290 + 5000) / 10_000) + 30;
+    const deliveryFee = local ? 200 : 0;
+    const keptShipping = local || fba ? 0 : shippingMinor;
     const next = fba ? [] : status === 'PLACED' ? ['CONFIRMED' as const] : status === 'CONFIRMED' ? ['PACKED' as const] : status === 'PACKED' ? ['READY' as const] : [];
     const total = itemsMinor + shippingMinor;
     return {
@@ -105,10 +116,10 @@ function seedOrders(now: Date): SellerOrderDetail[] {
       shipments: [
         {
           shipmentId: `sh-${1000 + i}`,
-          label: `Shipment 1 of 1 · ${fba ? 'Fulfilled by AfroTransact' : 'Ships from Ade’s Kitchen'}`,
+          label: `Shipment 1 of 1 · ${fba ? 'Fulfilled by AfroTransact' : local ? 'AfroTransact Delivery from your store' : 'Ships from Ade’s Kitchen'}`,
           status,
           statusLabel: SHIPMENT_LABELS[status],
-          fulfilment: fba ? 'AFROTRANSACT' : 'SELLER',
+          fulfilment: fba ? 'AFROTRANSACT' : local ? 'AFROTRANSACT_DELIVERY' : 'SELLER',
           perishable: false,
           lines: [{ title, quantity: qty, unitPriceMinor: price, itemsMinor, variantAtin: `ATADEV${String(i).padStart(4, '0')}`, imageUrl: null }],
           itemsMinor,
@@ -117,10 +128,25 @@ function seedOrders(now: Date): SellerOrderDetail[] {
           carrier: tracking ? 'usps' : null,
           trackingNumber: tracking,
           nextActions: next,
-          canBuyLabel: !fba && !tracking && ['CONFIRMED', 'PACKED', 'READY'].includes(status),
-          timeline: [{ status: 'PLACED', at: iso(placed), actor: 'customer' }]
+          canBuyLabel: !fba && !local && !tracking && ['CONFIRMED', 'PACKED', 'READY'].includes(status),
+          timeline: [{ status: 'PLACED', at: iso(placed), actor: 'customer' }],
+          localDelivery: local
+            ? { pickupLocationId: 'sfa-store', roadMiles: Math.round(roadMiles * 10) / 10, durationMinutes: Math.round(roadMiles * 2.6), customerChargeMinor: chargeMinor, sellerFeeMinor: deliveryFee }
+            : null
         }
-      ]
+      ],
+      earnings:
+        status === 'CANCELLED'
+          ? null
+          : {
+              itemsMinor,
+              shippingMinor: keptShipping,
+              commissionMinor: commission,
+              fbaFeesMinor: fba ? 325 * qty : 0,
+              deliveryFeesMinor: deliveryFee,
+              stripeFeeMinor: stripe,
+              netMinor: itemsMinor + keptShipping - commission - (fba ? 325 * qty : 0) - deliveryFee - stripe
+            }
     };
   });
 }
@@ -148,7 +174,7 @@ function seedListings(now: Date) {
       priceMinor: 499 + Math.floor(r() * 40) * 50,
       currency: 'USD',
       stock: variants.reduce((a, v) => a + v.quantity, 0),
-      fulfilment: i % 4 === 0 ? ('AFROTRANSACT' as const) : ('SELLER' as const),
+      fulfilment: i % 4 === 0 ? ('AFROTRANSACT' as const) : i % 4 === 2 ? ('AFROTRANSACT_DELIVERY' as const) : ('SELLER' as const),
       status,
       statusLabel: { LIVE: 'Live', IN_REVIEW: 'In review', PAUSED: 'Paused', TAKEN_DOWN: 'Taken down', REJECTED: 'Rejected', PENDING_CATEGORY_APPROVAL: 'Waiting for category approval' }[status],
       moderationNote: status === 'REJECTED' ? 'Add the full ingredient list and allergens (FALCPA).' : null,
@@ -306,8 +332,30 @@ export const PRODUCT_TYPES: Record<string, ProductTypeSchema> = {
   ], themes: [{ name: 'Option', dimensions: [{ name: 'Option', options: ['Standard', 'Small', 'Medium', 'Large'] }] }, { name: 'Size × Color', dimensions: [{ name: 'Size', options: ['S', 'M', 'L', 'XL'] }, { name: 'Color', options: ['Black', 'White', 'Gold', 'Multicolour'] }] }] }
 };
 
+/** One offer per listing variant (offers-service creates the seller's offers from catalog.product.created). */
+function seedOffers(listings: MockSellerDb['listings']): SellerOffer[] {
+  return listings.flatMap((l) =>
+    l.variants.map((v, i) => ({
+      offerId: `of-${l.productId}-${i + 1}`,
+      atin: `${l.atin ?? 'ATPENDING'}${i ? `-${i + 1}` : ''}`,
+      productId: l.productId,
+      sellerSku: v.sku,
+      condition: 'NEW',
+      priceMinor: l.priceMinor,
+      currency: 'USD',
+      fulfilment: l.fulfilment,
+      quantity: l.fulfilment === 'AFROTRANSACT' ? 0 : v.quantity,
+      availableQty: v.quantity,
+      shipFromLocationId: l.fulfilment === 'AFROTRANSACT_DELIVERY' ? 'sfa-store' : null,
+      shipsFrom: l.fulfilment === 'AFROTRANSACT' ? null : 'Houston, TX',
+      status: l.status === 'PAUSED' ? ('PAUSED' as const) : ('ACTIVE' as const),
+      version: 1
+    }))
+  );
+}
+
 function freshDb(now: Date): MockSellerDb {
-  return {
+  const db: MockSellerDb = {
     user: { id: 'user-titilayo', firstName: 'Titilayo', lastName: 'Adebayo', email: 'titilayo@adeskitchen.com' },
     orgs: [
       { id: SELLER_ORG, kind: 'SELLER', name: 'Ade’s Kitchen', status: 'APPROVED', role: 'seller.owner' },
@@ -383,9 +431,19 @@ function freshDb(now: Date): MockSellerDb {
     policy: { kind: 'MODERATE', freeHours: 48, partialRefund: true, partialFromHours: 24, partialPercent: 50, noShow: 'DEPOSIT', rescheduleHours: 48, maxReschedules: 2 },
     earnings: [],
     shipFrom: {
-      [SELLER_ORG]: [{ id: 'sfa-1', label: 'Warehouse', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '9800 Bissonnet St', line2: 'Unit 4',
-        city: 'Houston', state: 'TX', postalCode: '77036', country: 'US', isDefault: true, version: 0 }]
+      [SELLER_ORG]: [
+        { id: 'sfa-store', label: 'Warehouse', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '9800 Bissonnet St', line2: 'Unit 4',
+          city: 'Houston', state: 'TX', postalCode: '77036', country: 'US', isDefault: true, version: 0,
+          position: { lat: 29.6713, lng: -95.5559, precision: 'ADDRESS', geocodedAt: iso(new Date(now.getTime() - 40 * DAY)) },
+          afrotransactPickup: { enabled: true, zoneName: 'Houston Metro', enabledAt: iso(new Date(now.getTime() - 20 * DAY)),
+            hours: [{ day: 'MONDAY', opens: '09:00', closes: '17:00' }, { day: 'WEDNESDAY', opens: '09:00', closes: '17:00' }, { day: 'FRIDAY', opens: '09:00', closes: '15:00' }] } },
+        { id: 'sfa-katy', label: 'Katy kitchen', name: 'Ade Okafor', company: 'Ade’s Kitchen', phone: '+17135550142', line1: '23501 Cinco Ranch Blvd', line2: '',
+          city: 'Katy', state: 'TX', postalCode: '77494', country: 'US', isDefault: false, version: 0,
+          position: { lat: 29.7355, lng: -95.7739, precision: 'ADDRESS', geocodedAt: iso(new Date(now.getTime() - 5 * DAY)) },
+          afrotransactPickup: { enabled: false, zoneName: null, enabledAt: null, hours: [] } }
+      ]
     },
+    offers: [],
     pages: {
       [SELLER_ORG]: { kind: 'SELLER', slug: 'ades-kitchen', name: 'Ade’s Kitchen', tagline: 'Home-style Nigerian pantry, shipped from Houston', status: 'PUBLISHED',
         publishedAt: iso(new Date(now.getTime() - 30 * DAY)), primaryColor: '#0A8264', accentColor: '#FFD400', layout: 'CLASSIC', header: 'BAND', buttonShape: 'ROUNDED',
@@ -401,6 +459,8 @@ function freshDb(now: Date): MockSellerDb {
     },
     seq: 1
   };
+  db.offers = seedOffers(db.listings);
+  return db;
 }
 
 const KEY = '__atSellerMockDb';

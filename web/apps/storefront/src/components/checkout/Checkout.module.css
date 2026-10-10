@@ -39,6 +39,8 @@
 .codeNote { grid-column: 1 / -1; margin: 0; padding: var(--at-space-2) var(--at-space-3); border-radius: var(--at-radius-sm); background: var(--at-color-surface-brand); font-size: var(--at-text-sm); }
 .aside { position: sticky; top: var(--at-space-4); display: flex; flex-direction: column; gap: var(--at-space-3); padding: var(--at-space-5); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); background: var(--at-color-surface); }
 .fine { font-size: var(--at-text-xs); color: var(--at-color-text-muted); line-height: var(--at-leading-normal); }
+/* Links inside text must not rely on colour alone (axe link-in-text-block). */
+.fine a { text-decoration: underline; text-underline-offset: 2px; }
 .error { margin: 0; color: var(--at-color-danger); font-size: var(--at-text-sm); }
 .totals { display: grid; grid-template-columns: 1fr auto; gap: var(--at-space-1) var(--at-space-3); margin: 0; font-size: var(--at-text-sm); }
 .totals dd { margin: 0; text-align: right; }
@@ -56,3 +58,9 @@
   .choices { padding-left: 0; }
   .summaryLine { margin-left: 0; }
 }
+/* AfroTransact Delivery from the seller's store (S255): quote and out-of-range notice per package. */
+.localQuote { grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--at-space-1); padding: var(--at-space-2) var(--at-space-3); border-radius: var(--at-radius-sm); background: var(--at-color-success-bg); font-size: var(--at-text-sm); }
+.localProblem { grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--at-space-2); padding: var(--at-space-3); border: 1px solid var(--at-color-warning); border-radius: var(--at-radius-sm); background: var(--at-color-warning-bg); font-size: var(--at-text-sm); }
+.localProblem > strong { display: inline-flex; gap: var(--at-space-2); align-items: center; }
+.localMessage { margin: 0; }
+.localActions { display: flex; flex-wrap: wrap; gap: var(--at-space-2); }

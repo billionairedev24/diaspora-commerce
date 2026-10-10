@@ -473,7 +473,38 @@ type PickupPoint struct {
 // CheckoutPackage is a cart package with pickup points.
 type CheckoutPackage struct {
 	CartPackage
-	PickupPoints []PickupPoint `json:"pickupPoints"`
+	// LocalDelivery is the quote of AfroTransact Delivery from the seller's store (S255); AFROTRANSACT_DELIVERY packages only.
+	LocalDelivery *CheckoutLocalDelivery `json:"localDelivery,omitempty"`
+	PickupPoints  []PickupPoint          `json:"pickupPoints"`
+}
+
+// Reasons AfroTransact Delivery from the seller's store can't be quoted for an address.
+const (
+	LocalOutOfRange        = "OUT_OF_RANGE"
+	LocalUnavailable       = "UNAVAILABLE"
+	LocalPickupUnavailable = "PICKUP_UNAVAILABLE"
+	LocalAddressNotLocated = "ADDRESS_NOT_LOCATED"
+	LocalQuoteUnavailable  = "QUOTE_UNAVAILABLE"
+)
+
+// CheckoutLocalDelivery is the checkout quote of an AfroTransact Delivery package (S255).
+type CheckoutLocalDelivery struct {
+	Available         bool     `json:"available"`
+	ChargeMinor       *int64   `json:"chargeMinor"`
+	RoadMiles         *float64 `json:"roadMiles"`
+	DurationMinutes   *float64 `json:"durationMinutes"`
+	FromCity          string   `json:"fromCity"`
+	UnavailableReason *string  `json:"unavailableReason"`
+	Message           *string  `json:"message"`
+	MaxRadiusMiles    *float64 `json:"maxRadiusMiles"`
+	OfferIDs          []string `json:"offerIds"`
+}
+
+// OrderLocalDelivery is AfroTransact Delivery from the seller's store on an order shipment (seller fee hidden).
+type OrderLocalDelivery struct {
+	RoadMiles       *float64 `json:"roadMiles"`
+	DurationMinutes *float64 `json:"durationMinutes"`
+	ChargeMinor     int64    `json:"chargeMinor"`
 }
 
 // CheckoutSummary is the checkout page.

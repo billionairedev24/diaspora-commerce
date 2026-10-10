@@ -59,7 +59,9 @@ tags:
   - name: Support
     description: Customer support console (Lola hand-offs, customer lookup, refunds, notifications, shipments)
   - name: Fees
-    description: Fee-schedule editor (commission per category, seller overrides, card and FBA fees) over payments' immutable versions
+    description: Fee-schedule editor (commission per category, seller overrides, card and FBA fees, AfroTransact Delivery pricing) over payments' immutable versions
+  - name: Dispatch
+    description: Seller pickups of AfroTransact Delivery from the seller's store (S255) — nearest-driver suggestions, overrides and their history
 security:
   - sessionCookie: []
 paths:
@@ -523,6 +525,119 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/fees/delivery-quote:
+    post:
+      tags: [Fees]
+      operationId: quoteStaffDelivery
+      security: [{sessionCookie: []}]
+      summary: Price one AfroTransact Delivery trip under the live fee schedule (S255)
+      description: |
+        payments `POST /v1/delivery-pricing/quote` (staff payments:read): the customer charge and the seller's pickup-delivery
+        fee for a seller organisation, a road distance and a number of packages, under the version in force at `at`
+        (default now). `available: false` with `BEYOND_MAX_RADIUS` beyond the version's radius or `NOT_CONFIGURED` when it
+        has no delivery pricing. Needs VIEW on the fees module. Drafts are previewed in the console with the same rules.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryQuoteRequest'}}}
+      responses:
+        '200': {description: Quote, content: {application/json: {schema: {$ref: '#/components/schemas/DeliveryQuote'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── dispatch: seller pickups (S255)
+  /v1/staff/dispatch/pickups:
+    get:
+      tags: [Dispatch]
+      operationId: listStaffPickups
+      security: [{sessionCookie: []}]
+      summary: Seller pickups waiting for a route (AfroTransact Delivery from the seller's store)
+      description: |
+        fulfilment `GET /v1/dispatch/shipments` (delivery:dispatch), keeping the SELLER-origin entries. Pickups already
+        routed (auto-assigned to the nearest driver) are not in the pool; open them by shipment id. Needs VIEW on dispatch.
+      parameters:
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 64}, description: Depot / fulfilment node}
+      responses:
+        '200': {description: Waiting pickups, content: {application/json: {schema: {$ref: '#/components/schemas/PickupList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/dispatch/pickups/{shipmentId}/driver-suggestions:
+    get:
+      tags: [Dispatch]
+      operationId: getPickupDriverSuggestions
+      security: [{sessionCookie: []}]
+      summary: Top 5 available drivers for a seller pickup, nearest first
+      description: |
+        fulfilment `GET /v1/dispatch/pickups/{id}/driver-suggestions`: fresh positions in the pickup's delivery zone,
+        access active, an ASSIGNED or IN_PROGRESS route today, vehicle inspection passed, room left; ranked by geo road
+        distance (straight line when geo is down — `distanceMethod: STRAIGHT_LINE`, `roadMiles: null`).
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}]
+      responses:
+        '200': {description: Suggestions, content: {application/json: {schema: {$ref: '#/components/schemas/DriverSuggestions'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/dispatch/pickups/{shipmentId}/assign:
+    post:
+      tags: [Dispatch]
+      operationId: assignPickup
+      security: [{sessionCookie: []}]
+      summary: Assign or override the route of a seller pickup (reason required)
+      description: |
+        fulfilment `POST /v1/dispatch/pickups/{id}/assign {routeId, reason}` (delivery:dispatch, EDIT on dispatch). The
+        reason (5–500 characters) is logged as a DISPATCH_OVERRIDE. 409 `CONFLICT` when the pickup can't move any more
+        (collected, or its drop-off carries other shipments).
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PickupAssignRequest'}}}
+      responses:
+        '200': {description: Assigned, content: {application/json: {schema: {$ref: '#/components/schemas/PickupAssignResult'}}}}
+        '400': {$ref: '#/components/responses/Problem'}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/dispatch/pickups/{shipmentId}/assignments:
+    get:
+      tags: [Dispatch]
+      operationId: listPickupAssignments
+      security: [{sessionCookie: []}]
+      summary: Assignment history of a seller pickup (automatic nearest-driver and dispatch overrides)
+      description: fulfilment `GET /v1/dispatch/pickups/{id}/assignments`, newest first.
+      parameters: [{$ref: '#/components/parameters/ShipmentId'}]
+      responses:
+        '200': {description: History, content: {application/json: {schema: {$ref: '#/components/schemas/PickupAssignmentList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/ship-from-locations/{locationId}:
+    get:
+      tags: [Dispatch]
+      operationId: getStaffShipFromLocation
+      security: [{sessionCookie: []}]
+      summary: A seller's ship-from / pickup location (address, geocoded position, pickup hours)
+      description: seller `GET /v1/ship-from-locations/{id}` (staff seller:ship-from). Needs VIEW on dispatch.
+      parameters:
+        - {name: locationId, in: path, required: true, schema: {type: string, maxLength: 64}}
+      responses:
+        '200': {description: Location, content: {application/json: {schema: {$ref: '#/components/schemas/ShipFromLocation'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     sessionCookie:
@@ -538,6 +653,7 @@ components:
       schema: {$ref: '#/components/schemas/ResourceKey'}
     RecordId: {name: id, in: path, required: true, schema: {type: string, maxLength: 120}}
     ExportId: {name: exportId, in: path, required: true, schema: {type: string, maxLength: 64}}
+    ShipmentId: {name: shipmentId, in: path, required: true, schema: {type: string, maxLength: 64}}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
     IdempotencyKeyRequired: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}, description: Same key = same refund; never refunds twice.}
   responses:
@@ -1039,7 +1155,8 @@ components:
     FeeLimits:
       type: object
       description: Bounds the editor enforces (rates in basis points, amounts in minor units)
-      required: [commissionMaxBps, cardPctMaxBps, cardFixedMaxMinor, fbaPerUnitMaxMinor, noteMinLength, noteMaxLength, maxCategoryRates, maxOverrides]
+      required: [commissionMaxBps, cardPctMaxBps, cardFixedMaxMinor, fbaPerUnitMaxMinor, noteMinLength, noteMaxLength, maxCategoryRates, maxOverrides,
+        deliveryMaxRadiusMiles, deliveryAmountMaxMinor, deliveryMaxBands, maxDeliveryOverrides]
       properties:
         commissionMaxBps: {type: integer, examples: [5000]}
         cardPctMaxBps: {type: integer, examples: [1000]}
@@ -1049,6 +1166,10 @@ components:
         noteMaxLength: {type: integer}
         maxCategoryRates: {type: integer}
         maxOverrides: {type: integer}
+        deliveryMaxRadiusMiles: {type: number, examples: [200], description: Largest AfroTransact Delivery service radius payments accepts}
+        deliveryAmountMaxMinor: {type: integer, format: int64, examples: [10000], description: 'Largest delivery amount: fee, base, per mile, band, min or max'}
+        deliveryMaxBands: {type: integer, examples: [20]}
+        maxDeliveryOverrides: {type: integer, examples: [500]}
     FeeCategory:
       type: object
       required: [key, label, source]
@@ -1075,7 +1196,7 @@ components:
     FeeScheduleView:
       type: object
       required: [id, version, status, effectiveFrom, currency, defaultCommissionBps, categoryRates, overrides, cardPctBps, cardFixedMinor, fbaPerUnitMinor,
-        reverseCommissionOnRefund, note, createdBy, createdAt, cancelledAt, cancelledBy, cancelReason, cancellable]
+        reverseCommissionOnRefund, deliveryPricing, note, createdBy, createdAt, cancelledAt, cancelledBy, cancelReason, cancellable]
       properties:
         id: {type: string}
         version: {type: integer}
@@ -1089,6 +1210,9 @@ components:
         cardFixedMinor: {type: integer, format: int64, description: 'Card fee estimate per charge, fixed part'}
         fbaPerUnitMinor: {type: integer, format: int64}
         reverseCommissionOnRefund: {type: boolean}
+        deliveryPricing:
+          oneOf: [{$ref: '#/components/schemas/DeliveryPricing'}, {type: 'null'}]
+          description: 'AfroTransact Delivery from seller stores (S255); null when the version has no delivery pricing (quotes NOT_CONFIGURED)'
         note: {type: [string, 'null']}
         createdBy: {type: string}
         createdAt: {type: [string, 'null'], format: date-time}
@@ -1165,9 +1289,198 @@ components:
         cardFixedMinor: {type: integer, format: int64, minimum: 0, maximum: 1000}
         fbaPerUnitMinor: {type: integer, format: int64, minimum: 0, maximum: 10000}
         reverseCommissionOnRefund: {type: boolean}
+        deliveryPricing:
+          oneOf: [{$ref: '#/components/schemas/DeliveryPricingDraft'}, {type: 'null'}]
+          description: AfroTransact Delivery pricing (S255). Omitted or null = carried over from the latest live version; enabled=false stops offering it
         note: {type: string, minLength: 3, maxLength: 500, description: Why the fees change (required)}
     FeeCancelRequest:
       type: object
       required: [reason]
       properties:
         reason: {type: string, minLength: 3, maxLength: 500}
+    # ── AfroTransact Delivery pricing (S255; amounts in minor units, distances in road miles)
+    DeliveryBand:
+      type: object
+      required: [fromMiles, toMiles, feeMinor]
+      properties:
+        fromMiles: {type: number, minimum: 0, description: From (inclusive)}
+        toMiles: {type: number, minimum: 0, description: To (exclusive); bands never overlap}
+        feeMinor: {type: integer, format: int64, minimum: 0}
+    DeliveryTariff:
+      type: object
+      description: 'FLAT: flatPerPackageMinor × packages. DISTANCE (per trip): the fee of the band covering the distance, else
+        baseMinor + perMileMinor × miles (half up), then at least minMinor and at most maxMinor (null = no cap)'
+      required: [mode, flatPerPackageMinor, baseMinor, perMileMinor, bands, minMinor, maxMinor]
+      properties:
+        mode: {type: string, enum: [FLAT, DISTANCE]}
+        flatPerPackageMinor: {type: [integer, 'null'], format: int64, minimum: 0}
+        baseMinor: {type: [integer, 'null'], format: int64, minimum: 0}
+        perMileMinor: {type: [integer, 'null'], format: int64, minimum: 0, description: '85 = $0.85 per mile'}
+        bands: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/DeliveryBand'}}
+        minMinor: {type: [integer, 'null'], format: int64, minimum: 0}
+        maxMinor: {type: [integer, 'null'], format: int64, minimum: 0}
+    DeliveryFeeOverride:
+      type: object
+      required: [orgId, orgName, sellerFee]
+      properties:
+        orgId: {type: string}
+        orgName: {type: [string, 'null']}
+        sellerFee: {$ref: '#/components/schemas/DeliveryTariff'}
+    DeliveryPricing:
+      type: object
+      description: AfroTransact Delivery pricing of a fee-schedule version
+      required: [enabled, maxRadiusMiles, customerCharge, sellerFee, sellerOverrides]
+      properties:
+        enabled: {type: boolean, description: false = not offered under this version}
+        maxRadiusMiles: {type: number, description: Beyond this road distance the option is unavailable (BEYOND_MAX_RADIUS)}
+        customerCharge: {oneOf: [{$ref: '#/components/schemas/DeliveryTariff'}, {type: 'null'}], description: What the shopper pays (4200); null = free}
+        sellerFee: {oneOf: [{$ref: '#/components/schemas/DeliveryTariff'}, {type: 'null'}], description: What the seller pays per pickup-delivery (4250); null = no fee}
+        sellerOverrides: {type: array, items: {$ref: '#/components/schemas/DeliveryFeeOverride'}, description: Negotiated seller fees (AfroTransact Retail never pays one)}
+    DeliveryDraftOverride:
+      type: object
+      required: [orgId, sellerFee]
+      properties:
+        orgId: {type: string, minLength: 1, maxLength: 80}
+        sellerFee: {$ref: '#/components/schemas/DeliveryTariff'}
+    DeliveryPricingDraft:
+      type: object
+      required: [enabled, maxRadiusMiles, customerCharge, sellerFee, sellerOverrides]
+      properties:
+        enabled: {type: boolean}
+        maxRadiusMiles: {type: [number, 'null'], description: 0 < r ≤ limits.deliveryMaxRadiusMiles}
+        customerCharge: {oneOf: [{$ref: '#/components/schemas/DeliveryTariff'}, {type: 'null'}]}
+        sellerFee: {oneOf: [{$ref: '#/components/schemas/DeliveryTariff'}, {type: 'null'}]}
+        sellerOverrides: {type: array, maxItems: 500, items: {$ref: '#/components/schemas/DeliveryDraftOverride'}}
+    DeliveryQuoteRequest:
+      type: object
+      required: [sellerOrgId, distanceMiles]
+      properties:
+        sellerOrgId: {type: string, minLength: 1, maxLength: 80}
+        distanceMiles: {type: number, minimum: 0, maximum: 1000, description: Road miles}
+        packages: {type: integer, minimum: 1, maximum: 50, default: 1}
+        at: {type: [string, 'null'], format: date-time, description: Version in force at this time; default now}
+    DeliveryQuote:
+      type: object
+      required: [available, unavailableReason, customerChargeMinor, sellerFeeMinor, sellerFeeSource, scheduleVersion, maxRadiusMiles, currency]
+      properties:
+        available: {type: boolean}
+        unavailableReason: {type: [string, 'null'], enum: [NOT_CONFIGURED, BEYOND_MAX_RADIUS, null]}
+        customerChargeMinor: {type: integer, format: int64}
+        sellerFeeMinor: {type: integer, format: int64}
+        sellerFeeSource: {type: [string, 'null'], enum: [DEFAULT, OVERRIDE, RETAIL, null]}
+        scheduleVersion: {type: [integer, 'null']}
+        maxRadiusMiles: {type: [number, 'null']}
+        currency: {type: string}
+    # ── Dispatch: seller pickups (S255)
+    PickupRow:
+      type: object
+      required: [shipmentId, orderNumber, sellerOrgId, sellerName, city, state, postalCode, status, routeId, perishable, units, promisedBy, createdAt]
+      properties:
+        shipmentId: {type: string}
+        orderNumber: {type: string}
+        sellerOrgId: {type: string}
+        sellerName: {type: string}
+        city: {type: string, description: Drop-off city}
+        state: {type: string}
+        postalCode: {type: string}
+        status: {type: string, description: 'AWAITING_ROUTE, ROUTED, DELIVERED, FAILED or CANCELLED'}
+        routeId: {type: [string, 'null']}
+        perishable: {type: boolean}
+        units: {type: integer}
+        promisedBy: {type: [string, 'null'], format: date}
+        createdAt: {type: [string, 'null'], format: date-time}
+    PickupList:
+      type: object
+      required: [items, canAssign]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PickupRow'}}
+        canAssign: {type: boolean, description: delivery:dispatch and EDIT on dispatch}
+    DriverSuggestion:
+      type: object
+      required: [driverId, routeId, routeName, zone, routeStatus, straightLineMiles, roadMiles, durationMinutes, distanceMethod, positionAt, packagesOnRoute, capacityLeft]
+      properties:
+        driverId: {type: string}
+        routeId: {type: string}
+        routeName: {type: string}
+        zone: {type: string}
+        routeStatus: {type: string}
+        straightLineMiles: {type: number}
+        roadMiles: {type: [number, 'null'], description: null when geo is down (ranked by straight line)}
+        durationMinutes: {type: [number, 'null']}
+        distanceMethod: {type: string, description: 'ROAD_GOOGLE, ROAD_OSRM, GEODESIC_DETOUR or STRAIGHT_LINE'}
+        positionAt: {type: [string, 'null'], format: date-time}
+        packagesOnRoute: {type: integer}
+        capacityLeft: {type: integer}
+    DriverSuggestions:
+      type: object
+      required: [shipmentId, drivers, canAssign]
+      properties:
+        shipmentId: {type: string}
+        drivers: {type: array, maxItems: 5, items: {$ref: '#/components/schemas/DriverSuggestion'}}
+        canAssign: {type: boolean}
+    PickupAssignRequest:
+      type: object
+      required: [routeId, reason]
+      properties:
+        routeId: {type: string, minLength: 1, maxLength: 20}
+        reason: {type: string, minLength: 5, maxLength: 500}
+    PickupAssignResult:
+      type: object
+      required: [shipmentId, routeId, routeName, driverId, status]
+      properties:
+        shipmentId: {type: string}
+        routeId: {type: string}
+        routeName: {type: [string, 'null']}
+        driverId: {type: [string, 'null']}
+        status: {type: string, description: The route's status}
+    PickupAssignment:
+      type: object
+      required: [id, shipmentId, routeId, driverId, mode, reason, previousRouteId, straightMiles, roadMiles, distanceMethod, actor, createdAt]
+      properties:
+        id: {type: string}
+        shipmentId: {type: string}
+        routeId: {type: string}
+        driverId: {type: [string, 'null']}
+        mode: {type: string, enum: [AUTO_NEAREST, DISPATCH_OVERRIDE]}
+        reason: {type: [string, 'null']}
+        previousRouteId: {type: [string, 'null']}
+        straightMiles: {type: [number, 'null']}
+        roadMiles: {type: [number, 'null']}
+        distanceMethod: {type: [string, 'null']}
+        actor: {type: [string, 'null']}
+        createdAt: {type: [string, 'null'], format: date-time}
+    PickupAssignmentList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PickupAssignment'}}
+    PickupWindow:
+      type: object
+      required: [day, opens, closes]
+      properties:
+        day: {type: string, enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]}
+        opens: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+        closes: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+    ShipFromLocation:
+      type: object
+      required: [id, orgId, label, line1, line2, city, state, postalCode, country, position, pickupEnabled, pickupHours, zoneName]
+      properties:
+        id: {type: string}
+        orgId: {type: string}
+        label: {type: string}
+        line1: {type: string}
+        line2: {type: string}
+        city: {type: string}
+        state: {type: string}
+        postalCode: {type: string}
+        country: {type: string}
+        position:
+          type: [object, 'null']
+          required: [lat, lng, precision]
+          properties:
+            lat: {type: number}
+            lng: {type: number}
+            precision: {type: string, enum: [ADDRESS, ZIP, POINT]}
+        pickupEnabled: {type: boolean}
+        pickupHours: {type: array, items: {$ref: '#/components/schemas/PickupWindow'}}
+        zoneName: {type: [string, 'null']}

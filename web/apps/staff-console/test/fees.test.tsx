@@ -20,6 +20,12 @@ const base: FeeScheduleView = {
   ],
   overrides: [{ orgId: 'org-kente', orgName: 'Kente Naturals', category: 'beauty', categoryLabel: 'Beauty', commissionBps: 800 }],
   cardPctBps: 290, cardFixedMinor: 30, fbaPerUnitMinor: 325, reverseCommissionOnRefund: true, note: 'Q3', createdBy: 'Musa Bello', createdAt: null,
+  deliveryPricing: {
+    enabled: true, maxRadiusMiles: 25,
+    customerCharge: { mode: 'DISTANCE', flatPerPackageMinor: null, baseMinor: 499, perMileMinor: 85, bands: [], minMinor: 599, maxMinor: 2499 },
+    sellerFee: { mode: 'FLAT', flatPerPackageMinor: 200, baseMinor: null, perMileMinor: null, bands: [], minMinor: null, maxMinor: null },
+    sellerOverrides: [{ orgId: 'org-kente', orgName: 'Kente Naturals', sellerFee: { mode: 'FLAT', flatPerPackageMinor: 150, baseMinor: null, perMileMinor: null, bands: [], minMinor: null, maxMinor: null } }]
+  },
   cancelledAt: null, cancelledBy: null, cancelReason: null, cancellable: false
 };
 
@@ -27,7 +33,8 @@ const overview: Pick<FeesOverview, 'minEffectiveFrom' | 'immediateAllowed' | 're
   minEffectiveFrom: NOW.toISOString(),
   immediateAllowed: true,
   retail: { orgId: 'org-afrotransact-retail', name: 'AfroTransact Retail', note: 'No commission, no fees (merchant of record)' },
-  limits: { commissionMaxBps: 5000, cardPctMaxBps: 1000, cardFixedMaxMinor: 1000, fbaPerUnitMaxMinor: 10_000, noteMinLength: 3, noteMaxLength: 500, maxCategoryRates: 100, maxOverrides: 500 }
+  limits: { commissionMaxBps: 5000, cardPctMaxBps: 1000, cardFixedMaxMinor: 1000, fbaPerUnitMaxMinor: 10_000, noteMinLength: 3, noteMaxLength: 500, maxCategoryRates: 100, maxOverrides: 500,
+    deliveryMaxRadiusMiles: 200, deliveryAmountMaxMinor: 10_000, deliveryMaxBands: 20, maxDeliveryOverrides: 500 }
 };
 const cats = [
   { key: 'fashion', label: 'Fashion', source: 'TAXONOMY' as const },

@@ -34,7 +34,7 @@ function Line({ line, pkg }: { line: CartLine; pkg: CartPackage }) {
         <span className={`${styles.stock} ${low || out ? styles.lowStock : styles.inStock}`}>
           {out ? t('cart.unavailableLine') : low ? t('cart.onlyLeft', { n: line.availableQty }) : t('cart.inStock')}
         </span>
-        <FulfilmentBadge fulfilment={pkg.fulfilment} shipsFrom={pkg.seller.city} />
+        <FulfilmentBadge fulfilment={pkg.fulfilment} shipsFrom={pkg.seller.city} localDeliveryLabel={(city) => (city ? t('ld.badge', { city }) : t('ld.badgeNoCity'))} />
         <span className={styles.small}>
           {t('cart.soldBy')} <span style={{ color: 'var(--at-color-link)' }}>{pkg.seller.name}</span> · {line.unit}
         </span>
@@ -98,6 +98,11 @@ function Package({ pkg, n, total }: { pkg: CartPackage; n: number; total: number
         ))}
         <li>({t('cart.chooseAtCheckout')})</li>
       </ul>
+      {pkg.fulfilment === 'AFROTRANSACT_DELIVERY' && (
+        <p className={styles.nudge} data-testid="local-delivery-note">
+          {t('ld.cartNote', { city: pkg.seller.city || pkg.shipsFrom })}
+        </p>
+      )}
       {pkg.freeShippingNudge && (
         <p className={styles.nudge}>
           <CheckCircle weight="fill" aria-hidden /> {t('cart.nudge', { amount: fmt.money(pkg.freeShippingNudge.remainingMinor), seller: pkg.seller.name })}

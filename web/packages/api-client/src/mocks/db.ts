@@ -13,7 +13,7 @@ export interface MockOffer {
   city: string;
   priceMinor: number;
   listPriceMinor: number | null;
-  fulfilment: 'AFROTRANSACT' | 'SELLER';
+  fulfilment: 'AFROTRANSACT' | 'SELLER' | 'AFROTRANSACT_DELIVERY';
   stock: number;
 }
 
@@ -71,7 +71,7 @@ function createDb(): MockDb {
         city: o.city,
         priceMinor: Math.round(o.price * 100),
         listPriceMinor: o.list ? Math.round(o.list * 100) : null,
-        fulfilment: o.ff === 'AT' ? 'AFROTRANSACT' : 'SELLER',
+        fulfilment: o.ff === 'AT' ? 'AFROTRANSACT' : o.ff === 'ATD' ? 'AFROTRANSACT_DELIVERY' : 'SELLER',
         stock: o.stock
       };
       offers.set(offer.offerId, offer);

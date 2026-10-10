@@ -197,7 +197,8 @@ export function search(q: SearchQuery, loc: DeliveryLocation, now: Date): Search
     community: bucketCounts(cands, q, 'community', communities.map((d) => ({ value: d, label: d, test: (c: Candidate) => c.s.community === d }))),
     fulfilment: bucketCounts(cands, q, 'fulfilment', [
       { value: 'AFROTRANSACT', label: 'Fulfilled by AfroTransact', test: (c) => c.s.fulfilment === 'AFROTRANSACT' },
-      { value: 'SELLER', label: 'Ships from seller', test: (c) => c.s.fulfilment === 'SELLER' }
+      { value: 'SELLER', label: 'Ships from seller', test: (c) => c.s.fulfilment === 'SELLER' },
+      { value: 'AFROTRANSACT_DELIVERY', label: 'AfroTransact Delivery from local stores', test: (c) => c.s.fulfilment === 'AFROTRANSACT_DELIVERY' }
     ]),
     sellerKind: bucketCounts(cands, q, 'sellerKind', [
       { value: 'PLATFORM', label: 'AfroTransact', test: (c) => c.s.sellerKind === 'PLATFORM' },
@@ -351,6 +352,7 @@ export function buildCart(s: MockSession, now: Date): Cart {
     const first = items[0] as { offer: MockOffer };
     const o = first.offer;
     const isAT = o.fulfilment === 'AFROTRANSACT';
+    const local = o.fulfilment === 'AFROTRANSACT_DELIVERY';
     const lines = items.map(({ offer, line }) => {
       const p = db.products.get(offer.atin) as FixtureProduct;
       return {
@@ -380,14 +382,14 @@ export function buildCart(s: MockSession, now: Date): Cart {
       packageId: key,
       seller: { id: o.sellerId, name: o.sellerName, kind: o.sellerName === PLATFORM_SELLER ? 'PLATFORM' : 'SELLER', city: o.city },
       fulfilment: o.fulfilment,
-      heading: isAT ? `Shipped by AfroTransact from ${nearestFc(metro)}` : `Shipped by ${o.sellerName} from ${o.city}`,
+      heading: isAT ? `Shipped by AfroTransact from ${nearestFc(metro)}` : local ? `AfroTransact Delivery from ${o.city}` : `Shipped by ${o.sellerName} from ${o.city}`,
       shipsFrom: isAT ? nearestFc(metro) : o.city,
       delivery: { ...promise, days: slowest, label: options[0]?.eta ?? promise.label },
       deliveryOptions: options,
       lines,
       itemCount: lines.reduce((a, l) => a + l.quantity, 0),
       subtotalMinor,
-      freeShippingNudge: !isAT && subtotalMinor > 0 && subtotalMinor < FREE_SHIPPING_THRESHOLD_MINOR ? { remainingMinor: FREE_SHIPPING_THRESHOLD_MINOR - subtotalMinor, thresholdMinor: FREE_SHIPPING_THRESHOLD_MINOR } : null
+      freeShippingNudge: !isAT && !local && subtotalMinor > 0 && subtotalMinor < FREE_SHIPPING_THRESHOLD_MINOR ? { remainingMinor: FREE_SHIPPING_THRESHOLD_MINOR - subtotalMinor, thresholdMinor: FREE_SHIPPING_THRESHOLD_MINOR } : null
     };
   });
   const allLines = packages.flatMap((p) => p.lines);

@@ -2,7 +2,9 @@ import { z } from 'zod';
 
 import { MinorSchema } from './common';
 
-export const FulfilmentSchema = z.enum(['AFROTRANSACT', 'SELLER']);
+/** AFROTRANSACT = Fulfilled by AfroTransact; SELLER = Ships from seller; AFROTRANSACT_DELIVERY = "AfroTransact Delivery from
+ *  <store city>" (the seller packs, an AfroTransact driver collects at the store; priced by distance at checkout, S255). */
+export const FulfilmentSchema = z.enum(['AFROTRANSACT', 'SELLER', 'AFROTRANSACT_DELIVERY']);
 export type Fulfilment = z.infer<typeof FulfilmentSchema>;
 
 export const SellerKindSchema = z.enum(['PLATFORM', 'SELLER']);

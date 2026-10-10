@@ -470,10 +470,7 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 		if len(p.Lines) == 0 {
 			continue
 		}
-		fulfilment := p.Fulfilment
-		if fulfilment != domain.FulfilledByAfroTransact {
-			fulfilment = domain.ShipsFromSeller
-		}
+		fulfilment := normFulfilment(p.Fulfilment)
 		kind := p.Lines[0].SellerKind
 		if kind != domain.SellerKindPlatform {
 			kind = domain.SellerKindSeller
@@ -509,9 +506,14 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 			pkg.Delivery.Label = pkg.DeliveryOptions[0].ETA
 		}
 		pkg.FreeShippingNudge = s.d.Estimator.Nudge(fulfilment, pkg.SubtotalMinor)
-		if fulfilment == domain.FulfilledByAfroTransact {
+		switch fulfilment {
+		case domain.FulfilledByAfroTransact:
 			pkg.Heading, pkg.ShipsFrom = "Shipped by AfroTransact", "AfroTransact"
-		} else {
+		case domain.AfroTransactDelivery:
+			city := s.storeCity(ctx, p.Lines[0].OfferID)
+			pkg.Seller.City = city
+			pkg.Heading, pkg.ShipsFrom = domain.LocalDeliveryHeading(city), firstNonEmpty(city, seller.Name)
+		default:
 			pkg.Heading, pkg.ShipsFrom = "Shipped by "+seller.Name, seller.Name
 		}
 		sellers[seller.ID] = true
@@ -525,4 +527,17 @@ func (s *cartServiceImpl) present(ctx context.Context, c *domain.Caller, up port
 	cart.AllSelected = lineCount > 0 && allSelected
 	cart.SellerCount = len(sellers)
 	return cart, nil
+}
+
+// storeCity is the city of an AfroTransact Delivery offer's store (offers' seller.city is the ship-from city); best
+// effort, empty when offers can't answer.
+func (s *cartServiceImpl) storeCity(ctx context.Context, offerID string) string {
+	if s.d.Offers == nil || offerID == "" {
+		return ""
+	}
+	o, err := s.d.Offers.Offer(ctx, offerID)
+	if err != nil {
+		return ""
+	}
+	return o.Offer.Seller.City
 }

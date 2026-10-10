@@ -525,6 +525,8 @@ type PublicOffer struct {
 	ShipsFrom      string      `json:"shipsFrom"`
 	SoldBy         string      `json:"soldBy"`
 	Badges         []string    `json:"badges"`
+	// ShipFromLocationID is the pickup location of AFROTRANSACT_DELIVERY offers (S255).
+	ShipFromLocationID string `json:"shipFromLocationId"`
 }
 
 // OfferBuyBox is offers' BuyBox: the winner (nil = currently unavailable), the other listed offers by landed price,

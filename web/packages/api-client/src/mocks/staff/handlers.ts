@@ -9,20 +9,26 @@ import { bffProblemType } from '../../problem-types';
 import { type AccessLevel, type ChartSpec } from '../../schemas/seller';
 import {
   type Customer360,
+  DeliveryTariffSchema,
+  type DriverSuggestions,
   type ExportJob,
   FieldValueSchema,
+  type PickupAssignmentList,
+  type PickupAssignResult,
+  type PickupList,
   type RecordAction,
   type RecordDetail,
   type ResourceKey,
   ResourceKeySchema,
   type ResourcePage,
+  type ShipFromLocation,
   type StaffDashboard,
   type StaffSession,
   type SupportActionResult
 } from '../../schemas/staff';
 import { validateStaffForm } from '../../validation/staff-form';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
-import { createFeeSchedule, feeRecords, feesOverview, feeView, searchFeeOrgs } from './fees';
+import { createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
 
@@ -368,6 +374,16 @@ const FeeDraftBody = z.object({
   cardFixedMinor: z.number().int(),
   fbaPerUnitMinor: z.number().int(),
   reverseCommissionOnRefund: z.boolean(),
+  deliveryPricing: z
+    .object({
+      enabled: z.boolean(),
+      maxRadiusMiles: z.number().nullable(),
+      customerCharge: DeliveryTariffSchema.nullable(),
+      sellerFee: DeliveryTariffSchema.nullable(),
+      sellerOverrides: z.array(z.object({ orgId: z.string(), sellerFee: DeliveryTariffSchema }))
+    })
+    .nullable()
+    .optional(),
   note: z.string()
 });
 
@@ -377,6 +393,8 @@ function requireFeesConfigure(ctx: Ctx) {
   if (!allows(ctx.roles, 'fees', 'EDIT')) throw forbidden('Your roles can’t change fees, commissions & tax.');
   if (!ctx.permissions.includes('payments:configure')) throw forbidden('This needs the payments:configure permission.');
 }
+
+const canAssignPickups = (ctx: Ctx) => ctx.permissions.includes('delivery:dispatch') && allows(ctx.roles, 'dispatch', 'EDIT');
 
 function syncFeeRecords(ctx: Ctx) {
   ctx.db.records['fee-schedules'] = feeRecords(ctx.db.feeSchedules, ctx.now);
@@ -683,6 +701,84 @@ export const staffHandlers = [
       syncFeeRecords(ctx);
       audit(ctx, 'fee-schedule.cancelled', s.id, `Cancelled fee schedule v${s.version}: ${reason}`);
       return feeView(s, ctx.db.feeSchedules, ctx.now, true);
+    })
+  ),
+  http.post(
+    `${W}/fees/delivery-quote`,
+    route(async (ctx) => {
+      requireModule(ctx, 'fee-schedules');
+      const b = await json(
+        ctx.request,
+        z.object({
+          sellerOrgId: z.string().trim().min(1, 'Choose a seller organisation').max(80),
+          distanceMiles: z.number().min(0, 'Enter a distance between 0 and 1,000 miles').max(1000, 'Enter a distance between 0 and 1,000 miles'),
+          packages: z.number().int().min(1, 'Enter 1 to 50 packages').max(50, 'Enter 1 to 50 packages').optional()
+        })
+      );
+      return quoteDelivery(ctx.db.feeSchedules, ctx.now, b.sellerOrgId, b.distanceMiles, b.packages ?? 1);
+    })
+  ),
+  /* ── dispatch: seller pickups (S255) ── */
+  http.get(
+    `${W}/dispatch/pickups`,
+    route((ctx): PickupList => {
+      requireModule(ctx, 'routes');
+      return { items: ctx.db.dispatch.pickups.filter((p) => p.status === 'AWAITING_ROUTE'), canAssign: canAssignPickups(ctx) };
+    })
+  ),
+  http.get(
+    `${W}/dispatch/pickups/:id/driver-suggestions`,
+    route((ctx, p): DriverSuggestions => {
+      requireModule(ctx, 'routes');
+      const drivers = ctx.db.dispatch.suggestions[p.id ?? ''];
+      if (!drivers) throw notFound('No such pickup.');
+      return { shipmentId: p.id ?? '', drivers: drivers.slice(0, 5), canAssign: canAssignPickups(ctx) };
+    })
+  ),
+  http.post(
+    `${W}/dispatch/pickups/:id/assign`,
+    route(async (ctx, p): Promise<PickupAssignResult> => {
+      const b = await json(
+        ctx.request,
+        z.object({
+          routeId: z.string().trim().min(1, 'Choose a route').max(20, 'Choose a route'),
+          reason: z.string().trim().min(5, 'Say why you assign this route (5 to 500 characters)').max(500, 'Say why you assign this route (5 to 500 characters)')
+        })
+      );
+      requireModule(ctx, 'routes', 'EDIT');
+      if (!ctx.permissions.includes('delivery:dispatch')) throw forbidden('This needs the delivery:dispatch permission.');
+      const d = ctx.db.dispatch;
+      const pickup = d.pickups.find((x) => x.shipmentId === p.id);
+      const driver = (d.suggestions[p.id ?? ''] ?? []).find((x) => x.routeId === b.routeId);
+      if (!pickup) throw notFound('No such pickup.');
+      if (pickup.status !== 'AWAITING_ROUTE' && pickup.status !== 'ROUTED') throw conflict('The pickup was already collected, or its drop-off carries other shipments.');
+      const previous = pickup.routeId;
+      pickup.routeId = b.routeId;
+      pickup.status = 'ROUTED';
+      d.assignments.push({
+        id: `pa-${ctx.db.seq++}`, shipmentId: pickup.shipmentId, routeId: b.routeId, driverId: driver?.driverId ?? null, mode: 'DISPATCH_OVERRIDE', reason: b.reason,
+        previousRouteId: previous, straightMiles: driver?.straightLineMiles ?? null, roadMiles: driver?.roadMiles ?? null, distanceMethod: driver?.distanceMethod ?? null,
+        actor: ctx.action.actor, createdAt: ctx.now.toISOString()
+      });
+      audit(ctx, 'pickup.dispatch_assigned', pickup.shipmentId, `Assigned ${pickup.orderNumber} pickup to ${b.routeId}: ${b.reason}`);
+      return { shipmentId: pickup.shipmentId, routeId: b.routeId, routeName: driver?.routeName ?? null, driverId: driver?.driverId ?? null, status: 'ASSIGNED' };
+    })
+  ),
+  http.get(
+    `${W}/dispatch/pickups/:id/assignments`,
+    route((ctx, p): PickupAssignmentList => {
+      requireModule(ctx, 'routes');
+      if (!ctx.db.dispatch.suggestions[p.id ?? '']) throw notFound('No such pickup.');
+      return { items: ctx.db.dispatch.assignments.filter((a) => a.shipmentId === p.id).sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')) };
+    })
+  ),
+  http.get(
+    `${W}/ship-from-locations/:id`,
+    route((ctx, p): ShipFromLocation => {
+      requireModule(ctx, 'routes');
+      const loc = ctx.db.dispatch.locations.find((l) => l.id === p.id);
+      if (!loc) throw notFound('No such location.');
+      return loc;
     })
   ),
   /* Anything else under /v1/staff is not part of the contract. */

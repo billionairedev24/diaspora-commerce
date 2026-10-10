@@ -1,9 +1,10 @@
 'use client';
 
 import { sellerKeys, type SellerOrderRow, sellerQueries, type SellerStatusAction, type ShipmentStatus } from '@afrotransact/api-client';
-import { Badge, Button, useToast } from '@afrotransact/ui';
+import { Badge, Button, buttonClassName, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 import { DataTable, FilterChips } from '@/components/ui/DataTable';
@@ -82,7 +83,7 @@ export function OrdersView() {
       { id: 'total', header: 'Total', size: 10, cell: ({ row }) => money(row.original.totalMinor, row.original.currency) },
       {
         id: 'fulfilment', header: 'Fulfilment', size: 12,
-        cell: ({ row }) => (row.original.fulfilment === 'AFROTRANSACT' ? <Badge tone="fulfilled">AfroTransact</Badge> : <Badge tone="seller">You ship</Badge>)
+        cell: ({ row }) => <Badge tone={row.original.fulfilment === 'SELLER' ? 'seller' : 'fulfilled'}>{t(`sc.ff.${row.original.fulfilment}`)}</Badge>
       },
       { id: 'status', header: 'Status', size: 11, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.statusLabel}</StatusPill> },
       {
@@ -106,13 +107,23 @@ export function OrdersView() {
         }
       }
     ],
-    [editable, advance]
+    [editable, advance, t]
   );
 
   const copy = moduleCopy('orders', { provider: isProvider, orgName: session.activeOrg?.name ?? '' }, t);
   return (
     <>
-      <PageHeader title={copy.title} description={copy.description} />
+      <PageHeader
+        title={copy.title}
+        description={copy.description}
+        actions={
+          isProvider ? null : (
+            <Link href="/orders/ship-from" className={buttonClassName({ variant: 'neutral' })}>
+              {t('sc.shipFrom.link')}
+            </Link>
+          )
+        }
+      />
       {!editable ? (
         <Notice tone="info" icon="eye" title="Read-only.">
           {session.activeOrg?.roleLabel} can view orders but not change them.

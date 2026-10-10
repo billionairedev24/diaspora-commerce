@@ -18,6 +18,7 @@ export const Badges: Story = {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <FulfilmentBadge fulfilment="AFROTRANSACT" />
       <FulfilmentBadge fulfilment="SELLER" shipsFrom="Bronx, NY" />
+      <FulfilmentBadge fulfilment="AFROTRANSACT_DELIVERY" shipsFrom="Houston, TX" />
       <Badge tone="brand">AfroTransact Brand</Badge>
       <Badge tone="ai">AI summary</Badge>
       <Badge tone="warning">Pending review</Badge>

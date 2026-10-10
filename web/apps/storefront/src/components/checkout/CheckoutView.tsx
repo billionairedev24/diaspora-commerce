@@ -15,7 +15,7 @@ import {
   type Wallet
 } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { Button, buttonClassName, CheckCircle, Circle, CircleNotch, House, Key, LockSimple, Plus, ShieldCheck, Skeleton, Storefront, Truck } from '@afrotransact/ui';
+import { Button, buttonClassName, CheckCircle, Circle, CircleNotch, House, Key, LockSimple, Plus, ShieldCheck, Skeleton, Storefront, Truck, useToast, Warning } from '@afrotransact/ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -71,9 +71,69 @@ function Step({ n, title, done, onChange, children }: { n: number; title: string
   );
 }
 
-function PackageDelivery({ pkg, n, total, choice, onChoice }: { pkg: CheckoutPackage; n: number; total: number; choice: Choice; onChoice: (c: Choice) => void }) {
+/** AfroTransact Delivery from the seller's store (S255): the quoted charge, distance and drive time, or why this address
+ *  can't be served — with "remove from this order" and "change address". */
+function LocalDeliveryQuote({ pkg, onRemove, onChangeAddress, removing }: { pkg: CheckoutPackage; onRemove: () => void; onChangeAddress: () => void; removing: boolean }) {
   const fmt = useFormatters();
   const t = useT();
+  const ld = pkg.localDelivery;
+  if (!ld) return null;
+  const city = ld.fromCity || pkg.seller.city;
+  if (ld.available) {
+    return (
+      <div className={styles.localQuote} data-testid="local-delivery-quote">
+        <strong>{t('ld.title', { city })}</strong>
+        {ld.chargeMinor !== null && ld.roadMiles !== null ? (
+          <span>
+            {t('ld.quote', { miles: fmt.number(ld.roadMiles, { maximumFractionDigits: 1 }), city, minutes: Math.round(ld.durationMinutes ?? 0) })} ·{' '}
+            {t('ld.charge', { amount: fmt.money(ld.chargeMinor) })}
+          </span>
+        ) : (
+          <span className={styles.muted}>{ld.message ?? t('ld.pricedLater')}</span>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className={styles.localProblem} role="group" aria-labelledby={`ld-${pkg.packageId}`} data-testid="local-delivery-problem">
+      <strong id={`ld-${pkg.packageId}`}>
+        <Warning weight="fill" aria-hidden /> {ld.unavailableReason === 'OUT_OF_RANGE' ? t('ld.outOfRangeTitle') : t('ld.unavailableTitle')}
+      </strong>
+      {ld.message && <p className={styles.localMessage}>{ld.message}</p>}
+      <div className={styles.localActions}>
+        <Button size="sm" variant="secondary" loading={removing} onClick={onRemove} aria-label={t('ld.removeAria', { seller: pkg.seller.name })}>
+          {t('ld.remove')}
+        </Button>
+        <Button size="sm" variant="neutral" onClick={onChangeAddress}>
+          {t('ld.changeAddress')}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PackageDelivery({
+  pkg,
+  n,
+  total,
+  choice,
+  onChoice,
+  onRemove,
+  onChangeAddress,
+  removing
+}: {
+  pkg: CheckoutPackage;
+  n: number;
+  total: number;
+  choice: Choice;
+  onChoice: (c: Choice) => void;
+  onRemove: () => void;
+  onChangeAddress: () => void;
+  removing: boolean;
+}) {
+  const fmt = useFormatters();
+  const t = useT();
+  const undeliverable = pkg.localDelivery?.available === false;
   const perishable = pkg.lines.some((l) => l.perishable);
   const atd = choice.option === 'afrotransact_delivery';
   const handover = perishable && atd ? 'hand' : (choice.preferences.handover ?? 'door');
@@ -102,7 +162,8 @@ function PackageDelivery({ pkg, n, total, choice, onChoice }: { pkg: CheckoutPac
             </li>
           ))}
         </ul>
-        <fieldset className={styles.options}>
+        <LocalDeliveryQuote pkg={pkg} onRemove={onRemove} onChangeAddress={onChangeAddress} removing={removing} />
+        <fieldset className={styles.options} disabled={undeliverable}>
           <legend className={styles.legend}>{t('co.deliveryOption')}</legend>
           {pkg.deliveryOptions.map((o) => (
             <div key={o.key}>
@@ -111,7 +172,7 @@ function PackageDelivery({ pkg, n, total, choice, onChoice }: { pkg: CheckoutPac
                 <span>
                   {OPTION_ICON[o.key]} <strong className={styles.eta}>{o.eta}</strong>
                   <br />
-                  {o.label} · {o.free || o.feeMinor === 0 ? t('co.free') : fmt.money(o.feeMinor)}
+                  {undeliverable ? t('ld.notAvailableOption') : <>{o.label} · {o.free || o.feeMinor === 0 ? t('co.free') : fmt.money(o.feeMinor)}</>}
                   {o.cutoffLabel && choice.option === o.key && <span className={styles.cutoff}> · {o.cutoffLabel}</span>}
                 </span>
               </label>
@@ -136,7 +197,7 @@ function PackageDelivery({ pkg, n, total, choice, onChoice }: { pkg: CheckoutPac
             </div>
           ))}
         </fieldset>
-        {atd && (
+        {atd && !undeliverable && (
           <fieldset className={styles.prefs}>
             <legend className={styles.legend}>{t('co.prefs')}</legend>
             {(['hand', 'door', 'desk'] as const).map((h) => (
@@ -196,6 +257,7 @@ export function CheckoutView() {
   const t = useT();
   const api = browserApi();
   const qc = useQueryClient();
+  const toast = useToast();
   const router = useRouter();
   const [addressId, setAddressId] = useState<string | null>(null);
   const summary = useQuery(shopperQueries.checkoutSummary(api, addressId));
@@ -236,6 +298,25 @@ export function CheckoutView() {
   const total = (s?.subtotalMinor ?? 0) + shipping + (s?.taxMinor ?? 0);
   const itemCount = s?.packages.reduce((n, p) => n + p.itemCount, 0) ?? 0;
   const busy = placing >= 0;
+  // AfroTransact Delivery packages the chosen address can't be served by block the order until removed (S255).
+  const blocked = (s?.packages ?? []).some((p) => p.localDelivery?.available === false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const removePackage = async (p: CheckoutPackage) => {
+    setRemoving(p.packageId);
+    try {
+      for (const l of p.lines) await api.updateCartLine(l.lineId, { selected: false });
+      toast.show(t('ld.removed'));
+      await Promise.all([qc.invalidateQueries({ queryKey: cartKeys.all }), qc.invalidateQueries({ queryKey: checkoutKeys.all })]);
+    } catch (e) {
+      setError(isApiError(e) ? e.message : t('auth.genericError'));
+    } finally {
+      setRemoving(null);
+    }
+  };
+  const changeAddress = () => {
+    setError(null);
+    setStep(1);
+  };
 
   const selections = (): DeliverySelection[] =>
     (s?.packages ?? []).map((p) => {
@@ -412,16 +493,31 @@ export function CheckoutView() {
             <p className={styles.muted}>{t('co.afterPayment')}</p>
           ) : (
             s.packages.map((p, i) => (
-              <PackageDelivery key={p.packageId} pkg={p} n={i + 1} total={s.packages.length} choice={choices[p.packageId] ?? initialChoice(p)} onChoice={(c) => setChoices((x) => ({ ...x, [p.packageId]: c }))} />
+              <PackageDelivery
+                key={p.packageId}
+                pkg={p}
+                n={i + 1}
+                total={s.packages.length}
+                choice={choices[p.packageId] ?? initialChoice(p)}
+                onChoice={(c) => setChoices((x) => ({ ...x, [p.packageId]: c }))}
+                onRemove={() => void removePackage(p)}
+                onChangeAddress={changeAddress}
+                removing={removing === p.packageId}
+              />
             ))
           )}
         </Step>
       </div>
 
       <aside className={styles.aside} aria-label={t('co.orderSummary')}>
-        <Button size="lg" block onClick={() => void placeWithCard()} loading={busy} disabled={step < 3 || !pm || !address} data-place-order="1">
+        <Button size="lg" block onClick={() => void placeWithCard()} loading={busy} disabled={step < 3 || !pm || !address || blocked} data-place-order="1">
           {busy ? t('co.placing') : t('co.place')}
         </Button>
+        {blocked && step === 3 && (
+          <p className={styles.fine} data-testid="local-delivery-blocked">
+            {t('ld.blocked')}
+          </p>
+        )}
         <span className={styles.fine}>
           {t('co.agreePrefix')} <Link href="/legal/conditions-of-use">{t('co.conditions')}</Link> {t('co.and')} <Link href="/legal/privacy">{t('co.privacy')}</Link>.
         </span>

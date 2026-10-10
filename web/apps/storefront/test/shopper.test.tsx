@@ -121,6 +121,52 @@ describe('checkout (mock BFF + mock Stripe)', () => {
   });
 });
 
+describe('checkout with AfroTransact Delivery from the seller’s store (S255)', () => {
+  it('quotes the delivery per address and lets the shopper remove an out-of-range package', async () => {
+    const api = await signInDemo();
+    const palm = await api.getProduct('AT00000P23');
+    const jollof = await api.getProduct('AT000000P2');
+    await api.addToCart({ offerId: palm.buyBox?.offerId ?? '', quantity: 1 });
+    await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
+    const user = userEvent.setup();
+    renderWithProviders(<CheckoutView />);
+    await user.click(await screen.findByRole('radio', { name: /Adaeze Nwosu \(work\)/ }));
+    await user.click(screen.getByRole('button', { name: 'Deliver to this address' }));
+    await user.click(await screen.findByRole('button', { name: 'Use this payment method' }));
+    const problem = await screen.findByTestId('local-delivery-problem');
+    expect(problem).toHaveTextContent('Not deliverable to this address');
+    expect(problem).toHaveTextContent(/too far for AfroTransact Delivery/);
+    expect(screen.getByRole('button', { name: 'Place your order' })).toBeDisabled();
+    expect(screen.getByTestId('local-delivery-blocked')).toBeInTheDocument();
+    await user.click(within(problem).getByRole('button', { name: 'Change address' }));
+    await user.click(await screen.findByRole('radio', { name: /Adaeze Nwosu 9800 Westheimer/ }));
+    await user.click(screen.getByRole('button', { name: 'Deliver to this address' }));
+    await user.click(await screen.findByRole('button', { name: 'Use this payment method' }));
+    const quote = await screen.findByTestId('local-delivery-quote');
+    expect(quote).toHaveTextContent('7.4 mi from Houston, TX · about 18 min drive');
+    expect(quote).toHaveTextContent('Delivery charge $11.28');
+    expect(screen.getByRole('button', { name: 'Place your order' })).toBeEnabled();
+  });
+
+  it('removes the out-of-range package from this order (deselects it) and keeps it in the cart', async () => {
+    const api = await signInDemo();
+    const palm = await api.getProduct('AT00000P23');
+    const jollof = await api.getProduct('AT000000P2');
+    await api.addToCart({ offerId: palm.buyBox?.offerId ?? '', quantity: 1 });
+    await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });
+    await api.setDefaultAddress('ad2');
+    const user = userEvent.setup();
+    renderWithProviders(<CheckoutView />);
+    await user.click(await screen.findByRole('button', { name: 'Deliver to this address' }));
+    await user.click(await screen.findByRole('button', { name: 'Use this payment method' }));
+    const problem = await screen.findByTestId('local-delivery-problem');
+    await user.click(within(problem).getByRole('button', { name: /Remove Ama's Market’s items from this order/ }));
+    await waitFor(() => expect(screen.queryByTestId('local-delivery-problem')).not.toBeInTheDocument());
+    expect(screen.getAllByTestId('checkout-package')).toHaveLength(1);
+    expect((await api.getCart()).itemCount).toBe(2);
+  });
+});
+
 describe('services booking (mock BFF)', () => {
   it('books with a deposit from live slots', async () => {
     await signInDemo();

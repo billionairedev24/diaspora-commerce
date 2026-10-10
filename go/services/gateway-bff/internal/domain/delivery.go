@@ -16,8 +16,13 @@ type DeliveryPolicy struct {
 const (
 	DefaultAfroTransactDays = 2
 	DefaultSellerDays       = 4
-	ExpressFeeMinor         = 799
+	// DefaultLocalDeliveryDays is AfroTransact Delivery from the seller's store (offers' buy box uses 1 day).
+	DefaultLocalDeliveryDays = 1
+	ExpressFeeMinor          = 799
 )
+
+// LocalDeliveryOptionLabel is the AfroTransact Delivery option of a seller-store package before checkout prices it.
+const LocalDeliveryOptionLabel = "AfroTransact Delivery · priced by distance at checkout"
 
 // Estimator builds delivery promises and package delivery options from a business-day estimate.
 type Estimator interface {
@@ -47,14 +52,21 @@ func (e *estimatorImpl) days(fulfilment string, days int) int {
 	if days > 0 {
 		return days
 	}
-	if fulfilment == FulfilledByAfroTransact {
+	switch fulfilment {
+	case FulfilledByAfroTransact:
 		return DefaultAfroTransactDays
+	case AfroTransactDelivery:
+		return DefaultLocalDeliveryDays
 	}
 	return DefaultSellerDays
 }
 
 func (e *estimatorImpl) Promise(fulfilment string, days int, now time.Time) DeliveryPromise {
 	d := e.days(fulfilment, days)
+	if fulfilment == AfroTransactDelivery {
+		// Priced by road distance at checkout (payments' delivery pricing), so no fee is promised here.
+		return DeliveryPromise{Days: d, Label: e.DayLabel(d, now), Prefix: "AfroTransact Delivery", Free: false, FeeMinor: 0}
+	}
 	if fulfilment == FulfilledByAfroTransact {
 		express := e.DayLabel(1, now)
 		cutoff := cutoffNote(now.In(e.p.Location))
@@ -66,6 +78,9 @@ func (e *estimatorImpl) Promise(fulfilment string, days int, now time.Time) Deli
 
 func (e *estimatorImpl) Options(fulfilment string, days int, subtotalMinor int64, now time.Time) []DeliveryOption {
 	d := e.days(fulfilment, days)
+	if fulfilment == AfroTransactDelivery {
+		return []DeliveryOption{{Key: "afrotransact_delivery", Label: LocalDeliveryOptionLabel, ETA: e.DayLabel(d, now)}}
+	}
 	isAT := fulfilment == FulfilledByAfroTransact
 	free := isAT || (e.p.FreeShippingThresholdMinor > 0 && subtotalMinor >= e.p.FreeShippingThresholdMinor)
 	carrier := DeliveryOption{Key: "carrier", ETA: e.DayLabel(d, now), Free: free}
@@ -93,7 +108,7 @@ func (e *estimatorImpl) Options(fulfilment string, days int, subtotalMinor int64
 
 func (e *estimatorImpl) Nudge(fulfilment string, subtotalMinor int64) *ShippingNudge {
 	t := e.p.FreeShippingThresholdMinor
-	if fulfilment == FulfilledByAfroTransact || t <= 0 || subtotalMinor <= 0 || subtotalMinor >= t {
+	if fulfilment == FulfilledByAfroTransact || fulfilment == AfroTransactDelivery || t <= 0 || subtotalMinor <= 0 || subtotalMinor >= t {
 		return nil
 	}
 	return &ShippingNudge{RemainingMinor: t - subtotalMinor, ThresholdMinor: t}
@@ -125,6 +140,14 @@ func cutoffNote(now time.Time) string {
 	end := time.Date(now.Year(), now.Month(), now.Day(), 23, 59, 0, 0, now.Location())
 	mins := max(1, int(end.Sub(now).Minutes()))
 	return fmt.Sprintf("Order within %d hrs %d mins.", mins/60, mins%60)
+}
+
+// LocalDeliveryHeading is the package heading of AfroTransact Delivery from the seller's store.
+func LocalDeliveryHeading(city string) string {
+	if city == "" {
+		return "AfroTransact Delivery from the seller's store"
+	}
+	return "AfroTransact Delivery from " + city
 }
 
 // Money renders minor units as dollars, e.g. 599 → "$5.99".

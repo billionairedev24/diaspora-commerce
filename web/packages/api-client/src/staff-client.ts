@@ -4,6 +4,11 @@ import {
   Customer360Schema,
   type CustomerSearch,
   CustomerSearchSchema,
+  type DeliveryQuote,
+  type DeliveryQuoteRequest,
+  DeliveryQuoteSchema,
+  type DriverSuggestions,
+  DriverSuggestionsSchema,
   type ExportJob,
   type ExportJobList,
   ExportJobListSchema,
@@ -16,12 +21,21 @@ import {
   FeeScheduleViewSchema,
   type FeesOverview,
   FeesOverviewSchema,
+  type PickupAssignmentList,
+  PickupAssignmentListSchema,
+  type PickupAssignRequest,
+  type PickupAssignResult,
+  PickupAssignResultSchema,
+  type PickupList,
+  PickupListSchema,
   type RecordDetail,
   RecordDetailSchema,
   type RecordValues,
   type ResourceKey,
   type ResourcePage,
   ResourcePageSchema,
+  type ShipFromLocation,
+  ShipFromLocationSchema,
   type StaffDashboard,
   StaffDashboardSchema,
   type StaffSession,
@@ -93,7 +107,21 @@ export function createStaffApiClient(options: ApiClientOptions) {
     createFeeSchedule: (body: FeeScheduleDraft, key?: string): Promise<FeeScheduleView> =>
       request('/v1/staff/fees/schedules', FeeScheduleViewSchema, { method: 'POST', body, headers: idem(key) }),
     cancelFeeSchedule: (id: string, reason: string): Promise<FeeScheduleView> =>
-      request(`/v1/staff/fees/schedules/${enc(id)}/cancel`, FeeScheduleViewSchema, { method: 'POST', body: { reason } })
+      request(`/v1/staff/fees/schedules/${enc(id)}/cancel`, FeeScheduleViewSchema, { method: 'POST', body: { reason } }),
+    quoteDelivery: (body: DeliveryQuoteRequest, signal?: AbortSignal): Promise<DeliveryQuote> =>
+      request('/v1/staff/fees/delivery-quote', DeliveryQuoteSchema, { method: 'POST', body, signal }),
+
+    /* Dispatch: seller pickups (S255) */
+    listPickups: (nodeId?: string, signal?: AbortSignal): Promise<PickupList> =>
+      request('/v1/staff/dispatch/pickups', PickupListSchema, { query: { nodeId: nodeId || undefined }, signal }),
+    getPickupSuggestions: (shipmentId: string, signal?: AbortSignal): Promise<DriverSuggestions> =>
+      request(`/v1/staff/dispatch/pickups/${enc(shipmentId)}/driver-suggestions`, DriverSuggestionsSchema, { signal }),
+    assignPickup: (shipmentId: string, body: PickupAssignRequest): Promise<PickupAssignResult> =>
+      request(`/v1/staff/dispatch/pickups/${enc(shipmentId)}/assign`, PickupAssignResultSchema, { method: 'POST', body }),
+    getPickupAssignments: (shipmentId: string, signal?: AbortSignal): Promise<PickupAssignmentList> =>
+      request(`/v1/staff/dispatch/pickups/${enc(shipmentId)}/assignments`, PickupAssignmentListSchema, { signal }),
+    getShipFromLocation: (locationId: string, signal?: AbortSignal): Promise<ShipFromLocation> =>
+      request(`/v1/staff/ship-from-locations/${enc(locationId)}`, ShipFromLocationSchema, { signal })
   };
 }
 

@@ -122,6 +122,33 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
     expect(cancelled.status).toBe('cancelled');
   });
 
+  it('quotes AfroTransact Delivery from the seller’s store per address and refuses an out-of-range one (S255)', async () => {
+    const api = await signedIn();
+    const product = await api.getProduct('AT00000P23');
+    expect(product.buyBox).toMatchObject({ fulfilment: 'AFROTRANSACT_DELIVERY', seller: { name: "Ama's Market", city: 'Houston, TX' } });
+    const cart = await api.addToCart({ offerId: product.buyBox?.offerId ?? '', quantity: 1 });
+    const pkg = cart.packages.find((p) => p.fulfilment === 'AFROTRANSACT_DELIVERY');
+    expect(pkg?.heading).toBe('AfroTransact Delivery from Houston, TX');
+    expect(pkg?.freeShippingNudge).toBeNull();
+    const near = await api.getCheckoutSummary('ad1');
+    const local = near.packages[0];
+    expect(local?.localDelivery).toMatchObject({ available: true, chargeMinor: 1128, roadMiles: 7.4, fromCity: 'Houston, TX', unavailableReason: null });
+    expect(local?.deliveryOptions).toHaveLength(1);
+    expect(near.shippingMinor).toBe(1128);
+    const far = await api.getCheckoutSummary('ad2');
+    expect(far.packages[0]?.localDelivery).toMatchObject({ available: false, chargeMinor: null, unavailableReason: 'OUT_OF_RANGE' });
+    expect(far.packages[0]?.localDelivery?.message).toContain('too far for AfroTransact Delivery');
+    expect(far.shippingMinor).toBe(0);
+    const selection = [{ packageId: local?.packageId ?? '', option: 'afrotransact_delivery' as const }];
+    await expect(api.placeOrder({ addressId: 'ad2', paymentMethodId: 'pm_visa4242', deliverySelections: selection }, 'checkout-local-key-0001')).rejects.toSatisfy(
+      (e) => e instanceof ApiError && e.status === 422 && e.code === 'DELIVERY_OUT_OF_RANGE' && !!e.fieldErrors.deliverySelections
+    );
+    const conf = await api.placeOrder({ addressId: 'ad1', paymentMethodId: 'pm_visa4242', deliverySelections: selection }, 'checkout-local-key-0002');
+    await api.confirmCheckoutPayment(conf.orderNumber);
+    const order = await api.getOrder(conf.orderNumber);
+    expect(order.shipments[0]?.localDelivery).toEqual({ roadMiles: 7.4, durationMinutes: 18, chargeMinor: 1128 });
+  });
+
   it('starts a return with a reason and shows the refund; food can only be reported', async () => {
     const api = await signedIn();
     expect((await api.getOrder('AT-2026-104221')).shipments[0]?.returnable).toBe(true);

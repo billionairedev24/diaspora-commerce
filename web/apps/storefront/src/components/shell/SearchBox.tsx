@@ -173,7 +173,7 @@ export function SearchBox() {
             if (o.kind !== 'product') return null;
             const i = phrases.length + j;
             const p = o.product;
-            const meta = !p.inStock ? t('search.unavailable') : p.fulfilment === 'AFROTRANSACT' ? t('search.fulfilled') : t('search.shipsFrom', { city: p.sellerCity });
+            const meta = !p.inStock ? t('search.unavailable') : p.fulfilment === 'AFROTRANSACT' ? t('search.fulfilled') : p.fulfilment === 'AFROTRANSACT_DELIVERY' ? t('ld.badge', { city: p.sellerCity }) : t('search.shipsFrom', { city: p.sellerCity });
             return (
               <li
                 key={p.atin}

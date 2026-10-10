@@ -17,16 +17,23 @@ interface MockServer {
   devices: Record<string, { last: number; outcomes: Record<string, { sequence: number; outcome: string; code: string | null; message: string | null }> }>;
   revoked: Record<string, string>;
   sos: string[];
+  /** Last location ping per driver (fulfilment keeps one row per driver). */
+  positions: Record<string, { lat: number; lon: number; accuracyM: number | null; recordedAt: string }>;
 }
 
 let server: MockServer = fresh();
 
 function fresh(): MockServer {
-  return { route: demoRoute(), devices: {}, revoked: {}, sos: [] };
+  return { route: demoRoute(), devices: {}, revoked: {}, sos: [], positions: {} };
 }
 
 export function resetMockServer(): void {
   server = fresh();
+}
+
+/** Dev/test helper: the last position the mock fulfilment service holds for a driver. */
+export function mockDriverPosition(sub: string) {
+  return server.positions[sub] ?? null;
 }
 
 /** Dev helper: simulate an administrator removing delivery:operate (Backoffice → Access control). */
@@ -128,6 +135,16 @@ export async function mockFetch(req: Request): Promise<Response> {
     const e = (body as { event: Wire }).event;
     if (!server.sos.includes(e.eventId)) server.sos.push(e.eventId);
     return json({ eventId: e.eventId, sequence: e.sequence, outcome: 'APPLIED', replayed: false });
+  }
+  if (path === '/v1/driver/location' && req.method === 'POST') {
+    if (!allowed || server.revoked[claims.sub]) return problem(403, 'fulfilment.no-driver-access', 'No driver access', { grantHint });
+    const p = (body ?? {}) as { lat?: unknown; lon?: unknown; accuracyM?: unknown; capturedAt?: unknown };
+    if (typeof p.lat !== 'number' || typeof p.lon !== 'number' || Math.abs(p.lat) > 90 || Math.abs(p.lon) > 180) {
+      return problem(400, 'VALIDATION_FAILED', 'lat and lon are required');
+    }
+    const at = typeof p.capturedAt === 'string' ? p.capturedAt : new Date().toISOString();
+    server.positions[claims.sub] = { lat: p.lat, lon: p.lon, accuracyM: typeof p.accuracyM === 'number' ? p.accuracyM : null, recordedAt: at };
+    return json({ driverId: `drv_${claims.sub}`, lat: p.lat, lon: p.lon, ...(typeof p.accuracyM === 'number' ? { accuracyM: p.accuracyM } : {}), recordedAt: at, source: 'PING' });
   }
   if (path === '/v1/uploads' && req.method === 'POST') {
     const id = `00000000-0000-4000-8000-${String(Date.now()).slice(-12).padStart(12, '0')}`;

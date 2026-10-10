@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"strings"
@@ -188,6 +189,7 @@ type SellerShipment struct {
 	NextActions    []string             `json:"nextActions"`
 	CanBuyLabel    bool                 `json:"canBuyLabel"`
 	Timeline       []TimelineEntry      `json:"timeline"`
+	LocalDelivery  *SellerLocalDelivery `json:"localDelivery"`
 }
 
 // SellerOrderDetail is GET /v1/seller/orders/{orderNumber}.
@@ -200,6 +202,7 @@ type SellerOrderDetail struct {
 	ShippingAddress *SellerAddress   `json:"shippingAddress"`
 	Shipments       []SellerShipment `json:"shipments"`
 	TotalMinor      int64            `json:"totalMinor"`
+	Earnings        *OrderEarnings   `json:"earnings"`
 }
 
 // Shipment finds a shipment by id.
@@ -724,6 +727,126 @@ type ShipFromAddress struct {
 	Country    string `json:"country"`
 	IsDefault  bool   `json:"isDefault"`
 	Version    int64  `json:"version"`
+	// Position is where geo-service located the address (nil when geocoding failed or geo was down); S255.
+	Position           *GeoPosition       `json:"position"`
+	AfrotransactPickup AfrotransactPickup `json:"afrotransactPickup"`
+}
+
+// GeoPosition is a geocoded position: ADDRESS (street level), ZIP (centroid) or POINT.
+type GeoPosition struct {
+	Lat        float64    `json:"lat"`
+	Lng        float64    `json:"lng"`
+	Precision  string     `json:"precision"`
+	GeocodedAt *time.Time `json:"geocodedAt"`
+}
+
+// AfrotransactPickup is "AfroTransact picks up from my store" for one address (S255).
+type AfrotransactPickup struct {
+	Enabled   bool           `json:"enabled"`
+	Hours     []PickupWindow `json:"hours"`
+	ZoneName  *string        `json:"zoneName"`
+	EnabledAt *time.Time     `json:"enabledAt"`
+}
+
+// AfrotransactPickupRequest is PUT /v1/seller/ship-from-addresses/{id}/afrotransact-pickup.
+type AfrotransactPickupRequest struct {
+	Enabled bool           `json:"enabled"`
+	Hours   []PickupWindow `json:"hours"`
+	Version *int64         `json:"version"`
+}
+
+// PickupDays are the weekdays of pickup windows, Monday first.
+var PickupDays = []string{"MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"}
+
+var hhmm = regexp.MustCompile(`^([01][0-9]|2[0-3]):[0-5][0-9]$`)
+
+// Validate applies the seller service's pickup-hours rules: 1–14 windows to enable, HH:MM, opens before closes, no
+// overlap on the same day. Errors are keyed hours / hours.<i>.<field>.
+func (r AfrotransactPickupRequest) Validate() map[string]string {
+	errs := map[string]string{}
+	if r.Enabled && len(r.Hours) == 0 {
+		errs["hours"] = "Add at least one pickup window"
+	}
+	if len(r.Hours) > 14 {
+		errs["hours"] = "At most 14 pickup windows"
+	}
+	type span struct {
+		i          int
+		open, shut string
+	}
+	byDay := map[string][]span{}
+	for i, h := range r.Hours {
+		k := fmt.Sprintf("hours.%d", i)
+		day := strings.ToUpper(strings.TrimSpace(h.Day))
+		if !slices.Contains(PickupDays, day) {
+			errs[k+".day"] = "Choose a day"
+		}
+		switch {
+		case !hhmm.MatchString(h.Opens):
+			errs[k+".opens"] = "Use HH:MM (24-hour)"
+		case !hhmm.MatchString(h.Closes):
+			errs[k+".closes"] = "Use HH:MM (24-hour)"
+		case h.Opens >= h.Closes:
+			errs[k+".closes"] = "Closes after it opens"
+		default:
+			for _, o := range byDay[day] {
+				if h.Opens < o.shut && o.open < h.Closes {
+					errs[k+".opens"] = "Overlaps another window on " + strings.ToLower(day)
+				}
+			}
+			byDay[day] = append(byDay[day], span{i, h.Opens, h.Closes})
+		}
+	}
+	return errs
+}
+
+// SellerOffer is one offer of the organisation with its fulfilment choice (S255).
+type SellerOffer struct {
+	OfferID            string  `json:"offerId"`
+	ATIN               string  `json:"atin"`
+	ProductID          string  `json:"productId"`
+	SellerSKU          string  `json:"sellerSku"`
+	Condition          string  `json:"condition"`
+	PriceMinor         int64   `json:"priceMinor"`
+	Currency           string  `json:"currency"`
+	Fulfilment         string  `json:"fulfilment"`
+	Quantity           int     `json:"quantity"`
+	AvailableQty       int     `json:"availableQty"`
+	ShipFromLocationID *string `json:"shipFromLocationId"`
+	ShipsFrom          *string `json:"shipsFrom"`
+	Status             string  `json:"status"`
+	Version            int64   `json:"version"`
+}
+
+// SellerOfferList is GET /v1/seller/offers.
+type SellerOfferList struct {
+	Items []SellerOffer `json:"items"`
+}
+
+// OfferFulfilmentRequest is PUT /v1/seller/offers/{id}/fulfilment.
+type OfferFulfilmentRequest struct {
+	Fulfilment         string  `json:"fulfilment"`
+	ShipFromLocationID *string `json:"shipFromLocationId"`
+}
+
+// SellerLocalDelivery is AfroTransact Delivery from the seller's store on a shipment (S255).
+type SellerLocalDelivery struct {
+	PickupLocationID    *string  `json:"pickupLocationId"`
+	RoadMiles           *float64 `json:"roadMiles"`
+	DurationMinutes     *float64 `json:"durationMinutes"`
+	CustomerChargeMinor int64    `json:"customerChargeMinor"`
+	SellerFeeMinor      int64    `json:"sellerFeeMinor"`
+}
+
+// OrderEarnings is the organisation's row of the order's payment split.
+type OrderEarnings struct {
+	ItemsMinor        int64 `json:"itemsMinor"`
+	ShippingMinor     int64 `json:"shippingMinor"`
+	CommissionMinor   int64 `json:"commissionMinor"`
+	FbaFeesMinor      int64 `json:"fbaFeesMinor"`
+	DeliveryFeesMinor int64 `json:"deliveryFeesMinor"`
+	StripeFeeMinor    int64 `json:"stripeFeeMinor"`
+	NetMinor          int64 `json:"netMinor"`
 }
 
 // ShipFromInput creates or changes a ship-from address.

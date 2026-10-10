@@ -4,6 +4,7 @@ import { type ApiClientOptions, createRequester } from './http';
 import {
   type AcceptedInvitation,
   AcceptedInvitationSchema,
+  type AfrotransactPickupRequest,
   type Asset,
   AssetSchema,
   type Availability,
@@ -47,6 +48,7 @@ import {
   type ListingRow,
   ListingRowSchema,
   type ListingStatus,
+  type OfferFulfilmentRequest,
   type OnboardingStatus,
   OnboardingStatusSchema,
   type Parcel,
@@ -65,6 +67,10 @@ import {
   type SellerAddress,
   type SellerFeesView,
   SellerFeesViewSchema,
+  type SellerOffer,
+  type SellerOfferList,
+  SellerOfferListSchema,
+  SellerOfferSchema,
   type SellerOrderDetail,
   SellerOrderDetailSchema,
   type SellerOrderPage,
@@ -146,6 +152,13 @@ export function createSellerApiClient(options: ApiClientOptions) {
       (await request(`/v1/seller/ship-from-addresses/${enc(id)}/default`, ShipFromListSchema, { method: 'POST' })).items,
     deleteShipFrom: async (id: string): Promise<ShipFromAddress[]> =>
       (await request(`/v1/seller/ship-from-addresses/${enc(id)}`, ShipFromListSchema, { method: 'DELETE' })).items,
+    /** "AfroTransact picks up from my store" on or off, with the pickup hours (S255). */
+    setAfrotransactPickup: (id: string, body: AfrotransactPickupRequest): Promise<ShipFromAddress> =>
+      request(`/v1/seller/ship-from-addresses/${enc(id)}/afrotransact-pickup`, ShipFromAddressSchema, { method: 'PUT', body }),
+    listOffers: (productId: string, signal?: AbortSignal): Promise<SellerOfferList> =>
+      request('/v1/seller/offers', SellerOfferListSchema, { query: { productId }, signal }),
+    setOfferFulfilment: (offerId: string, body: OfferFulfilmentRequest): Promise<SellerOffer> =>
+      request(`/v1/seller/offers/${enc(offerId)}/fulfilment`, SellerOfferSchema, { method: 'PUT', body }),
 
     /* Listings & builder */
     listListings: (q: ListingsQuery, signal?: AbortSignal): Promise<ListingPage> =>

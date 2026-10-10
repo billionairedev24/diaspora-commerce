@@ -83,7 +83,7 @@ at:
         secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:local-bff-secret}}
         grant-types: [authorization_code, refresh_token, client_credentials]
         redirect-uris: ["${PUBLIC_WEB_URL:http://localhost:3000}/api/bff/v1/auth/oidc/callback", "${API_BASE_URL:http://localhost:8200}/login/oauth2/code/afrotransact"]
-        scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read"]
+        scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read", "sellers:ship-from.read"]
       - client-id: seller-service
         name: Seller service
         type: confidential

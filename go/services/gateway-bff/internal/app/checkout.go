@@ -149,6 +149,9 @@ func orderErr(err error) error {
 	if !ok {
 		return mapErr("orders", err)
 	}
+	if pr := deliveryProblem(p); pr != nil {
+		return pr.WithCause(err)
+	}
 	switch {
 	case p.Code == "orders.coupon-not-applicable":
 		return domain.FieldProblem(domain.CodeValidationFailed, "Coupon can't be used", "couponCode",
@@ -165,4 +168,27 @@ func orderErr(err error) error {
 		return pr.WithCause(err)
 	}
 	return mapErr("orders", err)
+}
+
+// deliveryProblem maps orders' AfroTransact Delivery refusals (S255) to the checkout's problems; the message goes on
+// errors.deliverySelections so the delivery step shows it.
+func deliveryProblem(p *port.UpstreamProblem) *domain.Problem {
+	var code, title, detail string
+	switch p.Code {
+	case "orders.delivery-out-of-range":
+		code, title, detail = domain.CodeDeliveryOutOfRange, "Too far for AfroTransact Delivery",
+			"A seller's store is too far from this address for AfroTransact Delivery. Remove its items or choose another address."
+	case "orders.delivery-unavailable":
+		code, title, detail = domain.CodeDeliveryUnavailable, "AfroTransact Delivery unavailable",
+			"AfroTransact Delivery from sellers' stores isn't offered right now. Remove those items to check out."
+	case "orders.delivery-pickup-unavailable":
+		code, title, detail = domain.CodeDeliveryPickupUnavailable, "Store pickup unavailable",
+			"A seller's store isn't set up for AfroTransact Delivery right now. Remove its items to check out."
+	case "orders.delivery-address-not-located":
+		code, title, detail = domain.CodeDeliveryAddressNotLocated, "Address not found",
+			"We couldn't locate this address for AfroTransact Delivery. Check the address or choose another one."
+	default:
+		return nil
+	}
+	return domain.FieldProblem(code, title, "deliverySelections", firstNonEmpty(p.Detail, detail))
 }

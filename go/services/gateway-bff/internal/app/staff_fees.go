@@ -24,6 +24,8 @@ type StaffFeesService interface {
 	SearchOrgs(ctx context.Context, c *domain.Caller, q string) (domain.FeeOrgSearch, error)
 	Create(ctx context.Context, c *domain.Caller, d domain.FeeScheduleDraft, idem string) (domain.FeeScheduleView, error)
 	Cancel(ctx context.Context, c *domain.Caller, id, reason string) (domain.FeeScheduleView, error)
+	// Quote prices one AfroTransact Delivery trip under the live schedule (payments POST /v1/delivery-pricing/quote).
+	Quote(ctx context.Context, c *domain.Caller, q domain.DeliveryQuoteRequest) (domain.DeliveryQuote, error)
 }
 
 type staffFeesImpl struct {
@@ -59,16 +61,17 @@ type paymentsSchedule struct {
 		Category      string `json:"category"`
 		CommissionBps int    `json:"commissionBps"`
 	} `json:"overrides"`
-	CardPctBps                int        `json:"cardPctBps"`
-	CardFixedMinor            int64      `json:"cardFixedMinor"`
-	FbaPerUnitMinor           int64      `json:"fbaPerUnitMinor"`
-	ReverseCommissionOnRefund bool       `json:"reverseCommissionOnRefund"`
-	Note                      string     `json:"note"`
-	CreatedBy                 string     `json:"createdBy"`
-	CreatedAt                 *time.Time `json:"createdAt"`
-	CancelledAt               *time.Time `json:"cancelledAt"`
-	CancelledBy               string     `json:"cancelledBy"`
-	CancelReason              string     `json:"cancelReason"`
+	CardPctBps                int                     `json:"cardPctBps"`
+	CardFixedMinor            int64                   `json:"cardFixedMinor"`
+	FbaPerUnitMinor           int64                   `json:"fbaPerUnitMinor"`
+	ReverseCommissionOnRefund bool                    `json:"reverseCommissionOnRefund"`
+	DeliveryPricing           *domain.DeliveryPricing `json:"deliveryPricing"`
+	Note                      string                  `json:"note"`
+	CreatedBy                 string                  `json:"createdBy"`
+	CreatedAt                 *time.Time              `json:"createdAt"`
+	CancelledAt               *time.Time              `json:"cancelledAt"`
+	CancelledBy               string                  `json:"cancelledBy"`
+	CancelReason              string                  `json:"cancelReason"`
 }
 
 func (p paymentsSchedule) cancelled() bool { return p.CancelledAt != nil }
@@ -205,6 +208,25 @@ func (s *staffFeesImpl) view(p paymentsSchedule, t feeTimeline, now time.Time, l
 		}
 		v.Overrides = append(v.Overrides, ov)
 	}
+	if dp := p.DeliveryPricing; dp != nil {
+		out := domain.DeliveryPricing{Enabled: dp.Enabled, MaxRadiusMiles: dp.MaxRadiusMiles, SellerOverrides: []domain.DeliveryFeeOverride{}}
+		if dp.CustomerCharge != nil {
+			t := dp.CustomerCharge.Normalized()
+			out.CustomerCharge = &t
+		}
+		if dp.SellerFee != nil {
+			t := dp.SellerFee.Normalized()
+			out.SellerFee = &t
+		}
+		for _, o := range dp.SellerOverrides {
+			out.SellerOverrides = append(out.SellerOverrides, domain.DeliveryFeeOverride{OrgID: o.OrgID, OrgName: strPtr(names[o.OrgID]), SellerFee: o.SellerFee.Normalized()})
+		}
+		sort.SliceStable(out.SellerOverrides, func(i, j int) bool {
+			a, b := out.SellerOverrides[i], out.SellerOverrides[j]
+			return strings.ToLower(deref(a.OrgName, a.OrgID)) < strings.ToLower(deref(b.OrgName, b.OrgID))
+		})
+		v.DeliveryPricing = &out
+	}
 	sort.SliceStable(v.Overrides, func(i, j int) bool {
 		a, b := v.Overrides[i], v.Overrides[j]
 		an, bn := strings.ToLower(deref(a.OrgName, a.OrgID)), strings.ToLower(deref(b.OrgName, b.OrgID))
@@ -300,6 +322,11 @@ func (s *staffFeesImpl) orgNames(ctx context.Context, sc staffCtx, all []payment
 	for _, p := range all {
 		for _, o := range p.Overrides {
 			want[o.OrgID] = true
+		}
+		if p.DeliveryPricing != nil {
+			for _, o := range p.DeliveryPricing.SellerOverrides {
+				want[o.OrgID] = true
+			}
 		}
 	}
 	names := map[string]string{}
@@ -397,6 +424,21 @@ func (s *staffFeesImpl) Create(ctx context.Context, c *domain.Caller, d domain.F
 	if !d.Immediate {
 		body["effectiveFrom"] = d.EffectiveFrom.UTC().Format(time.RFC3339)
 	}
+	if dp := d.DeliveryPricing; dp != nil { // omitted = payments carries the latest live version's section over
+		section := jobj{"enabled": dp.Enabled, "maxRadiusMiles": *dp.MaxRadiusMiles, "sellerOverrides": []jobj{}}
+		if dp.CustomerCharge != nil {
+			section["customerCharge"] = tariffBody(*dp.CustomerCharge)
+		}
+		if dp.SellerFee != nil {
+			section["sellerFee"] = tariffBody(*dp.SellerFee)
+		}
+		overrides := []jobj{}
+		for _, o := range dp.SellerOverrides {
+			overrides = append(overrides, jobj{"orgId": strings.TrimSpace(o.OrgID), "sellerFee": tariffBody(*o.SellerFee)})
+		}
+		section["sellerOverrides"] = overrides
+		body["deliveryPricing"] = section
+	}
 	var created paymentsSchedule
 	if err := sc.post(ctx, sc.up.Payments, "/v1/fee-schedules", body, &created); err != nil {
 		return domain.FeeScheduleView{}, err
@@ -453,4 +495,83 @@ func (s *staffFeesImpl) afterWrite(ctx context.Context, sc staffCtx, p paymentsS
 		}
 	}
 	return s.view(p, t, sc.now, labels, names, canConfigureFees(sc.access)), nil
+}
+
+// tariffBody is payments' DeliveryTariff: only the amounts of the mode, unset ones omitted (no cap without maxMinor).
+func tariffBody(t domain.DeliveryTariff) jobj {
+	mode := strings.ToUpper(t.Mode)
+	out := jobj{"mode": mode}
+	set := func(k string, v *int64) {
+		if v != nil {
+			out[k] = *v
+		}
+	}
+	if mode == domain.TariffFlat {
+		set("flatPerPackageMinor", t.FlatPerPackageMinor)
+		return out
+	}
+	set("baseMinor", t.BaseMinor)
+	set("perMileMinor", t.PerMileMinor)
+	set("minMinor", t.MinMinor)
+	set("maxMinor", t.MaxMinor)
+	bands := []jobj{}
+	for _, b := range t.Bands {
+		bands = append(bands, jobj{"fromMiles": b.FromMiles, "toMiles": b.ToMiles, "feeMinor": b.FeeMinor})
+	}
+	out["bands"] = bands
+	return out
+}
+
+// ---------------------------------------------------------------- live delivery quote (S255)
+
+func (s *staffFeesImpl) Quote(ctx context.Context, c *domain.Caller, q domain.DeliveryQuoteRequest) (domain.DeliveryQuote, error) {
+	errs := map[string]string{}
+	org := strings.TrimSpace(q.SellerOrgID)
+	if org == "" || len(org) > 80 {
+		errs["sellerOrgId"] = "Choose a seller organisation"
+	}
+	if q.DistanceMiles == nil || *q.DistanceMiles < 0 || *q.DistanceMiles > 1000 {
+		errs["distanceMiles"] = "Enter a distance between 0 and 1,000 miles"
+	}
+	if q.Packages == 0 {
+		q.Packages = 1
+	}
+	if q.Packages < 1 || q.Packages > 50 {
+		errs["packages"] = "Enter 1 to 50 packages"
+	}
+	var at *time.Time
+	if q.At != nil && *q.At != "" {
+		t, err := time.Parse(time.RFC3339, *q.At)
+		if err != nil {
+			errs["at"] = "Enter a date and time"
+		}
+		at = &t
+	}
+	if len(errs) > 0 {
+		return domain.DeliveryQuote{}, domain.ValidationProblem(errs)
+	}
+	sc, err := s.r.require(ctx, c, feesModule, domain.LevelView)
+	if err != nil {
+		return domain.DeliveryQuote{}, err
+	}
+	body := jobj{"sellerOrgId": org, "distanceMiles": *q.DistanceMiles, "packages": q.Packages}
+	if at != nil {
+		body["at"] = at.UTC().Format(time.RFC3339)
+	}
+	var up struct {
+		Available           bool     `json:"available"`
+		UnavailableReason   string   `json:"unavailableReason"`
+		CustomerChargeMinor int64    `json:"customerChargeMinor"`
+		SellerFeeMinor      int64    `json:"sellerFeeMinor"`
+		SellerFeeSource     string   `json:"sellerFeeSource"`
+		ScheduleVersion     *int     `json:"scheduleVersion"`
+		MaxRadiusMiles      *float64 `json:"maxRadiusMiles"`
+		Currency            string   `json:"currency"`
+	}
+	if err := sc.post(ctx, sc.up.Payments, "/v1/delivery-pricing/quote", body, &up); err != nil {
+		return domain.DeliveryQuote{}, err
+	}
+	return domain.DeliveryQuote{Available: up.Available, UnavailableReason: strPtr(strings.ToUpper(up.UnavailableReason)),
+		CustomerChargeMinor: up.CustomerChargeMinor, SellerFeeMinor: up.SellerFeeMinor, SellerFeeSource: strPtr(strings.ToUpper(up.SellerFeeSource)),
+		ScheduleVersion: up.ScheduleVersion, MaxRadiusMiles: up.MaxRadiusMiles, Currency: firstNonEmpty(up.Currency, domain.Currency)}, nil
 }

@@ -328,6 +328,70 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+  /v1/seller/ship-from-addresses/{addressId}/afrotransact-pickup:
+    put:
+      tags: [Orders]
+      operationId: setAfrotransactPickup
+      security: [{sessionCookie: []}]
+      summary: Turn "AfroTransact picks up from my store" on or off for a ship-from address (S255)
+      description: |
+        seller `PUT /v1/orgs/{orgId}/ship-from-addresses/{id}/afrotransact-pickup` (Orders edit). Enabling needs an approved
+        organisation (409 `PICKUP_ORG_NOT_APPROVED`), 1–14 non-overlapping pickup windows (422 `PICKUP_INVALID_HOURS`,
+        `errors.hours`), a street-level geocoded position (422 `PICKUP_NOT_GEOCODED`) and a location inside or within 25
+        miles of an AfroTransact delivery zone (422 `PICKUP_OUTSIDE_DELIVERY_AREA`). Geo down → 503
+        `UPSTREAM_UNAVAILABLE`. Disabling keeps the hours for next time. Optimistic: 409 `CONFLICT` when the address changed.
+      parameters:
+        - {name: addressId, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AfrotransactPickupRequest'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/ShipFromAddress'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── offers (fulfilment choice, S255)
+  /v1/seller/offers:
+    get:
+      tags: [Listings]
+      operationId: listSellerOffers
+      security: [{sessionCookie: []}]
+      summary: The organisation's offers of a product (fulfilment, pickup location, price, stock)
+      description: offers `GET /v1/offers` for the active organisation (Listings view), filtered by catalog product id.
+      parameters:
+        - {name: productId, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 64}}
+      responses:
+        '200': {description: Offers, content: {application/json: {schema: {$ref: '#/components/schemas/SellerOfferList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/offers/{offerId}/fulfilment:
+    put:
+      tags: [Listings]
+      operationId: setOfferFulfilment
+      security: [{sessionCookie: []}]
+      summary: 'Choose who fulfils an offer: I ship it, Fulfilled by AfroTransact (FBA) or AfroTransact picks up from my store'
+      description: |
+        offers `PATCH /v1/offers/{id}` `{fulfilment, shipFrom: {locationId}}` (Listings edit). `AFROTRANSACT_DELIVERY` needs
+        `shipFromLocationId`: one of the organisation's ship-from addresses with AfroTransact pickup enabled (422,
+        `errors.shipFromLocationId`). 409 `CONFLICT` when the offer changed meanwhile.
+      parameters:
+        - {name: offerId, in: path, required: true, schema: {type: string, maxLength: 64}}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/OfferFulfilmentRequest'}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/SellerOffer'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── listings
   /v1/seller/listings:
     get:
@@ -1022,7 +1086,8 @@ components:
             Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, NOT_APPROVED,
             NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR; team: LAST_OWNER, INVALID_ROLE,
             OWNER_ONLY, OWN_ROLE, ALREADY_MEMBER, INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED,
-            INVITATION_EMAIL_MISMATCH.
+            INVITATION_EMAIL_MISMATCH; AfroTransact pickup (S255): PICKUP_ORG_NOT_APPROVED, PICKUP_INVALID_HOURS,
+            PICKUP_NOT_GEOCODED, PICKUP_OUTSIDE_DELIVERY_AREA.
         errors:
           type: object
           additionalProperties: {type: string}
@@ -1200,7 +1265,10 @@ components:
         charts: {type: array, items: {$ref: '#/components/schemas/ChartSpec'}}
         todo: {type: array, items: {$ref: '#/components/schemas/TodoItem'}}
     # ── orders
-    Fulfilment: {type: string, enum: [SELLER, AFROTRANSACT]}
+    Fulfilment:
+      type: string
+      enum: [SELLER, AFROTRANSACT, AFROTRANSACT_DELIVERY]
+      description: 'SELLER = I ship it; AFROTRANSACT = Fulfilled by AfroTransact (FBA); AFROTRANSACT_DELIVERY = AfroTransact picks up from my store (S255)'
     ShipmentStatus:
       type: string
       enum: [PENDING_PAYMENT, PLACED, CONFIRMED, PACKED, READY, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERY_FAILED, DELIVERED, RETURNED, CANCELLED]
@@ -1234,7 +1302,7 @@ components:
         total: {type: integer}
     ShipFromAddress:
       type: object
-      required: [id, label, name, company, phone, line1, line2, city, state, postalCode, country, isDefault, version]
+      required: [id, label, name, company, phone, line1, line2, city, state, postalCode, country, isDefault, version, position, afrotransactPickup]
       properties:
         id: {type: string}
         label: {type: string, example: Houston warehouse}
@@ -1249,6 +1317,92 @@ components:
         country: {type: string}
         isDefault: {type: boolean}
         version: {type: integer, format: int64}
+        position:
+          oneOf: [{$ref: '#/components/schemas/GeoPosition'}, {type: 'null'}]
+          description: Where geo-service located the address; null until it could (geocoding failed or geo was down)
+        afrotransactPickup: {$ref: '#/components/schemas/AfrotransactPickup'}
+    GeoPosition:
+      type: object
+      required: [lat, lng, precision, geocodedAt]
+      properties:
+        lat: {type: number}
+        lng: {type: number}
+        precision: {type: string, enum: [ADDRESS, ZIP, POINT], description: 'ADDRESS = street level; ZIP = ZIP centroid only (not enough for a driver)'}
+        geocodedAt: {type: [string, 'null'], format: date-time}
+    PickupWindow:
+      type: object
+      required: [day, opens, closes]
+      properties:
+        day: {type: string, enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]}
+        opens: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', description: 24-hour local time}
+        closes: {type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'}
+    AfrotransactPickup:
+      type: object
+      description: 'AfroTransact Delivery from this address: the seller packs, the nearest AfroTransact driver collects during the pickup hours'
+      required: [enabled, hours, zoneName, enabledAt]
+      properties:
+        enabled: {type: boolean}
+        hours: {type: array, items: {$ref: '#/components/schemas/PickupWindow'}}
+        zoneName: {type: [string, 'null'], description: Delivery zone covering (or nearest to) the address}
+        enabledAt: {type: [string, 'null'], format: date-time}
+    AfrotransactPickupRequest:
+      type: object
+      required: [enabled, hours]
+      properties:
+        enabled: {type: boolean}
+        hours: {type: array, maxItems: 14, items: {$ref: '#/components/schemas/PickupWindow'}, description: At least one window to enable}
+        version: {type: [integer, 'null'], format: int64, description: Version being edited}
+    SellerOffer:
+      type: object
+      required: [offerId, atin, productId, sellerSku, condition, priceMinor, currency, fulfilment, quantity, availableQty, shipFromLocationId, shipsFrom, status, version]
+      properties:
+        offerId: {type: string}
+        atin: {type: string, description: Variant ATIN}
+        productId: {type: string}
+        sellerSku: {type: string}
+        condition: {type: string}
+        priceMinor: {type: integer}
+        currency: {type: string}
+        fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        quantity: {type: integer, description: Seller-declared stock (SELLER and AFROTRANSACT_DELIVERY)}
+        availableQty: {type: integer}
+        shipFromLocationId: {type: [string, 'null'], description: Pickup location (AFROTRANSACT_DELIVERY)}
+        shipsFrom: {type: [string, 'null'], examples: ['Houston, TX']}
+        status: {type: string, enum: [ACTIVE, PAUSED, WITHDRAWN]}
+        version: {type: integer, format: int64}
+    SellerOfferList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SellerOffer'}}
+    OfferFulfilmentRequest:
+      type: object
+      required: [fulfilment]
+      properties:
+        fulfilment: {$ref: '#/components/schemas/Fulfilment'}
+        shipFromLocationId: {type: [string, 'null'], maxLength: 64, description: Required for AFROTRANSACT_DELIVERY}
+    LocalDelivery:
+      type: object
+      description: AfroTransact Delivery from the seller's store (S255), as quoted at checkout
+      required: [pickupLocationId, roadMiles, durationMinutes, customerChargeMinor, sellerFeeMinor]
+      properties:
+        pickupLocationId: {type: [string, 'null']}
+        roadMiles: {type: [number, 'null']}
+        durationMinutes: {type: [number, 'null']}
+        customerChargeMinor: {type: integer, description: What the shopper paid for delivery (AfroTransact keeps it)}
+        sellerFeeMinor: {type: integer, description: The seller delivery fee deducted from the payout}
+    OrderEarnings:
+      type: object
+      description: The organisation's row of the order's payment split (payments); deductions are positive amounts
+      required: [itemsMinor, shippingMinor, commissionMinor, fbaFeesMinor, deliveryFeesMinor, stripeFeeMinor, netMinor]
+      properties:
+        itemsMinor: {type: integer}
+        shippingMinor: {type: integer}
+        commissionMinor: {type: integer}
+        fbaFeesMinor: {type: integer}
+        deliveryFeesMinor: {type: integer, description: AfroTransact Delivery seller fees}
+        stripeFeeMinor: {type: integer}
+        netMinor: {type: integer}
     ShipFromInput:
       type: object
       required: [name, line1, city, state, postalCode]
@@ -1279,7 +1433,7 @@ components:
         country: {type: string}
     SellerShipment:
       type: object
-      required: [shipmentId, label, status, statusLabel, fulfilment, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, timeline]
+      required: [shipmentId, label, status, statusLabel, fulfilment, perishable, lines, itemsMinor, shippingMinor, totalMinor, carrier, trackingNumber, nextActions, canBuyLabel, timeline, localDelivery]
       properties:
         shipmentId: {type: string}
         label: {type: string}
@@ -1306,6 +1460,9 @@ components:
         trackingNumber: {type: [string, 'null']}
         nextActions: {type: array, items: {$ref: '#/components/schemas/SellerStatusAction'}}
         canBuyLabel: {type: boolean}
+        localDelivery:
+          oneOf: [{$ref: '#/components/schemas/LocalDelivery'}, {type: 'null'}]
+          description: AfroTransact Delivery from the seller's store (S255); null for other shipments
         timeline:
           type: array
           items:
@@ -1317,7 +1474,7 @@ components:
               actor: {type: string}
     SellerOrderDetail:
       type: object
-      required: [orderNumber, status, placedAt, currency, buyerName, shippingAddress, shipments, totalMinor]
+      required: [orderNumber, status, placedAt, currency, buyerName, shippingAddress, shipments, totalMinor, earnings]
       properties:
         orderNumber: {type: string}
         status: {type: string}
@@ -1330,6 +1487,9 @@ components:
             - {type: 'null'}
         shipments: {type: array, items: {$ref: '#/components/schemas/SellerShipment'}}
         totalMinor: {type: integer}
+        earnings:
+          oneOf: [{$ref: '#/components/schemas/OrderEarnings'}, {type: 'null'}]
+          description: Payout breakdown from the order's payment split; null until the payment is split (or when payments can't be read)
     StatusUpdateRequest:
       type: object
       required: [status]
@@ -2112,7 +2272,7 @@ components:
         source: {type: string, enum: [OVERRIDE, CATEGORY, DEFAULT, RETAIL], description: 'OVERRIDE: negotiated for this organisation'}
     SellerFeeVersion:
       type: object
-      required: [version, effectiveFrom, defaultCommissionBps, categories, cardPctBps, cardFixedMinor, fbaPerUnitMinor, reverseCommissionOnRefund]
+      required: [version, effectiveFrom, defaultCommissionBps, categories, cardPctBps, cardFixedMinor, fbaPerUnitMinor, reverseCommissionOnRefund, deliveryFee]
       properties:
         version: {type: integer}
         effectiveFrom: {type: string, format: date-time}
@@ -2122,6 +2282,37 @@ components:
         cardFixedMinor: {type: integer, format: int64, description: 'Card fee estimate per charge, fixed part'}
         fbaPerUnitMinor: {type: integer, format: int64, description: 'FBA pick, pack and ship fee per unit'}
         reverseCommissionOnRefund: {type: boolean, description: Refunds give back the commission on the refunded amount}
+        deliveryFee:
+          oneOf: [{$ref: '#/components/schemas/SellerDeliveryFee'}, {type: 'null'}]
+          description: The seller delivery fee of AfroTransact Delivery from your store (S255); null when the version has no delivery pricing
+    SellerDeliveryTariff:
+      type: object
+      required: [mode, flatPerPackageMinor, baseMinor, perMileMinor, bands, minMinor, maxMinor]
+      properties:
+        mode: {type: string, enum: [FLAT, DISTANCE]}
+        flatPerPackageMinor: {type: [integer, 'null']}
+        baseMinor: {type: [integer, 'null']}
+        perMileMinor: {type: [integer, 'null']}
+        bands:
+          type: array
+          items:
+            type: object
+            required: [fromMiles, toMiles, feeMinor]
+            properties:
+              fromMiles: {type: number}
+              toMiles: {type: number}
+              feeMinor: {type: integer}
+        minMinor: {type: [integer, 'null']}
+        maxMinor: {type: [integer, 'null']}
+    SellerDeliveryFee:
+      type: object
+      required: [enabled, maxRadiusMiles, source, tariff, summary]
+      properties:
+        enabled: {type: boolean, description: AfroTransact Delivery from seller stores is offered}
+        maxRadiusMiles: {type: number}
+        source: {type: string, enum: [DEFAULT, OVERRIDE, RETAIL], description: 'OVERRIDE: negotiated for this organisation; RETAIL: never charged'}
+        tariff: {oneOf: [{$ref: '#/components/schemas/SellerDeliveryTariff'}, {type: 'null'}], description: null = no fee}
+        summary: {type: string, examples: ['$2.00 per package']}
     SellerFeeChange:
       type: object
       required: [field, label, from, to]

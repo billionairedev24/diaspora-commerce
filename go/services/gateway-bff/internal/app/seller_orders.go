@@ -36,16 +36,34 @@ func fulfilmentOf(t string) string {
 	return domain.FulfilledByAfroTransact
 }
 
+// shipmentFulfilment: a seller-fulfilled shipment that AfroTransact's driver collects at the seller's store (a local
+// delivery snapshot) is AfroTransact Delivery from the seller's store (S255).
+func shipmentFulfilment(s port.OrderShipmentView) string {
+	ff := fulfilmentOf(s.FulfilmentType)
+	if ff == domain.ShipsFromSeller && s.LocalDelivery != nil && strings.EqualFold(s.DeliveryMethod, domain.AfroTransactDelivery) {
+		return domain.AfroTransactDelivery
+	}
+	return ff
+}
+
 func shipmentOf(s port.OrderShipmentView) domain.SellerShipment {
 	status := strings.ToUpper(s.Status)
-	ff := fulfilmentOf(s.FulfilmentType)
+	ff := shipmentFulfilment(s)
 	out := domain.SellerShipment{ShipmentID: s.ID, Label: s.Label, Status: status, StatusLabel: domain.ShipmentStatusLabel(status),
 		Fulfilment: ff, Perishable: s.Perishable, Lines: []domain.SellerShipmentLine{}, ItemsMinor: s.ItemsMinor,
 		ShippingMinor: s.ShippingMinor, TotalMinor: s.TotalMinor, Carrier: strPtr(s.Carrier), TrackingNumber: strPtr(s.TrackingNumber),
 		NextActions: domain.SellerNextActions(s.NextActions), CanBuyLabel: domain.CanBuyLabel(ff, s.DeliveryMethod, status, s.TrackingNumber),
 		Timeline: []domain.TimelineEntry{}}
-	if ff != domain.ShipsFromSeller {
-		out.NextActions = []string{} // AfroTransact owns every step of FBA and 1P shipments
+	if ff == domain.FulfilledByAfroTransact {
+		out.NextActions = []string{} // AfroTransact owns every step of FBA and 1P shipments; sellers pack AfroTransact Delivery ones
+	}
+	if ld := s.LocalDelivery; ld != nil {
+		fee := int64(0)
+		if ld.SellerFeeMinor != nil {
+			fee = *ld.SellerFeeMinor
+		}
+		out.LocalDelivery = &domain.SellerLocalDelivery{PickupLocationID: strPtr(firstNonEmpty(ld.ShipFromLocationID, s.PickupLocationID)),
+			RoadMiles: ld.RoadMiles, DurationMinutes: ld.DurationMinutes, CustomerChargeMinor: ld.CustomerChargeMinor, SellerFeeMinor: fee}
 	}
 	for _, l := range s.Lines {
 		out.Lines = append(out.Lines, domain.SellerShipmentLine{Title: l.Title, Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor,
@@ -124,14 +142,46 @@ func (s *sellerOrdersImpl) List(ctx context.Context, c *domain.Caller, status, c
 }
 
 func (s *sellerOrdersImpl) Get(ctx context.Context, c *domain.Caller, orderNumber string) (domain.SellerOrderDetail, error) {
-	if _, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelView); err != nil {
+	sc, err := s.r.require(ctx, c, domain.OrgKindSeller, "orders", domain.LevelView)
+	if err != nil {
 		return domain.SellerOrderDetail{}, err
 	}
 	o, err := s.r.d.Orders.Order(ctx, c.BearerToken, orderNumber)
 	if err != nil {
 		return domain.SellerOrderDetail{}, mapErr("orders", err)
 	}
-	return orderOf(o), nil
+	out := orderOf(o)
+	out.Earnings = s.earnings(ctx, c, sc.org.ID, out)
+	return out, nil
+}
+
+// earnings is the organisation's row of the order's payment split (best effort: nil before the payment is split or
+// when it can't be read). orders' split does not relay payments' deliveryFeesMinor yet; until it does, the seller fees
+// snapshotted on the AfroTransact Delivery shipments are used.
+func (s *sellerOrdersImpl) earnings(ctx context.Context, c *domain.Caller, orgID string, o domain.SellerOrderDetail) *domain.OrderEarnings {
+	split, err := s.r.d.Orders.Split(ctx, c.BearerToken, o.OrderNumber)
+	if err != nil {
+		s.r.d.Log.DebugContext(ctx, "payment split unavailable; no earnings breakdown", "error", err)
+		return nil
+	}
+	var snapshot int64
+	for _, sh := range o.Shipments {
+		if sh.LocalDelivery != nil {
+			snapshot += sh.LocalDelivery.SellerFeeMinor
+		}
+	}
+	for _, r := range split.Recipients {
+		if r.Recipient != orgID || strings.EqualFold(r.Kind, "PLATFORM") {
+			continue
+		}
+		fees := snapshot
+		if r.DeliveryFeesMinor != nil {
+			fees = *r.DeliveryFeesMinor
+		}
+		return &domain.OrderEarnings{ItemsMinor: r.ItemsMinor, ShippingMinor: r.ShippingMinor, CommissionMinor: r.CommissionMinor, FbaFeesMinor: r.FbaFeesMinor,
+			DeliveryFeesMinor: fees, StripeFeeMinor: r.StripeFeeMinor, NetMinor: r.NetMinor}
+	}
+	return nil
 }
 
 func (s *sellerOrdersImpl) UpdateStatus(ctx context.Context, c *domain.Caller, key, orderNumber, shipmentID, status string) (domain.SellerOrderDetail, error) {

@@ -1,5 +1,5 @@
 // GENERATED from contracts/openapi/identity.yaml by openapi-typescript — do not edit by hand.
-// Regenerate with: pnpm --filter @afrotransact/driver-app generate
+// Regenerate with: pnpm --filter <app> generate
 /* eslint-disable */
 
 export interface paths {
@@ -1073,7 +1073,7 @@ export interface components {
     schemas: {
         UpsertOrgRequest: {
             /** @enum {string} */
-            kind: "SELLER" | "PROVIDER";
+            kind: "SELLER" | "PROVIDER" | "BOTH";
             name: string;
             /** @enum {string} */
             status: "PENDING" | "APPROVED" | "SUSPENDED" | "REJECTED";
@@ -1081,9 +1081,14 @@ export interface components {
         Organization: {
             /** @example org_3k2j9x8q7w6e5r4t3y2u */
             id?: string;
-            kind?: string;
+            /** @enum {string} */
+            kind?: "SELLER" | "PROVIDER" | "BOTH";
             name?: string;
             status?: string;
+            /**
+             * @description Market code as content-service defines it (ISO 3166-1 alpha-2)
+             * @example US
+             */
             market?: string;
             /** Format: date-time */
             updatedAt?: string;
@@ -1148,7 +1153,11 @@ export interface components {
         };
         Org: {
             id?: string;
-            kind?: string;
+            /**
+             * @description BOTH: sells products and offers services (Seller Center shows both the seller and provider navigation groups)
+             * @enum {string}
+             */
+            kind?: "SELLER" | "PROVIDER" | "BOTH";
             name?: string;
             status?: string;
             role?: string;
@@ -1210,7 +1219,7 @@ export interface components {
             orgId?: string;
             orgName?: string;
             /** @enum {string} */
-            orgKind?: "SELLER" | "PROVIDER";
+            orgKind?: "SELLER" | "PROVIDER" | "BOTH";
             email?: string;
             roleKey?: string;
             roleLabel?: string;
@@ -1335,7 +1344,7 @@ export interface components {
         InvitationPreview: {
             orgName?: string;
             /** @enum {string} */
-            orgKind?: "SELLER" | "PROVIDER";
+            orgKind?: "SELLER" | "PROVIDER" | "BOTH";
             email?: string;
             roleKey?: string;
             roleLabel?: string;
@@ -1350,7 +1359,7 @@ export interface components {
             orgId?: string;
             orgName?: string;
             /** @enum {string} */
-            orgKind?: "SELLER" | "PROVIDER";
+            orgKind?: "SELLER" | "PROVIDER" | "BOTH";
             /** @description The member's role now */
             roleKey?: string;
             /** Format: uuid */

@@ -106,6 +106,8 @@ type UpShipment struct {
 	Returnable         bool   `json:"returnable"`
 	ReturnWindowEndsAt string `json:"returnWindowEndsAt"`
 	ProblemReportOnly  bool   `json:"problemReportOnly"`
+	// LocalDelivery is orders' local_delivery snapshot (S255; the seller fee is hidden from customers).
+	LocalDelivery *LocalDeliveryView `json:"localDelivery"`
 }
 
 // UpShipTo is orders' ShipTo snapshot.
@@ -647,4 +649,62 @@ type DeliveryFactsClient interface {
 	ZonesCovering(ctx context.Context, lat, lon float64, zoneType string) ([]DeliveryZone, error)
 	// Tracking needs shipping:rate (a gateway-bff service token).
 	Tracking(ctx context.Context, bearer, carrier, number string) ([]CarrierScan, error)
+}
+
+// ---------------------------------------------------------------- AfroTransact Delivery from the seller's store (S255)
+
+// PickupLocationFacts is seller's ship-from location as checkout needs it (position and whether pickup is on).
+type PickupLocationFacts struct {
+	ID            string            `json:"id"`
+	OrgID         string            `json:"orgId"`
+	City          string            `json:"city"`
+	State         string            `json:"state"`
+	Position      *ShipFromPosition `json:"position"`
+	PickupEnabled bool              `json:"-"`
+	Pickup        *ShipFromPickup   `json:"afrotransactPickup"`
+}
+
+// GeoPlace is geo's Place: coordinates, or a street address to geocode.
+type GeoPlace struct {
+	Lat     *float64        `json:"lat,omitempty"`
+	Lng     *float64        `json:"lng,omitempty"`
+	Zip     string          `json:"zip,omitempty"`
+	Address *GeoAddressPart `json:"address,omitempty"`
+}
+
+// GeoAddressPart is geo's GeocodeRequest.
+type GeoAddressPart struct {
+	Line1      string `json:"line1,omitempty"`
+	Line2      string `json:"line2,omitempty"`
+	City       string `json:"city,omitempty"`
+	State      string `json:"state,omitempty"`
+	PostalCode string `json:"postalCode,omitempty"`
+	Country    string `json:"country,omitempty"`
+}
+
+// RoadDistance is geo's Distance.
+type RoadDistance struct {
+	StraightLineMiles float64 `json:"straightLineMiles"`
+	RoadMiles         float64 `json:"roadMiles"`
+	DurationMinutes   float64 `json:"durationMinutes"`
+	Method            string  `json:"method"`
+}
+
+// LocalDeliveryQuote is payments' DeliveryQuote.
+type LocalDeliveryQuote struct {
+	Available           bool     `json:"available"`
+	UnavailableReason   string   `json:"unavailableReason"`
+	CustomerChargeMinor int64    `json:"customerChargeMinor"`
+	SellerFeeMinor      int64    `json:"sellerFeeMinor"`
+	MaxRadiusMiles      *float64 `json:"maxRadiusMiles"`
+	ScheduleVersion     int      `json:"scheduleVersion"`
+}
+
+// LocalDeliveryClient prices AfroTransact Delivery from a seller's store for the checkout page, like orders does when
+// the order is placed: the pickup location (seller, service token sellers:ship-from.read), the road distance (geo)
+// and the price (payments, service token payments:fees.read).
+type LocalDeliveryClient interface {
+	Location(ctx context.Context, locationID string) (PickupLocationFacts, error)
+	Distance(ctx context.Context, from, to GeoPlace) (RoadDistance, error)
+	Quote(ctx context.Context, sellerOrgID string, miles float64, packages int) (LocalDeliveryQuote, error)
 }

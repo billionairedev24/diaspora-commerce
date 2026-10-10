@@ -160,10 +160,11 @@ func run() error {
 		SellerTeam:      app.NewSellerTeamService(sellerDeps),
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
+		SellerOffers:    app.NewSellerOffersService(sellerDeps),
 	}
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
-		identityAPI: identity, serviceTokens: serviceTokens}, services, log)
+		identityAPI: identity, serviceTokens: serviceTokens, offers: storefrontOffers}, services, log)
 	// Staff console (cmd/gateway-bff/staff.go).
 	if services.Staff, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient, inventory: inventoryClient,
 		payments: paymentsClient, orders: ordersClient}, rdb, cache, log); err != nil {

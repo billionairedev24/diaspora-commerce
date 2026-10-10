@@ -1,7 +1,18 @@
 /* Mock of the fee-schedule editor routes (gateway-bff-staff.yaml, tag Fees) over an in-memory copy of payments' immutable
    fee-schedule versions. Statuses, the base of a new version, validation and the AfroTransact Retail rule follow the
    Go BFF (internal/app/staff_fees.go). */
-import { type FeeCategory, type FeeLimits, type FeeOrgHit, type FeeScheduleDraft, type FeeScheduleView, type FeesOverview } from '../../schemas/staff';
+import { quoteTariff } from '../../fees';
+import {
+  type DeliveryPricing,
+  type DeliveryQuote,
+  type DeliveryTariff,
+  type FeeCategory,
+  type FeeLimits,
+  type FeeOrgHit,
+  type FeeScheduleDraft,
+  type FeeScheduleView,
+  type FeesOverview
+} from '../../schemas/staff';
 import { ALL_CATEGORIES, normalizeFeeCategory, validateFeeDraft } from '../../validation/fee-draft';
 import { type MockRecord } from './db';
 
@@ -16,6 +27,8 @@ export interface MockFeeSchedule {
   cardFixedMinor: number;
   fbaPerUnitMinor: number;
   reverseCommissionOnRefund: boolean;
+  /** AfroTransact Delivery from seller stores (S255); null on versions before it. */
+  deliveryPricing: MockDeliveryPricing | null;
   note: string | null;
   createdBy: string;
   createdAt: string;
@@ -23,6 +36,33 @@ export interface MockFeeSchedule {
   cancelledBy: string | null;
   cancelReason: string | null;
 }
+
+export interface MockDeliveryPricing {
+  enabled: boolean;
+  maxRadiusMiles: number;
+  customerCharge: DeliveryTariff | null;
+  sellerFee: DeliveryTariff | null;
+  sellerOverrides: { orgId: string; sellerFee: DeliveryTariff }[];
+}
+
+const tariff = (t: Partial<DeliveryTariff> & Pick<DeliveryTariff, 'mode'>): DeliveryTariff => ({
+  flatPerPackageMinor: null,
+  baseMinor: null,
+  perMileMinor: null,
+  bands: [],
+  minMinor: null,
+  maxMinor: null,
+  ...t
+});
+
+/** payments' seed (V9): customer $4.99 + $0.85/mi, $5.99–$24.99 within 25 miles; sellers $2.00 per package. */
+export const LAUNCH_DELIVERY: MockDeliveryPricing = {
+  enabled: true,
+  maxRadiusMiles: 25,
+  customerCharge: tariff({ mode: 'DISTANCE', baseMinor: 499, perMileMinor: 85, minMinor: 599, maxMinor: 2499 }),
+  sellerFee: tariff({ mode: 'FLAT', flatPerPackageMinor: 200 }),
+  sellerOverrides: [{ orgId: 'org-kente', sellerFee: tariff({ mode: 'FLAT', flatPerPackageMinor: 150 }) }]
+};
 
 export interface MockFeeOrg {
   id: string;
@@ -35,7 +75,8 @@ export const MOCK_RETAIL_ORG_ID = 'org-afrotransact-retail';
 export const RETAIL_NAME = 'AfroTransact Retail';
 export const RETAIL_NOTE = 'No commission, no fees (merchant of record)';
 export const FEE_LIMITS: FeeLimits = {
-  commissionMaxBps: 5000, cardPctMaxBps: 1000, cardFixedMaxMinor: 1000, fbaPerUnitMaxMinor: 10_000, noteMinLength: 3, noteMaxLength: 500, maxCategoryRates: 100, maxOverrides: 500
+  commissionMaxBps: 5000, cardPctMaxBps: 1000, cardFixedMaxMinor: 1000, fbaPerUnitMaxMinor: 10_000, noteMinLength: 3, noteMaxLength: 500, maxCategoryRates: 100, maxOverrides: 500,
+  deliveryMaxRadiusMiles: 200, deliveryAmountMaxMinor: 10_000, deliveryMaxBands: 20, maxDeliveryOverrides: 500
 };
 
 /** Catalog departments (seed taxonomy) as payments commission categories. */
@@ -60,13 +101,16 @@ export function seedFeeSchedules(now: Date): MockFeeSchedule[] {
   const base = { cardPctBps: 290, cardFixedMinor: 30, reverseCommissionOnRefund: true, cancelledAt: null, cancelledBy: null, cancelReason: null };
   return [
     { ...base, id: 'fee-1', version: 1, effectiveFrom: '2020-01-01T00:00:00Z', categoryBps: { ...LAUNCH }, defaultCommissionBps: 1000, overrides: [], fbaPerUnitMinor: 325,
-      note: 'Launch defaults', createdBy: 'system:seed', createdAt: '2020-01-01T00:00:00Z' },
+      deliveryPricing: null, note: 'Launch defaults', createdBy: 'system:seed', createdAt: '2020-01-01T00:00:00Z' },
     { ...base, id: 'fee-2', version: 2, effectiveFrom: ago(60), categoryBps: { ...LAUNCH, fashion: 1150 }, defaultCommissionBps: 1000, fbaPerUnitMinor: 325,
+      deliveryPricing: structuredClone(LAUNCH_DELIVERY),
       overrides: [{ orgId: 'org-kente', category: 'beauty', commissionBps: 800 }, { orgId: 'org-ade', category: ALL_CATEGORIES, commissionBps: 900 }],
       note: 'Q3 review: fashion down, launch partners', createdBy: 'Musa Bello', createdAt: ago(62) },
     { ...base, id: 'fee-3', version: 3, effectiveFrom: ahead(7), categoryBps: { ...LAUNCH }, defaultCommissionBps: 1100, overrides: [], fbaPerUnitMinor: 325,
+      deliveryPricing: structuredClone(LAUNCH_DELIVERY),
       note: 'Default to 11 % (typo)', createdBy: 'Musa Bello', createdAt: ago(3), cancelledAt: ago(2), cancelledBy: 'Musa Bello', cancelReason: 'Wrong default rate' },
     { ...base, id: 'fee-4', version: 4, effectiveFrom: ahead(21), categoryBps: { ...LAUNCH, fashion: 1300 }, defaultCommissionBps: 1000, fbaPerUnitMinor: 350,
+      deliveryPricing: structuredClone(LAUNCH_DELIVERY),
       overrides: [{ orgId: 'org-kente', category: 'beauty', commissionBps: 800 }, { orgId: 'org-ade', category: ALL_CATEGORIES, commissionBps: 900 }],
       note: 'Holiday season: fashion up, FBA $3.50', createdBy: 'Musa Bello', createdAt: ago(1) }
   ];
@@ -121,6 +165,7 @@ export function feeView(s: MockFeeSchedule, all: MockFeeSchedule[], now: Date, c
     cardFixedMinor: s.cardFixedMinor,
     fbaPerUnitMinor: s.fbaPerUnitMinor,
     reverseCommissionOnRefund: s.reverseCommissionOnRefund,
+    deliveryPricing: deliveryView(s.deliveryPricing),
     note: s.note,
     createdBy: s.createdBy,
     createdAt: s.createdAt,
@@ -128,6 +173,38 @@ export function feeView(s: MockFeeSchedule, all: MockFeeSchedule[], now: Date, c
     cancelledBy: s.cancelledBy,
     cancelReason: s.cancelReason,
     cancellable: canConfigure && status === 'SCHEDULED'
+  };
+}
+
+function deliveryView(p: MockDeliveryPricing | null): DeliveryPricing | null {
+  if (!p) return null;
+  return {
+    enabled: p.enabled,
+    maxRadiusMiles: p.maxRadiusMiles,
+    customerCharge: p.customerCharge ? structuredClone(p.customerCharge) : null,
+    sellerFee: p.sellerFee ? structuredClone(p.sellerFee) : null,
+    sellerOverrides: p.sellerOverrides
+      .map((o) => ({ orgId: o.orgId, orgName: nameOf(o.orgId), sellerFee: structuredClone(o.sellerFee) }))
+      .sort((a, b) => (a.orgName ?? a.orgId).localeCompare(b.orgName ?? b.orgId))
+  };
+}
+
+/** payments POST /v1/delivery-pricing/quote under the version in force now. */
+export function quoteDelivery(all: MockFeeSchedule[], now: Date, orgId: string, miles: number, packages: number): DeliveryQuote {
+  const { active } = timeline(all, now);
+  const p = active?.deliveryPricing ?? null;
+  const base = { customerChargeMinor: 0, sellerFeeMinor: 0, sellerFeeSource: null, scheduleVersion: active?.version ?? null, maxRadiusMiles: p?.maxRadiusMiles ?? null, currency: 'USD' };
+  if (!p || !p.enabled) return { ...base, available: false, unavailableReason: 'NOT_CONFIGURED' };
+  if (miles > p.maxRadiusMiles) return { ...base, available: false, unavailableReason: 'BEYOND_MAX_RADIUS' };
+  const override = p.sellerOverrides.find((o) => o.orgId === orgId);
+  const retail = orgId === MOCK_RETAIL_ORG_ID;
+  return {
+    ...base,
+    available: true,
+    unavailableReason: null,
+    customerChargeMinor: quoteTariff(p.customerCharge, miles, packages),
+    sellerFeeMinor: retail ? 0 : quoteTariff(override ? override.sellerFee : p.sellerFee, miles, packages),
+    sellerFeeSource: retail ? 'RETAIL' : override ? 'OVERRIDE' : 'DEFAULT'
   };
 }
 
@@ -205,6 +282,18 @@ export function createFeeSchedule(all: MockFeeSchedule[], d: FeeScheduleDraft, n
     cardFixedMinor: d.cardFixedMinor,
     fbaPerUnitMinor: d.fbaPerUnitMinor,
     reverseCommissionOnRefund: d.reverseCommissionOnRefund,
+    // Omitted = carried over from the latest live version (payments' rule).
+    deliveryPricing: d.deliveryPricing
+      ? {
+          enabled: d.deliveryPricing.enabled,
+          maxRadiusMiles: d.deliveryPricing.maxRadiusMiles ?? 0,
+          customerCharge: d.deliveryPricing.customerCharge,
+          sellerFee: d.deliveryPricing.sellerFee,
+          sellerOverrides: d.deliveryPricing.sellerOverrides.map((o) => ({ orgId: o.orgId.trim(), sellerFee: o.sellerFee }))
+        }
+      : t.latest?.deliveryPricing
+        ? structuredClone(t.latest.deliveryPricing)
+        : null,
     note: d.note.trim(),
     createdBy: actor,
     createdAt: now.toISOString(),

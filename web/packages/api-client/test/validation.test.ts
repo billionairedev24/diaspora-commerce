@@ -1,6 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
-import { countryOptions, evaluatePassword, flagOf, formatPhoneAsYouType, isValidMobile, JobApplicationFormSchema, SignUpFormSchema, toE164, toSignUpRequest } from '../src';
+import {
+  countryOptions,
+  evaluatePassword,
+  flagOf,
+  formatPhoneAsYouType,
+  isValidMobile,
+  JobApplicationFormSchema,
+  quoteTariff,
+  SignUpFormSchema,
+  tariffSummary,
+  toE164,
+  toSignUpRequest,
+  validateDeliveryDraft,
+  validatePickupHours
+} from '../src';
 
 describe('phone validation', () => {
   it('formats US numbers as you type', () => {
@@ -77,5 +91,39 @@ describe('careers application schema', () => {
     const ok = { name: 'Ama Owusu', email: 'ama@example.com', linkedin: '', workAuthorization: 'Yes', resumeFileName: 'cv.pdf', consent: true };
     expect(JobApplicationFormSchema.safeParse(ok).success).toBe(false); // the résumé must be uploaded first
     expect(JobApplicationFormSchema.safeParse({ ...ok, resumeAssetId: 'asset-1' }).success).toBe(true);
+  });
+});
+
+describe('AfroTransact Delivery pricing (S255)', () => {
+  const limits = { commissionMaxBps: 5000, cardPctMaxBps: 1000, cardFixedMaxMinor: 1000, fbaPerUnitMaxMinor: 10_000, noteMinLength: 3, noteMaxLength: 500, maxCategoryRates: 100,
+    maxOverrides: 500, deliveryMaxRadiusMiles: 200, deliveryAmountMaxMinor: 10_000, deliveryMaxBands: 20, maxDeliveryOverrides: 500 };
+  const distance = { mode: 'DISTANCE' as const, flatPerPackageMinor: null, baseMinor: 499, perMileMinor: 85, bands: [], minMinor: 599, maxMinor: 2499 };
+  it('quotes like payments: bands, base + per mile half up, min and max; flat per package', () => {
+    expect(quoteTariff(distance, 7.4)).toBe(1128);
+    expect(quoteTariff(distance, 0.5)).toBe(599);
+    expect(quoteTariff(distance, 40)).toBe(2499);
+    expect(quoteTariff({ ...distance, bands: [{ fromMiles: 0, toMiles: 3, feeMinor: 399 }], minMinor: null }, 2.99)).toBe(399);
+    expect(quoteTariff({ mode: 'FLAT', flatPerPackageMinor: 200, baseMinor: null, perMileMinor: null, bands: [], minMinor: null, maxMinor: null }, 9, 3)).toBe(600);
+    expect(quoteTariff(null, 9)).toBe(0);
+    expect(tariffSummary(distance)).toBe('$4.99 + $0.85/mi, at least $5.99, at most $24.99');
+  });
+  it('validates the section with the BFF’s keys', () => {
+    const errs = validateDeliveryDraft(
+      { enabled: true, maxRadiusMiles: 0, customerCharge: { ...distance, minMinor: 900, maxMinor: 500, bands: [{ fromMiles: 0, toMiles: 5, feeMinor: 399 }, { fromMiles: 4, toMiles: 8, feeMinor: 599 }] },
+        sellerFee: { ...distance, baseMinor: null }, sellerOverrides: [{ orgId: 'org-retail', sellerFee: distance }, { orgId: 'org-a', sellerFee: distance }, { orgId: 'org-a', sellerFee: distance }] },
+      'org-retail',
+      limits
+    );
+    expect(Object.keys(errs).sort()).toEqual([
+      'deliveryPricing.customerCharge.bands.1.fromMiles', 'deliveryPricing.customerCharge.maxMinor', 'deliveryPricing.maxRadiusMiles', 'deliveryPricing.sellerFee.baseMinor',
+      'deliveryPricing.sellerOverrides.0.orgId', 'deliveryPricing.sellerOverrides.2.orgId'
+    ]);
+    expect(validateDeliveryDraft(null, '', limits)).toEqual({});
+  });
+  it('checks pickup hours like the seller service', () => {
+    expect(validatePickupHours(true, [])).toEqual({ hours: 'Add at least one pickup window' });
+    expect(validatePickupHours(false, [])).toEqual({});
+    const e = validatePickupHours(true, [{ day: 'MONDAY', opens: '09:00', closes: '12:00' }, { day: 'MONDAY', opens: '11:00', closes: '13:00' }, { day: 'TUESDAY', opens: '14:00', closes: '13:00' }]);
+    expect(Object.keys(e)).toEqual(['hours.1.opens', 'hours.2.closes']);
   });
 });

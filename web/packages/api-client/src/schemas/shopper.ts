@@ -73,7 +73,9 @@ export const ShipmentDetailSchema = z.object({
   /** Returns (S148/S166): "Return items" when returnable; "Report a problem" when only that is possible. */
   returnable: z.boolean().optional(),
   returnWindowEndsAt: z.string().nullable().optional(),
-  problemReportOnly: z.boolean().optional()
+  problemReportOnly: z.boolean().optional(),
+  /** AfroTransact Delivery from the seller's store (S255), as charged at checkout. */
+  localDelivery: z.object({ roadMiles: z.number().nullable(), durationMinutes: z.number().nullable(), chargeMinor: MinorSchema }).nullable().optional()
 });
 export type ShipmentDetail = z.infer<typeof ShipmentDetailSchema>;
 
@@ -218,7 +220,26 @@ export const PickupPointSchema = z.object({
 });
 export type PickupPoint = z.infer<typeof PickupPointSchema>;
 
-export const CheckoutPackageSchema = CartPackageSchema.extend({ pickupPoints: z.array(PickupPointSchema).optional() });
+/** Why AfroTransact Delivery from a seller's store can't be quoted for the chosen address (S255). */
+export const LocalDeliveryReasonSchema = z.enum(['OUT_OF_RANGE', 'UNAVAILABLE', 'PICKUP_UNAVAILABLE', 'ADDRESS_NOT_LOCATED', 'QUOTE_UNAVAILABLE']);
+export type LocalDeliveryReason = z.infer<typeof LocalDeliveryReasonSchema>;
+export const CheckoutLocalDeliverySchema = z.object({
+  available: z.boolean(),
+  chargeMinor: MinorSchema.nullable(),
+  roadMiles: z.number().nullable(),
+  durationMinutes: z.number().nullable(),
+  fromCity: z.string(),
+  unavailableReason: LocalDeliveryReasonSchema.nullable(),
+  message: nullableString,
+  maxRadiusMiles: z.number().nullable(),
+  offerIds: z.array(z.string())
+});
+export type CheckoutLocalDelivery = z.infer<typeof CheckoutLocalDeliverySchema>;
+
+export const CheckoutPackageSchema = CartPackageSchema.extend({
+  pickupPoints: z.array(PickupPointSchema).optional(),
+  localDelivery: CheckoutLocalDeliverySchema.optional()
+});
 export type CheckoutPackage = z.infer<typeof CheckoutPackageSchema>;
 
 export const CheckoutSummarySchema = z.object({

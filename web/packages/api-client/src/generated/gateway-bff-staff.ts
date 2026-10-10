@@ -437,6 +437,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/fees/delivery-quote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Price one AfroTransact Delivery trip under the live fee schedule (S255)
+         * @description payments `POST /v1/delivery-pricing/quote` (staff payments:read): the customer charge and the seller's pickup-delivery
+         *     fee for a seller organisation, a road distance and a number of packages, under the version in force at `at`
+         *     (default now). `available: false` with `BEYOND_MAX_RADIUS` beyond the version's radius or `NOT_CONFIGURED` when it
+         *     has no delivery pricing. Needs VIEW on the fees module. Drafts are previewed in the console with the same rules.
+         */
+        post: operations["quoteStaffDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/pickups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Seller pickups waiting for a route (AfroTransact Delivery from the seller's store)
+         * @description fulfilment `GET /v1/dispatch/shipments` (delivery:dispatch), keeping the SELLER-origin entries. Pickups already
+         *     routed (auto-assigned to the nearest driver) are not in the pool; open them by shipment id. Needs VIEW on dispatch.
+         */
+        get: operations["listStaffPickups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/pickups/{shipmentId}/driver-suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Top 5 available drivers for a seller pickup, nearest first
+         * @description fulfilment `GET /v1/dispatch/pickups/{id}/driver-suggestions`: fresh positions in the pickup's delivery zone,
+         *     access active, an ASSIGNED or IN_PROGRESS route today, vehicle inspection passed, room left; ranked by geo road
+         *     distance (straight line when geo is down — `distanceMethod: STRAIGHT_LINE`, `roadMiles: null`).
+         */
+        get: operations["getPickupDriverSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/pickups/{shipmentId}/assign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign or override the route of a seller pickup (reason required)
+         * @description fulfilment `POST /v1/dispatch/pickups/{id}/assign {routeId, reason}` (delivery:dispatch, EDIT on dispatch). The
+         *     reason (5–500 characters) is logged as a DISPATCH_OVERRIDE. 409 `CONFLICT` when the pickup can't move any more
+         *     (collected, or its drop-off carries other shipments).
+         */
+        post: operations["assignPickup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/dispatch/pickups/{shipmentId}/assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Assignment history of a seller pickup (automatic nearest-driver and dispatch overrides)
+         * @description fulfilment `GET /v1/dispatch/pickups/{id}/assignments`, newest first.
+         */
+        get: operations["listPickupAssignments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/ship-from-locations/{locationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A seller's ship-from / pickup location (address, geocoded position, pickup hours)
+         * @description seller `GET /v1/ship-from-locations/{id}` (staff seller:ship-from). Needs VIEW on dispatch.
+         */
+        get: operations["getStaffShipFromLocation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -890,6 +1018,21 @@ export interface components {
             noteMaxLength: number;
             maxCategoryRates: number;
             maxOverrides: number;
+            /**
+             * @description Largest AfroTransact Delivery service radius payments accepts
+             * @example 200
+             */
+            deliveryMaxRadiusMiles: number;
+            /**
+             * Format: int64
+             * @description Largest delivery amount: fee, base, per mile, band, min or max
+             * @example 10000
+             */
+            deliveryAmountMaxMinor: number;
+            /** @example 20 */
+            deliveryMaxBands: number;
+            /** @example 500 */
+            maxDeliveryOverrides: number;
         };
         FeeCategory: {
             /** @description payments category key (lower-case), e.g. groceries */
@@ -936,6 +1079,8 @@ export interface components {
             /** Format: int64 */
             fbaPerUnitMinor: number;
             reverseCommissionOnRefund: boolean;
+            /** @description AfroTransact Delivery from seller stores (S255); null when the version has no delivery pricing (quotes NOT_CONFIGURED) */
+            deliveryPricing: components["schemas"]["DeliveryPricing"] | null;
             note: string | null;
             createdBy: string;
             /** Format: date-time */
@@ -1026,11 +1171,199 @@ export interface components {
             /** Format: int64 */
             fbaPerUnitMinor: number;
             reverseCommissionOnRefund: boolean;
+            /** @description AfroTransact Delivery pricing (S255). Omitted or null = carried over from the latest live version; enabled=false stops offering it */
+            deliveryPricing?: components["schemas"]["DeliveryPricingDraft"] | null;
             /** @description Why the fees change (required) */
             note: string;
         };
         FeeCancelRequest: {
             reason: string;
+        };
+        DeliveryBand: {
+            /** @description From (inclusive) */
+            fromMiles: number;
+            /** @description To (exclusive); bands never overlap */
+            toMiles: number;
+            /** Format: int64 */
+            feeMinor: number;
+        };
+        /** @description FLAT: flatPerPackageMinor × packages. DISTANCE (per trip): the fee of the band covering the distance, else baseMinor + perMileMinor × miles (half up), then at least minMinor and at most maxMinor (null = no cap) */
+        DeliveryTariff: {
+            /** @enum {string} */
+            mode: "FLAT" | "DISTANCE";
+            /** Format: int64 */
+            flatPerPackageMinor: number | null;
+            /** Format: int64 */
+            baseMinor: number | null;
+            /**
+             * Format: int64
+             * @description 85 = $0.85 per mile
+             */
+            perMileMinor: number | null;
+            bands: components["schemas"]["DeliveryBand"][];
+            /** Format: int64 */
+            minMinor: number | null;
+            /** Format: int64 */
+            maxMinor: number | null;
+        };
+        DeliveryFeeOverride: {
+            orgId: string;
+            orgName: string | null;
+            sellerFee: components["schemas"]["DeliveryTariff"];
+        };
+        /** @description AfroTransact Delivery pricing of a fee-schedule version */
+        DeliveryPricing: {
+            /** @description false = not offered under this version */
+            enabled: boolean;
+            /** @description Beyond this road distance the option is unavailable (BEYOND_MAX_RADIUS) */
+            maxRadiusMiles: number;
+            /** @description What the shopper pays (4200); null = free */
+            customerCharge: components["schemas"]["DeliveryTariff"] | null;
+            /** @description What the seller pays per pickup-delivery (4250); null = no fee */
+            sellerFee: components["schemas"]["DeliveryTariff"] | null;
+            /** @description Negotiated seller fees (AfroTransact Retail never pays one) */
+            sellerOverrides: components["schemas"]["DeliveryFeeOverride"][];
+        };
+        DeliveryDraftOverride: {
+            orgId: string;
+            sellerFee: components["schemas"]["DeliveryTariff"];
+        };
+        DeliveryPricingDraft: {
+            enabled: boolean;
+            /** @description 0 < r ≤ limits.deliveryMaxRadiusMiles */
+            maxRadiusMiles: number | null;
+            customerCharge: components["schemas"]["DeliveryTariff"] | null;
+            sellerFee: components["schemas"]["DeliveryTariff"] | null;
+            sellerOverrides: components["schemas"]["DeliveryDraftOverride"][];
+        };
+        DeliveryQuoteRequest: {
+            sellerOrgId: string;
+            /** @description Road miles */
+            distanceMiles: number;
+            /** @default 1 */
+            packages: number;
+            /**
+             * Format: date-time
+             * @description Version in force at this time; default now
+             */
+            at?: string | null;
+        };
+        DeliveryQuote: {
+            available: boolean;
+            /** @enum {string|null} */
+            unavailableReason: "NOT_CONFIGURED" | "BEYOND_MAX_RADIUS" | null;
+            /** Format: int64 */
+            customerChargeMinor: number;
+            /** Format: int64 */
+            sellerFeeMinor: number;
+            /** @enum {string|null} */
+            sellerFeeSource: "DEFAULT" | "OVERRIDE" | "RETAIL" | null;
+            scheduleVersion: number | null;
+            maxRadiusMiles: number | null;
+            currency: string;
+        };
+        PickupRow: {
+            shipmentId: string;
+            orderNumber: string;
+            sellerOrgId: string;
+            sellerName: string;
+            /** @description Drop-off city */
+            city: string;
+            state: string;
+            postalCode: string;
+            /** @description AWAITING_ROUTE, ROUTED, DELIVERED, FAILED or CANCELLED */
+            status: string;
+            routeId: string | null;
+            perishable: boolean;
+            units: number;
+            /** Format: date */
+            promisedBy: string | null;
+            /** Format: date-time */
+            createdAt: string | null;
+        };
+        PickupList: {
+            items: components["schemas"]["PickupRow"][];
+            /** @description delivery:dispatch and EDIT on dispatch */
+            canAssign: boolean;
+        };
+        DriverSuggestion: {
+            driverId: string;
+            routeId: string;
+            routeName: string;
+            zone: string;
+            routeStatus: string;
+            straightLineMiles: number;
+            /** @description null when geo is down (ranked by straight line) */
+            roadMiles: number | null;
+            durationMinutes: number | null;
+            /** @description ROAD_GOOGLE, ROAD_OSRM, GEODESIC_DETOUR or STRAIGHT_LINE */
+            distanceMethod: string;
+            /** Format: date-time */
+            positionAt: string | null;
+            packagesOnRoute: number;
+            capacityLeft: number;
+        };
+        DriverSuggestions: {
+            shipmentId: string;
+            drivers: components["schemas"]["DriverSuggestion"][];
+            canAssign: boolean;
+        };
+        PickupAssignRequest: {
+            routeId: string;
+            reason: string;
+        };
+        PickupAssignResult: {
+            shipmentId: string;
+            routeId: string;
+            routeName: string | null;
+            driverId: string | null;
+            /** @description The route's status */
+            status: string;
+        };
+        PickupAssignment: {
+            id: string;
+            shipmentId: string;
+            routeId: string;
+            driverId: string | null;
+            /** @enum {string} */
+            mode: "AUTO_NEAREST" | "DISPATCH_OVERRIDE";
+            reason: string | null;
+            previousRouteId: string | null;
+            straightMiles: number | null;
+            roadMiles: number | null;
+            distanceMethod: string | null;
+            actor: string | null;
+            /** Format: date-time */
+            createdAt: string | null;
+        };
+        PickupAssignmentList: {
+            items: components["schemas"]["PickupAssignment"][];
+        };
+        PickupWindow: {
+            /** @enum {string} */
+            day: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+            opens: string;
+            closes: string;
+        };
+        ShipFromLocation: {
+            id: string;
+            orgId: string;
+            label: string;
+            line1: string;
+            line2: string;
+            city: string;
+            state: string;
+            postalCode: string;
+            country: string;
+            position: {
+                lat: number;
+                lng: number;
+                /** @enum {string} */
+                precision: "ADDRESS" | "ZIP" | "POINT";
+            } | null;
+            pickupEnabled: boolean;
+            pickupHours: components["schemas"]["PickupWindow"][];
+            zoneName: string | null;
         };
     };
     responses: {
@@ -1057,6 +1390,7 @@ export interface components {
         Resource: components["schemas"]["ResourceKey"];
         RecordId: string;
         ExportId: string;
+        ShipmentId: string;
         /** @description Makes retries safe (same key = same result). */
         IdempotencyKey: string;
         /** @description Same key = same refund; never refunds twice. */
@@ -1742,6 +2076,178 @@ export interface operations {
             404: components["responses"]["Problem"];
             409: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    quoteStaffDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryQuoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Quote */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryQuote"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPickups: {
+        parameters: {
+            query?: {
+                /** @description Depot / fulfilment node */
+                nodeId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Waiting pickups */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getPickupDriverSuggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Suggestions */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriverSuggestions"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    assignPickup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PickupAssignRequest"];
+            };
+        };
+        responses: {
+            /** @description Assigned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupAssignResult"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listPickupAssignments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                shipmentId: components["parameters"]["ShipmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description History */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PickupAssignmentList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffShipFromLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                locationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Location */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipFromLocation"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

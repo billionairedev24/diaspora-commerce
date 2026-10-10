@@ -309,7 +309,11 @@ export const FeeLimitsSchema = z.object({
   noteMinLength: z.number().int(),
   noteMaxLength: z.number().int(),
   maxCategoryRates: z.number().int(),
-  maxOverrides: z.number().int()
+  maxOverrides: z.number().int(),
+  deliveryMaxRadiusMiles: z.number(),
+  deliveryAmountMaxMinor: z.number().int(),
+  deliveryMaxBands: z.number().int(),
+  maxDeliveryOverrides: z.number().int()
 });
 export type FeeLimits = z.infer<typeof FeeLimitsSchema>;
 export const FeeCategorySchema = z.object({ key: z.string(), label: z.string(), source: z.enum(['TAXONOMY', 'SCHEDULE', 'PLATFORM']) });
@@ -324,6 +328,60 @@ export const FeeOverrideSchema = z.object({
   commissionBps: z.number().int()
 });
 export type FeeOverride = z.infer<typeof FeeOverrideSchema>;
+
+/* AfroTransact Delivery from the seller's store (S255): amounts in minor units, distances in road miles. */
+export const DeliveryTariffModeSchema = z.enum(['FLAT', 'DISTANCE']);
+export type DeliveryTariffMode = z.infer<typeof DeliveryTariffModeSchema>;
+export const DeliveryBandSchema = z.object({ fromMiles: z.number(), toMiles: z.number(), feeMinor: z.number().int() });
+export type DeliveryBand = z.infer<typeof DeliveryBandSchema>;
+const nullableInt = z.number().int().nullable();
+export const DeliveryTariffSchema = z.object({
+  mode: DeliveryTariffModeSchema,
+  flatPerPackageMinor: nullableInt,
+  baseMinor: nullableInt,
+  perMileMinor: nullableInt,
+  bands: z.array(DeliveryBandSchema),
+  minMinor: nullableInt,
+  maxMinor: nullableInt
+});
+export type DeliveryTariff = z.infer<typeof DeliveryTariffSchema>;
+export const DeliveryFeeOverrideSchema = z.object({ orgId: z.string(), orgName: nullableString, sellerFee: DeliveryTariffSchema });
+export type DeliveryFeeOverride = z.infer<typeof DeliveryFeeOverrideSchema>;
+export const DeliveryPricingSchema = z.object({
+  enabled: z.boolean(),
+  maxRadiusMiles: z.number(),
+  customerCharge: DeliveryTariffSchema.nullable(),
+  sellerFee: DeliveryTariffSchema.nullable(),
+  sellerOverrides: z.array(DeliveryFeeOverrideSchema)
+});
+export type DeliveryPricing = z.infer<typeof DeliveryPricingSchema>;
+/** The delivery section of a draft (null on the draft = carried over from the latest live version). */
+export interface DeliveryPricingDraft {
+  enabled: boolean;
+  maxRadiusMiles: number | null;
+  customerCharge: DeliveryTariff | null;
+  sellerFee: DeliveryTariff | null;
+  sellerOverrides: { orgId: string; sellerFee: DeliveryTariff }[];
+}
+export const DeliveryUnavailableReasonSchema = z.enum(['NOT_CONFIGURED', 'BEYOND_MAX_RADIUS']);
+export const DeliveryQuoteSchema = z.object({
+  available: z.boolean(),
+  unavailableReason: DeliveryUnavailableReasonSchema.nullable(),
+  customerChargeMinor: z.number().int(),
+  sellerFeeMinor: z.number().int(),
+  sellerFeeSource: z.enum(['DEFAULT', 'OVERRIDE', 'RETAIL']).nullable(),
+  scheduleVersion: z.number().int().nullable(),
+  maxRadiusMiles: z.number().nullable(),
+  currency: z.string()
+});
+export type DeliveryQuote = z.infer<typeof DeliveryQuoteSchema>;
+export interface DeliveryQuoteRequest {
+  sellerOrgId: string;
+  distanceMiles: number;
+  packages?: number;
+  at?: string | null;
+}
+
 export const FeeScheduleViewSchema = z.object({
   id: z.string(),
   version: z.number().int(),
@@ -337,6 +395,7 @@ export const FeeScheduleViewSchema = z.object({
   cardFixedMinor: z.number().int(),
   fbaPerUnitMinor: z.number().int(),
   reverseCommissionOnRefund: z.boolean(),
+  deliveryPricing: DeliveryPricingSchema.nullable(),
   note: nullableString,
   createdBy: z.string(),
   createdAt: nullableString,
@@ -390,5 +449,95 @@ export interface FeeScheduleDraft {
   cardFixedMinor: number;
   fbaPerUnitMinor: number;
   reverseCommissionOnRefund: boolean;
+  /** Omitted or null = carried over from the latest live version. */
+  deliveryPricing?: DeliveryPricingDraft | null;
   note: string;
 }
+
+/* ── Dispatch: seller pickups of AfroTransact Delivery from the seller's store (S255) ── */
+
+export const PickupRowSchema = z.object({
+  shipmentId: z.string(),
+  orderNumber: z.string(),
+  sellerOrgId: z.string(),
+  sellerName: z.string(),
+  city: z.string(),
+  state: z.string(),
+  postalCode: z.string(),
+  status: z.string(),
+  routeId: nullableString,
+  perishable: z.boolean(),
+  units: z.number().int(),
+  promisedBy: nullableString,
+  createdAt: nullableString
+});
+export type PickupRow = z.infer<typeof PickupRowSchema>;
+export const PickupListSchema = z.object({ items: z.array(PickupRowSchema), canAssign: z.boolean() });
+export type PickupList = z.infer<typeof PickupListSchema>;
+export const DriverSuggestionSchema = z.object({
+  driverId: z.string(),
+  routeId: z.string(),
+  routeName: z.string(),
+  zone: z.string(),
+  routeStatus: z.string(),
+  straightLineMiles: z.number(),
+  roadMiles: z.number().nullable(),
+  durationMinutes: z.number().nullable(),
+  distanceMethod: z.string(),
+  positionAt: nullableString,
+  packagesOnRoute: z.number().int(),
+  capacityLeft: z.number().int()
+});
+export type DriverSuggestion = z.infer<typeof DriverSuggestionSchema>;
+export const DriverSuggestionsSchema = z.object({ shipmentId: z.string(), drivers: z.array(DriverSuggestionSchema), canAssign: z.boolean() });
+export type DriverSuggestions = z.infer<typeof DriverSuggestionsSchema>;
+export interface PickupAssignRequest {
+  routeId: string;
+  reason: string;
+}
+export const PickupAssignResultSchema = z.object({
+  shipmentId: z.string(),
+  routeId: z.string(),
+  routeName: nullableString,
+  driverId: nullableString,
+  status: z.string()
+});
+export type PickupAssignResult = z.infer<typeof PickupAssignResultSchema>;
+export const PickupAssignmentSchema = z.object({
+  id: z.string(),
+  shipmentId: z.string(),
+  routeId: z.string(),
+  driverId: nullableString,
+  mode: z.enum(['AUTO_NEAREST', 'DISPATCH_OVERRIDE']),
+  reason: nullableString,
+  previousRouteId: nullableString,
+  straightMiles: z.number().nullable(),
+  roadMiles: z.number().nullable(),
+  distanceMethod: nullableString,
+  actor: nullableString,
+  createdAt: nullableString
+});
+export type PickupAssignment = z.infer<typeof PickupAssignmentSchema>;
+export const PickupAssignmentListSchema = z.object({ items: z.array(PickupAssignmentSchema) });
+export type PickupAssignmentList = z.infer<typeof PickupAssignmentListSchema>;
+export const StaffPickupWindowSchema = z.object({
+  day: z.enum(['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']),
+  opens: z.string(),
+  closes: z.string()
+});
+export const ShipFromLocationSchema = z.object({
+  id: z.string(),
+  orgId: z.string(),
+  label: z.string(),
+  line1: z.string(),
+  line2: z.string(),
+  city: z.string(),
+  state: z.string(),
+  postalCode: z.string(),
+  country: z.string(),
+  position: z.object({ lat: z.number(), lng: z.number(), precision: z.enum(['ADDRESS', 'ZIP', 'POINT']) }).nullable(),
+  pickupEnabled: z.boolean(),
+  pickupHours: z.array(StaffPickupWindowSchema),
+  zoneName: nullableString
+});
+export type ShipFromLocation = z.infer<typeof ShipFromLocationSchema>;

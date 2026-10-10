@@ -36,6 +36,11 @@ export function createDriverApi(tokens: TokenSource, network: Fetch = (r) => fet
     },
     routes: async () => (await fulfilment<Array<F['schemas']['Route']>>('/v1/driver/routes')).map(mapRoute),
     sync: (deviceId: string, events: QueuedEvent[]) => fulfilment<SyncResult>('/v1/driver/sync', { method: 'POST', body: { deviceId, events: events.map(toWire) } }),
+    /** S255: last known position for nearest-driver pickup offers (foreground only, throttled by lib/locationPings). */
+    location: (deviceId: string, fix: { lat: number; lon: number; accuracyM: number | null; at: number }) => {
+      const body: F['schemas']['DriverLocationPing'] = { deviceId, lat: fix.lat, lon: fix.lon, capturedAt: new Date(fix.at).toISOString(), ...(fix.accuracyM !== null ? { accuracyM: fix.accuracyM } : {}) };
+      return fulfilment<F['schemas']['DriverPosition']>('/v1/driver/location', { method: 'POST', body });
+    },
     sos: (deviceId: string, event: QueuedEvent) => fulfilment<EventResult>('/v1/driver/sos', { method: 'POST', body: { deviceId, event: toWire(event) } }),
     /** media-service direct upload: request → PUT the file → complete. Returns the asset id. */
     async uploadPhoto(localUri: string, purpose: 'proof-photo'): Promise<string> {

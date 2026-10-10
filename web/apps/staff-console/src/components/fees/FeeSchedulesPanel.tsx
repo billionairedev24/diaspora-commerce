@@ -1,6 +1,6 @@
 'use client';
 
-import { type FeeScheduleStatus, type FeeScheduleView, formatBps, type RecordTone, staffKeys, staffQueries } from '@afrotransact/api-client';
+import { type FeeScheduleStatus, type FeeScheduleView, formatBps, type RecordTone, staffKeys, staffQueries, tariffSummary } from '@afrotransact/api-client';
 import { Button, Dialog, Field, fieldStyles, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type FormEvent, useState } from 'react';
@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/Card';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, money } from '@/lib/format';
 
@@ -71,6 +72,8 @@ function CancelDialog({ schedule, onOpenChange }: { schedule: FeeScheduleView | 
 }
 
 function CurrentSchedule({ s }: { s: FeeScheduleView }) {
+  const t = useT();
+  const dp = s.deliveryPricing;
   return (
     <Card title={`In force: v${s.version}`} actions={<span className="text-xs text-muted">since {dateTime(s.effectiveFrom)}</span>}>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,180px),1fr))] gap-3">
@@ -98,6 +101,11 @@ function CurrentSchedule({ s }: { s: FeeScheduleView }) {
           Overrides: {s.overrides.map((o) => `${o.orgName ?? o.orgId} (${o.categoryLabel}) ${formatBps(o.commissionBps)}`).join(' · ')}
         </p>
       ) : null}
+      <p className="m-0 text-sm" data-testid="current-delivery-pricing">
+        {dp?.enabled
+          ? t('st.delivery.current', { customer: tariffSummary(dp.customerCharge), seller: tariffSummary(dp.sellerFee), miles: dp.maxRadiusMiles })
+          : t('st.delivery.currentOff')}
+      </p>
     </Card>
   );
 }

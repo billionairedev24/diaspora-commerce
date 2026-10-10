@@ -35,6 +35,8 @@ type Services struct {
 	SellerTeam      app.SellerTeamService
 	ProviderHub     app.ProviderHubService
 	SellerShipFrom  app.SellerShipFromService
+	// SellerOffers is the fulfilment choice of offers (S255); its routes are registered when set.
+	SellerOffers app.SellerOffersService
 	// Storefront account, checkout payment, services, Lola (handlers_shopper.go); routes are registered when set.
 	Shopper ShopperServices
 	// Staff console (handlers_staff.go, contracts/openapi/gateway-bff-staff.yaml); routes are registered when set.

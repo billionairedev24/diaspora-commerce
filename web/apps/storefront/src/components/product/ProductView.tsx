@@ -172,7 +172,11 @@ export function ProductView({ atin }: { atin: string }) {
                     <OfferCartControl offer={o} title={p.title} label={`${t('card.addToCart')}: ${o.seller.name}`} />
                   </span>
                   <span className={styles.offerMeta}>
-                    {t('pdp.offerMeta', { seller: o.seller.name, fulfilment: o.fulfilment === 'AFROTRANSACT' ? t('search.fulfilled') : 'Ships from seller', eta: o.delivery.label })}
+                    {t('pdp.offerMeta', {
+                      seller: o.seller.name,
+                      fulfilment: o.fulfilment === 'AFROTRANSACT' ? t('search.fulfilled') : o.fulfilment === 'AFROTRANSACT_DELIVERY' ? t('ld.offerFulfilment', { city: o.seller.city }) : 'Ships from seller',
+                      eta: o.delivery.label
+                    })}
                   </span>
                 </div>
               ))}
@@ -183,11 +187,21 @@ export function ProductView({ atin }: { atin: string }) {
           {bb ? (
             <>
               <Price amountMinor={bb.priceMinor} size="lg" locale={fmt.tag} />
-              <FulfilmentBadge fulfilment={bb.fulfilment} shipsFrom={bb.seller.city} />
-              <p className={styles.promise}>
-                {bb.delivery.free ? 'FREE delivery' : `${fmt.money(bb.delivery.feeMinor)} delivery`} <strong>{bb.delivery.label}</strong>
-                {bb.delivery.cutoff ? `. ${bb.delivery.cutoff}` : '.'}
-              </p>
+              <FulfilmentBadge
+                fulfilment={bb.fulfilment}
+                shipsFrom={bb.seller.city}
+                localDeliveryLabel={(city) => (city ? t('ld.badge', { city }) : t('ld.badgeNoCity'))}
+              />
+              {bb.fulfilment === 'AFROTRANSACT_DELIVERY' ? (
+                <p className={styles.promise} data-testid="local-delivery-promise">
+                  <strong>{bb.delivery.label}</strong>. {t('ld.pdpPromise', { city: bb.seller.city })}
+                </p>
+              ) : (
+                <p className={styles.promise}>
+                  {bb.delivery.free ? 'FREE delivery' : `${fmt.money(bb.delivery.feeMinor)} delivery`} <strong>{bb.delivery.label}</strong>
+                  {bb.delivery.cutoff ? `. ${bb.delivery.cutoff}` : '.'}
+                </p>
+              )}
               {bb.delivery.expressLabel && (
                 <p className={styles.express}>
                   {t('pdp.orFastest')} <strong>{bb.delivery.expressLabel}</strong>

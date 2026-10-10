@@ -27,10 +27,13 @@ type ShopperDeps struct {
 	Pages    port.PublishedPagesClient
 	Lola     port.LolaClient
 	Delivery port.DeliveryFactsClient
-	Identity port.IdentityClient
-	Checkout CheckoutService
-	Carts    CartService
-	Location LocationService
+	// LocalDelivery and Offers price AfroTransact Delivery from the seller's store on the checkout page (S255; optional).
+	LocalDelivery port.LocalDeliveryClient
+	Offers        port.StorefrontOffersClient
+	Identity      port.IdentityClient
+	Checkout      CheckoutService
+	Carts         CartService
+	Location      LocationService
 	// PublishableKey is the Stripe publishable key handed to Stripe.js / PaymentSheet.
 	PublishableKey string
 	// IdentityPublicURL is where the browser reaches identity (hosted passkey registration page).
@@ -317,6 +320,9 @@ func (s *customerOrdersServiceImpl) Detail(ctx context.Context, c *domain.Caller
 			PromisedBy: optStr(sh.PromisedBy), DeliveredAt: optStr(sh.DeliveredAt), DeliveryCode: optStr(sh.HandoverCode),
 			Lines: []domain.OrderLineView{}, Timeline: timeline(sh.Timeline), Returnable: sh.Returnable,
 			ReturnWindowEndsAt: optStr(sh.ReturnWindowEndsAt), ProblemReportOnly: sh.ProblemReportOnly}
+		if ld := sh.LocalDelivery; ld != nil {
+			d.LocalDelivery = &domain.OrderLocalDelivery{RoadMiles: ld.RoadMiles, DurationMinutes: ld.DurationMinutes, ChargeMinor: ld.CustomerChargeMinor}
+		}
 		for _, l := range sh.Lines {
 			d.Lines = append(d.Lines, domain.OrderLineView{LineID: firstNonEmpty(l.ID, l.VariantATIN), ATIN: l.VariantATIN, Title: l.Title,
 				ImageURL: optStr(l.ImageURL), Quantity: l.Quantity, UnitPriceMinor: l.UnitPriceMinor, ItemsMinor: l.ItemsMinor})

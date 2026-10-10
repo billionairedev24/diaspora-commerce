@@ -59,6 +59,18 @@ export function OrderDetailView({ orderNumber }: { orderNumber: string }) {
                     {s.label} · {t('ord.soldBy', { seller: s.sellerName })}
                   </p>
                   {s.promisedBy && !s.deliveredAt && <p className={pageStyles.success}>{t('ord.arriving', { date: day(fmt.tag, s.promisedBy) ?? '' })}</p>}
+                  {s.localDelivery && (
+                    <p className={pageStyles.muted} data-testid="order-local-delivery">
+                      <Truck aria-hidden />{' '}
+                      {s.localDelivery.roadMiles !== null && s.localDelivery.durationMinutes !== null
+                        ? t('ld.orderInfo', {
+                            miles: fmt.number(s.localDelivery.roadMiles, { maximumFractionDigits: 1 }),
+                            minutes: Math.round(s.localDelivery.durationMinutes),
+                            amount: fmt.money(s.localDelivery.chargeMinor)
+                          })
+                        : t('ld.orderInfoShort', { amount: fmt.money(s.localDelivery.chargeMinor) })}
+                    </p>
+                  )}
                   {s.carrier && s.trackingNumber && (
                     <p className={pageStyles.muted}>
                       <Truck aria-hidden /> {t('ord.trackingNo', { carrier: s.carrier.toUpperCase(), number: s.trackingNumber })}

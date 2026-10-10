@@ -1958,7 +1958,9 @@ components:
             Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, PRODUCT_NOT_FOUND, OFFER_NOT_FOUND,
             LINE_NOT_FOUND, SAVED_NOT_FOUND, STOCK_LIMIT, OUT_OF_STOCK, INVALID_CREDENTIALS, INVALID_CODE, CHALLENGE_EXPIRED,
             EMAIL_TAKEN, WEAK_PASSWORD, PROVIDER_DISABLED, ZIP_NOT_SERVICEABLE, PAYMENT_DECLINED, IDEMPOTENCY_CONFLICT,
-            STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING.
+            STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; AfroTransact Delivery from the seller's store
+            (S255, 422 on place order, `errors.deliverySelections` explains it): DELIVERY_OUT_OF_RANGE, DELIVERY_UNAVAILABLE,
+            DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED.
         errors:
           type: object
           additionalProperties: {type: string}
@@ -1979,8 +1981,10 @@ components:
       description: AfroTransact product identifier (one per product and per variant).
     Fulfilment:
       type: string
-      enum: [AFROTRANSACT, SELLER]
-      description: AFROTRANSACT = "Fulfilled by AfroTransact"; SELLER = "Ships from seller".
+      enum: [AFROTRANSACT, SELLER, AFROTRANSACT_DELIVERY]
+      description: AFROTRANSACT = "Fulfilled by AfroTransact"; SELLER = "Ships from seller"; AFROTRANSACT_DELIVERY = "AfroTransact
+        Delivery from <store city>" (the seller packs, an AfroTransact driver collects at the seller's store and delivers;
+        priced by road distance at checkout, S255). The offer's `seller.city` is the store city.
     SellerKind:
       type: string
       enum: [PLATFORM, SELLER]
@@ -2760,6 +2764,8 @@ components:
               - $ref: '#/components/schemas/CartPackage'
               - type: object
                 properties:
+                  localDelivery:
+                    $ref: '#/components/schemas/CheckoutLocalDelivery'
                   pickupPoints:
                     type: array
                     items:
@@ -2782,6 +2788,34 @@ components:
         currency: {type: string}
         sellerCount: {type: integer}
         publishableKey: {type: string, description: Stripe publishable key for Stripe.js (Payment / Express Checkout Elements)}
+    CheckoutLocalDelivery:
+      type: object
+      description: |
+        AfroTransact Delivery from the seller's store (S255), quoted for the chosen address: geo road distance from the
+        store's pickup location, payments' delivery pricing. Present on AFROTRANSACT_DELIVERY packages only. When
+        `available` is false the package can't be delivered to this address: remove it or choose another address.
+      required: [available, chargeMinor, roadMiles, durationMinutes, fromCity, unavailableReason, message, maxRadiusMiles, offerIds]
+      properties:
+        available: {type: boolean}
+        chargeMinor: {type: [integer, 'null'], description: The delivery charge (the package's shipping); null when not available or not quoted}
+        roadMiles: {type: [number, 'null']}
+        durationMinutes: {type: [number, 'null']}
+        fromCity: {type: string, examples: ['Houston, TX']}
+        unavailableReason:
+          type: [string, 'null']
+          enum: [OUT_OF_RANGE, UNAVAILABLE, PICKUP_UNAVAILABLE, ADDRESS_NOT_LOCATED, QUOTE_UNAVAILABLE, null]
+          description: 'QUOTE_UNAVAILABLE: geo or payments could not answer now; the price is set when you place the order'
+        message: {type: [string, 'null'], examples: ["Ama's Market is 31 miles from Houston, TX: too far for AfroTransact Delivery."]}
+        maxRadiusMiles: {type: [number, 'null']}
+        offerIds: {type: array, items: {type: string}, description: The package's offers (remove them to check out without this package)}
+    OrderLocalDelivery:
+      type: object
+      description: AfroTransact Delivery from the seller's store (S255), as charged at checkout
+      required: [roadMiles, durationMinutes, chargeMinor]
+      properties:
+        roadMiles: {type: [number, 'null']}
+        durationMinutes: {type: [number, 'null']}
+        chargeMinor: {type: integer}
     PlaceOrderRequest:
       type: object
       required: [addressId, deliverySelections]
@@ -2949,6 +2983,9 @@ components:
               returnable: {type: boolean, description: A return can be started (show "Return items")}
               returnWindowEndsAt: {type: [string, 'null'], format: date-time}
               problemReportOnly: {type: boolean, description: Only "Report a problem" is possible}
+              localDelivery:
+                oneOf: [{$ref: '#/components/schemas/OrderLocalDelivery'}, {type: 'null'}]
+                description: AfroTransact Delivery from the seller's store (S255); null for other shipments
         payment: {$ref: '#/components/schemas/OrderPayment'}
     OrderTracking:
       type: object

@@ -32,6 +32,11 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("PUT /v1/seller/ship-from-addresses/{addressId}", h.shipFromUpdate)
 	route("POST /v1/seller/ship-from-addresses/{addressId}/default", h.shipFromDefault)
 	route("DELETE /v1/seller/ship-from-addresses/{addressId}", h.shipFromDelete)
+	route("PUT /v1/seller/ship-from-addresses/{addressId}/afrotransact-pickup", h.shipFromPickup)
+	if h.s.SellerOffers != nil {
+		route("GET /v1/seller/offers", h.sellerOffers)
+		route("PUT /v1/seller/offers/{offerId}/fulfilment", h.offerFulfilment)
+	}
 	// Listings, builder, stock
 	route("GET /v1/seller/listings", h.listings)
 	route("POST /v1/seller/listings/{productId}/status", h.listingStatus)
@@ -566,4 +571,31 @@ func (h *handlersImpl) shipFromDefault(w http.ResponseWriter, r *http.Request) {
 func (h *handlersImpl) shipFromDelete(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerShipFrom.Delete(r.Context(), callerFrom(r.Context()), r.PathValue("addressId"))
 	h.reply(w, r, http.StatusOK, map[string]any{"items": v}, err)
+}
+
+func (h *handlersImpl) shipFromPickup(w http.ResponseWriter, r *http.Request) {
+	var b domain.AfrotransactPickupRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerShipFrom.SetPickup(r.Context(), callerFrom(r.Context()), r.PathValue("addressId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- offers: fulfilment choice (S255)
+
+func (h *handlersImpl) sellerOffers(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerOffers.List(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("productId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) offerFulfilment(w http.ResponseWriter, r *http.Request) {
+	var b domain.OfferFulfilmentRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.SellerOffers.SetFulfilment(r.Context(), callerFrom(r.Context()), r.PathValue("offerId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
 }

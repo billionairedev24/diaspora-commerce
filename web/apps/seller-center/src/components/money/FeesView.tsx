@@ -8,6 +8,7 @@ import { ModulePage } from '@/components/ui/ModulePage';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { money, shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
@@ -24,11 +25,21 @@ const SOURCE: Record<SellerFeeCategory['source'], string> = {
 };
 
 function FeeTiles({ v }: { v: SellerFeeVersion }) {
+  const t = useT();
+  const df = v.deliveryFee;
+  const delivery: [string, string, string] | null = df
+    ? [
+        t('sc.fees.delivery'),
+        df.enabled ? df.summary : t('sc.fees.deliveryOff'),
+        df.enabled ? `${t('sc.fees.deliveryDetail', { miles: df.maxRadiusMiles })} · ${t(`sc.fees.deliverySource.${df.source}`)}` : ''
+      ]
+    : null;
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,200px),1fr))] gap-3">
       {[
         ['Card fee estimate', `${formatBps(v.cardPctBps)} + ${money(v.cardFixedMinor)}`, 'Per charge, until Stripe reports the actual fee'],
         ['FBA fee', `${money(v.fbaPerUnitMinor)} / unit`, 'Pick, pack and ship for fulfilled-by-AfroTransact orders'],
+        ...(delivery ? [delivery] : []),
         ['Other categories', formatBps(v.defaultCommissionBps), 'Commission where no category rate applies'],
         ['Refunds', v.reverseCommissionOnRefund ? 'Commission returned' : 'Commission kept', 'On the refunded amount']
       ].map(([label, value, detail]) => (

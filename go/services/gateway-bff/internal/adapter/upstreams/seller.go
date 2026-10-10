@@ -230,3 +230,10 @@ func (s *sellerServiceImpl) DeleteShipFrom(ctx context.Context, bearer, orgID, i
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodDelete, Path: shipFromPath(orgID, "/"+url.PathEscape(id)), Bearer: bearer}, &out)
 	return out, err
 }
+
+func (s *sellerServiceImpl) SetPickup(ctx context.Context, bearer, orgID, id string, in port.PickupRequest) (port.ShipFromAddress, error) {
+	var out port.ShipFromAddress
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPut, Path: shipFromPath(orgID, "/"+url.PathEscape(id)+"/afrotransact-pickup"),
+		Bearer: bearer, JSON: in}, &out)
+	return out, err
+}

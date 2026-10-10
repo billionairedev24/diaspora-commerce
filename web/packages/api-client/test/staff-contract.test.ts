@@ -7,6 +7,8 @@ import {
   createStaffApiClient,
   type Customer360,
   type CustomerSearch,
+  type DeliveryQuote,
+  type DriverSuggestions,
   type ExportJob,
   type FeeOrgSearch,
   type FeeScheduleView,
@@ -14,9 +16,14 @@ import {
   formatBps,
   isApiError,
   parsePercent,
+  type PickupAssignmentList,
+  type PickupAssignResult,
+  type PickupList,
+  quoteTariff,
   type RecordDetail,
   type ResourceKey,
   type ResourcePage,
+  type ShipFromLocation,
   type StaffDashboard,
   type StaffSession,
   type SupportActionResult
@@ -50,6 +57,12 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
     expectTypeOf<FeesOverview>().toExtend<S['FeesOverview']>();
     expectTypeOf<FeeScheduleView>().toExtend<S['FeeScheduleView']>();
     expectTypeOf<FeeOrgSearch>().toExtend<S['FeeOrgSearch']>();
+    expectTypeOf<DeliveryQuote>().toExtend<S['DeliveryQuote']>();
+    expectTypeOf<PickupList>().toExtend<S['PickupList']>();
+    expectTypeOf<DriverSuggestions>().toExtend<S['DriverSuggestions']>();
+    expectTypeOf<PickupAssignResult>().toExtend<S['PickupAssignResult']>();
+    expectTypeOf<PickupAssignmentList>().toExtend<S['PickupAssignmentList']>();
+    expectTypeOf<ShipFromLocation>().toExtend<S['ShipFromLocation']>();
   });
 
   it('generated file carries the do-not-edit banner', () => {
@@ -214,5 +227,64 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     const cancelled = await api.cancelFeeSchedule(created.id, 'Created by mistake');
     expect(cancelled.status).toBe('CANCELLED');
     await expect(api.cancelFeeSchedule('fee-2', 'Already in force')).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
+  });
+
+  it('edits AfroTransact Delivery pricing: validation, carried over when omitted, live quote (S255)', async () => {
+    const api = client('platform.finance');
+    const fees = await api.getFees();
+    const base = fees.base;
+    const dp = base?.deliveryPricing;
+    if (!base || !dp) throw new Error('no delivery pricing on the base version');
+    expect(dp.customerCharge).toMatchObject({ mode: 'DISTANCE', baseMinor: 499, perMileMinor: 85, minMinor: 599, maxMinor: 2499 });
+    expect(dp.sellerOverrides[0]).toMatchObject({ orgName: 'Kente Naturals' });
+    expect(quoteTariff(dp.customerCharge, 7.4)).toBe(1128);
+    const draft = {
+      effectiveFrom: new Date(new Date(fees.minEffectiveFrom).getTime() + 86_400_000).toISOString(),
+      immediate: false,
+      defaultCommissionBps: base.defaultCommissionBps,
+      categoryRates: base.categoryRates.map((c) => ({ category: c.category, commissionBps: c.commissionBps })),
+      overrides: [],
+      cardPctBps: base.cardPctBps,
+      cardFixedMinor: base.cardFixedMinor,
+      fbaPerUnitMinor: base.fbaPerUnitMinor,
+      reverseCommissionOnRefund: true,
+      note: 'Delivery radius to 30 miles'
+    };
+    const tooFar = { enabled: true, maxRadiusMiles: 250, customerCharge: dp.customerCharge, sellerFee: dp.sellerFee, sellerOverrides: [{ orgId: fees.retail.orgId, sellerFee: dp.sellerFee ?? dp.customerCharge ?? { mode: 'FLAT' as const, flatPerPackageMinor: 0, baseMinor: null, perMileMinor: null, bands: [], minMinor: null, maxMinor: null } }] };
+    await expect(api.createFeeSchedule({ ...draft, deliveryPricing: tooFar })).rejects.toSatisfy(
+      (e) => isApiError(e) && e.status === 422 && !!e.fieldErrors['deliveryPricing.maxRadiusMiles'] && !!e.fieldErrors['deliveryPricing.sellerOverrides.0.orgId']
+    );
+    const carried = await api.createFeeSchedule(draft);
+    expect(carried.deliveryPricing).toEqual(dp);
+    const wider = await api.createFeeSchedule({ ...draft, effectiveFrom: new Date(new Date(carried.effectiveFrom).getTime() + 86_400_000).toISOString(),
+      deliveryPricing: { ...dp, maxRadiusMiles: 30, sellerOverrides: [] } });
+    expect(wider.deliveryPricing).toMatchObject({ maxRadiusMiles: 30, sellerOverrides: [] });
+    const quote = await api.quoteDelivery({ sellerOrgId: 'org-kente', distanceMiles: 7.4, packages: 2 });
+    expect(quote).toMatchObject({ available: true, customerChargeMinor: 1128, sellerFeeMinor: 300, sellerFeeSource: 'OVERRIDE' });
+    expect((await api.quoteDelivery({ sellerOrgId: 'org-ade', distanceMiles: 31 })).unavailableReason).toBe('BEYOND_MAX_RADIUS');
+  });
+
+  it('suggests the nearest drivers for a seller pickup and assigns with a reason (S255)', async () => {
+    const support = client('platform.customer_support');
+    const viewOnly = await support.listPickups();
+    expect(viewOnly.items.length).toBeGreaterThan(0);
+    const dispatcher = client('platform.dispatcher');
+    const list = await dispatcher.listPickups();
+    expect(list.canAssign).toBe(true);
+    const pickup = list.items[0];
+    if (!pickup) throw new Error('no pickup');
+    const s = await dispatcher.getPickupSuggestions(pickup.shipmentId);
+    expect(s.drivers).toHaveLength(5);
+    expect(s.drivers[0]).toMatchObject({ driverId: 'drv-tunde', roadMiles: 2.6, distanceMethod: 'ROAD_OSRM' });
+    expect(s.drivers[4]).toMatchObject({ roadMiles: null, distanceMethod: 'STRAIGHT_LINE' });
+    const second = s.drivers[1];
+    if (!second) throw new Error('no second driver');
+    await expect(dispatcher.assignPickup(pickup.shipmentId, { routeId: second.routeId, reason: 'no' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422 && !!e.fieldErrors.reason);
+    const res = await dispatcher.assignPickup(pickup.shipmentId, { routeId: second.routeId, reason: 'Closer driver is at capacity' });
+    expect(res).toMatchObject({ routeId: second.routeId, driverId: second.driverId, status: 'ASSIGNED' });
+    const history = await dispatcher.getPickupAssignments(pickup.shipmentId);
+    expect(history.items[0]).toMatchObject({ mode: 'DISPATCH_OVERRIDE', reason: 'Closer driver is at capacity' });
+    expect((await dispatcher.listPickups()).items.some((p) => p.shipmentId === pickup.shipmentId)).toBe(false);
+    expect((await dispatcher.getShipFromLocation('loc-mamatee-1')).pickupEnabled).toBe(true);
   });
 });

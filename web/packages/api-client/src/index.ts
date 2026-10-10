@@ -1,6 +1,6 @@
 export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike, uploadResume } from './client';
 export { ApiError, isApiError } from './errors';
-export { applyBps, bpsToPercentText, formatBps, parsePercent } from './fees';
+export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
 export { type RequestOptions } from './http';
 export { readSse, type SseMessage, streamLola, toLolaEvent } from './lola';
 export { formatMoney, percentOff, splitMoney } from './money';
@@ -28,7 +28,7 @@ export { createSellerApiClient,type ListingsQuery, type SellerApiClient, type Se
 export { type SlotQuery } from './shopper-client';
 export { createStaffApiClient, type ResourceQuery, type StaffApiClient } from './staff-client';
 export { US_STATES } from './us-states';
-export { ALL_CATEGORIES, type FeeDraftRules, normalizeFeeCategory, validateFeeDraft } from './validation/fee-draft';
+export { ALL_CATEGORIES, type FeeDraftRules, normalizeFeeCategory, validateDeliveryDraft, validateFeeDraft } from './validation/fee-draft';
 export { evaluatePassword, isPasswordAcceptable, PASSWORD_MIN_LENGTH, type PasswordContext, type PasswordRule } from './validation/password';
 export { type CountryCode, type CountryOption, countryOptions, flagOf, formatPhoneAsYouType, isCountryCode, isValidMobile, toE164 } from './validation/phone';
 export { validateStaffForm } from './validation/staff-form';

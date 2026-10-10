@@ -1610,7 +1610,9 @@ export interface components {
              * @description Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, PRODUCT_NOT_FOUND, OFFER_NOT_FOUND,
              *     LINE_NOT_FOUND, SAVED_NOT_FOUND, STOCK_LIMIT, OUT_OF_STOCK, INVALID_CREDENTIALS, INVALID_CODE, CHALLENGE_EXPIRED,
              *     EMAIL_TAKEN, WEAK_PASSWORD, PROVIDER_DISABLED, ZIP_NOT_SERVICEABLE, PAYMENT_DECLINED, IDEMPOTENCY_CONFLICT,
-             *     STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING.
+             *     STOCK_CHANGED, RATE_LIMITED, UPSTREAM_UNAVAILABLE, PHONE_MISSING; AfroTransact Delivery from the seller's store
+             *     (S255, 422 on place order, `errors.deliverySelections` explains it): DELIVERY_OUT_OF_RANGE, DELIVERY_UNAVAILABLE,
+             *     DELIVERY_PICKUP_UNAVAILABLE, DELIVERY_ADDRESS_NOT_LOCATED.
              */
             code?: string;
             errors?: {
@@ -1628,10 +1630,10 @@ export interface components {
         /** @description AfroTransact product identifier (one per product and per variant). */
         Atin: string;
         /**
-         * @description AFROTRANSACT = "Fulfilled by AfroTransact"; SELLER = "Ships from seller".
+         * @description AFROTRANSACT = "Fulfilled by AfroTransact"; SELLER = "Ships from seller"; AFROTRANSACT_DELIVERY = "AfroTransact Delivery from <store city>" (the seller packs, an AfroTransact driver collects at the seller's store and delivers; priced by road distance at checkout, S255). The offer's `seller.city` is the store city.
          * @enum {string}
          */
-        Fulfilment: "AFROTRANSACT" | "SELLER";
+        Fulfilment: "AFROTRANSACT" | "SELLER" | "AFROTRANSACT_DELIVERY";
         /**
          * @description PLATFORM = sold by AfroTransact Retail (first party); SELLER = independent seller.
          * @enum {string}
@@ -2310,6 +2312,7 @@ export interface components {
         };
         CheckoutSummary: {
             packages: (components["schemas"]["CartPackage"] & {
+                localDelivery?: components["schemas"]["CheckoutLocalDelivery"];
                 pickupPoints?: {
                     id: string;
                     name: string;
@@ -2332,6 +2335,36 @@ export interface components {
             sellerCount: number;
             /** @description Stripe publishable key for Stripe.js (Payment / Express Checkout Elements) */
             publishableKey?: string;
+        };
+        /**
+         * @description AfroTransact Delivery from the seller's store (S255), quoted for the chosen address: geo road distance from the
+         *     store's pickup location, payments' delivery pricing. Present on AFROTRANSACT_DELIVERY packages only. When
+         *     `available` is false the package can't be delivered to this address: remove it or choose another address.
+         */
+        CheckoutLocalDelivery: {
+            available: boolean;
+            /** @description The delivery charge (the package's shipping); null when not available or not quoted */
+            chargeMinor: number | null;
+            roadMiles: number | null;
+            durationMinutes: number | null;
+            /** @example Houston, TX */
+            fromCity: string;
+            /**
+             * @description QUOTE_UNAVAILABLE: geo or payments could not answer now; the price is set when you place the order
+             * @enum {string|null}
+             */
+            unavailableReason: "OUT_OF_RANGE" | "UNAVAILABLE" | "PICKUP_UNAVAILABLE" | "ADDRESS_NOT_LOCATED" | "QUOTE_UNAVAILABLE" | null;
+            /** @example Ama's Market is 31 miles from Houston, TX: too far for AfroTransact Delivery. */
+            message: string | null;
+            maxRadiusMiles: number | null;
+            /** @description The package's offers (remove them to check out without this package) */
+            offerIds: string[];
+        };
+        /** @description AfroTransact Delivery from the seller's store (S255), as charged at checkout */
+        OrderLocalDelivery: {
+            roadMiles: number | null;
+            durationMinutes: number | null;
+            chargeMinor: number;
         };
         PlaceOrderRequest: {
             addressId: string;
@@ -2486,6 +2519,8 @@ export interface components {
                 returnWindowEndsAt?: string | null;
                 /** @description Only "Report a problem" is possible */
                 problemReportOnly?: boolean;
+                /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
+                localDelivery?: components["schemas"]["OrderLocalDelivery"] | null;
             }[];
             payment?: components["schemas"]["OrderPayment"];
         };

@@ -25,7 +25,7 @@ export interface ProductCardData {
   sellerName: string;
   sellerKind: 'PLATFORM' | 'SELLER';
   sellerCity: string;
-  fulfilment: 'AFROTRANSACT' | 'SELLER';
+  fulfilment: 'AFROTRANSACT' | 'SELLER' | 'AFROTRANSACT_DELIVERY';
   availableQty: number;
   inStock: boolean;
   lowStock: boolean;

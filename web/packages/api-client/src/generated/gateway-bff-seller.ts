@@ -272,6 +272,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/ship-from-addresses/{addressId}/afrotransact-pickup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Turn "AfroTransact picks up from my store" on or off for a ship-from address (S255)
+         * @description seller `PUT /v1/orgs/{orgId}/ship-from-addresses/{id}/afrotransact-pickup` (Orders edit). Enabling needs an approved
+         *     organisation (409 `PICKUP_ORG_NOT_APPROVED`), 1–14 non-overlapping pickup windows (422 `PICKUP_INVALID_HOURS`,
+         *     `errors.hours`), a street-level geocoded position (422 `PICKUP_NOT_GEOCODED`) and a location inside or within 25
+         *     miles of an AfroTransact delivery zone (422 `PICKUP_OUTSIDE_DELIVERY_AREA`). Geo down → 503
+         *     `UPSTREAM_UNAVAILABLE`. Disabling keeps the hours for next time. Optimistic: 409 `CONFLICT` when the address changed.
+         */
+        put: operations["setAfrotransactPickup"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/offers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The organisation's offers of a product (fulfilment, pickup location, price, stock)
+         * @description offers `GET /v1/offers` for the active organisation (Listings view), filtered by catalog product id.
+         */
+        get: operations["listSellerOffers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/offers/{offerId}/fulfilment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Choose who fulfils an offer: I ship it, Fulfilled by AfroTransact (FBA) or AfroTransact picks up from my store
+         * @description offers `PATCH /v1/offers/{id}` `{fulfilment, shipFrom: {locationId}}` (Listings edit). `AFROTRANSACT_DELIVERY` needs
+         *     `shipFromLocationId`: one of the organisation's ship-from addresses with AfroTransact pickup enabled (422,
+         *     `errors.shipFromLocationId`). 409 `CONFLICT` when the offer changed meanwhile.
+         */
+        put: operations["setOfferFulfilment"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/seller/listings": {
         parameters: {
             query?: never;
@@ -982,7 +1048,8 @@ export interface components {
              * @description Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, NOT_APPROVED,
              *     NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR; team: LAST_OWNER, INVALID_ROLE,
              *     OWNER_ONLY, OWN_ROLE, ALREADY_MEMBER, INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED,
-             *     INVITATION_EMAIL_MISMATCH.
+             *     INVITATION_EMAIL_MISMATCH; AfroTransact pickup (S255): PICKUP_ORG_NOT_APPROVED, PICKUP_INVALID_HOURS,
+             *     PICKUP_NOT_GEOCODED, PICKUP_OUTSIDE_DELIVERY_AREA.
              */
             code?: string;
             errors?: {
@@ -1128,8 +1195,11 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
             todo: components["schemas"]["TodoItem"][];
         };
-        /** @enum {string} */
-        Fulfilment: "SELLER" | "AFROTRANSACT";
+        /**
+         * @description SELLER = I ship it; AFROTRANSACT = Fulfilled by AfroTransact (FBA); AFROTRANSACT_DELIVERY = AfroTransact picks up from my store (S255)
+         * @enum {string}
+         */
+        Fulfilment: "SELLER" | "AFROTRANSACT" | "AFROTRANSACT_DELIVERY";
         /** @enum {string} */
         ShipmentStatus: "PENDING_PAYMENT" | "PLACED" | "CONFIRMED" | "PACKED" | "READY" | "PICKED_UP" | "IN_TRANSIT" | "OUT_FOR_DELIVERY" | "DELIVERY_FAILED" | "DELIVERED" | "RETURNED" | "CANCELLED";
         /**
@@ -1178,6 +1248,97 @@ export interface components {
             isDefault: boolean;
             /** Format: int64 */
             version: number;
+            /** @description Where geo-service located the address; null until it could (geocoding failed or geo was down) */
+            position: components["schemas"]["GeoPosition"] | null;
+            afrotransactPickup: components["schemas"]["AfrotransactPickup"];
+        };
+        GeoPosition: {
+            lat: number;
+            lng: number;
+            /**
+             * @description ADDRESS = street level; ZIP = ZIP centroid only (not enough for a driver)
+             * @enum {string}
+             */
+            precision: "ADDRESS" | "ZIP" | "POINT";
+            /** Format: date-time */
+            geocodedAt: string | null;
+        };
+        PickupWindow: {
+            /** @enum {string} */
+            day: "MONDAY" | "TUESDAY" | "WEDNESDAY" | "THURSDAY" | "FRIDAY" | "SATURDAY" | "SUNDAY";
+            /** @description 24-hour local time */
+            opens: string;
+            closes: string;
+        };
+        /** @description AfroTransact Delivery from this address: the seller packs, the nearest AfroTransact driver collects during the pickup hours */
+        AfrotransactPickup: {
+            enabled: boolean;
+            hours: components["schemas"]["PickupWindow"][];
+            /** @description Delivery zone covering (or nearest to) the address */
+            zoneName: string | null;
+            /** Format: date-time */
+            enabledAt: string | null;
+        };
+        AfrotransactPickupRequest: {
+            enabled: boolean;
+            /** @description At least one window to enable */
+            hours: components["schemas"]["PickupWindow"][];
+            /**
+             * Format: int64
+             * @description Version being edited
+             */
+            version?: number | null;
+        };
+        SellerOffer: {
+            offerId: string;
+            /** @description Variant ATIN */
+            atin: string;
+            productId: string;
+            sellerSku: string;
+            condition: string;
+            priceMinor: number;
+            currency: string;
+            fulfilment: components["schemas"]["Fulfilment"];
+            /** @description Seller-declared stock (SELLER and AFROTRANSACT_DELIVERY) */
+            quantity: number;
+            availableQty: number;
+            /** @description Pickup location (AFROTRANSACT_DELIVERY) */
+            shipFromLocationId: string | null;
+            /** @example Houston, TX */
+            shipsFrom: string | null;
+            /** @enum {string} */
+            status: "ACTIVE" | "PAUSED" | "WITHDRAWN";
+            /** Format: int64 */
+            version: number;
+        };
+        SellerOfferList: {
+            items: components["schemas"]["SellerOffer"][];
+        };
+        OfferFulfilmentRequest: {
+            fulfilment: components["schemas"]["Fulfilment"];
+            /** @description Required for AFROTRANSACT_DELIVERY */
+            shipFromLocationId?: string | null;
+        };
+        /** @description AfroTransact Delivery from the seller's store (S255), as quoted at checkout */
+        LocalDelivery: {
+            pickupLocationId: string | null;
+            roadMiles: number | null;
+            durationMinutes: number | null;
+            /** @description What the shopper paid for delivery (AfroTransact keeps it) */
+            customerChargeMinor: number;
+            /** @description The seller delivery fee deducted from the payout */
+            sellerFeeMinor: number;
+        };
+        /** @description The organisation's row of the order's payment split (payments); deductions are positive amounts */
+        OrderEarnings: {
+            itemsMinor: number;
+            shippingMinor: number;
+            commissionMinor: number;
+            fbaFeesMinor: number;
+            /** @description AfroTransact Delivery seller fees */
+            deliveryFeesMinor: number;
+            stripeFeeMinor: number;
+            netMinor: number;
         };
         ShipFromInput: {
             label?: string;
@@ -1230,6 +1391,8 @@ export interface components {
             trackingNumber: string | null;
             nextActions: components["schemas"]["SellerStatusAction"][];
             canBuyLabel: boolean;
+            /** @description AfroTransact Delivery from the seller's store (S255); null for other shipments */
+            localDelivery: components["schemas"]["LocalDelivery"] | null;
             timeline: {
                 status: string;
                 /** Format: date-time */
@@ -1247,6 +1410,8 @@ export interface components {
             shippingAddress: components["schemas"]["PostalAddress"] | null;
             shipments: components["schemas"]["SellerShipment"][];
             totalMinor: number;
+            /** @description Payout breakdown from the order's payment split; null until the payment is split (or when payments can't be read) */
+            earnings: components["schemas"]["OrderEarnings"] | null;
         };
         StatusUpdateRequest: {
             status: components["schemas"]["SellerStatusAction"];
@@ -1966,6 +2131,36 @@ export interface components {
             fbaPerUnitMinor: number;
             /** @description Refunds give back the commission on the refunded amount */
             reverseCommissionOnRefund: boolean;
+            /** @description The seller delivery fee of AfroTransact Delivery from your store (S255); null when the version has no delivery pricing */
+            deliveryFee: components["schemas"]["SellerDeliveryFee"] | null;
+        };
+        SellerDeliveryTariff: {
+            /** @enum {string} */
+            mode: "FLAT" | "DISTANCE";
+            flatPerPackageMinor: number | null;
+            baseMinor: number | null;
+            perMileMinor: number | null;
+            bands: {
+                fromMiles: number;
+                toMiles: number;
+                feeMinor: number;
+            }[];
+            minMinor: number | null;
+            maxMinor: number | null;
+        };
+        SellerDeliveryFee: {
+            /** @description AfroTransact Delivery from seller stores is offered */
+            enabled: boolean;
+            maxRadiusMiles: number;
+            /**
+             * @description OVERRIDE: negotiated for this organisation; RETAIL: never charged
+             * @enum {string}
+             */
+            source: "DEFAULT" | "OVERRIDE" | "RETAIL";
+            /** @description null = no fee */
+            tariff: components["schemas"]["SellerDeliveryTariff"] | null;
+            /** @example $2.00 per package */
+            summary: string;
         };
         SellerFeeChange: {
             field: string;
@@ -2448,6 +2643,96 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+        };
+    };
+    setAfrotransactPickup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                addressId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AfrotransactPickupRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShipFromAddress"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listSellerOffers: {
+        parameters: {
+            query: {
+                productId: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Offers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerOfferList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setOfferFulfilment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                offerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OfferFulfilmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SellerOffer"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
         };
     };
     listListings: {

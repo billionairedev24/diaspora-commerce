@@ -12,9 +12,12 @@ import { DataTable, FilterChips } from '@/components/ui/DataTable';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
+import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { money, shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
+
+import { FulfilmentSheet } from './FulfilmentSheet';
 
 const PAGE_SIZE = 25;
 const FILTERS: { value: ListingStatus | ''; label: string }[] = [
@@ -30,7 +33,9 @@ const FILTERS: { value: ListingStatus | ''; label: string }[] = [
 /** Listings: server-driven table (status, search, pages) with pause/resume and the "Add a product" builder. */
 export function ListingsView() {
   const api = sellerApi();
+  const t = useT();
   const qc = useQueryClient();
+  const [fulfilment, setFulfilment] = useState<ListingRow | null>(null);
   const toast = useToast();
   const { orgId, can } = useSeller();
   const editable = can('listings');
@@ -62,7 +67,19 @@ export function ListingsView() {
       { id: 'sku', header: 'SKU', size: 14, cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku}{row.original.variantCount > 1 ? ` +${row.original.variantCount - 1}` : ''}</span> },
       { id: 'price', header: 'Price', size: 10, cell: ({ row }) => money(row.original.priceMinor, row.original.currency) },
       { id: 'stock', header: 'Stock', size: 8, cell: ({ row }) => <span className={row.original.stock <= 5 ? 'font-semibold text-danger' : undefined}>{row.original.stock}</span> },
-      { id: 'ff', header: 'Fulfilment', size: 12, cell: ({ row }) => (row.original.fulfilment === 'AFROTRANSACT' ? <Badge tone="fulfilled">AfroTransact</Badge> : <Badge tone="seller">You ship</Badge>) },
+      {
+        id: 'ff', header: 'Fulfilment', size: 12,
+        cell: ({ row }) => (
+          <span className="flex flex-col items-start gap-1">
+            <Badge tone={row.original.fulfilment === 'SELLER' ? 'seller' : 'fulfilled'}>{t(`sc.ff.${row.original.fulfilment}`)}</Badge>
+            {row.original.atin ? (
+              <button type="button" className="link-button p-0 text-xs text-link hover:underline" onClick={() => setFulfilment(row.original)} aria-label={t('sc.ff.buttonAria', { title: row.original.title })}>
+                {t('sc.ff.button')}
+              </button>
+            ) : null}
+          </span>
+        )
+      },
       { id: 'status', header: 'Status', size: 12, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.statusLabel}</StatusPill> },
       {
         id: 'action', header: () => <span className="at-visually-hidden">Action</span>, size: 10,
@@ -74,7 +91,7 @@ export function ListingsView() {
           ) : null
       }
     ],
-    [editable, toggle]
+    [editable, toggle, t]
   );
   return (
     <ModulePage
@@ -104,6 +121,7 @@ export function ListingsView() {
           page={{ pageIndex: page, pageSize: PAGE_SIZE, total: q.data?.total ?? 0, hasNext: (page + 1) * PAGE_SIZE < (q.data?.total ?? 0), onPage: setPage }}
         />
       )}
+      <FulfilmentSheet listing={fulfilment} onClose={() => setFulfilment(null)} />
     </ModulePage>
   );
 }

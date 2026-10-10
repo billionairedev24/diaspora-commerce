@@ -158,13 +158,27 @@ type offersImpl struct{ c httpclient.Client }
 
 var _ port.OffersClient = (*offersImpl)(nil)
 
-// NewOffers returns the offers client (planned: PUT /v1/offers/stock/{sellerSku}).
+// NewOffers returns the offers client for sellers: PUT /v1/offers/stock/{sellerSku}, GET /v1/offers and PATCH
+// /v1/offers/{id} (fulfilment and pickup location, S255).
 func NewOffers(c httpclient.Client) port.OffersClient { return &offersImpl{c: c} }
 
 func (o *offersImpl) SetStock(ctx context.Context, bearer, key, sku string, quantity int, reason string) (domain.StockAdjustment, error) {
 	var out domain.StockAdjustment
 	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPut, Path: "/v1/offers/stock/" + url.PathEscape(sku), Bearer: bearer,
 		Header: idem(key), RetryUnsafe: key != "", JSON: map[string]any{"quantity": quantity, "reason": reason}}, &out)
+	return out, err
+}
+
+func (o *offersImpl) List(ctx context.Context, bearer string, page, size int) (port.OfferPage, error) {
+	var out port.OfferPage
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/offers", Bearer: bearer,
+		Query: url.Values{"page": {strconv.Itoa(page)}, "size": {strconv.Itoa(size)}}}, &out)
+	return out, err
+}
+
+func (o *offersImpl) Update(ctx context.Context, bearer, id string, body map[string]any) (port.SellerOfferUp, error) {
+	var out port.SellerOfferUp
+	_, err := call(ctx, o.c, httpclient.Request{Method: http.MethodPatch, Path: "/v1/offers/" + url.PathEscape(id), Bearer: bearer, JSON: body}, &out)
 	return out, err
 }
 
@@ -239,6 +253,12 @@ func (o *sellerOrdersImpl) Analytics(ctx context.Context, bearer string, from, t
 	var out port.SalesAnalytics
 	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/seller/analytics", Bearer: bearer,
 		Query: url.Values{"from": {from.Format(time.DateOnly)}, "to": {to.Format(time.DateOnly)}}}, &out)
+	return out, err
+}
+
+func (o *sellerOrdersImpl) Split(ctx context.Context, bearer, number string) (port.OrderSplit, error) {
+	var out port.OrderSplit
+	_, err := call(ctx, o.c, httpclient.Request{Path: "/v1/orders/" + url.PathEscape(number) + "/payment-split", Bearer: bearer}, &out)
 	return out, err
 }
 

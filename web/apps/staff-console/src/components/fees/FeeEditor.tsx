@@ -1,67 +1,26 @@
 'use client';
 
-import { type FeeOrgHit, type FeeScheduleDraft, type FeesOverview, formatBps, isApiError, staffKeys, staffQueries } from '@afrotransact/api-client';
+import { type FeeScheduleDraft, type FeesOverview, formatBps, isApiError, staffKeys } from '@afrotransact/api-client';
 import { Button, Checkbox, Field, fieldStyles, Select, TextField, useToast } from '@afrotransact/ui';
-import { MagnifyingGlass, Plus, Trash } from '@phosphor-icons/react/ssr';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Trash } from '@phosphor-icons/react/ssr';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type FormEvent, useMemo, useRef, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
 import { FormErrors } from '@/components/ui/FormErrors';
 import { Notice } from '@/components/ui/Notice';
 import { problemMessage } from '@/components/ui/States';
+import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { dateTime, idempotencyKey, money } from '@/lib/format';
 
+import { previewQuote } from './delivery-model';
+import { deliveryFieldId, DeliveryPricingEditor } from './DeliveryPricingEditor';
 import { affectedSellers, categoryLabel, diffDraft, type FeeForm, formFrom, impactRows, localInput, rowId, toDraft } from './model';
+import { OrgSearch } from './OrgSearch';
 
 const th = 'px-3 py-2 text-left text-xs font-semibold text-muted';
 const td = 'px-3 py-2 align-top text-sm';
-
-function OrgSearch({ overview, onPick, taken }: { overview: FeesOverview; onPick: (hit: FeeOrgHit) => void; taken: (orgId: string) => boolean }) {
-  const [text, setText] = useState('');
-  const [q, setQ] = useState('');
-  useEffect(() => {
-    const t = setTimeout(() => setQ(text.trim()), 250);
-    return () => clearTimeout(t);
-  }, [text]);
-  const hits = useQuery({ ...staffQueries.feeOrgs(staffApi(), q), enabled: q.length >= 2 });
-  return (
-    <div className="flex flex-col gap-2">
-      <label className="flex h-10 max-w-xl items-center gap-2 rounded-pill border border-border-strong bg-surface px-3">
-        <MagnifyingGlass size={16} aria-hidden className="text-muted" />
-        <span className="at-visually-hidden">Find a seller organisation</span>
-        <input type="search" className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Seller or provider name" value={text} onChange={(e) => setText(e.currentTarget.value)} />
-      </label>
-      {hits.isError ? <p className="m-0 text-sm text-danger">{problemMessage(hits.error)}</p> : null}
-      {hits.data ? (
-        hits.data.items.length ? (
-          <ul aria-label="Organisations found" className="m-0 flex max-w-xl list-none flex-col gap-1 p-0">
-            {hits.data.items.map((h) => (
-              <li key={h.orgId || h.name}>
-                <button
-                  type="button"
-                  disabled={!h.selectable}
-                  className="flex w-full flex-wrap items-center gap-2 rounded-sm px-3 py-2 text-left hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-70"
-                  onClick={() => {
-                    onPick(h);
-                    setText('');
-                    setQ('');
-                  }}
-                >
-                  <strong className="font-semibold">{h.name}</strong>
-                  <span className="text-xs text-muted">{h.retail ? (h.reason ?? overview.retail.note) : `${h.kind.toLowerCase()} · ${taken(h.orgId) ? 'has an override — adds another category' : h.orgId}`}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="m-0 text-sm text-muted">No organisation matches “{q}”.</p>
-        )
-      ) : null}
-    </div>
-  );
-}
 
 /**
  * New fee-schedule version: starts as a copy of the latest version, edits everything as percentages / dollars, then
@@ -70,6 +29,7 @@ function OrgSearch({ overview, onPick, taken }: { overview: FeesOverview; onPick
 export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClose: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
+  const t = useT();
   const now = useMemo(() => new Date(), []);
   const [form, setForm] = useState<FeeForm>(() => formFrom(overview.base, overview, now));
   const [step, setStep] = useState<'edit' | 'review'>('edit');
@@ -103,7 +63,7 @@ export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClo
   const review = (e: FormEvent) => {
     e.preventDefault();
     setSubmits((n) => n + 1);
-    const r = toDraft(form, overview, new Date());
+    const r = toDraft(form, overview, new Date(), t);
     setErrors(r.errors);
     if (r.draft) {
       setDraft(r.draft);
@@ -122,10 +82,13 @@ export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClo
     ids[`overrides.${i}.category`] = `fee-ovr-cat-${o.rowId}`;
     ids[`overrides.${i}.commissionBps`] = `fee-ovr-rate-${o.rowId}`;
   });
+  Object.keys(errors)
+    .filter((k) => k.startsWith('deliveryPricing.'))
+    .forEach((k) => (ids[k] = deliveryFieldId(k)));
   const categoryOptions = [{ value: '', label: 'All categories' }, ...cats.map((c) => ({ value: c.key, label: c.label }))];
 
   if (step === 'review' && draft) {
-    const diff = diffDraft(overview.base, draft, cats, orgName);
+    const diff = diffDraft(overview.base, draft, cats, orgName, t);
     const impact = impactRows(overview.current, draft, cats, overview.exampleSaleMinor);
     const affected = affectedSellers(overview.base, draft, cats, orgName);
     const blocked = draft.immediate && !confirmImmediate;
@@ -194,6 +157,42 @@ export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClo
           <p className="m-0 text-xs text-muted">
             Before card fees ({formatBps(draft.cardPctBps)} + {money(draft.cardFixedMinor)} per charge) and FBA fees. {overview.retail.name}: {overview.retail.note.toLowerCase()}.
           </p>
+        </Card>
+        <Card title={t('st.delivery.title')}>
+          {draft.deliveryPricing ? (
+            <table className="w-full border-collapse" aria-label={t('st.delivery.review.examples')} data-testid="delivery-review">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className={th}>{t('st.delivery.review.trip')}</th>
+                  <th className={th}>{t('st.delivery.review.customerNow')}</th>
+                  <th className={th}>{t('st.delivery.review.customerNew')}</th>
+                  <th className={th}>{t('st.delivery.review.sellerNow')}</th>
+                  <th className={th}>{t('st.delivery.review.sellerNew')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {([3, 10, 20] as const).map((miles) => {
+                  const show = (q: ReturnType<typeof previewQuote>, which: 'customerMinor' | 'sellerMinor') =>
+                    q.available ? money(q[which]) : q.reason === 'BEYOND_MAX_RADIUS' ? t('st.delivery.review.beyond') : t('st.delivery.notOffered');
+                  const now = previewQuote(overview.current?.deliveryPricing ?? null, '', miles, 1, overview.retail.orgId);
+                  const next = previewQuote(draft.deliveryPricing ?? null, '', miles, 1, overview.retail.orgId);
+                  return (
+                    <tr key={miles} className="border-b border-border">
+                      <td className={td}>{t('st.delivery.miles', { n: miles })}</td>
+                      <td className={td}>{show(now, 'customerMinor')}</td>
+                      <td className={`${td} font-semibold`}>{show(next, 'customerMinor')}</td>
+                      <td className={td}>{show(now, 'sellerMinor')}</td>
+                      <td className={`${td} font-semibold`}>{show(next, 'sellerMinor')}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <p className="m-0 text-sm text-muted" data-testid="delivery-review">
+              {overview.base?.deliveryPricing ? t('st.delivery.notChanged', { v: overview.base.version }) : t('st.delivery.notConfigured')}
+            </p>
+          )}
         </Card>
         <Card title="Sellers affected by overrides">
           {affected.length ? (
@@ -421,6 +420,7 @@ export function FeeEditor({ overview, onClose }: { overview: FeesOverview; onClo
         </div>
         <Checkbox id="fee-reverse" checked={form.reverseOnRefund} onChange={(e) => set('reverseOnRefund', e.currentTarget.checked)} label="Reverse commission on refunds" description={`— ${overview.reverseOnRefundHelp}`} />
       </Card>
+      <DeliveryPricingEditor overview={overview} form={form.delivery} onChange={(d) => set('delivery', d)} errors={errors} />
       <Card title="Why">
         <Field id="fee-note" label="Note explaining the change (required)" error={errors.note}>
           {(a11y) => <textarea {...a11y} className={fieldStyles.control} rows={3} maxLength={overview.limits.noteMaxLength} value={form.note} onChange={(e) => set('note', e.currentTarget.value)} />}

@@ -24,10 +24,12 @@ import {
   type PublicPage,
   type RateQuotes,
   type SellerFeesView,
+  type SellerOfferList,
   type SellerOrderDetail,
   type SellerOrderPage,
   type SellerSession,
   type ServiceOffer,
+  type ShipFromAddress,
   type TeamView
 } from '../src';
 import { type components } from '../src/generated/gateway-bff-seller';
@@ -57,6 +59,8 @@ describe('Seller Zod schemas stay aligned with contracts/openapi/gateway-bff-sel
     expectTypeOf<InventoryView>().toExtend<S['InventoryView']>();
     expectTypeOf<PayoutsView>().toExtend<S['PayoutsView']>();
     expectTypeOf<SellerFeesView>().toExtend<S['SellerFeesView']>();
+    expectTypeOf<ShipFromAddress>().toExtend<S['ShipFromAddress']>();
+    expectTypeOf<SellerOfferList>().toExtend<S['SellerOfferList']>();
     expectTypeOf<BillingView>().toExtend<S['BillingView']>();
     expectTypeOf<TeamView>().toExtend<S['TeamView']>();
     expectTypeOf<CalendarView>().toExtend<S['CalendarView']>();
@@ -166,5 +170,44 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     await expect(api.listListings({ page: 0, size: 25 })).rejects.toSatisfy((e) => isApiError(e) && e.code === 'NOT_APPROVED');
     await expect(api.getOnboarding()).resolves.toMatchObject({ status: 'INFO_REQUESTED', canResume: true });
     await api.setActiveOrg(SELLER_ORG);
+  });
+
+  it('turns AfroTransact pickup on per address and lets offers use it (S255)', async () => {
+    const api = client();
+    const [store, katy] = await api.listShipFrom();
+    if (!store || !katy) throw new Error('no addresses');
+    expect(store.position?.precision).toBe('ADDRESS');
+    expect(store.afrotransactPickup).toMatchObject({ enabled: true, zoneName: 'Houston Metro' });
+    await expect(api.setAfrotransactPickup(katy.id, { enabled: true, hours: [] })).rejects.toSatisfy((e) => isApiError(e) && e.code === 'PICKUP_INVALID_HOURS');
+    const hours = [{ day: 'TUESDAY' as const, opens: '10:00', closes: '16:00' }];
+    const on = await api.setAfrotransactPickup(katy.id, { enabled: true, hours, version: katy.version });
+    expect(on.afrotransactPickup).toMatchObject({ enabled: true, hours });
+    const austin = await api.createShipFrom({ name: 'Ade Okafor', line1: '500 Congress Ave', line2: '', city: 'Austin', state: 'TX', postalCode: '78701', phone: '' });
+    await expect(api.setAfrotransactPickup(austin.id, { enabled: true, hours })).rejects.toSatisfy((e) => isApiError(e) && e.code === 'PICKUP_OUTSIDE_DELIVERY_AREA');
+    const lost = await api.createShipFrom({ name: 'Ade Okafor', line1: '1 Nowhere Rd', line2: '', city: 'Houston', state: 'TX', postalCode: '00000', phone: '' });
+    expect(lost.position).toBeNull();
+    await expect(api.setAfrotransactPickup(lost.id, { enabled: true, hours })).rejects.toSatisfy((e) => isApiError(e) && e.code === 'PICKUP_NOT_GEOCODED');
+
+    const listing = (await api.listListings({ page: 0, size: 5 })).items.find((l) => l.fulfilment === 'SELLER');
+    if (!listing) throw new Error('no seller-shipped listing');
+    const offers = await api.listOffers(listing.productId);
+    const offer = offers.items[0];
+    if (!offer) throw new Error('no offer');
+    await expect(api.setOfferFulfilment(offer.offerId, { fulfilment: 'AFROTRANSACT_DELIVERY' })).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.shipFromLocationId);
+    await expect(api.setOfferFulfilment(offer.offerId, { fulfilment: 'AFROTRANSACT_DELIVERY', shipFromLocationId: austin.id })).rejects.toSatisfy(
+      (e) => isApiError(e) && !!e.fieldErrors.shipFromLocationId
+    );
+    const atd = await api.setOfferFulfilment(offer.offerId, { fulfilment: 'AFROTRANSACT_DELIVERY', shipFromLocationId: store.id });
+    expect(atd).toMatchObject({ fulfilment: 'AFROTRANSACT_DELIVERY', shipFromLocationId: store.id, shipsFrom: 'Houston, TX' });
+
+    const fees = await api.getFees();
+    expect(fees.current.deliveryFee).toMatchObject({ source: 'DEFAULT', summary: '$2.00 per package', maxRadiusMiles: 25 });
+    const page = await api.listOrders({ limit: 100 });
+    const localRow = page.items.find((r) => r.fulfilment === 'AFROTRANSACT_DELIVERY');
+    if (!localRow) throw new Error('no AfroTransact Delivery order');
+    expect(localRow.canBuyLabel).toBe(false);
+    const order = await api.getOrder(localRow.orderNumber);
+    expect(order.shipments[0]?.localDelivery?.sellerFeeMinor).toBe(200);
+    expect(order.earnings?.deliveryFeesMinor).toBe(200);
   });
 });

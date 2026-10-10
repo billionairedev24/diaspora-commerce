@@ -36,11 +36,18 @@ type FeeLimits struct {
 	NoteMaxLength      int   `json:"noteMaxLength"`
 	MaxCategoryRates   int   `json:"maxCategoryRates"`
 	MaxOverrides       int   `json:"maxOverrides"`
+	// AfroTransact Delivery pricing (S255): payments accepts a radius up to 200 miles.
+	DeliveryMaxRadiusMiles float64 `json:"deliveryMaxRadiusMiles"`
+	DeliveryAmountMaxMinor int64   `json:"deliveryAmountMaxMinor"`
+	DeliveryMaxBands       int     `json:"deliveryMaxBands"`
+	MaxDeliveryOverrides   int     `json:"maxDeliveryOverrides"`
 }
 
-// DefaultFeeLimits allow commission 0–50 %, a card fee of 0–10 % + up to $10.00 and an FBA fee up to $100.00 per unit.
+// DefaultFeeLimits allow commission 0–50 %, a card fee of 0–10 % + up to $10.00, an FBA fee up to $100.00 per unit and
+// AfroTransact Delivery amounts up to $100.00 within a radius of up to 200 miles.
 var DefaultFeeLimits = FeeLimits{CommissionMaxBps: 5000, CardPctMaxBps: 1000, CardFixedMaxMinor: 1000, FbaPerUnitMaxMinor: 10_000,
-	NoteMinLength: 3, NoteMaxLength: 500, MaxCategoryRates: 100, MaxOverrides: 500}
+	NoteMinLength: 3, NoteMaxLength: 500, MaxCategoryRates: 100, MaxOverrides: 500,
+	DeliveryMaxRadiusMiles: 200, DeliveryAmountMaxMinor: 10_000, DeliveryMaxBands: 20, MaxDeliveryOverrides: 500}
 
 // FeeCategory is a commission category the editor offers (catalog departments, plus the ones schedules already use).
 type FeeCategory struct {
@@ -79,6 +86,7 @@ type FeeScheduleView struct {
 	CardFixedMinor            int64             `json:"cardFixedMinor"`
 	FbaPerUnitMinor           int64             `json:"fbaPerUnitMinor"`
 	ReverseCommissionOnRefund bool              `json:"reverseCommissionOnRefund"`
+	DeliveryPricing           *DeliveryPricing  `json:"deliveryPricing"`
 	Note                      *string           `json:"note"`
 	CreatedBy                 string            `json:"createdBy"`
 	CreatedAt                 *time.Time        `json:"createdAt"`
@@ -145,7 +153,9 @@ type FeeScheduleDraft struct {
 	CardFixedMinor            *int64                 `json:"cardFixedMinor"`
 	FbaPerUnitMinor           *int64                 `json:"fbaPerUnitMinor"`
 	ReverseCommissionOnRefund bool                   `json:"reverseCommissionOnRefund"`
-	Note                      string                 `json:"note"`
+	// DeliveryPricing nil = carried over from the latest live version (payments' rule).
+	DeliveryPricing *DeliveryPricingDraft `json:"deliveryPricing"`
+	Note            string                `json:"note"`
 }
 
 // FeeDraftCategoryRate is one category row of a draft.
@@ -274,6 +284,9 @@ func ValidateFeeDraft(d FeeScheduleDraft, r FeeDraftRules) map[string]string {
 		pairs[org+"|"+cat] = true
 		bpsIn(field+".commissionBps", o.CommissionBps, l.CommissionMaxBps)
 	}
+	for k, v := range ValidateDeliveryDraft(d.DeliveryPricing, r.RetailOrgID, l) {
+		errs[k] = v
+	}
 	return errs
 }
 
@@ -312,6 +325,42 @@ type SellerFeeVersion struct {
 	CardFixedMinor            int64               `json:"cardFixedMinor"`
 	FbaPerUnitMinor           int64               `json:"fbaPerUnitMinor"`
 	ReverseCommissionOnRefund bool                `json:"reverseCommissionOnRefund"`
+	DeliveryFee               *SellerDeliveryFee  `json:"deliveryFee"`
+}
+
+// SellerDeliveryFee is what the organisation pays for AfroTransact Delivery from its store under one version (S255).
+type SellerDeliveryFee struct {
+	Enabled        bool            `json:"enabled"`
+	MaxRadiusMiles float64         `json:"maxRadiusMiles"`
+	Source         string          `json:"source"` // DEFAULT, OVERRIDE or RETAIL
+	Tariff         *DeliveryTariff `json:"tariff"`
+	Summary        string          `json:"summary"`
+}
+
+// SellerDeliveryFeeFor picks the organisation's seller fee from a version's delivery pricing: its override, else the
+// default; AfroTransact Retail never pays one. Nil when the version has no delivery pricing.
+func SellerDeliveryFeeFor(p *DeliveryPricing, orgID string, retail bool) *SellerDeliveryFee {
+	if p == nil {
+		return nil
+	}
+	out := &SellerDeliveryFee{Enabled: p.Enabled, MaxRadiusMiles: p.MaxRadiusMiles, Source: "DEFAULT", Tariff: p.SellerFee}
+	if retail {
+		out.Source, out.Tariff = "RETAIL", nil
+		out.Summary = "No delivery fee (merchant of record)"
+		return out
+	}
+	for _, o := range p.SellerOverrides {
+		if o.OrgID == orgID {
+			t := o.SellerFee
+			out.Source, out.Tariff = "OVERRIDE", &t
+		}
+	}
+	if out.Tariff != nil {
+		t := out.Tariff.Normalized()
+		out.Tariff = &t
+	}
+	out.Summary = TariffSummary(out.Tariff)
+	return out
 }
 
 // SellerFeeChange is one rate that changes in the upcoming version.
@@ -402,6 +451,17 @@ func SellerFeeChanges(cur SellerFeeVersion, next *SellerFeeVersion) []SellerFeeC
 			return "Kept on refunds"
 		}
 		out = append(out, SellerFeeChange{Field: "reverseCommissionOnRefund", Label: "Commission on refunds", From: yn(cur.ReverseCommissionOnRefund), To: yn(next.ReverseCommissionOnRefund)})
+	}
+	feeText := func(f *SellerDeliveryFee) string {
+		switch {
+		case f == nil || !f.Enabled:
+			return "Not offered"
+		default:
+			return f.Summary
+		}
+	}
+	if from, to := feeText(cur.DeliveryFee), feeText(next.DeliveryFee); from != to {
+		out = append(out, SellerFeeChange{Field: "deliveryFee", Label: "AfroTransact Delivery seller fee", From: from, To: to})
 	}
 	return out
 }

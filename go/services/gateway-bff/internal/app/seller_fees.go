@@ -69,6 +69,8 @@ func (s *sellerFeesImpl) Fees(ctx context.Context, c *domain.Caller) (domain.Sel
 	}
 	out := domain.SellerFeesView{Currency: domain.Currency, Current: cur, Changes: []domain.SellerFeeChange{}}
 	out.Retail = slices.ContainsFunc(cur.Categories, func(c domain.SellerFeeCategory) bool { return c.Source == "RETAIL" })
+	out.Current.DeliveryFee = domain.SellerDeliveryFeeFor(active.DeliveryPricing, orgID, out.Retail)
+	cur = out.Current
 	if out.Retail {
 		out.Note = strPtr(domain.RetailFeesNote)
 	}
@@ -77,6 +79,7 @@ func (s *sellerFeesImpl) Fees(ctx context.Context, c *domain.Caller) (domain.Sel
 		if err != nil {
 			return domain.SellerFeesView{}, err
 		}
+		next.DeliveryFee = domain.SellerDeliveryFeeFor(upcoming.DeliveryPricing, orgID, out.Retail)
 		out.Upcoming = &next
 		out.Changes = domain.SellerFeeChanges(cur, &next)
 	}

@@ -19,11 +19,13 @@ import {
   type ChartSpec,
   type Dashboard,
   type EarningsRow,
+  FulfilmentKindSchema,
   type ListingRow,
   type ModuleKey,
   type OnboardingStatus,
   type OrgSummary,
   ParcelSchema,
+  PickupWindowSchema,
   ProductDraftSchema,
   PublicPageInputSchema,
   SellerAddressSchema,
@@ -39,7 +41,8 @@ import {
   StockAdjustmentRequestSchema,
   TEAM_ERROR_MESSAGES,
   type TeamMember,
-  UploadRequestSchema
+  UploadRequestSchema,
+  validatePickupHours
 } from '../../schemas/seller';
 import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, SELLER_ORG } from './db';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
@@ -189,7 +192,8 @@ function refreshShipment(o: SellerOrderDetail, shipmentId: string) {
   if (!s) throw notFound('That shipment isn’t part of this order.');
   s.statusLabel = SHIPMENT_LABELS[s.status];
   const next = NEXT[s.status];
-  s.nextActions = s.fulfilment === 'SELLER' && next && SellerStatusActionSchema.safeParse(next).success ? [next as 'CONFIRMED' | 'PACKED' | 'READY'] : [];
+  // Sellers pack AfroTransact Delivery shipments too (a driver collects them), but buy no label for them.
+  s.nextActions = s.fulfilment !== 'AFROTRANSACT' && next && SellerStatusActionSchema.safeParse(next).success ? [next as 'CONFIRMED' | 'PACKED' | 'READY'] : [];
   s.canBuyLabel = s.fulfilment === 'SELLER' && !s.trackingNumber && ['CONFIRMED', 'PACKED', 'READY'].includes(s.status);
   return s;
 }
@@ -318,7 +322,17 @@ function sellerFees(kind: string, now: Date): SellerFeesView {
     cardPctBps: 290,
     cardFixedMinor: 30,
     fbaPerUnitMinor: fba,
-    reverseCommissionOnRefund: true
+    reverseCommissionOnRefund: true,
+    deliveryFee:
+      kind === 'PROVIDER'
+        ? null
+        : {
+            enabled: true,
+            maxRadiusMiles: 25,
+            source: 'DEFAULT',
+            tariff: { mode: 'FLAT', flatPerPackageMinor: 200, baseMinor: null, perMileMinor: null, bands: [], minMinor: null, maxMinor: null },
+            summary: '$2.00 per package'
+          }
   });
   const current = version(2, new Date(now.getTime() - 60 * 86_400_000).toISOString(), launch, 325);
   const upcoming = version(4, upcomingAt, { ...launch, fashion: 1300 }, 350);
@@ -376,6 +390,9 @@ const ShipFromBody = z.object({
   version: z.number().int().nullable().optional()
 });
 
+const PickupBody = z.object({ enabled: z.boolean(), hours: z.array(PickupWindowSchema).max(14, 'At most 14 pickup windows'), version: z.number().int().nullable().optional() });
+const OfferFulfilmentBody = z.object({ fulfilment: FulfilmentKindSchema, shipFromLocationId: z.string().max(64).nullable().optional() });
+
 const TokenBody = z.object({ token: z.string().trim().min(1, 'This invitation link is incomplete. Open it again from the email.').max(200) });
 /** Invitation tokens the mock knows (Seller Center accept page). */
 const MOCK_INVITES: Record<string, 'PENDING' | 'EXPIRED' | 'REVOKED'> = { 'demo-invite': 'PENDING', 'expired-invite': 'EXPIRED', 'revoked-invite': 'REVOKED' };
@@ -412,8 +429,16 @@ function saveShipFrom(ctx: Ctx, input: z.infer<typeof ShipFromBody>, existing?: 
     postalCode: input.postalCode,
     country: 'US',
     isDefault: makeDefault,
-    version: existing ? existing.version + 1 : 0
+    version: existing ? existing.version + 1 : 0,
+    // geo-service geocodes every change (S255); the mock can't place ZIP 00000 at all and 99999 only by its ZIP.
+    position:
+      input.postalCode === '00000'
+        ? null
+        : { lat: 29.76 + (Number(input.postalCode.slice(-2)) || 0) / 1000, lng: -95.37, precision: input.postalCode === '99999' ? 'ZIP' : 'ADDRESS', geocodedAt: ctx.now.toISOString() },
+    afrotransactPickup: existing?.afrotransactPickup ?? { enabled: false, hours: [], zoneName: null, enabledAt: null }
   };
+  // Moving an enabled pickup location out of the delivery area turns it off (seller re-checks every move).
+  if (next.afrotransactPickup.enabled && !next.postalCode.startsWith('77')) next.afrotransactPickup = { ...next.afrotransactPickup, enabled: false, enabledAt: null };
   if (existing) list.splice(list.indexOf(existing), 1, next);
   else list.push(next);
   return next;
@@ -538,7 +563,7 @@ export const sellerHandlers = [
       require(ctx, 'orders', 'EDIT', 'SELLER');
       const o = findOrder(ctx.db, p.orderNumber ?? '');
       const s = refreshShipment(o, p.shipmentId ?? '');
-      if (s.fulfilment !== 'SELLER') throw forbidden('AfroTransact handles every step of this shipment.');
+      if (s.fulfilment === 'AFROTRANSACT') throw forbidden('AfroTransact handles every step of this shipment.');
       if (NEXT[s.status] !== status) throw conflict(`This order is ${s.statusLabel.toLowerCase()}; it can’t move to ${SHIPMENT_LABELS[status as ShipmentStatus].toLowerCase()}.`);
       s.status = status as ShipmentStatus;
       s.timeline.push({ status, at: ctx.now.toISOString(), actor: 'seller' });
@@ -1112,6 +1137,67 @@ export const sellerHandlers = [
       const first = list[0];
       if (target.isDefault && first) first.isDefault = true;
       return { items: list };
+    })
+  ),
+  http.put(
+    `${W}/ship-from-addresses/:id/afrotransact-pickup`,
+    route(async (ctx, p) => {
+      const b = await body(ctx.request, PickupBody);
+      const hourErrors = validatePickupHours(b.enabled, b.hours);
+      if (Object.keys(hourErrors).length)
+        throw new SellerProblem(422, 'PICKUP_INVALID_HOURS', 'Check the pickup hours', 'Add 1 to 14 pickup windows that don’t overlap, each opening before it closes.', hourErrors);
+      require(ctx, 'orders', 'EDIT', 'SELLER');
+      const a = findShipFrom(ctx, p.id);
+      if (b.version != null && b.version !== a.version) throw conflict('Someone else changed this address. Reload and try again.');
+      if (b.enabled) {
+        if (a.position === null || a.position.precision !== 'ADDRESS')
+          throw new SellerProblem(422, 'PICKUP_NOT_GEOCODED', 'We couldn’t locate this address', 'Drivers need a street-level location, and we could only place this address by its ZIP code. Check the street address and save it again.', { enabled: 'Not located at street level' });
+        if (!a.postalCode.startsWith('77'))
+          throw new SellerProblem(422, 'PICKUP_OUTSIDE_DELIVERY_AREA', 'Outside the delivery area', `${a.city} is more than 25 miles from the Houston Metro delivery zone.`, { enabled: 'Outside the delivery area' });
+      }
+      a.afrotransactPickup = {
+        enabled: b.enabled,
+        hours: b.hours,
+        zoneName: b.enabled ? 'Houston Metro' : a.afrotransactPickup.zoneName,
+        enabledAt: b.enabled ? (a.afrotransactPickup.enabledAt ?? ctx.now.toISOString()) : null
+      };
+      a.version += 1;
+      return a;
+    })
+  ),
+  /* ── Offers: the fulfilment choice (S255) ── */
+  http.get(
+    `${W}/offers`,
+    route((ctx) => {
+      const productId = (query(ctx).get('productId') ?? '').trim();
+      if (!productId) throw invalid({ productId: 'Name the listing' });
+      require(ctx, 'listings', 'VIEW', 'SELLER');
+      return { items: ctx.db.offers.filter((o) => o.productId === productId && o.status !== 'WITHDRAWN') };
+    })
+  ),
+  http.put(
+    `${W}/offers/:offerId/fulfilment`,
+    route(async (ctx, p) => {
+      const b = await body(ctx.request, OfferFulfilmentBody);
+      if (b.fulfilment === 'AFROTRANSACT_DELIVERY' && !b.shipFromLocationId)
+        throw invalid({ shipFromLocationId: 'Choose the pickup location (a ship-from address with AfroTransact pickup on)' });
+      require(ctx, 'listings', 'EDIT', 'SELLER');
+      const o = ctx.db.offers.find((x) => x.offerId === p.offerId);
+      if (!o) throw notFound('No such offer.');
+      let shipsFrom = o.shipsFrom;
+      if (b.fulfilment === 'AFROTRANSACT_DELIVERY') {
+        const loc = shipFromList(ctx).find((a) => a.id === b.shipFromLocationId);
+        if (!loc || !loc.afrotransactPickup.enabled) throw invalid({ shipFromLocationId: 'Choose a ship-from address with AfroTransact pickup turned on' });
+        shipsFrom = `${loc.city}, ${loc.state}`;
+      }
+      o.fulfilment = b.fulfilment;
+      o.shipFromLocationId = b.fulfilment === 'AFROTRANSACT_DELIVERY' ? (b.shipFromLocationId ?? null) : null;
+      o.shipsFrom = b.fulfilment === 'AFROTRANSACT' ? null : shipsFrom ?? 'Houston, TX';
+      o.quantity = b.fulfilment === 'AFROTRANSACT' ? 0 : o.availableQty;
+      o.version += 1;
+      const listing = ctx.db.listings.find((l) => l.productId === o.productId);
+      if (listing && ctx.db.offers.filter((x) => x.productId === o.productId).every((x) => x.fulfilment === o.fulfilment)) listing.fulfilment = o.fulfilment;
+      return o;
     })
   ),
   /* Anything else under /v1/seller is not part of the contract. */

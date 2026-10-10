@@ -2,7 +2,9 @@
    S081: OIDC sign-in, then GET /v1/driver/me decides access (No driver access / revoked). Revocation — from /me, from
    `signOut: true` on a sync, or on the periodic re-check — signs the driver out after a last best-effort sync, and the
    outbox stays on the phone (events captured before revokedAt are still accepted later).
-   S087: the SyncEngine queues every action in SQLite and syncs in order when online. */
+   S087: the SyncEngine queues every action in SQLite and syncs in order when online.
+   S255: while on shift and in the foreground, location pings (throttled) feed nearest-driver pickup offers; the
+   newest fix also stamps queued events. */
 import * as Crypto from 'expo-crypto';
 import * as Device from 'expo-device';
 import * as Network from 'expo-network';
@@ -16,9 +18,11 @@ import { refreshTokens, revokeTokens, signInWithIdentity, type TokenSet } from '
 import { secureStorage } from '@/auth/secureStorage';
 import { decideAccess } from '@/domain/access';
 import { decodeJwt, isExpiring } from '@/domain/jwt';
-import { currentFix, ensureLocationPermission } from '@/lib/location';
+import { onShift } from '@/domain/shift';
+import { currentFix, ensureLocationPermission, watchForegroundFixes } from '@/lib/location';
 import { driverStore } from '@/storage';
 import { type EngineState, SyncEngine } from '@/sync/engine';
+import { LocationPinger } from '@/sync/locationPinger';
 
 const TOKENS = 'at.driver.tokens';
 const PAUSED = 'sync.paused';
@@ -64,6 +68,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const [denied, setDenied] = useState<Ctx['denied']>(null);
   const [paused, setPausedState] = useState(false);
   const [netUp, setNetUp] = useState(true);
+  const [appActive, setAppActive] = useState(AppState.currentState !== 'background');
 
   const tokenSource = useMemo<TokenSource>(() => {
     const refreshAccessToken = async (): Promise<string | null> => {
@@ -85,7 +90,16 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const api = useMemo(() => createDriverApi(tokenSource), [tokenSource]);
-  const engine = useMemo(() => new SyncEngine({ store: driverStore, api, uuid: () => Crypto.randomUUID(), now: () => new Date(), position: currentFix }), [api]);
+  const engineRef = useRef<SyncEngine | null>(null);
+  const pinger = useMemo(() => new LocationPinger({
+    watch: watchForegroundFixes,
+    send: (fix) => api.location(engineRef.current?.getState().outbox.deviceId ?? '', fix),
+    now: () => Date.now()
+  }), [api]);
+  /* Events carry GPS: the pinger's fresh fix when on shift, otherwise a one-off fix (null without permission). */
+  const position = useCallback(async () => pinger.latest() ?? (await currentFix()), [pinger]);
+  const engine = useMemo(() => new SyncEngine({ store: driverStore, api, uuid: () => Crypto.randomUUID(), now: () => new Date(), position }), [api, position]);
+  engineRef.current = engine;
   const sync = useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
 
   const clearSession = useCallback(async () => {
@@ -166,6 +180,19 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     return () => sub.remove();
   }, []);
   useEffect(() => { engine.setOnline(netUp && !paused); }, [engine, netUp, paused]);
+
+  /* Location pings: foreground only, on shift, signed in with access. Offline pings are skipped, not queued. */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => setAppActive(s === 'active'));
+    return () => sub.remove();
+  }, []);
+  const shiftOn = phase === 'ready' && !!sync.route && onShift(sync.route);
+  useEffect(() => { pinger.setOnline(netUp && !paused); }, [pinger, netUp, paused]);
+  useEffect(() => {
+    if (shiftOn && appActive) void pinger.start();
+    else pinger.stop();
+  }, [pinger, shiftOn, appActive]);
+  useEffect(() => () => pinger.stop(), [pinger]);
 
   /* Revocation reported by a sync (signOut: true). */
   useEffect(() => {

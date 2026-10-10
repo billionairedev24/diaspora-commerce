@@ -122,6 +122,26 @@ members without `access:read` get the seeded default matrix). Before approval on
 Upstream gaps found while building the seller routes: the module matrix needs `access:read`; payments lists payout history only for `payouts:approve`. Ship-from addresses, seller analytics, seller stock and
 the bookings provider routes are now served upstream.
 
+## AfroTransact Delivery from the seller's store (S255)
+
+| BFF operation | Upstream(s) | Status |
+|---|---|---|
+| `GET /v1/checkout/summary` (packages with `fulfilment: AFROTRANSACT_DELIVERY`) | offers `shipFromLocationId` → seller `GET /v1/ship-from-locations/{id}` (position, city, pickup on) + geo `POST /v1/distance` (road miles, minutes) + payments `POST /v1/delivery-pricing/quote` (customer charge, radius) with client-credentials tokens (`sellers:ship-from.read`, `payments:fees.read`); per package `localDelivery` (charge, miles, minutes, `fromCity`, or `unavailableReason` + message) | live (a failing quote → `QUOTE_UNAVAILABLE`, the package cannot be placed) |
+| `POST /v1/checkout/orders` | orders `orders.delivery-out-of-range`, `-unavailable`, `-pickup-unavailable`, `-address-not-located` → 422 `DELIVERY_OUT_OF_RANGE`, `DELIVERY_UNAVAILABLE`, `DELIVERY_PICKUP_UNAVAILABLE`, `DELIVERY_ADDRESS_NOT_LOCATED` with `errors.deliverySelections` | live |
+| `GET /v1/account/orders/{orderNumber}` | orders shipment `localDelivery` (charge, miles, minutes, from city) → `shipments[].localDelivery` | live |
+| cart / product | package heading "AfroTransact Delivery from {city}" (seller ship-from city) | live |
+| `PUT /v1/seller/ship-from-addresses/{id}/afrotransact-pickup` | seller `PUT /v1/orgs/{orgId}/ship-from-addresses/{id}/afrotransact-pickup`; `sellers.pickup-*` → `PICKUP_ORG_NOT_APPROVED` (403), `PICKUP_INVALID_HOURS`, `PICKUP_NOT_GEOCODED`, `PICKUP_OUTSIDE_DELIVERY_AREA` (422); addresses carry `position` and `afrotransactPickup` | live |
+| `GET /v1/seller/offers?productId=`, `PUT /v1/seller/offers/{offerId}/fulfilment` | offers `GET /v1/offers`, `PATCH /v1/offers/{id}` (`fulfilment`, `shipFromLocationId`; `offers.ship-from-*` → field error on `shipFromLocationId`) | live |
+| `GET /v1/seller/orders/{orderNumber}` | shipments add `localDelivery` (seller fee); `earnings` from orders `GET /v1/orders/{n}/payment-split` (falls back to the fee snapshot) | live |
+| `GET /v1/seller/fees` | versions add `deliveryFee` (tariff, summary, source DEFAULT / OVERRIDE / RETAIL) from the schedule's `deliveryPricing` | live |
+| `GET/POST /v1/staff/fees` (`deliveryPricing` section), `POST /v1/staff/fees/delivery-quote` | payments `/v1/fee-schedules` (section omitted on create → carried over from the previous version), `POST /v1/delivery-pricing/quote` | live |
+| `GET /v1/staff/dispatch/pickups`, `GET …/pickups/{shipmentId}/driver-suggestions`, `POST …/assign`, `GET …/assignments`, `GET /v1/staff/ship-from-locations/{locationId}` | fulfilment `GET /v1/dispatch/shipments` (AWAITING_ROUTE pickups), `GET /v1/dispatch/pickups/{id}/driver-suggestions` (top 5), `POST …/assign {routeId, reason}`, `GET …/assignments`; seller `GET /v1/ship-from-locations/{id}`; module `dispatch`, edit needs `delivery:dispatch` | live |
+
+Gaps: identity's `gateway-bff` client must be granted `sellers:ship-from.read` and `payments:fees.read`; fulfilment
+shipments carry no pickup location id and routed pickups are not listed; orders' payment split has no per-recipient
+delivery-fee total (the BFF falls back to the snapshot); payments' payout balance has no delivery-fee total; catalog
+has no fulfilment field (listings stay `SELLER` until the offer is changed).
+
 ## Configuration
 
 `config/<APP_ENV>.yaml` (local, dev, uat, prod) with env overrides: `PORT`, `REDIS_URL`, `SESSION_SIGNING_KEY` (≥ 32

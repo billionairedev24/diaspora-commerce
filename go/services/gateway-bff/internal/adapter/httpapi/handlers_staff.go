@@ -26,6 +26,8 @@ type StaffServices struct {
 	Exports   app.StaffExportsService
 	Support   app.StaffSupportService
 	Fees      app.StaffFeesService
+	// Dispatch serves the seller pickups of AfroTransact Delivery (S255); routes are registered when it is set.
+	Dispatch app.StaffDispatchService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
 	Files port.LocalExportFiles
 }
@@ -58,6 +60,14 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 		route("GET /v1/staff/fees/orgs", h.staffFeeOrgs)
 		route("POST /v1/staff/fees/schedules", h.staffCreateFeeSchedule)
 		route("POST /v1/staff/fees/schedules/{scheduleId}/cancel", h.staffCancelFeeSchedule)
+		route("POST /v1/staff/fees/delivery-quote", h.staffDeliveryQuote)
+	}
+	if s.Dispatch != nil {
+		route("GET /v1/staff/dispatch/pickups", h.staffPickups)
+		route("GET /v1/staff/dispatch/pickups/{shipmentId}/driver-suggestions", h.staffPickupSuggestions)
+		route("POST /v1/staff/dispatch/pickups/{shipmentId}/assign", h.staffAssignPickup)
+		route("GET /v1/staff/dispatch/pickups/{shipmentId}/assignments", h.staffPickupAssignments)
+		route("GET /v1/staff/ship-from-locations/{locationId}", h.staffShipFromLocation)
 	}
 }
 
@@ -356,5 +366,47 @@ func (h *handlersImpl) staffCancelFeeSchedule(w http.ResponseWriter, r *http.Req
 		return
 	}
 	v, err := h.s.Staff.Fees.Cancel(r.Context(), callerFrom(r.Context()), r.PathValue("scheduleId"), b.Reason)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffDeliveryQuote(w http.ResponseWriter, r *http.Request) {
+	var b domain.DeliveryQuoteRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Fees.Quote(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+// ---------------------------------------------------------------- dispatch: seller pickups (S255)
+
+func (h *handlersImpl) staffPickups(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.Pickups(r.Context(), callerFrom(r.Context()), r.URL.Query().Get("nodeId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPickupSuggestions(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.Suggestions(r.Context(), callerFrom(r.Context()), r.PathValue("shipmentId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffAssignPickup(w http.ResponseWriter, r *http.Request) {
+	var b domain.PickupAssignRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Dispatch.Assign(r.Context(), callerFrom(r.Context()), r.PathValue("shipmentId"), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPickupAssignments(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.Assignments(r.Context(), callerFrom(r.Context()), r.PathValue("shipmentId"))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffShipFromLocation(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Dispatch.ShipFromLocation(r.Context(), callerFrom(r.Context()), r.PathValue("locationId"))
 	h.reply(w, r, http.StatusOK, v, err)
 }

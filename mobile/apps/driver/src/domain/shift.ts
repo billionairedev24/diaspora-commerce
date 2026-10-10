@@ -88,3 +88,10 @@ export function canEndShift(r: Route, odometer: string): string | null {
   if (!(Number(odometer) > start)) return `End odometer must be more than ${start}.`;
   return null;
 }
+
+/** On shift: the route is started (or ready to start after a passed inspection) and not ended. Location pings
+ *  (S255, nearest driver for seller pickups) are sent only then. */
+export function onShift(r: Route | null): boolean {
+  if (!r || r.ended || r.blocked) return false;
+  return r.status === 'IN_PROGRESS' || (r.status === 'ASSIGNED' && r.inspection === 'PASSED');
+}

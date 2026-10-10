@@ -46,6 +46,15 @@ const (
 	CodeUpstreamError       = "UPSTREAM_ERROR"
 	CodeInternal            = "INTERNAL"
 	CodePhoneMissing        = "PHONE_MISSING"
+	// AfroTransact Delivery from the seller's store (S255): checkout (shopper) and pickup locations (seller).
+	CodeDeliveryOutOfRange        = "DELIVERY_OUT_OF_RANGE"
+	CodeDeliveryUnavailable       = "DELIVERY_UNAVAILABLE"
+	CodeDeliveryPickupUnavailable = "DELIVERY_PICKUP_UNAVAILABLE"
+	CodeDeliveryAddressNotLocated = "DELIVERY_ADDRESS_NOT_LOCATED"
+	CodePickupOrgNotApproved      = "PICKUP_ORG_NOT_APPROVED"
+	CodePickupInvalidHours        = "PICKUP_INVALID_HOURS"
+	CodePickupNotGeocoded         = "PICKUP_NOT_GEOCODED"
+	CodePickupOutsideDeliveryArea = "PICKUP_OUTSIDE_DELIVERY_AREA"
 )
 
 // Problem is an RFC 9457 problem the HTTP adapter renders as application/problem+json.

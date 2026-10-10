@@ -1,7 +1,8 @@
 /* Sample catalogue ported from the design prototype (design/AfroTransact Shop.dc.html, const P).
    Prices are dollars here and converted to minor units by the mock database. */
 
-export type FixtureFulfilment = 'AT' | 'S';
+/** AT = Fulfilled by AfroTransact; S = ships from the seller; ATD = AfroTransact Delivery from the seller's store (S255). */
+export type FixtureFulfilment = 'AT' | 'S' | 'ATD';
 
 export interface FixtureOffer {
   seller: string;
@@ -57,6 +58,7 @@ const BASE: FixtureProduct[] = [
   { id: 'p19', name: 'Moringa Leaf Powder, 8 oz', brand: 'Green Leaf Naturals', comm: 'West African', cat: 'Health', rating: 4.5, reviews: 612, unit: '8 oz', origin: 'Dallas, TX', bullets: ['Shade-dried leaf powder', 'Not intended to diagnose, treat, cure or prevent any disease'], offers: [{ seller: 'Green Leaf Naturals', city: 'Dallas, TX', price: 13, ff: 'S', stock: 90 }] },
   { id: 'p20', name: 'Bogolan Mudcloth Pillow Cover, 18 in', brand: 'Bamako Home', comm: 'Malian', cat: 'Home & Art', rating: 4.8, reviews: 144, unit: '18 × 18 in', origin: 'Ségou, Mali', bullets: ['Hand-dyed with fermented mud', 'Hidden zipper; insert not included'], offers: [{ seller: 'Bamako Home', city: 'Brooklyn, NY', price: 32, ff: 'S', stock: 18 }] },
   { id: 'p21', name: 'Clay Diya Lamps, Set of 12', brand: 'Patel Grocers', comm: 'Indian', cat: 'Party', rating: 4.7, reviews: 489, unit: '12 pcs', origin: 'Gujarat, India', bullets: ['Hand-painted terracotta', 'For Diwali and puja'], offers: [{ seller: 'Patel Grocers', city: 'Edison, NJ', price: 18, ff: 'S', stock: 70 }] },
+  { id: 'p23', name: 'Red Palm Oil, Unrefined, 1 L', brand: "Ama's Market", comm: 'Ghanaian', cat: 'Groceries', rating: 4.7, reviews: 96, unit: '1 L bottle', origin: 'Kumasi, Ghana', bullets: ['Cold-pressed zomi with its deep red colour', 'Packed at Ama’s store in Houston; an AfroTransact driver brings it the same or next day'], offers: [{ seller: "Ama's Market", city: 'Houston, TX', price: 12.99, ff: 'ATD', stock: 30 }] },
   { id: 'p22', name: 'Dried Guajillo Chiles, 8 oz', brand: 'La Tiendita', comm: 'Mexican', cat: 'Groceries', rating: 4.8, reviews: 721, unit: '8 oz', origin: 'Zacatecas, Mexico', bullets: ['Whole, stemmed, pliable', 'For birria, pozole rojo and salsas'], offers: [{ seller: 'La Tiendita', city: 'Los Angeles, CA', price: 6.99, ff: 'AT', stock: 160 }] }
 ];
 

@@ -18,7 +18,13 @@ export const staffKeys = {
   customers: (q: string) => [...staffKeys.all, 'support', 'customers', q] as const,
   customer: (id: string) => [...staffKeys.all, 'support', 'customer', id] as const,
   fees: () => [...staffKeys.all, 'fees'] as const,
-  feeOrgs: (q: string) => [...staffKeys.fees(), 'orgs', q] as const
+  feeOrgs: (q: string) => [...staffKeys.fees(), 'orgs', q] as const,
+  deliveryQuote: (orgId: string, miles: number, packages: number) => [...staffKeys.fees(), 'delivery-quote', orgId, miles, packages] as const,
+  pickups: () => [...staffKeys.all, 'dispatch', 'pickups'] as const,
+  pickupList: (nodeId: string) => [...staffKeys.pickups(), 'list', nodeId] as const,
+  pickup: (shipmentId: string) => [...staffKeys.pickups(), 'pickup', shipmentId] as const,
+  pickupSuggestions: (shipmentId: string) => [...staffKeys.pickup(shipmentId), 'suggestions'] as const,
+  pickupAssignments: (shipmentId: string) => [...staffKeys.pickup(shipmentId), 'assignments'] as const
 };
 
 const MINUTE = 60_000;
@@ -46,5 +52,17 @@ export const staffQueries = {
     queryOptions({ queryKey: staffKeys.customer(id), queryFn: ({ signal }) => api.getCustomer(id, signal), staleTime: 15_000 }),
   fees: (api: StaffApiClient) => queryOptions({ queryKey: staffKeys.fees(), queryFn: ({ signal }) => api.getFees(signal), staleTime: 15_000 }),
   feeOrgs: (api: StaffApiClient, q: string) =>
-    queryOptions({ queryKey: staffKeys.feeOrgs(q), queryFn: ({ signal }) => api.searchFeeOrgs(q, signal), staleTime: 30_000 })
+    queryOptions({ queryKey: staffKeys.feeOrgs(q), queryFn: ({ signal }) => api.searchFeeOrgs(q, signal), staleTime: 30_000 }),
+  deliveryQuote: (api: StaffApiClient, orgId: string, miles: number, packages: number) =>
+    queryOptions({
+      queryKey: staffKeys.deliveryQuote(orgId, miles, packages),
+      queryFn: ({ signal }) => api.quoteDelivery({ sellerOrgId: orgId, distanceMiles: miles, packages }, signal),
+      staleTime: 30_000
+    }),
+  pickups: (api: StaffApiClient, nodeId = '') =>
+    queryOptions({ queryKey: staffKeys.pickupList(nodeId), queryFn: ({ signal }) => api.listPickups(nodeId, signal), staleTime: 10_000 }),
+  pickupSuggestions: (api: StaffApiClient, shipmentId: string) =>
+    queryOptions({ queryKey: staffKeys.pickupSuggestions(shipmentId), queryFn: ({ signal }) => api.getPickupSuggestions(shipmentId, signal), staleTime: 10_000 }),
+  pickupAssignments: (api: StaffApiClient, shipmentId: string) =>
+    queryOptions({ queryKey: staffKeys.pickupAssignments(shipmentId), queryFn: ({ signal }) => api.getPickupAssignments(shipmentId, signal), staleTime: 10_000 })
 };

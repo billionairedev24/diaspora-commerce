@@ -112,7 +112,9 @@ export type Dashboard = z.infer<typeof DashboardSchema>;
 
 /* ── Orders ────────────────────────────────────────────── */
 
-export const FulfilmentKindSchema = z.enum(['SELLER', 'AFROTRANSACT']);
+/** SELLER = I ship it; AFROTRANSACT = Fulfilled by AfroTransact (FBA); AFROTRANSACT_DELIVERY = AfroTransact picks up from my store (S255). */
+export const FulfilmentKindSchema = z.enum(['SELLER', 'AFROTRANSACT', 'AFROTRANSACT_DELIVERY']);
+export type FulfilmentKind = z.infer<typeof FulfilmentKindSchema>;
 export const ShipmentStatusSchema = z.enum([
   'PENDING_PAYMENT', 'PLACED', 'CONFIRMED', 'PACKED', 'READY', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERY_FAILED', 'DELIVERED', 'RETURNED', 'CANCELLED'
 ]);
@@ -172,9 +174,29 @@ export const SellerShipmentSchema = z.object({
   trackingNumber: nullableString,
   nextActions: z.array(SellerStatusActionSchema),
   canBuyLabel: z.boolean(),
-  timeline: z.array(z.object({ status: z.string(), at: z.string(), actor: z.string() }))
+  timeline: z.array(z.object({ status: z.string(), at: z.string(), actor: z.string() })),
+  /** AfroTransact Delivery from the seller's store (S255): the seller delivery fee is deducted from the payout. */
+  localDelivery: z
+    .object({
+      pickupLocationId: nullableString,
+      roadMiles: z.number().nullable(),
+      durationMinutes: z.number().nullable(),
+      customerChargeMinor: z.number().int(),
+      sellerFeeMinor: z.number().int()
+    })
+    .nullable()
 });
 export type SellerShipment = z.infer<typeof SellerShipmentSchema>;
+export const OrderEarningsSchema = z.object({
+  itemsMinor: z.number().int(),
+  shippingMinor: z.number().int(),
+  commissionMinor: z.number().int(),
+  fbaFeesMinor: z.number().int(),
+  deliveryFeesMinor: z.number().int(),
+  stripeFeeMinor: z.number().int(),
+  netMinor: z.number().int()
+});
+export type OrderEarnings = z.infer<typeof OrderEarningsSchema>;
 
 export const SellerOrderDetailSchema = z.object({
   orderNumber: z.string(),
@@ -184,7 +206,8 @@ export const SellerOrderDetailSchema = z.object({
   buyerName: z.string(),
   shippingAddress: SellerAddressSchema.nullable(),
   shipments: z.array(SellerShipmentSchema),
-  totalMinor: z.number().int()
+  totalMinor: z.number().int(),
+  earnings: OrderEarningsSchema.nullable()
 });
 export type SellerOrderDetail = z.infer<typeof SellerOrderDetailSchema>;
 
@@ -237,6 +260,17 @@ export function toSellerAddress(f: ShipFromForm): SellerAddress {
   return { name: f.name, phone: f.phone || null, line1: f.line1, line2: f.line2 || null, city: f.city, state: f.state, postalCode: f.postalCode, country: 'US' };
 }
 
+export const PICKUP_DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
+export const PickupDaySchema = z.enum(PICKUP_DAYS);
+export type PickupDay = z.infer<typeof PickupDaySchema>;
+export const PickupWindowSchema = z.object({ day: PickupDaySchema, opens: z.string(), closes: z.string() });
+export type PickupWindow = z.infer<typeof PickupWindowSchema>;
+export interface AfrotransactPickupRequest {
+  enabled: boolean;
+  hours: PickupWindow[];
+  version?: number | null;
+}
+
 /** A saved ship-from address of the organisation (seller service; the label form preselects the default). */
 export const ShipFromAddressSchema = z.object({
   id: z.string(),
@@ -251,9 +285,67 @@ export const ShipFromAddressSchema = z.object({
   postalCode: z.string(),
   country: z.string(),
   isDefault: z.boolean(),
-  version: z.number().int()
+  version: z.number().int(),
+  /** Where geo-service located the address (null when geocoding failed or geo was down). */
+  position: z
+    .object({ lat: z.number(), lng: z.number(), precision: z.enum(['ADDRESS', 'ZIP', 'POINT']), geocodedAt: nullableString })
+    .nullable(),
+  /** "AfroTransact picks up from my store" (S255). */
+  afrotransactPickup: z.object({
+    enabled: z.boolean(),
+    hours: z.array(PickupWindowSchema),
+    zoneName: nullableString,
+    enabledAt: nullableString
+  })
 });
 export type ShipFromAddress = z.infer<typeof ShipFromAddressSchema>;
+
+const PICKUP_HHMM = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+
+/** The seller service's pickup-hours rules (the BFF's AfrotransactPickupRequest.Validate): keys hours / hours.<i>.<field>. */
+export function validatePickupHours(enabled: boolean, hours: PickupWindow[]): Record<string, string> {
+  const errs: Record<string, string> = {};
+  if (enabled && hours.length === 0) errs.hours = 'Add at least one pickup window';
+  if (hours.length > 14) errs.hours = 'At most 14 pickup windows';
+  const byDay = new Map<string, { opens: string; closes: string }[]>();
+  hours.forEach((h, i) => {
+    const k = `hours.${i}`;
+    if (!PICKUP_HHMM.test(h.opens)) errs[`${k}.opens`] = 'Use HH:MM (24-hour)';
+    else if (!PICKUP_HHMM.test(h.closes)) errs[`${k}.closes`] = 'Use HH:MM (24-hour)';
+    else if (h.opens >= h.closes) errs[`${k}.closes`] = 'Closes after it opens';
+    else {
+      const same = byDay.get(h.day) ?? [];
+      if (same.some((o) => h.opens < o.closes && o.opens < h.closes)) errs[`${k}.opens`] = `Overlaps another window on ${h.day.toLowerCase()}`;
+      byDay.set(h.day, [...same, h]);
+    }
+  });
+  return errs;
+}
+
+/* ── Offers: the fulfilment choice of a listing (S255) ── */
+export const SellerOfferSchema = z.object({
+  offerId: z.string(),
+  atin: z.string(),
+  productId: z.string(),
+  sellerSku: z.string(),
+  condition: z.string(),
+  priceMinor: z.number().int(),
+  currency: z.string(),
+  fulfilment: FulfilmentKindSchema,
+  quantity: z.number().int(),
+  availableQty: z.number().int(),
+  shipFromLocationId: nullableString,
+  shipsFrom: nullableString,
+  status: z.enum(['ACTIVE', 'PAUSED', 'WITHDRAWN']),
+  version: z.number().int()
+});
+export type SellerOffer = z.infer<typeof SellerOfferSchema>;
+export const SellerOfferListSchema = z.object({ items: z.array(SellerOfferSchema) });
+export type SellerOfferList = z.infer<typeof SellerOfferListSchema>;
+export interface OfferFulfilmentRequest {
+  fulfilment: FulfilmentKind;
+  shipFromLocationId?: string | null;
+}
 export const ShipFromListSchema = z.object({ items: z.array(ShipFromAddressSchema) });
 export type ShipFromInput = ShipFromForm & { label?: string; company?: string; country?: string; makeDefault?: boolean; version?: number | null };
 
@@ -450,7 +542,27 @@ export const SellerFeeVersionSchema = z.object({
   cardPctBps: z.number().int(),
   cardFixedMinor: z.number().int(),
   fbaPerUnitMinor: z.number().int(),
-  reverseCommissionOnRefund: z.boolean()
+  reverseCommissionOnRefund: z.boolean(),
+  /** The seller delivery fee of AfroTransact Delivery from your store (S255); null when the version has no delivery pricing. */
+  deliveryFee: z
+    .object({
+      enabled: z.boolean(),
+      maxRadiusMiles: z.number(),
+      source: z.enum(['DEFAULT', 'OVERRIDE', 'RETAIL']),
+      tariff: z
+        .object({
+          mode: z.enum(['FLAT', 'DISTANCE']),
+          flatPerPackageMinor: z.number().int().nullable(),
+          baseMinor: z.number().int().nullable(),
+          perMileMinor: z.number().int().nullable(),
+          bands: z.array(z.object({ fromMiles: z.number(), toMiles: z.number(), feeMinor: z.number().int() })),
+          minMinor: z.number().int().nullable(),
+          maxMinor: z.number().int().nullable()
+        })
+        .nullable(),
+      summary: z.string()
+    })
+    .nullable()
 });
 export type SellerFeeVersion = z.infer<typeof SellerFeeVersionSchema>;
 export const SellerFeeChangeSchema = z.object({ field: z.string(), label: z.string(), from: z.string(), to: z.string() });

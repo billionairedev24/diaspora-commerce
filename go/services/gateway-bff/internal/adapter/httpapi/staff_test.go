@@ -77,7 +77,11 @@ func (f *fakePlatform) feeSchedules(w http.ResponseWriter, r *http.Request, p st
 		f.fees = []map[string]any{
 			{"id": "fee-1", "version": 1, "effectiveFrom": at(-90 * day), "currency": "USD", "categoryBps": map[string]any{"groceries": 800, "beauty": 1000},
 				"defaultCommissionBps": 1000, "overrides": []any{}, "cardPctBps": 290, "cardFixedMinor": 30, "fbaPerUnitMinor": 325,
-				"reverseCommissionOnRefund": true, "note": "Launch defaults", "createdBy": "system:seed", "createdAt": at(-90 * day)},
+				"reverseCommissionOnRefund": true, "note": "Launch defaults", "createdBy": "system:seed", "createdAt": at(-90 * day),
+				"deliveryPricing": map[string]any{"enabled": true, "maxRadiusMiles": 25,
+					"customerCharge":  map[string]any{"mode": "DISTANCE", "baseMinor": 499, "perMileMinor": 85, "minMinor": 599, "maxMinor": 2499},
+					"sellerFee":       map[string]any{"mode": "FLAT", "flatPerPackageMinor": 200},
+					"sellerOverrides": []any{map[string]any{"orgId": "org-1", "sellerFee": map[string]any{"mode": "FLAT", "flatPerPackageMinor": 150}}}}},
 			{"id": "fee-2", "version": 2, "effectiveFrom": at(10 * day), "currency": "USD", "categoryBps": map[string]any{"groceries": 700, "beauty": 1000},
 				"defaultCommissionBps": 1000, "overrides": []any{map[string]any{"orgId": "org-1", "category": "*", "commissionBps": 600}},
 				"cardPctBps": 290, "cardFixedMinor": 30, "fbaPerUnitMinor": 325, "reverseCommissionOnRefund": true, "note": "Grocery promo",
@@ -337,6 +341,50 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJ(w, 200, po)
 		}
+	// payments: AfroTransact Delivery quote (S255)
+	case p == "/v1/delivery-pricing/quote":
+		miles, _ := body["distanceMiles"].(float64)
+		if miles > 25 {
+			writeJ(w, 200, map[string]any{"available": false, "unavailableReason": "BEYOND_MAX_RADIUS", "customerChargeMinor": 0, "sellerFeeMinor": 0,
+				"currency": "USD", "scheduleVersion": 1, "maxRadiusMiles": 25})
+			return
+		}
+		writeJ(w, 200, map[string]any{"available": true, "customerChargeMinor": 499 + int(85*miles+0.5), "sellerFeeMinor": 200, "sellerFeeSource": "DEFAULT",
+			"currency": "USD", "scheduleId": "fee-1", "scheduleVersion": 1, "maxRadiusMiles": 25, "distanceMiles": miles})
+	// fulfilment: seller pickups (S255)
+	case p == "/v1/dispatch/shipments":
+		writeJ(w, 200, []any{
+			map[string]any{"shipmentId": "shp-9", "orderNumber": "AT-000009", "sellerOrgId": "org-1", "sellerName": "Kente Naturals", "origin": "SELLER",
+				"city": "Houston", "state": "TX", "postalCode": "77042", "perishable": true, "units": 2, "status": "AWAITING_ROUTE", "promisedBy": "2026-10-11",
+				"createdAt": now},
+			map[string]any{"shipmentId": "shp-8", "orderNumber": "AT-000008", "origin": "FC", "city": "Houston", "state": "TX", "status": "AWAITING_ROUTE"}})
+	case strings.HasSuffix(p, "/driver-suggestions") && strings.HasPrefix(p, "/v1/dispatch/pickups/"):
+		if strings.Contains(p, "/nope/") {
+			problemJ(w, 404, "fulfilment.shipment-not-found")
+			return
+		}
+		writeJ(w, 200, map[string]any{"shipmentId": "shp-9", "drivers": []any{
+			map[string]any{"driverId": "drv-1", "routeId": "rte-1", "routeName": "HOU-W", "zone": "Alief", "routeStatus": "IN_PROGRESS", "straightLineMiles": 2.1,
+				"roadMiles": 2.9, "durationMinutes": 9, "distanceMethod": "ROAD_OSRM", "positionAt": now, "packagesOnRoute": 12, "capacityLeft": 28},
+			map[string]any{"driverId": "drv-2", "routeId": "rte-2", "routeName": "HOU-S", "zone": "Alief", "routeStatus": "ASSIGNED", "straightLineMiles": 4.8,
+				"distanceMethod": "STRAIGHT_LINE", "positionAt": now, "packagesOnRoute": 30, "capacityLeft": 10}}})
+	case strings.HasSuffix(p, "/assign") && strings.HasPrefix(p, "/v1/dispatch/pickups/"):
+		if body["routeId"] == "rte-done" {
+			problemJ(w, 409, "fulfilment.pickup-not-movable")
+			return
+		}
+		writeJ(w, 200, map[string]any{"id": body["routeId"], "name": "HOU-S", "zone": "Alief", "status": "ASSIGNED", "driverId": "drv-2"})
+	case strings.HasSuffix(p, "/assignments") && strings.HasPrefix(p, "/v1/dispatch/pickups/"):
+		writeJ(w, 200, []any{
+			map[string]any{"id": "pa-1", "shipmentId": "shp-9", "routeId": "rte-1", "driverId": "drv-1", "mode": "AUTO_NEAREST", "straightMiles": 2.1, "roadMiles": 2.9,
+				"distanceMethod": "ROAD_OSRM", "actor": "system", "createdAt": "2026-10-10T08:00:00Z"},
+			map[string]any{"id": "pa-2", "shipmentId": "shp-9", "routeId": "rte-2", "driverId": "drv-2", "mode": "DISPATCH_OVERRIDE", "reason": "Driver 1 has a flat tyre",
+				"previousRouteId": "rte-1", "actor": "stf-1", "createdAt": "2026-10-10T09:00:00Z"}})
+	// seller: pickup locations
+	case strings.HasPrefix(p, "/v1/ship-from-locations/"):
+		writeJ(w, 200, map[string]any{"id": "loc-1", "orgId": "org-1", "label": "Store", "line1": "9800 Bissonnet St", "city": "Houston", "state": "TX",
+			"postalCode": "77036", "country": "US", "position": map[string]any{"lat": 29.67, "lng": -95.55, "precision": "ADDRESS"},
+			"afrotransactPickup": map[string]any{"enabled": true, "zoneName": "Houston Metro", "hours": []any{map[string]any{"day": "MONDAY", "opens": "09:00", "closes": "17:00"}}}})
 	case p == "/v1/dispatch/routes" || strings.HasPrefix(p, "/v1/dispatch/routes/"):
 		rt := map[string]any{"id": "rte-1", "name": "HOU-W", "zone": "Alief", "status": "PLANNED", "serviceDate": "2026-10-10",
 			"stops": []any{map[string]any{"id": "st-1", "sequence": 1, "name": "Amara", "status": "PENDING"}}}
@@ -409,7 +457,8 @@ func staffBFF(t *testing.T, f *fakePlatform) (http.Handler, func(token, method, 
 		Matrix: upstreams.NewOrgAccess(httpclient.New(httpclient.Options{Name: "identity", BaseURL: srv.URL, Metrics: metrics, Transport: http.DefaultTransport})),
 		Jobs:   exportfiles.NewMemoryJobs(), Blobs: files, ExportBasePath: "/api/bff", Log: log, Background: func(fn func()) { fn() }, RetailOrgID: "org-retail"}
 	staff := httpapi.StaffServices{Shell: app.NewStaffShellService(d), Records: app.NewStaffRecordsService(d), Dashboard: app.NewStaffDashboardService(d),
-		Exports: app.NewStaffExportsService(d), Support: app.NewStaffSupportService(d), Fees: app.NewStaffFeesService(d), Files: files}
+		Exports: app.NewStaffExportsService(d), Support: app.NewStaffSupportService(d), Fees: app.NewStaffFeesService(d), Files: files,
+		Dispatch: app.NewStaffDispatchService(d)}
 	mux := http.NewServeMux()
 	httpapi.New(httpapi.Services{Sessions: staffSessions{}, Staff: staff}, nil, httpapi.SecurityOptions{AllowedOrigins: []string{"http://localhost:3002"}}, log).Register(mux)
 	do := func(token, method, path string, body any, headers ...string) *httptest.ResponseRecorder {
@@ -751,10 +800,90 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatal("cancel calls")
 	}
 
+	// AfroTransact Delivery pricing (S255): shown per version, validated, sent to payments; omitted = carried over.
+	if dp := feesAt(fees, "current", "deliveryPricing").(map[string]any); dp["enabled"] != true || feesAt(dp, "sellerOverrides", "0", "orgName") != "Kente Naturals" ||
+		len(feesAt(dp, "customerCharge", "bands").([]any)) != 0 || feesAt(dp, "customerCharge", "flatPerPackageMinor") != nil {
+		t.Fatalf("delivery pricing = %v", dp)
+	}
+	if feesAt(fees, "base", "deliveryPricing") != nil || feesAt(fees, "limits", "deliveryMaxRadiusMiles") != float64(200) {
+		t.Fatalf("base delivery pricing = %v", feesAt(fees, "base", "deliveryPricing"))
+	}
+	delivery := func() map[string]any {
+		return map[string]any{"enabled": true, "maxRadiusMiles": 30,
+			"customerCharge": map[string]any{"mode": "DISTANCE", "flatPerPackageMinor": nil, "baseMinor": 499, "perMileMinor": 85, "minMinor": 599, "maxMinor": nil,
+				"bands": []any{map[string]any{"fromMiles": 0, "toMiles": 3, "feeMinor": 499}}},
+			"sellerFee":       map[string]any{"mode": "FLAT", "flatPerPackageMinor": 200, "baseMinor": nil, "perMileMinor": nil, "minMinor": nil, "maxMinor": nil, "bands": []any{}},
+			"sellerOverrides": []any{map[string]any{"orgId": "org-2", "sellerFee": map[string]any{"mode": "FLAT", "flatPerPackageMinor": 100, "bands": []any{}}}}}
+	}
+	withDelivery := draft()
+	withDelivery["effectiveFrom"] = time.Now().UTC().Add(12 * 24 * time.Hour).Format(time.RFC3339)
+	badDelivery := delivery()
+	badDelivery["maxRadiusMiles"] = 250
+	badDelivery["customerCharge"].(map[string]any)["bands"] = []any{map[string]any{"fromMiles": 0, "toMiles": 5, "feeMinor": 499}, map[string]any{"fromMiles": 4, "toMiles": 8, "feeMinor": 699}}
+	badDelivery["customerCharge"].(map[string]any)["maxMinor"] = 100
+	badDelivery["sellerOverrides"] = []any{map[string]any{"orgId": "org-retail", "sellerFee": map[string]any{"mode": "FLAT", "flatPerPackageMinor": 0, "bands": []any{}}}}
+	withDelivery["deliveryPricing"] = badDelivery
+	e := do("admin", "POST", "/v1/staff/fees/schedules", withDelivery, 422)["errors"].(map[string]any)
+	for _, k := range []string{"deliveryPricing.maxRadiusMiles", "deliveryPricing.customerCharge.bands.1.fromMiles", "deliveryPricing.customerCharge.maxMinor", "deliveryPricing.sellerOverrides.0.orgId"} {
+		if e[k] == nil {
+			t.Fatalf("missing delivery error %s: %v", k, e)
+		}
+	}
+	withDelivery["deliveryPricing"] = delivery()
+	if c := do("admin", "POST", "/v1/staff/fees/schedules", withDelivery, 201, "Idempotency-Key", "fee-draft-0002"); feesAt(c, "deliveryPricing", "maxRadiusMiles") != float64(30) {
+		t.Fatalf("created with delivery = %v", c)
+	}
+	sentDP := f.bodies["POST /v1/fee-schedules"]["deliveryPricing"].(map[string]any)
+	if _, has := sentDP["customerCharge"].(map[string]any)["maxMinor"]; has || feesAt(sentDP, "sellerFee", "flatPerPackageMinor") != float64(200) ||
+		feesAt(sentDP, "customerCharge", "bands", "0", "feeMinor") != float64(499) {
+		t.Fatalf("payments delivery body = %v", sentDP)
+	}
+	if _, has := sent["deliveryPricing"]; has {
+		t.Fatal("a draft without the section must not send it (payments carries it over)")
+	}
+	q := do("admin", "POST", "/v1/staff/fees/delivery-quote", map[string]any{"sellerOrgId": "org-1", "distanceMiles": 7.4, "packages": 1}, 200)
+	if q["available"] != true || q["customerChargeMinor"] != float64(1128) || q["sellerFeeSource"] != "DEFAULT" {
+		t.Fatalf("quote = %v", q)
+	}
+	if q := do("auditor", "POST", "/v1/staff/fees/delivery-quote", map[string]any{"sellerOrgId": "org-1", "distanceMiles": 31}, 200); q["unavailableReason"] != "BEYOND_MAX_RADIUS" || q["sellerFeeSource"] != nil {
+		t.Fatalf("far quote = %v", q)
+	}
+	do("admin", "POST", "/v1/staff/fees/delivery-quote", map[string]any{"sellerOrgId": "", "distanceMiles": -1}, 422)
+
+	// Dispatch: seller pickups, nearest drivers, overrides with a reason, history.
+	pk := do("admin", "GET", "/v1/staff/dispatch/pickups", nil, 200)
+	if items := pk["items"].([]any); len(items) != 1 || items[0].(map[string]any)["shipmentId"] != "shp-9" || pk["canAssign"] != true {
+		t.Fatalf("pickups = %v", pk)
+	}
+	if s := do("support", "GET", "/v1/staff/dispatch/pickups", nil, 200); s["canAssign"] != false {
+		t.Fatalf("support may view, not assign: %v", s)
+	}
+	sg := do("admin", "GET", "/v1/staff/dispatch/pickups/shp-9/driver-suggestions", nil, 200)
+	if d := sg["drivers"].([]any); len(d) != 2 || d[1].(map[string]any)["roadMiles"] != nil || d[0].(map[string]any)["roadMiles"] != 2.9 {
+		t.Fatalf("suggestions = %v", sg)
+	}
+	do("admin", "GET", "/v1/staff/dispatch/pickups/nope/driver-suggestions", nil, 404)
+	do("admin", "POST", "/v1/staff/dispatch/pickups/shp-9/assign", map[string]any{"routeId": "rte-2", "reason": "ok"}, 422)
+	do("support", "POST", "/v1/staff/dispatch/pickups/shp-9/assign", map[string]any{"routeId": "rte-2", "reason": "Driver 1 has a flat tyre"}, 403)
+	if a := do("admin", "POST", "/v1/staff/dispatch/pickups/shp-9/assign", map[string]any{"routeId": "rte-2", "reason": "Driver 1 has a flat tyre"}, 200); a["routeId"] != "rte-2" || a["driverId"] != "drv-2" {
+		t.Fatalf("assign = %v", a)
+	}
+	if b := f.bodies["POST /v1/dispatch/pickups/shp-9/assign"]; b["reason"] != "Driver 1 has a flat tyre" {
+		t.Fatalf("assign body = %v", b)
+	}
+	do("admin", "POST", "/v1/staff/dispatch/pickups/shp-9/assign", map[string]any{"routeId": "rte-done", "reason": "Too late to move"}, 409)
+	if h := do("admin", "GET", "/v1/staff/dispatch/pickups/shp-9/assignments", nil, 200)["items"].([]any); len(h) != 2 || h[0].(map[string]any)["mode"] != "DISPATCH_OVERRIDE" {
+		t.Fatalf("history = %v", h)
+	}
+	if l := do("admin", "GET", "/v1/staff/ship-from-locations/loc-1", nil, 200); l["pickupEnabled"] != true || l["position"].(map[string]any)["precision"] != "ADDRESS" {
+		t.Fatalf("location = %v", l)
+	}
+
 	for _, op := range []string{"getStaffSession", "getStaffDashboard", "listStaffResource", "createStaffRecord", "getStaffRecord", "updateStaffRecord", "runStaffAction",
 		"addStaffNote", "listStaffExports", "createStaffExport", "getStaffExport", "downloadStaffExport", "getStaffExportFile", "searchSupportCustomers",
 		"getSupportCustomer", "supportRefund", "supportResendNotification", "supportCancelShipment", "getStaffFees", "searchFeeOrgs", "createFeeSchedule",
-		"cancelFeeSchedule"} {
+		"cancelFeeSchedule", "quoteStaffDelivery", "listStaffPickups", "getPickupDriverSuggestions", "assignPickup", "listPickupAssignments",
+		"getStaffShipFromLocation"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not exercised", op)
 		}
