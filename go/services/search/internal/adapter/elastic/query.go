@@ -66,7 +66,8 @@ func buildSearch(q domain.Query, vec []float32) object {
 }
 
 func buildFilters(q domain.Query) []any {
-	var f []any
+	// Only complete, live product pages are searchable (availability updates can arrive before the product).
+	f := []any{object{"term": object{"status": "LIVE"}}}
 	if q.Department != "" {
 		f = append(f, object{"term": object{"department": q.Department}})
 	}
@@ -148,6 +149,7 @@ func buildSuggest(prefix string, limit int) object {
 				"query": prefix, "type": "bool_prefix", "operator": "and", "fuzziness": "AUTO:4,7",
 				"fields": []string{"title.suggest", "title.suggest._2gram", "title.suggest._3gram"},
 			}}},
+			"filter": []any{object{"term": object{"status": "LIVE"}}},
 			"should": []any{object{"term": object{"in_stock": object{"value": true, "boost": 2}}}},
 		}},
 		"_source": []string{"atin", "title", "department", "seller_name", "seller_kind", "fulfilment",

@@ -87,6 +87,10 @@
       "ships_from":    { "type": "geo_point" },
       "image_url":     { "type": "keyword", "index": false },
       "offer_count":   { "type": "integer" },
+      "variant_atins": { "type": "keyword" },
+      "variant_qty":   { "type": "flattened" },
+      "variant_qty_version": { "type": "flattened" },
+      "status":        { "type": "keyword" },
       "embedding":     { "type": "dense_vector", "dims": 1536, "index": true, "similarity": "cosine" },
       "version":       { "type": "long" },
       "updated_at":    { "type": "date" }

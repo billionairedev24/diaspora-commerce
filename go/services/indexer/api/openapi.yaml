@@ -1,0 +1,28 @@
+openapi: 3.1.0
+info:
+  title: Indexer
+  version: v1
+  description: |
+    Kafka → Elasticsearch projection of the product read model. Consumes catalog.product.* and
+    inventory.availability.changed (topics at.product.events, at.inventory.events), upserts product documents
+    with version guards so redelivered or out-of-order events never overwrite newer data, and parks poison
+    events on at.indexer.dlq.events after retries. The HTTP surface is operational only.
+servers:
+  - url: http://localhost:8202
+    description: local
+paths:
+  /healthz:
+    get:
+      summary: Liveness
+      operationId: healthz
+      responses: {'200': {description: alive}}
+  /readyz:
+    get:
+      summary: Readiness (Elasticsearch reachable)
+      operationId: readyz
+      responses: {'200': {description: ready}, '503': {description: not ready}}
+  /metrics:
+    get:
+      summary: Prometheus metrics (indexer_events_total by type and outcome)
+      operationId: metrics
+      responses: {'200': {description: metrics, content: {text/plain: {schema: {type: string}}}}}

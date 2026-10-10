@@ -36,6 +36,12 @@ const (
 	ShipsFromSeller         = "SELLER"
 )
 
+// Document statuses. Only LIVE documents are returned by search.
+const (
+	StatusLive    = "LIVE"
+	StatusPending = "PENDING"
+)
+
 // Seller kinds.
 const (
 	SellerPlatform = "PLATFORM"
@@ -44,30 +50,33 @@ const (
 
 // ProductDocument is one product page with its buy-box offer (lowest-landed-price eligible offer).
 type ProductDocument struct {
-	ATIN         string    `json:"atin"`
-	Title        string    `json:"title"`
-	Brand        string    `json:"brand,omitempty"`
-	Description  string    `json:"description,omitempty"`
-	Department   string    `json:"department"`
-	CategoryPath string    `json:"category_path"`
-	Communities  []string  `json:"communities,omitempty"`
-	SellerID     string    `json:"seller_id"`
-	SellerName   string    `json:"seller_name"`
-	SellerKind   string    `json:"seller_kind"`
-	Fulfilment   string    `json:"fulfilment"`
-	PriceMinor   int64     `json:"price_minor"`
-	Currency     string    `json:"currency"`
-	Rating       float64   `json:"rating"`
-	ReviewCount  int       `json:"review_count"`
-	AvailableQty int       `json:"available_qty"`
-	InStock      bool      `json:"in_stock"`
-	DeliveryDays int       `json:"delivery_days"`
-	ShipsFrom    *GeoPoint `json:"ships_from,omitempty"`
-	ImageURL     string    `json:"image_url,omitempty"`
-	OfferCount   int       `json:"offer_count"`
-	Embedding    []float32 `json:"embedding,omitempty"`
-	Version      int64     `json:"version"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ATIN         string         `json:"atin"`
+	Title        string         `json:"title"`
+	Brand        string         `json:"brand,omitempty"`
+	Description  string         `json:"description,omitempty"`
+	Department   string         `json:"department"`
+	CategoryPath string         `json:"category_path"`
+	Communities  []string       `json:"communities,omitempty"`
+	SellerID     string         `json:"seller_id"`
+	SellerName   string         `json:"seller_name"`
+	SellerKind   string         `json:"seller_kind"`
+	Fulfilment   string         `json:"fulfilment"`
+	PriceMinor   int64          `json:"price_minor"`
+	Currency     string         `json:"currency"`
+	Rating       float64        `json:"rating"`
+	ReviewCount  int            `json:"review_count"`
+	AvailableQty int            `json:"available_qty"`
+	InStock      bool           `json:"in_stock"`
+	DeliveryDays int            `json:"delivery_days"`
+	ShipsFrom    *GeoPoint      `json:"ships_from,omitempty"`
+	ImageURL     string         `json:"image_url,omitempty"`
+	OfferCount   int            `json:"offer_count"`
+	VariantATINs []string       `json:"variant_atins,omitempty"`
+	VariantQty   map[string]int `json:"variant_qty,omitempty"`
+	Status       string         `json:"status,omitempty"`
+	Embedding    []float32      `json:"embedding,omitempty"`
+	Version      int64          `json:"version"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
 // GeoPoint is an Elasticsearch geo_point.

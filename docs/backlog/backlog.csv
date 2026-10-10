@@ -142,7 +142,7 @@
 "S037","Story","Indexer: Kafka → Elasticsearch projection","Indexer consumes catalog, offers and inventory events and upserts product documents idempotently by version.","- catalog.product.approved creates/updates a document
 - inventory.availability.changed updates available_qty and in_stock
 - Out-of-order events with an older version are ignored
-- Bulk indexing with retries and a dead-letter topic","E04","","Highest","8","search go events","search","To Do"
+- Bulk indexing with retries and a dead-letter topic","E04","","Highest","8","search go events","search","Done"
 "S038","Story","Low-stock signals on cards","Product cards and search hits show 'Only N left' at 5 units or fewer.","- lowStock is true when 1–5 units are available
 - Out-of-stock items show 'Currently unavailable'","E04","","Medium","1","search","search","In Progress"
 "S039","Story","Search relevance tuning and analytics","Click-through and zero-result logging, ranking boosts for buy-box price, delivery promise and seller health.","- Zero-result queries are logged for synonym curation

@@ -1,0 +1,20 @@
+# indexer · dev. ES_URLS / KAFKA_BOOTSTRAP / ES_API_KEY come from the environment outside local and dev.
+port: 8080
+docsEnabled: true
+market: us
+kafka:
+  brokers: [kafka:9092]
+  group: indexer
+  topics: [at.product.events, at.inventory.events, at.position.events]
+elasticsearch:
+  urls: [http://elasticsearch:9200]
+  refresh: false
+catalogUrl: http://catalog
+sellerNames:
+  org_afrotransact_retail: AfroTransact Retail
+retry:
+  attempts: 4
+  backoffMs: 250
+telemetry:
+  otlpEndpoint: otel-collector.observability:4318
+  sampleRatio: 1.0
