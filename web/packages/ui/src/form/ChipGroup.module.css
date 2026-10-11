@@ -17,11 +17,18 @@
   cursor: pointer;
 }
 
-.chip:hover {
-  background: var(--at-color-surface-hover);
+@media (hover: hover) {
+  .chip:hover {
+    background: var(--at-color-surface-hover);
+  }
 }
 
 .chip[aria-pressed="true"] {
   border-color: var(--at-gold-500);
   background: var(--at-gold-50);
+}
+
+/* Touch screens: 44px chips. */
+@media (pointer: coarse) {
+  .chip { min-height: var(--at-size-touch); }
 }

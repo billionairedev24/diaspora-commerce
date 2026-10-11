@@ -9,7 +9,9 @@
   font-size: var(--at-text-2xs);
   font-weight: var(--at-weight-bold);
   line-height: var(--at-leading-normal);
-  white-space: nowrap;
+  /* Never wider than its column: a long label ("Fulfilled by AfroTransact" in a two-up card) wraps instead. */
+  max-width: 100%;
+  white-space: normal;
 }
 
 .fulfilled { background: var(--at-color-badge-fulfilled-bg); color: var(--at-color-badge-fulfilled-text); }

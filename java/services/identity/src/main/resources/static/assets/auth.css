@@ -1,10 +1,11 @@
 /* Hosted sign-in pages of the authorization server: the storefront's two-panel auth layout
    (web/apps/storefront/src/components/auth/Auth.module.css) and the @afrotransact/ui form controls, drawn with design
-   tokens only (tokens.css, copied from @afrotransact/tokens). */
+   tokens only (tokens.css, copied from @afrotransact/tokens). Hover styles sit in @media (hover: hover), so a tap on a
+   touch screen leaves no stuck hover colour; phones (320–560px) get a one-column, edge-to-edge layout (bottom). */
 
 /* ── Page and two-panel card ─────────────────────────────── */
-.page { min-height: 100vh; padding: clamp(0px, 2vw, 24px); background: var(--at-color-canvas); }
-.card { display: flex; flex-wrap: wrap-reverse; align-items: stretch; min-height: calc(100vh - 48px); max-width: 1280px; margin: 0 auto; border-radius: clamp(0px, 2vw, 16px); overflow: hidden; border: 1px solid var(--at-color-border); background: var(--at-color-surface); }
+.page { min-height: 100dvh; padding: clamp(0px, 2vw, 24px); background: var(--at-color-canvas); }
+.card { display: flex; flex-wrap: wrap-reverse; align-items: stretch; min-height: calc(100dvh - 48px); max-width: 1280px; margin: 0 auto; border-radius: clamp(0px, 2vw, 16px); overflow: hidden; border: 1px solid var(--at-color-border); background: var(--at-color-surface); }
 
 .aside { position: relative; display: flex; flex-direction: column; flex: 1 1 420px; min-width: 0; background: var(--at-ink-1000); color: var(--at-ink-0); }
 .photo { position: relative; flex: 1; min-height: clamp(180px, 32vw, 300px); background: repeating-linear-gradient(135deg, var(--at-color-placeholder-a) 0 6px, var(--at-color-placeholder-b) 6px 12px); }
@@ -20,7 +21,9 @@
 
 .form-col { display: flex; flex: 1 1 420px; flex-direction: column; align-items: center; justify-content: center; gap: var(--at-space-6); min-width: 0; padding: clamp(24px, 5vw, 64px) clamp(16px, 4vw, 32px); outline: none; }
 .logo { display: flex; align-items: center; gap: var(--at-space-2); color: var(--at-color-text); text-decoration: none; }
-.logo:hover { color: var(--at-color-text); text-decoration: none; }
+@media (hover: hover) {
+  .logo:hover { color: var(--at-color-text); text-decoration: none; }
+}
 .wordmark { font-size: var(--at-text-2xl); font-weight: var(--at-weight-black); letter-spacing: var(--at-tracking-tight); line-height: 1; }
 .app-tag { padding: 2px 8px; border-radius: var(--at-radius-pill); background: var(--at-ink-1000); color: var(--at-gold-500); font-size: var(--at-text-2xs); font-weight: var(--at-weight-bold); letter-spacing: var(--at-tracking-caps); text-transform: uppercase; }
 
@@ -87,21 +90,33 @@ select.control { padding: 0 var(--at-space-2); cursor: pointer; }
 
 /* ── Buttons (@afrotransact/ui Button) ───────────────────── */
 .btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: var(--at-space-2); width: 100%; height: var(--at-size-control); padding: 0 var(--at-space-6); border: 0; border-radius: var(--at-radius-pill); font-family: inherit; font-size: var(--at-text-md); font-weight: var(--at-weight-semibold); line-height: 1; text-decoration: none; white-space: nowrap; cursor: pointer; transition: background var(--at-duration-fast) var(--at-ease); }
-.btn:hover { text-decoration: none; }
+@media (hover: hover) {
+  .btn:hover { text-decoration: none; }
+}
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn svg { width: 20px; height: 20px; fill: currentColor; }
 .btn-lg { height: var(--at-size-control-lg); }
 .btn-primary { background: var(--at-color-action-primary); color: var(--at-color-action-primary-text); }
-.btn-primary:hover:not(:disabled) { background: var(--at-color-action-primary-hover); color: var(--at-color-action-primary-text); }
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) { background: var(--at-color-action-primary-hover); color: var(--at-color-action-primary-text); }
+}
 .btn-primary:active:not(:disabled) { background: var(--at-color-action-primary-press); }
 .btn-dark { background: var(--at-ink-1000); color: var(--at-ink-0); }
-.btn-dark:hover:not(:disabled) { background: var(--at-ink-800); color: var(--at-ink-0); }
+@media (hover: hover) {
+  .btn-dark:hover:not(:disabled) { background: var(--at-ink-800); color: var(--at-ink-0); }
+}
 .btn-neutral { border: 1px solid var(--at-color-border-strong); background: var(--at-color-action-neutral); color: var(--at-color-text); }
-.btn-neutral:hover:not(:disabled) { background: var(--at-color-action-neutral-hover); color: var(--at-color-text); }
+@media (hover: hover) {
+  .btn-neutral:hover:not(:disabled) { background: var(--at-color-action-neutral-hover); color: var(--at-color-text); }
+}
 .btn-link { width: auto; height: auto; padding: 0; background: none; color: var(--at-color-link); font-weight: var(--at-weight-regular); }
-.btn-link:hover:not(:disabled) { color: var(--at-color-link-hover); text-decoration: underline; }
+@media (hover: hover) {
+  .btn-link:hover:not(:disabled) { color: var(--at-color-link-hover); text-decoration: underline; }
+}
 .social { display: flex; align-items: center; justify-content: center; gap: var(--at-space-2); width: 100%; height: var(--at-size-control-lg); border: 1px solid var(--at-color-border-strong); border-radius: var(--at-radius-pill); background: var(--at-color-surface); color: var(--at-color-text); font-size: var(--at-text-md); font-weight: var(--at-weight-semibold); text-decoration: none; }
-.social:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); text-decoration: none; }
+@media (hover: hover) {
+  .social:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); text-decoration: none; }
+}
 .social svg { width: 20px; height: 20px; }
 .inline-form { display: contents; }
 
@@ -110,9 +125,28 @@ select.control { padding: 0 var(--at-space-2); cursor: pointer; }
 .skip:focus { top: var(--at-space-2); color: var(--at-ink-0); }
 [hidden] { display: none !important; }
 
+/* Phones (320–560px): the form comes first (the brand panel wraps under it), one column, edge to edge, with the
+   notch insets as padding (viewport-fit=cover). */
 @media (max-width: 560px) {
+  .page { padding: 0; }
+  .card { min-height: 100dvh; border: 0; border-radius: 0; }
+  .form-col { justify-content: flex-start; gap: var(--at-space-5); padding: calc(var(--at-space-6) + env(safe-area-inset-top, 0px)) max(var(--at-space-4), env(safe-area-inset-right, 0px)) var(--at-space-8) max(var(--at-space-4), env(safe-area-inset-left, 0px)); }
+  .aside { flex-basis: 100%; }
+  .photo { min-height: 140px; }
+  .ad { padding-bottom: calc(var(--at-space-8) + env(safe-area-inset-bottom, 0px)); }
   .grid2 { grid-template-columns: 1fr; }
   .span2 { grid-column: auto; }
   .rules { grid-template-columns: 1fr; }
   .phone .country { width: 112px; }
+  .links { flex-direction: column; align-items: flex-start; }
+  .btn, .social { white-space: normal; text-align: center; }
+  .code { letter-spacing: 0.25em; }
+}
+
+/* Touch screens: 44px controls and targets (WCAG 2.5.5). */
+@media (pointer: coarse) {
+  .control, .btn:not(.btn-link) { min-height: var(--at-size-touch); }
+  .check { min-height: var(--at-size-touch); align-items: center; }
+  .check input { margin-top: 0; }
+  .links a, .toggle a, .btn-link { display: inline-flex; align-items: center; min-height: var(--at-size-touch); }
 }

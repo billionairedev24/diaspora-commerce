@@ -68,6 +68,20 @@ describe('DataTable', () => {
     expect(screen.queryByRole('region', { name: 'Selection' })).toBeNull();
   });
 
+  it('phone cards: every cell carries its column label and one Sort select stands in for the headers', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    // The stacked-card layout (container query) prints each cell's label from data-label.
+    const firstRow = screen.getAllByRole('row').find((r) => r.getAttribute('data-row-id') === 'o1');
+    expect(within(firstRow as HTMLElement).getByText('Ada Obi').closest('td')).toHaveAttribute('data-label', 'Customer');
+    const sort = screen.getByRole('combobox', { name: 'Sort orders by' });
+    await user.selectOptions(sort, 'totalMinor:desc');
+    await waitFor(() => expect(rowIds()).toEqual(['o1', 'o3', 'o5', 'o4', 'o2']));
+    expect(screen.getByRole('columnheader', { name: /^Total/ })).toHaveAttribute('aria-sort', 'descending');
+    await user.selectOptions(sort, '');
+    expect(screen.getByRole('columnheader', { name: /^Total/ })).toHaveAttribute('aria-sort', 'none');
+  });
+
   it('never opens the row when the checkbox is clicked; a row click does', async () => {
     const user = userEvent.setup();
     const onRowClick = vi.fn();

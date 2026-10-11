@@ -194,16 +194,22 @@ export function DataTable<T>(props: DataTableProps<T>) {
       enableResizing: false,
       meta: { export: false, label: 'Select' },
       header: ({ table }) => (
-        <input
-          type="checkbox"
-          aria-label="Select all rows on this page"
-          className="block size-4 cursor-pointer"
-          checked={table.getIsAllPageRowsSelected()}
-          ref={(el) => {
-            if (el) el.indeterminate = table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected();
-          }}
-          onChange={table.getToggleAllPageRowsSelectedHandler()}
-        />
+        // The label is the touch target (44px on coarse pointers); the checkbox keeps its own name.
+        <label className="flex cursor-pointer items-center gap-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:justify-center">
+          <input
+            type="checkbox"
+            aria-label="Select all rows on this page"
+            className="block size-4 cursor-pointer"
+            checked={table.getIsAllPageRowsSelected()}
+            ref={(el) => {
+              if (el) el.indeterminate = table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected();
+            }}
+            onChange={table.getToggleAllPageRowsSelectedHandler()}
+          />
+          <span aria-hidden className="hidden text-xs font-semibold @max-xl/dt:inline">
+            All
+          </span>
+        </label>
       ),
       cell: () => null
     }),
@@ -367,7 +373,11 @@ export function DataTable<T>(props: DataTableProps<T>) {
         className={cx(
           'group relative sticky top-0 z-[2] border-b border-border bg-surface-muted px-3 py-2 text-left text-xs font-bold text-muted',
           end && 'text-right',
-          c.getIsPinned() && c.getIsLastColumn('left') && 'border-r'
+          c.getIsPinned() && c.getIsLastColumn('left') && 'border-r',
+          // Narrow (cards): only the select-all box stays (as a chip); sorting moves to the toolbar's Sort select.
+          c.id === SELECT_COLUMN
+            ? '@max-xl/dt:static! @max-xl/dt:flex @max-xl/dt:items-center @max-xl/dt:rounded-pill @max-xl/dt:border @max-xl/dt:border-border-strong @max-xl/dt:bg-surface @max-xl/dt:px-3 @max-xl/dt:py-0'
+            : '@max-xl/dt:hidden'
         )}
       >
         {h.isPlaceholder ? null : sortable ? (
@@ -403,7 +413,10 @@ export function DataTable<T>(props: DataTableProps<T>) {
               const delta = e.key === 'ArrowLeft' ? -16 : 16;
               setSizing((s) => ({ ...s, [c.id]: Math.min(720, Math.max(64, c.getSize() + delta)) }));
             }}
-            className={cx('absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none select-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100', c.getIsResizing() ? 'bg-gold-500 opacity-100' : 'bg-border-strong')}
+            className={cx(
+              'absolute right-0 top-0 h-full w-1.5 cursor-col-resize touch-none select-none opacity-0 group-hover:opacity-100 focus-visible:opacity-100 @max-xl/dt:hidden',
+              c.getIsResizing() ? 'bg-gold-500 opacity-100' : 'bg-border-strong'
+            )}
           />
         ) : null}
       </th>
@@ -411,29 +424,69 @@ export function DataTable<T>(props: DataTableProps<T>) {
   };
 
   const pad = density === 'compact' ? 'py-1.5' : 'py-2.5';
+  const sortOptions = table
+    .getAllLeafColumns()
+    .filter((c) => c.getCanSort() && c.getIsVisible())
+    .flatMap((c) => {
+      const name = columnLabel(c);
+      const kind = c.columnDef.meta?.kind;
+      const [up, down] =
+        kind === 'date' || kind === 'datetime'
+          ? ['oldest first', 'newest first']
+          : kind === 'money' || kind === 'number' || kind === 'percent' || c.columnDef.meta?.align === 'end'
+            ? ['low to high', 'high to low']
+            : ['A to Z', 'Z to A'];
+      return [
+        { value: `${c.id}:asc`, label: `${name} (${up})` },
+        { value: `${c.id}:desc`, label: `${name} (${down})` }
+      ];
+    });
+  const firstSort = state.sorting[0];
+  const sortValue = firstSort ? `${firstSort.id}:${firstSort.desc ? 'desc' : 'asc'}` : '';
   const bodyCell = (cell: Cell<T, unknown>, row: Row<T>, index: number, active: boolean) => {
     const c = cell.column;
     const pinned = c.getIsPinned();
     const bg = active ? 'bg-gold-50' : row.getIsSelected() ? 'bg-green-50' : 'bg-surface group-hover/row:bg-surface-hover';
     if (c.id === SELECT_COLUMN) {
       return (
-        <td key={cell.id} style={pinStyle(c)} className={cx('px-3 align-top', pad, pinned && bg)} data-no-row-click>
-          <input
-            type="checkbox"
-            aria-label={`Select ${rowLabel ? rowLabel(row.original) : `row ${index + 1}`}`}
-            className="mt-0.5 block size-4 cursor-pointer"
-            checked={row.getIsSelected()}
-            onClick={(e) => toggleRow(row, index, e)}
-            onChange={() => undefined}
-          />
+        <td
+          key={cell.id}
+          style={pinStyle(c)}
+          className={cx('px-3 align-top', pad, pinned && bg, '@max-xl/dt:static! @max-xl/dt:col-start-2 @max-xl/dt:row-start-1 @max-xl/dt:-my-2 @max-xl/dt:-mr-2 @max-xl/dt:bg-transparent @max-xl/dt:p-0')}
+          data-no-row-click
+        >
+          {/* The label is the touch target (44px on coarse pointers); the checkbox keeps its own name. */}
+          <label className="flex cursor-pointer pointer-coarse:size-11 pointer-coarse:items-center pointer-coarse:justify-center">
+            <input
+              type="checkbox"
+              aria-label={`Select ${rowLabel ? rowLabel(row.original) : `row ${index + 1}`}`}
+              className="mt-0.5 block size-4 cursor-pointer pointer-coarse:mt-0"
+              checked={row.getIsSelected()}
+              onClick={(e) => toggleRow(row, index, e)}
+              onChange={() => undefined}
+            />
+          </label>
         </td>
       );
     }
+    const primary = c.id === firstColumn;
     return (
       <td
         key={cell.id}
         style={pinStyle(c)}
-        className={cx('px-3 align-top [overflow-wrap:anywhere]', pad, c.columnDef.meta?.align === 'end' && 'text-right tabular-nums', pinned && bg, pinned && c.getIsLastColumn('left') && 'border-r border-border')}
+        data-label={columnLabel(c)}
+        className={cx(
+          'px-3 align-top [overflow-wrap:anywhere]',
+          pad,
+          c.columnDef.meta?.align === 'end' && 'text-right tabular-nums',
+          pinned && bg,
+          pinned && c.getIsLastColumn('left') && 'border-r border-border',
+          // Narrow (cards): the first column is the card's title; every other cell is a label / value pair.
+          '@max-xl/dt:static! @max-xl/dt:border-r-0 @max-xl/dt:bg-transparent @max-xl/dt:p-0 @max-xl/dt:text-left',
+          primary
+            ? '@max-xl/dt:col-start-1 @max-xl/dt:row-start-1 @max-xl/dt:block @max-xl/dt:text-md @max-xl/dt:font-semibold'
+            : '@max-xl/dt:col-span-2 @max-xl/dt:grid @max-xl/dt:grid-cols-[minmax(6rem,38%)_minmax(0,1fr)] @max-xl/dt:gap-3 @max-xl/dt:before:text-xs @max-xl/dt:before:font-semibold @max-xl/dt:before:text-muted @max-xl/dt:before:content-[attr(data-label)] @max-xl/dt:empty:hidden'
+        )}
       >
         {flexRender(c.columnDef.cell, cell.getContext())}
       </td>
@@ -444,6 +497,9 @@ export function DataTable<T>(props: DataTableProps<T>) {
   const fitted = Object.keys(sizing).length === 0;
   const fixedWidth = enableSelection ? 44 : 0;
   const flexibleTotal = Math.max(1, table.getVisibleLeafColumns().reduce((n, c) => n + (c.id === SELECT_COLUMN ? 0 : c.getSize()), 0));
+  // Fitted tables never squeeze a column below ~96px (text would wrap letter by letter on a tablet): past that the
+  // region scrolls sideways with the checkbox and first column pinned. Phones get cards instead (container query).
+  const minFitted = table.getVisibleLeafColumns().reduce((n, c) => n + (c.id === SELECT_COLUMN ? 44 : Math.max(96, Math.min(c.getSize(), 140))), 0);
   const from = pagination.pageIndex * pagination.pageSize + (pageRows.length ? 1 : 0);
   const to = pagination.pageIndex * pagination.pageSize + pageRows.length;
   const hasPrev = client ? table.getCanPreviousPage() : pagination.pageIndex > 0;
@@ -468,9 +524,10 @@ export function DataTable<T>(props: DataTableProps<T>) {
         : `0 of ${fmt(matching)}`;
 
   return (
-    <div className="flex flex-col gap-2" data-table-id={id}>
+    // A size container: below 36rem (phones, side sheets) the rows become stacked cards and the toolbar wraps.
+    <div className="@container/dt flex flex-col gap-2" data-table-id={id}>
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor={searchId} className="flex h-9 min-w-56 flex-1 items-center gap-2 rounded-pill border border-border-strong bg-surface px-3 sm:max-w-96">
+        <label htmlFor={searchId} className="flex h-9 min-w-0 flex-1 basis-56 items-center gap-2 rounded-pill border border-border-strong bg-surface px-3 sm:max-w-96 pointer-coarse:h-11 @max-xl/dt:max-w-none @max-xl/dt:basis-full">
           <MagnifyingGlass size={16} aria-hidden className="shrink-0 text-muted" />
           <span className="at-visually-hidden">Search {label.toLowerCase()}</span>
           <input
@@ -482,7 +539,30 @@ export function DataTable<T>(props: DataTableProps<T>) {
             onChange={(e) => state.setSearchInput(e.currentTarget.value)}
           />
         </label>
-        <span className="flex-1" />
+        <span className="flex-1 @max-xl/dt:hidden" />
+        {/* Cards have no column headers: one Sort select stands in for them (the first sort key; shift-sorting is a
+            desktop affordance). */}
+        {sortOptions.length ? (
+          <label className="hidden h-9 items-center gap-1.5 rounded-pill border border-border-strong bg-surface pr-1 pl-3 text-sm font-semibold pointer-coarse:h-11 @max-xl/dt:flex">
+            <ArrowsDownUp size={16} aria-hidden />
+            <span className="at-visually-hidden">Sort {label.toLowerCase()} by</span>
+            <select
+              className="h-full max-w-40 min-w-0 cursor-pointer bg-transparent text-sm font-semibold outline-none"
+              value={sortValue}
+              onChange={(e) => {
+                const [col, dir] = e.currentTarget.value.split(':');
+                state.setSorting(col ? [{ id: col, desc: dir === 'desc' }] : []);
+              }}
+            >
+              <option value="">Sort</option>
+              {sortOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <ColumnsMenu
           table={table}
           density={density}
@@ -500,7 +580,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
             trigger={
               <button
                 type="button"
-                className="flex h-9 items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 text-sm font-semibold hover:bg-surface-hover"
+                className="flex h-9 items-center gap-1.5 rounded-pill border border-border-strong bg-surface px-3 text-sm font-semibold hover:bg-surface-hover pointer-coarse:h-11"
                 aria-busy={exporting || undefined}
                 disabled={exporting}
               >
@@ -537,42 +617,54 @@ export function DataTable<T>(props: DataTableProps<T>) {
       ) : null}
       {partial ? <p className="m-0 text-xs text-muted">Search and sort cover the first 5,000 rows of this table; narrow the search to reach older rows.</p> : null}
       {/* A scrollable region holds focus so keyboard users can scroll it (scrollbars are hidden everywhere). */}
-      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
-      <div className="max-h-[70vh] overflow-auto rounded-md border border-border" tabIndex={0} role="region" aria-label={`${label} (scrollable)`}>
+      <div
+        className="max-h-[70dvh] overflow-auto rounded-md border border-border @max-xl/dt:max-h-none @max-xl/dt:overflow-visible @max-xl/dt:rounded-none @max-xl/dt:border-0"
+        // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+        tabIndex={0}
+        role="region"
+        aria-label={`${label} (scrollable)`}
+      >
         {/* Until someone resizes a column the table fits its container (columns keep their proportions; the checkbox
             column stays 44px), so nothing hides off to the side. Resized columns keep their pixel widths and the
             region scrolls sideways with the checkbox and first column pinned. */}
-        <table className="table-fixed border-collapse text-sm" style={{ width: fitted ? '100%' : table.getTotalSize(), minWidth: '100%' }} aria-label={label} aria-busy={loading || fetching || undefined}>
-          <colgroup>
+        <table
+          className="table-fixed border-collapse text-sm @max-xl/dt:block @max-xl/dt:w-full! @max-xl/dt:min-w-0!"
+          style={{ width: fitted ? '100%' : table.getTotalSize(), minWidth: fitted ? `max(100%, ${minFitted}px)` : '100%' }}
+          aria-label={label}
+          aria-busy={loading || fetching || undefined}
+        >
+          <colgroup className="@max-xl/dt:hidden">
             {table.getVisibleLeafColumns().map((c) => (
               <col key={c.id} style={{ width: fitted && c.id !== SELECT_COLUMN ? `calc((100% - ${fixedWidth}px) * ${c.getSize() / flexibleTotal})` : c.getSize() }} />
             ))}
           </colgroup>
-          <thead>
+          <thead className="@max-xl/dt:block">
             {table.getHeaderGroups().map((hg) => (
-              <tr key={hg.id}>{hg.headers.map(headerCell)}</tr>
+              <tr key={hg.id} className="@max-xl/dt:flex @max-xl/dt:flex-wrap @max-xl/dt:gap-1.5 @max-xl/dt:pb-2">
+                {hg.headers.map(headerCell)}
+              </tr>
             ))}
           </thead>
-          <tbody className={cx(fetching && !loading && 'opacity-60')}>
+          <tbody className={cx(fetching && !loading && 'opacity-60', '@max-xl/dt:flex @max-xl/dt:flex-col @max-xl/dt:gap-2')}>
             {error ? (
-              <tr>
-                <td colSpan={visibleCount} className="p-4">
+              <tr className="@max-xl/dt:block">
+                <td colSpan={visibleCount} className="p-4 @max-xl/dt:block">
                   {error}
                 </td>
               </tr>
             ) : loading && !data.length ? (
               Array.from({ length: 6 }, (_, i) => (
-                <tr key={`sk-${i}`} className="border-t border-border" aria-hidden>
+                <tr key={`sk-${i}`} className="border-t border-border @max-xl/dt:flex @max-xl/dt:flex-col @max-xl/dt:gap-2 @max-xl/dt:rounded-md @max-xl/dt:border @max-xl/dt:p-3" aria-hidden>
                   {table.getVisibleLeafColumns().map((c) => (
-                    <td key={c.id} className={cx('px-3', pad)}>
+                    <td key={c.id} className={cx('px-3', pad, '@max-xl/dt:block @max-xl/dt:p-0', c.id === SELECT_COLUMN && '@max-xl/dt:hidden')}>
                       <Skeleton height={12} width={c.id === SELECT_COLUMN ? 16 : '80%'} />
                     </td>
                   ))}
                 </tr>
               ))
             ) : pageRows.length === 0 ? (
-              <tr>
-                <td colSpan={visibleCount} className="px-3 py-10 text-center text-muted">
+              <tr className="@max-xl/dt:block">
+                <td colSpan={visibleCount} className="px-3 py-10 text-center text-muted @max-xl/dt:block">
                   {state.q ? (noMatches ?? `Nothing matches “${state.q}”.`) : (empty ?? 'Nothing here yet.')}
                 </td>
               </tr>
@@ -599,7 +691,13 @@ export function DataTable<T>(props: DataTableProps<T>) {
                           }
                         : undefined
                     }
-                    className={cx('group/row border-t border-border', onRowClick && 'cursor-pointer', active ? 'bg-gold-50' : row.getIsSelected() ? 'bg-green-50' : 'hover:bg-surface-hover')}
+                    className={cx(
+                      'group/row border-t border-border',
+                      // Narrow: a card — title and checkbox on top, label / value pairs below.
+                      '@max-xl/dt:grid @max-xl/dt:grid-cols-[minmax(0,1fr)_auto] @max-xl/dt:gap-x-3 @max-xl/dt:gap-y-1.5 @max-xl/dt:rounded-md @max-xl/dt:border @max-xl/dt:p-3',
+                      onRowClick && 'cursor-pointer',
+                      active ? 'bg-gold-50' : row.getIsSelected() ? 'bg-green-50' : 'hover:bg-surface-hover'
+                    )}
                   >
                     {row.getVisibleCells().map((cell) => bodyCell(cell, row, index, active))}
                   </tr>
@@ -615,7 +713,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
           <label className="flex items-center gap-1.5">
             Rows per page
             <select
-              className="h-8 rounded-sm border border-border-strong bg-surface px-1.5 text-xs text-text"
+              className="h-8 rounded-sm border border-border-strong bg-surface px-1.5 text-xs text-text pointer-coarse:h-11"
               value={pagination.pageSize}
               onChange={(e) => state.setPagination({ pageIndex: 0, pageSize: Number(e.currentTarget.value) })}
             >
@@ -644,7 +742,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                   disabled={fetching || !reachable(n)}
                   onClick={() => goTo(n)}
                   className={cx(
-                    'h-8 min-w-8 rounded-sm border px-2 text-xs font-semibold tabular-nums disabled:cursor-default',
+                    'h-8 min-w-8 rounded-sm border px-2 text-xs font-semibold tabular-nums disabled:cursor-default pointer-coarse:h-11 pointer-coarse:min-w-11',
                     n === pagination.pageIndex ? 'border-gold-500 bg-gold-50 text-text' : 'border-border-strong bg-surface text-text hover:bg-surface-hover disabled:opacity-45'
                   )}
                 >

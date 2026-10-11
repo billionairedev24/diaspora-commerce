@@ -1,0 +1,100 @@
+/* Back-office frame (Seller Center, staff console): the sticky header sits above this grid.
+   Phones (<768px): one column; the navigation is a disclosure under the header ("Menu"), expanded inline, no overlay.
+   Tablets (768–1023px): a 72px icon rail that expands to the full navigation in place.
+   Desktops (≥1024px): the full 264px sidebar, fixed while the page scrolls. */
+.frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: calc(100dvh - var(--at-sticky-header-h, 0px));
+}
+
+.aside {
+  background: var(--at-color-surface);
+  border-bottom: 1px solid var(--at-color-border);
+}
+
+.aside[data-open='false'] { display: none; }
+.full { display: flex; flex: 1; flex-direction: column; }
+.rail { display: none; }
+.railToggle { display: none; }
+
+/* The phone menu button lives in the header (dark bar). */
+.menuButton {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--at-space-1);
+  min-height: var(--at-size-touch);
+  min-width: var(--at-size-touch);
+  padding: 0 var(--at-space-2);
+  border: 0;
+  border-radius: var(--at-radius-sm);
+  background: none;
+  color: var(--at-color-header-text);
+  font: inherit;
+  font-size: var(--at-text-sm);
+  font-weight: var(--at-weight-bold);
+  cursor: pointer;
+}
+
+.menuButton[aria-expanded='true'] { background: var(--at-color-header-hover-bg); }
+.menuButton:focus-visible { outline: none; background: var(--at-color-header-hover-bg); box-shadow: inset 0 0 0 2px var(--at-color-header-indicator); }
+
+@media (hover: hover) {
+  .menuButton:hover { background: var(--at-color-header-hover-bg); }
+  .railToggle:hover { background: var(--at-color-surface-hover); }
+}
+
+@media (min-width: 768px) {
+  .menuButton { display: none; }
+
+  .frame { grid-template-columns: 72px minmax(0, 1fr); }
+  .frame[data-rail='expanded'] { grid-template-columns: 264px minmax(0, 1fr); }
+
+  .aside,
+  .aside[data-open='false'] {
+    display: flex;
+    flex-direction: column;
+    position: sticky;
+    top: var(--at-sticky-header-h, 0px);
+    height: calc(100dvh - var(--at-sticky-header-h, 0px));
+    align-self: start;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-bottom: 0;
+    border-inline-end: 1px solid var(--at-color-border);
+  }
+
+  .frame[data-rail='collapsed'] .full { display: none; }
+  .frame[data-rail='collapsed'] .rail { display: block; }
+
+  .railToggle {
+    display: flex;
+    align-items: center;
+    gap: var(--at-space-2);
+    min-height: var(--at-size-touch);
+    margin: var(--at-space-2) var(--at-space-3) 0;
+    padding: 0 var(--at-space-3);
+    border: 0;
+    border-radius: var(--at-radius-sm);
+    background: none;
+    color: var(--at-color-text-muted);
+    font: inherit;
+    font-size: var(--at-text-sm);
+    font-weight: var(--at-weight-semibold);
+    cursor: pointer;
+  }
+
+  .frame[data-rail='collapsed'] .railToggle { justify-content: center; margin-inline: var(--at-space-2); padding: 0; }
+  .railToggle:focus-visible { outline: 2px solid var(--at-color-focus); outline-offset: -2px; }
+}
+
+@media (min-width: 1024px) {
+  .frame,
+  .frame[data-rail='expanded'],
+  .frame[data-rail='collapsed'] { grid-template-columns: 264px minmax(0, 1fr); }
+
+  .frame[data-rail] .full { display: flex; }
+  .frame[data-rail] .rail { display: none; }
+  .railToggle { display: none; }
+}

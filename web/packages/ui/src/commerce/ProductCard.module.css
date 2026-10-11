@@ -7,7 +7,13 @@
 .card .title { font-size: var(--at-text-base); font-weight: var(--at-weight-medium); line-height: var(--at-leading-tight); }
 
 .title { color: var(--at-color-text); text-decoration: none; }
-.title:hover { color: var(--at-color-link); text-decoration: none; }
+@media (hover: hover) {
+  .title:hover { text-decoration: none; }
+}
+
+@media (hover: hover) {
+  .title:hover { color: var(--at-color-link); }
+}
 .meta { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .sponsored { font-size: var(--at-text-2xs); color: var(--at-color-text-muted); }
 .adWhy { font-size: var(--at-text-2xs); color: var(--at-color-text-muted); }
@@ -49,3 +55,21 @@
 .availability { font-size: var(--at-text-xs); font-weight: var(--at-weight-semibold); }
 .availabilityGold { color: var(--at-gold-800); }
 .availabilityMuted { color: var(--at-ink-600); }
+
+/* Narrow cards (two per row on phones): tighter padding so the title and price keep their room. */
+@media (max-width: 599px) {
+  .media { padding: var(--at-space-2); }
+  .body { padding: var(--at-space-2) var(--at-space-3) var(--at-space-3); }
+  .card .title { font-size: var(--at-text-md); }
+}
+
+/* Touch screens: the title link's tap area grows to 44px tall (an invisible extender inside the card). */
+@media (pointer: coarse) {
+  .title { position: relative; }
+  .title::after { content: ''; position: absolute; inset: -13px 0; }
+}
+
+/* Touch screens: "Why this ad?" is a 44px row. */
+@media (pointer: coarse) {
+  .adWhy summary { display: flex; align-items: center; min-height: var(--at-size-touch); }
+}

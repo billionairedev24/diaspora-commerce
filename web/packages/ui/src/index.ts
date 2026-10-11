@@ -30,4 +30,5 @@ export { Menu, MenuGroup, MenuItem, type MenuItemProps, type MenuProps, MenuSepa
 export { type TabItem, Tabs, type TabsProps } from './overlay/Tabs';
 export { type ToastAction, type ToastMessage, ToastProvider, useToast } from './overlay/Toast';
 export { QR_QUIET_ZONE, QrCodeImage, type QrCodeImageProps, type QrMatrix, qrMatrix, qrPath } from './security/QrCodeImage';
+export { BackofficeFrame, type BackofficeFrameProps } from './shell/BackofficeFrame';
 export { UserMenu, type UserMenuLink, type UserMenuProps } from './shell/UserMenu';

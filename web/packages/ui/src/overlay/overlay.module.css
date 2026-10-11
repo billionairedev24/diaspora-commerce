@@ -7,7 +7,7 @@
   transform: translate(-50%, -50%);
   z-index: var(--at-z-dialog);
   width: min(var(--dialog-width, 480px), calc(100vw - 2 * var(--at-space-4)));
-  max-height: calc(100vh - 2 * var(--at-space-4));
+  max-height: calc(100dvh - 2 * var(--at-space-4));
   overflow-y: auto;
   background: var(--at-color-surface);
   color: var(--at-color-text);
@@ -35,7 +35,9 @@
   cursor: pointer;
 }
 
-.close:hover { background: var(--at-color-surface-hover); }
+@media (hover: hover) {
+  .close:hover { background: var(--at-color-surface-hover); }
+}
 
 .sheet {
   position: fixed;
@@ -57,8 +59,18 @@
 .docked { top: var(--at-sticky-header-h, 0px); border-inline-start: 1px solid var(--at-color-border); }
 .left { left: 0; }
 .sheetHead { display: flex; align-items: center; gap: var(--at-space-3); padding: var(--at-space-3) var(--at-space-4); background: var(--at-color-header-bg); color: var(--at-color-header-text); }
-.sheetHead .close:hover { background: var(--at-color-header-hover-bg); }
-.sheetBody { flex: 1; overflow-y: auto; padding: var(--at-space-4); }
+@media (hover: hover) {
+  .sheetHead .close:hover { background: var(--at-color-header-hover-bg); }
+}
+.sheetBody { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: var(--at-space-4) var(--at-space-4) calc(var(--at-space-4) + env(safe-area-inset-bottom, 0px)); }
+
+/* Phones: sheets take the full width; dialogs keep a small margin and scroll inside. */
+@media (max-width: 640px) {
+  .sheet { width: 100%; border-inline-start: 0; }
+  .dialog { width: calc(100vw - 2 * var(--at-space-3)); max-height: calc(100dvh - 2 * var(--at-space-3)); }
+  .head { padding: var(--at-space-3) var(--at-space-4); }
+  .body { padding: var(--at-space-4); }
+}
 
 /* Menu (dropdown) */
 .menu {
@@ -90,8 +102,10 @@
   outline: none;
 }
 
-.menuItem:hover, .menuItem[data-highlighted] { background: var(--at-color-surface-hover); color: var(--at-color-text); text-decoration: none; }
-.menuItem[data-highlighted] { box-shadow: inset 3px 0 0 var(--at-color-focus); }
+.menuItem[data-highlighted] { background: var(--at-color-surface-hover); color: var(--at-color-text); text-decoration: none; box-shadow: inset 3px 0 0 var(--at-color-focus); }
+@media (hover: hover) {
+  .menuItem:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); text-decoration: none; }
+}
 .menuIcon { font-size: var(--at-text-lg); color: var(--at-color-text-muted); flex: none; }
 .menuText { flex: 1; }
 .menuCount { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
@@ -99,7 +113,8 @@
 .menuGroup { padding: var(--at-space-1) 0; }
 
 /* Tabs */
-.tabList { display: flex; gap: var(--at-space-1); border-bottom: 1px solid var(--at-color-border); overflow-x: auto; }
+/* Tabs scroll sideways when they don't fit (no visible scrollbar: global rule); the row never pushes the page wider. */
+.tabList { display: flex; gap: var(--at-space-1); border-bottom: 1px solid var(--at-color-border); overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; max-width: 100%; }
 
 .tab {
   min-height: var(--at-size-touch);
@@ -112,6 +127,8 @@
   color: var(--at-color-text-muted);
   cursor: pointer;
   white-space: nowrap;
+  flex: none;
+  scroll-snap-align: start;
 }
 
 .tab[data-state='active'] { color: var(--at-color-text); border-bottom-color: var(--at-color-action-primary); }
@@ -135,6 +152,12 @@
 }
 
 .toastIcon { color: var(--at-gold-500); flex: none; }
+
+/* Phones: toasts drop in under the sticky header, clear of bottom bars (checkout, cart summary, cookie banner). */
+@media (max-width: 640px) {
+  .toastRegion { top: calc(var(--at-sticky-header-h, 0px) + var(--at-space-3)); bottom: auto; }
+  .toast { border-radius: var(--at-radius-md); }
+}
 .toastAction { margin-left: var(--at-space-2); min-height: 32px; padding: 0 var(--at-space-3); border: 1px solid currentColor; border-radius: var(--at-radius-pill); background: transparent; color: inherit; font: inherit; font-weight: var(--at-weight-bold); cursor: pointer; }
 .toastAction:focus-visible { outline: 2px solid var(--at-gold-500); outline-offset: 2px; }
 .toastError .toastIcon { color: var(--at-red-100); }

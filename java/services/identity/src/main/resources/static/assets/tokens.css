@@ -117,6 +117,22 @@
   --store-text: var(--at-color-text);
 }
 
+/* Web-only responsive layer. The token generator (and so the native apps) reads the first :root block only; these
+   overrides apply to the web apps. Display sizes scale fluidly from phone to desktop (clamp: never below the phone
+   size, never above the design size), page gutters clear a notch in landscape (viewport-fit=cover), and on touch
+   screens the smallest text is 12px and controls are 44px tall (WCAG 2.5.5 target size). */
+:root {
+  --at-text-2xl: clamp(21px, 19px + 0.5vw, 24px);
+  --at-text-3xl: clamp(24px, 20px + 1vw, 30px);
+  --at-text-4xl: clamp(28px, 22px + 1.6vw, 38px);
+  --at-text-5xl: clamp(34px, 22px + 3.2vw, 52px);
+  --at-page-gutter: max(clamp(12px, 2.4vw, 32px), env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+}
+
+@media (pointer: coarse) {
+  :root { --at-text-2xs: 12px; --at-size-control: 44px; --at-size-control-sm: 44px; }
+}
+
 /* Element defaults live in the `base` cascade layer so component styles (CSS modules, Tailwind utilities) always win
    over them — an unlayered `a { color }` used to override Tailwind's text-* utilities on links (WCAG 1.4.3). */
 @layer base {
@@ -128,11 +144,16 @@
   /* No rubber-band bounce or scroll chaining at the page edges (macOS / iOS overscroll). */
   html, body { overscroll-behavior: none; }
   a { color: var(--at-color-link); text-decoration: none; }
-  a:hover { color: var(--at-color-link-hover); text-decoration: underline; }
+  /* Hover styles only where there is a hover: a tap on a touch screen leaves no "stuck" hover colour. */
+  @media (hover: hover) {
+    a:hover { color: var(--at-color-link-hover); text-decoration: underline; }
+  }
   /* Links inside running text are underlined, not told apart by colour alone (WCAG 1.4.1). */
   :where(p, li, label, small, dd, td, figcaption) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; }
   ::selection { background: var(--at-gold-200); }
   button, input, select, textarea { font-family: inherit; }
+  /* No double-tap-to-zoom delay on controls (the page itself can still be pinch-zoomed). */
+  a, button, input, select, textarea, label, summary, [role="button"] { touch-action: manipulation; }
 }
 
 /* Visible keyboard focus everywhere (WCAG 2.4.7 / 2.4.11): unlayered so no component can remove it by accident. */
