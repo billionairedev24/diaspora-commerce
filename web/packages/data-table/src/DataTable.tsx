@@ -90,11 +90,10 @@ function sortIcon<T>(c: Column<T, unknown>) {
   return <ArrowsDownUp size={12} aria-hidden className="opacity-50" />;
 }
 
-function pinStyle<T>(c: Column<T, unknown>, header = false): CSSProperties {
-  const pinned = c.getIsPinned();
-  const base: CSSProperties = { width: c.getSize() };
-  if (pinned !== 'left') return base;
-  return { ...base, position: 'sticky', left: c.getStart('left'), zIndex: header ? 3 : 1 };
+/** Sticky left offset of the pinned checkbox and first column (widths come from the <colgroup>). */
+function pinStyle<T>(c: Column<T, unknown>, header = false): CSSProperties | undefined {
+  if (c.getIsPinned() !== 'left') return undefined;
+  return { position: 'sticky', left: c.getStart('left'), zIndex: header ? 3 : 1 };
 }
 
 const fmt = (n: number) => n.toLocaleString('en-US');
@@ -442,6 +441,9 @@ export function DataTable<T>(props: DataTableProps<T>) {
   };
 
   const visibleCount = table.getVisibleLeafColumns().length;
+  const fitted = Object.keys(sizing).length === 0;
+  const fixedWidth = enableSelection ? 44 : 0;
+  const flexibleTotal = Math.max(1, table.getVisibleLeafColumns().reduce((n, c) => n + (c.id === SELECT_COLUMN ? 0 : c.getSize()), 0));
   const from = pagination.pageIndex * pagination.pageSize + (pageRows.length ? 1 : 0);
   const to = pagination.pageIndex * pagination.pageSize + pageRows.length;
   const hasPrev = client ? table.getCanPreviousPage() : pagination.pageIndex > 0;
@@ -537,10 +539,13 @@ export function DataTable<T>(props: DataTableProps<T>) {
       {/* A scrollable region holds focus so keyboard users can scroll it (scrollbars are hidden everywhere). */}
       {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
       <div className="max-h-[70vh] overflow-auto rounded-md border border-border" tabIndex={0} role="region" aria-label={`${label} (scrollable)`}>
-        <table className="table-fixed border-collapse text-sm" style={{ width: table.getTotalSize(), minWidth: '100%' }} aria-label={label} aria-busy={loading || fetching || undefined}>
+        {/* Until someone resizes a column the table fits its container (columns keep their proportions; the checkbox
+            column stays 44px), so nothing hides off to the side. Resized columns keep their pixel widths and the
+            region scrolls sideways with the checkbox and first column pinned. */}
+        <table className="table-fixed border-collapse text-sm" style={{ width: fitted ? '100%' : table.getTotalSize(), minWidth: '100%' }} aria-label={label} aria-busy={loading || fetching || undefined}>
           <colgroup>
             {table.getVisibleLeafColumns().map((c) => (
-              <col key={c.id} style={{ width: c.getSize() }} />
+              <col key={c.id} style={{ width: fitted && c.id !== SELECT_COLUMN ? `calc((100% - ${fixedWidth}px) * ${c.getSize() / flexibleTotal})` : c.getSize() }} />
             ))}
           </colgroup>
           <thead>

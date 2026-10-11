@@ -15,7 +15,7 @@ test.describe('staff console · notification templates', () => {
     const table = page.getByRole('table', { name: 'Notification templates' });
     await expect(table.getByRole('link', { name: 'order.confirmed' })).toBeVisible();
     await expectNoSeriousA11yViolations(page, testInfo, { page: 'staff notification templates' });
-    await page.getByRole('searchbox', { name: 'Search templates' }).fill('order');
+    await page.getByRole('searchbox', { name: 'Search notification templates' }).fill('order');
     await expect(table.getByRole('link', { name: 'identity.verification' })).toHaveCount(0);
     await table.getByRole('link', { name: 'order.confirmed' }).click();
 

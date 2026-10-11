@@ -30,12 +30,14 @@ test.describe('staff console · pre-orders', () => {
     await page.getByRole('tab', { name: /^Orders \(\d+\)$/ }).click();
     await expect(page).toHaveURL(/tab=orders/);
     await expect(page.getByTestId('order-row')).toHaveCount(12);
-    await page.getByRole('combobox', { name: 'Channel' }).selectOption('INSTAGRAM');
+    // One search over every column (the channel is not one of delivery-runs' search fields).
+    await page.getByRole('searchbox', { name: 'Search pre-order orders' }).fill('instagram');
     await expect(page.getByTestId('order-row').first()).toContainText('Instagram');
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: /^Export \d+ rows$/ }).click();
-    expect((await download).suggestedFilename()).toBe('lbk-7-orders-filtered.csv');
-    await expect(page.getByText(/Exported \d+ rows · lbk-7-orders-filtered\.csv/)).toBeVisible();
+    await page.getByRole('button', { name: /^Export$/ }).click();
+    await page.getByRole('menuitem', { name: /CSV/ }).click();
+    expect((await download).suggestedFilename()).toMatch(/^preorder-orders-.*\.csv$/);
+    await expect(page.getByText(/Exported \d+ rows · preorder-orders-/)).toBeVisible();
 
     // Creatives: five slots, the seeded 4:5 feed post is flagged.
     await page.getByRole('tab', { name: 'Creatives' }).click();
