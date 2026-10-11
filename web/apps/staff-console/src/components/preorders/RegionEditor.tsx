@@ -81,6 +81,7 @@ export function RegionCoverageEditor({ country, region, canEdit, onClose }: { co
       return d;
     });
     setPicked(new Set());
+    setQ('');
   };
   const shown = matches.slice(0, SHOWN);
   const exact = q.trim() && !geoCities.some((c) => lower(c) === lower(q.trim())) && !listed.has(lower(q.trim())) && !q.includes('/') ? q.trim() : null;
