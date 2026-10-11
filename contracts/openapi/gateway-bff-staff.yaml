@@ -2365,7 +2365,6 @@ components:
               atin: {type: string}
               qty: {type: integer, minimum: 1}
         payment: {type: string, enum: [SAVED_CARD, PAYMENT_LINK]}
-        fulfilment: {type: string, enum: [DOOR, PICKUP]}
         reason: {type: string, maxLength: 120, examples: [Customer called]}
         note: {type: string, maxLength: 500}
     StaffPreorderLateAddress:

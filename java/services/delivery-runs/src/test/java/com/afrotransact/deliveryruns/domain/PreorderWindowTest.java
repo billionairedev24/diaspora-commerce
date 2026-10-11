@@ -55,6 +55,34 @@ class PreorderWindowTest {
     }
 
     @Test
+    void theAnnouncementSmsMustFitOneMessageWithItsTrackedLink() {
+        WindowDetails base = Preorders.lubbock();
+        String copy = "AfroTransact: Lubbock pre-order is open until Thu Oct 22. Egusi, garri, palm oil and more. "
+                + "Order: {link} Reply STOP to opt out";
+        PreorderWindow w = Preorders.draft(withSms(base, copy)).withCreative(CreativeSlot.HERO, Preorders.HERO,
+                Preorders.OPENS);
+        String page = "https://afrotransact.com/pre-orders";
+        assertThat(w.smsAsSent(page)).contains(page + "?src=sms&po=LUB-7&cr=announce").doesNotContain("{link}");
+        assertThat(copy.length()).as("raw copy fits").isLessThanOrEqualTo(160);
+        assertThat(w.publishChecks(PAYMENT, page)).extracting(RuleViolation::code)
+                .containsExactly("delivery-runs.preorder-sms-too-long");
+        assertThatThrownBy(() -> w.publish(PAYMENT, page, Preorders.OPENS))
+                .isInstanceOf(PublishBlockedException.class);
+
+        PreorderWindow shortCopy = Preorders.draft(withSms(base, "AfroTransact: Lubbock pre-order is open. {link} "
+                + "Reply STOP to opt out")).withCreative(CreativeSlot.HERO, Preorders.HERO, Preorders.OPENS);
+        assertThat(shortCopy.publishChecks(PAYMENT, page)).isEmpty();
+        assertThat(w.publishChecks(PAYMENT)).as("without a page URL the link is not checked").isEmpty();
+    }
+
+    private static WindowDetails withSms(WindowDetails d, String sms) {
+        return new WindowDetails(d.name(), d.targets(), d.opensAt(), d.closesAt(), d.deliversOn(), d.timeZone(),
+                d.ribbon(), d.headline(), sms, d.categories(), d.door(), d.pickup(), d.pickupPointId(),
+                d.pickupAddress(), d.showCount(), d.socialBudget(), d.comms(), d.doorFeeOverride(),
+                d.pickupFeeOverride(), d.locationId());
+    }
+
+    @Test
     void anEmptyDraftFailsEverySevenChecks() {
         WindowDetails d = new WindowDetails("", List.of(), Preorders.CLOSES, Preorders.OPENS,
                 LocalDate.parse("2026-10-01"), Preorders.CHICAGO, "", "", "", null, false, false, null, null, true,

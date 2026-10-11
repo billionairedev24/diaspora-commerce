@@ -2187,8 +2187,6 @@ export interface components {
             }[];
             /** @enum {string} */
             payment: "SAVED_CARD" | "PAYMENT_LINK";
-            /** @enum {string} */
-            fulfilment?: "DOOR" | "PICKUP";
             /** @example Customer called */
             reason: string;
             note?: string;

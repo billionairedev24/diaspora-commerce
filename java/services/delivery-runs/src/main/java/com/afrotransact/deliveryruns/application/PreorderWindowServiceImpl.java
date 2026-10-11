@@ -121,7 +121,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         PreorderWindow w = support.lock(id, expectedVersion);
         PaymentSettings payment = support.coverage().settings().payment();
         WindowDetails details = PreorderSupport.details(command);
-        PreorderWindow saved = windows.update(w.edit(details, payment, now));
+        PreorderWindow saved = windows.update(w.edit(details, payment, support.pageUrl(), now));
         rememberAreas(details);
         if (!saved.draft()) {
             events.window(DeliveryRunsEvents.PREORDER_WINDOW_UPDATED, saved, payment, now);
@@ -136,7 +136,7 @@ class PreorderWindowServiceImpl implements PreorderWindowService {
         Instant now = Instant.now(clock);
         PreorderWindow w = support.lock(id, expectedVersion);
         PaymentSettings payment = support.coverage().settings().payment();
-        PreorderWindow saved = windows.update(w.publish(payment, now));
+        PreorderWindow saved = windows.update(w.publish(payment, support.pageUrl(), now));
         events.window(DeliveryRunsEvents.PREORDER_WINDOW_PUBLISHED, saved, payment, now);
         return support.view(saved, now);
     }

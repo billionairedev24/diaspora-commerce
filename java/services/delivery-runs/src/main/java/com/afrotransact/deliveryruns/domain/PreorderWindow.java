@@ -29,6 +29,9 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
                              boolean draft, boolean active, UUID runId, Instant createdAt, Instant updatedAt,
                              long version) {
 
+    /** Placeholder in the SMS copy that notifications replaces with the tracked link. */
+    public static final String SMS_LINK = "{link}";
+
     /** Delivery may be at most this long before the close (the design allows the same day). */
     public static final Duration DELIVERY_GRACE = Duration.ofHours(12);
 
@@ -144,6 +147,23 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
         return failed;
     }
 
+    /**
+     * The announcement SMS as notifications sends it: {@code {link}} becomes {@code <pageUrl>?src=sms&po=<CODE>&cr=announce}.
+     */
+    public String smsAsSent(String pageUrl) {
+        return details.smsCopy().replace(SMS_LINK, pageUrl + "?src=sms&po=" + code + "&cr=announce");
+    }
+
+    /** As {@link #publishChecks(PaymentSettings)}, plus: the announcement SMS fits one message with its tracked link. */
+    public List<RuleViolation> publishChecks(PaymentSettings payment, String pageUrl) {
+        List<RuleViolation> failed = publishChecks(payment);
+        if (pageUrl != null && !Gsm7.fitsOneSegment(smsAsSent(pageUrl))) {
+            failed.add(new RuleViolation("delivery-runs.preorder-sms-too-long",
+                    "Announcement SMS fits one message with its tracked link"));
+        }
+        return failed;
+    }
+
     // ---- fees ------------------------------------------------------------------------------------------------
 
     /** Effective door fee: the window override, else the platform fee in the window's currency. */
@@ -164,10 +184,15 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
 
     /** DRAFT → published (active). Every check must pass. */
     public PreorderWindow publish(PaymentSettings payment, Instant now) {
+        return publish(payment, null, now);
+    }
+
+    /** DRAFT → published, also checking the announcement SMS with its link under {@code pageUrl} (null skips it). */
+    public PreorderWindow publish(PaymentSettings payment, String pageUrl, Instant now) {
         if (!draft) {
             throw new InvalidTransitionException(status(now).name(), "PUBLISHED");
         }
-        List<RuleViolation> failed = publishChecks(payment);
+        List<RuleViolation> failed = publishChecks(payment, pageUrl);
         if (!failed.isEmpty()) {
             throw new PublishBlockedException(failed);
         }
@@ -192,11 +217,16 @@ public record PreorderWindow(UUID id, String code, WindowDetails details, Map<Cr
 
     /** Changes the details; a published window must still pass its checks, a delivered one is read-only. */
     public PreorderWindow edit(WindowDetails changed, PaymentSettings payment, Instant now) {
+        return edit(changed, payment, null, now);
+    }
+
+    /** As {@link #edit(WindowDetails, PaymentSettings, Instant)}, checking the SMS link under {@code pageUrl}. */
+    public PreorderWindow edit(WindowDetails changed, PaymentSettings payment, String pageUrl, Instant now) {
         requireEditable(now);
         PreorderWindow next = new PreorderWindow(id, code, changed, creatives, draft, active, runId, createdAt, now,
                 version);
         if (!draft) {
-            List<RuleViolation> failed = next.publishChecks(payment);
+            List<RuleViolation> failed = next.publishChecks(payment, pageUrl);
             if (!failed.isEmpty()) {
                 throw new PublishBlockedException(failed);
             }

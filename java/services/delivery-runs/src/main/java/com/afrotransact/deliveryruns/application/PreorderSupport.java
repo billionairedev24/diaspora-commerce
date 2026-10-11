@@ -29,12 +29,19 @@ class PreorderSupport {
     private final PreorderWindowRepository windows;
     private final PreorderSettingsRepository settings;
     private final PreorderOrderRepository orders;
+    private final String pageUrl;
 
     PreorderSupport(PreorderWindowRepository windows, PreorderSettingsRepository settings,
-                    PreorderOrderRepository orders) {
+                    PreorderOrderRepository orders, DeliveryRunsSettings runSettings, PreorderOptions options) {
         this.windows = windows;
         this.settings = settings;
         this.orders = orders;
+        this.pageUrl = runSettings.publicWebUrl() + options.pagePath();
+    }
+
+    /** Storefront pre-order page, the base of the tracked SMS link ({@code <PUBLIC_WEB_URL>/pre-orders}). */
+    String pageUrl() {
+        return pageUrl;
     }
 
     Coverage coverage() {
@@ -66,7 +73,7 @@ class PreorderSupport {
         PaymentSettings payment = coverage.settings().payment();
         WindowTotals t = totals.getOrDefault(w.id(), new WindowTotals(0, 0));
         boolean areaOff = !coverage.settings().enabled() || coverage.allTargetsOff(w.details().targets());
-        return new WindowView(w, w.status(now), w.publishChecks(payment), w.doorFee(payment).orElse(null),
+        return new WindowView(w, w.status(now), w.publishChecks(payment, pageUrl), w.doorFee(payment).orElse(null),
                 w.pickupFee(payment), payment.pickupWindow(), t.orders(),
                 t.revenueMinor(), areaOff);
     }
