@@ -25,6 +25,8 @@ storybook-static/
 .env
 .env.*
 !.env.example
+# Local provider credentials (template: infra/local/secrets.env.example; .local/ is ignored below too)
+secrets.env
 *.pem
 # IDE / OS
 .idea/
