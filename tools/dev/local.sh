@@ -355,8 +355,12 @@ start() {
     jar=$( { ls "$ROOT"/java/services/"$svc"/target/"$svc"-service-*.jar 2>/dev/null || true; } | grep -v -- '-plain' | head -1 || true)
     [[ -n "$jar" ]] || { echo "no jar for $svc; run: tools/dev/local.sh restart $svc" >&2; return 1; }
     # `cd …` on its own line (not `cd … &&`): with `&&` the `&` would background the whole list and $! be a wrapper.
+    # Run a copy: a later `mvnw package` (tests, another terminal) rewrites target/*.jar in place, and a running JVM
+    # whose jar changed under it fails to load classes and hangs.
+    mkdir -p "$BIN"
+    cp "$jar" "$BIN/$svc.jar"
     (cd "$ROOT/java/services/$svc" || exit 1
-      SPRING_PROFILES_ACTIVE=local nohup java -XX:TieredStopAtLevel=1 -Xmx512m -jar "$jar" >>"$LOGS/$svc.log" 2>&1 &
+      SPRING_PROFILES_ACTIVE=local nohup java -XX:TieredStopAtLevel=1 -Xmx512m -jar "$BIN/$svc.jar" >>"$LOGS/$svc.log" 2>&1 &
       echo $! >"$PIDS/$svc.pid")
   else
     (cd "$ROOT/go/services/$svc" || exit 1
