@@ -40,7 +40,7 @@ export function OwnersStep({ status, ref }: StepProps) {
       <StepErrors errors={f.errors} submitCount={f.submitCount} />
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="m-0 text-xs text-muted">
-          Each person verifies their identity with Stripe in the next step. AfroTransact never sees ID images or full tax numbers.
+          Everyone with 25% or more, and at least one person with significant control (FinCEN CDD rules and Stripe).
         </p>
         <span className={cx('text-sm font-semibold', total > 100 ? 'text-danger' : 'text-muted')} aria-live="polite">
           Ownership listed: {total}%

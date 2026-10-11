@@ -49,7 +49,7 @@ test.describe('seller center · application wizard', () => {
     await onStep(page, 'business', 'Your business');
 
     // The header has no account menu while the application is in progress; My account redirects to onboarding.
-    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Account menu/ })).toHaveCount(0);
     const steps = page.getByRole('navigation', { name: 'Application steps' });
     await expect(steps.getByRole('link')).toHaveCount(1);

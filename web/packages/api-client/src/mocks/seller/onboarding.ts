@@ -240,7 +240,7 @@ export function onboardingStatus(db: MockSellerDb, org: MockOrg): OnboardingStat
   steps.push({ key: review.key, slug: review.slug, label: review.label, sub: review.sub,
     state: status === 'APPROVED' ? 'DONE' : status === 'REJECTED' ? 'BLOCKED' : info ? 'ACTION' : status === 'DRAFT' ? 'TODO' : 'WAITING' });
   return {
-    orgId: org.id, kind: org.kind, status, reference: status === 'DRAFT' ? 'APP-40001' : 'APP-30131', steps,
+    orgId: org.id, kind: org.kind, status, reference: org.id === 'org_new' ? 'APP-40001' : 'APP-30131', steps,
     requestedItems: info ? ['Harris County food establishment permit (current)'] : [], canResume: editable, resumeStep: resume ?? 'review',
     submittedAt: app.submittedAt, stripe: app.stripe, timeline: app.timeline, form: { ...f, editable }
   };

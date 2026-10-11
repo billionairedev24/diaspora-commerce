@@ -116,7 +116,7 @@ function EmbeddedOnboarding({ session, onExit }: { session: OnboardingStripeSess
           {failed}
         </p>
       ) : null}
-      <div ref={box} className="min-h-24 rounded-md border border-border p-2" aria-label="Stripe verification" />
+      <div ref={box} className="min-h-24 rounded-md border border-border p-2" aria-label="Stripe embedded onboarding" />
     </div>
   );
 }

@@ -108,7 +108,7 @@ export function SubmittedView({ status, onRefresh, refreshing }: { status: Onboa
               <li key={`${t.occurredAt}-${i}`} className="flex flex-wrap gap-x-3">
                 <span className="text-muted">{date(t.occurredAt)}</span>
                 <span>{ACTIONS[t.action] ?? t.action}</span>
-                {t.note ? <span className="text-muted">· {t.note}</span> : null}
+                {t.note && t.action !== 'STARTED' ? <span className="text-muted">· {t.note}</span> : null}
               </li>
             ))}
           </ul>

@@ -19,6 +19,8 @@ const dash = (v: string | null | undefined): string => (v && v.trim() ? v : '—
 const addressLine = (a: OnboardingForm['details']['address']): string =>
   a ? [a.line1, a.line2, a.city, [a.state, a.postalCode].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '—';
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+const BRANDS: Record<string, string> = { visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', discover: 'Discover' };
+const brandName = (b: string | null): string => (b ? (BRANDS[b.toLowerCase()] ?? b) : 'Card');
 
 /** Rows of each section, keyed by the step's slug. */
 function sectionRows(st: OnboardingStatus): Record<string, Row[]> {
@@ -78,7 +80,7 @@ function sectionRows(st: OnboardingStatus): Record<string, Row[]> {
       ['First charge', f.plan.firstCharge ? (f.plan.firstCharge.amountCents ? f.plan.firstCharge.sentence : 'No subscription fee') : '—'],
       [
         'Pays with',
-        f.plan.cardLast4 ? `${f.plan.cardBrand ?? 'Card'} ••${f.plan.cardLast4}` : f.plan.firstCharge && !f.plan.firstCharge.amountCents ? '—' : 'Not added'
+        f.plan.cardLast4 ? `${brandName(f.plan.cardBrand)} ••${f.plan.cardLast4}` : f.plan.firstCharge && !f.plan.firstCharge.amountCents ? '—' : 'Not added'
       ]
     ],
     'catalog-compliance': [

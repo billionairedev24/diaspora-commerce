@@ -1,5 +1,5 @@
 import { getSellerDb, PENDING_ORG, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
-import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,6 +11,9 @@ import { PortalShell } from '@/components/shell/PortalShell';
 import { mockApi } from './mock-api';
 import { renderScreen, renderWithProviders } from './render';
 import { nav } from './setup';
+
+// The wizard saves through the in-process mock BFF and the address search debounces: give slow CI machines room.
+configure({ asyncUtilTimeout: 5000 });
 
 vi.mock('@/lib/auth', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),

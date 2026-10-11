@@ -83,8 +83,21 @@ class LocalActorResolverTest {
     }
 
     @Test
-    void staffAndServicesKeepTheSuperAdmin() {
-        for (String pt : new String[] {"STAFF", "SERVICE", "PARTNER_APP", "AI_AGENT", "SOMETHING_NEW"}) {
+    void staffKeepEveryPermissionButActAsThemselves() {
+        Actor reviewer = LocalActorResolver.actorFor("Bearer " + token("{\"sub\":\"staff-trust\",\"pt\":\"STAFF\","
+                + "\"roles\":[\"platform.trust_safety\"],\"perms\":[\"applications:review\"]}"));
+        Actor approver = LocalActorResolver.actorFor("Bearer " + token("{\"sub\":\"staff-admin\",\"pt\":\"STAFF\"}"));
+        assertThat(reviewer.subject()).isEqualTo("staff-trust");
+        assertThat(approver.subject()).as("two people, so the four-eyes rule can pass locally")
+                .isEqualTo("staff-admin");
+        assertThat(reviewer.can("applications:approve")).as("still the local super admin's permissions").isTrue();
+        assertThat(reviewer.roles()).contains("platform.trust_safety", "platform.super_admin");
+        assertThat(reviewer.orgId()).isEmpty();
+    }
+
+    @Test
+    void servicesAndUnknownPrincipalsKeepTheSuperAdmin() {
+        for (String pt : new String[] {"SERVICE", "PARTNER_APP", "AI_AGENT", "SOMETHING_NEW"}) {
             Actor actor = LocalActorResolver.actorFor("Bearer " + token("{\"sub\":\"u1\",\"pt\":\"" + pt
                     + "\",\"org\":\"org_x\",\"perms\":[\"orders:read\"]}"));
             assertThat(actor).as(pt).isEqualTo(LocalActorResolver.LOCAL_SUPER_ADMIN);

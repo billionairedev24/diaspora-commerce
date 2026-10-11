@@ -212,7 +212,7 @@ export function OnboardingWizard({ slug }: { slug: string }) {
             <Button variant="neutral" size="sm" onClick={() => void saveAndSignOut()} disabled={busy !== null}>
               {busy === 'exit' ? 'Saving…' : 'Save & sign out'}
             </Button>
-            <Button onClick={() => void saveAndContinue()} disabled={busy !== null}>
+            <Button onClick={() => void saveAndContinue()} disabled={busy !== null} className="max-sm:order-first max-sm:w-full">
               {busy === 'continue'
                 ? isReview
                   ? 'Submitting…'

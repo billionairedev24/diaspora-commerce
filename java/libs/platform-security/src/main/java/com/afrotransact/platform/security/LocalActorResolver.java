@@ -24,7 +24,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
  * {@code DRIVER}, {@code SELLER_MEMBER} or {@code PROVIDER_MEMBER} acts as that person (and organisation), with the
  * token's own permissions. The claims are read without checking the signature: this resolver only runs with security
  * off, where every caller is already the super admin, so reading the token can only lower what the caller may do,
- * never raise it. Staff, services and calls without a usable token keep the super admin.
+ * never raise it. Staff keep the super admin's permissions but act as themselves (their own subject and roles), so
+ * rules about who did something, such as the two-step review where the final approver must be a different person than
+ * the reviewer, work locally too. Services and calls without a usable token keep the super admin.
  */
 public class LocalActorResolver implements ActorResolver {
 
@@ -54,7 +56,15 @@ public class LocalActorResolver implements ActorResolver {
             JWTClaimsSet claims = JWTParser.parse(authorization.substring(BEARER.length()).trim()).getJWTClaimsSet();
             PrincipalType type = principalType(claims.getClaim("pt"));
             String subject = claims.getSubject();
-            if (type == null || !ACT_AS_THEMSELVES.contains(type) || subject == null || subject.isBlank()) {
+            if (type == null || subject == null || subject.isBlank()) {
+                return LOCAL_SUPER_ADMIN;
+            }
+            if (type == PrincipalType.STAFF) {
+                Set<String> roles = new HashSet<>(strings(claims.getClaim("roles")));
+                roles.addAll(LOCAL_SUPER_ADMIN.roles());
+                return new Actor(subject, PrincipalType.STAFF, Optional.empty(), roles, Set.of("*"));
+            }
+            if (!ACT_AS_THEMSELVES.contains(type)) {
                 return LOCAL_SUPER_ADMIN;
             }
             Set<String> perms = new HashSet<>(strings(claims.getClaim("perms")));

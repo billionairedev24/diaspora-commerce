@@ -254,8 +254,9 @@ export function validateDetails(v: DetailsValues, entityType: OnboardingEntityTy
 export function toDetailsInput(v: DetailsValues, entityType: OnboardingEntityType | ''): OnboardingDetailsInput {
   const sole = isSole(entityType);
   return {
-    legalFirstName: sole ? opt(v.legalFirstName) : undefined,
-    legalLastName: sole ? opt(v.legalLastName) : undefined,
+    // The applicant's legal name is kept for every business type (it prefills the first owner).
+    legalFirstName: opt(v.legalFirstName),
+    legalLastName: opt(v.legalLastName),
     legalName: sole ? undefined : opt(v.legalName),
     dba: opt(v.dba),
     taxId: v.taxId ? formatTaxId(v.taxId, sole ? 'SSN' : 'EIN') : undefined,
