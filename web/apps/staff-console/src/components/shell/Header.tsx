@@ -7,15 +7,8 @@ import { List, SignOut } from '@phosphor-icons/react/ssr';
 import { useRouter } from 'next/navigation';
 
 import { useT } from '@/i18n/t';
+import { signOutEverywhere } from '@/lib/auth';
 import { useStorefrontUrl } from '@/lib/runtime-config';
-
-async function signOut(storefrontUrl: string) {
-  try {
-    await fetch('/api/bff/v1/auth/sign-out', { method: 'POST', credentials: 'include' });
-  } finally {
-    window.location.assign(storefrontUrl);
-  }
-}
 
 /** Black top bar: logo, gold "Staff console" tag, menu button on small screens, the staff member and sign out. */
 export function Header({ session, onMenu }: { session: StaffSession | null; onMenu?: () => void }) {
@@ -46,7 +39,7 @@ export function Header({ session, onMenu }: { session: StaffSession | null; onMe
           <span className="hidden sm:inline">
             {session.user.firstName} {session.user.lastName.slice(0, 1)}.
           </span>
-          <IconButton label={t('st.header.signOut')} onDark onClick={() => void signOut(storefrontUrl)}>
+          <IconButton label={t('st.header.signOut')} onDark onClick={() => void signOutEverywhere(storefrontUrl)}>
             <SignOut size={20} aria-hidden />
           </IconButton>
         </span>

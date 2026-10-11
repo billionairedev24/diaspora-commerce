@@ -218,9 +218,9 @@ export function LolaSheet({ open, onOpenChange, prompt, onPromptSent }: { open: 
           )}
           {busy && <span className={styles.status}>{t('lola.shopping')}</span>}
           {needsSignIn && (
-            <Link href={signInHref(pathname)} className={buttonClassName({ size: 'sm' })}>
+            <a href={signInHref(pathname)} className={buttonClassName({ size: 'sm' })}>
               {t('account.signIn')}
-            </Link>
+            </a>
           )}
           <div ref={end} />
         </div>

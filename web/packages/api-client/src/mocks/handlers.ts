@@ -4,14 +4,13 @@
 import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
 
-import { CodeSchema, SignInRequestSchema, SignUpRequestSchema, VerifyCodeRequestSchema } from '../schemas/auth';
+import { CodeSchema } from '../schemas/auth';
 import { JobApplicationFormSchema } from '../schemas/careers';
 import { AddToCartRequestSchema, SelectAllRequestSchema, UpdateCartLineRequestSchema } from '../schemas/cart';
 import { StockAlertRequestSchema } from '../schemas/catalog';
 import { ZipSchema } from '../schemas/location';
 import { NewsletterRequestSchema } from '../schemas/site';
 import { fromApiSearchParams } from '../search-params';
-import { isPasswordAcceptable } from '../validation/password';
 import { suggestAddresses } from './addresses';
 import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
@@ -50,7 +49,6 @@ function me(ctx: Ctx) {
 }
 
 const safeReturn = (v: string | null | undefined): string => (v && v.startsWith('/') && !v.startsWith('//') ? v : '/');
-const maskEmail = (e: string) => e.replace(/^(.)(.*)(@.*)$/, (_, a: string, b: string, c: string) => a + '•'.repeat(Math.max(1, Math.min(6, b.length))) + c);
 
 function challenge(kind: MockChallenge['kind'], returnTo: string, extra: Partial<Pick<MockChallenge, 'userId' | 'pending'>> = {}) {
   const id = nextId('ch');
@@ -167,71 +165,16 @@ export const handlers = [
 
   /* Auth */
   http.get('*/v1/me', route((ctx) => json(me(ctx)))),
-  http.post('*/v1/auth/sign-in', route(async (ctx) => {
-    const req = await body(ctx.request, SignInRequestSchema);
-    const u = getDb().users.get(req.email.trim().toLowerCase());
-    if (!u || u.password !== req.password) throw new MockProblem(401, 'INVALID_CREDENTIALS', 'Sign-in failed', 'Email or password is incorrect.');
-    const id = challenge('mfa', safeReturn(req.returnTo), { userId: u.id });
-    return json({ status: 'mfa_required', challengeId: id, methods: ['totp', 'sms'], destination: '+1 (713) •••-' + u.phone.slice(-4) });
-  })),
-  http.post('*/v1/auth/mfa/verify', route(async (ctx) => {
-    const req = await body(ctx.request, VerifyCodeRequestSchema);
-    const c = takeChallenge(req.challengeId, 'mfa');
-    if (req.code !== DEMO_CODE) throw new MockProblem(422, 'INVALID_CODE', 'Incorrect code', 'That code is incorrect or expired.', { errors: { code: 'That code is incorrect or expired.' } });
-    getDb().challenges.delete(c.id);
-    ctx.session.userId = c.userId ?? null;
-    return json({ status: 'authenticated', redirectTo: c.returnTo });
-  })),
-  http.post('*/v1/auth/sign-up', route(async (ctx) => {
-    const req = await body(ctx.request, SignUpRequestSchema);
-    const email = req.email.trim().toLowerCase();
-    if (getDb().users.has(email)) throw new MockProblem(409, 'EMAIL_TAKEN', 'Account exists', 'An account with this email already exists. Sign in instead.', { errors: { email: 'An account with this email already exists' } });
-    if (!isPasswordAcceptable(req.password, { firstName: req.firstName, lastName: req.lastName, email })) {
-      throw new MockProblem(422, 'WEAK_PASSWORD', 'Password too weak', 'Password must meet all the rules.', { errors: { password: 'Password must meet all the rules' } });
-    }
-    const pending = { id: nextId('u'), firstName: req.firstName, lastName: req.lastName, email, password: req.password, phone: req.phone, roles: ['customer'] };
-    if (req.invitationToken) {
-      /* An organisation invite link: the account starts verified and joined, no email code. */
-      getDb().users.set(email, pending);
-      return json({ status: 'authenticated', redirectTo: `/signin?returnTo=${encodeURIComponent(safeReturn(req.returnTo))}` }, 201);
-    }
-    const id = challenge('email', safeReturn(req.returnTo), { pending });
-    return json({ status: 'verification_required', challengeId: id, destination: maskEmail(email), resendAfterSeconds: 30 }, 201);
-  })),
-  http.post('*/v1/auth/email-verification/verify', route(async (ctx) => {
-    const req = await body(ctx.request, VerifyCodeRequestSchema);
-    const c = takeChallenge(req.challengeId, 'email');
-    if (req.code !== DEMO_CODE) throw new MockProblem(422, 'INVALID_CODE', 'Incorrect code', 'That code is incorrect or expired.', { errors: { code: 'That code is incorrect or expired.' } });
-    const u = c.pending;
-    if (!u) throw new MockProblem(410, 'CHALLENGE_EXPIRED', 'Verification expired', 'Start again.');
-    getDb().users.set(u.email, u);
-    getDb().challenges.delete(c.id);
-    ctx.session.userId = u.id;
-    return json({ status: 'authenticated', redirectTo: c.returnTo });
-  })),
-  http.post('*/v1/auth/email-verification/resend', route(async (ctx) => {
-    const { challengeId } = await body(ctx.request, VerifyCodeRequestSchema.pick({ challengeId: true }));
-    const c = takeChallenge(challengeId, 'email');
-    c.expiresAt = Date.now() + 10 * 60_000;
-    return json({ resendAfterSeconds: 30 }, 202);
-  })),
-  http.post('*/v1/auth/passkey/options', route((ctx) => {
-    const id = challenge('passkey', '/');
-    const bytes = new Uint8Array(32);
-    crypto.getRandomValues(bytes);
-    const challengeB64 = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    return json({ challengeId: id, challenge: challengeB64, rpId: new URL(ctx.request.url).hostname, timeout: 60000, userVerification: 'required', allowCredentials: [] });
-  })),
-  http.post('*/v1/auth/passkey/verify', route(async (ctx) => {
-    const raw = (await ctx.request.json()) as { challengeId?: string };
-    const c = takeChallenge(raw.challengeId ?? '', 'passkey');
-    getDb().challenges.delete(c.id);
+  /* Hosted sign-in (identity's pages in production): the mock BFF signs the demo shopper in straight away and
+     returns to returnTo, as the real flow does after identity's sign-in or sign-up page. */
+  http.get('*/v1/auth/login', route((ctx) => {
+    const url = new URL(ctx.request.url);
     ctx.session.userId = 'u_adaeze';
-    return json({ status: 'authenticated', redirectTo: c.returnTo });
+    return new HttpResponse(null, { status: 302, headers: { Location: new URL(safeReturn(url.searchParams.get('returnTo')), url.origin).toString() } });
   })),
   http.post('*/v1/auth/sign-out', route((ctx) => {
     ctx.session.userId = null;
-    return new HttpResponse(null, { status: 204 });
+    return json({ redirectTo: null });
   })),
   http.get('*/v1/auth/oidc/:provider/authorize', route((ctx, p) => {
     const provider = p.provider ?? '';

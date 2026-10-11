@@ -67,14 +67,21 @@ export function AccountMenu({ me, onAskLola, inline, defaultOpen }: AccountMenuP
   const subtitle = isUser ? model.subtitle : t(model.subtitle as MessageKey);
 
   const signOut = async () => {
+    let redirectTo: string | null = null;
     try {
-      await browserApi().signOut();
-    } finally {
-      await Promise.all([qc.invalidateQueries({ queryKey: accountKeys.all }), qc.invalidateQueries({ queryKey: cartKeys.all })]);
-      toast.show(t('account.signedOut'));
-      router.push('/');
-      router.refresh();
+      ({ redirectTo } = await browserApi().signOut());
+    } catch {
+      /* signed out locally anyway: the session cookie is gone or was never there */
     }
+    if (redirectTo) {
+      // Ends the identity session too (single sign-out); identity then returns the browser to the storefront home.
+      window.location.assign(redirectTo);
+      return;
+    }
+    await Promise.all([qc.invalidateQueries({ queryKey: accountKeys.all }), qc.invalidateQueries({ queryKey: cartKeys.all })]);
+    toast.show(t('account.signedOut'));
+    router.push('/');
+    router.refresh();
   };
 
   const trigger = (

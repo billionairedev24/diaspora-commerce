@@ -199,9 +199,9 @@ export function ServiceDetailView({ serviceId }: { serviceId: string }) {
                   {quote.data ? t('bk.bookCta', { amount: fmt.money(quote.data.depositNowMinor) }) : t('bk.book')}
                 </Button>
               ) : (
-                <Link href={signInHref(pathname)} className={buttonClassName({ block: true })}>
+                <a href={signInHref(pathname)} className={buttonClassName({ block: true })}>
                   {t('bk.signInToBook')}
-                </Link>
+                </a>
               )}
               <span className={styles.muted}>{s.instantBooking ? t('bk.instant') : t('bk.request', { mins: quote.data?.providerAnswersWithinMinutes ?? 120 })}</span>
             </form>

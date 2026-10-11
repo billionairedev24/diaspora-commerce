@@ -41,15 +41,12 @@ test.describe('storefront · guest shopper', () => {
     await expect(page.getByRole('main')).toContainText(/jollof/i);
   });
 
-  test('sign-in renders without the storefront header, department bar or footer', async ({ page }) => {
-    await page.goto('/signin');
-    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    await expect(page.getByRole('main').getByLabel('Email')).toBeVisible();
-    await expect(page.getByRole('main').getByRole('link', { name: 'AfroTransact home' })).toBeVisible();
-    await expect(page.getByRole('banner')).toHaveCount(0);
-    await expect(page.getByRole('contentinfo')).toHaveCount(0);
-    await expect(page.getByRole('navigation', { name: 'Departments' })).toHaveCount(0);
-    await expect(page.getByRole('combobox', { name: 'Search' })).toHaveCount(0);
+  test('sign-in hands off to the hosted sign-in start and comes back signed in (mock BFF)', async ({ page }) => {
+    // Production: identity's hosted page (single sign-on); the mock BFF signs the demo shopper in directly.
+    await page.goto('/signin?returnTo=%2Fcart');
+    await expect(page).toHaveURL(/\/cart$/);
+    await page.getByRole('button', { name: /Account menu: Adaeze Nwosu/ }).click();
+    await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
   });
 });
 
@@ -72,9 +69,7 @@ test.describe('storefront · a11y smoke @a11y', () => {
     ['about', '/about'],
     ['careers', '/careers'],
     ['help', '/help'],
-    ['not found', '/no-such-page'],
-    ['sign in', '/signin'],
-    ['sign up', '/signup']
+    ['not found', '/no-such-page']
   ] as const) {
     test(`${name} has no serious axe violations`, async ({ page }, testInfo) => {
       await page.goto(path);

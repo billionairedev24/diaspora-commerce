@@ -9,6 +9,7 @@ import { type ReactNode, useState } from 'react';
 import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
+import { loginHref } from '@/lib/auth';
 import { hrefOf, moduleOf } from '@/lib/modules';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 import { StaffSessionProvider } from '@/lib/session';
@@ -21,14 +22,13 @@ function Centered({ children }: { children: ReactNode }) {
 }
 
 function SignInPrompt() {
-  const storefrontUrl = useStorefrontUrl();
   const t = useT();
   const returnTo = typeof window !== 'undefined' ? window.location.href : '/';
   return (
     <Centered>
       <h1 className="m-0 text-2xl font-bold">{t('st.consoleShell.signInToTheStaff')}</h1>
       <p className="m-0 text-muted">{t('st.consoleShell.useYourAfrotransactComStaff')}</p>
-      <a className="rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={`${storefrontUrl}/signin?returnTo=${encodeURIComponent(returnTo)}`}>
+      <a className="rounded-pill bg-primary px-6 py-2.5 font-bold text-on-primary no-underline hover:bg-primary-hover hover:text-on-primary hover:no-underline" href={loginHref(returnTo)}>
         {t('st.consoleShell.signIn')}
       </a>
     </Centered>

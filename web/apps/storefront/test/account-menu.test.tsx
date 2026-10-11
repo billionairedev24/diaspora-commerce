@@ -48,7 +48,8 @@ describe('avatar menu variants', () => {
 
   it('builds return-to links for guests', () => {
     const m = accountMenuModel(guest, '/p/AT000000P2');
-    expect(m.items.map((i) => i.href)).toEqual(['/signin?returnTo=%2Fp%2FAT000000P2', '/signup?returnTo=%2Fp%2FAT000000P2']);
+    expect(m.items.map((i) => i.href)).toEqual(['/api/bff/v1/auth/login?returnTo=%2Fp%2FAT000000P2', '/api/bff/v1/auth/login?returnTo=%2Fp%2FAT000000P2&prompt=create']);
+    expect(m.items.every((i) => i.external)).toBe(true);
     expect(m.showSignOut).toBe(false);
   });
 });

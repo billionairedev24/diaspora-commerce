@@ -1,8 +1,10 @@
+import { buttonClassName } from '@afrotransact/ui';
 import { type Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
-import { authPageData } from '@/components/auth/authPageData';
+import styles from '@/components/auth/Auth.module.css';
 import { AuthShell } from '@/components/auth/AuthShell';
-import { SignInForm } from '@/components/auth/SignInForm';
+import { hostedLoginTarget, type SearchParams } from '@/components/auth/hostedLogin';
 import { getT } from '@/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -10,13 +12,27 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('title.signin'), robots: { index: false } };
 }
 
-type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
+type Props = { searchParams: Promise<SearchParams> };
 
+/**
+ * Sign-in happens on identity's hosted page (single sign-on for every AfroTransact app). This route stays so old links
+ * keep working: it forwards to the BFF's hosted sign-in start. When sign-in failed (`?error=`, set by the BFF
+ * callback) it explains and offers to start again instead of looping.
+ */
 export default async function SignInPage({ searchParams }: Props) {
-  const d = await authPageData(searchParams);
+  const sp = await searchParams;
+  const { href, error } = hostedLoginTarget(sp, 'signin');
+  if (!error) redirect(href);
+  const t = await getT();
   return (
     <AuthShell mode="signin">
-      <SignInForm providers={d.providers} returnTo={d.returnTo} demo={d.demo} />
+      <h1 className={styles.h1}>{t('auth.signinTitle')}</h1>
+      <p className={styles.summary} role="alert">
+        {t('auth.genericError')}
+      </p>
+      <a href={href} className={buttonClassName({ block: true })}>
+        {t('auth.continue')}
+      </a>
     </AuthShell>
   );
 }

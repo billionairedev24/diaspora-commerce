@@ -8,10 +8,8 @@ import {
   isValidMobile,
   JobApplicationFormSchema,
   quoteTariff,
-  SignUpFormSchema,
   tariffSummary,
   toE164,
-  toSignUpRequest,
   validateDeliveryDraft,
   validatePickupHours
 } from '../src';
@@ -57,29 +55,6 @@ describe('password rules', () => {
   it('rejects passwords containing the name or email', () => {
     const personal = evaluatePassword('Adaeze-Market-2026', { firstName: 'Adaeze' }).find((r) => r.id === 'personal');
     expect(personal?.ok).toBe(false);
-  });
-});
-
-describe('sign-up form schema', () => {
-  const valid = {
-    firstName: 'Adaeze', lastName: 'Nwosu', email: 'ada@example.com', phoneCountry: 'US', phone: '(713) 249-0142',
-    password: 'Kente-Weaver-2026', confirmPassword: 'Kente-Weaver-2026', termsAccepted: true, smsConsent: false
-  };
-
-  it('accepts the unified sign-up fields', () => {
-    const parsed = SignUpFormSchema.parse(valid);
-    expect(toSignUpRequest(parsed)).toMatchObject({ phone: '+17132490142', email: 'ada@example.com', termsAccepted: true, smsConsent: false });
-  });
-
-  it('reports per-field errors', () => {
-    const r = SignUpFormSchema.safeParse({ ...valid, firstName: '', email: 'nope', phone: '12', confirmPassword: 'x', termsAccepted: false });
-    expect(r.success).toBe(false);
-    const fields = new Set(r.error?.issues.map((i) => i.path[0]));
-    expect([...fields].sort()).toEqual(['confirmPassword', 'email', 'firstName', 'phone', 'termsAccepted']);
-  });
-
-  it('allows accented and hyphenated names', () => {
-    expect(SignUpFormSchema.safeParse({ ...valid, firstName: 'Zoë', lastName: "O'Neil-Adé" }).success).toBe(true);
   });
 });
 

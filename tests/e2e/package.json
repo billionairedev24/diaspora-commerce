@@ -11,7 +11,8 @@
     "report": "playwright show-report reports/html",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf reports test-results"
+    "clean": "rm -rf reports test-results",
+    "test:live": "playwright test --config playwright.live.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

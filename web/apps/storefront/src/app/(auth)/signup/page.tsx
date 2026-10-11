@@ -1,8 +1,7 @@
 import { type Metadata } from 'next';
+import { redirect } from 'next/navigation';
 
-import { authPageData } from '@/components/auth/authPageData';
-import { AuthShell } from '@/components/auth/AuthShell';
-import { SignUpForm } from '@/components/auth/SignUpForm';
+import { hostedLoginTarget, type SearchParams } from '@/components/auth/hostedLogin';
 import { getT } from '@/i18n/server';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -10,13 +9,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: t('title.signup'), robots: { index: false } };
 }
 
-type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
+type Props = { searchParams: Promise<SearchParams> };
 
+/**
+ * Account creation happens on identity's hosted sign-up page (OIDC prompt=create). This route stays so old links and
+ * organisation invite links (`?invitation=…&email=…`) keep working: it forwards to the BFF's hosted sign-in start.
+ */
 export default async function SignUpPage({ searchParams }: Props) {
-  const d = await authPageData(searchParams);
-  return (
-    <AuthShell mode="signup">
-      <SignUpForm providers={d.providers} returnTo={d.returnTo} demo={d.demo} smsProgram={d.smsProgram} links={d.links} invitation={d.invitation} invitedEmail={d.invitedEmail} />
-    </AuthShell>
-  );
+  redirect(hostedLoginTarget(await searchParams, 'signup').href);
 }

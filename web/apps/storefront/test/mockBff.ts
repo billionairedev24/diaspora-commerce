@@ -32,11 +32,10 @@ export function installMockBff() {
   });
 }
 
-/** Signs the demo shopper in (password + MFA code) on the shared cookie jar. */
+/** Signs the demo shopper in on the shared cookie jar (the mock BFF's hosted sign-in start, as identity's page would). */
 export async function signInDemo() {
   const api = createApiClient({ baseUrl: `${window.location.origin}/api/bff` });
-  const r = await api.signIn({ email: 'adaeze@example.com', password: 'shop2026' });
-  if (r.status !== 'mfa_required') throw new Error('expected MFA');
-  await api.verifyMfa({ challengeId: r.challengeId, code: '246810' });
+  const res = await fetch(api.loginUrl('/'), { redirect: 'manual' });
+  if (res.status !== 302 && res.type !== 'opaqueredirect') throw new Error(`expected the sign-in redirect, got ${res.status}`);
   return api;
 }

@@ -1,6 +1,7 @@
 import { type Me } from '@afrotransact/api-client';
 
 import { type MessageKey } from '@/i18n/t';
+import { signInHref, signUpHref } from '@/lib/links';
 
 export type AccountMenuIcon = 'user' | 'package' | 'returns' | 'pin' | 'card' | 'shield' | 'sparkle' | 'store' | 'calendar' | 'signin' | 'signup';
 
@@ -9,7 +10,7 @@ export interface AccountMenuEntry {
   label: MessageKey;
   icon: AccountMenuIcon;
   href?: string;
-  /** Full page navigation (other apps, e.g. Seller Center via /sell). */
+  /** Full page navigation (other apps, e.g. Seller Center via /sell, and identity's hosted sign-in). */
   external?: boolean;
   action?: 'lola' | 'signout';
   count?: number;
@@ -28,7 +29,6 @@ export interface AccountMenuModel {
 export function accountMenuModel(me: Me | undefined, returnTo = '/'): AccountMenuModel {
   const user = me?.authenticated ? me.user : null;
   if (!user) {
-    const rt = returnTo && returnTo !== '/' ? `?returnTo=${encodeURIComponent(returnTo)}` : '';
     return {
       variant: 'guest',
       initials: '?',
@@ -36,8 +36,9 @@ export function accountMenuModel(me: Me | undefined, returnTo = '/'): AccountMen
       subtitle: 'account.guestSub',
       showSignOut: false,
       items: [
-        { id: 'signin', label: 'account.signIn', icon: 'signin', href: `/signin${rt}` },
-        { id: 'signup', label: 'account.createAccount', icon: 'signup', href: `/signup${rt}` }
+        // Identity's hosted sign-in / sign-up pages (single sign-on), started by the BFF.
+        { id: 'signin', label: 'account.signIn', icon: 'signin', href: signInHref(returnTo), external: true },
+        { id: 'signup', label: 'account.createAccount', icon: 'signup', href: signUpHref(returnTo), external: true }
       ]
     };
   }

@@ -94,46 +94,22 @@ test('cart shows one package per seller, save for later and move back', async ({
   await expect(packages).toHaveCount(2);
 });
 
-test('/signin has no storefront chrome and shows the Google button and passkey', async ({ page }) => {
-  await page.goto('/signin');
-  await expect(page.getByRole('banner')).toHaveCount(0);
-  await expect(page.getByRole('contentinfo')).toHaveCount(0);
-  await expect(page.getByRole('navigation', { name: 'Departments' })).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'AfroTransact home' })).toBeVisible();
-  const google = page.getByRole('link', { name: 'Continue with Google' });
-  await expect(google).toBeVisible();
-  await expect(google).toHaveAttribute('href', /\/api\/bff\/v1\/auth\/oidc\/google\/authorize/);
-  await expect(page.getByRole('link', { name: 'Continue with Apple' })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Sign in with a passkey' })).toBeVisible();
-  await page.goto('/signup');
-  await expect(page.getByRole('button', { name: 'Sign in with a passkey' })).toHaveCount(0);
-  await expect(page.getByLabel('Mobile phone')).toBeVisible();
-});
-
-test('sign in with email, two-step code, then the avatar menu shows the account', async ({ page }) => {
+test('Sign in hands off to the hosted sign-in (mock BFF) and the avatar menu then shows the account', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /Account menu: Welcome, Guest/ }).click();
   await expect(page.getByRole('menuitem', { name: 'Create account' })).toBeVisible();
+  // Credentials are entered on identity's hosted page in production; the mock BFF signs the demo shopper in.
   await page.getByRole('menuitem', { name: 'Sign in' }).click();
-  await expect(page).toHaveURL(/\/signin/);
-  await page.getByLabel('Email').fill('adaeze@example.com');
-  await page.getByLabel('Password', { exact: true }).fill('shop2026');
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page.getByRole('heading', { name: 'Two-step verification' })).toBeVisible();
-  await page.getByLabel('Verification code').fill('246810');
-  await page.getByRole('button', { name: 'Verify' }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.getByRole('button', { name: /Account menu: Adaeze Nwosu/ }).click();
   await expect(page.getByRole('menuitem', { name: /Your orders/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
 });
 
-test('sign-up validates fields per field', async ({ page }) => {
-  await page.goto('/signup');
-  await page.getByRole('button', { name: 'Create account' }).click();
-  await expect(page.getByRole('alert').filter({ hasText: 'problems with this form' })).toBeVisible();
-  await expect(page.getByText('Enter your first name').first()).toBeVisible();
-  await page.getByLabel('Mobile phone').fill('7132490142');
-  await expect(page.getByLabel('Mobile phone')).toHaveValue('(713) 249-0142');
-  await expect(page.getByText('Mobile number looks good')).toBeVisible();
+test('the old /signin and /signup routes redirect to the hosted sign-in start', async ({ page }) => {
+  const seen: string[] = [];
+  page.on('request', (r) => seen.push(new URL(r.url()).pathname + new URL(r.url()).search));
+  await page.goto('/signup?returnTo=%2Fcart');
+  await expect(page).toHaveURL(/\/cart$/);
+  expect(seen.some((u) => u.startsWith('/api/bff/v1/auth/login?returnTo=%2Fcart&prompt=create'))).toBe(true);
 });

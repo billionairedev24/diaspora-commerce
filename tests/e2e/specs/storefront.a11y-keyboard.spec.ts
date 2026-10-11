@@ -87,16 +87,6 @@ test.describe('storefront · keyboard and preferences @a11y', () => {
     await expect(page.getByRole('button', { name: 'Play slideshow' })).toBeVisible();
   });
 
-  test('form errors are listed at the top, take focus and link to their fields', async ({ page }) => {
-    await page.goto('/signup');
-    await page.getByRole('button', { name: 'Create account' }).click();
-    const summary = page.getByRole('alert').filter({ hasText: /problems? with this form/ });
-    await expect(summary).toBeFocused();
-    const first = summary.getByRole('link').first();
-    await first.click();
-    await expect(page.locator('#su-first')).toBeFocused();
-  });
-
   test('Arabic switches the page to right-to-left and stays axe-clean', async ({ page, context, baseURL }, testInfo) => {
     await context.addCookies([{ name: 'at_locale', value: 'ar', url: baseURL ?? '' }]);
     await page.goto('/');

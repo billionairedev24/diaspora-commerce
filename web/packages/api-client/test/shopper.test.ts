@@ -42,14 +42,14 @@ function browserLikeClient() {
       return res;
     }
   };
-  return createApiClient(opts);
+  return { api: createApiClient(opts), fetch: opts.fetch };
 }
 
+/** Hosted sign-in (the mock BFF signs the demo shopper in at the login start, like identity's page would). */
 async function signedIn() {
-  const api = browserLikeClient();
-  const r = await api.signIn({ email: 'adaeze@example.com', password: 'shop2026' });
-  if (r.status !== 'mfa_required') throw new Error('expected MFA');
-  await api.verifyMfa({ challengeId: r.challengeId, code: '246810' });
+  const { api, fetch: fetchLike } = browserLikeClient();
+  const res = await fetchLike(new Request(api.loginUrl('/account'), { redirect: 'manual' }));
+  if (res.status !== 302) throw new Error('expected the hosted sign-in redirect');
   return api;
 }
 
@@ -208,7 +208,7 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
     const done = events.at(-1);
     expect(done?.type).toBe('done');
     if (done?.type === 'done') expect(done.data.suggestions.length).toBeGreaterThan(0);
-    const guest = browserLikeClient();
+    const guest = browserLikeClient().api;
     await expect(guest.chatWithLola({ message: 'hi' }, () => undefined)).rejects.toMatchObject({ status: 401 });
   });
 
@@ -226,7 +226,7 @@ describe('mock BFF — account, checkout, returns, bookings, Lola', () => {
 
 describe('mock BFF — sponsored search (S240)', () => {
   it('labels ads with the reason and records clicks once per search and product', async () => {
-    const api = browserLikeClient();
+    const api = browserLikeClient().api;
     const page = await api.search(SearchQuerySchema.parse({ q: 'shea' }));
     expect(page.searchId).toBeTruthy();
     const hit = page.hits[0];

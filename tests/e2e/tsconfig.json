@@ -3,5 +3,5 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["*.ts", "specs", "support"]
+  "include": ["*.ts", "specs", "support", "live"]
 }

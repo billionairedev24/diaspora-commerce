@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
-test('mobile: no horizontal scroll and hidden scrollbars on home, search and auth', async ({ page }) => {
-  for (const path of ['/', '/s?q=rice', '/signin', '/cart']) {
+test('mobile: no horizontal scroll and hidden scrollbars on home, search and cart', async ({ page }) => {
+  for (const path of ['/', '/s?q=rice', '/cart']) {
     await page.goto(path);
     await expect(page.locator('body')).toBeVisible();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

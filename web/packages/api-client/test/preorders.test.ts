@@ -30,7 +30,11 @@ function browserLikeClient() {
     const res = await fetchLike(new Request('http://bff.test/v1/mock/preorder-preview', { method: 'PUT', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }));
     expect(res.ok).toBe(true);
   };
-  return { api, preview };
+  const signIn = async () => {
+    const res = await fetchLike(new Request(api.loginUrl('/'), { redirect: 'manual' }));
+    expect(res.status).toBe(302);
+  };
+  return { api, preview, signIn };
 }
 
 const JOLLOF = 'AT000000P2'; // Groceries: pre-order eligible
@@ -143,9 +147,8 @@ describe('pre-orders (mock BFF) — every storefront state', () => {
   });
 
   it('blocks checkout while the window is not open and confirms a pre-order with its number and attribution', async () => {
-    const { api, preview } = browserLikeClient();
-    const r = await api.signIn({ email: 'adaeze@example.com', password: 'shop2026' });
-    if (r.status === 'mfa_required') await api.verifyMfa({ challengeId: r.challengeId, code: '246810' });
+    const { api, preview, signIn } = browserLikeClient();
+    await signIn();
     await api.setDeliveryLocation({ zip: '79401' });
     const jollof = await api.getProduct(JOLLOF);
     await api.addToCart({ offerId: jollof.buyBox?.offerId ?? '', quantity: 1 });

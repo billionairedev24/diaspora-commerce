@@ -1,25 +1,9 @@
-import { z } from 'zod';
+import { type z } from 'zod';
 
 import { type ApiClientOptions, createRequester, joinUrl } from './http';
 import { type PreorderFulfilmentRequest, preorderMethods } from './preorders';
 import { type Address, AddressSchema, type OrderSummary, OrderSummarySchema, PageOfSchema, type PaymentMethod, PaymentMethodSchema, type ReturnSummary, ReturnSummarySchema } from './schemas/account';
-import {
-  type AuthResult,
-  AuthResultSchema,
-  type Me,
-  MeSchema,
-  type PasskeyAssertion,
-  type PasskeyOptions,
-  PasskeyOptionsSchema,
-  type PhoneCodeSent,
-  PhoneCodeSentSchema,
-  type PhoneVerification,
-  PhoneVerificationSchema,
-  ResendResponseSchema,
-  type SignInRequest,
-  type SignUpRequest,
-  type VerifyCodeRequest
-} from './schemas/auth';
+import { type Me, MeSchema, type PhoneCodeSent, PhoneCodeSentSchema, type PhoneVerification, PhoneVerificationSchema, type SignOutResult, SignOutResultSchema } from './schemas/auth';
 import {
   type ApplicationReceipt,
   ApplicationReceiptSchema,
@@ -40,7 +24,6 @@ import { NewsletterResponseSchema, type SiteConfig, SiteConfigSchema } from './s
 import { toApiSearchParams } from './search-params';
 import { shopperMethods } from './shopper-client';
 
-const AuthVoid = z.undefined();
 
 export type { ApiClientOptions, FetchLike } from './http';
 
@@ -89,19 +72,25 @@ export function createApiClient(options: ApiClientOptions) {
     /* Pre-orders (S273) */
     ...preorderMethods(request),
 
-    /* Auth (OIDC PKCE against identity is driven by the BFF; these are the first-party form steps) */
+    /* Auth: sign-in and sign-up run on identity's hosted pages (single sign-on), started with a full-page navigation to
+       loginUrl(); the BFF keeps the tokens (OIDC authorization code + PKCE). */
     getMe: (signal?: AbortSignal): Promise<Me> => request('/v1/me', MeSchema, { signal }),
-    signIn: (body: SignInRequest): Promise<AuthResult> => request('/v1/auth/sign-in', AuthResultSchema, { method: 'POST', body }),
-    verifyMfa: (body: VerifyCodeRequest): Promise<AuthResult> => request('/v1/auth/mfa/verify', AuthResultSchema, { method: 'POST', body }),
-    signUp: (body: SignUpRequest): Promise<AuthResult> => request('/v1/auth/sign-up', AuthResultSchema, { method: 'POST', body }),
     startPhoneVerification: (): Promise<PhoneCodeSent> => request('/v1/account/phone/verification', PhoneCodeSentSchema, { method: 'POST' }),
     confirmPhoneVerification: (code: string): Promise<PhoneVerification> =>
       request('/v1/account/phone/verification/confirm', PhoneVerificationSchema, { method: 'POST', body: { code } }),
-    verifyEmail: (body: VerifyCodeRequest): Promise<AuthResult> => request('/v1/auth/email-verification/verify', AuthResultSchema, { method: 'POST', body }),
-    resendEmailCode: (challengeId: string) => request('/v1/auth/email-verification/resend', ResendResponseSchema, { method: 'POST', body: { challengeId } }),
-    passkeyOptions: (): Promise<PasskeyOptions> => request('/v1/auth/passkey/options', PasskeyOptionsSchema, { method: 'POST', body: {} }),
-    passkeyVerify: (body: PasskeyAssertion): Promise<AuthResult> => request('/v1/auth/passkey/verify', AuthResultSchema, { method: 'POST', body }),
-    signOut: (): Promise<void> => request('/v1/auth/sign-out', AuthVoid, { method: 'POST' }),
+    /** Ends the BFF session; navigate to redirectTo (when set) to end the identity session too (single sign-out). */
+    signOut: (): Promise<SignOutResult> => request('/v1/auth/sign-out', SignOutResultSchema, { method: 'POST' }),
+    /**
+     * URL of the BFF's hosted sign-in start (identity's sign-in page, or its sign-up page with prompt 'create').
+     * returnTo is a storefront path or an absolute URL on another AfroTransact web app.
+     */
+    loginUrl: (returnTo = '/', opts: { prompt?: 'login' | 'create'; loginHint?: string; invitation?: string } = {}): string =>
+      joinUrl(options.baseUrl, '/v1/auth/login', {
+        returnTo,
+        ...(opts.prompt ? { prompt: opts.prompt } : {}),
+        ...(opts.loginHint ? { login_hint: opts.loginHint } : {}),
+        ...(opts.invitation ? { invitation: opts.invitation } : {})
+      }),
     /** URL that starts the OIDC authorization-code + PKCE flow with an external identity provider. */
     oidcAuthorizeUrl: (provider: string, returnTo = '/'): string =>
       joinUrl(options.baseUrl, `/v1/auth/oidc/${encodeURIComponent(provider)}/authorize`, { returnTo }),

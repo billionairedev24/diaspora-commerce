@@ -344,7 +344,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Redirect to identity's hosted login (authorization code + PKCE) */
+        /**
+         * Redirect to identity's hosted sign-in (authorization code + PKCE)
+         * @description Every web app (storefront, Seller Center, staff console) signs in here: credentials, two-step verification,
+         *     passkeys, social sign-in and account creation all happen on identity's hosted pages, so one identity
+         *     session signs the person in to every app (SSO). The callback is the calling app's own
+         *     `<origin>/api/bff/v1/auth/oidc/callback` (the session cookie stays on that app's host), chosen from
+         *     `returnTo`.
+         */
         get: operations["startHostedLogin"];
         put?: never;
         post?: never;
@@ -364,7 +371,7 @@ export interface paths {
         /**
          * Start sign-in with an external identity provider (only providers enabled in site config)
          * @description Generates `code_verifier`, `state` and `nonce`, stores them in the session and redirects to
-         *     `{identity}/oauth2/authorize?response_type=code&client_id=storefront-bff&scope=openid%20email%20profile&code_challenge=…&code_challenge_method=S256&state=…&nonce=…&idp_hint={provider}`.
+         *     `{identity}/oauth2/authorize?response_type=code&client_id=gateway-bff&scope=openid%20email%20profile&code_challenge=…&code_challenge_method=S256&state=…&nonce=…&idp_hint={provider}`.
          */
         get: operations["startSocialLogin"];
         put?: never;
@@ -392,157 +399,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/auth/sign-in": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Email + password sign-in (step 1); usually continues with two-step verification
-         * @description Runs on identity's first-party sign-in API (the BFF's client-credentials token, the shopper's IP and user
-         *     agent). `authenticated` means the session is signed in (cookie rotated) — go to `redirectTo`;
-         *     `mfa_required` continues on the code form. A trusted device (cookie `at_trusted_device`, set after
-         *     "trust this device") skips the second factor. 401 `INVALID_CREDENTIALS`; 403 when the email is not
-         *     verified or the account is disabled; 429 `RATE_LIMITED` with `Retry-After` while the account or IP is locked.
-         */
-        post: operations["signIn"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/mfa/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Two-step verification code (authenticator app, SMS or a recovery code)
-         * @description `method` picks the factor (default: the authenticator app when enrolled, SMS after a code was texted).
-         *     `trustDevice` keeps an HttpOnly `at_trusted_device` cookie for 30 days. Wrong code: 422 `INVALID_CODE`;
-         *     expired challenge: 410 `CHALLENGE_EXPIRED`; lockout: 429 with `Retry-After`.
-         */
-        post: operations["verifyMfa"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/mfa/sms": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Text the two-step verification code instead (or again) */
-        post: operations["sendMfaCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/sign-up": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create an account (same fields for customers, sellers and providers — role is decided server-side)
-         * @description Sends a 6-digit code to the email address; the account is created when the code is verified. With `invitationToken` (organisation invite link, same email) identity starts the account verified and joins the organisation: the answer is `authenticated` with `redirectTo` the sign-in page, and no code is sent.
-         */
-        post: operations["signUp"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/email-verification/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Verify the sign-up email code; signs the new customer in */
-        post: operations["verifyEmail"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/email-verification/resend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Resend the sign-up code */
-        post: operations["resendEmailCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/passkey/options": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** WebAuthn assertion options for "Sign in with a passkey" (discoverable credentials) */
-        post: operations["passkeyOptions"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/auth/passkey/verify": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Verify a WebAuthn assertion and sign in */
-        post: operations["passkeyVerify"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/auth/sign-out": {
         parameters: {
             query?: never;
@@ -552,7 +408,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** End the session (revokes refresh tokens at identity) */
+        /**
+         * End the session (revokes the tokens at identity) and get identity's end-session URL
+         * @description Clears the `at_session` cookie and revokes the refresh and access tokens. For a web session `redirectTo` is
+         *     identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and a
+         *     `post_logout_redirect_uri` back to the home page of the calling app, chosen from the request's `Origin`):
+         *     navigating there ends the identity session too, so every app is signed out (single sign-out). `redirectTo`
+         *     is null when there was no signed-in web session.
+         */
         post: operations["signOut"];
         delete?: never;
         options?: never;
@@ -2225,11 +2088,9 @@ export interface components {
                 paymentMethods: number;
             } | null;
         };
-        SignInRequest: {
-            /** Format: email */
-            email: string;
-            password: string;
-            returnTo?: string;
+        SignOutResult: {
+            /** @description Identity's end-session URL to navigate to (ends the identity session, then returns to the calling app's home page); null without a signed-in web session. */
+            redirectTo: string | null;
         };
         PhoneCodeSent: {
             /** @description Masked phone, e.g. •••• 0142 */
@@ -2241,83 +2102,6 @@ export interface components {
             phoneVerified: boolean;
             /** Format: date-time */
             verifiedAt?: string;
-        };
-        SignUpRequest: {
-            firstName: string;
-            lastName: string;
-            /** Format: email */
-            email: string;
-            /** @description E.164 mobile number */
-            phone: string;
-            /** @description Upper and lower case, a number, not containing the name or email */
-            password: string;
-            /** @constant */
-            termsAccepted: true;
-            /** @description Separate, optional SMS opt-in (AfroTransact Alerts) */
-            smsConsent: boolean;
-            returnTo?: string;
-            /** @description Token from an organisation invitation link (Seller Center accept page) */
-            invitationToken?: string;
-        };
-        VerifyCodeRequest: {
-            challengeId: string;
-            /** @description 6-digit code, or a recovery code with method recovery */
-            code: string;
-            /**
-             * @description Two-step sign-in only; defaults to the factor offered first
-             * @enum {string}
-             */
-            method?: "totp" | "sms" | "recovery";
-            trustDevice?: boolean;
-        };
-        ResendResponse: {
-            resendAfterSeconds: number;
-        };
-        AuthResult: {
-            /** @constant */
-            status: "authenticated";
-            redirectTo: string;
-        } | {
-            /** @constant */
-            status: "mfa_required";
-            challengeId: string;
-            methods: ("totp" | "sms" | "email" | "passkey")[];
-            /** @description Masked phone or email */
-            destination: string;
-        } | {
-            /** @constant */
-            status: "verification_required";
-            challengeId: string;
-            destination: string;
-            resendAfterSeconds: number;
-        };
-        PasskeyOptions: {
-            challengeId: string;
-            /** @description base64url */
-            challenge: string;
-            rpId: string;
-            timeout: number;
-            /** @enum {string} */
-            userVerification: "required" | "preferred" | "discouraged";
-            allowCredentials: {
-                id: string;
-                /** @constant */
-                type: "public-key";
-            }[];
-        };
-        PasskeyAssertion: {
-            challengeId: string;
-            id: string;
-            /** @description base64url */
-            rawId: string;
-            /** @constant */
-            type: "public-key";
-            response: {
-                clientDataJSON: string;
-                authenticatorData: string;
-                signature: string;
-                userHandle: string | null;
-            };
         };
         AddressInput: {
             name: string;
@@ -3251,17 +3035,6 @@ export interface components {
                 "application/json": components["schemas"]["Cart"];
             };
         };
-        /** @description Next step of the authentication flow */
-        AuthResult: {
-            headers: {
-                /** @description Rotated session cookie once authenticated */
-                "Set-Cookie"?: string;
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["AuthResult"];
-            };
-        };
         /** @description Redirect to identity /oauth2/authorize (authorization code + PKCE S256, state, nonce) */
         AuthorizeRedirect: {
             headers: {
@@ -3279,7 +3052,7 @@ export interface components {
         ServiceId: string;
         /** @description Makes retries safe (the same key replays the same result); derived per customer and minute when omitted. */
         OptionalIdempotencyKey: string;
-        /** @description Relative storefront path to return to after sign-in (absolute URLs are rejected). */
+        /** @description Where to return after sign-in: a path on the storefront, or an absolute URL on Seller Center's or the staff console's origin (sign-in then completes on that app's own callback). Any other absolute or protocol-relative URL is replaced by the storefront home page. */
         ReturnTo: string;
     };
     requestBodies: never;
@@ -3732,9 +3505,14 @@ export interface operations {
     startHostedLogin: {
         parameters: {
             query?: {
-                /** @description Relative storefront path to return to after sign-in (absolute URLs are rejected). */
+                /** @description Where to return after sign-in: a path on the storefront, or an absolute URL on Seller Center's or the staff console's origin (sign-in then completes on that app's own callback). Any other absolute or protocol-relative URL is replaced by the storefront home page. */
                 returnTo?: components["parameters"]["ReturnTo"];
+                /** @description OIDC prompt. `create` opens identity's sign-up page ("Create account"); `login` asks to sign in again. */
                 prompt?: "login" | "create";
+                /** @description Email to prefill on identity's pages (OIDC login_hint). */
+                login_hint?: string;
+                /** @description Organisation invitation token from an invite link; the account created on identity's sign-up page joins the organisation without an email code. */
+                invitation?: string;
             };
             header?: never;
             path?: never;
@@ -3748,7 +3526,7 @@ export interface operations {
     startSocialLogin: {
         parameters: {
             query?: {
-                /** @description Relative storefront path to return to after sign-in (absolute URLs are rejected). */
+                /** @description Where to return after sign-in: a path on the storefront, or an absolute URL on Seller Center's or the staff console's origin (sign-in then completes on that app's own callback). Any other absolute or protocol-relative URL is replaced by the storefront home page. */
                 returnTo?: components["parameters"]["ReturnTo"];
             };
             header?: never;
@@ -3776,7 +3554,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Signed in; redirect to the original returnTo (or /signin?error=… on failure) */
+            /** @description Signed in; redirect to the original returnTo on the app that started sign-in (or the storefront's /signin?error=… on failure) */
             302: {
                 headers: {
                     Location?: string;
@@ -3786,187 +3564,6 @@ export interface operations {
                 };
                 content?: never;
             };
-        };
-    };
-    signIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SignInRequest"];
-            };
-        };
-        responses: {
-            200: components["responses"]["AuthResult"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            410: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            429: components["responses"]["TooManyRequests"];
-        };
-    };
-    verifyMfa: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyCodeRequest"];
-            };
-        };
-        responses: {
-            200: components["responses"]["AuthResult"];
-            403: components["responses"]["Problem"];
-            410: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            429: components["responses"]["TooManyRequests"];
-        };
-    };
-    sendMfaCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    challengeId: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Code sent; verify it with method sms */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AuthResult"];
-                };
-            };
-            410: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            429: components["responses"]["TooManyRequests"];
-        };
-    };
-    signUp: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SignUpRequest"];
-            };
-        };
-        responses: {
-            201: components["responses"]["AuthResult"];
-            409: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            429: components["responses"]["TooManyRequests"];
-        };
-    };
-    verifyEmail: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["VerifyCodeRequest"];
-            };
-        };
-        responses: {
-            200: components["responses"]["AuthResult"];
-            410: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-        };
-    };
-    resendEmailCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    challengeId: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Sent */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResendResponse"];
-                };
-            };
-            410: components["responses"]["Problem"];
-            429: components["responses"]["TooManyRequests"];
-        };
-    };
-    passkeyOptions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description PublicKeyCredentialRequestOptions (base64url-encoded binary fields) */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PasskeyOptions"];
-                };
-            };
-            429: components["responses"]["TooManyRequests"];
-        };
-    };
-    passkeyVerify: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PasskeyAssertion"];
-            };
-        };
-        responses: {
-            200: components["responses"]["AuthResult"];
-            401: components["responses"]["Problem"];
-            403: components["responses"]["Problem"];
-            410: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            429: components["responses"]["TooManyRequests"];
         };
     };
     signOut: {
@@ -3979,12 +3576,14 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Signed out */
-            204: {
+            200: {
                 headers: {
                     "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["SignOutResult"];
+                };
             };
         };
     };
