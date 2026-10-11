@@ -352,16 +352,13 @@ func listPaged(path string, upstream func(staffCtx) staffUp, extra func(q staffQ
 
 // listLimited calls an upstream that returns a bare array capped by `limit`: the BFF asks for the rows up to the
 // requested page and slices (cursor = offset).
-func listLimited(path string, upstream func(staffCtx) staffUp, extra func(q staffQuery, v url.Values)) func(context.Context, staffCtx, staffQuery) (staffList, error) {
+func listLimited(path string, upstream func(staffCtx) staffUp) func(context.Context, staffCtx, staffQuery) (staffList, error) {
 	return func(ctx context.Context, sc staffCtx, q staffQuery) (staffList, error) {
 		offset, _ := strconv.Atoi(q.Cursor)
 		limit := min(offset+q.Size+1, 500)
 		v := url.Values{"limit": {strconv.Itoa(limit)}}
 		if q.Status != "" {
 			v.Set("status", q.Status)
-		}
-		if extra != nil {
-			extra(q, v)
 		}
 		var raw any
 		if err := sc.get(ctx, upstream(sc), path, v, &raw); err != nil {

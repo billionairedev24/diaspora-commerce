@@ -458,6 +458,26 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"id": "loc-1", "orgId": "org-1", "label": "Store", "line1": "9800 Bissonnet St", "city": "Houston", "state": "TX",
 			"postalCode": "77036", "country": "US", "position": map[string]any{"lat": 29.67, "lng": -95.55, "precision": "ADDRESS"},
 			"afrotransactPickup": map[string]any{"enabled": true, "zoneName": "Houston Metro", "hours": []any{map[string]any{"day": "MONDAY", "opens": "09:00", "closes": "17:00"}}}})
+	// fulfilment: dispatch board (S281)
+	case p == "/v1/dispatch/sos":
+		writeJ(w, 200, []any{map[string]any{"alertId": "sos-1", "driverId": "drv-1", "routeId": "rte-1", "kind": "BREAKDOWN", "lat": 29.7, "lon": -95.5,
+			"note": "Flat tyre on I-69", "raisedAt": now, "receivedAt": now}})
+	case strings.HasPrefix(p, "/v1/dispatch/sos/") && strings.HasSuffix(p, "/acknowledge"):
+		w.WriteHeader(http.StatusNoContent)
+	case p == "/v1/dispatch/defects":
+		writeJ(w, 200, []any{map[string]any{"id": "def-1", "routeId": "rte-1", "vehicleId": "VAN-12", "driverId": "drv-1", "critical": true,
+			"items": []any{"brakes"}, "note": "Soft brake pedal", "reportedAt": now}})
+	case strings.HasPrefix(p, "/v1/dispatch/defects/") && strings.HasSuffix(p, "/resolve"):
+		writeJ(w, 200, map[string]any{"id": "rte-1", "status": "ASSIGNED"})
+	case p == "/v1/dispatch/events":
+		writeJ(w, 200, []any{map[string]any{"eventId": "ev-1", "deviceId": "dev-1", "sequence": 4, "driverId": "drv-1", "type": "delivery.completed",
+			"routeId": "rte-1", "stopId": "st-1", "capturedAt": now, "receivedAt": now, "outcome": "APPLIED"}})
+	case p == "/v1/dispatch/routes/build":
+		if body["depotNodeId"] == "EMPTY-FC" {
+			writeJ(w, 201, []any{})
+			return
+		}
+		writeJ(w, 201, []any{map[string]any{"id": "rte-7", "name": "HOU-SW", "status": "PLANNED"}})
 	case p == "/v1/dispatch/routes" || strings.HasPrefix(p, "/v1/dispatch/routes/"):
 		rt := map[string]any{"id": "rte-1", "name": "HOU-W", "zone": "Alief", "status": "PLANNED", "serviceDate": "2026-10-10",
 			"stops": []any{map[string]any{"id": "st-1", "sequence": 1, "name": "Amara", "status": "PENDING"}}}
@@ -1001,6 +1021,18 @@ func TestStaffContractConformance(t *testing.T) {
 		t.Fatalf("assign body = %v", b)
 	}
 	do("admin", "POST", "/v1/staff/dispatch/pickups/shp-9/assign", map[string]any{"routeId": "rte-done", "reason": "Too late to move"}, 409)
+
+	// Dispatch board (S281): SOS acknowledged, defect resolved with its route, routes built from the waiting pool.
+	do("admin", "POST", "/v1/staff/resources/sos-alerts/sos-1/actions/acknowledge", nil, 200)
+	do("admin", "POST", "/v1/staff/resources/vehicle-defects/def-1/actions/resolve", map[string]any{"values": map[string]any{"note": "Brakes bled"}}, 200)
+	if b := f.bodies["POST /v1/dispatch/defects/def-1/resolve"]; b["routeId"] != "rte-1" || b["note"] != "Brakes bled" {
+		t.Fatalf("resolve body = %v", b)
+	}
+	do("admin", "POST", "/v1/staff/resources/routes", map[string]any{"values": map[string]any{"depotNodeId": "HOU-FC", "serviceDate": "2026-10-12", "maxDropoffs": 20}}, 201)
+	if b := f.bodies["POST /v1/dispatch/routes/build"]; b["maxDropoffs"] != float64(20) || b["depotNodeId"] != "HOU-FC" {
+		t.Fatalf("build body = %v", b)
+	}
+	do("admin", "POST", "/v1/staff/resources/routes", map[string]any{"values": map[string]any{"depotNodeId": "EMPTY-FC", "serviceDate": "2026-10-12"}}, 409)
 	if h := do("admin", "GET", "/v1/staff/dispatch/pickups/shp-9/assignments", nil, 200)["items"].([]any); len(h) != 2 || h[0].(map[string]any)["mode"] != "DISPATCH_OVERRIDE" {
 		t.Fatalf("history = %v", h)
 	}

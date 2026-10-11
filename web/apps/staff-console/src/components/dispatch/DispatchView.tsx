@@ -9,7 +9,10 @@ import { useT } from '@/i18n/t';
 
 import { PickupsPanel } from './PickupsPanel';
 
-/** Delivery dispatch: the routes table and the seller pickups of AfroTransact Delivery from the seller's store (S255). */
+/**
+ * Delivery dispatch: routes (with the route builder), the shipments waiting for a route, seller pickups (S255), and what
+ * the driver app raises: SOS alerts, vehicle defects that block a route, and the driver event log (S281).
+ */
 export function DispatchView() {
   const t = useT();
   const router = useRouter();
@@ -24,7 +27,11 @@ export function DispatchView() {
         onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
         items={[
           { value: 'routes', label: t('st.pickups.routesTab'), content: <ResourceTable resource="routes" urlPrefix="routes" /> },
-          { value: 'pickups', label: t('st.pickups.tab'), content: <PickupsPanel /> }
+          { value: 'shipments', label: t('st.dispatch.shipmentsTab'), content: <ResourceTable resource="dispatch-shipments" urlPrefix="shipments" /> },
+          { value: 'pickups', label: t('st.pickups.tab'), content: <PickupsPanel /> },
+          { value: 'sos', label: t('st.dispatch.sosTab'), content: <ResourceTable resource="sos-alerts" urlPrefix="sos" /> },
+          { value: 'defects', label: t('st.dispatch.defectsTab'), content: <ResourceTable resource="vehicle-defects" urlPrefix="defects" /> },
+          { value: 'events', label: t('st.dispatch.eventsTab'), content: <ResourceTable resource="driver-events" urlPrefix="events" /> }
         ]}
       />
     </ModulePage>

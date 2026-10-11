@@ -62,7 +62,10 @@ export interface paths {
          *     applications: seller `GET /v1/applications`; orders: orders `GET /v1/admin/orders`; products: catalog
          *     `GET /v1/products`; moderation: trust-ops `GET /v1/moderation/items`; claims: trust-ops `GET /v1/claims`;
          *     returns: tax-returns `GET /v1/returns`; payouts: payments `GET /v1/payouts/requests`; inventory: inventory
-         *     `GET /v1/lots`; purchase-orders: retail `GET /v1/purchase-orders`; routes: fulfilment `GET /v1/dispatch/routes`;
+         *     `GET /v1/lots`; purchase-orders: retail `GET /v1/purchase-orders`; routes: fulfilment `GET /v1/dispatch/routes` (create = the route builder
+         *     `POST /v1/dispatch/routes/build`); dispatch-shipments: fulfilment `GET /v1/dispatch/shipments`; sos-alerts: fulfilment
+         *     `GET /v1/dispatch/sos` (action acknowledge); vehicle-defects: fulfilment `GET /v1/dispatch/defects` (action resolve);
+         *     driver-events: fulfilment `GET /v1/dispatch/events`;
          *     support-cases: trust-ops `GET /v1/support-cases`; audit: trust-ops `GET /v1/audit/entries`; markets: content
          *     `GET /v1/markets/draft/countries`; site-settings: content `GET /v1/site-config/settings`; legal-documents: content
          *     `GET /v1/legal`; help-articles: content `GET /v1/help/admin/articles` (content:site.view); privacy-requests: content `GET /v1/privacy/requests` (content:legal.view); announcements and
@@ -2824,7 +2827,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates";
+        ResourceKey: "users" | "roles" | "applications" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates" | "dispatch-shipments" | "sos-alerts" | "vehicle-defects" | "driver-events";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;

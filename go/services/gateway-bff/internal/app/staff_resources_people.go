@@ -15,6 +15,7 @@ func staffResources() map[string]*staffResource {
 	all := []*staffResource{
 		usersResource(), rolesResource(), applicationsResource(), supportCasesResource(), auditResource(),
 		ordersResource(), productsResource(), moderationResource(), inventoryResource(), purchaseOrdersResource(), routesResource(),
+		dispatchShipmentsResource(), sosAlertsResource(), vehicleDefectsResource(), driverEventsResource(),
 		claimsResource(), returnsResource(), payoutsResource(), feeSchedulesResource(), taxRatesResource(),
 		marketsResource(), siteSettingsResource(), legalResource(), helpArticlesResource(), privacyRequestsResource(), placementsResource("announcements"), placementsResource("placements"),
 		identityProvidersResource(),

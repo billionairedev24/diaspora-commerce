@@ -289,6 +289,26 @@ function seed(now: Date): MockStaffDb {
     )
   );
 
+  /* Dispatch board (S281): shipments waiting for a route, and what the driver app raised. */
+  const dispatchShipments = Array.from({ length: 5 }, (_, i) =>
+    rec(`shp-${2000 + i}`, {
+      orderNumber: `AT-${String(410_200 + i * 7)}`, sellerName: i % 2 ? 'AfroTransact Retail' : 'Kente Naturals', origin: i % 2 ? 'FC' : 'SELLER',
+      place: pick(['Houston, TX 77036', 'Sugar Land, TX 77478', 'Katy, TX 77449', 'Pearland, TX 77584']), units: 1 + (i % 3), perishable: i % 2 === 0 ? 'Yes' : 'No',
+      promisedBy: day(-1 - (i % 2)), status: 'AWAITING_ROUTE'
+    })
+  );
+  const sosAlerts = [
+    rec('sos-1', { kind: 'Breakdown', driverId: 'drv-1', routeId: 'rte-1000', where: '29.70510, -95.55120', note: 'Flat tyre on Bellaire Blvd', raisedAt: ago(0, 1), status: 'ALERT' }),
+    rec('sos-2', { kind: 'Unsafe', driverId: 'drv-2', routeId: 'rte-1001', where: '29.61980, -95.63540', note: 'Aggressive dog at stop 4', raisedAt: ago(0, 3), status: 'ACKNOWLEDGED' })
+  ];
+  const vehicleDefects = [
+    rec('def-1', { vehicleId: 'VAN-12', driverId: 'drv-2', routeId: 'rte-1002', failed: 'Brakes', note: 'Soft brake pedal at pre-trip', reportedAt: ago(0, 2), status: 'BLOCKED' }),
+    rec('def-2', { vehicleId: 'VAN-14', driverId: 'drv-1', routeId: 'rte-1003', failed: 'Wipers', note: 'Passenger wiper torn', reportedAt: ago(1), status: 'OPEN' })
+  ];
+  const driverEvents = ['session signed in', 'inspection submitted', 'loadout completed', 'route started', 'stop arrived', 'delivery completed', 'delivery problem', 'pickup confirmed'].map((type, i) =>
+    rec(`ev-${100 + i}`, { capturedAt: ago(0, 8 - i), type: type.charAt(0).toUpperCase() + type.slice(1), driverId: i % 2 ? 'drv-2' : 'drv-1', routeId: `rte-${1000 + (i % 2)}`, stopId: i > 3 ? `st-${i}` : null, message: type === 'delivery problem' ? 'Customer not home: left a card' : null, outcome: type === 'delivery problem' ? 'REJECTED' : 'APPLIED' })
+  );
+
   const supportCases = Array.from({ length: 6 }, (_, i) => {
     const c = customers[i] ?? { id: 'cus-1000', name: 'Amara Nwosu' };
     const o = orders.find((x) => x.fields.customerId === c.id);
@@ -419,7 +439,8 @@ function seed(now: Date): MockStaffDb {
     records: {
       users, roles, applications, orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
       'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
-      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates
+      'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates,
+      'dispatch-shipments': dispatchShipments, 'sos-alerts': sosAlerts, 'vehicle-defects': vehicleDefects, 'driver-events': driverEvents
     },
     notifications,
     exports: [],

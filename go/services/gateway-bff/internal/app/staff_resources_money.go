@@ -92,7 +92,7 @@ func returnsResource() *staffResource {
 		columns: []domain.Column{col("number", "RMA", "mono", 18), col("orderNumber", "Order", "mono", 14), col("method", "Method", "text", 14), col("refundState", "Refund", "text", 14),
 			col("estimateMinor", "Refund est.", "money", 14), col("status", "Status", "status", 14), col("createdAt", "Opened", "date", 12)},
 		facets:  domain.StaffFacets("REQUESTED", "APPROVED", "IN_TRANSIT", "RECEIVED", "INSPECTED", "REFUNDED", "REJECTED", "CANCELLED"),
-		list:    listLimited("/v1/returns", upTaxReturns, nil),
+		list:    listLimited("/v1/returns", upTaxReturns),
 		get:     getByPath("/v1/returns/", upTaxReturns),
 		titleOf: func(o jobj) string { return "Return " + jstr(o, "number") },
 		subtitleOf: func(o jobj) string {
@@ -130,7 +130,7 @@ func payoutsResource() *staffResource {
 		columns: []domain.Column{col("id", "Request", "mono", 14), col("orgId", "Organisation", "strong", 22), col("amountMinor", "Amount", "money", 14),
 			col("requestedAt", "Requested", "date", 14), col("holdReason", "Hold reason", "text", 22), col("status", "Status", "status", 14)},
 		facets:     domain.StaffFacets("REQUESTED", "ON_HOLD", "APPROVED", "IN_TRANSIT", "PAID", "FAILED"),
-		list:       listLimited("/v1/payouts/requests", upPayments, nil),
+		list:       listLimited("/v1/payouts/requests", upPayments),
 		get:        getByPath("/v1/payouts/requests/", upPayments),
 		titleOf:    func(o jobj) string { return "Payout to " + jstr(o, "orgId") },
 		subtitleOf: func(o jobj) string { return jstr(o, "id") },

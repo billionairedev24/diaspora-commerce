@@ -91,7 +91,8 @@ const TONES: Record<string, RecordTone> = {
   QUARANTINED: 'bad', DRAFT: 'info', PENDING_APPROVAL: 'warn', SENT: 'info', CONFIRMED: 'info', RECEIVED: 'good', CANCELLED: 'bad', PLANNED: 'info',
   ASSIGNED: 'brand', IN_PROGRESS: 'brand', COMPLETED: 'good', OPEN: 'warn', RESOLVED: 'good', COMING_SOON: 'brand', SCHEDULED: 'brand', ENDED: 'info',
   ENABLED: 'good', DISABLED: 'bad', ACTIVE: 'good', IN_TRANSIT: 'info', REFUNDED: 'good', DELIVERED: 'good', PLACED: 'brand', DELIVERY_FAILED: 'bad',
-  OUT_FOR_DELIVERY: 'info', PACKED: 'info', STATE: 'info', LOCAL: 'brand'
+  OUT_FOR_DELIVERY: 'info', PACKED: 'info', STATE: 'info', LOCAL: 'brand', ALERT: 'bad', BLOCKED: 'bad', AWAITING_ROUTE: 'warn', APPLIED: 'good',
+  ACKNOWLEDGED: 'info', DUPLICATE: 'info'
 };
 export const toneOf = (status: string | null): RecordTone | null => (status ? (TONES[status] ?? 'info') : null);
 
@@ -364,7 +365,73 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
         apply: (r, v, ctx) => { r.fields.driver = v.driverId === 'drv-1' ? 'Tunde Adeyemi' : 'Chinedu Okafor'; r.fields.vehicle = str(v.vehicleId) || null; r.fields.status = 'ASSIGNED'; log(r, ctx, `Assigned ${str(r.fields.driver)}`); }
       },
       { key: 'cancel', label: 'Cancel route', tone: 'danger', permission: 'delivery:dispatch', form: reasonForm('Cancel the route', 'Cancel route'), when: (r) => stateReason(r, 'PLANNED', 'ASSIGNED'), apply: setStatus('CANCELLED', 'Cancelled — shipments back to the pool') }
+    ],
+    /* The route builder (fulfilment POST /v1/dispatch/routes/build): the depot's waiting shipments planned into routes per zone. */
+    create: {
+      permission: 'delivery:dispatch',
+      form: form('Build routes from the waiting shipments', 'Build routes', [
+        field('depotNodeId', 'Depot (fulfilment centre)', 'text', true, { maxLength: 40, value: 'HOU-FC' }),
+        field('serviceDate', 'Service date', 'date', true),
+        field('maxDropoffs', 'Drop-offs per route', 'number', false, { min: 0, max: 200, value: 25 }),
+        field('window', 'Delivery window', 'text', false, { maxLength: 60 })
+      ]),
+      build: (v, id, ctx) => ({
+        id,
+        fields: { name: `${str(v.depotNodeId).slice(0, 3)}-NEW-${str(v.serviceDate).slice(5)}`, zone: 'Alief', serviceDate: str(v.serviceDate), window: str(v.window) || '9am–1pm', driver: null, vehicle: null, status: 'PLANNED', stops: 0, perishable: false },
+        activity: [{ at: ctx.now.toISOString(), actor: ctx.actor, text: 'Route built from the waiting shipments' }],
+        lines: []
+      })
+    }
+  },
+  'dispatch-shipments': {
+    title: 'Waiting shipments',
+    columns: [col('orderNumber', 'Order', 'mono', 14), col('sellerName', 'Seller', 'strong', 16), col('origin', 'Origin', 'text', 10), col('place', 'Deliver to', 'text', 18), col('units', 'Units', 'number', 7), col('perishable', 'Perishable', 'text', 9), col('promisedBy', 'Promised by', 'date', 11), col('status', 'Status', 'status', 15)],
+    statusKey: 'status',
+    facets: [],
+    search: ['orderNumber', 'sellerName', 'place'],
+    cursor: true,
+    exportable: true,
+    titleOf: (r) => `Shipment ${str(r.fields.orderNumber)}`,
+    subtitleOf: (r) => `${str(r.fields.sellerName)} · ${str(r.fields.place)}`,
+    actions: []
+  },
+  'sos-alerts': {
+    title: 'SOS alerts',
+    columns: [col('kind', 'Emergency', 'strong', 14), col('driverId', 'Driver', 'mono', 16), col('routeId', 'Route', 'mono', 16), col('where', 'Where (GPS)', 'mono', 18), col('note', 'Note', 'text', 22), col('raisedAt', 'Raised', 'datetime', 14), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: [],
+    cursor: true,
+    exportable: true,
+    titleOf: (r) => `SOS: ${str(r.fields.kind)}`,
+    subtitleOf: (r) => `Driver ${str(r.fields.driverId)} · route ${str(r.fields.routeId)}`,
+    actions: [
+      { key: 'acknowledge', label: 'Acknowledge', tone: 'primary', permission: 'delivery:dispatch', confirm: 'Acknowledge this SOS? The driver sees that dispatch is on it.', when: (r) => stateReason(r, 'ALERT'), apply: setStatus('ACKNOWLEDGED', 'SOS acknowledged') }
     ]
+  },
+  'vehicle-defects': {
+    title: 'Vehicle defects',
+    columns: [col('vehicleId', 'Vehicle', 'mono', 12), col('driverId', 'Driver', 'mono', 14), col('routeId', 'Route', 'mono', 14), col('failed', 'Failed checks', 'text', 20), col('note', 'Note', 'text', 20), col('reportedAt', 'Reported', 'datetime', 12), col('status', 'Status', 'status', 10)],
+    statusKey: 'status',
+    facets: [],
+    cursor: true,
+    exportable: true,
+    titleOf: (r) => `Defect on ${str(r.fields.vehicleId)}`,
+    subtitleOf: (r) => `Route ${str(r.fields.routeId)} · driver ${str(r.fields.driverId)}`,
+    actions: [
+      { key: 'resolve', label: 'Resolve and unblock the route', tone: 'primary', permission: 'delivery:dispatch', form: noteForm('Resolve the defect (the driver re-inspects before starting)', 'Resolve', false), when: (r) => stateReason(r, 'OPEN', 'BLOCKED'), apply: setStatus('RESOLVED', 'Defect resolved, route unblocked') }
+    ]
+  },
+  'driver-events': {
+    title: 'Driver events',
+    columns: [col('capturedAt', 'When', 'datetime', 14), col('type', 'Event', 'strong', 18), col('driverId', 'Driver', 'mono', 14), col('routeId', 'Route', 'mono', 14), col('stopId', 'Stop', 'mono', 12), col('message', 'Detail', 'text', 18), col('outcome', 'Outcome', 'status', 10)],
+    statusKey: 'outcome',
+    facets: facets('APPLIED', 'DUPLICATE', 'REJECTED'),
+    search: ['type', 'driverId', 'routeId'],
+    cursor: true,
+    exportable: true,
+    titleOf: (r) => str(r.fields.type),
+    subtitleOf: (r) => `Driver ${str(r.fields.driverId)} · ${str(r.fields.capturedAt)}`,
+    actions: []
   },
   'support-cases': {
     title: 'Support cases',
