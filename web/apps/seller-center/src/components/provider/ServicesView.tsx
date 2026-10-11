@@ -1,18 +1,20 @@
 'use client';
 
 import { sellerKeys, sellerQueries, type ServiceInput, ServiceInputSchema, type ServiceOffer } from '@afrotransact/api-client';
+import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Checkbox, Dialog, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
-import { DataTable } from '@/components/ui/DataTable';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage } from '@/components/ui/States';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { sellerApi } from '@/lib/api';
 import { minutesLabel, money, toMinor } from '@/lib/format';
 import { useSeller } from '@/lib/session';
+import { exportDataset, pollExport } from '@/lib/table-export';
 
 type Draft = { name: string; description: string; duration: string; price: string; deposit: string; active: boolean };
 const EMPTY: Draft = { name: '', description: '', duration: '60', price: '', deposit: '0', active: true };
@@ -36,6 +38,7 @@ export function ServicesView() {
   const { orgId, can } = useSeller();
   const editable = can('services');
   const q = useQuery(sellerQueries.services(api, orgId));
+  const state = useTableState({ searchParams: useSearchParams() });
   const [editing, setEditing] = useState<ServiceOffer | 'new' | null>(null);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -55,13 +58,13 @@ export function ServicesView() {
     setErrors({});
   };
   const columns: ColumnDef<ServiceOffer>[] = [
-    { id: 'name', header: 'Service', size: 30, cell: ({ row }) => <span className="flex flex-col"><strong>{row.original.name}</strong><span className="truncate text-xs text-muted">{row.original.description}</span></span> },
-    { id: 'duration', header: 'Duration', size: 12, cell: ({ row }) => minutesLabel(row.original.durationMinutes) },
-    { id: 'price', header: 'Price', size: 12, cell: ({ row }) => money(row.original.priceMinor, row.original.currency) },
-    { id: 'deposit', header: 'Deposit', size: 12, cell: ({ row }) => money(row.original.depositMinor, row.original.currency) },
-    { id: 'takeHome', header: 'You take home', size: 14, cell: ({ row }) => <strong>{money(row.original.takeHome.takeHomeMinor, row.original.currency)}</strong> },
-    { id: 'status', header: 'Status', size: 10, cell: ({ row }) => <StatusPill tone={row.original.active ? 'good' : 'info'}>{row.original.active ? 'Bookable' : 'Hidden'}</StatusPill> },
-    { id: 'edit', header: () => <span className="at-visually-hidden">Edit</span>, size: 10, cell: ({ row }) => (editable ? <Button size="sm" variant="neutral" onClick={() => open(row.original)}>Edit</Button> : null) }
+    { id: 'name', accessorFn: (s) => s.name, header: 'Service', size: 260, meta: { kind: 'strong' }, cell: ({ row }) => <span className="flex flex-col"><strong>{row.original.name}</strong><span className="truncate text-xs text-muted">{row.original.description}</span></span> },
+    { id: 'durationMinutes', accessorFn: (s) => s.durationMinutes, header: 'Duration', size: 110, meta: { kind: 'number', label: 'Duration (minutes)' }, cell: ({ row }) => minutesLabel(row.original.durationMinutes) },
+    { id: 'priceMinor', accessorFn: (s) => s.priceMinor, header: 'Price', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.priceMinor, row.original.currency) },
+    { id: 'depositMinor', accessorFn: (s) => s.depositMinor, header: 'Deposit', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.depositMinor, row.original.currency) },
+    { id: 'takeHomeMinor', accessorFn: (s) => s.takeHome.takeHomeMinor, header: 'You take home', size: 130, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => <strong>{money(row.original.takeHome.takeHomeMinor, row.original.currency)}</strong> },
+    { id: 'status', accessorFn: (s) => (s.active ? 'Bookable' : 'Hidden'), header: 'Status', size: 110, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={row.original.active ? 'good' : 'info'}>{row.original.active ? 'Bookable' : 'Hidden'}</StatusPill> },
+    { id: 'edit', header: () => <span className="at-visually-hidden">Edit</span>, size: 90, enableSorting: false, meta: { export: false, label: 'Edit' }, cell: ({ row }) => (editable ? <Button size="sm" variant="neutral" onClick={() => open(row.original)}>Edit</Button> : null) }
   ];
   const priceMinor = toMinor(draft.price);
   const est = estimateTakeHome(Number.isNaN(priceMinor) ? 0 : priceMinor, commission);
@@ -79,9 +82,11 @@ export function ServicesView() {
   };
   return (
     <ModulePage module="services" actions={editable ? <Button onClick={() => open('new')}>Add service</Button> : null}>
-      {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : (
-        <DataTable label="Services" columns={columns} data={q.data ?? []} getRowId={(s) => s.id} loading={q.isFetching} empty="No services yet. Add the first thing customers can book." />
-      )}
+      <DataTable<ServiceOffer> id="seller.services" label="Services" columns={columns} data={q.data ?? []} getRowId={(s) => s.id} rowLabel={(s) => s.name}
+        state={state} mode="client" loading={q.isPending} fetching={q.isFetching}
+        error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
+        onRowClick={editable ? (s) => open(s) : undefined}
+        empty="No services yet. Add the first thing customers can book." onExport={exportDataset} pollExport={pollExport} />
       <Dialog open={editing !== null} onOpenChange={(o) => (o ? undefined : setEditing(null))} width={520} title={editing === 'new' ? 'Add service' : 'Edit service'}
         description="Customers pay the deposit when they book; the rest is charged when you mark the booking complete.">
         <form className="flex flex-col gap-1" onSubmit={(e) => { e.preventDefault(); submit(); }}>

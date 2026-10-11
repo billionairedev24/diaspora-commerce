@@ -1,14 +1,15 @@
 'use client';
 
 import { type BillingPaymentMethod, type Cadence, type Invoice, sellerKeys, sellerQueries } from '@afrotransact/api-client';
-import { Badge, Button, cx, useToast } from '@afrotransact/ui';
+import { DataTable, useTableState } from '@afrotransact/data-table';
+import { Badge, Button, ChipGroup, cx, useToast } from '@afrotransact/ui';
 import { Bank, CheckCircle, CreditCard } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
-import { DataTable, FilterChips } from '@/components/ui/DataTable';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
@@ -16,6 +17,7 @@ import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { sellerApi } from '@/lib/api';
 import { money, shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
+import { exportDataset, pollExport } from '@/lib/table-export';
 
 const BRAND: Record<string, string> = { visa: 'Visa', mastercard: 'Mastercard', amex: 'American Express', discover: 'Discover' };
 const CADENCES: { value: Cadence; label: string }[] = [
@@ -61,11 +63,11 @@ function MethodCard({ m, canManage, onDefault, onRemove, busy }: { m: BillingPay
 }
 
 const invoiceColumns: ColumnDef<Invoice>[] = [
-  { id: 'number', header: 'Invoice', size: 18, cell: ({ row }) => <span className="font-mono text-xs">{row.original.number}</span> },
-  { id: 'period', header: 'Period', size: 30, cell: ({ row }) => `${shortDate(row.original.periodStart)} – ${shortDate(row.original.periodEnd)}` },
-  { id: 'amount', header: 'Amount', size: 16, cell: ({ row }) => money(row.original.amountDueMinor, row.original.currency) },
-  { id: 'status', header: 'Status', size: 14, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill> },
-  { id: 'pdf', header: () => <span className="at-visually-hidden">Download</span>, size: 22, cell: ({ row }) => (row.original.pdfUrl ? <a href={row.original.pdfUrl} target="_blank" rel="noreferrer">Download PDF</a> : null) }
+  { id: 'number', accessorFn: (i) => i.number, header: 'Invoice', size: 160, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.number}</span> },
+  { id: 'periodStart', accessorFn: (i) => i.periodStart, header: 'Period', size: 240, meta: { kind: 'date', exportValue: (i) => `${i.periodStart} – ${i.periodEnd}` }, cell: ({ row }) => `${shortDate(row.original.periodStart)} – ${shortDate(row.original.periodEnd)}` },
+  { id: 'amountDueMinor', accessorFn: (i) => i.amountDueMinor, header: 'Amount', size: 130, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.amountDueMinor, row.original.currency) },
+  { id: 'status', accessorFn: (i) => i.status, header: 'Status', size: 120, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill> },
+  { id: 'pdf', header: () => <span className="at-visually-hidden">Download</span>, size: 150, enableSorting: false, meta: { export: false, label: 'Download' }, cell: ({ row }) => (row.original.pdfUrl ? <a href={row.original.pdfUrl} target="_blank" rel="noreferrer">Download PDF</a> : null) }
 ];
 
 /** Plan & billing: plan and cadence (monthly, quarterly, annual), cards and bank accounts, invoices. Owner-only changes. */
@@ -75,6 +77,7 @@ export function BillingView() {
   const toast = useToast();
   const { orgId } = useSeller();
   const q = useQuery(sellerQueries.billing(api, orgId));
+  const state = useTableState({ searchParams: useSearchParams(), prefix: 'invoices' });
   const [cadence, setCadence] = useState<Cadence | ''>('');
   const plan = useMutation({
     mutationFn: (v: { code: string; cadence: Cadence }) => api.changePlan(v.code, v.cadence),
@@ -117,7 +120,7 @@ export function BillingView() {
       </Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="m-0 text-lg font-semibold">Plans</h2>
-        <FilterChips label="Billing frequency" options={CADENCES} value={shown} onChange={(v) => setCadence(v)} />
+        <ChipGroup label="Billing frequency" options={CADENCES} value={shown} onChange={(v) => setCadence(v)} />
       </div>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,240px),1fr))] gap-3">
         {plans.map((p) => {
@@ -155,7 +158,8 @@ export function BillingView() {
       </div>
       <p className="m-0 text-xs text-muted">The default method can’t be removed until another one is the default.</p>
       <h2 className="m-0 text-lg font-semibold">Invoices</h2>
-      <DataTable label="Invoices" columns={invoiceColumns} data={invoices} getRowId={(i) => i.id} empty="No invoices yet." />
+      <DataTable<Invoice> id="seller.invoices" label="Invoices" columns={invoiceColumns} data={invoices} getRowId={(i) => i.id} rowLabel={(i) => i.number}
+        state={state} mode="client" fetching={q.isFetching} empty="No invoices yet." onExport={exportDataset} pollExport={pollExport} />
     </ModulePage>
   );
 }

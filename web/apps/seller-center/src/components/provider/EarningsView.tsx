@@ -1,22 +1,23 @@
 'use client';
 
 import { type Earnings, type EarningsRow, type ProviderFees, sellerQueries } from '@afrotransact/api-client';
-import { Button } from '@afrotransact/ui';
+import { DataTable, useTableState } from '@afrotransact/data-table';
+import { ChipGroup } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
-import { DataTable, FilterChips } from '@/components/ui/DataTable';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { Notice } from '@/components/ui/Notice';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { sellerApi } from '@/lib/api';
 import { toCsv } from '@/lib/export/csv';
-import { download } from '@/lib/export/table';
 import { dateTime, isoDay, money, shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
+import { exportDataset, pollExport } from '@/lib/table-export';
 
 type Range = '30' | '90' | 'ytd';
 
@@ -29,14 +30,16 @@ function rangeOf(r: Range, now = new Date()): { from: string; to: string } {
 }
 
 const columns: ColumnDef<EarningsRow>[] = [
-  { id: 'booking', header: 'Booking', size: 24, cell: ({ row }) => <span className="flex flex-col"><strong>{row.original.customerName}</strong><span className="text-xs text-muted">{row.original.serviceName} · {row.original.reference}</span></span> },
-  { id: 'date', header: 'Date', size: 12, cell: ({ row }) => shortDate(row.original.startAt) },
-  { id: 'status', header: 'Status', size: 12, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.statusLabel}</StatusPill> },
-  { id: 'collected', header: 'Collected', size: 11, cell: ({ row }) => money(row.original.collectedMinor) },
-  { id: 'commission', header: 'Commission', size: 11, cell: ({ row }) => (row.original.commissionMinor ? `−${money(row.original.commissionMinor)}` : '—') },
-  { id: 'card', header: 'Stripe fees', size: 10, cell: ({ row }) => (row.original.cardFeesMinor ? `−${money(row.original.cardFeesMinor)}` : '—') },
-  { id: 'late', header: 'Late-cancel fee', size: 10, cell: ({ row }) => (row.original.lateCancelFeeMinor ? <span className="text-danger">−{money(row.original.lateCancelFeeMinor)}</span> : '—') },
-  { id: 'net', header: 'Net', size: 10, cell: ({ row }) => <strong>{money(row.original.netMinor)}</strong> }
+  { id: 'reference', accessorFn: (r) => r.reference, header: 'Reference', size: 130, meta: { kind: 'mono' } },
+  { id: 'customerName', accessorFn: (r) => r.customerName, header: 'Booking', size: 220, meta: { kind: 'strong', label: 'Customer', exportValue: (r) => r.customerName }, cell: ({ row }) => <span className="flex flex-col"><strong>{row.original.customerName}</strong><span className="text-xs text-muted">{row.original.serviceName} · {row.original.reference}</span></span> },
+  { id: 'serviceName', accessorFn: (r) => r.serviceName, header: 'Service', size: 180 },
+  { id: 'startAt', accessorFn: (r) => r.startAt, header: 'Date', size: 120, meta: { kind: 'date' }, cell: ({ row }) => shortDate(row.original.startAt) },
+  { id: 'status', accessorFn: (r) => r.statusLabel, header: 'Status', size: 130, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.statusLabel}</StatusPill> },
+  { id: 'collectedMinor', accessorFn: (r) => r.collectedMinor, header: 'Collected', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.collectedMinor) },
+  { id: 'commissionMinor', accessorFn: (r) => r.commissionMinor, header: 'Commission', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => (row.original.commissionMinor ? `−${money(row.original.commissionMinor)}` : '—') },
+  { id: 'cardFeesMinor', accessorFn: (r) => r.cardFeesMinor, header: 'Stripe fees', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => (row.original.cardFeesMinor ? `−${money(row.original.cardFeesMinor)}` : '—') },
+  { id: 'lateCancelFeeMinor', accessorFn: (r) => r.lateCancelFeeMinor, header: 'Late-cancel fee', size: 120, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => (row.original.lateCancelFeeMinor ? <span className="text-danger">−{money(row.original.lateCancelFeeMinor)}</span> : '—') },
+  { id: 'netMinor', accessorFn: (r) => r.netMinor, header: 'Net', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => <strong>{money(row.original.netMinor)}</strong> }
 ];
 
 export function earningsCsv(e: Earnings): string {
@@ -90,11 +93,12 @@ export function EarningsView() {
   const [range, setRange] = useState<Range>('30');
   const { from, to } = rangeOf(range);
   const q = useQuery(sellerQueries.earnings(api, orgId, from, to));
+  const state = useTableState({ searchParams: useSearchParams() });
   const e = q.data;
   return (
-    <ModulePage module="earnings"
-      actions={e ? <Button variant="neutral" onClick={() => download(new Blob([earningsCsv(e)], { type: 'text/csv;charset=utf-8' }), `earnings-${from}-to-${to}.csv`)}>Export CSV</Button> : null}>
-      <FilterChips<Range> label="Period" value={range} onChange={(v) => setRange(v || '30')}
+    <ModulePage module="earnings">
+      {/* The report period chooses which bookings are loaded; the table then has its one search over every column. */}
+      <ChipGroup<Range> label="Period" value={range} onChange={setRange}
         options={[{ value: '30', label: 'Last 30 days' }, { value: '90', label: 'Last 90 days' }, { value: 'ytd', label: 'This year' }]} />
       {q.isPending ? <Spinner /> : q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : e ? (
         <>
@@ -115,7 +119,8 @@ export function EarningsView() {
           </dl>
           <p className="m-0 text-sm text-muted">Paid out every {e.payoutDay}. Deposits held are authorised but not yet captured.</p>
           <ProviderFeesCard fees={e.providerFees} currency={e.currency} />
-          <DataTable label="Earnings by booking" columns={columns} data={e.rows} getRowId={(r) => r.bookingId} loading={q.isFetching} empty="No completed or charged bookings in this period." />
+          <DataTable<EarningsRow> id="seller.earnings" label="Earnings by booking" columns={columns} data={e.rows} getRowId={(r) => r.bookingId} rowLabel={(r) => r.reference}
+            state={state} mode="client" fetching={q.isFetching} empty="No completed or charged bookings in this period." onExport={exportDataset} pollExport={pollExport} />
         </>
       ) : null}
     </ModulePage>

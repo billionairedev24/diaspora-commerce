@@ -16,11 +16,11 @@ describe('Fees & commission page (read-only)', () => {
   it('shows the commission per category with the seller’s own override, the fees and the upcoming change', async () => {
     await renderScreen(<FeesView />);
     const table = await screen.findByRole('table', { name: 'Commission by category' });
-    const groceries = within(table).getByRole('row', { name: /^Groceries/ });
+    const groceries = within(table).getByRole('row', { name: /^Select Groceries/ });
     expect(within(groceries).getByText('7.00%')).toBeInTheDocument();
     expect(within(groceries).getByText('$7.00')).toBeInTheDocument();
     expect(within(groceries).getByText('Your negotiated rate')).toBeInTheDocument();
-    const fashion = within(table).getByRole('row', { name: /^Fashion/ });
+    const fashion = within(table).getByRole('row', { name: /^Select Fashion/ });
     expect(within(fashion).getByText('11.50%')).toBeInTheDocument();
     expect(within(fashion).getByText('13.00%')).toBeInTheDocument();
     expect(screen.getAllByText('$3.25 / unit')).not.toHaveLength(0);
@@ -35,7 +35,7 @@ describe('Fees & commission page (read-only)', () => {
   it('shows the provider’s services rate', async () => {
     await renderScreen(<FeesView />, PROVIDER_ORG);
     const table = await screen.findByRole('table', { name: 'Commission by category' });
-    const services = within(table).getByRole('row', { name: /^Services/ });
+    const services = within(table).getByRole('row', { name: /^Select Services/ });
     expect(within(services).getByText('9.00%')).toBeInTheDocument();
     expect(within(services).getByText('Your negotiated rate')).toBeInTheDocument();
   });

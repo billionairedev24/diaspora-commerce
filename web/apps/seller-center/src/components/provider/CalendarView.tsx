@@ -1,12 +1,11 @@
 'use client';
 
 import { type BookingCard, type DaySummary, sellerQueries } from '@afrotransact/api-client';
-import { Button, cx } from '@afrotransact/ui';
+import { Button, ChipGroup, cx } from '@afrotransact/ui';
 import { CaretLeft, CaretRight } from '@phosphor-icons/react/ssr';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
-import { FilterChips } from '@/components/ui/DataTable';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { sellerApi } from '@/lib/api';
@@ -93,7 +92,7 @@ export function CalendarView() {
         <Button size="sm" variant="neutral" onClick={() => setAnchor(new Date())}>Today</Button>
         <Button size="sm" variant="neutral" aria-label="Next" onClick={() => step(1)}><CaretRight size={16} aria-hidden /></Button>
         <strong className="flex-1 text-lg" aria-live="polite">{title}</strong>
-        <FilterChips label="View" value={mode} onChange={(v) => setMode(v === 'month' ? 'month' : 'week')} options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }]} />
+        <ChipGroup label="View" value={mode} onChange={setMode} options={[{ value: 'week', label: 'Week' }, { value: 'month', label: 'Month' }]} />
       </div>
       {q.isPending ? <Spinner /> : null}
       {q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : null}

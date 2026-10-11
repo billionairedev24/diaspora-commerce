@@ -1,26 +1,28 @@
 'use client';
 
 import { type Payout, sellerKeys, sellerQueries } from '@afrotransact/api-client';
+import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, Dialog, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
+import { useSearchParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
-import { DataTable } from '@/components/ui/DataTable';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { sellerApi } from '@/lib/api';
 import { idempotencyKey, money, shortDate, toMinor } from '@/lib/format';
 import { useSeller } from '@/lib/session';
+import { exportDataset, pollExport } from '@/lib/table-export';
 
 const columns: ColumnDef<Payout>[] = [
-  { id: 'id', header: 'Payout', size: 22, cell: ({ row }) => <span className="font-mono text-xs">{row.original.id}</span> },
-  { id: 'date', header: 'Requested', size: 20, cell: ({ row }) => shortDate(row.original.requestedAt) },
-  { id: 'amount', header: 'Amount', size: 18, cell: ({ row }) => money(row.original.amountMinor, row.original.currency) },
-  { id: 'status', header: 'Status', size: 14, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.replace('_', ' ').toLowerCase()}</StatusPill> },
-  { id: 'note', header: 'Note', size: 26, cell: ({ row }) => <span className="text-xs text-muted">{row.original.holdReason ?? row.original.failureMessage ?? ''}</span> }
+  { id: 'id', accessorFn: (p) => p.id, header: 'Payout', size: 200, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.id}</span> },
+  { id: 'requestedAt', accessorFn: (p) => p.requestedAt, header: 'Requested', size: 140, meta: { kind: 'date' }, cell: ({ row }) => shortDate(row.original.requestedAt) },
+  { id: 'amountMinor', accessorFn: (p) => p.amountMinor, header: 'Amount', size: 130, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.amountMinor, row.original.currency) },
+  { id: 'status', accessorFn: (p) => p.status, header: 'Status', size: 130, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.status.replace('_', ' ').toLowerCase()}</StatusPill> },
+  { id: 'note', accessorFn: (p) => p.holdReason ?? p.failureMessage ?? undefined, header: 'Note', size: 260, cell: ({ row }) => <span className="text-xs text-muted">{row.original.holdReason ?? row.original.failureMessage ?? ''}</span> }
 ];
 
 /** Payouts: available / on hold / on the way, holds per order, history and "Request payout" (payments). */
@@ -30,6 +32,7 @@ export function PayoutsView() {
   const toast = useToast();
   const { orgId, can } = useSeller();
   const q = useQuery(sellerQueries.payouts(api, orgId));
+  const state = useTableState({ searchParams: useSearchParams() });
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +92,8 @@ export function PayoutsView() {
       ) : null}
       <h2 className="m-0 text-lg font-semibold">History</h2>
       {q.data.historyAvailable ? (
-        <DataTable label="Payouts" columns={columns} data={q.data.payouts} getRowId={(p) => p.id} empty="No payouts yet." />
+        <DataTable<Payout> id="seller.payouts" label="Payouts" columns={columns} data={q.data.payouts} getRowId={(p) => p.id} rowLabel={(p) => p.id}
+          state={state} mode="client" fetching={q.isFetching} empty="No payouts yet." onExport={exportDataset} pollExport={pollExport} />
       ) : (
         <p className="m-0 text-sm text-muted">Payout history isn’t available for your role yet.</p>
       )}

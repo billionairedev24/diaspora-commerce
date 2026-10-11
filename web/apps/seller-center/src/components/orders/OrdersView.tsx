@@ -1,13 +1,14 @@
 'use client';
 
-import { sellerKeys, type SellerOrderRow, sellerQueries, type SellerStatusAction, type ShipmentStatus } from '@afrotransact/api-client';
+import { sellerKeys, type SellerOrderRow, sellerQueries, type SellerStatusAction } from '@afrotransact/api-client';
+import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Badge, Button, buttonClassName, useToast } from '@afrotransact/ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
-import { DataTable, FilterChips } from '@/components/ui/DataTable';
 import { Notice } from '@/components/ui/Notice';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ErrorState, problemMessage } from '@/components/ui/States';
@@ -17,22 +18,12 @@ import { sellerApi } from '@/lib/api';
 import { dateTime, idempotencyKey, money } from '@/lib/format';
 import { moduleCopy } from '@/lib/modules';
 import { useSeller } from '@/lib/session';
+import { exportTable, pollExport, runForEach } from '@/lib/table-export';
 
 import { ACTION_LABEL, OrderSheet } from './OrderSheet';
 
-const PAGE_SIZE = 20;
-const STATUS_FILTERS: { value: ShipmentStatus | ''; label: string }[] = [
-  { value: '', label: 'All' },
-  { value: 'PLACED', label: 'New' },
-  { value: 'CONFIRMED', label: 'Confirmed' },
-  { value: 'PACKED', label: 'Packed' },
-  { value: 'READY', label: 'Ready to ship' },
-  { value: 'IN_TRANSIT', label: 'In transit' },
-  { value: 'DELIVERED', label: 'Delivered' },
-  { value: 'CANCELLED', label: 'Cancelled' }
-];
-
-/** Orders: server-driven table (status filter, cursor pages); rows open in a sheet; sellers confirm, pack and mark ready only. */
+/** Orders: server-driven table (one search over every column, sort, cursor pages, selection, exports); rows open in a
+    sheet; sellers confirm, pack and mark ready only (one row or many). */
 export function OrdersView() {
   const t = useT();
   const api = sellerApi();
@@ -40,12 +31,10 @@ export function OrdersView() {
   const toast = useToast();
   const { orgId, can, session, isProvider } = useSeller();
   const editable = can('orders');
-  const [status, setStatus] = useState<ShipmentStatus | ''>('');
-  const [cursors, setCursors] = useState<(string | undefined)[]>([undefined]);
-  const [pageIndex, setPageIndex] = useState(0);
+  const state = useTableState({ searchParams: useSearchParams(), defaultPageSize: 25 });
   const [open, setOpen] = useState<string | null>(null);
-  const query = { status: status || undefined, cursor: cursors[pageIndex], limit: PAGE_SIZE };
-  const q = useQuery(sellerQueries.orders(api, orgId, query));
+  const query = { q: state.q || undefined, sort: state.sort, cursor: state.cursor, limit: state.pagination.pageSize };
+  const q = useQuery({ ...sellerQueries.orders(api, orgId, query), placeholderData: keepPreviousData });
 
   const advance = useMutation({
     mutationFn: (r: { row: SellerOrderRow; to: SellerStatusAction }) => api.updateShipmentStatus(r.row.orderNumber, r.row.shipmentId, r.to, idempotencyKey()),
@@ -60,34 +49,39 @@ export function OrdersView() {
   const columns = useMemo<ColumnDef<SellerOrderRow>[]>(
     () => [
       {
-        id: 'order', header: 'Order', size: 15,
+        id: 'orderNumber', accessorFn: (r) => r.orderNumber, header: 'Order', size: 160, meta: { kind: 'mono', label: 'Order' },
         cell: ({ row }) => (
           <span className="flex flex-col">
             <button type="button" className="link-button p-0 text-left font-mono text-xs font-semibold text-link hover:underline" onClick={() => setOpen(row.original.orderNumber)}>
               {row.original.orderNumber}
             </button>
-            <span className="text-xs text-muted">{dateTime(row.original.placedAt)}</span>
           </span>
         )
       },
       {
-        id: 'buyer', header: 'Buyer', size: 16,
+        id: 'buyerName', accessorFn: (r) => r.buyerName, header: 'Buyer', size: 180, meta: { kind: 'strong' },
         cell: ({ row }) => (
           <span className="flex flex-col">
             <strong className="font-semibold">{row.original.buyerName}</strong>
-            <span className="text-xs text-muted">{row.original.shipTo}</span>
           </span>
         )
       },
-      { id: 'items', header: 'Items', size: 23, cell: ({ row }) => row.original.itemsSummary },
-      { id: 'total', header: 'Total', size: 10, cell: ({ row }) => money(row.original.totalMinor, row.original.currency) },
+      { id: 'placedAt', accessorFn: (r) => r.placedAt, header: 'Placed', size: 150, meta: { kind: 'datetime' }, cell: ({ row }) => dateTime(row.original.placedAt) },
+      { id: 'shipTo', accessorFn: (r) => r.shipTo, header: 'Ship to', size: 140 },
+      { id: 'itemsSummary', accessorFn: (r) => r.itemsSummary, header: 'Items', size: 230 },
+      { id: 'itemCount', accessorFn: (r) => r.itemCount, header: 'Units', size: 80, meta: { kind: 'number', align: 'end' } },
+      { id: 'totalMinor', accessorFn: (r) => r.totalMinor, header: 'Total', size: 110, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => money(row.original.totalMinor, row.original.currency) },
       {
-        id: 'fulfilment', header: 'Fulfilment', size: 12,
+        id: 'fulfilment', accessorFn: (r) => t(`sc.ff.${r.fulfilment}`), header: 'Fulfilment', size: 140,
         cell: ({ row }) => <Badge tone={row.original.fulfilment === 'SELLER' ? 'seller' : 'fulfilled'}>{t(`sc.ff.${row.original.fulfilment}`)}</Badge>
       },
-      { id: 'status', header: 'Status', size: 11, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.statusLabel}</StatusPill> },
+      { id: 'status', accessorFn: (r) => r.statusLabel, header: 'Status', size: 130, meta: { kind: 'status' }, cell: ({ row }) => <StatusPill tone={toneOf(row.original.status)}>{row.original.statusLabel}</StatusPill> },
       {
-        id: 'action', header: () => <span className="at-visually-hidden">Action</span>, size: 13,
+        id: 'trackingNumber', accessorFn: (r) => r.trackingNumber ?? undefined, header: 'Tracking', size: 170, meta: { kind: 'mono' },
+        cell: ({ row }) => <span className="font-mono text-xs">{row.original.trackingNumber ?? '—'}</span>
+      },
+      {
+        id: 'action', header: () => <span className="at-visually-hidden">Action</span>, size: 130, enableSorting: false, meta: { export: false, label: 'Action' },
         cell: ({ row }) => {
           const r = row.original;
           const next = r.nextActions[0];
@@ -129,39 +123,52 @@ export function OrdersView() {
           {session.activeOrg?.roleLabel} can view orders but not change them.
         </Notice>
       ) : null}
-      <FilterChips
-        label="Status"
-        options={STATUS_FILTERS}
-        value={status}
-        onChange={(v) => {
-          setStatus(v);
-          setCursors([undefined]);
-          setPageIndex(0);
-        }}
+      <DataTable<SellerOrderRow>
+        id="seller.orders"
+        label="Orders"
+        columns={columns}
+        data={q.data?.items ?? []}
+        getRowId={(r) => r.shipmentId}
+        rowLabel={(r) => r.orderNumber}
+        rowTestId="order-row"
+        state={state}
+        paging="cursor"
+        total={q.data?.total ?? null}
+        nextCursor={q.data?.nextCursor ?? null}
+        loading={q.isPending}
+        fetching={q.isFetching}
+        partial={q.data?.partial}
+        error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
+        onRowClick={(r) => setOpen(r.orderNumber)}
+        activeRowId={q.data?.items.find((r) => r.orderNumber === open)?.shipmentId ?? null}
+        searchPlaceholder="Search order, buyer, items, total, status, tracking…"
+        empty="No orders yet — they appear here as soon as shoppers buy."
+        noMatches="No orders match."
+        onExport={(req) => exportTable('orders', req)}
+        pollExport={pollExport}
+        bulkActions={
+          editable
+            ? (rows, clear) => {
+                const next = rows.filter((r) => r.nextActions[0]);
+                return (
+                  <Button
+                    size="sm"
+                    variant="neutral"
+                    disabled={!next.length}
+                    onClick={async () => {
+                      const r = await runForEach(next, (row) => api.updateShipmentStatus(row.orderNumber, row.shipmentId, row.nextActions[0] as SellerStatusAction, idempotencyKey()), 'moved to the next step', problemMessage);
+                      void qc.invalidateQueries({ queryKey: sellerKeys.orders(orgId) });
+                      toast.show(r.text, r.tone);
+                      clear();
+                    }}
+                  >
+                    Next step for {next.length} {next.length === 1 ? 'order' : 'orders'}
+                  </Button>
+                );
+              }
+            : undefined
+        }
       />
-      {q.isError ? (
-        <ErrorState error={q.error} onRetry={() => void q.refetch()} />
-      ) : (
-        <DataTable
-          label="Orders"
-          columns={columns}
-          data={q.data?.items ?? []}
-          getRowId={(r) => r.shipmentId}
-          loading={q.isFetching}
-          activeRowId={q.data?.items.find((r) => r.orderNumber === open)?.shipmentId ?? null}
-          empty={status ? 'No orders with this status.' : 'No orders yet — they appear here as soon as shoppers buy.'}
-          page={{
-            pageIndex,
-            pageSize: PAGE_SIZE,
-            total: q.data?.total ?? 0,
-            hasNext: !!q.data?.nextCursor,
-            onPage: (i) => {
-              if (i > pageIndex && q.data?.nextCursor) setCursors((c) => [...c.slice(0, i), q.data?.nextCursor ?? undefined]);
-              setPageIndex(i);
-            }
-          }}
-        />
-      )}
       <OrderSheet orderNumber={open} onClose={() => setOpen(null)} />
     </>
   );

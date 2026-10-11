@@ -1,7 +1,11 @@
 'use client';
 
 import { applyBps, formatBps, type SellerFeeCategory, type SellerFeeVersion, sellerQueries } from '@afrotransact/api-client';
+import { DataTable, useTableState } from '@afrotransact/data-table';
 import { useQuery } from '@tanstack/react-query';
+import { type ColumnDef } from '@tanstack/react-table';
+import { useSearchParams } from 'next/navigation';
+import { useMemo } from 'react';
 
 import { Card } from '@/components/ui/Card';
 import { ModulePage } from '@/components/ui/ModulePage';
@@ -12,9 +16,8 @@ import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { money, shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
+import { exportDataset, pollExport } from '@/lib/table-export';
 
-const th = 'px-3 py-2 text-left text-xs font-semibold text-muted';
-const td = 'px-3 py-2 text-sm';
 const EXAMPLE_SALE = 10_000;
 
 const SOURCE: Record<SellerFeeCategory['source'], string> = {
@@ -57,12 +60,36 @@ function FeeTiles({ v }: { v: SellerFeeVersion }) {
 export function FeesView() {
   const { orgId } = useSeller();
   const q = useQuery(sellerQueries.fees(sellerApi(), orgId));
+  const state = useTableState({ searchParams: useSearchParams() });
+  const next = q.data?.upcoming ?? null;
+  const columns = useMemo<ColumnDef<SellerFeeCategory>[]>(() => {
+    const nextBy = new Map((next?.categories ?? []).map((c) => [c.category, c]));
+    const cols: ColumnDef<SellerFeeCategory>[] = [
+      { id: 'label', accessorFn: (c) => c.label, header: 'Category', size: 220, meta: { kind: 'strong' } },
+      { id: 'commission', accessorFn: (c) => formatBps(c.commissionBps), header: 'Commission', size: 130 },
+      { id: 'example', accessorFn: (c) => applyBps(EXAMPLE_SALE, c.commissionBps), header: `On a ${money(EXAMPLE_SALE)} sale`, size: 150, meta: { kind: 'money', align: 'end' },
+        cell: ({ row }) => money(applyBps(EXAMPLE_SALE, row.original.commissionBps)) },
+      { id: 'source', accessorFn: (c) => SOURCE[c.source], header: 'Rate', size: 140, meta: { kind: 'status' },
+        cell: ({ row }) => <StatusPill tone={row.original.source === 'OVERRIDE' ? 'good' : 'info'}>{SOURCE[row.original.source]}</StatusPill> }
+    ];
+    if (next) {
+      cols.push({
+        id: 'next',
+        accessorFn: (c) => {
+          const n = nextBy.get(c.category);
+          return n ? (n.commissionBps === c.commissionBps ? 'No change' : formatBps(n.commissionBps)) : formatBps(next.defaultCommissionBps);
+        },
+        header: `From ${shortDate(next.effectiveFrom)}`,
+        size: 150,
+        cell: ({ row, getValue }) => <span className={getValue() === 'No change' && nextBy.get(row.original.category) ? 'text-muted' : 'font-semibold'}>{String(getValue())}</span>
+      });
+    }
+    return cols;
+  }, [next]);
   if (q.isPending) return <ModulePage module="fees" readOnlyNote={false}><Spinner /></ModulePage>;
   if (q.isError) return <ModulePage module="fees" readOnlyNote={false}><ErrorState error={q.error} onRetry={() => void q.refetch()} /></ModulePage>;
   const f = q.data;
   const cur = f.current;
-  const next = f.upcoming;
-  const nextBy = new Map((next?.categories ?? []).map((c) => [c.category, c]));
   return (
     <ModulePage module="fees" readOnlyNote={false}>
       {f.retail ? (
@@ -76,37 +103,8 @@ export function FeesView() {
         </Notice>
       ) : null}
       <Card title="Commission by category" actions={<span className="text-xs text-muted">Fee schedule v{cur.version} · since {shortDate(cur.effectiveFrom)}</span>}>
-                  <table className="w-full border-collapse" aria-label="Commission by category">
-            <thead>
-              <tr className="border-b border-border">
-                <th className={th}>Category</th>
-                <th className={th}>Commission</th>
-                <th className={th}>On a {money(EXAMPLE_SALE)} sale</th>
-                <th className={th}>Rate</th>
-                {next ? <th className={th}>From {shortDate(next.effectiveFrom)}</th> : null}
-              </tr>
-            </thead>
-            <tbody>
-              {cur.categories.map((c) => {
-                const n = nextBy.get(c.category);
-                return (
-                  <tr key={c.category} className="border-b border-border">
-                    <td className={`${td} font-semibold`}>{c.label}</td>
-                    <td className={td}>{formatBps(c.commissionBps)}</td>
-                    <td className={td}>{money(applyBps(EXAMPLE_SALE, c.commissionBps))}</td>
-                    <td className={td}>
-                      <StatusPill tone={c.source === 'OVERRIDE' ? 'good' : 'info'}>{SOURCE[c.source]}</StatusPill>
-                    </td>
-                    {next ? (
-                      <td className={`${td} ${n && n.commissionBps !== c.commissionBps ? 'font-semibold' : 'text-muted'}`}>
-                        {n ? (n.commissionBps === c.commissionBps ? 'No change' : formatBps(n.commissionBps)) : formatBps(next.defaultCommissionBps)}
-                      </td>
-                    ) : null}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <DataTable<SellerFeeCategory> id="seller.fees" label="Commission by category" columns={columns} data={cur.categories} getRowId={(c) => c.category} rowLabel={(c) => c.label}
+          state={state} mode="client" fetching={q.isFetching} empty="No categories." onExport={exportDataset} pollExport={pollExport} />
         <p className="m-0 text-xs text-muted">Commission is charged on item prices (not shipping or tax), rounded to the cent per line.</p>
       </Card>
       <Card title="Fees">

@@ -1,13 +1,14 @@
 'use client';
 
 import { InviteFormSchema, isApiError, type RoleCard, sellerKeys, sellerQueries, TEAM_ERROR_MESSAGES, type TeamMember } from '@afrotransact/api-client';
+import { DataTable, useTableState } from '@afrotransact/data-table';
 import { Button, cx, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
 import { CheckCircle, Eye, Prohibit } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
+import { useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
-import { DataTable } from '@/components/ui/DataTable';
 import { FormErrors } from '@/components/ui/FormErrors';
 import { ModulePage } from '@/components/ui/ModulePage';
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
@@ -15,6 +16,7 @@ import { StatusPill, toneOf } from '@/components/ui/StatusPill';
 import { sellerApi } from '@/lib/api';
 import { shortDate } from '@/lib/format';
 import { useSeller } from '@/lib/session';
+import { exportDataset, pollExport } from '@/lib/table-export';
 
 /** One card per role: what it can change, only view, and can't access. The member's own role is highlighted. */
 export function RoleCards({ roles, yours }: { roles: RoleCard[]; yours: string }) {
@@ -71,6 +73,7 @@ export function TeamView() {
   const toast = useToast();
   const { orgId } = useSeller();
   const q = useQuery(sellerQueries.team(api, orgId));
+  const state = useTableState({ searchParams: useSearchParams() });
   const [invite, setInvite] = useState(false);
   const [form, setForm] = useState({ email: '', roleKey: '' });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -111,10 +114,10 @@ export function TeamView() {
   const canManage = q.data?.canManage ?? false;
   const columns = useMemo<ColumnDef<TeamMember>[]>(
     () => [
-      { id: 'name', header: 'Name', size: 24, cell: ({ row }) => <strong className="font-semibold">{row.original.name}{row.original.isYou ? <span className="font-normal text-muted"> (you)</span> : null}</strong> },
-      { id: 'email', header: 'Email', size: 24, cell: ({ row }) => row.original.email ?? '—' },
+      { id: 'name', accessorFn: (m) => m.name, header: 'Name', size: 220, meta: { kind: 'strong' }, cell: ({ row }) => <strong className="font-semibold">{row.original.name}{row.original.isYou ? <span className="font-normal text-muted"> (you)</span> : null}</strong> },
+      { id: 'email', accessorFn: (m) => m.email ?? undefined, header: 'Email', size: 240, cell: ({ row }) => row.original.email ?? '—' },
       {
-        id: 'role', header: 'Role', size: 22,
+        id: 'role', accessorFn: (m) => m.roleLabel, header: 'Role', size: 200,
         cell: ({ row }) =>
           canManage && !row.original.isYou && row.original.status !== 'INVITED' ? (
             <label className="flex flex-col text-xs">
@@ -133,7 +136,7 @@ export function TeamView() {
           )
       },
       {
-        id: 'status', header: 'Status', size: 16,
+        id: 'status', accessorFn: (m) => m.status, header: 'Status', size: 150, meta: { kind: 'status' },
         cell: ({ row }) => (
           <span className="flex flex-col gap-0.5">
             <StatusPill tone={toneOf(row.original.status)}>{row.original.status.toLowerCase()}</StatusPill>
@@ -142,7 +145,7 @@ export function TeamView() {
         )
       },
       {
-        id: 'actions', header: () => <span className="at-visually-hidden">Actions</span>, size: 14,
+        id: 'actions', header: () => <span className="at-visually-hidden">Actions</span>, size: 130, enableSorting: false, meta: { export: false, label: 'Actions' },
         cell: ({ row }) => {
           const m = row.original;
           if (!canManage || m.isYou) return null;
@@ -167,7 +170,8 @@ export function TeamView() {
       module="team"
       actions={canManage ? <Button onClick={() => { setErrors({}); setForm({ email: '', roleKey: roleOptions[1]?.value ?? '' }); setInvite(true); }}>Invite member</Button> : null}
     >
-      <DataTable label="Team members" columns={columns} data={q.data.members} getRowId={(m) => m.userId} />
+      <DataTable<TeamMember> id="seller.team" label="Team members" columns={columns} data={q.data.members} getRowId={(m) => m.userId} rowLabel={(m) => m.name}
+        state={state} mode="client" fetching={q.isFetching} empty="No members yet." onExport={exportDataset} pollExport={pollExport} />
       <h2 className="m-0 text-lg font-semibold">What each role can and can’t do</h2>
       <RoleCards roles={q.data.roles} yours={q.data.yourRoleKey} />
       <Dialog open={invite} onOpenChange={setInvite} title="Invite a team member" description="They get an email to join with their own AfroTransact account. Give each person the least access they need.">
