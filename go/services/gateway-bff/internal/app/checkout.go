@@ -158,6 +158,13 @@ func orderErr(err error) error {
 			firstNonEmpty(p.Detail, "This coupon can't be used on this order.")).WithCause(err)
 	case p.Status == http.StatusPaymentRequired:
 		return domain.NewProblem(http.StatusPaymentRequired, domain.CodePaymentDeclined, "Payment declined", firstNonEmpty(p.Detail, "Your payment was declined.")).WithCause(err)
+	case p.Code == "orders.checkout-in-progress":
+		// The customer's previous checkout is still being closed: retry with the SAME key in a moment.
+		return domain.NewProblem(http.StatusConflict, domain.CodeCheckoutInProgress, "Checkout in progress",
+			firstNonEmpty(p.Detail, "Your previous checkout is still being closed; try again in a moment.")).WithCause(err)
+	case p.Code == "orders.previous-checkout-paid":
+		return domain.NewProblem(http.StatusConflict, domain.CodePreviousCheckoutPaid, "Previous checkout paid",
+			firstNonEmpty(p.Detail, "Your previous checkout was paid and is being placed; check your orders.")).WithCause(err)
 	case p.Status == http.StatusConflict && strings.Contains(p.Code, "idempotency"):
 		pr := domain.NewProblem(http.StatusConflict, domain.CodeIdempotencyConflict, "Conflicting retry", "This Idempotency-Key was used for a different order.")
 		pr.Extra = map[string]any{"available": 0, "inCart": 0, "requested": 0}

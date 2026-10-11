@@ -37,8 +37,12 @@ const (
 	CodeZipNotServiceable   = "ZIP_NOT_SERVICEABLE"
 	CodePaymentDeclined     = "PAYMENT_DECLINED"
 	CodeIdempotencyConflict = "IDEMPOTENCY_CONFLICT"
-	CodeStockChanged        = "STOCK_CHANGED"
-	CodeConflict            = "CONFLICT"
+	// CodeCheckoutInProgress: the customer's previous checkout is still being closed; retry with the same key.
+	CodeCheckoutInProgress = "CHECKOUT_IN_PROGRESS"
+	// CodePreviousCheckoutPaid: the customer's previous open checkout was paid; it is being placed.
+	CodePreviousCheckoutPaid = "PREVIOUS_CHECKOUT_PAID"
+	CodeStockChanged         = "STOCK_CHANGED"
+	CodeConflict             = "CONFLICT"
 	// CodeVersionConflict: an If-Match edit named an older version (412); reload and retry.
 	CodeVersionConflict     = "VERSION_CONFLICT"
 	CodeRateLimited         = "RATE_LIMITED"
