@@ -375,6 +375,7 @@ of yesterday (`RECONCILIATION_CRON`, 03:10): ledger 1000 per Stripe object vs St
 |---|---|
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | **Only from the environment.** prod requires `sk_live_`/`rk_live_`; every other profile refuses live keys |
 | `STRIPE_API_BASE` | default `https://api.stripe.com` (tests point it at WireMock) |
+| `STRIPE_MULTICAPTURE` | `false` (default): every checkout intent is a single-capture intent, captured once when the order's first shipment ships (all its lines; Stripe releases nothing). `true` only once Stripe enabled multicapture (flexible payments, IC+) on the account: intents ask for `request_multicapture=if_available` and each shipment is captured separately. If Stripe still answers "This account is not eligible for the requested card features", payments creates the intent without it (key `<orderId>:create-intent:single`) and stops asking until restart. `payment.multicapture` records what each intent allows; single-capture orders are settled with the order, not per shipment |
 | `DB_URL`, `DB_USER`, `DB_PASSWORD`, `KAFKA_BOOTSTRAP`, `AUTH_ISSUER_URL` | infrastructure |
 | `RETAIL_ORG_ID` | AfroTransact Retail org (merchant of record: no commission, FBA fee, transfer or payout; sales to 4400) |
 | `SUPPLIER_PAYMENT_TERMS_DAYS` | days from `retail.payment.released` to a supplier payment's due date when retail sends none (30) |
