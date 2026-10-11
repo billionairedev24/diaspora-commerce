@@ -199,5 +199,25 @@ class SellersTest(unittest.TestCase):
         self.assertEqual(len(s.report.problems), 1)
 
 
+
+class PickupPointsTest(unittest.TestCase):
+    def test_saves_every_afrotransact_pickup_point_with_its_fixed_id(self):
+        s = seeder()
+        saved = {}
+        s.svc["carrier-gateway"].on("PUT", "/v1/pickup-locations/*", lambda path, body, kw: saved.setdefault(path.rsplit("/", 1)[1], body))
+        s.step_pickups()
+
+        self.assertEqual(set(saved), {p["id"] for p in D.PICKUP_POINTS})
+        self.assertTrue(all(b["ownerOrg"] == D.PICKUP_OWNER and b["active"] and b["kind"] != "SELLER" for b in saved.values()))
+        self.assertTrue(all(b["hours"] and b["timezone"] and b["position"] for b in saved.values()))
+        self.assertEqual(s.report.counts[("pickup points", "saved")], len(D.PICKUP_POINTS))
+
+    def test_skips_when_carrier_gateway_is_down(self):
+        s = seeder()
+        s.up["carrier-gateway"] = False
+        s.step_pickups()
+        self.assertEqual(s.svc["carrier-gateway"].calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

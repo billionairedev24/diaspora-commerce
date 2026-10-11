@@ -535,6 +535,7 @@ class OpsSeeder:
             if address.get("version") is not None:
                 body["version"] = address["version"]
             sel.put(f"/v1/orgs/{seller.org_id}/ship-from-addresses/{address['id']}/afrotransact-pickup", body)
+        self._seller_customer_pickup(seller.org_id, address, cfg)
         atin = self.atin(cfg["product"])
         offers = items_of(self.svc["offers"].get("/v1/offers", params={"atin": atin, "sellerOrgId": seller.org_id,
                                                                       "size": 20}))
@@ -548,6 +549,26 @@ class OpsSeeder:
             "shipFrom": {"city": a["city"], "region": a["state"], "country": "US", "postalCode": a["postalCode"],
                          "locationId": address["id"]}})
         self.add("offers", "seller pickup offer created")
+
+    def _seller_customer_pickup(self, org_id: str, address: dict[str, Any], cfg: dict[str, Any]) -> None:
+        """Customers can also collect Mama Put's orders at the kitchen: a SELLER pickup location with the address id."""
+        cg = self.svc.get("carrier-gateway")
+        if cg is None or (self.up is not None and not self.up.get("carrier-gateway", True)):
+            return
+        a = cfg["address"]
+        days = {"SUNDAY": 0, "MONDAY": 1, "TUESDAY": 2, "WEDNESDAY": 3, "THURSDAY": 4, "FRIDAY": 5, "SATURDAY": 6}
+        position = address.get("position") or {}
+        body = {"kind": "SELLER", "ownerOrg": org_id, "name": f"{a['name']} · {a['label']}", "timezone": "America/Chicago",
+                "address": {k: a[k] for k in ("line1", "line2", "city", "state", "postalCode", "country")},
+                "hours": [{"weekday": days[h["day"]], "open": h["opens"], "close": h["closes"]} for h in cfg["hours"]],
+                "readyHours": 3, "active": True}
+        if position.get("lat") is not None and position.get("lng") is not None:
+            body["position"] = {"lat": position["lat"], "lng": position["lng"]}
+        try:
+            cg.put(f"/v1/pickup-locations/{address['id']}", body)
+            self.add("seller pickup points", "saved")
+        except ApiError as e:
+            self.problem(f"seller pickup point: {e}")
 
     def _my_orders(self, email: str) -> list[dict[str, Any]]:
         out, cursor = [], None

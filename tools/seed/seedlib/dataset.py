@@ -537,3 +537,31 @@ TEST_USERS: list[tuple[str, str, str, Union[str, None], bool]] = [
     ("staff.auditor@afrotransact.test", "Auditor (read-only)", "Staff console", None, True),
     ("driver@afrotransact.test", "Driver", "Driver app", None, False),
 ]
+
+
+# Customer pickup points (carrier-gateway pickup locations, staff-managed in Delivery dispatch › Customer pickup points):
+# AfroTransact counters and lockers where customers collect AfroTransact Retail and Fulfilled-by-AfroTransact items.
+# Checkout offers the active ones near the delivery address, nearest first. Fixed ids keep re-seeding idempotent.
+def _hours(days: tuple[int, ...], opens: str, closes: str) -> list[dict[str, object]]:
+    return [{"weekday": d, "open": opens, "close": closes} for d in days]
+
+
+PICKUP_POINTS = [
+    {"id": "6f3a2c1e-0b7d-4c55-9a10-000000000101", "kind": "PLATFORM_COUNTER", "name": "Houston FC — Will Call",
+     "address": {"line1": "15900 John F Kennedy Blvd", "city": "Houston", "state": "TX", "postalCode": "77032", "country": "US"},
+     "timezone": "America/Chicago", "hours": _hours((1, 2, 3, 4, 5, 6), "08:00", "20:00"), "readyHours": 2,
+     "position": {"lat": 29.9389, "lng": -95.3364}},
+    {"id": "6f3a2c1e-0b7d-4c55-9a10-000000000102", "kind": "LOCKER", "name": "AfroTransact Locker · Bellaire",
+     "address": {"line1": "7100 Bellaire Blvd", "city": "Houston", "state": "TX", "postalCode": "77074", "country": "US"},
+     "timezone": "America/Chicago", "hours": _hours((0, 1, 2, 3, 4, 5, 6), "06:00", "22:00"), "readyHours": 18,
+     "position": {"lat": 29.7058, "lng": -95.5157}},
+    {"id": "6f3a2c1e-0b7d-4c55-9a10-000000000103", "kind": "PLATFORM_COUNTER", "name": "Edison FC — Will Call",
+     "address": {"line1": "300 Raritan Center Pkwy", "city": "Edison", "state": "NJ", "postalCode": "08837", "country": "US"},
+     "timezone": "America/New_York", "hours": _hours((1, 2, 3, 4, 5, 6), "08:00", "20:00"), "readyHours": 2,
+     "position": {"lat": 40.3018, "lng": -74.3443}},
+    {"id": "6f3a2c1e-0b7d-4c55-9a10-000000000104", "kind": "PLATFORM_COUNTER", "name": "Atlanta FC — Will Call",
+     "address": {"line1": "1600 Murphy Ave SW", "city": "Atlanta", "state": "GA", "postalCode": "30310", "country": "US"},
+     "timezone": "America/New_York", "hours": _hours((1, 2, 3, 4, 5, 6), "08:00", "18:00"), "readyHours": 3,
+     "position": {"lat": 33.7144, "lng": -84.4185}},
+]
+PICKUP_OWNER = "afrotransact"

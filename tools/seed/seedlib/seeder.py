@@ -28,7 +28,7 @@ MAIN_MIN_EDGE = 1000  # catalog: the main product image must be at least 1000 x 
 FOOD_TYPES = {"grocery", "perishable"}
 FC_NODES = ("HOU-FC", "ATL-FC", "EWR-FC", "LAX-FC")
 PREORDER_TIME_ZONE = "America/Chicago"
-STEPS = ("sellers", "products", "content", "ads", "preorders", "bookings", "ops", "users")
+STEPS = ("sellers", "products", "content", "ads", "preorders", "pickups", "bookings", "ops", "users")
 OPS_REQUIRED = ("identity", "catalog", "offers", "inventory", "retail", "orders", "payments", "fulfilment", "cart")
 
 SERVICES = {  # env var, default local URL (infra/local/PORTS.md), health path
@@ -51,6 +51,8 @@ SERVICES = {  # env var, default local URL (infra/local/PORTS.md), health path
     "tax-returns": ("TAX_RETURNS_URL", "http://localhost:8111", "/actuator/health"),
     "cart": ("CART_URL", "http://localhost:8203", "/readyz"),
     "geo": ("GEO_URL", "http://localhost:8205", "/readyz"),
+    # customer pickup points (pickups step; the ops step's seller store pickup)
+    "carrier-gateway": ("CARRIER_GATEWAY_URL", "http://localhost:8209", "/readyz"),
 }
 REQUIRED = ("catalog", "offers", "inventory", "media")
 
@@ -634,6 +636,22 @@ class Seeder:
             window = dr.post(f"/v1/preorders/{window['id']}/publish")
         self.log(f"  ✓ {window['name']} ({window.get('code')}): {window.get('status')} · "
                  f"{window.get('statusLabel', '')} · delivers {window.get('deliversOn')}")
+
+    # ------------------------------------------------------------------------------------------------ pickups
+    def step_pickups(self) -> None:
+        """AfroTransact's customer pickup points (carrier-gateway): idempotent PUTs with fixed ids."""
+        self.log("== customer pickup points (carrier-gateway)")
+        if not self.up.get("carrier-gateway"):
+            self.log("  ! carrier-gateway is down: skipped")
+            return
+        cg = self.svc["carrier-gateway"]
+        for p in D.PICKUP_POINTS:
+            body = dict(p, ownerOrg=D.PICKUP_OWNER, active=True)
+            try:
+                cg.put(f"/v1/pickup-locations/{p['id']}", body)
+                self.report.add("pickup points", "saved")
+            except ApiError as e:
+                self._problem(f"pickup point {p['name']}: {e}")
 
     # ------------------------------------------------------------------------------------------------ bookings
     def step_bookings(self) -> None:

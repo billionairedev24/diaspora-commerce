@@ -14,7 +14,8 @@ python3 tools/seed/seed.py --skip products      # everything else
 make seed-test                                  # the seeder's unit tests
 ```
 
-Steps: `sellers`, `products`, `content`, `ads`, `preorders`, `bookings`, `ops`, `users`. The datasets are
+Steps: `sellers`, `products`, `content`, `ads`, `preorders`, `pickups` (AfroTransact's customer pickup points in
+carrier-gateway, CARRIER_GATEWAY_URL), `bookings`, `ops`, `users`. The datasets are
 `seedlib/dataset.py` and `seedlib/ops_dataset.py`; photo sources, attribution and service URLs are described in
 `seed.py` and the guide.
 
