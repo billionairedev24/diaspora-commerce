@@ -9,3 +9,5 @@
 1821159fa5889654ebb56ae3f5356071fc45b479:java/services/identity/src/test/java/com/afrotransact/identity/it/DataProtectionIT.java:generic-api-key:61
 # Fake Android app origin (apk-key-hash) in the passkey ceremony test.
 bdd0f451e2ddf86e83988f3487c9219537227078:java/services/identity/src/test/java/com/afrotransact/identity/it/PasskeyCeremonyIT.java:generic-api-key:64
+# gateway-bff staff pre-order test: fake Idempotency-Key header value
+1a2380f99ce4a179d973a4b443a6a2d1454e46cc:go/services/gateway-bff/internal/adapter/httpapi/preorders_staff_test.go:generic-api-key:249
