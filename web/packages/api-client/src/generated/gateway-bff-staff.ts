@@ -716,7 +716,13 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Switch several pre-orders on or off (bulk), each on its own
+         * @description delivery-runs `PATCH /v1/preorders {ids[], active}` (preorders:manage, EDIT). 1–100 ids. Each window's own
+         *     switch only (the master switch is never touched); items[] say SWITCHED, UNCHANGED or SKIPPED (draft, delivered,
+         *     unknown or failing its publish checks, with the reason).
+         */
+        patch: operations["switchStaffPreorders"];
         trace?: never;
     };
     "/v1/staff/preorders/settings": {
@@ -788,6 +794,38 @@ export interface paths {
          *     slashes encoded (`US%2FTX%2FLubbock`). Answers the refreshed area page.
          */
         delete: operations["deleteStaffPreorderArea"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/areas/regions/{country}/{region}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                country: string;
+                region: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * One state's / province's coverage for the in-place editor
+         * @description delivery-runs `GET /v1/preorder-areas/regions/{country}/{region}` (VIEW): the "Every city" row (or null), every
+         *     listed city with its switch and the live pre-orders selling there, and `version` (also the ETag) to send back
+         *     as If-Match.
+         */
+        get: operations["getStaffPreorderRegion"];
+        /**
+         * Edit a state's / province's cities in place (If-Match)
+         * @description delivery-runs `PUT /v1/preorder-areas/regions/{country}/{region}` (preorders:manage, EDIT). Full replacement:
+         *     listed cities are added or switched, cities left out are removed, everyCity adds / switches / (null) removes the
+         *     "Every city" row. 412 when anyone changed the region since the version sent; 409 `delivery-runs.area-in-use`
+         *     when a removal would leave a live pre-order's place uncovered (switch it off instead).
+         */
+        put: operations["updateStaffPreorderRegion"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -897,7 +935,15 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Switch one pre-order on or off
+         * @description delivery-runs `PATCH /v1/preorders/{id} {active}` (preorders:manage, EDIT; If-Match relayed). Sets this
+         *     window's own switch only; it is live when the master switch AND its own switch AND one of its areas are on
+         *     (`switchState`: ON, PAUSED, GLOBAL_OFF, AREA_OFF, NOT_LIVE). Off stops the storefront exposure (resolution,
+         *     banners, eligibility, the cart's pre-order packages); orders already placed are kept. On re-runs the publish
+         *     checks. Idempotent; drafts and delivered windows answer 409.
+         */
+        patch: operations["switchStaffPreorder"];
         trace?: never;
     };
     "/v1/staff/preorders/{preorderId}/publish": {
@@ -2172,7 +2218,65 @@ export interface components {
             violations?: {
                 [key: string]: unknown;
             }[];
+            /** @description The window's own switch (never rewritten by the master switch) */
+            active?: boolean;
+            /** @description Published and not delivered */
+            switchable?: boolean;
+            switchState?: components["schemas"]["PreorderSwitchState"];
+            /** @description switchState is ON */
+            live?: boolean;
             version?: number;
+            can: components["schemas"]["PreorderCan"];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * @description Effective state = master switch AND window switch AND an area on. PAUSED = this window is off ("Off");
+         *     GLOBAL_OFF = the master switch holds it ("Off (global switch)"); AREA_OFF = every target area is off;
+         *     NOT_LIVE = draft or delivered (no switch).
+         * @enum {string}
+         */
+        PreorderSwitchState: "ON" | "PAUSED" | "GLOBAL_OFF" | "AREA_OFF" | "NOT_LIVE";
+        StaffPreorderBulkSwitch: {
+            items: ({
+                id?: string;
+                /** @enum {string} */
+                outcome?: "SWITCHED" | "UNCHANGED" | "SKIPPED";
+                /** @description The list row now */
+                window?: {
+                    [key: string]: unknown;
+                } | null;
+                code?: string | null;
+                reason?: string | null;
+            } & {
+                [key: string]: unknown;
+            })[];
+            switched?: number;
+            unchanged?: number;
+            skipped?: number;
+            can: components["schemas"]["PreorderCan"];
+        } & {
+            [key: string]: unknown;
+        };
+        StaffPreorderRegionRow: {
+            /** @example US/TX/Lubbock */
+            key: string;
+            name: string;
+            on: boolean;
+            version: number;
+            /** @description Live pre-orders selling here (they block removal) */
+            windows: string[];
+        };
+        StaffPreorderRegion: {
+            country: string;
+            region: string;
+            countryName?: string;
+            regionName?: string;
+            regionLabel?: string;
+            wholeRegion?: components["schemas"]["StaffPreorderRegionRow"] | null;
+            cities: components["schemas"]["StaffPreorderRegionRow"][];
+            /** @description The region's optimistic-lock version (ETag) */
+            version: number;
             can: components["schemas"]["PreorderCan"];
         } & {
             [key: string]: unknown;
@@ -3428,6 +3532,37 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
+    switchStaffPreorders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    ids: string[];
+                    active: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Outcomes */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderBulkSwitch"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
     getStaffPreorderSettings: {
         parameters: {
             query?: never;
@@ -3602,6 +3737,80 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPreorderRegion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                country: string;
+                region: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Coverage */
+            200: {
+                headers: {
+                    /** @description The region's version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderRegion"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffPreorderRegion: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                country: string;
+                region: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description null = no "Every city" row */
+                    everyCity?: boolean | null;
+                    cities: {
+                        city: string;
+                        on: boolean;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description The region's new version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderRegion"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
@@ -3795,6 +4004,46 @@ export interface operations {
             200: {
                 headers: {
                     /** @description Optimistic-lock version ("<version>"); send it back as If-Match */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    switchStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    active: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Switched */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>") */
                     ETag?: string;
                     [name: string]: unknown;
                 };

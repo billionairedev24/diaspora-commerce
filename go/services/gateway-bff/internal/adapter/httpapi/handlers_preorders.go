@@ -84,12 +84,16 @@ func (h *handlersImpl) registerStaffPreorders(route func(pattern string, fn http
 	route("POST /v1/staff/preorders/areas", h.staffAddPreorderArea)
 	route("PATCH /v1/staff/preorders/areas", h.staffTogglePreorderAreas)
 	route("DELETE /v1/staff/preorders/areas/{key}", h.staffDeletePreorderArea)
+	route("GET /v1/staff/preorders/areas/regions/{country}/{region}", h.staffPreorderRegion)
+	route("PUT /v1/staff/preorders/areas/regions/{country}/{region}", h.staffUpdatePreorderRegion)
+	route("PATCH /v1/staff/preorders", h.staffSwitchPreorders)
 	route("GET /v1/staff/preorders/places/search", h.staffPreorderPlaces)
 	route("POST /v1/staff/preorders/address-verify", h.staffVerifyPreorderAddress)
 	route("POST /v1/staff/preorders/uploads", h.staffPreorderUpload)
 	route("GET /v1/staff/preorders/{id}/products", h.staffPreorderProducts)
 	route("GET /v1/staff/preorders/{id}", h.staffPreorder)
 	route("PUT /v1/staff/preorders/{id}", h.staffUpdatePreorder)
+	route("PATCH /v1/staff/preorders/{id}", h.staffSwitchPreorder)
 	route("POST /v1/staff/preorders/{id}/{action}", h.staffPreorderAction)
 	route("PUT /v1/staff/preorders/{id}/creatives/{slot}", h.staffPutPreorderCreative)
 	route("DELETE /v1/staff/preorders/{id}/creatives/{slot}", h.staffDeletePreorderCreative)
@@ -137,6 +141,44 @@ func (h *handlersImpl) staffUpdatePreorder(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	v, err := h.s.Staff.Preorders.Update(r.Context(), callerFrom(r.Context()), r.PathValue("id"), r.Header.Get("If-Match"), b)
+	setVersionETag(w, v)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffSwitchPreorder(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.SetActive(r.Context(), callerFrom(r.Context()), r.PathValue("id"), r.Header.Get("If-Match"), b)
+	setVersionETag(w, v)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffSwitchPreorders(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.SetActiveMany(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffPreorderRegion(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Staff.Preorders.Region(r.Context(), callerFrom(r.Context()), r.PathValue("country"), r.PathValue("region"))
+	setVersionETag(w, v)
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) staffUpdatePreorderRegion(w http.ResponseWriter, r *http.Request) {
+	b, err := staffBody(r)
+	if err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Staff.Preorders.UpdateRegion(r.Context(), callerFrom(r.Context()), r.PathValue("country"), r.PathValue("region"), r.Header.Get("If-Match"), b)
 	setVersionETag(w, v)
 	h.reply(w, r, http.StatusOK, v, err)
 }

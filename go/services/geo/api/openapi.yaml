@@ -215,6 +215,7 @@ paths:
     get:
       tags: [Places]
       operationId: listPlaceCountries
+      security: [{bearer: []}]
       summary: Every country, by name
       responses:
         '200':
@@ -224,6 +225,7 @@ paths:
     get:
       tags: [Places]
       operationId: listPlaceRegions
+      security: [{bearer: []}]
       summary: A country's states, provinces or regions, by name
       parameters:
         - {name: country, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
@@ -236,6 +238,7 @@ paths:
     get:
       tags: [Places]
       operationId: listPlaceCities
+      security: [{bearer: []}]
       summary: Cities of a state / province / region, by name; q filters (contains, case-insensitive)
       parameters:
         - {name: country, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z]{2}$'}}
@@ -251,6 +254,7 @@ paths:
     get:
       tags: [Places]
       operationId: searchPlaces
+      security: [{bearer: []}]
       summary: Countries, regions and cities whose name contains q (2+ characters); prefix matches first
       parameters:
         - {name: q, in: query, required: true, schema: {type: string, minLength: 2, maxLength: 80}}
@@ -461,7 +465,7 @@ components:
         country: {type: string}
         region: {type: string}
         regionName: {type: string}
-        items: {type: array, items: {type: string}, description: City names, by name}
+        items: {type: array, items: {type: string}, description: 'City names, by name'}
         total: {type: integer, description: Cities matching q before the limit}
     PlaceMatch:
       type: object

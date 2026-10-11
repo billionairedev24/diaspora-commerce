@@ -28,6 +28,10 @@ type StaffPreordersService interface {
 	Update(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
 	// Act runs publish, pause or resume.
 	Act(ctx context.Context, c *domain.Caller, id, action string) (any, error)
+	// SetActive sets one window's own on/off switch ({active}); the master switch is never touched.
+	SetActive(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error)
+	// SetActiveMany switches several windows ({ids, active}), each on its own.
+	SetActiveMany(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	PutCreative(ctx context.Context, c *domain.Caller, id, slot string, body map[string]any) (any, error)
 	DeleteCreative(ctx context.Context, c *domain.Caller, id, slot string) (any, error)
 	Orders(ctx context.Context, c *domain.Caller, id string, q url.Values) (any, error)
@@ -41,6 +45,10 @@ type StaffPreordersService interface {
 	AddArea(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	ToggleAreas(ctx context.Context, c *domain.Caller, body map[string]any) (any, error)
 	DeleteArea(ctx context.Context, c *domain.Caller, key string) (any, error)
+	// Region is one region's coverage for the in-place editor (ETag = its version).
+	Region(ctx context.Context, c *domain.Caller, country, region string) (any, error)
+	// UpdateRegion replaces one region's "Every city" row and cities ({everyCity, cities[{city, on}]}, If-Match).
+	UpdateRegion(ctx context.Context, c *domain.Caller, country, region, ifMatch string, body map[string]any) (any, error)
 	Places(ctx context.Context, c *domain.Caller, q url.Values) (any, error)
 	// Products are the window's products (the late-add item list).
 	Products(ctx context.Context, c *domain.Caller, id string) (any, error)
@@ -243,6 +251,64 @@ func (s *staffPreordersImpl) Act(ctx context.Context, c *domain.Caller, id, acti
 		return nil, err
 	}
 	out, err := sc.send(ctx, http.MethodPost, windowPath(id, "/", action), "", nil)
+	if err != nil {
+		return nil, err
+	}
+	return withCan(out, can), nil
+}
+
+// maxBulkSwitch is how many windows one bulk switch may name (delivery-runs' limit).
+const maxBulkSwitch = 100
+
+func switchOf(body map[string]any) (bool, error) {
+	on, ok := body["active"].(bool)
+	if !ok {
+		return false, domain.ValidationProblem(map[string]string{"active": "Send true (on) or false (off)"})
+	}
+	return on, nil
+}
+
+func (s *staffPreordersImpl) SetActive(ctx context.Context, c *domain.Caller, id, ifMatch string, body map[string]any) (any, error) {
+	if p := domain.ValidPreorderID(id); p != nil {
+		return nil, p
+	}
+	on, err := switchOf(body)
+	if err != nil {
+		return nil, err
+	}
+	sc, can, err := s.need(ctx, c, poManage)
+	if err != nil {
+		return nil, err
+	}
+	out, err := sc.send(ctx, http.MethodPatch, windowPath(id), ifMatch, map[string]any{"active": on})
+	if err != nil {
+		return nil, err
+	}
+	return withCan(out, can), nil
+}
+
+func (s *staffPreordersImpl) SetActiveMany(ctx context.Context, c *domain.Caller, body map[string]any) (any, error) {
+	on, err := switchOf(body)
+	if err != nil {
+		return nil, err
+	}
+	raw, _ := body["ids"].([]any)
+	ids := make([]string, 0, len(raw))
+	for _, v := range raw {
+		id, _ := v.(string)
+		if domain.ValidPreorderID(id) != nil {
+			return nil, domain.ValidationProblem(map[string]string{"ids": "Unknown pre-order id"})
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 || len(ids) > maxBulkSwitch {
+		return nil, domain.ValidationProblem(map[string]string{"ids": "Choose 1 to 100 pre-orders"})
+	}
+	sc, can, err := s.need(ctx, c, poManage)
+	if err != nil {
+		return nil, err
+	}
+	out, err := sc.send(ctx, http.MethodPatch, preordersPath, "", map[string]any{"ids": ids, "active": on})
 	if err != nil {
 		return nil, err
 	}
@@ -650,6 +716,85 @@ func (s *staffPreordersImpl) DeleteArea(ctx context.Context, c *domain.Caller, k
 		return nil, err
 	}
 	out, err := sc.send(ctx, http.MethodDelete, preorderAreas+"/"+url.PathEscape(key), "", nil)
+	if err != nil {
+		return nil, err
+	}
+	return withCan(out, can), nil
+}
+
+func regionPath(country, region string) (string, error) {
+	country, region = strings.ToUpper(strings.TrimSpace(country)), strings.ToUpper(strings.TrimSpace(region))
+	if !domain.ValidAreaKey(country + "/" + region) {
+		return "", domain.NewProblem(http.StatusNotFound, domain.CodeNotFound, "Not found", "No such state, province or region.")
+	}
+	return preorderAreas + "/regions/" + url.PathEscape(country) + "/" + url.PathEscape(region), nil
+}
+
+func (s *staffPreordersImpl) Region(ctx context.Context, c *domain.Caller, country, region string) (any, error) {
+	path, err := regionPath(country, region)
+	if err != nil {
+		return nil, err
+	}
+	sc, can, err := s.need(ctx, c, poView)
+	if err != nil {
+		return nil, err
+	}
+	var out any
+	if err := sc.get(ctx, sc.up.DeliveryRuns, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return withCan(out, can), nil
+}
+
+// maxRegionCities is how many cities one region edit may list (delivery-runs' limit).
+const maxRegionCities = 2000
+
+// regionBody validates a region edit: everyCity true / false / null and cities [{city, on}].
+func regionBody(country, region string, body map[string]any) (map[string]any, error) {
+	out := map[string]any{"everyCity": nil}
+	switch v := body["everyCity"].(type) {
+	case nil:
+	case bool:
+		out["everyCity"] = v
+	default:
+		return nil, domain.ValidationProblem(map[string]string{"everyCity": "true, false or null"})
+	}
+	raw, ok := body["cities"].([]any)
+	if !ok && body["cities"] != nil {
+		return nil, domain.ValidationProblem(map[string]string{"cities": "A list of {city, on}"})
+	}
+	if len(raw) > maxRegionCities {
+		return nil, domain.ValidationProblem(map[string]string{"cities": "At most 2000 cities; cover the whole region instead"})
+	}
+	cities := make([]map[string]any, 0, len(raw))
+	for _, v := range raw {
+		m, _ := v.(map[string]any)
+		name, _ := m["city"].(string)
+		on, okOn := m["on"].(bool)
+		name = strings.TrimSpace(name)
+		if !okOn || !domain.ValidAreaKey(country+"/"+region+"/"+name) {
+			return nil, domain.ValidationProblem(map[string]string{"cities": "Each city needs a name (no '/', at most 80 characters) and on or off"})
+		}
+		cities = append(cities, map[string]any{"city": name, "on": on})
+	}
+	out["cities"] = cities
+	return out, nil
+}
+
+func (s *staffPreordersImpl) UpdateRegion(ctx context.Context, c *domain.Caller, country, region, ifMatch string, body map[string]any) (any, error) {
+	path, err := regionPath(country, region)
+	if err != nil {
+		return nil, err
+	}
+	b, err := regionBody(strings.ToUpper(strings.TrimSpace(country)), strings.ToUpper(strings.TrimSpace(region)), body)
+	if err != nil {
+		return nil, err
+	}
+	sc, can, err := s.need(ctx, c, poManage)
+	if err != nil {
+		return nil, err
+	}
+	out, err := sc.send(ctx, http.MethodPut, path, ifMatch, b)
 	if err != nil {
 		return nil, err
 	}

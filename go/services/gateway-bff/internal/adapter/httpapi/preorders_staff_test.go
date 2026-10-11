@@ -111,6 +111,15 @@ func (f *fakeDeliveryRuns) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			out[k] = v
 		}
 		writeJ(w, 201, out)
+	case p == "/v1/preorders" && r.Method == http.MethodPatch:
+		writeJ(w, 200, map[string]any{"items": []any{
+			map[string]any{"id": "win-7", "outcome": "SWITCHED", "window": map[string]any{"id": "win-7", "active": false, "switchState": "PAUSED"}},
+			map[string]any{"id": "win-8", "outcome": "SKIPPED", "window": nil, "code": "delivery-runs.invalid-transition", "reason": "A draft has no switch"}},
+			"switched": 1, "unchanged": 0, "skipped": 1})
+	case strings.HasPrefix(p, "/v1/preorder-areas/regions/"):
+		writeJ(w, 200, map[string]any{"country": "US", "region": "TX", "countryName": "United States", "regionName": "Texas", "regionLabel": "State",
+			"wholeRegion": nil, "cities": []any{map[string]any{"key": "US/TX/Lubbock", "name": "Lubbock", "on": true, "version": 2,
+				"windows": []string{"Lubbock Pre-order #7"}}}, "version": 9007199254740991})
 	case p == "/v1/preorders/win-7/publish":
 		problemDetail(w, 422, "delivery-runs.publish-checks-failed", "2 checks to fix")
 	case strings.HasSuffix(p, "/orders"):
@@ -289,6 +298,24 @@ func TestStaffPreordersConformance(t *testing.T) {
 		t.Fatalf("publish checks = %v", e)
 	}
 	do("ops", "POST", "/v1/staff/preorders/win-7/pause", nil, 200)
+	// Each window's own switch (never the master switch), one at a time or in bulk.
+	if etag := do("ops", "PATCH", "/v1/staff/preorders/win-7", map[string]any{"active": false}, 200, "If-Match", `"3"`).Header().Get("ETag"); etag != `"3"` {
+		t.Fatalf("switch ETag = %q", etag)
+	}
+	if b := f.bodies["PATCH /v1/preorders/win-7"]; b["active"] != false || f.ifMatch["PATCH /v1/preorders/win-7"] != `"3"` {
+		t.Fatalf("switch body = %v, If-Match %q", b, f.ifMatch["PATCH /v1/preorders/win-7"])
+	}
+	do("ops", "PATCH", "/v1/staff/preorders/win-7", map[string]any{"active": "off"}, 422)
+	do("finance", "PATCH", "/v1/staff/preorders/win-7", map[string]any{"active": false}, 403)
+	if bulk := jsonOf(t, do("ops", "PATCH", "/v1/staff/preorders", map[string]any{"ids": []string{"win-7", "win-8"}, "active": false}, 200)); bulk["skipped"] != float64(1) {
+		t.Fatalf("bulk = %v", bulk)
+	}
+	do("ops", "PATCH", "/v1/staff/preorders", map[string]any{"ids": []string{}, "active": false}, 422)
+	do("ops", "PATCH", "/v1/staff/preorders", map[string]any{"ids": []string{"bad id"}, "active": false}, 422)
+	do("cs", "PATCH", "/v1/staff/preorders", map[string]any{"ids": []string{"win-7"}, "active": false}, 403)
+	if containsPath(f, "PUT /v1/preorder-settings") {
+		t.Fatal("switching a window must never touch the master switch")
+	}
 	do("ops", "POST", "/v1/staff/preorders/win-7/resume", nil, 200)
 	do("finance", "POST", "/v1/staff/preorders/win-7/pause", nil, 403)
 	do("ops", "PUT", "/v1/staff/preorders/win-7/creatives/HERO", map[string]any{"assetId": "ast-9"}, 200)
@@ -426,6 +453,23 @@ func TestStaffPreordersConformance(t *testing.T) {
 	if !containsPath(f, "DELETE /v1/preorder-areas/US%2FTX%2FMidland") {
 		t.Fatalf("area delete path = %v", f.paths)
 	}
+	// One state's cities edited in place (If-Match relayed, ETag = the region's version).
+	if etag := do("finance", "GET", "/v1/staff/preorders/areas/regions/us/tx", nil, 200).Header().Get("ETag"); etag != `"9007199254740991"` {
+		t.Fatalf("region ETag = %q", etag)
+	}
+	region := map[string]any{"everyCity": nil, "cities": []any{map[string]any{"city": " Lubbock ", "on": false}, map[string]any{"city": "Abilene", "on": true}}}
+	do("ops", "PUT", "/v1/staff/preorders/areas/regions/US/TX", region, 200, "If-Match", `"9007199254740991"`)
+	if f.ifMatch["PUT /v1/preorder-areas/regions/US/TX"] != `"9007199254740991"` {
+		t.Fatalf("region If-Match = %v", f.ifMatch)
+	}
+	if b := f.bodies["PUT /v1/preorder-areas/regions/US/TX"]; b["cities"].([]any)[0].(map[string]any)["city"] != "Lubbock" || b["everyCity"] != nil {
+		t.Fatalf("region body = %v", b)
+	}
+	do("cs", "PUT", "/v1/staff/preorders/areas/regions/US/TX", region, 403)
+	do("ops", "PUT", "/v1/staff/preorders/areas/regions/US/TX", map[string]any{"cities": []any{map[string]any{"city": "A/B", "on": true}}}, 422)
+	do("ops", "PUT", "/v1/staff/preorders/areas/regions/US/TX", map[string]any{"everyCity": "yes", "cities": []any{}}, 422)
+	do("ops", "GET", "/v1/staff/preorders/areas/regions/USA/TX", nil, 404)
+
 	if items := jsonOf(t, do("ops", "GET", "/v1/staff/preorders/places/search?country=US&q=lub", nil, 200))["items"].([]any); len(items) != 1 {
 		t.Fatalf("places = %v", items)
 	}
@@ -434,6 +478,7 @@ func TestStaffPreordersConformance(t *testing.T) {
 		"pauseStaffPreorder", "resumeStaffPreorder", "putStaffPreorderCreative", "deleteStaffPreorderCreative", "listStaffPreorderOrders",
 		"getStaffPreorderSummary", "exportStaffPreorder", "addStaffPreorderLateOrder", "getStaffPreorderSettings", "updateStaffPreorderSettings",
 		"listStaffPreorderAreas", "addStaffPreorderArea", "toggleStaffPreorderAreas", "deleteStaffPreorderArea", "searchStaffPreorderPlaces",
+		"switchStaffPreorder", "switchStaffPreorders", "getStaffPreorderRegion", "updateStaffPreorderRegion",
 		"searchStaffCustomers", "listStaffPreorderProducts", "verifyStaffPreorderAddress", "requestStaffPreorderUpload"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not exercised", op)
