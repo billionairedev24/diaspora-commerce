@@ -73,7 +73,10 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "at.events.relay-enabled=false", "spring.kafka.bootstrap-servers=localhost:1",
-    "at.delivery-runs.public-web-url=http://storefront.test", "at.delivery-runs.jobs.enabled=false"})
+    "at.delivery-runs.public-web-url=http://storefront.test", "at.delivery-runs.jobs.enabled=false",
+    // Never the geo service that may be running on this machine: the built-in place list makes the searches below
+    // deterministic (a live gazetteer ranks "Lubbeek, BE" before "Lubbock, TX").
+    "at.delivery-runs.geo.base-url=http://127.0.0.1:1"})
 @ActiveProfiles("local")
 @Import(ItSupport.class)
 @Testcontainers

@@ -31,10 +31,12 @@ import com.afrotransact.identity.application.SignInProtectionService;
 import com.afrotransact.identity.application.SignInService;
 import com.afrotransact.identity.port.PasskeyAssertions;
 import com.afrotransact.identity.port.PasskeyRegistrations;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -88,7 +90,7 @@ class SecurityConfiguration {
 
     private static final String[] PUBLIC_BROWSER_PATHS = {
         "/", "/login", "/login/mfa", "/login/mfa/**", "/login/forgot", "/signup", "/signup/**", "/assets/**",
-        "/error", "/favicon.ico",
+        "/error", "/favicon.ico", "/.well-known/appspecific/**",
         "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
         "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc"
     };
@@ -189,9 +191,29 @@ class SecurityConfiguration {
                 new HttpSessionSecurityContextRepository());
     }
 
+    /**
+     * Only real page visits are remembered as "where to continue after sign-in": browser GETs that accept HTML, never
+     * /.well-known/ probes (Chrome DevTools fetches /.well-known/appspecific/com.chrome.devtools.json on every page),
+     * static assets or the favicon. Otherwise such a background request replaced the saved /oauth2/authorize and the
+     * person landed on a 404 after signing up or entering their code.
+     */
     @Bean
     RequestCache requestCache() {
-        return new HttpSessionRequestCache();
+        HttpSessionRequestCache cache = new HttpSessionRequestCache();
+        cache.setRequestMatcher(SecurityConfiguration::worthReturningTo);
+        return cache;
+    }
+
+    static boolean worthReturningTo(HttpServletRequest request) {
+        if (!HttpMethod.GET.matches(request.getMethod())) {
+            return false;
+        }
+        String path = request.getRequestURI().substring(request.getContextPath().length());
+        if (path.startsWith("/.well-known/") || path.startsWith("/assets/") || path.equals("/favicon.ico")) {
+            return false;
+        }
+        String accept = request.getHeader(HttpHeaders.ACCEPT);
+        return accept != null && accept.contains(MediaType.TEXT_HTML_VALUE);
     }
 
     @Bean
