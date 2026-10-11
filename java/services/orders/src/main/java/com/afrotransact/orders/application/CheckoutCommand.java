@@ -14,10 +14,19 @@ import com.afrotransact.orders.domain.Attribution;
  * @param lines           optional subset of cart lines to check out (default: every available line)
  * @param couponCode      optional coupon, validated and redeemed with offers-service
  * @param attribution     storefront attribution {src, cr, po} (S272), stored on the order; null when none
+ * @param savePaymentMethod the shopper pays with a new method from Stripe's Payment Element and keeps it for future
+ *                          purchases: the PaymentIntent is created with setup_future_usage=off_session (S282)
  */
 public record CheckoutCommand(String idempotencyKey, String customerBearer, String addressId,
                               List<CheckoutInput.Selection> selections, List<SelectedLine> lines,
-                              String couponCode, Attribution attribution) {
+                              String couponCode, Attribution attribution, boolean savePaymentMethod) {
+
+    /** A checkout that does not save the payment method. */
+    public CheckoutCommand(String idempotencyKey, String customerBearer, String addressId,
+                           List<CheckoutInput.Selection> selections, List<SelectedLine> lines, String couponCode,
+                           Attribution attribution) {
+        this(idempotencyKey, customerBearer, addressId, selections, lines, couponCode, attribution, false);
+    }
 
     /** A checkout without attribution. */
     public CheckoutCommand(String idempotencyKey, String customerBearer, String addressId,

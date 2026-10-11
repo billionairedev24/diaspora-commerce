@@ -32,6 +32,7 @@ monitoring:
 #   - REDIS_URL
 #   - OIDC_CLIENT_SECRET
 #   - SESSION_SIGNING_KEY
+#   - STRIPE_PUBLISHABLE_KEY   (pk_test_… in dev/uat, pk_live_… in prod; the BFF refuses to start without it, S282)
 secrets:
   enabled: true
   store: platform-secrets

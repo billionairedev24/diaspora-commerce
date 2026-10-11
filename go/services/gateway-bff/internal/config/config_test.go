@@ -17,6 +17,7 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 		"OIDC_CLIENT_SECRET": "s", "CATALOG_URL": "http://catalog.override"}
 	for _, env := range []string{"local", "dev", "uat", "prod"} {
 		var c config.Config
+		secrets["STRIPE_PUBLISHABLE_KEY"] = stripeKey(env)
 		lookup := func(k string) (string, bool) { v, ok := secrets[k]; return v, ok }
 		if err := pkgconfig.NewLoaderFor(gatewaybff.Files, env, lookup).Load(&c); err != nil {
 			t.Fatalf("%s: %v", env, err)
@@ -122,7 +123,8 @@ func TestMissingPlatformURLsFail(t *testing.T) {
 
 func load(t *testing.T, env string, extra map[string]string) config.Config {
 	t.Helper()
-	vars := map[string]string{"REDIS_URL": "redis://valkey:6379/0", "SESSION_SIGNING_KEY": "0123456789abcdef0123456789abcdef"}
+	vars := map[string]string{"REDIS_URL": "redis://valkey:6379/0", "SESSION_SIGNING_KEY": "0123456789abcdef0123456789abcdef",
+		"STRIPE_PUBLISHABLE_KEY": stripeKey(env)}
 	maps.Copy(vars, extra)
 	lookup := func(k string) (string, bool) { v, ok := vars[k]; return v, ok }
 	var c config.Config
@@ -135,4 +137,57 @@ func load(t *testing.T, env string, extra map[string]string) config.Config {
 		t.Fatalf("%s: %v", env, err)
 	}
 	return c
+}
+
+// stripeKey is a well-formed publishable key for the environment (live in prod, test elsewhere, none locally).
+func stripeKey(env string) string {
+	switch env {
+	case "local":
+		return ""
+	case "prod":
+		return "pk_live_51Example"
+	default:
+		return "pk_test_51Example"
+	}
+}
+
+// The storefront's dev-only Stripe test form is possible only locally: every deployed environment fails to start
+// without a real publishable key of the right mode (S282).
+func TestStripePublishableKeyPerEnvironment(t *testing.T) {
+	cases := []struct {
+		env, key, want string
+	}{
+		{"local", "", ""},
+		{"local", "pk_test_mock", ""},
+		{"local", "pk_test_51Real", ""},
+		{"local", "pk_live_51Real", "test key"},
+		{"dev", "", "STRIPE_PUBLISHABLE_KEY is required in dev"},
+		{"uat", "", "STRIPE_PUBLISHABLE_KEY is required in uat"},
+		{"prod", "", "STRIPE_PUBLISHABLE_KEY is required in prod"},
+		{"dev", "pk_test_mock", "mock BFF"},
+		{"dev", "pk_live_51Real", "test publishable key"},
+		{"uat", "pk_test_51Real", ""},
+		{"prod", "pk_test_51Real", "live Stripe publishable key"},
+		{"prod", " pk_live_51Real ", ""},
+	}
+	for _, tc := range cases {
+		vars := map[string]string{"REDIS_URL": "redis://valkey:6379/0", "SESSION_SIGNING_KEY": "0123456789abcdef0123456789abcdef",
+			"STRIPE_PUBLISHABLE_KEY": tc.key}
+		lookup := func(k string) (string, bool) { v, ok := vars[k]; return v, ok }
+		var c config.Config
+		if err := pkgconfig.NewLoaderFor(gatewaybff.Files, tc.env, lookup).Load(&c); err != nil {
+			t.Fatalf("%s: %v", tc.env, err)
+		}
+		c.ApplyUpstreamEnv(lookup)
+		c.Resolve()
+		err := c.Validate(tc.env)
+		switch {
+		case tc.want == "" && err != nil:
+			t.Fatalf("%s %q: unexpected %v", tc.env, tc.key, err)
+		case tc.want != "" && (err == nil || !strings.Contains(err.Error(), tc.want)):
+			t.Fatalf("%s %q: want error containing %q, got %v", tc.env, tc.key, tc.want, err)
+		case tc.want == "" && c.Stripe.PublishableKey != strings.TrimSpace(tc.key):
+			t.Fatalf("%s: key not trimmed: %q", tc.env, c.Stripe.PublishableKey)
+		}
+	}
 }

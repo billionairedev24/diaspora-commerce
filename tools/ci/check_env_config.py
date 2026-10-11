@@ -14,6 +14,11 @@ Checks every service against the environment rules in docs/engineering/environme
                toleration, at least 2 replicas or an HPA with min >= 2; every env sets CPU/memory requests and a
                memory limit.
   image        no `latest` tag in any values file.
+  stripe       (S282) Stripe keys come only from the environment / secret store: gateway-bff's stripe.publishableKey is
+               empty in every config/<env>.yaml (STRIPE_PUBLISHABLE_KEY; the BFF refuses to start without a pk_test_ key
+               in dev/uat or a pk_live_ key in prod, so the storefront's dev-only Stripe stand-in is local-only);
+               payments' at.payments.stripe.secret-key / webhook-secret have no default outside local and
+               require-live-key is true in prod only; the Helm charts list the Stripe keys their secret store must hold.
 
   python3 tools/ci/check_env_config.py                 # whole repository; exit 1 on violations
   python3 tools/ci/check_env_config.py --format github # ::error annotations
@@ -209,6 +214,61 @@ def check_helm(chart: pathlib.Path, rep: Report) -> None:
                 rep.error(f, f"prod needs at least 2 replicas (HPA min or replicas; found {floor})")
 
 
+# ------------------------------------------------------------------------------------------------ Stripe (S282)
+STRIPE_SECRETS = {
+    "gateway-bff": ["STRIPE_PUBLISHABLE_KEY"],
+    "payments": ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"],
+}
+
+
+def chart_secret_keys(values: pathlib.Path) -> set[str]:
+    """Keys listed in the chart's '# Secret keys expected at …' comment (what the ExternalSecret extracts)."""
+    keys: set[str] = set()
+    listing = False
+    for line in values.read_text(encoding="utf-8").splitlines():
+        if line.startswith("# Secret keys expected"):
+            listing = True
+            continue
+        if listing:
+            m = re.match(r"^#\s+-\s+([A-Z0-9_]+)", line)
+            if not m:
+                break
+            keys.add(m.group(1))
+    return keys
+
+
+def check_stripe(svc_dir: pathlib.Path, rep: Report) -> None:
+    name = svc_dir.name
+    if name not in STRIPE_SECRETS:
+        return
+    values = svc_dir / "deploy/helm/values.yaml"
+    if values.exists():
+        missing = [k for k in STRIPE_SECRETS[name] if k not in chart_secret_keys(values)]
+        if missing:
+            rep.error(values, f"secret store keys must list {', '.join(missing)} (Stripe keys never live in values or config)")
+    if name == "gateway-bff":
+        for env in ENVS:
+            f = svc_dir / "config" / f"{env}.yaml"
+            if f.exists() and str(get(load(f), "stripe.publishableKey") or "").strip():
+                rep.error(f, "stripe.publishableKey must be empty: the key comes only from STRIPE_PUBLISHABLE_KEY")
+        return
+    res = svc_dir / "src/main/resources"
+    base = load(res / "application.yml") if (res / "application.yml").exists() else {}
+    for env in DEPLOYED:
+        f = res / f"application-{env}.yml"
+        if not f.exists():
+            continue
+        eff = deep_merge(base, load(f))
+        for key, var in (("secret-key", "STRIPE_SECRET_KEY"), ("webhook-secret", "STRIPE_WEBHOOK_SECRET")):
+            raw = get(eff, f"at.payments.stripe.{key}")
+            m = PLACEHOLDER.match(str(raw or "").strip())
+            if not m or m.group(1) != var or m.group(2) is not None:
+                rep.error(f, f"at.payments.stripe.{key} must be ${{{var}}} with no default in {env} (found {raw!r})")
+        live = as_bool(get(eff, "at.payments.stripe.require-live-key")) is True
+        if live != (env == "prod"):
+            rep.error(f, f"at.payments.stripe.require-live-key must be {str(env == 'prod').lower()} in {env}")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--format", choices=["text", "github"], default="text")
@@ -222,6 +282,7 @@ def main() -> int:
             continue
         rep.checked += 1
         (check_java if marker.name == "pom.xml" else check_go)(svc_dir, rep)
+        check_stripe(svc_dir, rep)
         chart = svc_dir / "deploy/helm"
         if chart.is_dir():
             check_helm(chart, rep)

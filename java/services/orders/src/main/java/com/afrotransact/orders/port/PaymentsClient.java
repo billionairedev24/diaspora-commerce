@@ -65,10 +65,19 @@ public interface PaymentsClient {
      */
     record NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
                      Map<String, String> metadata, List<Line> lines, String shopperId,
-                     List<String> paymentMethodTypes, boolean offSession, Integer paymentLinkHours) {
+                     List<String> paymentMethodTypes, boolean offSession, Integer paymentLinkHours,
+                     boolean saveForOffSession) {
 
         public NewIntent {
             paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
+        }
+
+        /** An intent that does not save the payment method. */
+        public NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,
+                         Map<String, String> metadata, List<Line> lines, String shopperId,
+                         List<String> paymentMethodTypes, boolean offSession, Integer paymentLinkHours) {
+            this(orderId, amountMinor, currency, placedAt, metadata, lines, shopperId, paymentMethodTypes, offSession,
+                    paymentLinkHours, false);
         }
 
         public NewIntent(String orderId, long amountMinor, String currency, Instant placedAt,

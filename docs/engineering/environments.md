@@ -186,6 +186,7 @@ fixtures, generated clients, contracts and the docs portal are not scanned. File
 | Sizing (S182): replicas / HPA | | 1, no HPA | 2+ | 2+ (HPA min or replicas) |
 | Spot pool toleration (`afrotransact.com/spot`) | | required | required | forbidden |
 | `resources.requests.cpu/memory` and `limits.memory`; no `image.tag: latest` | | yes | yes | yes |
+| Stripe (S282): gateway-bff `stripe.publishableKey` empty in config (`STRIPE_PUBLISHABLE_KEY` only, listed in its chart's secrets); payments `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` without defaults, `require-live-key` | defaults allowed | test keys | test keys | live keys |
 
 Secrets are never in these files: each service's `values.yaml` lists the keys it expects in
 `afrotransact/<env>/<service>` (rendered as an ExternalSecret), and `docs/runbooks/first-environment.md` lists them all

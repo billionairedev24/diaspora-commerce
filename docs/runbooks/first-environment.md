@@ -126,6 +126,7 @@ which never overwrites keys you do not name:
 ```bash
 cd infra/terraform
 scripts/secret-set.sh <cloud> ENV payments STRIPE_SECRET_KEY=- STRIPE_WEBHOOK_SECRET=-     # prompts, no echo
+scripts/secret-set.sh <cloud> ENV gateway-bff STRIPE_PUBLISHABLE_KEY=-                       # same Stripe account
 scripts/secret-set.sh <cloud> ENV identity SIGNING_KEY_PEM=@signing-key.pem
 scripts/secret-set.sh <cloud> ENV identity --list                                          # what is there
 ```
@@ -146,7 +147,7 @@ The keys each chart expects (from the `Secret keys expected` comment in every `d
 | catalog | `DB_*`, `KAFKA_BOOTSTRAP`, `GS1_API_KEY` (optional), `FGA_API_TOKEN` | GS1 US, OpenFGA pre-shared key |
 | content | `DB_*`, `KAFKA_BOOTSTRAP`, `NEWSLETTER_TOKEN_KEY` | generated |
 | fulfilment | `DB_*`, `KAFKA_BOOTSTRAP`, `FULFILMENT_CLIENT_SECRET` | identity client secret |
-| gateway-bff | `REDIS_URL`, `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY` | identity client `gateway-bff`; generated |
+| gateway-bff | `REDIS_URL`, `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY`, `STRIPE_PUBLISHABLE_KEY` | identity client `gateway-bff`; generated; Stripe publishable key of the same account as payments' `STRIPE_SECRET_KEY` (`pk_test_…` in dev/uat, `pk_live_…` in prod; the BFF refuses to start without it) |
 | geo | `DB_URL`, `GOOGLE_PLACES_API_KEY`, `SMARTY_AUTH_ID`, `SMARTY_AUTH_TOKEN`, `GOOGLE_MAPS_API_KEY` (optional, Routes API), `OSRM_URL` (optional, self-hosted OSRM) | Google Maps Platform (Places + Routes, key restricted by API and to the cluster egress IPs from `tofu output egress_ips`); Smarty |
 | identity | `DB_*`, `KAFKA_BOOTSTRAP`, `SIGNING_KEY_PEM`, `IDENTITY_DATA_KEY` (+ optional `IDENTITY_DATA_KEY_ID`, `IDENTITY_DATA_KEYS_PREVIOUS`), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `APPLE_CLIENT_ID`, `APPLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_ID`, `FACEBOOK_CLIENT_SECRET`, `BFF_CLIENT_SECRET`, `SELLER_SERVICE_CLIENT_SECRET`, `ORDERS_CLIENT_SECRET`, `BOOKINGS_CLIENT_SECRET`, `FULFILMENT_CLIENT_SECRET`, `PAYMENTS_CLIENT_SECRET`, `NOTIFICATIONS_CLIENT_SECRET`, `SEARCH_CLIENT_SECRET`, `RETAIL_CLIENT_SECRET`, `GATEWAY_BFF_CLIENT_SECRET`, `OFFERS_CLIENT_SECRET`, `INDEXER_CLIENT_SECRET`, `TRUSTOPS_CLIENT_SECRET`, `TAX_RETURNS_CLIENT_SECRET`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_PHONE` | `openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256` for the signing key; social login consoles; every `*_CLIENT_SECRET` is generated here and copied to the calling service |
 | indexer | `ES_URLS`, `ES_API_KEY`, `KAFKA_BOOTSTRAP`, `INDEXER_CLIENT_SECRET` | `elastic-ilm.sh`; identity client |

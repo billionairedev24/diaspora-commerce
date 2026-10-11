@@ -28,15 +28,26 @@ import com.afrotransact.orders.port.CartClient;
  * @param attribution           storefront attribution (S272; null when none)
  * @param preorderFulfilment    door / pickup per pre-order window chosen in the cart (S272; window id → DOOR|PICKUP)
  * @param lateAdd               set for a customer-service late pre-order add (S272): the window may be CLOSED
+ * @param savePaymentMethod     the PaymentIntent saves the shopper's new method (setup_future_usage=off_session, S282)
  */
 public record CheckoutInput(String orderId, String orderNumber, String customerId, String idempotencyKey,
                             String workflowId, String currency, ShipTo shipTo, List<CartClient.Item> items,
                             List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt,
                             String couponCode, Attribution attribution, Map<String, String> preorderFulfilment,
-                            LateAdd lateAdd) {
+                            LateAdd lateAdd, boolean savePaymentMethod) {
 
     public CheckoutInput {
         preorderFulfilment = preorderFulfilment == null ? Map.of() : Map.copyOf(preorderFulfilment);
+    }
+
+    /** An input that does not save the payment method (late adds, older workflow histories). */
+    public CheckoutInput(String orderId, String orderNumber, String customerId, String idempotencyKey,
+                         String workflowId, String currency, ShipTo shipTo, List<CartClient.Item> items,
+                         List<Selection> selections, long paymentTimeoutSeconds, Instant requestedAt,
+                         String couponCode, Attribution attribution, Map<String, String> preorderFulfilment,
+                         LateAdd lateAdd) {
+        this(orderId, orderNumber, customerId, idempotencyKey, workflowId, currency, shipTo, items, selections,
+                paymentTimeoutSeconds, requestedAt, couponCode, attribution, preorderFulfilment, lateAdd, false);
     }
 
     /** An input without pre-order details (tests, older workflow histories). */

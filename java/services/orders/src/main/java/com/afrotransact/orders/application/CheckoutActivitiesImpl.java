@@ -419,7 +419,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         OrderOrigin origin = in.lateAdd() != null ? null : OrderOrigin.checkout(in.attribution());
         return checkoutTax.tax(new OrderDraft(in.orderId(), in.orderNumber(), in.customerId(), in.workflowId(),
                 plan.currency(), in.shipTo(), reserved, shipments, Instant.now(clock), null, origin,
-                plan.paymentMethodTypes()));
+                plan.paymentMethodTypes(), in.savePaymentMethod()));
     }
 
     /**
@@ -612,7 +612,8 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             PaymentsClient.Intent intent = payments.createIntent(new PaymentsClient.NewIntent(order.id(),
                     order.totals().grandTotalMinor(), order.currency(), Instant.now(clock),
                     Map.of("order_number", order.number(), "customer_id", order.customerId()),
-                    PaymentLines.of(order), order.customerId(), draft.paymentMethodTypes(), false, null));
+                    PaymentLines.of(order), order.customerId(), draft.paymentMethodTypes(), false, null,
+                    draft.savePaymentMethod()));
             return new PaymentRef(intent.paymentId(), intent.clientSecret(), intent.status());
         });
     }

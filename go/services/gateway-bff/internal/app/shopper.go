@@ -508,13 +508,24 @@ func (s *checkoutPaymentServiceImpl) Place(ctx context.Context, c *domain.Caller
 	if len(sels) == 0 {
 		errs["deliverySelections"] = "Choose delivery options"
 	}
+	sources := 0
+	for _, set := range []bool{req.Wallet != "", req.PaymentMethodID != "", req.NewPaymentMethod} {
+		if set {
+			sources++
+		}
+	}
 	switch {
 	case req.Wallet != "" && !walletKinds[req.Wallet]:
 		errs["wallet"] = "Choose Apple Pay, Google Pay or Link"
-	case req.Wallet == "" && req.PaymentMethodID == "":
+	case sources == 0:
 		errs["paymentMethodId"] = "Choose a payment method"
+	case sources > 1:
+		errs["paymentMethodId"] = "Pay with one of a saved method, a wallet or a new payment method"
 	case req.PaymentMethodID != "" && !pmIDRe.MatchString(req.PaymentMethodID):
 		errs["paymentMethodId"] = "Unknown payment method"
+	}
+	if req.SavePaymentMethod && !req.NewPaymentMethod {
+		errs["savePaymentMethod"] = "Only a new payment method can be saved"
 	}
 	if len(strings.TrimSpace(req.CouponCode)) > 20 {
 		errs["couponCode"] = "Coupon codes have at most 20 characters"
@@ -541,7 +552,7 @@ func (s *checkoutPaymentServiceImpl) Place(ctx context.Context, c *domain.Caller
 	}
 	v, status, err := s.d.Orders.Checkout(ctx, c.BearerToken, key, port.UpCheckoutRequest{AddressID: req.AddressID, DeliverySelections: sels,
 		Lines: lines, PaymentMethodID: req.PaymentMethodID, Wallet: req.Wallet, Gift: req.Gift, CouponCode: strings.TrimSpace(req.CouponCode),
-		Attribution: req.Attribution.Clean()})
+		SavePaymentMethod: req.SavePaymentMethod, Attribution: req.Attribution.Clean()})
 	if err != nil {
 		return port.PlaceOrderResult{}, orderErr(err)
 	}

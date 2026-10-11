@@ -524,6 +524,10 @@ type PlaceOrderRequest struct {
 	Wallet             string            `json:"wallet,omitempty"`
 	Gift               bool              `json:"gift,omitempty"`
 	DeliverySelections []json.RawMessage `json:"deliverySelections"`
+	// NewPaymentMethod: paid with a new method from Stripe's Payment Element (deferred intent, confirmed client-side).
+	NewPaymentMethod bool `json:"newPaymentMethod,omitempty"`
+	// SavePaymentMethod (with NewPaymentMethod) keeps the method on the shopper's Stripe Customer.
+	SavePaymentMethod bool `json:"savePaymentMethod,omitempty"`
 	// CouponCode is validated and redeemed by orders with offers-service (released if the order fails).
 	CouponCode string `json:"couponCode,omitempty"`
 	// Attribution is the last-touch source {src, cr, po}; the handler falls back to the at_attr cookie.

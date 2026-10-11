@@ -183,6 +183,8 @@ type UpCheckoutRequest struct {
 	Wallet             string                `json:"wallet,omitempty"`
 	Gift               bool                  `json:"gift,omitempty"`
 	CouponCode         string                `json:"couponCode,omitempty"`
+	// SavePaymentMethod asks orders for a PaymentIntent with setup_future_usage=off_session (new method saved).
+	SavePaymentMethod bool `json:"savePaymentMethod,omitempty"`
 	// Attribution {src, cr, po} is stored on the order and echoed in orders.order.placed.
 	Attribution *domain.Attribution `json:"attribution,omitempty"`
 }

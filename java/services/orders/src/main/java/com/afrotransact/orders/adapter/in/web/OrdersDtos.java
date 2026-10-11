@@ -37,7 +37,10 @@ final class OrdersDtos {
             @Schema(description = "Coupon code: validated and redeemed with offers-service, released when the order "
                     + "fails or is cancelled") @Size(max = 20) String couponCode,
             @Schema(description = "S272 marketing attribution (last touch): stored on the order and sent in "
-                    + "orders.order.placed") @Valid AttributionDto attribution) {
+                    + "orders.order.placed") @Valid AttributionDto attribution,
+            @Schema(description = "Paid with a new method from Stripe's Payment Element: save it on the shopper's "
+                    + "Stripe Customer for future purchases (the PaymentIntent gets setup_future_usage=off_session)")
+            Boolean savePaymentMethod) {
 
         CheckoutCommand toCommand(String idempotencyKey, String bearer) {
             List<CheckoutInput.Selection> selections = deliverySelections == null ? List.of()
@@ -47,7 +50,7 @@ final class OrdersDtos {
                     l.quantity() == null ? 0 : l.quantity())).toList();
             return new CheckoutCommand(idempotencyKey, bearer, addressId, selections, selected, couponCode,
                     attribution == null ? null : Attribution.ofNullable(attribution.src(), attribution.cr(),
-                            attribution.po()));
+                            attribution.po()), Boolean.TRUE.equals(savePaymentMethod));
         }
     }
 

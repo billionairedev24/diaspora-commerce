@@ -287,6 +287,24 @@ func TestShopperRoutesConformAndMapUpstreams(t *testing.T) {
 	if sel["preferences"].(map[string]any)["handover"] != "HAND" || sent["paymentMethodId"] != "pm_new_from_sheet" || len(sent["lines"].([]any)) == 0 {
 		t.Fatalf("orders checkout body: %v", sent)
 	}
+	// Stripe Payment Element (deferred intent): no saved method or wallet; saving asks orders for setup_future_usage.
+	b.headers = map[string]string{"Idempotency-Key": "checkout-key-0000000002"}
+	sels := []map[string]any{{"packageId": platform["packageId"], "option": "carrier"}}
+	for _, bad := range []map[string]any{
+		{"addressId": "addr-1", "deliverySelections": sels},
+		{"addressId": "addr-1", "deliverySelections": sels, "newPaymentMethod": true, "paymentMethodId": "pm_saved_1"},
+		{"addressId": "addr-1", "deliverySelections": sels, "paymentMethodId": "pm_saved_1", "savePaymentMethod": true},
+	} {
+		mustStatus(t, b.do("POST", "/v1/checkout/orders", bad), 422)
+	}
+	r = b.do("POST", "/v1/checkout/orders", map[string]any{"addressId": "addr-1", "deliverySelections": sels, "newPaymentMethod": true, "savePaymentMethod": true})
+	mustStatus(t, r, 201)
+	if r.json(t)["paymentClientSecret"] == nil {
+		t.Fatalf("new payment method: the client secret confirms the Payment Element: %s", r.body)
+	}
+	if sent := u.LastCheckout(); sent["savePaymentMethod"] != true || sent["paymentMethodId"] != nil || sent["wallet"] != nil {
+		t.Fatalf("orders checkout body for a saved new method: %v", sent)
+	}
 	b.headers = nil
 	number := conf["orderNumber"].(string)
 	mustStatus(t, b.do("GET", "/v1/checkout/orders/"+number, nil), 200)

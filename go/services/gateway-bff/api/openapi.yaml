@@ -3354,8 +3354,14 @@ components:
       properties:
         attribution: {$ref: '#/components/schemas/Attribution'}
         addressId: {type: string}
-        paymentMethodId: {type: string, description: 'A Stripe PaymentMethod id — saved, or new from PaymentSheet / the Payment Element; omit when paying with a wallet'}
+        paymentMethodId: {type: string, description: 'A saved Stripe PaymentMethod id (or a new one from PaymentSheet); omit when paying with a wallet or newPaymentMethod'}
         wallet: {type: string, enum: [apple_pay, google_pay, link]}
+        newPaymentMethod:
+          type: boolean
+          description: Pay with a new method entered in Stripe's Payment Element (deferred-intent flow). Send neither paymentMethodId nor wallet; the storefront calls elements.submit() first, then confirms paymentClientSecret with stripe.confirmPayment({elements})
+        savePaymentMethod:
+          type: boolean
+          description: With newPaymentMethod, save the method on the shopper's Stripe Customer for future purchases (the order's PaymentIntent gets setup_future_usage=off_session, so the Payment Element is created with setupFutureUsage off_session)
         gift: {type: boolean}
         couponCode:
           type: string

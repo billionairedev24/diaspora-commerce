@@ -1403,6 +1403,10 @@ components:
         attribution:
           $ref: '#/components/schemas/Attribution'
           description: S272 marketing attribution (last touch), stored on the order and sent in orders.order.placed
+        savePaymentMethod:
+          type: boolean
+          description: 'Paid with a new method from Stripe''s Payment Element: save it on the shopper''s Stripe Customer
+            for future purchases (the PaymentIntent gets setup_future_usage=off_session)'
       required:
       - addressId
     DeliverySelection:

@@ -259,5 +259,32 @@ func (c *Config) Validate(env string) error {
 			u.Breaker.Cooldown = 15 * time.Second
 		}
 	}
+	return c.validateStripe(env)
+}
+
+// validateStripe checks the publishable key the storefront's Stripe Elements (and the apps' PaymentSheet) use. It comes
+// only from STRIPE_PUBLISHABLE_KEY. Locally it may be empty: the storefront then shows its labelled, dev-only test form
+// ("Stripe test mode is not configured"). Every deployed environment needs a real key, so that fallback can never
+// reach dev, uat or prod: pk_test_… in dev and uat, pk_live_… in prod (payments enforces the same split for sk_).
+func (c *Config) validateStripe(env string) error {
+	key := strings.TrimSpace(c.Stripe.PublishableKey)
+	c.Stripe.PublishableKey = key
+	live := strings.HasPrefix(key, "pk_live_")
+	if env == "local" {
+		if live {
+			return fmt.Errorf("config: STRIPE_PUBLISHABLE_KEY must be a Stripe test key (pk_test_…) locally")
+		}
+		return nil
+	}
+	switch {
+	case key == "":
+		return fmt.Errorf("config: STRIPE_PUBLISHABLE_KEY is required in %s (pk_test_… in dev and uat, pk_live_… in prod)", env)
+	case strings.HasPrefix(key, "pk_test_mock"):
+		return fmt.Errorf("config: STRIPE_PUBLISHABLE_KEY %q is the mock BFF's key; set a real Stripe key in %s", key, env)
+	case env == "prod" && !live:
+		return fmt.Errorf("config: prod needs a live Stripe publishable key (pk_live_…)")
+	case env != "prod" && !strings.HasPrefix(key, "pk_test_"):
+		return fmt.Errorf("config: %s needs a Stripe test publishable key (pk_test_…)", env)
+	}
 	return nil
 }

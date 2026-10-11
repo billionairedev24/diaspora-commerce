@@ -81,7 +81,7 @@ class CheckoutServiceImpl implements CheckoutService {
             throw new OrdersRuleViolation("orders.address-required", "Choose a delivery address");
         }
         String fingerprint = Fingerprint.of(cmd.addressId().trim() + "|" + cmd.selections() + "|" + cmd.lines()
-                + (cmd.couponCode() == null ? "" : "|" + cmd.couponCode()));
+                + (cmd.couponCode() == null ? "" : "|" + cmd.couponCode()) + (cmd.savePaymentMethod() ? "|save" : ""));
         Claimed claimed = claim(customer.subject(), key, fingerprint);
         CheckoutRequest request = claimed.request();
         boolean start = claimed.fresh()
@@ -152,7 +152,7 @@ class CheckoutServiceImpl implements CheckoutService {
         return new CheckoutInput(request.orderId(), request.orderNumber(), request.customerId(),
                 request.idempotencyKey(), request.workflowId(), currency, shipTo, select(snapshot, cmd.lines()),
                 cmd.selections(), settings.paymentTimeout().toSeconds(), Instant.now(clock), cmd.couponCode(),
-                cmd.attribution(), snapshot.preorderFulfilment(), null);
+                cmd.attribution(), snapshot.preorderFulfilment(), null, cmd.savePaymentMethod());
     }
 
     /** Every available line, or the requested subset (quantities never above what is in the cart). */

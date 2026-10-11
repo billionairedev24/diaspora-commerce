@@ -48,6 +48,9 @@ class HttpPaymentsClient implements PaymentsClient {
         if (r.offSession()) {
             body.put("offSession", true);
         }
+        if (r.saveForOffSession()) {
+            body.put("saveForOffSession", true);
+        }
         if (r.paymentLinkHours() != null) {
             body.put("paymentLinkHours", r.paymentLinkHours());
         }

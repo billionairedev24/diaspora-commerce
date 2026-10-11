@@ -81,7 +81,8 @@ class CheckoutIT extends OrdersIntegrationTest {
                 .withRequestBody(WireMock.matchingJsonPath("$.amountMinor",
                         WireMock.equalTo(String.valueOf(2500 + 4000 + 206 + 330 + 499))))
                 .withRequestBody(WireMock.matchingJsonPath("$.lines[?(@.fulfilment == 'FBA')]"))
-                .withRequestBody(WireMock.matchingJsonPath("$.lines[?(@.fulfilment == 'SELF')]")));
+                .withRequestBody(WireMock.matchingJsonPath("$.lines[?(@.fulfilment == 'SELF')]"))
+                .withRequestBody(WireMock.notContaining("saveForOffSession")));
         WIREMOCK.verify(WireMock.getRequestedFor(WireMock.urlPathEqualTo("/v1/cart"))
                 .withHeader("Authorization", WireMock.equalTo("Bearer " + bearer)));
         assertThat(jdbc.sql("select status from customer_order where id = :id").param("id", UUID.fromString(orderId))
@@ -141,6 +142,36 @@ class CheckoutIT extends OrdersIntegrationTest {
         assertThat(sellerView.path("totalMinor").asLong()).isEqualTo(4000 + 330);
         TestSupport.as(TestSupport.seller(id("org-other")));
         problem(send("GET", "/v1/orders/" + number, null), 404, "orders.order-not-found");
+    }
+
+    /** S282: a new method from Stripe's Payment Element the shopper keeps → setup_future_usage on the intent. */
+    @Test
+    void aNewPaymentMethodTheShopperSavesCreatesTheIntentForOffSessionReuse() {
+        String customer = id("cust");
+        String bearer = "tok-" + customer;
+        String atin = id("ATS");
+        String org = id("org-sel");
+        String paymentId = UUID.randomUUID().toString();
+        UPSTREAMS.cart(bearer, Upstreams.pkg(org, "Mama Tee", "SELLER", Upstreams.line(atin, org, "SELLER", 4000, 1)));
+        UPSTREAMS.addresses(bearer, "addr-1", "TX");
+        UPSTREAMS.paymentIntent(customer, paymentId);
+        TestSupport.as(TestSupport.customer(customer));
+        String request = """
+                {"addressId":"addr-1","savePaymentMethod":true,
+                 "deliverySelections":[{"packageId":"%s:SELLER","option":"carrier"}]}
+                """.formatted(org);
+
+        JsonNode created = ok(send("POST", "/v1/checkout", request, "Idempotency-Key", "save-" + customer,
+                "Authorization", "Bearer " + bearer), 201);
+
+        assertThat(created.path("clientSecret").asString()).isEqualTo("pi_" + paymentId + "_secret");
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payments"))
+                .withHeader("Idempotency-Key", WireMock.equalTo(created.path("orderId").asString()))
+                .withRequestBody(WireMock.matchingJsonPath("$.saveForOffSession", WireMock.equalTo("true")))
+                .withRequestBody(WireMock.matchingJsonPath("$.shopperId", WireMock.equalTo(customer))));
+        // Saving is part of the request: the same key without it is another request.
+        problem(send("POST", "/v1/checkout", request.replace("\"savePaymentMethod\":true,", ""), "Idempotency-Key",
+                "save-" + customer, "Authorization", "Bearer " + bearer), 409, "orders.idempotency-key-reused");
     }
 
     @Test

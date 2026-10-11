@@ -2837,10 +2837,14 @@ export interface components {
         PlaceOrderRequest: {
             attribution?: components["schemas"]["Attribution"];
             addressId: string;
-            /** @description A Stripe PaymentMethod id — saved, or new from PaymentSheet / the Payment Element; omit when paying with a wallet */
+            /** @description A saved Stripe PaymentMethod id (or a new one from PaymentSheet); omit when paying with a wallet or newPaymentMethod */
             paymentMethodId?: string;
             /** @enum {string} */
             wallet?: "apple_pay" | "google_pay" | "link";
+            /** @description Pay with a new method entered in Stripe's Payment Element (deferred-intent flow). Send neither paymentMethodId nor wallet; the storefront calls elements.submit() first, then confirms paymentClientSecret with stripe.confirmPayment({elements}) */
+            newPaymentMethod?: boolean;
+            /** @description With newPaymentMethod, save the method on the shopper's Stripe Customer for future purchases (the order's PaymentIntent gets setup_future_usage=off_session, so the Payment Element is created with setupFutureUsage off_session) */
+            savePaymentMethod?: boolean;
             gift?: boolean;
             /** @description Coupon validated and redeemed by orders with the offers service (released if the order fails or is cancelled); 422 with errors.couponCode when it does not apply */
             couponCode?: string;

@@ -136,3 +136,49 @@ profile by `LocalDevelopmentPolicy`: on `uat` or `prod` identity refuses to star
 (`LocalDevelopmentConfigurationTest`, `DefaultLocalDevelopmentPolicyTest`); `dev` can opt in to test users only with
 `IDENTITY_TEST_USERS=true` and a password of its own (`IDENTITY_TEST_USERS_PASSWORD`; the published local one is
 refused), and dev codes always go through the notifications service. `IDENTITY_TEST_USERS=false` turns them off locally.
+
+## Payments: Stripe test mode and Stripe Elements
+
+Checkout pays with **Stripe Elements** (S282): the Express Checkout Element (Apple Pay, Google Pay, Link) at the top of
+the payment step, the shopper's saved methods, and "Use a new payment method" with the **Payment Element inline**. It
+uses Stripe's deferred-intent flow: the Elements are created from the cart total (`mode: 'payment'`, currency,
+`captureMethod: 'manual'`, `setupFutureUsage: 'off_session'` when "Save for future purchases" is ticked, the pre-order
+windows' `paymentMethodTypes` when they restrict methods) and updated as delivery choices change. **Place order** runs
+`elements.submit()`, then `POST /v1/checkout/orders` (`newPaymentMethod`, `savePaymentMethod`; orders creates the
+PaymentIntent through payments), then `stripe.confirmPayment({ elements, clientSecret, redirect: 'if_required' })`.
+Card 3-D Secure opens in Stripe's modal; redirect methods (Cash App Pay, Affirm, bank) come back to
+`/checkout/complete?order=…`, which asks the BFF to confirm the order's payment (orders reads the PaymentIntent from
+payments, refreshed from Stripe) before showing the order. Your Payments and booking deposits use the same Payment
+Element and Appearance on a SetupIntent. The Appearance is read from the design tokens at runtime (gold primary,
+Figtree, radius, colours).
+
+**Keys.** Three variables, one Stripe account in test mode ([dashboard.stripe.com/test/apikeys](https://dashboard.stripe.com/test/apikeys)):
+
+| Variable | Service | Value |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | payments (8105), also seller for Connect | `sk_test_…` (or a restricted `rk_test_…`) |
+| `STRIPE_WEBHOOK_SECRET` | payments | `whsec_…` printed by `stripe listen` |
+| `STRIPE_PUBLISHABLE_KEY` | gateway-bff (8200): sent to the storefront in the checkout summary, setup intents and booking payments | `pk_test_…` |
+
+```bash
+export STRIPE_SECRET_KEY=sk_test_...
+export STRIPE_PUBLISHABLE_KEY=pk_test_...
+stripe login                                                   # once
+stripe listen --forward-to localhost:8105/v1/webhooks/stripe   # prints whsec_…; keep it running
+export STRIPE_WEBHOOK_SECRET=whsec_...
+make up                                                        # or restart payments and gateway-bff
+```
+
+Then check out as `customer.houston@afrotransact.test` / `Test1234!Local` with Stripe's test cards: `4242 4242 4242 4242`
+(authorised), `4000 0027 6000 3184` (3-D Secure), `4000 0000 0000 9995` (declined); Cash App Pay and Affirm show
+Stripe's test redirect pages. Orders are authorised (manual capture) and captured per shipment, so the dashboard shows
+"Uncaptured" until a shipment ships. `stripe trigger payment_intent.succeeded` exercises the webhook path.
+
+**Without keys** (the local default) the storefront shows a labelled stand-in, *"Stripe test mode is not configured: set
+STRIPE_PUBLISHABLE_KEY and STRIPE_SECRET_KEY"*, above its own card form; payments still cannot create PaymentIntents, so
+placing a real order needs the keys. The stand-in is impossible elsewhere: gateway-bff refuses to start in dev or uat
+without a `pk_test_` key and in prod without a `pk_live_` key, payments refuses live keys outside prod and test keys in
+prod, and `tools/ci/check_env_config.py` fails if a key is written into config or missing from a chart's secret list.
+The mock BFF (`pnpm dev:mocks`, Playwright) uses `pk_test_mock`; its cookie `at_mock_stripe_pk` swaps in another key so
+`e2e/checkout-stripe.spec.ts` can drive the real Elements code against a fake `window.Stripe`. The customer app keeps
+`@stripe/stripe-react-native` PaymentSheet (`EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY`).
