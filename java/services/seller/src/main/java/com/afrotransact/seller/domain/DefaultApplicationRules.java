@@ -214,42 +214,6 @@ public class DefaultApplicationRules implements ApplicationRules {
     }
 
     @Override
-    public Validated<PayoutSection> payouts(PayoutInput in, PayoutSection existing, boolean complete) {
-        Errors e = new Errors("payouts");
-        if (in == null) {
-            e.required(complete && existing == null, "accountNumber");
-            return new Validated<>(existing, e.map());
-        }
-        String routing = trim(in.routingNumber());
-        if (routing != null && !RoutingNumbers.isValid(routing)) {
-            e.put("routingNumber", "This routing number isn't valid");
-        }
-        String account = trim(in.accountNumber());
-        String confirm = trim(in.accountNumberConfirmation());
-        if (account != null && !account.matches("\\d{4,17}")) {
-            e.put("accountNumber", "4 to 17 digits");
-        }
-        if (account != null && !account.equals(confirm)) {
-            e.put("accountNumberConfirmation", "Account numbers don't match");
-        }
-        String type = trim(in.accountType());
-        if (type != null && !Set.of("checking", "savings").contains(type.toLowerCase(Locale.ROOT))) {
-            e.put("accountType", "Checking or savings");
-        }
-        String holder = trim(in.accountHolderName());
-        String bank = trim(in.bankName());
-        String routingLast4 = routing != null ? TaxIds.last4(routing) : existing == null ? null : existing.routingLast4();
-        String accountLast4 = account != null ? TaxIds.last4(account) : existing == null ? null : existing.accountLast4();
-        e.required(complete && holder == null, "accountHolderName");
-        e.required(complete && bank == null, "bankName");
-        e.required(complete && routingLast4 == null, "routingNumber");
-        e.required(complete && accountLast4 == null, "accountNumber");
-        boolean linked = existing != null && existing.externalAccountLinked() && account == null;
-        return new Validated<>(new PayoutSection(holder, type == null ? null : type.toLowerCase(Locale.ROOT), bank,
-                routingLast4, accountLast4, linked), e.map());
-    }
-
-    @Override
     public Validated<PlanSection> plan(PlanSection in, Optional<Plan> plan, ApplicationData data, RuleContext ctx,
                                        boolean complete) {
         Errors e = new Errors("plan");
@@ -286,8 +250,9 @@ public class DefaultApplicationRules implements ApplicationRules {
                 e.required(in.cardExpMonth() == null || in.cardExpYear() == null, "cardExpiry");
             }
         }
-        if (in.paymentMethodKind() == PaymentMethodKind.US_BANK_ACCOUNT && complete && data.payouts() == null) {
-            e.put("paymentMethodKind", "Add your payout bank account first");
+        if (in.paymentMethodKind() == PaymentMethodKind.US_BANK_ACCOUNT && complete
+                && (data.payouts() == null || !data.payouts().externalAccountLinked())) {
+            e.put("paymentMethodKind", "Add your payout bank account in Stripe verification first");
         }
         if (in.stripePaymentMethodId() != null && !in.stripePaymentMethodId().startsWith("pm_")) {
             e.put("stripePaymentMethodId", "Expected a Stripe payment method id (pm_…)");
@@ -416,7 +381,7 @@ public class DefaultApplicationRules implements ApplicationRules {
             out.put(OnboardingStep.OWNERS, owners(data.owners(), et, ctx, true).errors());
         }
         out.put(OnboardingStep.STRIPE_VERIFICATION, stripeErrors(data.stripe()));
-        out.put(OnboardingStep.PAYOUTS, payoutErrors(data.payouts()));
+        out.put(OnboardingStep.PAYOUTS, payoutErrors(data.payouts(), data.stripe()));
         out.put(OnboardingStep.PLAN, plan(data.plan(), plan, data, ctx, true).errors());
         Offering offering = data.business() == null ? null : data.business().offering();
         out.put(OnboardingStep.CATALOG_COMPLIANCE, compliance(data.compliance(), offering, ctx, true).errors());
@@ -442,15 +407,24 @@ public class DefaultApplicationRules implements ApplicationRules {
     }
 
     /**
-     * Payouts are complete only once a bank account is linked to the Stripe connected account. A prefilled account
-     * holder name, or numbers typed but never sent to Stripe, are not a payout account.
+     * Payouts are complete once Stripe holds a payout bank account it accepted (not failed) and payouts are on, or
+     * only waiting for Stripe's checks: Stripe collects the bank in its embedded onboarding, and payouts stay on
+     * AfroTransact's manual schedule either way. A prefilled holder name or numbers typed into AfroTransact are not
+     * a payout account.
      */
-    static Map<String, String> payoutErrors(PayoutSection p) {
+    static Map<String, String> payoutErrors(PayoutSection p, StripeVerification s) {
         Errors e = new Errors("payouts");
-        if (p == null || !p.externalAccountLinked()) {
-            e.put("externalAccount", "Add the bank account for your payouts");
-        } else if (p.accountLast4() == null) {
-            e.put("accountNumber", "Required");
+        if (s == null || s.accountId() == null) {
+            e.put("externalAccount", "Start Stripe verification: Stripe collects your payout bank account there");
+        } else if (p == null || p.accountLast4() == null) {
+            e.put("externalAccount", "Add your payout bank account in Stripe verification");
+        } else if (p.failed() || !p.externalAccountLinked()) {
+            e.put("externalAccount", "Stripe couldn't use this bank account; change it");
+        } else if (s.currentlyDue().stream().anyMatch(k -> k.startsWith("external_account"))) {
+            e.put("externalAccount", "Stripe needs your payout bank account");
+        } else if (!s.payoutsEnabled() && s.disabledReason() != null
+                && !s.disabledReason().equals("requirements.pending_verification")) {
+            e.put("payoutsEnabled", "Stripe hasn't enabled payouts for this account yet");
         }
         return e.map();
     }

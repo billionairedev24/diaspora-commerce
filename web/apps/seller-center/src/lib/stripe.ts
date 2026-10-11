@@ -2,8 +2,10 @@
 
 /* Stripe in the application wizard, without an npm dependency (like the storefront): the official scripts that
    @stripe/connect-js and @stripe/stripe-js load, plus the small typed surface the wizard uses.
-   - Connect.js (connect-js.stripe.com): Stripe's embedded account onboarding for identity and tax ID verification,
-     inside Seller Center (no Stripe-hosted page, no Stripe login);
+   - Connect.js (connect-js.stripe.com): Stripe's embedded components inside Seller Center (no Stripe-hosted page, no
+     Stripe login). Seller accounts are Stripe-collected, so these components collect everything Stripe needs:
+     account onboarding (identity, tax ID and the payout bank account), account management ("Change bank account")
+     and the notification banner (what Stripe needs later, in Account health);
    - Stripe.js (js.stripe.com): the Card Element that tokenises a paid plan's card into a pm_… (only brand, last 4
      and expiry reach AfroTransact).
    Without a publishable key (local stack without Stripe, mock BFF) the wizard shows its labelled local stand-ins. */
@@ -19,8 +21,11 @@ export interface ConnectElement extends HTMLElement {
   setCollectionOptions?(options: { fields: 'currently_due' | 'eventually_due'; futureRequirements?: 'omit' | 'include' }): void;
 }
 
+/** The embedded components Seller Center mounts. */
+export type ConnectComponent = 'account-onboarding' | 'account-management' | 'notification-banner';
+
 export interface ConnectInstance {
-  create(component: 'account-onboarding'): ConnectElement;
+  create(component: ConnectComponent): ConnectElement;
   logout?(): Promise<void>;
 }
 

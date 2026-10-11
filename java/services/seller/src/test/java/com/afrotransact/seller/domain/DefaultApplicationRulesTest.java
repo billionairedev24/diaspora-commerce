@@ -128,21 +128,6 @@ class DefaultApplicationRulesTest {
     }
 
     @Test
-    void payoutRoutingChecksumAndMatchingAccountNumbers() {
-        PayoutInput ok = new PayoutInput("Ade Ade", "Checking", "Chase", "021000021", "000123456789", "000123456789",
-                null);
-        Validated<PayoutSection> v = rules.payouts(ok, null, true);
-        assertThat(v.errors()).isEmpty();
-        assertThat(v.value().accountLast4()).isEqualTo("6789");
-        assertThat(v.value().routingLast4()).isEqualTo("0021");
-        assertThat(v.value().accountType()).isEqualTo("checking");
-        PayoutInput bad = new PayoutInput("Ade", "checking", "Chase", "021000022", "000123456789", "000123456780",
-                null);
-        assertThat(rules.payouts(bad, null, false).errors())
-                .containsOnlyKeys("payouts.routingNumber", "payouts.accountNumberConfirmation");
-    }
-
-    @Test
     void planNeedsMatchingKindAndAValidCardForPaidPlans() {
         Plan growth = Plan.standard("seller_growth", OrgKind.SELLER, "Seller Growth", null, 3900, 30, List.of(), 1);
         PlanSection expired = new PlanSection("seller_growth", Cadence.QUARTERLY, PaymentMethodKind.CARD, "pm_1",
@@ -196,18 +181,42 @@ class DefaultApplicationRulesTest {
     }
 
     @Test
-    void payoutsAreCompleteOnlyOnceStripeLinkedTheBankAccount() {
-        RuleContext ctx = SELLER;
-        ApplicationData prefilledHolder = ApplicationData.empty().withPayouts(new PayoutSection("Adaeze Okafor", null,
-                null, null, null, false));
-        assertThat(rules.completedSteps(prefilledHolder, Optional.empty(), ctx)).doesNotContain(OnboardingStep.PAYOUTS);
-        assertThat(rules.submission(prefilledHolder, Optional.empty(), ctx)).containsKey("payouts.externalAccount");
-        ApplicationData typedNotLinked = ApplicationData.empty().withPayouts(new PayoutSection("Adaeze Okafor",
-                "checking", "Chase", "0021", "6789", false));
-        assertThat(rules.completedSteps(typedNotLinked, Optional.empty(), ctx)).doesNotContain(OnboardingStep.PAYOUTS);
-        ApplicationData linked = ApplicationData.empty().withPayouts(new PayoutSection("Adaeze Okafor", "checking",
-                "Chase", "0021", "6789", true));
-        assertThat(rules.completedSteps(linked, Optional.empty(), ctx)).contains(OnboardingStep.PAYOUTS);
+    void payoutsAreCompleteOnlyOnceStripeHoldsAUsableBankAccountAndPayoutsCanRun() {
+        Instant now = Instant.parse("2026-10-10T12:00:00Z");
+        StripeVerification verified = new StripeVerification("acct_1", true, true, true, "verified", "verified",
+                List.of(), null, now);
+        PayoutSection bank = PayoutSection.fromStripe(new PayoutBank("ba_1", "STRIPE TEST BANK", "6789", "new"));
+        assertThat(DefaultApplicationRules.payoutErrors(null, null)).as("no Stripe account yet")
+                .containsOnlyKeys("payouts.externalAccount");
+        assertThat(DefaultApplicationRules.payoutErrors(null, verified)).as("Stripe holds no bank yet")
+                .containsOnlyKeys("payouts.externalAccount");
+        assertThat(DefaultApplicationRules.payoutErrors(new PayoutSection("Adaeze Okafor", null, null, null, null,
+                false), verified)).as("a prefilled holder name is not a payout account")
+                .containsOnlyKeys("payouts.externalAccount");
+        assertThat(DefaultApplicationRules.payoutErrors(bank, verified)).isEmpty();
+        PayoutSection failed = PayoutSection.fromStripe(new PayoutBank("ba_1", "STRIPE TEST BANK", "6789",
+                "errored"));
+        assertThat(failed.externalAccountLinked()).isFalse();
+        assertThat(DefaultApplicationRules.payoutErrors(failed, verified)).containsOnlyKeys("payouts.externalAccount");
+        StripeVerification bankDue = new StripeVerification("acct_1", true, true, false, "verified", "verified",
+                List.of("external_account"), "requirements.past_due", now);
+        assertThat(DefaultApplicationRules.payoutErrors(bank, bankDue)).containsOnlyKeys("payouts.externalAccount");
+        StripeVerification checking = new StripeVerification("acct_1", true, true, false, "pending", "pending",
+                List.of(), "requirements.pending_verification", now);
+        assertThat(DefaultApplicationRules.payoutErrors(bank, checking))
+                .as("payouts only waiting for Stripe's checks (and our manual schedule) are fine").isEmpty();
+        StripeVerification disabled = new StripeVerification("acct_1", true, true, false, "verified", "verified",
+                List.of(), "under_review", now);
+        assertThat(DefaultApplicationRules.payoutErrors(bank, disabled)).containsOnlyKeys("payouts.payoutsEnabled");
+
+        ApplicationData linked = ApplicationData.empty().withStripe(verified).withPayouts(bank);
+        assertThat(rules.completedSteps(linked, Optional.empty(), SELLER)).contains(OnboardingStep.PAYOUTS);
+        ApplicationData typedNotLinked = ApplicationData.empty().withStripe(verified).withPayouts(
+                new PayoutSection("Adaeze Okafor", "checking", "Chase", "0021", "6789", false));
+        assertThat(rules.completedSteps(typedNotLinked, Optional.empty(), SELLER))
+                .doesNotContain(OnboardingStep.PAYOUTS);
+        assertThat(rules.submission(ApplicationData.empty(), Optional.empty(), SELLER))
+                .containsKey("payouts.externalAccount");
     }
 
     @Test

@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { type ReactNode, useImperativeHandle, useRef, useState } from 'react';
 
 import { sellerApi } from '@/lib/api';
-import { displayPhone, ENTITY_TYPES, FOOD_PERMITS, OFFERINGS, PRODUCT_CATEGORIES } from '@/lib/onboarding-form';
+import { displayPhone, ENTITY_TYPES, FOOD_PERMITS, OFFERINGS, payoutAccountLabel, PRODUCT_CATEGORIES } from '@/lib/onboarding-form';
 import { onboardingHref } from '@/lib/onboarding-wizard';
 import { useSeller } from '@/lib/session';
 
@@ -66,14 +66,19 @@ function sectionRows(st: OnboardingStatus): Record<string, Row[]> {
       ['Identity (KYC)', st.stripe.identityStatus === 'verified' ? 'Verified' : 'Pending'],
       ['IRS name & TIN match', st.stripe.taxIdStatus === 'verified' ? 'Matched' : 'Pending']
     ],
-    payouts: f.payouts.linked
+    payouts: f.payouts.accountLast4
       ? [
-          ['Account holder', dash(f.payouts.accountHolderName)],
-          ['Account', `${f.payouts.accountType === 'savings' ? 'Savings' : 'Checking'} ••${f.payouts.accountLast4 ?? ''}`],
-          ['Bank', dash(f.payouts.bankName)],
-          ['Verification', 'Linked to Stripe Connect']
+          ['Payout account', payoutAccountLabel(f.payouts)],
+          [
+            'Status',
+            f.payouts.status === 'READY'
+              ? 'Held by Stripe · payouts on request'
+              : f.payouts.status === 'FAILED'
+                ? 'Stripe couldn’t use it — change it'
+                : 'Stripe is checking it'
+          ]
         ]
-      : [['Bank account', 'Not added yet']],
+      : [['Bank account', 'Not added yet — Stripe collects it in Stripe verification']],
     plan: [
       ['Plan', dash(f.plan.planName)],
       ['Billing', f.plan.cadence ? f.plan.cadence.charAt(0) + f.plan.cadence.slice(1).toLowerCase() : '—'],

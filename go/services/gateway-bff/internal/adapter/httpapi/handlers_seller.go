@@ -26,7 +26,6 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("PUT /v1/seller/onboarding/business", h.saveOnboardingBusiness)
 	route("PUT /v1/seller/onboarding/business-details", h.saveOnboardingDetails)
 	route("PUT /v1/seller/onboarding/owners", onboardingSave(h, h.s.SellerShell.SaveOnboardingOwners))
-	route("PUT /v1/seller/onboarding/payouts", onboardingSave(h, h.s.SellerShell.SaveOnboardingPayouts))
 	route("PUT /v1/seller/onboarding/plan", onboardingSave(h, h.s.SellerShell.SaveOnboardingPlan))
 	route("PUT /v1/seller/onboarding/catalog-compliance", onboardingSave(h, h.s.SellerShell.SaveOnboardingCompliance))
 	route("GET /v1/seller/onboarding/plans", h.onboardingPlans)
@@ -36,6 +35,7 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 	route("POST /v1/seller/onboarding/uploads", h.onboardingUpload)
 	route("POST /v1/seller/onboarding/uploads/{assetId}/complete", h.completeOnboardingUpload)
 	route("GET /v1/seller/compliance", h.sellerCompliance)
+	route("POST /v1/seller/stripe/session", h.sellerStripeSession)
 	route("GET /v1/seller/dashboard", h.sellerDashboard)
 	// Orders
 	route("GET /v1/seller/orders", h.sellerOrders)
@@ -207,6 +207,11 @@ func (h *handlersImpl) onboardingPlans(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) onboardingStripeSession(w http.ResponseWriter, r *http.Request) {
 	v, err := h.s.SellerShell.OnboardingStripeSession(r.Context(), callerFrom(r.Context()))
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) sellerStripeSession(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.SellerShell.SellerStripeSession(r.Context(), callerFrom(r.Context()))
 	h.reply(w, r, http.StatusOK, v, err)
 }
 

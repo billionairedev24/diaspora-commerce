@@ -31,7 +31,6 @@ import com.afrotransact.seller.domain.OnboardingStep;
 import com.afrotransact.seller.domain.OrgKind;
 import com.afrotransact.seller.domain.Owner;
 import com.afrotransact.seller.domain.PaymentMethodKind;
-import com.afrotransact.seller.domain.PayoutInput;
 import com.afrotransact.seller.domain.PlanSection;
 import com.afrotransact.seller.domain.ReviewAction;
 import com.afrotransact.platform.test.PostgresTestContainer;
@@ -160,9 +159,8 @@ abstract class SellerIntegrationTest {
         onboarding.saveStep(OnboardingStep.OWNERS, StepInput.owners(List.of(new Owner("Ade", "Ade", "CEO",
                 "ade@example.com", BigDecimal.valueOf(100), true, LocalDate.of(1981, 1, 1), ADDRESS))));
         stripeOnboarding.accountSession();
+        // Stripe's embedded onboarding collected identity, tax ID and the payout bank (stubbed account).
         stripeOnboarding.refreshVerification();
-        onboarding.saveStep(OnboardingStep.PAYOUTS, StepInput.payouts(new PayoutInput("Store LLC", "checking",
-                "Chase", "021000021", "000123456789", "000123456789", null)));
         onboarding.saveStep(OnboardingStep.PLAN, StepInput.plan(new PlanSection(planCode, cadence,
                 PaymentMethodKind.CARD, "pm_card_" + user.replace("-", ""), "visa", "4242", 12, 2030, promoCode)));
         List<ComplianceSection.ServiceLicence> services = offering.includesServices()

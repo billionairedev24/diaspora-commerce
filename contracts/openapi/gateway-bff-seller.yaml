@@ -200,24 +200,6 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
-  /v1/seller/onboarding/payouts:
-    put:
-      tags: [Shell]
-      operationId: saveOnboardingPayouts
-      security: [{sessionCookie: []}]
-      summary: Save "Payouts" (the payout bank account, linked via Stripe)
-      description: seller `PUT /v1/applications/me/steps/payouts`. The routing and account numbers go to Stripe once as the connected account's payout account and are never stored or returned (last 4 only). The step is complete only once Stripe accepted the account (`form.payouts.linked`); 422 `seller.stripe-account-required` before Stripe verification.
-      requestBody:
-        required: true
-        content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingPayoutsInput'}}}
-      responses:
-        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStatus'}}}}
-        '401': {$ref: '#/components/responses/Problem'}
-        '404': {$ref: '#/components/responses/Problem'}
-        '409': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-        '502': {$ref: '#/components/responses/Problem'}
-        '503': {$ref: '#/components/responses/Problem'}
   /v1/seller/onboarding/plan:
     put:
       tags: [Shell]
@@ -272,13 +254,15 @@ paths:
       tags: [Shell]
       operationId: createOnboardingStripeSession
       security: [{sessionCookie: []}]
-      summary: Account Session for Stripe's embedded Connect onboarding (identity and tax ID verification)
+      summary: Account Session for Stripe's embedded Connect components (verification and the payout bank account)
       description: |
-        seller `POST /v1/applications/me/stripe/account-session`: creates the platform-controlled connected account on
-        first use and an Account Session for Connect.js (`account-onboarding`), with the BFF's Stripe publishable key.
-        No Stripe-hosted page: verification runs embedded in Seller Center. `localTest` is true only for the seller
-        service's local stand-in (local profile without a Stripe key); Seller Center then shows its labelled local
-        verification. 503 `STRIPE_NOT_CONFIGURED` when a real session can't load for lack of a publishable key.
+        seller `POST /v1/applications/me/stripe/account-session`: creates the connected account on first use and an
+        Account Session for Connect.js, with the BFF's Stripe publishable key. The account is Stripe-collected (Stripe
+        keeps the liability and KYC), so Stripe's components collect identity, tax ID and the payout bank account:
+        `account-onboarding` in "Stripe verification", `account-management` for "Change bank account" on "Payouts".
+        No Stripe-hosted page. `localTest` is true only for the seller service's local stand-in (local profile without
+        a Stripe key); Seller Center then shows its labelled local verification. 503 `STRIPE_NOT_CONFIGURED` when a real
+        session can't load for lack of a publishable key.
       responses:
         '200': {description: Account Session, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStripeSession'}}}}
         '401': {$ref: '#/components/responses/Problem'}
@@ -358,6 +342,26 @@ paths:
         '200': {description: Compliance summary, content: {application/json: {schema: {$ref: '#/components/schemas/ComplianceSummary'}}}}
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/stripe/session:
+    post:
+      tags: [Shell]
+      operationId: createSellerStripeSession
+      security: [{sessionCookie: []}]
+      summary: Account Session for Stripe's embedded components in Account health (owner / finance)
+      description: |
+        seller `POST /v1/orgs/{orgId}/stripe/account-session` for the active organisation. Seller accounts are
+        Stripe-collected: what Stripe needs and the payout bank account are answered in Stripe's embedded components
+        (`notification-banner`, `account-management`, `account-onboarding`), never through AfroTransact. 403 for
+        members other than the owner and finance; 404 before the organisation has a Stripe account; 503
+        `STRIPE_NOT_CONFIGURED` without a publishable key.
+      responses:
+        '200': {description: Account Session, content: {application/json: {schema: {$ref: '#/components/schemas/OnboardingStripeSession'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── dashboard
@@ -1960,14 +1964,22 @@ components:
         owners: {type: array, items: {$ref: '#/components/schemas/OnboardingOwner'}}
         payouts:
           type: object
-          required: [accountHolderName, accountType, bankName, routingLast4, accountLast4, linked]
+          description: |
+            The payout bank account Stripe holds, read-only: Stripe collects it in its embedded onboarding ("Stripe
+            verification") and changes it in account management ("Change bank account"). Never the numbers.
+          required: [status, bankName, accountLast4, bankStatus, linked]
           properties:
-            accountHolderName: {type: [string, 'null']}
-            accountType: {type: [string, 'null']}
+            status:
+              type: string
+              enum: [NOT_STARTED, NEEDS_BANK, FAILED, VERIFYING, READY]
+              description: |
+                NOT_STARTED (no Stripe account yet), NEEDS_BANK (Stripe holds no bank yet: finish Stripe verification),
+                FAILED (Stripe rejected the bank: change it), VERIFYING (bank on file, payouts not on yet), READY (the
+                step is complete).
             bankName: {type: [string, 'null']}
-            routingLast4: {type: [string, 'null']}
             accountLast4: {type: [string, 'null']}
-            linked: {type: boolean, description: Stripe accepted the account as the payout account (the step's completion)}
+            bankStatus: {type: [string, 'null'], description: "Stripe's status: new, validated, verified, verification_failed, errored"}
+            linked: {type: boolean, description: Stripe holds a usable payout account}
         plan:
           type: object
           required: [planCode, planName, cadence, paymentMethodKind, cardBrand, cardLast4, cardExpMonth, cardExpYear, firstCharge]
@@ -2060,15 +2072,6 @@ components:
       required: [owners]
       properties:
         owners: {type: array, maxItems: 10, items: {$ref: '#/components/schemas/OnboardingOwnerInput'}}
-    OnboardingPayoutsInput:
-      type: object
-      required: [accountHolderName, accountType, routingNumber, accountNumber, accountNumberConfirmation]
-      properties:
-        accountHolderName: {type: string, maxLength: 120}
-        accountType: {type: string, enum: [checking, savings]}
-        routingNumber: {type: string, maxLength: 11, writeOnly: true}
-        accountNumber: {type: string, maxLength: 20, writeOnly: true}
-        accountNumberConfirmation: {type: string, maxLength: 20, writeOnly: true}
     OnboardingPlanInput:
       type: object
       required: [planCode, cadence]
@@ -2163,7 +2166,7 @@ components:
     ComplianceStatus: {type: string, enum: [COMPLIANT, ACTION_NEEDED, RESTRICTED_SOON, RESTRICTED, VERIFYING]}
     ComplianceSummary:
       type: object
-      required: [status, showBanner, tone, title, message, openItems, deadline, payoutsPaused, chargesEnabled, payoutsEnabled, listingsHidden, items]
+      required: [status, showBanner, tone, title, message, openItems, deadline, payoutsPaused, chargesEnabled, payoutsEnabled, listingsHidden, payoutBank, items]
       properties:
         status: {$ref: '#/components/schemas/ComplianceStatus'}
         showBanner: {type: boolean}
@@ -2176,15 +2179,29 @@ components:
         chargesEnabled: {type: boolean}
         payoutsEnabled: {type: boolean}
         listingsHidden: {type: boolean}
+        payoutBank:
+          description: The payout bank account Stripe holds (changed in Stripe's account management component)
+          oneOf:
+            - type: object
+              required: [bankName, last4, status]
+              properties:
+                bankName: {type: [string, 'null']}
+                last4: {type: [string, 'null']}
+                status: {type: [string, 'null']}
+            - {type: 'null'}
         items:
           type: array
           items:
             type: object
-            required: [requirement, label, bucket]
+            required: [requirement, label, bucket, component]
             properties:
               requirement: {type: string}
               label: {type: string}
               bucket: {type: string}
+              component:
+                type: string
+                enum: [account_onboarding, account_management]
+                description: The Stripe embedded component that collects it (nothing is answered through AfroTransact)
     # ── dashboard
     ChartTone: {type: string, enum: [ink, gold, green, blue, red, grey]}
     ChartKind: {type: string, enum: [trend, hbar, donut, stack]}

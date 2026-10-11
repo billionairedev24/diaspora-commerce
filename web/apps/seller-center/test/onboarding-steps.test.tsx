@@ -1,10 +1,14 @@
 import { getSellerDb, PENDING_ORG, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
 import { act, configure, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRef } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { AccountHealthView } from '@/components/onboarding/AccountHealthView';
 import { OnboardingView, OnboardingWizard } from '@/components/onboarding/OnboardingView';
 import { Stepper } from '@/components/onboarding/Stepper';
+import { PayoutsStep } from '@/components/onboarding/steps/PayoutsStep';
+import { type StepHandle } from '@/components/onboarding/WizardKit';
 import { Header } from '@/components/shell/Header';
 import { PortalShell } from '@/components/shell/PortalShell';
 
@@ -187,6 +191,55 @@ describe('application wizard', () => {
     expect(await screen.findByText(/Verified · charges enabled/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Save and continue' }));
     await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/onboarding/payouts'));
+  });
+
+  it('Payouts: Stripe collects the bank, so before verification the step points back to Stripe verification', async () => {
+    await throughBusiness('SOLE_PROPRIETOR');
+    const st = await mockApi().getOnboarding();
+    expect(st.form.payouts.status).toBe('NOT_STARTED');
+    const handle = createRef<StepHandle>();
+    await renderScreen(<PayoutsStep status={st} ref={handle} />);
+    expect(screen.getByText('Stripe collects your payout bank account.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Stripe verification' })).toHaveAttribute('href', '/onboarding/stripe-verification');
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    let ok = true;
+    await act(async () => {
+      ok = (await handle.current?.save('continue')) ?? true;
+    });
+    expect(ok).toBe(false);
+    expect(screen.getByText('Add your payout bank account in Stripe verification to continue.')).toBeInTheDocument();
+  });
+
+  it('Payouts: shows the bank Stripe holds, read-only, and changes it in Stripe’s account management', async () => {
+    const user = userEvent.setup();
+    await throughBusiness('SOLE_PROPRIETOR');
+    await mockApi().createOnboardingStripeSession();
+    await mockApi().refreshOnboardingStripe();
+    await renderScreen(<OnboardingWizard slug="payouts" />);
+    expect(await screen.findByText('STRIPE TEST BANK (local) ••6789')).toBeInTheDocument();
+    expect(screen.getByText('Held by Stripe')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Change bank account' }));
+    expect(await screen.findByRole('region', { name: 'Local test account management' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Local test account management' })).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Save and continue' }));
+    await waitFor(() => expect(nav.push).toHaveBeenCalledWith('/onboarding/plan'));
+  });
+});
+
+describe('Account health', () => {
+  it('is read-only: each item names the Stripe form that collects it, and Stripe’s components open here', async () => {
+    resetSellerDb(new Date());
+    const user = userEvent.setup();
+    nav.pathname = '/account-health';
+    await renderScreen(<AccountHealthView />);
+    expect(await screen.findByText('Payout bank account')).toBeInTheDocument();
+    expect(screen.getByText('STRIPE TEST BANK ••6789')).toBeInTheDocument();
+    expect(screen.getByText('In Stripe’s account settings')).toBeInTheDocument();
+    expect(screen.getByText('In Stripe’s secure form')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Resolve with Stripe' }));
+    expect(await screen.findByRole('region', { name: 'Local test account management' })).toBeInTheDocument();
   });
 });
 

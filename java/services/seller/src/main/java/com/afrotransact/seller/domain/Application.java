@@ -54,6 +54,14 @@ public record Application(String id, String reference, String orgId, String appl
                 failedChecks, requestedItems, reasonCode, submissionCount, submittedAt, createdAt, now, version);
     }
 
+    /** Stripe's verification results and the payout account it holds, mirrored from the connected account. */
+    public Application withStripeAccount(StripeVerification stripe, PayoutSection payouts, Instant now) {
+        return new Application(id, reference, orgId, applicantUserId, kind, status, currentStep,
+                data.withStripe(stripe).withPayouts(payouts), prefilledFields, reviewerId, reviewedAt,
+                finalApproverId, decidedAt, failedChecks, requestedItems, reasonCode, submissionCount, submittedAt,
+                createdAt, now, version);
+    }
+
     public Application submit(Instant now) {
         requireEditable();
         return new Application(id, reference, orgId, applicantUserId, kind, ApplicationStatus.PENDING_REVIEW,

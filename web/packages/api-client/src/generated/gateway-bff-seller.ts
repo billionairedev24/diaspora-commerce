@@ -142,26 +142,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/seller/onboarding/payouts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Save "Payouts" (the payout bank account, linked via Stripe)
-         * @description seller `PUT /v1/applications/me/steps/payouts`. The routing and account numbers go to Stripe once as the connected account's payout account and are never stored or returned (last 4 only). The step is complete only once Stripe accepted the account (`form.payouts.linked`); 422 `seller.stripe-account-required` before Stripe verification.
-         */
-        put: operations["saveOnboardingPayouts"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/seller/onboarding/plan": {
         parameters: {
             query?: never;
@@ -232,12 +212,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Account Session for Stripe's embedded Connect onboarding (identity and tax ID verification)
-         * @description seller `POST /v1/applications/me/stripe/account-session`: creates the platform-controlled connected account on
-         *     first use and an Account Session for Connect.js (`account-onboarding`), with the BFF's Stripe publishable key.
-         *     No Stripe-hosted page: verification runs embedded in Seller Center. `localTest` is true only for the seller
-         *     service's local stand-in (local profile without a Stripe key); Seller Center then shows its labelled local
-         *     verification. 503 `STRIPE_NOT_CONFIGURED` when a real session can't load for lack of a publishable key.
+         * Account Session for Stripe's embedded Connect components (verification and the payout bank account)
+         * @description seller `POST /v1/applications/me/stripe/account-session`: creates the connected account on first use and an
+         *     Account Session for Connect.js, with the BFF's Stripe publishable key. The account is Stripe-collected (Stripe
+         *     keeps the liability and KYC), so Stripe's components collect identity, tax ID and the payout bank account:
+         *     `account-onboarding` in "Stripe verification", `account-management` for "Change bank account" on "Payouts".
+         *     No Stripe-hosted page. `localTest` is true only for the seller service's local stand-in (local profile without
+         *     a Stripe key); Seller Center then shows its labelled local verification. 503 `STRIPE_NOT_CONFIGURED` when a real
+         *     session can't load for lack of a publishable key.
          */
         post: operations["createOnboardingStripeSession"];
         delete?: never;
@@ -340,6 +322,30 @@ export interface paths {
         get: operations["getCompliance"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/stripe/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Account Session for Stripe's embedded components in Account health (owner / finance)
+         * @description seller `POST /v1/orgs/{orgId}/stripe/account-session` for the active organisation. Seller accounts are
+         *     Stripe-collected: what Stripe needs and the payout bank account are answered in Stripe's embedded components
+         *     (`notification-banner`, `account-management`, `account-onboarding`), never through AfroTransact. 403 for
+         *     members other than the owner and finance; 404 before the organisation has a Stripe account; 503
+         *     `STRIPE_NOT_CONFIGURED` without a publishable key.
+         */
+        post: operations["createSellerStripeSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1857,13 +1863,23 @@ export interface components {
                 irsDeterminationLetterAssetId: string | null;
             };
             owners: components["schemas"]["OnboardingOwner"][];
+            /**
+             * @description The payout bank account Stripe holds, read-only: Stripe collects it in its embedded onboarding ("Stripe
+             *     verification") and changes it in account management ("Change bank account"). Never the numbers.
+             */
             payouts: {
-                accountHolderName: string | null;
-                accountType: string | null;
+                /**
+                 * @description NOT_STARTED (no Stripe account yet), NEEDS_BANK (Stripe holds no bank yet: finish Stripe verification),
+                 *     FAILED (Stripe rejected the bank: change it), VERIFYING (bank on file, payouts not on yet), READY (the
+                 *     step is complete).
+                 * @enum {string}
+                 */
+                status: "NOT_STARTED" | "NEEDS_BANK" | "FAILED" | "VERIFYING" | "READY";
                 bankName: string | null;
-                routingLast4: string | null;
                 accountLast4: string | null;
-                /** @description Stripe accepted the account as the payout account (the step's completion) */
+                /** @description Stripe's status: new, validated, verified, verification_failed, errored */
+                bankStatus: string | null;
+                /** @description Stripe holds a usable payout account */
                 linked: boolean;
             };
             plan: {
@@ -1946,14 +1962,6 @@ export interface components {
         };
         OnboardingOwnersInput: {
             owners: components["schemas"]["OnboardingOwnerInput"][];
-        };
-        OnboardingPayoutsInput: {
-            accountHolderName: string;
-            /** @enum {string} */
-            accountType: "checking" | "savings";
-            routingNumber: string;
-            accountNumber: string;
-            accountNumberConfirmation: string;
         };
         OnboardingPlanInput: {
             planCode: string;
@@ -2056,10 +2064,21 @@ export interface components {
             chargesEnabled: boolean;
             payoutsEnabled: boolean;
             listingsHidden: boolean;
+            /** @description The payout bank account Stripe holds (changed in Stripe's account management component) */
+            payoutBank: {
+                bankName: string | null;
+                last4: string | null;
+                status: string | null;
+            } | null;
             items: {
                 requirement: string;
                 label: string;
                 bucket: string;
+                /**
+                 * @description The Stripe embedded component that collects it (nothing is answered through AfroTransact)
+                 * @enum {string}
+                 */
+                component: "account_onboarding" | "account_management";
             }[];
         };
         /** @enum {string} */
@@ -3545,36 +3564,6 @@ export interface operations {
             503: components["responses"]["Problem"];
         };
     };
-    saveOnboardingPayouts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OnboardingPayoutsInput"];
-            };
-        };
-        responses: {
-            /** @description Saved */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OnboardingStatus"];
-                };
-            };
-            401: components["responses"]["Problem"];
-            404: components["responses"]["Problem"];
-            409: components["responses"]["Problem"];
-            422: components["responses"]["ValidationProblem"];
-            502: components["responses"]["Problem"];
-            503: components["responses"]["Problem"];
-        };
-    };
     saveOnboardingPlan: {
         parameters: {
             query?: never;
@@ -3811,6 +3800,32 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createSellerStripeSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account Session */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OnboardingStripeSession"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

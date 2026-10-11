@@ -57,7 +57,6 @@ import {
   type OnboardingComplianceInput,
   type OnboardingDetailsInput,
   type OnboardingOwnersInput,
-  type OnboardingPayoutsInput,
   type OnboardingPlanInput,
   type OnboardingPlans,
   OnboardingPlansSchema,
@@ -162,15 +161,15 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/onboarding/business-details', OnboardingStatusSchema, { method: 'PUT', body }),
     saveOnboardingOwners: (body: OnboardingOwnersInput): Promise<OnboardingStatus> =>
       request('/v1/seller/onboarding/owners', OnboardingStatusSchema, { method: 'PUT', body }),
-    /** The bank numbers go to Stripe once (through the seller service) and are never stored. */
-    saveOnboardingPayouts: (body: OnboardingPayoutsInput): Promise<OnboardingStatus> =>
-      request('/v1/seller/onboarding/payouts', OnboardingStatusSchema, { method: 'PUT', body }),
     saveOnboardingPlan: (body: OnboardingPlanInput): Promise<OnboardingStatus> =>
       request('/v1/seller/onboarding/plan', OnboardingStatusSchema, { method: 'PUT', body }),
     saveOnboardingCompliance: (body: OnboardingComplianceInput): Promise<OnboardingStatus> =>
       request('/v1/seller/onboarding/catalog-compliance', OnboardingStatusSchema, { method: 'PUT', body }),
     getOnboardingPlans: (signal?: AbortSignal): Promise<OnboardingPlans> => request('/v1/seller/onboarding/plans', OnboardingPlansSchema, { signal }),
-    /** Account Session for Stripe's embedded Connect onboarding (localTest: the local stand-in). */
+    /**
+     * Account Session for Stripe's embedded Connect components (localTest: the local stand-in): account onboarding
+     * (identity, tax ID and the payout bank) and account management ("Change bank account").
+     */
     createOnboardingStripeSession: (): Promise<OnboardingStripeSession> =>
       request('/v1/seller/onboarding/stripe/session', OnboardingStripeSessionSchema, { method: 'POST' }),
     refreshOnboardingStripe: (): Promise<OnboardingStatus> => request('/v1/seller/onboarding/stripe/refresh', OnboardingStatusSchema, { method: 'POST' }),
@@ -184,6 +183,9 @@ export function createSellerApiClient(options: ApiClientOptions) {
     searchAddresses: (q: string, signal?: AbortSignal): Promise<AddressSuggestions> =>
       request('/v1/geo/address-suggestions', AddressSuggestionsSchema, { query: { q }, signal }),
     getCompliance: (signal?: AbortSignal): Promise<ComplianceSummary> => request('/v1/seller/compliance', ComplianceSummarySchema, { signal }),
+    /** Account Session for Account health (owner / finance): Stripe's components answer what Stripe needs. */
+    createSellerStripeSession: (): Promise<OnboardingStripeSession> =>
+      request('/v1/seller/stripe/session', OnboardingStripeSessionSchema, { method: 'POST' }),
     getDashboard: (rangeDays: number, signal?: AbortSignal): Promise<Dashboard> =>
       request('/v1/seller/dashboard', DashboardSchema, { query: { rangeDays: String(rangeDays) }, signal }),
 

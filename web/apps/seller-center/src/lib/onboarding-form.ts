@@ -9,7 +9,6 @@ import {
   type OnboardingForm,
   type OnboardingOffering,
   type OnboardingOwnersInput,
-  type OnboardingPayoutsInput,
   type OrgKind,
   US_STATES
 } from '@afrotransact/api-client';
@@ -380,55 +379,13 @@ export function toOwnersInput(owners: OwnerValues[]): OnboardingOwnersInput {
   };
 }
 
-/* ── Step 5: Payouts ───────────────────────────────────── */
+/* ── Step 5: Payouts ─────────────────────────────────────
+   Nothing to type: seller accounts are Stripe-collected, so Stripe's embedded onboarding collects the payout bank
+   account and its account management changes it. The step shows what Stripe holds (form.payouts, read-only). */
 
-export interface PayoutValues {
-  accountHolderName: string;
-  accountType: 'checking' | 'savings' | '';
-  routingNumber: string;
-  accountNumber: string;
-  accountNumberConfirmation: string;
-}
-
-export function payoutValues(form: OnboardingForm): PayoutValues {
-  const t = form.payouts.accountType;
-  const legal = form.details.legalName ?? '';
-  return {
-    accountHolderName: text(form.payouts.accountHolderName) || legal,
-    accountType: t === 'checking' || t === 'savings' ? t : '',
-    routingNumber: '',
-    accountNumber: '',
-    accountNumberConfirmation: ''
-  };
-}
-
-/** ABA routing number checksum (3-7-1 weights). */
-export function validRouting(raw: string): boolean {
-  const r = digitsOf(raw);
-  if (r.length !== 9) return false;
-  const d = r.split('').map(Number);
-  return (3 * ((d[0] ?? 0) + (d[3] ?? 0) + (d[6] ?? 0)) + 7 * ((d[1] ?? 0) + (d[4] ?? 0) + (d[7] ?? 0)) + ((d[2] ?? 0) + (d[5] ?? 0) + (d[8] ?? 0))) % 10 === 0;
-}
-
-export function validatePayouts(v: PayoutValues): Errors {
-  const e: Errors = {};
-  if (!v.accountHolderName.trim()) e.accountHolderName = 'Enter the account holder’s name';
-  if (!validRouting(v.routingNumber)) e.routingNumber = 'Not a valid ABA routing number';
-  if (!v.accountType) e.accountType = 'Choose checking or savings';
-  const a = digitsOf(v.accountNumber);
-  if (a.length < 4 || a.length > 17) e.accountNumber = '4 to 17 digits';
-  if (digitsOf(v.accountNumberConfirmation) !== a || !a) e.accountNumberConfirmation = 'Account numbers don’t match';
-  return e;
-}
-
-export function toPayoutsInput(v: PayoutValues): OnboardingPayoutsInput {
-  return {
-    accountHolderName: v.accountHolderName.trim(),
-    accountType: v.accountType || 'checking',
-    routingNumber: digitsOf(v.routingNumber),
-    accountNumber: digitsOf(v.accountNumber),
-    accountNumberConfirmation: digitsOf(v.accountNumberConfirmation)
-  };
+/** The payout account as one line: "Chase ••6789". */
+export function payoutAccountLabel(p: OnboardingForm['payouts']): string {
+  return p.accountLast4 ? `${p.bankName ?? 'Bank account'} ••${p.accountLast4}` : 'Not added yet';
 }
 
 /* ── Step 7: Catalog, permits & licences / Services & licences ── */

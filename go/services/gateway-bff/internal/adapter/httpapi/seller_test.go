@@ -452,9 +452,6 @@ func TestSellerContractConformance(t *testing.T) {
 		{"firstName": "Kofi", "lastName": "Mensah", "ownershipPercent": 70}, {"firstName": "Ama", "lastName": "Mensah", "ownershipPercent": 40}}}), 422)
 	mustStatus(t, w.do("POST", "/v1/seller/onboarding/stripe/session", nil), 200)
 	mustStatus(t, w.do("POST", "/v1/seller/onboarding/stripe/refresh", nil), 200)
-	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/payouts", map[string]any{"accountHolderName": "Kofi Mensah", "accountType": "checking",
-		"routingNumber": "021000021", "accountNumber": "000123456789", "accountNumberConfirmation": "000123456789"}), 200)
-	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/payouts", map[string]any{"accountHolderName": "Kofi Mensah"}), 422)
 	mustStatus(t, w.do("GET", "/v1/seller/onboarding/plans", nil), 200)
 	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/plan", map[string]any{"planCode": "seller_growth", "cadence": "monthly", "paymentMethodKind": "card",
 		"stripePaymentMethodId": "pm_1", "cardBrand": "visa", "cardLast4": "4242", "cardExpMonth": 8, "cardExpYear": 2029}), 200)
@@ -478,6 +475,13 @@ func TestSellerContractConformance(t *testing.T) {
 	_, nokey := startedApplicant(t, "")
 	nokey.onResponse = check
 	mustStatus(t, nokey.do("POST", "/v1/seller/onboarding/stripe/session", nil), 503)
+	// Account health: an Account Session for Stripe's components (owner / finance of the active organisation).
+	mustStatus(t, b.do("POST", "/v1/seller/stripe/session", nil), 503)
+	keyed, kb := sellerSetup(t, testkit.Options{SellerPublishableKey: "pk_test_health"})
+	kb.onResponse = check
+	mustStatus(t, kb.do("POST", "/v1/seller/stripe/session", nil), 200)
+	keyed.Upstreams.AccountHealthForbidden = true
+	mustStatus(t, kb.do("POST", "/v1/seller/stripe/session", nil), 403)
 
 	for _, op := range []string{"getSellerSession", "setActiveOrg", "getOnboarding", "getCompliance", "getDashboard", "listSellerOrders", "getSellerOrder",
 		"updateShipmentStatus", "quoteShippingRates", "buyShippingLabel", "listListings", "setListingActive", "submitProduct", "getCategoryTree",
@@ -485,7 +489,7 @@ func TestSellerContractConformance(t *testing.T) {
 		"getPayouts", "requestPayout", "getSellerFees", "getBilling", "changePlan", "makeDefaultPaymentMethod", "removePaymentMethod", "getTeam", "inviteMember",
 		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
 		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings", "getPublicPage", "savePublicPage", "publishPublicPage",
-		"saveOnboardingOwners", "saveOnboardingPayouts", "saveOnboardingPlan", "saveOnboardingCompliance", "getOnboardingPlans", "createOnboardingStripeSession",
+		"saveOnboardingOwners", "createSellerStripeSession", "saveOnboardingPlan", "saveOnboardingCompliance", "getOnboardingPlans", "createOnboardingStripeSession",
 		"refreshOnboardingStripe", "submitOnboarding", "requestOnboardingUpload", "completeOnboardingUpload"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)

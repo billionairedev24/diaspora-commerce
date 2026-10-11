@@ -77,6 +77,19 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public AccountSession accountSession(String orgId) {
+        access.orgRole(orgId, AccessGuard.OWNER_OR_FINANCE, null);
+        ConnectAccount a = accounts.findByOrg(orgId).orElseThrow(() -> new NotFoundException(
+                "seller.no-connected-account", "Organisation " + orgId + " has no Stripe account yet"));
+        if (a.deauthorized()) {
+            throw new SellerStateConflict("seller.account-deauthorized",
+                    "This Stripe account is no longer connected to AfroTransact");
+        }
+        return stripe.createAccountSession(a.accountId(), new LinkedHashSet<>(settings.sessionComponents()));
+    }
+
+    @Override
     @Transactional
     public ApplicationView refreshVerification() {
         Actor actor = access.applicant();

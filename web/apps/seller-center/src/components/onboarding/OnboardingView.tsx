@@ -42,8 +42,8 @@ const STEP_COMPONENTS: Record<OnboardingStepSlug, ComponentType<StepProps>> = {
 const SUBTITLES: Partial<Record<OnboardingStepSlug, string>> = {
   business: 'Tell us what you’ll sell and how your business is set up. The rest of the form adapts to your answers.',
   owners: 'Each person will verify their identity in the next step.',
-  'stripe-verification': 'Verification runs inside AfroTransact, powered by Stripe. It takes about three minutes on a phone.',
-  payouts: 'Payouts go here weekly, after delivery. The account must belong to the business or owner.',
+  'stripe-verification': 'Verification runs inside AfroTransact, powered by Stripe, and includes your payout bank account. About three minutes on a phone.',
+  payouts: 'Stripe holds the bank account your payouts go to. It must belong to the business or owner; change it here any time.',
   plan: 'Every paid plan starts with a free trial. Change plans any time.',
   'catalog-compliance': 'Some categories need permits. We only ask for what applies to you.',
   review: 'Our trust team reviews every application, usually within 2 business days. You can’t sell until it’s approved.'

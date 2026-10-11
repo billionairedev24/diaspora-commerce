@@ -114,15 +114,20 @@ test.describe('seller center · application wizard', () => {
     await shot(page, '4-stripe-verification');
     await page.getByRole('button', { name: 'Complete test verification' }).click();
     await expect(page.getByText(/Verified · charges enabled/)).toBeVisible();
+    // Stripe's onboarding (here the stand-in) collects the payout bank account too.
+    await expect(page.getByText('STRIPE TEST BANK (local) ••6789 · held by Stripe')).toBeVisible();
     await saveAndContinue(page);
 
-    // 5 · Payouts: complete only once the bank account is linked.
+    // 5 · Payouts: read-only — the bank Stripe holds; "Change bank account" opens Stripe's account management.
     await onStep(page, 'payouts', 'Payouts');
-    await page.getByLabel('Routing number').fill('021000021');
-    await page.getByLabel('Account type').selectOption('checking');
-    await page.getByLabel('Account number', { exact: true }).fill('000123456789');
-    await page.getByLabel('Confirm account number').fill('000123456789');
+    await expect(page.getByText('STRIPE TEST BANK (local) ••6789')).toBeVisible();
+    await expect(page.getByText('Held by Stripe')).toBeVisible();
+    await expect(page.getByLabel('Routing number')).toHaveCount(0);
     await shot(page, '5-payouts');
+    await page.getByRole('button', { name: 'Change bank account' }).click();
+    await expect(page.getByRole('region', { name: 'Local test account management' })).toBeVisible();
+    await shot(page, '5-payouts-change-bank');
+    await page.getByRole('button', { name: 'Done' }).click();
     await saveAndContinue(page);
 
     // 6 · Plan: a paid plan with the labelled local test card; the fee summary.
@@ -151,7 +156,8 @@ test.describe('seller center · application wizard', () => {
 
     // 8 · Review & submit.
     await onStep(page, 'review', 'Review & submit');
-    await expect(page.getByRole('region', { name: 'Payouts' })).toContainText('Linked to Stripe Connect');
+    await expect(page.getByRole('region', { name: 'Payouts' })).toContainText('STRIPE TEST BANK (local) ••6789');
+    await expect(page.getByRole('region', { name: 'Payouts' })).toContainText('Held by Stripe');
     await expect(page.getByRole('region', { name: 'Business details & TIN' })).toContainText('••-•••6789');
     await expect(page.getByRole('link', { name: 'Edit Owners' })).toHaveAttribute('href', '/onboarding/owners');
     await shot(page, '8-review');

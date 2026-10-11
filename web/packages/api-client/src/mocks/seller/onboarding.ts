@@ -7,7 +7,6 @@ import {
   type OnboardingDetailsInput,
   type OnboardingForm,
   type OnboardingOwnerInput,
-  type OnboardingPayoutsInput,
   type OnboardingPlanInput,
   type OnboardingPlans,
   type OnboardingStatus,
@@ -34,7 +33,7 @@ const STEPS: { key: OnboardingStepKey; slug: OnboardingStepSlug; label: string; 
   { key: 'BUSINESS_DETAILS', slug: 'business-details', label: 'Business details & TIN', sub: 'Legal name, EIN and registered address' },
   { key: 'OWNERS', slug: 'owners', label: 'Owners', sub: 'Everyone with 25%+ and a control person' },
   { key: 'STRIPE_VERIFICATION', slug: 'stripe-verification', label: 'Stripe verification', sub: 'Identity and tax ID checked by Stripe' },
-  { key: 'PAYOUTS', slug: 'payouts', label: 'Payouts', sub: 'Bank account for your payouts' },
+  { key: 'PAYOUTS', slug: 'payouts', label: 'Payouts', sub: 'The bank account Stripe pays out to' },
   { key: 'PLAN', slug: 'plan', label: 'Plan', sub: 'Choose a subscription' },
   { key: 'CATALOG_COMPLIANCE', slug: 'catalog-compliance', label: 'Catalog, permits & licences', sub: 'Categories, permits and agreements' },
   { key: 'REVIEW', slug: 'review', label: 'Review & submit', sub: 'Check everything before our team reviews it' }
@@ -46,6 +45,11 @@ const US_STATES = new Set(
 const FOOD = new Set(['groceries', 'perishables', 'prepared_food']);
 const BEAUTY = new Set(['beauty', 'cosmetics']);
 const ACCOUNT_ADDRESS = { line1: '4410 Bellaire Blvd', line2: null, city: 'Houston', state: 'TX', postalCode: '77025', country: 'US' };
+/* Stripe collects the payout bank account in its embedded onboarding (seller accounts are Stripe-collected): the
+   wizard's "Payouts" only mirrors what Stripe holds. */
+const NO_BANK: OnboardingForm['payouts'] = { status: 'NOT_STARTED', bankName: null, accountLast4: null, bankStatus: null, linked: false };
+/** The bank the local stand-in's verification "collects", as Stripe's test bank account. */
+const LOCAL_BANK: OnboardingForm['payouts'] = { status: 'READY', bankName: 'STRIPE TEST BANK (local)', accountLast4: '6789', bankStatus: 'new', linked: true };
 const NO_STRIPE: OnboardingStripe = { status: 'NOT_STARTED', detailsSubmitted: false, chargesEnabled: false, payoutsEnabled: false, identityStatus: null, taxIdStatus: null, currentlyDue: [] };
 
 const blank = (v: string | null | undefined): boolean => !v || !v.trim();
@@ -60,7 +64,7 @@ export function accountForm(db: MockSellerDb, kind: OrgKind): OnboardingForm {
       stateOfFormation: null, dateOfFormation: null, address: { ...ACCOUNT_ADDRESS }, formationDocumentAssetId: null, irsDeterminationLetterAssetId: null
     },
     owners: [],
-    payouts: { accountHolderName: `${db.user.firstName} ${db.user.lastName}`, accountType: null, bankName: null, routingLast4: null, accountLast4: null, linked: false },
+    payouts: { ...NO_BANK },
     plan: { planCode: null, planName: null, cadence: null, paymentMethodKind: null, cardBrand: null, cardLast4: null, cardExpMonth: null, cardExpYear: null, firstCharge: null },
     compliance: { categories: [], foodPermit: null, beautyLabellingConfirmed: null, services: [], insuranceDocumentAssetId: null, agreementsAccepted: null, w9Certified: null, w9SignerName: null },
     documents: [],
@@ -77,7 +81,7 @@ function submittedForm(db: MockSellerDb, org: MockOrg): OnboardingForm {
     business: { offering: 'PRODUCTS', entityType: 'SINGLE_MEMBER_LLC', country: 'US', storeName: org.name, contactEmail: 'hello@bonwire.example', phone: '+17132490142', website: null },
     details: { ...f.details, legalName: `${org.name} LLC`, taxIdType: 'EIN', taxIdMasked: '••-•••6789', stateOfFormation: 'TX', dateOfFormation: '2021-03-01', formationDocumentAssetId: 'asset-articles' },
     owners: [{ firstName: 'Kwame', lastName: 'Asante', title: 'Owner', email: 'kwame@bonwire.example', ownershipPercent: 100, significantControl: true, dateOfBirth: '1984-05-02', address: { ...ACCOUNT_ADDRESS } }],
-    payouts: { accountHolderName: `${org.name} LLC`, accountType: 'checking', bankName: 'Chase', routingLast4: '0021', accountLast4: '4417', linked: true },
+    payouts: { status: 'READY', bankName: 'Chase', accountLast4: '4417', bankStatus: 'verified', linked: true },
     plan: { ...f.plan, planCode: 'seller_essentials', planName: 'Seller Essentials', cadence: 'MONTHLY' },
     compliance: { ...f.compliance, categories: ['groceries'], foodPermit: { permitType: 'FOOD_ESTABLISHMENT', permitNumber: 'HC-FE-1', issuingAuthority: 'Harris County', expiresOn: '2025-12-31', documentAssetId: 'asset-permit' }, agreementsAccepted: true, w9Certified: true, w9SignerName: 'Kwame Asante' },
     prefilled: []
@@ -173,7 +177,9 @@ export function stepErrors(key: OnboardingStepKey, app: MockApplication, kind: O
       else if (app.stripe.currentlyDue.length) e['stripe.currentlyDue'] = 'Stripe needs more information';
       break;
     case 'PAYOUTS':
-      if (!f.payouts.linked) e['payouts.externalAccount'] = 'Add the bank account for your payouts';
+      if (app.stripe.status === 'NOT_STARTED') e['payouts.externalAccount'] = 'Start Stripe verification: Stripe collects your payout bank account there';
+      else if (!f.payouts.accountLast4) e['payouts.externalAccount'] = 'Add your payout bank account in Stripe verification';
+      else if (!f.payouts.linked) e['payouts.externalAccount'] = 'Stripe couldn’t use this bank account; change it';
       break;
     case 'PLAN': {
       req(!f.plan.planCode, 'plan.planCode');
@@ -242,8 +248,18 @@ export function onboardingStatus(db: MockSellerDb, org: MockOrg): OnboardingStat
   return {
     orgId: org.id, kind: org.kind, status, reference: org.id === 'org_new' ? 'APP-40001' : 'APP-30131', steps,
     requestedItems: info ? ['Harris County food establishment permit (current)'] : [], canResume: editable, resumeStep: resume ?? 'review',
-    submittedAt: app.submittedAt, stripe: app.stripe, timeline: app.timeline, form: { ...f, editable }
+    submittedAt: app.submittedAt, stripe: app.stripe, timeline: app.timeline, form: { ...f, payouts: { ...f.payouts, status: payoutsStatus(app, steps) }, editable }
   };
+}
+
+/** "Payouts" as the BFF reports it from what Stripe holds. */
+function payoutsStatus(app: MockApplication, steps: OnboardingStep[]): OnboardingForm['payouts']['status'] {
+  const p = app.form.payouts;
+  if (steps.some((s) => s.key === 'PAYOUTS' && s.state === 'DONE')) return 'READY';
+  if (app.stripe.status === 'NOT_STARTED') return 'NOT_STARTED';
+  if (p.bankStatus === 'errored' || p.bankStatus === 'verification_failed') return 'FAILED';
+  if (!p.accountLast4) return 'NEEDS_BANK';
+  return 'VERIFYING';
 }
 
 /** Keeps a prefilled marker only while the answer is unchanged. */
@@ -319,28 +335,6 @@ export function saveOwners(app: MockApplication, owners: OnboardingOwnerInput[])
   return null;
 }
 
-/** ABA routing number checksum. */
-export const validRouting = (r: string): boolean => {
-  if (!/^\d{9}$/.test(r)) return false;
-  const d = r.split('').map(Number);
-  return (3 * (d[0]! + d[3]! + d[6]!) + 7 * (d[1]! + d[4]! + d[7]!) + (d[2]! + d[5]! + d[8]!)) % 10 === 0;
-};
-
-export function savePayouts(app: MockApplication, p: OnboardingPayoutsInput): FieldErrors | null {
-  const errors: FieldErrors = {};
-  if (blank(p.accountHolderName)) errors['payouts.accountHolderName'] = 'Required';
-  if (!validRouting(p.routingNumber)) errors['payouts.routingNumber'] = 'This routing number isn’t valid';
-  if (!/^\d{4,17}$/.test(p.accountNumber)) errors['payouts.accountNumber'] = '4 to 17 digits';
-  if (p.accountNumber !== p.accountNumberConfirmation) errors['payouts.accountNumberConfirmation'] = 'Account numbers don’t match';
-  if (app.stripe.status === 'NOT_STARTED') errors['payouts.externalAccount'] = 'Finish Stripe verification first';
-  if (only(errors)) return errors;
-  update(app, {
-    ...app.form,
-    payouts: { accountHolderName: p.accountHolderName.trim(), accountType: p.accountType, bankName: 'STRIPE TEST BANK (local)', routingLast4: p.routingNumber.slice(-4), accountLast4: p.accountNumber.slice(-4), linked: true }
-  });
-  return null;
-}
-
 export function savePlan(app: MockApplication, kind: OrgKind, p: OnboardingPlanInput): FieldErrors | null {
   const plan = plansFor(kind, '').find((x) => x.code === p.planCode);
   if (!plan) return { 'plan.planCode': 'Unknown plan' };
@@ -383,9 +377,13 @@ export function saveCompliance(app: MockApplication, c: OnboardingComplianceInpu
   return null;
 }
 
-/** POST …/stripe/refresh with the local stand-in: the applicant finished the labelled local verification. */
+/**
+ * POST …/stripe/refresh with the local stand-in: the applicant finished the labelled local verification, which (like
+ * Stripe's embedded onboarding) also collected the payout bank account.
+ */
 export function verifyStripe(app: MockApplication) {
   app.stripe = { status: 'VERIFIED', detailsSubmitted: true, chargesEnabled: true, payoutsEnabled: true, identityStatus: 'verified', taxIdStatus: 'verified', currentlyDue: [] };
+  if (!app.form.payouts.accountLast4 || !app.form.payouts.linked) app.form = { ...app.form, payouts: { ...LOCAL_BANK } };
 }
 
 /** POST …/submit: every step's errors, or the application goes to review. */

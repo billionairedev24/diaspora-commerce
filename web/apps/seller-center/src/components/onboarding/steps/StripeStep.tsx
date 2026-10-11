@@ -4,13 +4,13 @@ import { isApiError, type OnboardingStatus, type OnboardingStripeSession, seller
 import { Button, cx } from '@afrotransact/ui';
 import { CheckCircle, CircleDashed, CircleNotch, Flask, ShieldCheck, WarningCircle } from '@phosphor-icons/react/ssr';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useImperativeHandle, useState } from 'react';
 
 import { sellerApi } from '@/lib/api';
-import { fieldId } from '@/lib/onboarding-form';
+import { fieldId, payoutAccountLabel } from '@/lib/onboarding-form';
 import { useSeller } from '@/lib/session';
-import { hasStripeKey, initConnect } from '@/lib/stripe';
 
+import { isLocalSession, StripeEmbedded } from '../StripeEmbedded';
 import { type StepProps } from '../WizardKit';
 
 type Row = { name: string; ok: boolean; note: string };
@@ -36,6 +36,7 @@ function rows(st: OnboardingStatus): Row[] {
                 ? 'Stripe could not verify this business. Contact AfroTransact support.'
                 : 'Verified · charges enabled · payouts on request from your back office'
   };
+  const bank = st.form.payouts;
   return [
     account,
     {
@@ -47,6 +48,13 @@ function rows(st: OnboardingStatus): Row[] {
       name: sole ? 'SSN / ITIN — IRS name & TIN match' : 'EIN — IRS name & TIN match',
       ok: s.taxIdStatus === 'verified',
       note: s.taxIdStatus === 'verified' ? 'Matched against IRS records' : 'Stripe compares the legal name and tax ID with the IRS database'
+    },
+    {
+      name: 'Payout bank account',
+      ok: bank.linked,
+      note: bank.accountLast4
+        ? `${payoutAccountLabel(bank)} · held by Stripe`
+        : 'Stripe asks for it in the same secure form; AfroTransact never sees the numbers'
     },
     {
       name: 'Sanctions screening',
@@ -68,8 +76,8 @@ function LocalVerification({ onComplete, busy }: { onComplete: () => void; busy:
         <div className="flex flex-col gap-1 text-sm">
           <strong>Local test mode — Stripe isn’t configured on this machine</strong>
           <span className="text-muted">
-            With a Stripe key, Stripe’s secure verification opens right here: identity, date of birth, SSN or EIN and address. Locally the seller service
-            simulates a verified account instead. Nothing is sent to Stripe.
+            With a Stripe key, Stripe’s secure verification opens right here: identity, date of birth, SSN or EIN, address and the payout bank account. Locally
+            the seller service simulates a verified account with Stripe’s test bank instead. Nothing is sent to Stripe.
           </span>
         </div>
       </div>
@@ -82,46 +90,10 @@ function LocalVerification({ onComplete, busy }: { onComplete: () => void; busy:
   );
 }
 
-/** Stripe's embedded account onboarding (Connect.js), mounted in the page; closing it re-reads the results. */
-function EmbeddedOnboarding({ session, onExit }: { session: OnboardingStripeSession; onExit: () => void }) {
-  const box = useRef<HTMLDivElement>(null);
-  const [failed, setFailed] = useState<string | null>(null);
-  const exit = useRef(onExit);
-  exit.current = onExit;
-  useEffect(() => {
-    let cancelled = false;
-    let mounted: HTMLElement | null = null;
-    initConnect(session.publishableKey, async () => (await sellerApi().createOnboardingStripeSession()).clientSecret)
-      .then((connect) => {
-        if (cancelled || !box.current) return;
-        const el = connect.create('account-onboarding');
-        el.setCollectionOptions?.({
-          fields: 'eventually_due',
-          futureRequirements: 'include'
-        });
-        el.setOnExit?.(() => exit.current());
-        box.current.appendChild(el);
-        mounted = el;
-      })
-      .catch(() => setFailed('Stripe verification couldn’t load. Check your connection and try again.'));
-    return () => {
-      cancelled = true;
-      mounted?.remove();
-    };
-  }, [session.publishableKey, session.accountId]);
-  return (
-    <div className="flex flex-col gap-2">
-      {failed ? (
-        <p role="alert" className="m-0 text-sm text-danger">
-          {failed}
-        </p>
-      ) : null}
-      <div ref={box} className="min-h-24 rounded-md border border-border p-2" aria-label="Stripe embedded onboarding" />
-    </div>
-  );
-}
-
-/** Step 4 "Stripe verification": identity and tax ID checked by Stripe Connect, embedded (no Stripe-hosted page). */
+/**
+ * Step 4 "Stripe verification": identity, tax ID and the payout bank account, collected and checked by Stripe Connect
+ * in its embedded onboarding (no Stripe-hosted page). The account is Stripe-collected: Stripe keeps the liability.
+ */
 export function StripeStep({ status, ref }: StepProps) {
   const qc = useQueryClient();
   const { orgId } = useSeller();
@@ -170,7 +142,7 @@ export function StripeStep({ status, ref }: StepProps) {
     }
   };
 
-  const local = session ? session.localTest || !hasStripeKey(session.publishableKey) : false;
+  const local = session ? isLocalSession(session) : false;
   return (
     <div className="flex flex-col gap-3">
       <ul className="m-0 flex list-none flex-col gap-2 p-0">
@@ -204,10 +176,17 @@ export function StripeStep({ status, ref }: StepProps) {
         ))}
       </ul>
       {session && local ? <LocalVerification onComplete={() => void refresh()} busy={busy} /> : null}
-      {session && !local ? <EmbeddedOnboarding session={session} onExit={() => void refresh()} /> : null}
+      {session && !local ? (
+        <StripeEmbedded
+          session={session}
+          component="account-onboarding"
+          fetchClientSecret={async () => (await sellerApi().createOnboardingStripeSession()).clientSecret}
+          onExit={() => void refresh()}
+        />
+      ) : null}
       <p className="m-0 text-xs text-muted">
-        Identity, SSN/EIN and date of birth are collected inside Stripe’s embedded Connect onboarding, and Stripe runs KYC plus the IRS name/TIN match.
-        AfroTransact only receives the verification result — never ID images or full tax numbers.
+        Identity, SSN/EIN, date of birth and your payout bank account are collected inside Stripe’s embedded Connect onboarding, and Stripe runs KYC plus the
+        IRS name/TIN match. AfroTransact only receives the result — never ID images, full tax numbers or bank numbers.
       </p>
       <p role={error ? 'alert' : undefined} className={cx('m-0 min-h-4 text-sm', error ? 'text-danger' : 'text-muted')}>
         {error}

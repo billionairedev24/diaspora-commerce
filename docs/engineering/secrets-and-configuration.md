@@ -111,7 +111,7 @@ Prices and free tiers change: check the provider's pricing page.
   | Endpoint | Listen to | Events |
   |---|---|---|
   | payments `/v1/webhooks/stripe` | Your account | `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action` |
-  | seller `/v1/webhooks/stripe-connect` | Connected accounts | `account.updated`, `capability.updated`, `person.created`, `person.updated`, `account.external_account.updated`, `payout.failed`, `account.application.deauthorized` |
+  | seller `/v1/webhooks/stripe-connect` | Connected accounts | `account.updated`, `capability.updated`, `person.created`, `person.updated`, `account.external_account.created`, `account.external_account.updated`, `account.external_account.deleted`, `payout.failed`, `account.application.deauthorized` |
   | seller `/v1/webhooks/stripe-billing` | Your account | `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.finalized`, `invoice.paid`, `invoice.payment_failed` |
 - **Test cards:** `4242 4242 4242 4242` (any future date, any CVC, any ZIP), `4000 0027 6000 3184` (3-D Secure),
   `4000 0000 0000 9995` (declined).

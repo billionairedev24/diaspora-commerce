@@ -52,7 +52,7 @@ public class StripeWebhookAdapter implements StripeWebhookParser {
         if (type != null) {
             switch (type) {
                 case "account.updated" -> {
-                    accountSnapshot = json.account(o);
+                    accountSnapshot = json.account(o).withPayoutBank(StripeAccountJson.payoutBank(o));
                     if (account == null) {
                         account = StripeJson.text(o, "id");
                     }
@@ -67,9 +67,15 @@ public class StripeWebhookAdapter implements StripeWebhookParser {
                             o.path("relationship").path("representative").asBoolean(false));
                     account = account == null ? StripeJson.idOf(o.path("account")) : account;
                 }
-                case "account.external_account.updated" -> bank = new StripeEvent.ExternalAccount(
-                        StripeJson.text(o, "id"), StripeJson.text(o, "bank_name"), StripeJson.text(o, "last4"),
-                        StripeJson.text(o, "status"));
+                case "account.external_account.created", "account.external_account.updated",
+                     "account.external_account.deleted" -> {
+                    if ("bank_account".equals(StripeJson.text(o, "object"))) {
+                        bank = new StripeEvent.ExternalAccount(StripeJson.text(o, "id"),
+                                StripeJson.text(o, "bank_name"), StripeJson.text(o, "last4"),
+                                StripeJson.text(o, "status"));
+                    }
+                    account = account == null ? StripeJson.idOf(o.path("account")) : account;
+                }
                 case "payout.failed" -> payout = new StripeEvent.Payout(StripeJson.text(o, "id"),
                         o.path("amount").asLong(0), StripeJson.text(o, "currency"),
                         StripeJson.text(o, "failure_code"), StripeJson.text(o, "failure_message"),

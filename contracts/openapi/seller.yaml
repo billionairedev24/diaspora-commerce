@@ -130,9 +130,9 @@ paths:
       tags:
       - Onboarding
       summary: Autosave one step
-      description: 'Steps: business, business-details, owners, payouts, plan, catalog-compliance, review. The body is the
-        step''s data; only the fields present are validated (submit validates everything). stripe-verification is completed
-        in Stripe''s embedded component.'
+      description: 'Steps: business, business-details, owners, plan, catalog-compliance, review. The body is the step''s
+        data; only the fields present are validated (submit validates everything). stripe-verification and payouts are completed
+        in Stripe''s embedded components (Stripe collects the payout bank account); saving them answers 422 seller.step-managed-by-stripe.'
       operationId: saveStep
       parameters:
       - name: step
@@ -148,13 +148,12 @@ paths:
               - $ref: '#/components/schemas/BusinessStep'
               - $ref: '#/components/schemas/BusinessDetailsStep'
               - $ref: '#/components/schemas/OwnersStep'
-              - $ref: '#/components/schemas/PayoutsStep'
               - $ref: '#/components/schemas/PlanStep'
               - $ref: '#/components/schemas/CatalogComplianceStep'
         required: true
       responses:
         '422':
-          description: seller.invalid-application (fieldErrors), seller.country-not-live or seller.step-not-applicable
+          description: seller.invalid-application (fieldErrors), seller.country-not-live, seller.step-not-applicable or seller.step-managed-by-stripe
           content:
             application/problem+json:
               schema:
@@ -603,7 +602,7 @@ paths:
     get:
       tags:
       - Stripe compliance
-      summary: 'Account health: what Stripe needs, with a typed form per requirement'
+      summary: 'Account health: what Stripe needs, and the embedded component that collects each item'
       operationId: accountHealth
       parameters:
       - name: orgId
@@ -618,39 +617,28 @@ paths:
             '*/*':
               schema:
                 $ref: '#/components/schemas/AccountHealth'
-  /v1/orgs/{orgId}/account-health/requirements/{requirement}:
+  /v1/orgs/{orgId}/stripe/account-session:
     post:
       tags:
       - Stripe compliance
-      summary: Answer a requirement (owner / finance)
-      description: Values follow the requirement's form. Documents are media asset ids (uploaded to Stripe Files with purpose
-        account_requirement); SSNs and bank accounts are Stripe.js tokens. The requirement then shows as pending verification
-        until Stripe confirms.
-      operationId: answerRequirement
+      summary: Account Session for Stripe's embedded components (owner / finance)
+      description: "Seller accounts are Stripe-collected: what Stripe needs (identity, tax ID, documents, terms) and the payout
+        bank account are entered in Stripe's embedded components — account onboarding, account management, notification banner
+        — never through AfroTransact. Returns client_secret for Connect.js. Staff can't open one."
+      operationId: orgAccountSession
       parameters:
       - name: orgId
         in: path
         required: true
         schema:
           type: string
-      - name: requirement
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RequirementAnswer'
-        required: true
       responses:
         '200':
           description: OK
           content:
             '*/*':
               schema:
-                $ref: '#/components/schemas/AccountHealth'
+                $ref: '#/components/schemas/AccountSession'
   /v1/orgs/{orgId}/billing:
     get:
       tags:
@@ -1290,7 +1278,7 @@ paths:
     post:
       tags:
       - Stripe webhooks
-      summary: 'Connect events: account.updated, capability.updated, person.created/updated, account.external_account.updated,
+      summary: 'Connect events: account.updated, capability.updated, person.created/updated, account.external_account.created/updated/deleted,
         payout.failed, account.application.deauthorized'
       operationId: stripeConnectWebhook
       parameters:
@@ -1612,29 +1600,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Owner'
-    PayoutsStep:
-      type: object
-      description: Step 'payouts'. Only last 4 digits are stored. The bank account goes to Stripe as the connected account's
-        payout account, either externalAccountToken (btok_…, Stripe.js) or the routing and account numbers, sent once to
-        Stripe and never stored. The step is complete only once Stripe accepted the account (externalAccountLinked).
-      properties:
-        accountHolderName:
-          type: string
-        accountType:
-          type: string
-          enum:
-          - checking
-          - savings
-        bankName:
-          type: string
-        routingNumber:
-          type: string
-        accountNumber:
-          type: string
-        accountNumberConfirmation:
-          type: string
-        externalAccountToken:
-          type: string
     PlanStep:
       type: object
       description: Step 'plan'. Cards are tokenised client-side (pm_…); only brand, last 4 and expiry are stored. US_BANK_ACCOUNT
@@ -2104,15 +2069,6 @@ components:
       required:
       - kind
       - stripePaymentMethodId
-    RequirementAnswer:
-      type: object
-      properties:
-        values:
-          type: object
-          additionalProperties:
-            type: string
-      required:
-      - values
     AccountHealth:
       type: object
       properties:
@@ -2154,6 +2110,8 @@ components:
           type: object
           additionalProperties:
             type: string
+        payoutBank:
+          $ref: '#/components/schemas/PayoutBank'
         requirements:
           type: array
           items:
@@ -2180,23 +2138,20 @@ components:
         occurredAt:
           type: string
           format: date-time
-    FormField:
+    PayoutBank:
       type: object
+      description: The payout bank account Stripe holds (Stripe collects and changes it in its embedded components). Never the
+        numbers.
       properties:
-        name:
+        id:
           type: string
-        label:
+        bankName:
           type: string
-        type:
+        last4:
           type: string
-        required:
-          type: boolean
-        options:
-          type: array
-          items:
-            type: string
-        pattern:
+        status:
           type: string
+          description: Stripe's status (new, validated, verified, verification_failed, errored)
     RequirementError:
       type: object
       properties:
@@ -2230,10 +2185,10 @@ components:
           type: string
         why:
           type: string
-        fields:
-          type: array
-          items:
-            $ref: '#/components/schemas/FormField'
+        component:
+          type: string
+          description: The Stripe embedded component that collects it (account_management for the payout bank account,
+            account_onboarding for everything else). Nothing is answered through AfroTransact.
     RequirementItem:
       type: object
       properties:
@@ -2580,6 +2535,9 @@ components:
           $ref: '#/components/schemas/Address'
     PayoutSection:
       type: object
+      description: "Step 'payouts': the payout bank account Stripe holds for the connected account, mirrored read-only. Stripe
+        collects and changes it in its embedded components (the account is Stripe-collected, so the platform can't attach
+        one); only the bank name, last 4 digits and Stripe's status are kept."
       properties:
         accountHolderName:
           type: string
@@ -2593,6 +2551,10 @@ components:
           type: string
         externalAccountLinked:
           type: boolean
+          description: Stripe holds a usable payout account (not verification_failed or errored)
+        bankStatus:
+          type: string
+          description: Stripe's status (new, validated, verified, verification_failed, errored)
     PlanSelection:
       type: object
       properties:

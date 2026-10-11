@@ -29,8 +29,6 @@ import com.afrotransact.seller.domain.OrgMember;
 import com.afrotransact.seller.domain.OrgStatus;
 import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.Owner;
-import com.afrotransact.seller.domain.PayoutInput;
-import com.afrotransact.seller.domain.PayoutSection;
 import com.afrotransact.seller.domain.PhoneNumbers;
 import com.afrotransact.seller.domain.Plan;
 import com.afrotransact.seller.domain.ReviewAction;
@@ -42,14 +40,11 @@ import com.afrotransact.seller.domain.TaxIdType;
 import com.afrotransact.seller.domain.TimelineEntry;
 import com.afrotransact.seller.domain.Validated;
 import com.afrotransact.seller.port.ApplicationRepository;
-import com.afrotransact.seller.port.BankAccountDetails;
 import com.afrotransact.seller.port.CallerProfile;
 import com.afrotransact.seller.port.CallerProfileProvider;
 import com.afrotransact.seller.port.FieldCipher;
 import com.afrotransact.seller.port.LaunchListRepository;
-import com.afrotransact.seller.port.LinkedBankAccount;
 import com.afrotransact.seller.port.OrganisationRepository;
-import com.afrotransact.seller.port.StripeConnectGateway;
 import com.afrotransact.platform.events.DomainEventPublisher;
 import com.afrotransact.platform.security.Actor;
 import com.afrotransact.platform.web.error.NotFoundException;
@@ -63,7 +58,6 @@ class OnboardingServiceImpl implements OnboardingService {
     static final String PREFILL_PHONE = "business.phone";
     static final String PREFILL_FIRST = "businessDetails.legalFirstName";
     static final String PREFILL_LAST = "businessDetails.legalLastName";
-    static final String PREFILL_HOLDER = "payouts.accountHolderName";
     static final String PREFILL_STORE = "business.storeName";
     static final String PREFILL_ADDRESS = "businessDetails.address";
 
@@ -76,8 +70,7 @@ class OnboardingServiceImpl implements OnboardingService {
             PREFILL_FIRST, d -> d.businessDetails() == null ? null : d.businessDetails().legalFirstName(),
             PREFILL_LAST, d -> d.businessDetails() == null ? null : d.businessDetails().legalLastName(),
             PREFILL_ADDRESS, d -> d.businessDetails() == null || d.businessDetails().address() == null ? null
-                    : d.businessDetails().address().toString(),
-            PREFILL_HOLDER, d -> d.payouts() == null ? null : d.payouts().accountHolderName());
+                    : d.businessDetails().address().toString());
 
     private final ApplicationRepository apps;
     private final OrganisationRepository orgs;
@@ -87,7 +80,6 @@ class OnboardingServiceImpl implements OnboardingService {
     private final FieldCipher cipher;
     private final CallerProfileProvider profiles;
     private final PhoneNumbers phones;
-    private final StripeConnectGateway stripe;
     private final AccessGuard access;
     private final DomainEventPublisher events;
     private final SellerSettings settings;
@@ -95,8 +87,8 @@ class OnboardingServiceImpl implements OnboardingService {
 
     OnboardingServiceImpl(ApplicationRepository apps, OrganisationRepository orgs, LaunchListRepository launchList,
                           ApplicationRules rules, ApplicationViews views, FieldCipher cipher,
-                          CallerProfileProvider profiles, PhoneNumbers phones, StripeConnectGateway stripe,
-                          AccessGuard access, DomainEventPublisher events, SellerSettings settings, Clock clock) {
+                          CallerProfileProvider profiles, PhoneNumbers phones, AccessGuard access,
+                          DomainEventPublisher events, SellerSettings settings, Clock clock) {
         this.apps = apps;
         this.orgs = orgs;
         this.launchList = launchList;
@@ -105,7 +97,6 @@ class OnboardingServiceImpl implements OnboardingService {
         this.cipher = cipher;
         this.profiles = profiles;
         this.phones = phones;
-        this.stripe = stripe;
         this.access = access;
         this.events = events;
         this.settings = settings;
@@ -217,16 +208,6 @@ class OnboardingServiceImpl implements OnboardingService {
                     d.taxIdType(), d.taxIdLast4(), d.taxIdCipher(), d.dateOfBirth(), d.stateOfFormation(),
                     d.dateOfFormation(), address, d.formationDocumentAssetId(), d.irsDeterminationLetterAssetId()));
         }
-        PayoutSection p = data.payouts();
-        String holder = fill(prefilled, PREFILL_HOLDER, p == null ? null : p.accountHolderName(), k.full());
-        if (p == null) {
-            if (holder != null) {
-                next = next.withPayouts(new PayoutSection(holder, null, null, null, null, false));
-            }
-        } else {
-            next = next.withPayouts(new PayoutSection(holder, p.accountType(), p.bankName(), p.routingLast4(),
-                    p.accountLast4(), p.externalAccountLinked()));
-        }
         return next;
     }
 
@@ -262,7 +243,9 @@ class OnboardingServiceImpl implements OnboardingService {
             case OWNERS -> saveOwners(data, in, ctx);
             case STRIPE_VERIFICATION -> throw new SellerRuleViolation("seller.step-managed-by-stripe",
                     "Stripe verification happens in the embedded Stripe component; create an account session");
-            case PAYOUTS -> savePayouts(data, in);
+            case PAYOUTS -> throw new SellerRuleViolation("seller.step-managed-by-stripe",
+                    "Stripe collects the payout bank account in its embedded components (onboarding, or account "
+                            + "management to change it); AfroTransact only shows what Stripe holds");
             case PLAN -> {
                 if (in.plan() == null) {
                     throw missing("plan");
@@ -391,47 +374,6 @@ class OnboardingServiceImpl implements OnboardingService {
         }
         List<Owner> owners = valid(rules.owners(in.owners(), et, ctx, false));
         return data.withOwners(owners);
-    }
-
-    /**
-     * Payouts: the bank account goes to Stripe as the connected account's payout account (a client-side token, or the
-     * numbers the applicant typed, sent once and never stored). The step is complete only once Stripe accepted it.
-     */
-    private ApplicationData savePayouts(ApplicationData data, StepInput in) {
-        if (in.payouts() == null) {
-            throw missing("payouts");
-        }
-        PayoutInput raw = in.payouts();
-        PayoutSection p = valid(rules.payouts(raw, data.payouts(), false));
-        String token = clean(raw.externalAccountToken());
-        String routing = clean(raw.routingNumber());
-        String account = clean(raw.accountNumber());
-        if (token == null && (routing == null || account == null)) {
-            return data.withPayouts(p);
-        }
-        if (data.stripe() == null || data.stripe().accountId() == null) {
-            throw new SellerRuleViolation("seller.stripe-account-required",
-                    "Finish Stripe verification before adding your payout bank account",
-                    Map.of("payouts.externalAccount", "Finish Stripe verification first"));
-        }
-        if (p.accountHolderName() == null) {
-            throw new SellerRuleViolation("seller.invalid-application", "Some fields are invalid",
-                    Map.of("payouts.accountHolderName", "Required"));
-        }
-        String bankName = p.bankName();
-        String last4 = p.accountLast4();
-        if (token != null) {
-            stripe.attachExternalAccount(data.stripe().accountId(), token);
-        } else {
-            EntityType et = data.entityType();
-            String holderType = et == null || et == EntityType.SOLE_PROPRIETOR ? "individual" : "company";
-            LinkedBankAccount linked = stripe.attachBankAccount(data.stripe().accountId(),
-                    new BankAccountDetails(p.accountHolderName(), holderType, routing, account));
-            bankName = clean(linked.bankName()) != null ? linked.bankName() : bankName;
-            last4 = clean(linked.last4()) != null ? linked.last4() : last4;
-        }
-        return data.withPayouts(new PayoutSection(p.accountHolderName(), p.accountType(), bankName, p.routingLast4(),
-                last4, true));
     }
 
     private ApplicationView applicantView(Application app) {

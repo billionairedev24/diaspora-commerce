@@ -236,14 +236,10 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 				return
 			}
 			u.Application["owners"] = b["owners"]
-		case "payouts":
-			acct, _ := b["accountNumber"].(string)
-			if acct == "" {
-				problem(w, 422, "seller.invalid-application", "Some fields are invalid", map[string]any{"fieldErrors": map[string]string{"payouts.accountNumber": "4 to 17 digits"}})
-				return
-			}
-			u.Application["payouts"] = map[string]any{"accountHolderName": b["accountHolderName"], "accountType": b["accountType"], "bankName": "STRIPE TEST BANK",
-				"routingLast4": "0021", "accountLast4": acct[len(acct)-4:], "externalAccountLinked": true}
+		case "stripe-verification", "payouts":
+			// Stripe-collected accounts: Stripe's embedded components collect these, never a step body.
+			problem(w, 422, "seller.step-managed-by-stripe", "Stripe collects this in its embedded components", nil)
+			return
 		case "plan":
 			if c, _ := b["planCode"].(string); c == "" {
 				problem(w, 422, "seller.invalid-application", "Some fields are invalid", map[string]any{"fieldErrors": map[string]string{"plan.planCode": "Choose a plan"}})
@@ -294,8 +290,10 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 		}
 		u.Application["stripe"] = map[string]any{"accountId": "acct_local_1", "detailsSubmitted": true, "chargesEnabled": true, "payoutsEnabled": true,
 			"identityStatus": "verified", "taxIdStatus": "verified", "currentlyDue": []string{}}
+		// The payout bank Stripe's embedded onboarding collected, mirrored read-only.
+		u.Application["payouts"] = map[string]any{"bankName": "STRIPE TEST BANK", "accountLast4": "6789", "externalAccountLinked": true, "bankStatus": "new"}
 		done, _ := u.Application["completedSteps"].([]string)
-		u.Application["completedSteps"] = append(done, "stripe-verification")
+		u.Application["completedSteps"] = append(done, "stripe-verification", "payouts")
 		writeJSON(w, 200, u.Application)
 	})
 	mux.HandleFunc("POST /v1/applications/me/submit", func(w http.ResponseWriter, r *http.Request) {
@@ -347,7 +345,24 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 		}
 		writeJSON(w, 200, map[string]any{"accountId": "acct_1", "orgId": r.PathValue("id"), "status": "ACTION_NEEDED", "chargesEnabled": true,
 			"payoutsEnabled": true, "payoutsPaused": false, "listingsHidden": false, "openItems": 2, "currentDeadline": "2026-10-24T00:00:00Z",
-			"requirements": []map[string]any{{"requirement": "company.tax_id", "bucket": "currently_due"}, {"requirement": "external_account", "bucket": "past_due"}}})
+			"payoutBank": map[string]any{"id": "ba_1", "bankName": "STRIPE TEST BANK", "last4": "6789", "status": "errored"},
+			"requirements": []map[string]any{{"requirement": "company.tax_id", "bucket": "currently_due", "form": map[string]any{"component": "account_onboarding"}},
+				{"requirement": "external_account", "bucket": "past_due", "form": map[string]any{"component": "account_management"}}}})
+	})
+	mux.HandleFunc("POST /v1/orgs/{id}/stripe/account-session", func(w http.ResponseWriter, r *http.Request) {
+		if u.AccountHealthForbidden {
+			problem(w, 403, "seller.org-role-required", "Only the organisation's finance or owner can do this", nil)
+			return
+		}
+		if r.PathValue("id") == PendingOrgID {
+			problem(w, 404, "seller.no-connected-account", "No Stripe account yet", nil)
+			return
+		}
+		u.mu.Lock()
+		local := u.StripeLocalTest
+		u.mu.Unlock()
+		//nolint:gosec // a test fixture, not a credential
+		writeJSON(w, 200, map[string]any{"accountId": "acct_1", "clientSecret": "accs_secret_org", "expiresAt": "2026-10-10T13:00:00Z", "localTest": local})
 	})
 	billing := func() map[string]any {
 		return map[string]any{"orgId": SellerOrgID, "planCode": u.seller.plan, "planName": "Seller Growth", "cadence": "QUARTERLY", "status": "ACTIVE",

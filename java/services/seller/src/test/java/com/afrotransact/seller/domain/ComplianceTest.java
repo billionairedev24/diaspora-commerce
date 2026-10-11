@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -99,14 +98,21 @@ class ComplianceTest {
     }
 
     @Test
-    void answeringMovesARequirementToPendingVerification() {
-        ConnectAccount due = ConnectAccount.open("acct_1", "org_1", NOW).apply(snap(List.of("business_profile.url"),
-                List.of(), List.of(), NOW.plus(Duration.ofDays(6)), null, true), 1, NOW).account();
-        assertThat(due.status()).isEqualTo(ComplianceStatus.ACTION_NEEDED);
-        ConnectAccount answered = due.answered("business_profile.url", NOW);
-        assertThat(answered.requirements().currentlyDue()).isEmpty();
-        assertThat(answered.requirements().pendingVerification()).containsExactly("business_profile.url");
-        assertThat(answered.status()).isEqualTo(ComplianceStatus.VERIFYING);
+    void theMirroredPayoutBankSurvivesSnapshotsThatDontListIt() {
+        PayoutBank bank = new PayoutBank("ba_1", "STRIPE TEST BANK", "6789", "new");
+        ConnectAccount withBank = ConnectAccount.open("acct_1", "org_1", NOW).apply(snap(List.of(), List.of(),
+                List.of(), null, null, true).withPayoutBank(bank), 1, NOW).account();
+        assertThat(withBank.requirements().payoutBank()).isEqualTo(bank);
+        ConnectAccount later = withBank.apply(snap(List.of(), List.of(), List.of(), null, null, true), 2, NOW)
+                .account();
+        assertThat(later.requirements().payoutBank()).as("kept: the payload did not list external accounts")
+                .isEqualTo(bank);
+        PayoutBank failed = new PayoutBank("ba_1", "STRIPE TEST BANK", "6789", "errored");
+        ConnectAccount errored = later.withPayoutBank(failed, NOW);
+        assertThat(errored.externalAccountStatus()).isEqualTo("errored");
+        assertThat(errored.requirements().payoutBank().failed()).isTrue();
+        assertThat(errored.withoutPayoutBank("ba_other", NOW).requirements().payoutBank()).isNotNull();
+        assertThat(errored.withoutPayoutBank("ba_1", NOW).requirements().payoutBank()).isNull();
     }
 
     @Test
@@ -133,7 +139,7 @@ class ComplianceTest {
     }
 
     @Test
-    void requirementFormsAreTypedAndValidated() {
+    void everyRequirementIsAnsweredInStripesEmbeddedComponents() {
         assertThat(RequirementCatalog.classify("company.tax_id")).isEqualTo(RequirementKind.TAX_ID);
         assertThat(RequirementCatalog.classify("individual.id_number")).isEqualTo(RequirementKind.ID_NUMBER);
         assertThat(RequirementCatalog.classify("person_1Abc.verification.document"))
@@ -147,22 +153,14 @@ class ComplianceTest {
         assertThat(RequirementCatalog.classify("tos_acceptance.date")).isEqualTo(RequirementKind.TOS_ACCEPTANCE);
         assertThat(RequirementCatalog.classify("external_account")).isEqualTo(RequirementKind.BANK_ACCOUNT);
         assertThat(RequirementCatalog.classify("business_profile.mcc")).isEqualTo(RequirementKind.UNSUPPORTED);
-        assertThat(RequirementCatalog.form("company.tax_id").fields()).extracting(FormField::name)
-                .containsExactly("ein");
-
-        LocalDate today = LocalDate.of(2026, 10, 10);
-        assertThat(RequirementCatalog.answer("company.tax_id", Map.of("ein", "12-3456789"), today).value().ein())
-                .isEqualTo("123456789");
-        assertThat(RequirementCatalog.answer("company.tax_id", Map.of("ein", "07-1234567"), today).errors())
-                .containsKey("ein");
-        assertThat(RequirementCatalog.answer("representative.dob", Map.of("dateOfBirth", "2010-01-01"), today)
-                .errors()).containsKey("dateOfBirth");
-        assertThat(RequirementCatalog.answer("tos_acceptance", Map.of("accept", "false"), today).errors())
-                .containsKey("accept");
-        assertThat(RequirementCatalog.answer("external_account", Map.of("routingNumber", "021000021",
-                "bankAccountToken", "btok_123"), today).value().routingLast4()).isEqualTo("0021");
-        assertThat(RequirementCatalog.answer("company.verification.document", Map.of("documentType", "Selfie",
-                "frontAssetId", "a1"), today).errors()).containsKey("documentType");
+        // Stripe-collected accounts: the bank account is changed in account management, the rest in onboarding.
+        assertThat(RequirementCatalog.form("external_account").component())
+                .isEqualTo(RequirementForm.ACCOUNT_MANAGEMENT);
+        for (String key : List.of("company.tax_id", "individual.id_number", "representative.dob.day",
+                "tos_acceptance.date", "person_1Abc.verification.document", "business_profile.mcc")) {
+            assertThat(RequirementCatalog.form(key).component()).as(key).isEqualTo(RequirementForm.ACCOUNT_ONBOARDING);
+        }
+        assertThat(RequirementCatalog.form("company.tax_id").label()).isEqualTo("Company tax ID (EIN)");
     }
 
     @Test

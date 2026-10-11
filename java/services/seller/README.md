@@ -45,8 +45,8 @@ steps shown (no `owners` for sole proprietors); `POST /v1/applications/me/submit
 | `business` | offering products / services / both (sellers must include products, providers services), entity type, country — non-live countries → `422 seller.country-not-live` (live list: `SELLER_LIVE_COUNTRIES`, default `US`), store name, email, phone (libphonenumber, mobile, stored E.164) |
 | `business-details` | sole proprietor: legal first/last name, SSN/ITIN, DOB 18+, address. LLCs, corporation, partnership: legal name, EIN, state + date of formation, address, formation document asset id. Nonprofit: + IRS determination letter |
 | `owners` | everyone ≥ 25 % (below 25 % only with significant control), total ≤ 100 %, ≥ 1 significant-control person, multi-member LLC and partnership ≥ 2 people |
-| `stripe-verification` | `POST /v1/applications/me/stripe/account-session` creates the connected account on first use (controller: Stripe-collected requirements, fees and losses on the platform, no Stripe dashboard, manual payouts) and returns the Account Session `client_secret` for the embedded account-onboarding / account-management components; `POST …/stripe/refresh` re-reads verification results. Submission needs `details_submitted` |
-| `payouts` | ABA routing checksum, account number entered twice, last 4 + bank name stored, `externalAccountToken` attached to the connected account |
+| `stripe-verification` | `POST /v1/applications/me/stripe/account-session` creates the connected account on first use (controller: Stripe-collected requirements, Stripe-liable losses, the account pays its own fees, no Stripe dashboard, manual payouts) and returns the Account Session `client_secret` for the embedded account-onboarding / account-management / notification-banner components (no feature overrides: Stripe collects the payout bank account, and `external_account_collection` can only be false when the platform collects requirements); `POST …/stripe/refresh` re-reads verification results and the payout bank. Complete when details are submitted, nothing is currently due and the account isn't rejected |
+| `payouts` | read-only: the payout bank account Stripe holds (bank name, last 4, Stripe's status), mirrored from the account's `external_accounts` and `account.external_account.*` webhooks. Saving the step answers `422 seller.step-managed-by-stripe`: Stripe's onboarding collects the bank and its account management changes it. Complete when Stripe holds a usable (not failed) bank, `external_account` isn't due and payouts are enabled or only waiting for Stripe's checks |
 | `plan` | plan of the org's kind + cadence + payment method (`CARD` brand/last 4/expiry, or `US_BANK_ACCOUNT` = payout bank by ACH); response carries the first-charge sentence |
 | `catalog-compliance` | groceries/perishables/prepared food → food permit (number, expiry, document); beauty → labelling confirmation; regulated services → licence number, issuing state, expiry (expired rejected), licence document + insurance; agreements and W-9 certification |
 
@@ -102,7 +102,8 @@ admin and fulfilment members change; staff `seller:ship-from`). Up to 20 per org
 `com.stripe.net.Webhook.constructEvent`, de-duplicated by event id in `stripe_webhook_event` (same transaction as the
 change), `account.updated` snapshots applied only when `event.created ≥ requirements_version` (older ones are
 recorded as `stale`). Handles `account.updated`, `capability.updated`, `person.created/updated`,
-`account.external_account.updated`, `payout.failed`, `account.application.deauthorized`.
+`account.external_account.created/updated/deleted` (bank accounts only: the payout bank mirrored onto the account and
+the open application), `payout.failed`, `account.application.deauthorized`.
 
 Status: past due or disabled → `RESTRICTED`; currently due with ≤ 3 days to the deadline → `RESTRICTED_SOON`, else
 `ACTION_NEEDED`; only pending verification → `VERIFYING`; else `COMPLIANT`. Enforcement: past due → payouts paused
@@ -112,8 +113,8 @@ Status: past due or disabled → `RESTRICTED`; currently due with ≤ 3 days to 
 
 | Endpoint | Who |
 |---|---|
-| `GET /v1/orgs/{orgId}/account-health` | org owner / finance; staff and service tokens (principal type `SERVICE`) with `compliance:remind`, `compliance:hold` or `sellers:enforce`: status, flags, each requirement with a typed form (tax ID, ID number token, verification document, ownership declaration, representative DOB / title, ToS acceptance, bank account token, business URL) |
-| `POST /v1/orgs/{orgId}/account-health/requirements/{requirement} {values}` | org owner / finance: validated, documents fetched from media-service (`GET /v1/assets/{id}` → signed URL) and uploaded to Stripe Files (`account_requirement`, on the connected account), then Accounts / Persons update; the item moves to pending verification |
+| `GET /v1/orgs/{orgId}/account-health` | org owner / finance; staff and service tokens (principal type `SERVICE`) with `compliance:remind`, `compliance:hold` or `sellers:enforce`: status, flags, the payout bank Stripe holds and each requirement with its label and the embedded component that collects it (`account_management` for the payout bank, `account_onboarding` for everything else). Read-only |
+| `POST /v1/orgs/{orgId}/stripe/account-session` | org owner / finance (not staff): Account Session for Stripe's embedded components. Seller accounts are Stripe-collected, so the platform can't update identity, tax, person or bank details through the API once onboarding started; sellers answer Stripe in its components |
 | `GET /v1/compliance/accounts?status=&openOnly=` · `GET /v1/compliance/accounts/{id}` | `compliance:remind` or `compliance:hold` |
 | `POST /v1/compliance/accounts/{id}/reminders` | `compliance:remind` |
 | `POST /v1/compliance/accounts/{id}/payouts/pause` | `compliance:remind` or `compliance:hold` |

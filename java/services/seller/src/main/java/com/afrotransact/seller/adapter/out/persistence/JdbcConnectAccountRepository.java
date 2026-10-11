@@ -10,6 +10,7 @@ import java.util.UUID;
 import com.afrotransact.seller.domain.ComplianceHistoryEntry;
 import com.afrotransact.seller.domain.ComplianceStatus;
 import com.afrotransact.seller.domain.ConnectAccount;
+import com.afrotransact.seller.domain.PayoutBank;
 import com.afrotransact.seller.domain.PayoutHold;
 import com.afrotransact.seller.domain.RequirementError;
 import com.afrotransact.seller.domain.RequirementsSnapshot;
@@ -53,7 +54,8 @@ class JdbcConnectAccountRepository implements ConnectAccountRepository {
                        errors = cast(:errors as jsonb), current_deadline = :deadline, disabled_reason = :disabled,
                        charges_enabled = :charges, payouts_enabled = :payouts, details_submitted = :details,
                        individual_verification = :individual, capabilities = cast(:caps as jsonb),
-                       persons = cast(:persons as jsonb), external_account_status = :bank, status = :status,
+                       persons = cast(:persons as jsonb), external_account_status = :bank,
+                       payout_bank = cast(:payoutBank as jsonb), status = :status,
                        requirements_version = :rv, payouts_paused = :paused, hold_reason = :hold,
                        listings_hidden = :hidden, deauthorized = :deauth, reminders_sent = :reminders,
                        last_reminder_at = :lastReminder, updated_at = :at, version = version + 1
@@ -66,6 +68,7 @@ class JdbcConnectAccountRepository implements ConnectAccountRepository {
                 .param("payouts", r.payoutsEnabled()).param("details", r.detailsSubmitted())
                 .param("individual", r.individualVerificationStatus()).param("caps", json.write(r.capabilities()))
                 .param("persons", json.write(a.persons())).param("bank", a.externalAccountStatus())
+                .param("payoutBank", r.payoutBank() == null ? null : json.write(r.payoutBank()))
                 .param("status", a.status().name()).param("rv", a.requirementsVersion())
                 .param("paused", a.payoutsPaused()).param("hold", a.holdReason() == null ? null : a.holdReason().name())
                 .param("hidden", a.listingsHidden()).param("deauth", a.deauthorized())
@@ -174,13 +177,18 @@ class JdbcConnectAccountRepository implements ConnectAccountRepository {
                 .param("now", Sql.ts(now)).update();
     }
 
+    private PayoutBank payoutBank(String column) {
+        return column == null ? null : json.read(column, PayoutBank.class);
+    }
+
     private ConnectAccount map(ResultSet rs, int n) throws SQLException {
         RequirementsSnapshot r = new RequirementsSnapshot(json.strings(rs.getString("currently_due")),
                 json.strings(rs.getString("eventually_due")), json.strings(rs.getString("past_due")),
                 json.strings(rs.getString("pending_verification")), json.read(rs.getString("errors"), ERRORS),
                 Sql.instant(rs, "current_deadline"), rs.getString("disabled_reason"),
                 rs.getBoolean("charges_enabled"), rs.getBoolean("payouts_enabled"), rs.getBoolean("details_submitted"),
-                rs.getString("individual_verification"), json.stringMap(rs.getString("capabilities")));
+                rs.getString("individual_verification"), json.stringMap(rs.getString("capabilities")),
+                payoutBank(rs.getString("payout_bank")));
         String hold = rs.getString("hold_reason");
         return new ConnectAccount(rs.getString("account_id"), rs.getString("org_id"), r,
                 ComplianceStatus.valueOf(rs.getString("status")), rs.getLong("requirements_version"),

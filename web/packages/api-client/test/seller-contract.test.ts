@@ -22,7 +22,6 @@ import {
   type OnboardingComplianceInput,
   type OnboardingDetailsInput,
   type OnboardingOwnersInput,
-  type OnboardingPayoutsInput,
   type OnboardingPlanInput,
   type OnboardingPlans,
   type OnboardingStatus,
@@ -60,7 +59,6 @@ describe('Seller Zod schemas stay aligned with contracts/openapi/gateway-bff-sel
     expectTypeOf<OnboardingBusinessInput>().toExtend<S['OnboardingBusinessInput']>();
     expectTypeOf<OnboardingDetailsInput>().toExtend<S['OnboardingDetailsInput']>();
     expectTypeOf<OnboardingOwnersInput>().toExtend<S['OnboardingOwnersInput']>();
-    expectTypeOf<OnboardingPayoutsInput>().toExtend<S['OnboardingPayoutsInput']>();
     expectTypeOf<OnboardingPlanInput>().toExtend<S['OnboardingPlanInput']>();
     expectTypeOf<OnboardingComplianceInput>().toExtend<S['OnboardingComplianceInput']>();
     expectTypeOf<OnboardingStripeSession>().toExtend<S['OnboardingStripeSession']>();
@@ -108,6 +106,12 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(keysOf(session)).toEqual(['home', 'orders', 'listings', 'inventory', 'storefront', 'payouts', 'fees', 'billing', 'account-health', 'team']);
     expect(session.navGroups.map((g) => g.label)).toEqual(['Overview', 'Commerce', 'Growth', 'Finance', 'Trust & compliance', 'Settings']);
     await expect(api.getCompliance()).resolves.toMatchObject({ showBanner: true, tone: 'warning', openItems: 2 });
+    // Account health: each item names the Stripe embedded component that collects it; the payout bank is changed in
+    // account management. The Account Session is the labelled local stand-in in the mock.
+    const health = await api.getCompliance();
+    expect(health.items.map((i) => i.component)).toEqual(['account_onboarding', 'account_management']);
+    expect(health.payoutBank).toMatchObject({ last4: '6789', status: 'errored' });
+    await expect(api.createSellerStripeSession()).resolves.toMatchObject({ localTest: true });
     const dash = await api.getDashboard(30);
     expect(dash.charts.map((c) => c.id)).toEqual(['sales', 'top-products', 'fulfilment', 'stock']);
     const orders = await api.listOrders({ limit: 10 });
@@ -210,13 +214,13 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(details.form.prefilled).toEqual(['business.contactEmail', 'business.phone', 'details.legalLastName']);
   });
 
-  it('runs the whole wizard: completion only with real data, Stripe stand-in, payouts linked, submit (S289)', async () => {
+  it('runs the whole wizard: completion only with real data, Stripe stand-in collecting the payout bank, submit (S289)', async () => {
     const api = client();
     getSellerDb().orgs = [];
     const started = await api.startOnboarding('SELLER');
     expect(started.resumeStep).toBe('business');
-    // The prefilled payout holder name is not a payout account.
-    expect(started.form.payouts.accountHolderName).toBe('Titilayo Adebayo');
+    // Stripe collects the payout bank account: nothing to show before the Stripe account.
+    expect(started.form.payouts).toMatchObject({ status: 'NOT_STARTED', linked: false, accountLast4: null });
     expect(started.steps.find((s) => s.key === 'PAYOUTS')?.state).toBe('TODO');
     const b = await api.saveOnboardingBusiness({ offering: 'PRODUCTS', entityType: 'SINGLE_MEMBER_LLC', country: 'US', storeName: 'Titi Foods', contactEmail: 't@titi.test', phone: '+17132490142' });
     expect(b.steps.map((s) => `${s.slug}:${s.state}`)).toEqual(['business:DONE', 'business-details:TODO', 'owners:TODO', 'stripe-verification:TODO', 'payouts:TODO', 'plan:TODO', 'catalog-compliance:TODO', 'review:TODO']);
@@ -231,15 +235,15 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const o = await api.saveOnboardingOwners({ owners: [{ firstName: 'Titi', lastName: 'Adebayo', title: 'Owner', email: 't@titi.test', ownershipPercent: 100, significantControl: true, dateOfBirth: '1985-01-02',
       address: { line1: '1 Main St', city: 'Houston', state: 'TX', postalCode: '77002' } }] });
     expect(o.resumeStep).toBe('stripe-verification');
-    await expect(api.saveOnboardingPayouts({ accountHolderName: 'Titi Foods LLC', accountType: 'checking', routingNumber: '021000021', accountNumber: '000123456789', accountNumberConfirmation: '000123456789' }))
-      .rejects.toSatisfy((e) => isApiError(e) && e.fieldErrors['payouts.externalAccount'] !== undefined);
     const session = await api.createOnboardingStripeSession();
     expect(session.localTest).toBe(true);
+    expect((await api.getOnboarding()).form.payouts.status).toBe('NEEDS_BANK');
+    // The stand-in, like Stripe's embedded onboarding, collects the payout bank too: "Payouts" completes from it.
     const verified = await api.refreshOnboardingStripe();
     expect(verified.stripe.status).toBe('VERIFIED');
-    const p = await api.saveOnboardingPayouts({ accountHolderName: 'Titi Foods LLC', accountType: 'checking', routingNumber: '021000021', accountNumber: '000123456789', accountNumberConfirmation: '000123456789' });
-    expect(p.form.payouts).toMatchObject({ linked: true, accountLast4: '6789' });
-    expect(JSON.stringify(p)).not.toContain('000123456789');
+    expect(verified.form.payouts).toMatchObject({ status: 'READY', linked: true, accountLast4: '6789', bankStatus: 'new' });
+    expect(verified.steps.find((s) => s.key === 'PAYOUTS')?.state).toBe('DONE');
+    expect('saveOnboardingPayouts' in api).toBe(false);
     const plans = await api.getOnboardingPlans();
     expect(plans.plans.map((x) => x.code)).toEqual(['seller_essentials', 'seller_growth', 'seller_pro']);
     await api.saveOnboardingPlan({ planCode: 'seller_essentials', cadence: 'MONTHLY' });

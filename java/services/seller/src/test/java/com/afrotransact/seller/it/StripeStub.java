@@ -10,8 +10,9 @@ import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.verification.LoggedRequest;
 
 /**
- * In-JVM WireMock standing in for api.stripe.com, files.stripe.com and media-service. Responses are templated so
- * every organisation gets distinct Stripe ids.
+ * In-JVM WireMock standing in for api.stripe.com and media-service. Responses are templated so every organisation
+ * gets distinct Stripe ids. Seller accounts are Stripe-collected, so there are no stubs for account, person or bank
+ * account updates: a call to one fails the test. Retrieved accounts list the bank Stripe's onboarding collected.
  */
 final class StripeStub {
 
@@ -26,22 +27,9 @@ final class StripeStub {
                         + "\"payouts_enabled\":false,\"details_submitted\":false}")));
         wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+"))
                 .willReturn(json(account("{{request.pathSegments.[2]}}"))));
-        wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+"))
-                .willReturn(json(account("{{request.pathSegments.[2]}}"))));
-        wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+/external_accounts"))
-                .willReturn(json("{\"id\":\"ba_" + RANDOM + "\",\"object\":\"bank_account\",\"last4\":\"6789\","
-                        + "\"bank_name\":\"Chase\",\"status\":\"new\"}")));
-        wm.stubFor(WireMock.get(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+/persons"))
-                .willReturn(json("{\"object\":\"list\",\"data\":[{\"id\":\"person_Rep1\",\"object\":\"person\","
-                        + "\"relationship\":{\"representative\":true}}],\"has_more\":false,\"url\":\"/v1/persons\"}")));
-        wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/accounts/acct_[A-Za-z0-9]+/persons/person_[A-Za-z0-9]+"))
-                .willReturn(json("{\"id\":\"{{request.pathSegments.[4]}}\",\"object\":\"person\"}")));
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/account_sessions"))
                 .willReturn(json("{\"object\":\"account_session\",\"account\":\"acct_x\",\"client_secret\":"
                         + "\"accs_secret_test\",\"expires_at\":4102444800,\"livemode\":false}")));
-        wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/files"))
-                .willReturn(json("{\"id\":\"file_" + RANDOM + "\",\"object\":\"file\",\"purpose\":"
-                        + "\"account_requirement\"}")));
         wm.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/customers"))
                 .willReturn(json("{\"id\":\"cus_" + RANDOM + "\",\"object\":\"customer\"}")));
         wm.stubFor(WireMock.post(WireMock.urlPathMatching("/v1/customers/cus_[A-Za-z0-9]+"))
@@ -115,7 +103,10 @@ final class StripeStub {
                 + "\"individual\":{\"verification\":{\"status\":\"verified\"}},"
                 + "\"capabilities\":{\"card_payments\":\"active\",\"transfers\":\"active\"},"
                 + "\"requirements\":{\"currently_due\":[],\"eventually_due\":[],\"past_due\":[],"
-                + "\"pending_verification\":[],\"errors\":[],\"current_deadline\":null,\"disabled_reason\":null}}";
+                + "\"pending_verification\":[],\"errors\":[],\"current_deadline\":null,\"disabled_reason\":null},"
+                + "\"external_accounts\":{\"object\":\"list\",\"data\":[{\"id\":\"ba_" + id + "\","
+                + "\"object\":\"bank_account\",\"bank_name\":\"STRIPE TEST BANK\",\"last4\":\"6789\","
+                + "\"status\":\"new\",\"default_for_currency\":true,\"currency\":\"usd\"}],\"has_more\":false}}";
     }
 
     private static String subscription(String id, String status) {

@@ -107,15 +107,31 @@ type OnboardingOwner struct {
 	Address            *OnboardingAddress `json:"address"`
 }
 
-// OnboardingPayouts is the payout bank account as Stripe accepted it (last 4 digits only).
+// OnboardingPayouts is the payout bank account Stripe holds, read-only: Stripe collects it in its embedded onboarding
+// and changes it in account management (seller accounts are Stripe-collected). Never the numbers.
 type OnboardingPayouts struct {
-	AccountHolderName *string `json:"accountHolderName"`
-	AccountType       *string `json:"accountType"`
-	BankName          *string `json:"bankName"`
-	RoutingLast4      *string `json:"routingLast4"`
-	AccountLast4      *string `json:"accountLast4"`
-	Linked            bool    `json:"linked"`
+	// Status is NOT_STARTED, NEEDS_BANK, FAILED, VERIFYING or READY (see the Payouts* constants).
+	Status       string  `json:"status"`
+	BankName     *string `json:"bankName"`
+	AccountLast4 *string `json:"accountLast4"`
+	// BankStatus is Stripe's: new, validated, verified, verification_failed or errored.
+	BankStatus *string `json:"bankStatus"`
+	Linked     bool    `json:"linked"`
 }
+
+// "Payouts" states.
+const (
+	// PayoutsNotStarted: no Stripe account yet.
+	PayoutsNotStarted = "NOT_STARTED"
+	// PayoutsNeedsBank: Stripe holds no bank yet (finish Stripe verification, where Stripe collects it).
+	PayoutsNeedsBank = "NEEDS_BANK"
+	// PayoutsFailed: Stripe rejected the bank (change it in account management).
+	PayoutsFailed = "FAILED"
+	// PayoutsVerifying: a bank is on file, payouts aren't on yet.
+	PayoutsVerifying = "VERIFYING"
+	// PayoutsReady: the step is complete.
+	PayoutsReady = "READY"
+)
 
 // OnboardingFirstCharge is the plan's first charge ("Free for 30 days. First charge of $39.00 on …").
 type OnboardingFirstCharge struct {
@@ -240,16 +256,6 @@ type OnboardingOwnerInput struct {
 // OnboardingOwnersInput is PUT /v1/seller/onboarding/owners.
 type OnboardingOwnersInput struct {
 	Owners []OnboardingOwnerInput `json:"owners"`
-}
-
-// OnboardingPayoutsInput is PUT /v1/seller/onboarding/payouts. The numbers go to Stripe once, through the seller
-// service, and are never stored or logged.
-type OnboardingPayoutsInput struct {
-	AccountHolderName         string `json:"accountHolderName"`
-	AccountType               string `json:"accountType"`
-	RoutingNumber             string `json:"routingNumber"`
-	AccountNumber             string `json:"accountNumber"`
-	AccountNumberConfirmation string `json:"accountNumberConfirmation"`
 }
 
 // OnboardingPlanInput is PUT /v1/seller/onboarding/plan. Cards are tokenised by Stripe.js (pm_…).

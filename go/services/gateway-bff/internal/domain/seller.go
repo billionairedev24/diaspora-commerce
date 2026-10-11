@@ -393,6 +393,30 @@ type ComplianceItem struct {
 	Requirement string `json:"requirement"`
 	Label       string `json:"label"`
 	Bucket      string `json:"bucket"`
+	// Component is the Stripe embedded component that collects it: account_management for the payout bank account,
+	// account_onboarding for everything else. Seller accounts are Stripe-collected; nothing is answered through us.
+	Component string `json:"component"`
+}
+
+// Stripe embedded components that collect a requirement.
+const (
+	ComponentAccountOnboarding = "account_onboarding"
+	ComponentAccountManagement = "account_management"
+)
+
+// RequirementComponent is the embedded component for a requirement key when the seller service didn't name one.
+func RequirementComponent(requirement string) string {
+	if strings.HasPrefix(requirement, "external_account") {
+		return ComponentAccountManagement
+	}
+	return ComponentAccountOnboarding
+}
+
+// ComplianceBank is the payout bank account Stripe holds.
+type ComplianceBank struct {
+	BankName *string `json:"bankName"`
+	Last4    *string `json:"last4"`
+	Status   *string `json:"status"`
 }
 
 // ComplianceSummary drives the account-health banner.
@@ -408,6 +432,7 @@ type ComplianceSummary struct {
 	ChargesEnabled bool             `json:"chargesEnabled"`
 	PayoutsEnabled bool             `json:"payoutsEnabled"`
 	ListingsHidden bool             `json:"listingsHidden"`
+	PayoutBank     *ComplianceBank  `json:"payoutBank"`
 	Items          []ComplianceItem `json:"items"`
 }
 

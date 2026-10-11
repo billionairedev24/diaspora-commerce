@@ -13,7 +13,6 @@ import com.afrotransact.seller.domain.Cadence;
 import com.afrotransact.seller.domain.RequirementsSnapshot;
 import com.afrotransact.seller.domain.StripePriceFacts;
 import com.afrotransact.seller.port.AccountSession;
-import com.afrotransact.seller.port.BankAccountDetails;
 import com.afrotransact.seller.port.CreateConnectedAccount;
 import com.afrotransact.seller.port.GatewayException;
 import com.afrotransact.seller.port.StripeBillingGateway;
@@ -40,15 +39,8 @@ class LocalTestStripeConnectTest {
         assertThat(snap.chargesEnabled()).isTrue();
         assertThat(snap.payoutsEnabled()).isTrue();
         assertThat(snap.open()).isEmpty();
-    }
-
-    @Test
-    void bankAccountsKeepOnlyTheLastFourAndNeverPrintTheNumbers() {
-        String account = connect.createAccount(new CreateConnectedAccount("org_2", "app_2", "US", null, "company",
-                "k"));
-        BankAccountDetails bank = new BankAccountDetails("Ade LLC", "company", "021000021", "000123456789");
-        assertThat(connect.attachBankAccount(account, bank).last4()).isEqualTo("6789");
-        assertThat(bank.toString()).doesNotContain("000123456789").doesNotContain("021000021").contains("6789");
+        assertThat(snap.payoutBank().last4()).as("the bank Stripe's onboarding would collect").isEqualTo("6789");
+        assertThat(snap.payoutBank().usable()).isTrue();
     }
 
     @Test

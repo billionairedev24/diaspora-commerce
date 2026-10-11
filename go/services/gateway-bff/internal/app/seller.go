@@ -225,11 +225,12 @@ type SellerShellService interface {
 	SaveOnboardingBusiness(ctx context.Context, c *domain.Caller, in domain.OnboardingBusinessInput) (domain.OnboardingStatus, error)
 	SaveOnboardingDetails(ctx context.Context, c *domain.Caller, in domain.OnboardingDetailsInput) (domain.OnboardingStatus, error)
 	SaveOnboardingOwners(ctx context.Context, c *domain.Caller, in domain.OnboardingOwnersInput) (domain.OnboardingStatus, error)
-	SaveOnboardingPayouts(ctx context.Context, c *domain.Caller, in domain.OnboardingPayoutsInput) (domain.OnboardingStatus, error)
 	SaveOnboardingPlan(ctx context.Context, c *domain.Caller, in domain.OnboardingPlanInput) (domain.OnboardingStatus, error)
 	SaveOnboardingCompliance(ctx context.Context, c *domain.Caller, in domain.OnboardingComplianceInput) (domain.OnboardingStatus, error)
 	// OnboardingStripeSession is the Account Session for Stripe's embedded Connect onboarding.
 	OnboardingStripeSession(ctx context.Context, c *domain.Caller) (domain.OnboardingStripeSession, error)
+	// SellerStripeSession is an Account Session for Account health (owner / finance of the active organisation).
+	SellerStripeSession(ctx context.Context, c *domain.Caller) (domain.OnboardingStripeSession, error)
 	// RefreshOnboardingStripe re-reads the verification results from Stripe.
 	RefreshOnboardingStripe(ctx context.Context, c *domain.Caller) (domain.OnboardingStatus, error)
 	// SubmitOnboarding sends the application to AfroTransact staff review.
@@ -399,7 +400,15 @@ func (s *sellerShellImpl) Compliance(ctx context.Context, c *domain.Caller) (dom
 		PayoutsPaused: h.PayoutsPaused, ChargesEnabled: h.ChargesEnabled, PayoutsEnabled: h.PayoutsEnabled, ListingsHidden: h.ListingsHidden,
 		Items: []domain.ComplianceItem{}}
 	for _, r := range h.Requirements {
-		out.Items = append(out.Items, domain.ComplianceItem{Requirement: r.Requirement, Label: domain.RequirementLabel(r.Requirement), Bucket: r.Bucket})
+		component := domain.RequirementComponent(r.Requirement)
+		if r.Form != nil && r.Form.Component != "" {
+			component = r.Form.Component
+		}
+		out.Items = append(out.Items, domain.ComplianceItem{Requirement: r.Requirement, Label: domain.RequirementLabel(r.Requirement), Bucket: r.Bucket,
+			Component: component})
+	}
+	if b := h.PayoutBank; b != nil {
+		out.PayoutBank = &domain.ComplianceBank{BankName: strPtr(b.BankName), Last4: strPtr(b.Last4), Status: strPtr(b.Status)}
 	}
 	if out.OpenItems == 0 {
 		out.OpenItems = len(out.Items)

@@ -62,7 +62,6 @@ import {
   saveCompliance,
   saveDetails,
   saveOwners,
-  savePayouts,
   savePlan,
   submit,
   verifyStripe
@@ -609,9 +608,6 @@ const OwnersBody = z.object({
     ownershipPercent: z.number().min(0).max(100).optional(), significantControl: z.boolean().optional(), dateOfBirth: z.string().optional(), address: AddressBody.optional()
   })).max(10)
 });
-const PayoutsBody = z.object({
-  accountHolderName: z.string(), accountType: z.enum(['checking', 'savings']), routingNumber: z.string(), accountNumber: z.string(), accountNumberConfirmation: z.string()
-});
 const OnboardingPlanBody = z.object({
   planCode: z.string(), cadence: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']), paymentMethodKind: z.enum(['CARD']).optional(), stripePaymentMethodId: z.string().optional(),
   cardBrand: z.string().optional(), cardLast4: z.string().optional(), cardExpMonth: z.number().int().optional(), cardExpYear: z.number().int().optional()
@@ -715,7 +711,6 @@ export const sellerHandlers = [
   ),
   http.put(`${W}/onboarding/business-details`, saveStep(DetailsBody, (app, d) => saveDetails(app, d))),
   http.put(`${W}/onboarding/owners`, saveStep(OwnersBody, (app, o) => saveOwners(app, o.owners))),
-  http.put(`${W}/onboarding/payouts`, saveStep(PayoutsBody, (app, p) => savePayouts(app, p))),
   http.put(`${W}/onboarding/plan`, saveStep(OnboardingPlanBody, (app, p, org) => savePlan(app, org.kind, p))),
   http.put(`${W}/onboarding/catalog-compliance`, saveStep(ComplianceBody, (app, c) => saveCompliance(app, c))),
   http.get(
@@ -807,15 +802,27 @@ export const sellerHandlers = [
       require(ctx, null, 'VIEW');
       if (ctx.org.kind === 'PROVIDER') {
         return { status: 'COMPLIANT', showBanner: false, tone: 'none', title: 'Account in good standing.', message: 'Nothing to do.', openItems: 0, deadline: null,
-          payoutsPaused: false, chargesEnabled: true, payoutsEnabled: true, listingsHidden: false, items: [] };
+          payoutsPaused: false, chargesEnabled: true, payoutsEnabled: true, listingsHidden: false, payoutBank: { bankName: 'Chase', last4: '9921', status: 'verified' }, items: [] };
       }
       const deadline = new Date(ctx.now.getTime() + 14 * 86_400_000);
       return {
         status: 'ACTION_NEEDED', showBanner: true, tone: 'warning', title: 'We need a little more information.',
         message: `2 item(s) due ${deadline.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}. Open Account health to resolve.`, openItems: 2,
         deadline: deadline.toISOString(), payoutsPaused: false, chargesEnabled: true, payoutsEnabled: true, listingsHidden: false,
-        items: [{ requirement: 'company.tax_id', label: 'Company tax ID (EIN)', bucket: 'currently_due' }, { requirement: 'external_account', label: 'Payout bank account', bucket: 'past_due' }]
+        payoutBank: { bankName: 'STRIPE TEST BANK', last4: '6789', status: 'errored' },
+        items: [
+          { requirement: 'company.tax_id', label: 'Company tax ID (EIN)', bucket: 'currently_due', component: 'account_onboarding' },
+          { requirement: 'external_account', label: 'Payout bank account', bucket: 'past_due', component: 'account_management' }
+        ]
       };
+    })
+  ),
+  http.post(
+    `${W}/stripe/session`,
+    route((ctx): OnboardingStripeSession => {
+      require(ctx, null, 'VIEW');
+      // Account health (owner / finance). No Stripe in the mock BFF: the session is the labelled local stand-in.
+      return { accountId: 'acct_local_mock', clientSecret: 'local_test_session_mock', publishableKey: '', expiresAt: null, localTest: true };
     })
   ),
   http.get(

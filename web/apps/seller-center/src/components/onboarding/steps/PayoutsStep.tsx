@@ -1,143 +1,156 @@
 'use client';
 
-import { Button, Select, TextField } from '@afrotransact/ui';
-import { Bank, CheckCircle, LockSimple } from '@phosphor-icons/react/ssr';
+import { isApiError, type OnboardingStatus, type OnboardingStripeSession, sellerKeys } from '@afrotransact/api-client';
+import { Button, cx } from '@afrotransact/ui';
+import { Bank, CheckCircle, CircleNotch, LockSimple, WarningCircle } from '@phosphor-icons/react/ssr';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useImperativeHandle, useState } from 'react';
 
 import { Notice } from '@/components/ui/Notice';
 import { sellerApi } from '@/lib/api';
-import { fieldId, payoutValues, toPayoutsInput, validatePayouts } from '@/lib/onboarding-form';
+import { fieldId, payoutAccountLabel } from '@/lib/onboarding-form';
 import { onboardingHref } from '@/lib/onboarding-wizard';
+import { useSeller } from '@/lib/session';
 
-import { Cell, FieldGrid, StepErrors, type StepProps, useStepForm } from '../WizardKit';
+import { isLocalSession, LocalAccountManagement, StripeEmbedded } from '../StripeEmbedded';
+import { type StepProps } from '../WizardKit';
 
-const digits = (v: string, max: number) => v.replace(/\D/g, '').slice(0, max);
+const NOTE: Record<OnboardingStatus['form']['payouts']['status'], string> = {
+  NOT_STARTED: '',
+  NEEDS_BANK: '',
+  FAILED: 'Stripe couldn’t use this account (a payout bounced or the bank rejected it). Change it to keep receiving payouts.',
+  VERIFYING: 'Stripe has your bank account and is finishing its checks. You can continue meanwhile.',
+  READY: 'Payouts go here on request from your back office, after delivery.'
+};
 
 /**
- * Step 5 "Payouts": the bank account Stripe Connect pays out to. The numbers go to Stripe once (through the seller
- * service) and are never stored; the step is complete only once Stripe accepted the account.
+ * Step 5 "Payouts": the bank account Stripe pays out to. Seller accounts are Stripe-collected, so Stripe collects it
+ * in its embedded onboarding (Stripe verification) and changes it in its account management component ("Change bank
+ * account"); AfroTransact only shows the bank name, last 4 digits and status Stripe reports.
  */
 export function PayoutsStep({ status, ref }: StepProps) {
-  const form = status.form;
-  const p = form.payouts;
-  const disabled = !form.editable;
-  const stripeReady = status.stripe.status !== 'NOT_STARTED';
-  const [replacing, setReplacing] = useState(!p.linked);
-  const f = useStepForm(() => payoutValues(form));
-  const v = f.values;
+  const qc = useQueryClient();
+  const { orgId } = useSeller();
+  const p = status.form.payouts;
+  const disabled = !status.form.editable;
+  const done = status.steps.find((x) => x.key === 'PAYOUTS')?.state === 'DONE';
+  const [session, setSession] = useState<OnboardingStripeSession | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useImperativeHandle(ref, () => ({
     save: (mode) => {
-      if (!replacing) return Promise.resolve(true);
-      // A draft keeps nothing half-typed: bank numbers are only ever sent whole, to Stripe.
-      if (mode === 'draft' && Object.keys(validatePayouts(f.values)).length) return Promise.resolve(true);
-      return f
-        .run(
-          mode,
-          () => validatePayouts(f.values),
-          () => sellerApi().saveOnboardingPayouts(toPayoutsInput(f.values))
-        )
-        .then((ok) => {
-          if (ok) setReplacing(false);
-          return ok;
-        });
+      if (mode === 'draft' || done) return Promise.resolve(true);
+      setError(
+        p.status === 'FAILED'
+          ? 'Change your payout bank account to continue.'
+          : p.status === 'VERIFYING'
+            ? 'Stripe is still checking your bank account. Refresh in a moment.'
+            : 'Add your payout bank account in Stripe verification to continue.'
+      );
+      return Promise.resolve(false);
     }
   }));
 
-  if (p.linked && !replacing) {
+  const apply = (st: OnboardingStatus) => qc.setQueryData(sellerKeys.onboarding(orgId), st);
+  const fail = (e: unknown) => setError(isApiError(e) && e.problem.detail ? e.problem.detail : 'Stripe is unavailable right now. Try again in a minute.');
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fn();
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const openManagement = () => run(async () => setSession(await sellerApi().createOnboardingStripeSession()));
+  const refresh = () =>
+    run(async () => {
+      apply(await sellerApi().refreshOnboardingStripe());
+      setSession(null);
+    });
+
+  if (p.status === 'NOT_STARTED' || p.status === 'NEEDS_BANK') {
     return (
       <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-3">
-          <Bank size={28} className="flex-none" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <strong className="text-sm">
-              {p.bankName ?? 'Bank account'} ••{p.accountLast4}
-            </strong>
-            <div className="text-xs text-muted">
-              {p.accountType === 'savings' ? 'Savings' : 'Checking'} · {p.accountHolderName} · routing •••••{p.routingLast4}
-            </div>
-          </div>
-          <span className="inline-flex items-center gap-1 text-sm font-semibold text-success">
-            <CheckCircle size={18} weight="fill" aria-hidden /> Linked to Stripe
-          </span>
-          {!disabled ? (
-            <Button size="sm" variant="link" onClick={() => setReplacing(true)}>
-              Use a different account
+        <Notice tone="info" title="Stripe collects your payout bank account.">
+          Add it in <Link href={onboardingHref('stripe-verification')}>Stripe verification</Link>, in Stripe’s secure form. It appears here once Stripe has it.
+        </Notice>
+        {p.status === 'NEEDS_BANK' && !disabled ? (
+          <div>
+            <Button id={fieldId('payouts')} size="sm" variant="link" onClick={() => void refresh()} disabled={busy}>
+              {busy ? <CircleNotch size={16} className="animate-spin" aria-hidden /> : null}I’ve added it — refresh
             </Button>
-          ) : null}
-        </div>
-        <p className="m-0 text-xs text-muted">Payouts go here weekly, after delivery. The account must belong to the business or owner.</p>
+          </div>
+        ) : null}
+        <Footer error={error} />
       </div>
     );
   }
 
-  const set = (k: 'accountHolderName' | 'routingNumber' | 'accountNumber' | 'accountNumberConfirmation', max = 0) => ({
-    id: fieldId(k),
-    value: v[k],
-    onChange: (e: { target: { value: string } }) => f.patch({ [k]: max ? digits(e.target.value, max) : e.target.value }, [k]),
-    error: f.errors[k],
-    disabled: disabled || !stripeReady
-  });
+  const failed = p.status === 'FAILED';
   return (
     <div className="flex flex-col gap-3">
-      {!stripeReady ? (
-        <Notice tone="info" title="Verify with Stripe first.">
-          Payouts go to the Stripe account that’s created when you <Link href={onboardingHref('stripe-verification')}>start Stripe verification</Link>.
-        </Notice>
+      <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-3">
+        <Bank size={28} className="flex-none" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <strong className="text-sm">{payoutAccountLabel(p)}</strong>
+          <div className="text-xs text-muted">{NOTE[p.status]}</div>
+        </div>
+        <span
+          className={cx(
+            'inline-flex items-center gap-1 text-sm font-semibold',
+            failed ? 'text-danger' : p.status === 'READY' ? 'text-success' : 'text-warning'
+          )}
+        >
+          {failed ? <WarningCircle size={18} weight="fill" aria-hidden /> : <CheckCircle size={18} weight="fill" aria-hidden />}
+          {failed ? 'Needs a new account' : p.status === 'READY' ? 'Held by Stripe' : 'Stripe is checking'}
+        </span>
+        {!disabled && !session ? (
+          <Button id={fieldId('payouts')} size="sm" variant={failed ? 'primary' : 'neutral'} onClick={() => void openManagement()} disabled={busy}>
+            {busy ? <CircleNotch size={16} className="animate-spin" aria-hidden /> : null}
+            Change bank account
+          </Button>
+        ) : null}
+        {p.status === 'VERIFYING' && !session ? (
+          <Button size="sm" variant="link" onClick={() => void refresh()} disabled={busy}>
+            Refresh status
+          </Button>
+        ) : null}
+      </div>
+      {session && isLocalSession(session) ? <LocalAccountManagement onDone={() => void refresh()} /> : null}
+      {session && !isLocalSession(session) ? (
+        <StripeEmbedded
+          session={session}
+          component="account-management"
+          fetchClientSecret={async () => (await sellerApi().createOnboardingStripeSession()).clientSecret}
+          onExit={() => void refresh()}
+        />
       ) : null}
-      <StepErrors errors={f.errors} submitCount={f.submitCount} />
-      <FieldGrid>
-        <Cell span={6}>
-          <TextField label="Account holder name" autoComplete="name" {...set('accountHolderName')} />
-        </Cell>
-        <Cell span={3}>
-          <TextField label="Routing number" inputMode="numeric" placeholder="9 digits" autoComplete="off" {...set('routingNumber', 9)} />
-        </Cell>
-        <Cell span={3}>
-          <Select
-            id={fieldId('accountType')}
-            label="Account type"
-            placeholder="Choose…"
-            options={[
-              { value: 'checking', label: 'Checking' },
-              { value: 'savings', label: 'Savings' }
-            ]}
-            value={v.accountType}
-            onChange={(e) =>
-              f.patch(
-                {
-                  accountType: e.target.value === 'savings' ? 'savings' : e.target.value === 'checking' ? 'checking' : ''
-                },
-                ['accountType']
-              )
-            }
-            error={f.errors.accountType}
-            disabled={disabled || !stripeReady}
-          />
-        </Cell>
-        <Cell span={6}>
-          <TextField type="password" label="Account number" inputMode="numeric" autoComplete="off" {...set('accountNumber', 17)} />
-        </Cell>
-        <Cell span={6}>
-          <TextField type="password" label="Confirm account number" inputMode="numeric" autoComplete="off" {...set('accountNumberConfirmation', 17)} />
-        </Cell>
-      </FieldGrid>
-      <p className="m-0 inline-flex items-center gap-1 text-xs text-muted">
-        <LockSimple size={12} aria-hidden /> Sent once to Stripe as your payout account. AfroTransact keeps only the last 4 digits.
-      </p>
-      {p.linked ? (
+      {session && !isLocalSession(session) ? (
         <div>
-          <Button size="sm" variant="link" onClick={() => setReplacing(false)}>
-            Keep ••{p.accountLast4}
+          <Button size="sm" variant="link" onClick={() => void refresh()} disabled={busy}>
+            Done — refresh
           </Button>
         </div>
       ) : null}
-      {f.failure ? (
-        <p role="alert" className="m-0 text-sm text-danger">
-          {f.failure}
-        </p>
-      ) : null}
+      <Footer error={error} />
     </div>
+  );
+}
+
+function Footer({ error }: { error: string | null }) {
+  return (
+    <>
+      <p className="m-0 inline-flex items-center gap-1 text-xs text-muted">
+        <LockSimple size={12} aria-hidden /> Stripe holds your bank details. AfroTransact only sees the bank name and the last 4 digits.
+      </p>
+      <p role={error ? 'alert' : undefined} className={cx('m-0 min-h-4 text-sm', error ? 'text-danger' : 'text-muted')}>
+        {error}
+      </p>
+    </>
   );
 }

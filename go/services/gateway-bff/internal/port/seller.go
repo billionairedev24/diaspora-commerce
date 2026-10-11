@@ -176,14 +176,13 @@ type SellerApplicationStripe struct {
 	DisabledReason   string   `json:"disabledReason"`
 }
 
-// SellerApplicationPayouts is seller's PayoutSection.
+// SellerApplicationPayouts is seller's PayoutSection: the payout bank account Stripe holds, mirrored read-only
+// (Stripe collects it in its embedded components; the account is Stripe-collected).
 type SellerApplicationPayouts struct {
-	AccountHolderName     string `json:"accountHolderName"`
-	AccountType           string `json:"accountType"`
 	BankName              string `json:"bankName"`
-	RoutingLast4          string `json:"routingLast4"`
 	AccountLast4          string `json:"accountLast4"`
 	ExternalAccountLinked bool   `json:"externalAccountLinked"`
+	BankStatus            string `json:"bankStatus"`
 }
 
 // SellerFirstCharge is seller's FirstCharge.
@@ -260,15 +259,6 @@ type SellerAccountSession struct {
 	LocalTest    bool       `json:"localTest"`
 }
 
-// SellerApplicationPayoutsStep is seller's PayoutsStep.
-type SellerApplicationPayoutsStep struct {
-	AccountHolderName         string `json:"accountHolderName,omitempty"`
-	AccountType               string `json:"accountType,omitempty"`
-	RoutingNumber             string `json:"routingNumber,omitempty"`
-	AccountNumber             string `json:"accountNumber,omitempty"`
-	AccountNumberConfirmation string `json:"accountNumberConfirmation,omitempty"`
-}
-
 // SellerApplicationPlanStep is seller's PlanStep.
 type SellerApplicationPlanStep struct {
 	PlanCode              string `json:"planCode,omitempty"`
@@ -335,10 +325,20 @@ type AddressBook interface {
 	Addresses(ctx context.Context, bearer string) ([]IdentityAddress, error)
 }
 
-// AccountHealthRequirement is one open Stripe requirement.
+// AccountHealthRequirement is one open Stripe requirement and the embedded component that collects it.
 type AccountHealthRequirement struct {
 	Requirement string `json:"requirement"`
 	Bucket      string `json:"bucket"`
+	Form        *struct {
+		Component string `json:"component"`
+	} `json:"form"`
+}
+
+// AccountHealthBank is seller's PayoutBank: the payout bank account Stripe holds (never the numbers).
+type AccountHealthBank struct {
+	BankName string `json:"bankName"`
+	Last4    string `json:"last4"`
+	Status   string `json:"status"`
 }
 
 // AccountHealth is seller's AccountHealth.
@@ -350,6 +350,7 @@ type AccountHealth struct {
 	ListingsHidden  bool                       `json:"listingsHidden"`
 	OpenItems       int                        `json:"openItems"`
 	CurrentDeadline *time.Time                 `json:"currentDeadline"`
+	PayoutBank      *AccountHealthBank         `json:"payoutBank"`
 	Requirements    []AccountHealthRequirement `json:"requirements"`
 }
 
@@ -515,8 +516,11 @@ type SellerServiceClient interface {
 	// SaveApplicationStep autosaves one wizard step (seller PUT /v1/applications/me/steps/{step}).
 	SaveApplicationStep(ctx context.Context, bearer, step string, body any) (SellerApplication, error)
 	// ApplicationStripeSession creates the connected account on first use and an Account Session for Stripe's
-	// embedded onboarding (seller POST /v1/applications/me/stripe/account-session).
+	// embedded components (seller POST /v1/applications/me/stripe/account-session).
 	ApplicationStripeSession(ctx context.Context, bearer string) (SellerAccountSession, error)
+	// OrgStripeSession is an Account Session for an organisation's owner or finance member (Account health: Stripe's
+	// components answer what Stripe needs and change the payout bank; seller POST /v1/orgs/{orgId}/stripe/account-session).
+	OrgStripeSession(ctx context.Context, bearer, orgID string) (SellerAccountSession, error)
 	// RefreshApplicationStripe re-reads the verification results from Stripe (POST …/stripe/refresh).
 	RefreshApplicationStripe(ctx context.Context, bearer string) (SellerApplication, error)
 	// SubmitApplication validates every step and sends the application to staff review (POST …/submit).

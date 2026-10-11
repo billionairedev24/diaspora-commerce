@@ -9,7 +9,6 @@ import com.afrotransact.seller.adapter.in.web.OnboardingDtos.BusinessStep;
 import com.afrotransact.seller.adapter.in.web.OnboardingDtos.ComplianceStep;
 import com.afrotransact.seller.adapter.in.web.OnboardingDtos.OwnerDto;
 import com.afrotransact.seller.adapter.in.web.OnboardingDtos.OwnersStep;
-import com.afrotransact.seller.adapter.in.web.OnboardingDtos.PayoutsStep;
 import com.afrotransact.seller.adapter.in.web.OnboardingDtos.PlanStep;
 import com.afrotransact.seller.application.OnboardingService;
 import com.afrotransact.seller.application.StepInput;
@@ -43,17 +42,18 @@ class OnboardingStepController {
     }
 
     @Operation(summary = "Autosave one step",
-            description = "Steps: business, business-details, owners, payouts, plan, catalog-compliance, review. The "
-                    + "body is the step's data; only the fields present are validated (submit validates "
-                    + "everything). stripe-verification is completed in Stripe's embedded component.")
+            description = "Steps: business, business-details, owners, plan, catalog-compliance, review. The body "
+                    + "is the step's data; only the fields present are validated (submit validates everything). "
+                    + "stripe-verification and payouts are completed in Stripe's embedded components (Stripe "
+                    + "collects the payout bank account); saving them answers 422 seller.step-managed-by-stripe.")
     @ApiResponse(responseCode = "422", description = "seller.invalid-application (fieldErrors), "
-            + "seller.country-not-live or seller.step-not-applicable", content = @Content(
+            + "seller.country-not-live, seller.step-not-applicable or seller.step-managed-by-stripe", content = @Content(
             mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
     @PutMapping("/v1/applications/me/steps/{step}")
     ApplicationResponse saveStep(@PathVariable String step,
                                  @RequestBody(required = true, content = @Content(mediaType = "application/json",
                                          schema = @Schema(oneOf = {BusinessStep.class, BusinessDetailsStep.class,
-                                             OwnersStep.class, PayoutsStep.class, PlanStep.class,
+                                             OwnersStep.class, PlanStep.class,
                                              ComplianceStep.class}))) HttpEntity<JsonNode> request) {
         OnboardingStep s = OnboardingStep.fromKey(step);
         JsonNode b = request.getBody() == null ? json.createObjectNode() : request.getBody();
@@ -66,7 +66,6 @@ class OnboardingStepController {
                 yield StepInput.owners(owners.owners() == null ? List.of()
                         : owners.owners().stream().map(OwnerDto::toOwner).toList());
             }
-            case PAYOUTS -> StepInput.payouts(read(b, PayoutsStep.class).toInput());
             case PLAN -> StepInput.plan(read(b, PlanStep.class).toSection());
             case CATALOG_COMPLIANCE -> StepInput.compliance(read(b, ComplianceStep.class).toSection());
             default -> StepInput.none();

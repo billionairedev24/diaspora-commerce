@@ -69,6 +69,12 @@ export type OnboardingAddress = z.infer<typeof OnboardingAddressSchema>;
 
 export const OnboardingStepKeySchema = z.enum(['BUSINESS', 'BUSINESS_DETAILS', 'OWNERS', 'STRIPE_VERIFICATION', 'PAYOUTS', 'PLAN', 'CATALOG_COMPLIANCE', 'REVIEW']);
 export type OnboardingStepKey = z.infer<typeof OnboardingStepKeySchema>;
+/**
+ * "Payouts": NOT_STARTED (no Stripe account yet), NEEDS_BANK (finish Stripe verification, where Stripe collects the
+ * bank), FAILED (Stripe rejected the bank: change it), VERIFYING (bank on file, payouts not on yet), READY.
+ */
+export const OnboardingPayoutsStatusSchema = z.enum(['NOT_STARTED', 'NEEDS_BANK', 'FAILED', 'VERIFYING', 'READY']);
+export type OnboardingPayoutsStatus = z.infer<typeof OnboardingPayoutsStatusSchema>;
 export const OnboardingStepSlugSchema = z.enum(['business', 'business-details', 'owners', 'stripe-verification', 'payouts', 'plan', 'catalog-compliance', 'review']);
 export type OnboardingStepSlug = z.infer<typeof OnboardingStepSlugSchema>;
 export const OnboardingStepStateSchema = z.enum(['DONE', 'TODO', 'ACTION', 'WAITING', 'BLOCKED']);
@@ -157,12 +163,12 @@ export const OnboardingFormSchema = z.object({
     irsDeterminationLetterAssetId: nullableString
   }),
   owners: z.array(OnboardingOwnerSchema),
+  /** The payout bank account Stripe holds, read-only: Stripe collects it in its embedded components. */
   payouts: z.object({
-    accountHolderName: nullableString,
-    accountType: nullableString,
+    status: OnboardingPayoutsStatusSchema,
     bankName: nullableString,
-    routingLast4: nullableString,
     accountLast4: nullableString,
+    bankStatus: nullableString,
     linked: z.boolean()
   }),
   plan: z.object({
@@ -259,15 +265,6 @@ export interface OnboardingOwnersInput {
   owners: OnboardingOwnerInput[];
 }
 
-/** PUT /v1/seller/onboarding/payouts: the numbers go to Stripe once and are never stored. */
-export interface OnboardingPayoutsInput {
-  accountHolderName: string;
-  accountType: 'checking' | 'savings';
-  routingNumber: string;
-  accountNumber: string;
-  accountNumberConfirmation: string;
-}
-
 /** PUT /v1/seller/onboarding/plan. */
 export interface OnboardingPlanInput {
   planCode: string;
@@ -350,7 +347,12 @@ export const ComplianceSummarySchema = z.object({
   chargesEnabled: z.boolean(),
   payoutsEnabled: z.boolean(),
   listingsHidden: z.boolean(),
-  items: z.array(z.object({ requirement: z.string(), label: z.string(), bucket: z.string() }))
+  /** The payout bank account Stripe holds (changed in Stripe's account management component). */
+  payoutBank: z.object({ bankName: nullableString, last4: nullableString, status: nullableString }).nullable(),
+  /** component: the Stripe embedded component that collects it (nothing is answered through AfroTransact). */
+  items: z.array(
+    z.object({ requirement: z.string(), label: z.string(), bucket: z.string(), component: z.enum(['account_onboarding', 'account_management']) })
+  )
 });
 export type ComplianceSummary = z.infer<typeof ComplianceSummarySchema>;
 

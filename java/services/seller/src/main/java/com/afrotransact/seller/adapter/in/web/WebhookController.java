@@ -21,7 +21,7 @@ class WebhookController {
     }
 
     @Operation(summary = "Connect events: account.updated, capability.updated, person.created/updated, "
-            + "account.external_account.updated, payout.failed, account.application.deauthorized")
+            + "account.external_account.created/updated/deleted, payout.failed, account.application.deauthorized")
     @PostMapping("/v1/webhooks/stripe-connect")
     WebhookResult stripeConnectWebhook(@RequestBody String payload,
                           @RequestHeader(value = "Stripe-Signature", required = false) String signature) {

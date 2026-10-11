@@ -20,7 +20,6 @@ import com.afrotransact.seller.domain.DocumentAccess;
 import com.afrotransact.seller.domain.FirstCharge;
 import com.afrotransact.seller.domain.OnboardingStep;
 import com.afrotransact.seller.domain.Owner;
-import com.afrotransact.seller.domain.PayoutInput;
 import com.afrotransact.seller.domain.PayoutSection;
 import com.afrotransact.seller.domain.PlanSection;
 import com.afrotransact.seller.domain.StripeVerification;
@@ -109,20 +108,6 @@ final class OnboardingDtos {
 
     @Schema(name = "OwnersStep", description = "Step 'owners' (not for sole proprietors)")
     record OwnersStep(List<OwnerDto> owners) {
-    }
-
-    @Schema(name = "PayoutsStep", description = "Step 'payouts'. Only last 4 digits are stored. The bank account "
-            + "goes to Stripe as the connected account's payout account: either externalAccountToken (btok_…, "
-            + "Stripe.js) or the routing and account numbers, sent once to Stripe and never stored. The step is "
-            + "complete only once Stripe accepted the account (externalAccountLinked).")
-    record PayoutsStep(String accountHolderName, @Schema(allowableValues = {"checking", "savings"}) String accountType,
-                       String bankName, String routingNumber, String accountNumber, String accountNumberConfirmation,
-                       String externalAccountToken) {
-
-        PayoutInput toInput() {
-            return new PayoutInput(accountHolderName, accountType, bankName, routingNumber, accountNumber,
-                    accountNumberConfirmation, externalAccountToken);
-        }
     }
 
     @Schema(name = "PlanStep", description = "Step 'plan'. Cards are tokenised client-side (pm_…); only brand, last 4 "

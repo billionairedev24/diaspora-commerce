@@ -165,6 +165,12 @@ func (s *sellerServiceImpl) ApplicationStripeSession(ctx context.Context, bearer
 	return out, err
 }
 
+func (s *sellerServiceImpl) OrgStripeSession(ctx context.Context, bearer, orgID string) (port.SellerAccountSession, error) {
+	var out port.SellerAccountSession
+	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: orgPath(orgID, "/stripe/account-session"), Bearer: bearer}, &out)
+	return out, err
+}
+
 func (s *sellerServiceImpl) RefreshApplicationStripe(ctx context.Context, bearer string) (port.SellerApplication, error) {
 	var a port.SellerApplication
 	_, err := call(ctx, s.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/applications/me/stripe/refresh", Bearer: bearer}, &a)
