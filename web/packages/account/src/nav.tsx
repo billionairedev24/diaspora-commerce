@@ -26,7 +26,7 @@ export function accountSectionOf(pathname: string): AccountSection | null {
   return seg === 'security' || seg === 'notifications' || seg === 'preferences' ? seg : null;
 }
 
-/** Back-office "My account": heading, sub-navigation (side on desktop, tabs on phones) and the section. */
+/** Back-office "My account": heading, the sections as tabs (like the module pages) and the section. */
 export function AccountShell({ active, children }: { active: AccountSection; children: ReactNode }) {
   const t = useAccountT();
   const { Link } = useAccountEnv();
@@ -51,7 +51,7 @@ export function AccountShell({ active, children }: { active: AccountSection; chi
           </Link>
         ))}
       </nav>
-      <div style={{ minWidth: 0 }}>{children}</div>
+      <div className={styles.section}>{children}</div>
     </div>
   );
 }
