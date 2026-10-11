@@ -5,12 +5,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.port.StripeGateway;
 import com.afrotransact.payments.port.StripeGatewayException;
 import com.stripe.StripeClient;
 import com.stripe.exception.CardException;
+import com.stripe.exception.InvalidRequestException;
 import com.stripe.exception.StripeException;
 import com.stripe.model.BalanceTransaction;
 import com.stripe.model.Charge;
@@ -39,35 +41,97 @@ import com.stripe.param.RefundCreateParams;
 import com.stripe.param.SetupIntentCreateParams;
 import com.stripe.param.TransferCreateParams;
 import com.stripe.param.TransferReversalCreateParams;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * stripe-java ({@link StripeClient}) implementation of {@link StripeGateway}. The client's API base is configurable
  * (tests point it at WireMock; every real environment uses api.stripe.com with a test or live key). Wired by
  * PaymentsConfiguration unless the local profile runs without a Stripe key (LocalTestPaymentsPolicy).
+ *
+ * <p>Multicapture (several partial captures of one authorisation, "captured per shipment") is a Stripe flexible
+ * payments feature that must be enabled for the account; requesting it on an account that is not eligible fails every
+ * checkout with "This account is not eligible for the requested card features", even with {@code if_available}. It is
+ * therefore only requested when configured ({@code at.payments.stripe.multicapture=true}), and when Stripe still refuses
+ * it the intent is created once more without it (and it is not requested again by this process). Intents without
+ * multicapture use the idempotency key {@code <key>:single}, so a key is never reused with different parameters.
  */
 public class StripeJavaGateway implements StripeGateway {
 
-    private final StripeClient client;
+    private static final Logger LOG = LoggerFactory.getLogger(StripeJavaGateway.class);
 
+    /** Suffix of the idempotency key of a single-capture intent. */
+    static final String SINGLE_CAPTURE_KEY = ":single";
+
+    private final StripeClient client;
+    private final AtomicBoolean multicapture;
+
+    /** A gateway that creates single-capture intents (accounts without flexible payments). */
     public StripeJavaGateway(StripeClient client) {
+        this(client, false);
+    }
+
+    /**
+     * @param requestMulticapture request {@code request_multicapture=if_available} (only for accounts Stripe enabled
+     *                            for multicapture)
+     */
+    public StripeJavaGateway(StripeClient client, boolean requestMulticapture) {
         this.client = client;
+        this.multicapture = new AtomicBoolean(requestMulticapture);
     }
 
     @Override
     public IntentSnapshot createIntent(CreateIntent request, String idempotencyKey) {
+        if (multicapture.get()) {
+            try {
+                return intent(client.v1().paymentIntents().create(intentParams(request, true).build(),
+                        key(idempotencyKey)), true);
+            } catch (InvalidRequestException e) {
+                if (!multicaptureRefused(e)) {
+                    throw gatewayError(e);
+                }
+                multicapture.set(false);
+                LOG.warn("Stripe refused multicapture for this account ({}); intents are created for a single capture "
+                        + "from now on. Set at.payments.stripe.multicapture=false (STRIPE_MULTICAPTURE) until Stripe "
+                        + "enables flexible payments.", e.getMessage());
+            } catch (StripeException e) {
+                throw gatewayError(e);
+            }
+        }
+        PaymentIntentCreateParams params = intentParams(request, false).build();
+        return call(() -> intent(client.v1().paymentIntents().create(params,
+                key(idempotencyKey + SINGLE_CAPTURE_KEY)), false));
+    }
+
+    /**
+     * True when Stripe refused the multicapture request itself: the account is not eligible for flexible payments
+     * ("This account is not eligible for the requested card features") or does not know the parameter.
+     */
+    static boolean multicaptureRefused(StripeException e) {
+        String message = e.getMessage() == null ? "" : e.getMessage().toLowerCase(Locale.ROOT);
+        String param = e.getStripeError() == null || e.getStripeError().getParam() == null ? ""
+                : e.getStripeError().getParam();
+        return message.contains("not eligible for the requested card features")
+                || message.contains("flexible-payments") || message.contains("flexible payments")
+                || param.contains("request_multicapture");
+    }
+
+    private static PaymentIntentCreateParams.Builder intentParams(CreateIntent request, boolean multicapture) {
         PaymentIntentCreateParams.Builder params = PaymentIntentCreateParams.builder()
                 .setAmount(request.amount().minor())
                 .setCurrency(lower(request.amount().currency()))
                 .setCaptureMethod(PaymentIntentCreateParams.CaptureMethod.MANUAL)
                 .setDescription(request.description())
                 .setTransferGroup(request.transferGroup())
-                .putAllMetadata(request.metadata())
-                .setPaymentMethodOptions(PaymentIntentCreateParams.PaymentMethodOptions.builder()
-                        .setCard(PaymentIntentCreateParams.PaymentMethodOptions.Card.builder()
-                                .setRequestMulticapture(PaymentIntentCreateParams.PaymentMethodOptions.Card
-                                        .RequestMulticapture.IF_AVAILABLE)
-                                .build())
-                        .build());
+                .putAllMetadata(request.metadata());
+        if (multicapture) {
+            params.setPaymentMethodOptions(PaymentIntentCreateParams.PaymentMethodOptions.builder()
+                    .setCard(PaymentIntentCreateParams.PaymentMethodOptions.Card.builder()
+                            .setRequestMulticapture(PaymentIntentCreateParams.PaymentMethodOptions.Card
+                                    .RequestMulticapture.IF_AVAILABLE)
+                            .build())
+                    .build());
+        }
         if (request.customerId() != null && !request.customerId().isBlank()) {
             params.setCustomer(request.customerId());
             if (request.saveForOffSession()) {
@@ -83,7 +147,7 @@ public class StripeJavaGateway implements StripeGateway {
                         .valueOf(type.trim().toUpperCase(Locale.ROOT)));
             }
         }
-        return call(() -> intent(client.v1().paymentIntents().create(params.build(), key(idempotencyKey))));
+        return params;
     }
 
     @Override
@@ -92,14 +156,15 @@ public class StripeJavaGateway implements StripeGateway {
     }
 
     @Override
-    public IntentSnapshot capture(String intentId, Money amount, boolean finalCapture, Map<String, String> metadata,
+    public IntentSnapshot capture(String intentId, Money amount, Boolean finalCapture, Map<String, String> metadata,
                                   String idempotencyKey) {
-        PaymentIntentCaptureParams params = PaymentIntentCaptureParams.builder()
+        PaymentIntentCaptureParams.Builder params = PaymentIntentCaptureParams.builder()
                 .setAmountToCapture(amount.minor())
-                .setFinalCapture(finalCapture)
-                .putAllMetadata(metadata)
-                .build();
-        return call(() -> intent(client.v1().paymentIntents().capture(intentId, params, key(idempotencyKey))));
+                .putAllMetadata(metadata);
+        if (finalCapture != null) {
+            params.setFinalCapture(finalCapture);
+        }
+        return call(() -> intent(client.v1().paymentIntents().capture(intentId, params.build(), key(idempotencyKey))));
     }
 
     @Override
@@ -304,12 +369,19 @@ public class StripeJavaGateway implements StripeGateway {
     }
 
     private static IntentSnapshot intent(PaymentIntent pi) {
+        PaymentIntent.PaymentMethodOptions options = pi.getPaymentMethodOptions();
+        boolean multi = options != null && options.getCard() != null
+                && "if_available".equals(options.getCard().getRequestMulticapture());
+        return intent(pi, multi);
+    }
+
+    private static IntentSnapshot intent(PaymentIntent pi, boolean multicapture) {
         StripeError error = pi.getLastPaymentError();
         String failure = error == null ? null : error.getMessage() == null ? error.getDeclineCode()
                 : error.getMessage();
         return new IntentSnapshot(pi.getId(), pi.getStatus(), pi.getClientSecret(), nz(pi.getAmount()),
                 nz(pi.getAmountCapturable()), nz(pi.getAmountReceived()), pi.getLatestCharge(), failure,
-                pi.getNextAction() == null ? null : pi.getNextAction().getType());
+                pi.getNextAction() == null ? null : pi.getNextAction().getType(), multicapture);
     }
 
     private static RequestOptions key(String idempotencyKey) {

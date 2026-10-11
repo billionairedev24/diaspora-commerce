@@ -182,6 +182,15 @@ class SettlementServiceImpl implements SettlementService {
             settlements.markShipmentChecked(s.orderId(), s.shipmentId(), true, null, now);
             return 0;
         }
+        if (!payment.get().multicapture() && payment.get().capturedPerShipment()) {
+            // Single-capture order (no Stripe multicapture): the first shipment's capture took every line, so the
+            // nets of shipments not delivered yet are in it too. Sellers are paid by the order's settlement instead,
+            // once every shipment is delivered (or cancelled and refunded).
+            LOG.info("Order {}: single-capture payment; shipment {} is settled with the order", s.orderId(),
+                    s.shipmentId());
+            settlements.markShipmentChecked(s.orderId(), s.shipmentId(), true, null, now);
+            return 0;
+        }
         String currency = payment.get().currency();
         List<Payment> all = new ArrayList<>();
         all.add(payment.get());

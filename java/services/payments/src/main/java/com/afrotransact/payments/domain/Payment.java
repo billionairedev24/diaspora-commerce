@@ -8,12 +8,21 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-/** The payment of one order: one Stripe PaymentIntent (manual capture) that settles to many recipients. */
+/**
+ * The payment of one order: one Stripe PaymentIntent (manual capture) that settles to many recipients.
+ *
+ * @param multicapture the PaymentIntent allows several partial captures (Stripe multicapture). A single-capture
+ *                     intent's first capture is final: Stripe releases whatever is not captured with it
+ */
 public record Payment(UUID id, String orderId, String customerId, Money amount, PaymentStatus status,
                       String stripePaymentIntentId, String clientSecret, UUID feeScheduleId, Instant placedAt,
                       Money captured, Money refunded, Instant authorizedAt, String failureMessage,
                       Map<String, String> metadata, List<PaymentLine> lines, Instant createdAt, Instant updatedAt,
-                      long version, UUID parentPaymentId) {
+                      long version, UUID parentPaymentId, boolean multicapture) {
+
+    /** Metadata of payments whose captures follow shipments (orders): {@code capture_plan=per_shipment}. */
+    public static final String CAPTURE_PLAN = "capture_plan";
+    public static final String PER_SHIPMENT = "per_shipment";
 
     public Payment {
         Objects.requireNonNull(id, "id");
@@ -46,7 +55,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, PaymentStatus.REQUIRES_PAYMENT_METHOD, null, null,
                 feeScheduleId, placedAt, Money.zero(amount.currency()), Money.zero(amount.currency()), null, null,
-                metadata, pls, now, now, 0, null);
+                metadata, pls, now, now, 0, null, true);
     }
 
     /**
@@ -62,7 +71,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         Payment p = create(id, parent.orderId(), stripeCustomerId, total, parent.feeScheduleId(), parent.placedAt(),
                 metadata, lines, now);
         return new Payment(p.id, p.orderId, p.customerId, p.amount, p.status, null, null, p.feeScheduleId,
-                p.placedAt, p.captured, p.refunded, null, null, p.metadata, p.lines, now, now, 0, parent.id());
+                p.placedAt, p.captured, p.refunded, null, null, p.metadata, p.lines, now, now, 0, parent.id(), true);
     }
 
     public String currency() {
@@ -105,14 +114,14 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, PaymentStatus.CAPTURED, stripePaymentIntentId,
                 clientSecret, feeScheduleId, placedAt, captured, refunded, authorizedAt, failureMessage, metadata,
-                lines, createdAt, now, version, parentPaymentId);
+                lines, createdAt, now, version, parentPaymentId, multicapture);
     }
 
     /** Off-session confirmation needs the customer (3-D Secure / SCA): the intent waits for them on-session. */
     public Payment awaitingCustomer(String reason, Instant now) {
         return new Payment(id, orderId, customerId, amount, PaymentStatus.REQUIRES_ACTION, stripePaymentIntentId,
                 clientSecret, feeScheduleId, placedAt, captured, refunded, authorizedAt, reason, metadata, lines,
-                createdAt, now, version, parentPaymentId);
+                createdAt, now, version, parentPaymentId, multicapture);
     }
 
     public Optional<PaymentLine> line(String lineId) {
@@ -124,9 +133,19 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
     }
 
     public Payment withIntent(String intentId, String secret, PaymentStatus newStatus, Instant now) {
+        return withIntent(intentId, secret, newStatus, multicapture, now);
+    }
+
+    /** The PaymentIntent was created; {@code multi} says whether it allows several partial captures. */
+    public Payment withIntent(String intentId, String secret, PaymentStatus newStatus, boolean multi, Instant now) {
         return new Payment(id, orderId, customerId, amount, newStatus, intentId, secret, feeScheduleId, placedAt,
                 captured, refunded, authorizedAt, failureMessage, metadata, lines, createdAt, now, version,
-                parentPaymentId);
+                parentPaymentId, multi);
+    }
+
+    /** Captures follow the order's shipments ({@link #CAPTURE_PLAN} = {@link #PER_SHIPMENT}, set by orders). */
+    public boolean capturedPerShipment() {
+        return PER_SHIPMENT.equals(metadata.get(CAPTURE_PLAN));
     }
 
     /**
@@ -151,7 +170,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         String failureText = reported == PaymentStatus.FAILED ? failure : null;
         return new Payment(id, orderId, customerId, amount, next, stripePaymentIntentId, clientSecret, feeScheduleId,
                 placedAt, captured, refunded, authorised, failureText, metadata, lines, createdAt, now, version,
-                parentPaymentId);
+                parentPaymentId, multicapture);
     }
 
     /**
@@ -186,7 +205,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
                 : PaymentStatus.PARTIALLY_CAPTURED;
         return new Payment(id, orderId, customerId, amount, next, stripePaymentIntentId, clientSecret, feeScheduleId,
                 placedAt, total, refunded, authorizedAt, failureMessage, metadata, updated, createdAt, now, version,
-                parentPaymentId);
+                parentPaymentId, multicapture);
     }
 
     public Payment cancel(Instant now) {
@@ -200,7 +219,7 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, PaymentStatus.CANCELED, stripePaymentIntentId,
                 clientSecret, feeScheduleId, placedAt, captured, refunded, authorizedAt, failureMessage, metadata,
-                lines, createdAt, now, version, parentPaymentId);
+                lines, createdAt, now, version, parentPaymentId, multicapture);
     }
 
     public Payment refund(Refund refund, Instant now) {
@@ -216,6 +235,6 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         }
         return new Payment(id, orderId, customerId, amount, status, stripePaymentIntentId, clientSecret,
                 feeScheduleId, placedAt, captured, refunded.plus(refund.amount()), authorizedAt, failureMessage,
-                metadata, updated, createdAt, now, version, parentPaymentId);
+                metadata, updated, createdAt, now, version, parentPaymentId, multicapture);
     }
 }

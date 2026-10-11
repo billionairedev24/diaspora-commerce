@@ -118,6 +118,10 @@ at:
       # stripe everywhere; only the local profile may use its stand-in (auto / local-test, LocalTestPaymentsPolicy).
       mode: stripe
       require-live-key: false
+      # Multicapture ("captured per shipment") needs Stripe flexible payments on the account; without it Stripe refuses
+      # every checkout ("This account is not eligible for the requested card features"). Off: each order is captured
+      # once, when its first shipment ships (the rest of the order with it). Turn on only once Stripe enabled it.
+      multicapture: ${STRIPE_MULTICAPTURE:false}
       max-network-retries: 2
       webhook-tolerance-seconds: 300
     webhooks:

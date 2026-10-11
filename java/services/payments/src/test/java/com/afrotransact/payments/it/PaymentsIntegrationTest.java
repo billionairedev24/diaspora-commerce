@@ -52,6 +52,7 @@ import tools.jackson.databind.json.JsonMapper;
     "at.payments.stripe.secret-key=sk_test_integration",
     "at.payments.stripe.webhook-secret=" + PaymentsIntegrationTest.WEBHOOK_SECRET,
     "at.payments.stripe.max-network-retries=0",
+    "at.payments.stripe.multicapture=true",
     "spring.datasource.hikari.maximum-pool-size=30"
 })
 @ActiveProfiles("local")

@@ -49,7 +49,7 @@ public class LocalTestStripeGateway implements StripeGateway {
         IntentSnapshot snapshot() {
             long capturable = REQUIRES_CAPTURE.equals(status) ? Math.max(0, amount - captured) : 0;
             return new IntentSnapshot(id, status, id + "_secret_localtest", amount, capturable, captured,
-                    captured > 0 ? "ch" + id.substring(2) : null, null, null);
+                    captured > 0 ? "ch" + id.substring(2) : null, null, null, true);
         }
     }
 
@@ -91,10 +91,11 @@ public class LocalTestStripeGateway implements StripeGateway {
     }
 
     @Override
-    public IntentSnapshot capture(String intentId, Money amount, boolean finalCapture, Map<String, String> metadata,
+    public IntentSnapshot capture(String intentId, Money amount, Boolean finalCapture, Map<String, String> metadata,
                                   String idempotencyKey) {
         find(intentId);
-        return intents.computeIfPresent(intentId, (id, i) -> i.with(finalCapture ? SUCCEEDED : REQUIRES_CAPTURE,
+        boolean last = finalCapture == null || finalCapture;
+        return intents.computeIfPresent(intentId, (id, i) -> i.with(last ? SUCCEEDED : REQUIRES_CAPTURE,
                 i.captured() + amount.minor())).snapshot();
     }
 

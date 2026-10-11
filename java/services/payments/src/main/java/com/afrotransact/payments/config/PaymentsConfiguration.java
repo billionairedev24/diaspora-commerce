@@ -82,7 +82,7 @@ class PaymentsConfiguration {
         if (useLocalTest(policy, props.stripe(), activeProfiles(env))) {
             return new LocalTestStripeGateway();
         }
-        return new StripeJavaGateway(stripeClient(props));
+        return new StripeJavaGateway(stripeClient(props), props.stripe().multicapture());
     }
 
     /** Active profiles, or the default profile when none is active. */

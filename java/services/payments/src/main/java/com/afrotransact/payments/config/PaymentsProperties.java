@@ -24,7 +24,7 @@ public record PaymentsProperties(String retailOrgId, Duration settlementHold, St
         currency = currency == null ? "USD" : currency;
         zone = zone == null ? "UTC" : zone;
         payout = payout == null ? new Payout(null, null) : payout;
-        stripe = stripe == null ? new Stripe(null, null, null, null, null, null, null, null, null) : stripe;
+        stripe = stripe == null ? new Stripe(null, null, null, null, null, null, null, null, null, null) : stripe;
         webhooks = webhooks == null ? new Webhooks(null) : webhooks;
         jobs = jobs == null ? new Jobs(null, null, null, null) : jobs;
     }
@@ -45,12 +45,16 @@ public record PaymentsProperties(String retailOrgId, Duration settlementHold, St
      * @param requireLiveKey prod: only sk_live_/rk_live_ keys; elsewhere live keys are refused
      * @param mode           stripe (default) | local-test | auto: the local profile's stand-in for Stripe, see
      *                       LocalTestPaymentsPolicy (refused outside local)
+     * @param multicapture   request multicapture (one partial capture per shipment) on checkout intents. Only for
+     *                       accounts Stripe enabled for flexible payments (IC+ pricing); default false: each order
+     *                       intent is captured once, when its first shipment ships
      */
     public record Stripe(String secretKey, String webhookSecret, String apiBase, String connectBase,
                          Boolean requireLiveKey, Integer maxNetworkRetries, Duration connectTimeout,
-                         Duration readTimeout, String mode) {
+                         Duration readTimeout, String mode, Boolean multicapture) {
 
         public Stripe {
+            multicapture = multicapture != null && multicapture;
             mode = mode == null || mode.isBlank() ? "stripe" : mode.trim();
             apiBase = apiBase == null || apiBase.isBlank() ? "https://api.stripe.com" : apiBase;
             connectBase = connectBase == null || connectBase.isBlank() ? "https://connect.stripe.com" : connectBase;

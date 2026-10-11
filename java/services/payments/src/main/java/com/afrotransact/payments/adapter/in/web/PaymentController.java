@@ -94,7 +94,10 @@ class PaymentController {
 
     @Operation(summary = "Capture one shipment and post its journal",
             description = "Stripe amount_to_capture = the lines' items + shipping + tax (multicapture; final_capture "
-                    + "releases the rest). Posts Dr 1000 Stripe clearing / Dr 5000 Stripe fees, Cr 2000 seller "
+                    + "releases the rest). A single-capture payment (multicapture false) is captured once: an order's "
+                    + "(capture_plan=per_shipment) first shipment captures every line not captured yet (the response's "
+                    + "lineIds), and a later shipment whose lines were taken by it gets that capture back (replayed); "
+                    + "other payments capture the lines asked for and Stripe releases the rest. Posts Dr 1000 Stripe clearing / Dr 5000 Stripe fees, Cr 2000 seller "
                     + "payables, 2100 sales tax, 4000 commission, 4100 FBA fees, 4200 shipping. Idempotent per "
                     + "(payment, shipmentId).")
     @PostMapping("/v1/payments/{id}/capture")

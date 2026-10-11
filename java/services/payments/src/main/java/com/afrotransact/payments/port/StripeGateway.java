@@ -15,14 +15,24 @@ import com.afrotransact.payments.domain.Money;
  */
 public interface StripeGateway {
 
-    /** PaymentIntent with capture_method=manual, multicapture when available, automatic payment methods. */
+    /**
+     * PaymentIntent with capture_method=manual and automatic (or the given) payment methods. Multicapture
+     * ({@code request_multicapture=if_available}) is requested only when the adapter is configured for it, i.e. Stripe
+     * enabled flexible payments for the account; an account that is not eligible answers "This account is not eligible
+     * for the requested card features", and the adapter then creates a single-capture intent instead. The snapshot's
+     * {@link IntentSnapshot#multicapture()} says which one was created.
+     */
     IntentSnapshot createIntent(CreateIntent request, String idempotencyKey);
 
     /** Reads the current status (confirmation / 3-D Secure / authorisation). */
     IntentSnapshot retrieveIntent(String intentId);
 
-    /** Captures {@code amount} (amount_to_capture); {@code finalCapture=false} keeps the rest capturable. */
-    IntentSnapshot capture(String intentId, Money amount, boolean finalCapture, Map<String, String> metadata,
+    /**
+     * Captures {@code amount} (amount_to_capture). {@code finalCapture=false} keeps the rest capturable (multicapture
+     * intents only); {@code null} sends no final_capture at all, as single-capture intents need: Stripe releases the
+     * uncaptured rest.
+     */
+    IntentSnapshot capture(String intentId, Money amount, Boolean finalCapture, Map<String, String> metadata,
                            String idempotencyKey);
 
     IntentSnapshot cancel(String intentId, String idempotencyKey);
@@ -120,9 +130,15 @@ public interface StripeGateway {
         }
     }
 
-    /** What AfroTransact needs from a PaymentIntent. */
+    /**
+     * What AfroTransact needs from a PaymentIntent.
+     *
+     * @param multicapture the intent was created with multicapture requested (several partial captures possible);
+     *                     false for a single-capture intent, whose first capture releases the uncaptured rest
+     */
     record IntentSnapshot(String id, String status, String clientSecret, long amount, long amountCapturable,
-                          long amountReceived, String latestChargeId, String failureMessage, String nextActionType) {
+                          long amountReceived, String latestChargeId, String failureMessage, String nextActionType,
+                          boolean multicapture) {
     }
 
     /** Off-session PaymentIntent parameters (confirm=true, off_session=true, capture_method=manual). */

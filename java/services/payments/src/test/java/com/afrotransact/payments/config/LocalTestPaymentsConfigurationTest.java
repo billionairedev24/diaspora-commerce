@@ -24,7 +24,7 @@ class LocalTestPaymentsConfigurationTest {
 
     private static PaymentsProperties props(String mode, String key) {
         return new PaymentsProperties(null, null, null, null, null,
-                new PaymentsProperties.Stripe(key, "whsec_x", null, null, null, null, null, null, mode), null, null);
+                new PaymentsProperties.Stripe(key, "whsec_x", null, null, null, null, null, null, mode, null), null, null);
     }
 
     private static MockEnvironment env(String... profiles) {

@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import com.afrotransact.payments.domain.Capture;
+import com.afrotransact.payments.domain.CapturePlan;
 import com.afrotransact.payments.domain.FeeSchedule;
 import com.afrotransact.payments.domain.Journal;
 import com.afrotransact.payments.domain.Money;
@@ -140,7 +141,7 @@ class PaymentServiceImpl implements PaymentService {
                     payment.customerId(), cmd.paymentMethodTypes(), "AfroTransact order " + cmd.orderId(), metadata,
                     cmd.orderId(), cmd.saveForOffSession()), cmd.orderId() + ":create-intent");
             Payment stored = payments.update(payment.withIntent(intent.id(), intent.clientSecret(),
-                    PaymentStatus.fromStripe(intent.status()), now));
+                    PaymentStatus.fromStripe(intent.status()), intent.multicapture(), now));
             statuses.publish(PaymentsEvents.INTENT_CREATED, stored);
             idempotency.complete("payment-create", idempotencyKey, new StoredRef(stored.id()));
             return new PaymentResult(stored, false);
@@ -160,7 +161,7 @@ class PaymentServiceImpl implements PaymentService {
                 + " (off-session)", metadata, payment.orderId()), payment.orderId() + ":create-intent");
         IntentSnapshot intent = attempt.intent();
         Payment stored = payments.update(payment.withIntent(intent.id(), intent.clientSecret(),
-                PaymentStatus.REQUIRES_PAYMENT_METHOD, now));
+                PaymentStatus.REQUIRES_PAYMENT_METHOD, intent.multicapture(), now));
         statuses.publish(PaymentsEvents.INTENT_CREATED, stored);
         if (attempt.authenticationRequired()) {
             stored = payments.update(stored.awaitingCustomer(OffSessionAttempt.AUTHENTICATION_REQUIRED, now));
@@ -288,20 +289,29 @@ class PaymentServiceImpl implements PaymentService {
                 IntentSnapshot intent = stripe.retrieveIntent(p.stripePaymentIntentId());
                 p = statuses.apply(p, PaymentStatus.fromStripe(intent.status()), intent.failureMessage());
             }
-            List<OrderLine> lines = linesToCapture(p, cmd.lineIds());
-            Money amount = lines.stream().map(OrderLine::total).reduce(Money.zero(p.currency()), Money::plus);
-            if (cmd.amount() != null && !cmd.amount().equals(amount)) {
-                throw new PaymentsRuleViolation("payments.capture-amount-mismatch", "The shipment's lines add up to "
-                        + amount + ", not " + cmd.amount(), Map.of("amountMinor", "Must equal the lines' total"));
+            Optional<Capture> earlier = capturedWithEarlierShipment(p, cmd.lineIds());
+            if (earlier.isPresent()) {
+                idempotency.complete(scope, idempotencyKey, new StoredRef(earlier.get().id()));
+                return new CaptureResult(earlier.get(), p, true);
             }
-            boolean finalCapture = cmd.finalCapture() || p.captured().plus(amount).equals(p.amount());
-            UUID captureId = Fingerprint.id("capture", p.id().toString(), cmd.shipmentId());
-            Payment capturable = p;
-            if (!capturable.status().isCapturable()) {
+            List<PaymentLine> requested = linesToCapture(p, cmd.lineIds());
+            Money asked = requested.stream().map(pl -> pl.line().total()).reduce(Money.zero(p.currency()),
+                    Money::plus);
+            if (cmd.amount() != null && !cmd.amount().equals(asked)) {
+                throw new PaymentsRuleViolation("payments.capture-amount-mismatch", "The shipment's lines add up to "
+                        + asked + ", not " + cmd.amount(), Map.of("amountMinor", "Must equal the lines' total"));
+            }
+            if (!p.status().isCapturable()) {
                 throw new PaymentsStateConflict("payments.not-capturable", "Payment of order " + p.orderId() + " is "
                         + p.status() + "; only AUTHORIZED or PARTIALLY_CAPTURED payments can be captured");
             }
-            IntentSnapshot captured = stripe.capture(p.stripePaymentIntentId(), amount, finalCapture,
+            CapturePlan plan = CapturePlan.of(p, requested, cmd.finalCapture());
+            List<OrderLine> lines = plan.lines().stream().map(PaymentLine::line).toList();
+            Money amount = plan.amount(p.currency());
+            boolean finalCapture = plan.finalCapture();
+            UUID captureId = Fingerprint.id("capture", p.id().toString(), cmd.shipmentId());
+            Payment capturable = p;
+            IntentSnapshot captured = stripe.capture(p.stripePaymentIntentId(), amount, plan.stripeFinalCapture(),
                     Map.of("order_id", p.orderId(), "shipment_id", cmd.shipmentId()),
                     p.stripeKeyPrefix() + ":capture:" + cmd.shipmentId());
             FeeSchedule schedule = schedule(p);
@@ -325,7 +335,28 @@ class PaymentServiceImpl implements PaymentService {
         });
     }
 
-    private List<OrderLine> linesToCapture(Payment p, List<String> lineIds) {
+    /**
+     * A single-capture order's first capture took every line (CapturePlan): a later shipment's lines were captured
+     * with an earlier shipment, so its capture is that one (replayed). Empty when the lines are not captured yet.
+     */
+    private Optional<Capture> capturedWithEarlierShipment(Payment p, List<String> lineIds) {
+        if (p.multicapture() || !p.capturedPerShipment()) {
+            return Optional.empty();
+        }
+        List<Capture> done = payments.captures(p.id());
+        if (lineIds.isEmpty()) {
+            return p.lines().stream().allMatch(PaymentLine::isCaptured) && !done.isEmpty()
+                    ? Optional.of(done.getLast()) : Optional.empty();
+        }
+        Set<String> wanted = new HashSet<>(lineIds);
+        boolean allCaptured = lineIds.stream().allMatch(id -> p.line(id).map(PaymentLine::isCaptured).orElse(false));
+        if (!allCaptured) {
+            return Optional.empty();
+        }
+        return done.stream().filter(c -> c.lineIds().stream().anyMatch(wanted::contains)).findFirst();
+    }
+
+    private List<PaymentLine> linesToCapture(Payment p, List<String> lineIds) {
         List<PaymentLine> chosen = new ArrayList<>();
         if (lineIds.isEmpty()) {
             p.lines().stream().filter(l -> !l.isCaptured()).forEach(chosen::add);
@@ -344,7 +375,7 @@ class PaymentServiceImpl implements PaymentService {
             throw new PaymentsStateConflict("payments.nothing-to-capture", "Every line of order " + p.orderId()
                     + " is already captured");
         }
-        return chosen.stream().map(PaymentLine::line).toList();
+        return List.copyOf(chosen);
     }
 
     /** Stripe's real fee for this capture from the charge's balance transactions, else the schedule's estimate. */

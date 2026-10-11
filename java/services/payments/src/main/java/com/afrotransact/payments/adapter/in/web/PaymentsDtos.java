@@ -126,13 +126,17 @@ final class PaymentsDtos {
                                    + "charge waits for the customer") String failureMessage,
                            @Schema(description = "Set for an off-session charge: the order's primary payment")
                            UUID parentPaymentId,
-                           boolean offSession, boolean replayed, List<LineResponse> lines) {
+                           boolean offSession,
+                           @Schema(description = "The PaymentIntent allows one partial capture per shipment (Stripe "
+                                   + "multicapture). False = single capture; an order (metadata "
+                                   + "capture_plan=per_shipment) is then captured whole with its first shipment")
+                           boolean multicapture, boolean replayed, List<LineResponse> lines) {
 
         static PaymentResponse of(Payment p, boolean replayed) {
             return new PaymentResponse(p.id(), p.orderId(), p.status().name(), p.stripePaymentIntentId(),
                     p.clientSecret(), p.amount().minor(), p.captured().minor(), p.refunded().minor(),
                     p.released().minor(), p.currency(), p.feeScheduleId(), p.placedAt(), p.authorizedAt(),
-                    p.failureMessage(), p.parentPaymentId(), p.isOffSession(), replayed,
+                    p.failureMessage(), p.parentPaymentId(), p.isOffSession(), p.multicapture(), replayed,
                     p.lines().stream().map(LineResponse::of).toList());
         }
     }
