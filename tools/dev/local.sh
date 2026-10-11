@@ -436,6 +436,32 @@ build_sig() {
   if [[ -n "$f" && -f "$f" ]]; then cksum <"$f" | awk '{print $1 "-" $2}'; fi
 }
 
+# A process this script doesn't track (an older run whose pid file is gone, a service started by hand) may still hold
+# the service's port: the new one then can't bind, while the old one keeps answering health checks with old code.
+# Replace it when it is one of ours (this repository's jar or binary); refuse with a clear message otherwise.
+listener_pid() {
+  if command -v lsof >/dev/null 2>&1; then lsof -nP -t -iTCP:"$1" -sTCP:LISTEN 2>/dev/null | head -1
+  elif command -v ss >/dev/null 2>&1; then ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2
+  fi
+}
+
+free_port_for() {
+  local svc=$1 port pid cmd i
+  port=$(port_of "$svc")
+  port_open "$port" || return 0
+  pid=$(listener_pid "$port")
+  cmd=$(ps -o command= -p "$pid" 2>/dev/null || true)
+  if [[ -n "$pid" && ( "$cmd" == *"$ROOT"* || "$cmd" == *".local/bin/$svc"* || "$cmd" == *"$svc-service-"* ) ]]; then
+    echo "  · $svc: an old $svc (pid $pid, not started by this run) holds :$port; replacing it"
+    kill "$pid" 2>/dev/null || true
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do port_open "$port" || return 0; sleep 0.5; done
+    kill -9 "$pid" 2>/dev/null || true; sleep 1
+    port_open "$port" || return 0
+  fi
+  echo "  ✗ $svc: localhost:$port is in use by another program${pid:+ (pid $pid: ${cmd:0:80})}; stop it and run make up again" >&2
+  return 1
+}
+
 start() {
   local svc=$1 jar
   mkdir -p "$LOGS" "$PIDS"
@@ -446,6 +472,7 @@ start() {
     echo "  · $svc was rebuilt since it started: restarting"
     stop "$svc"
   fi
+  free_port_for "$svc" || return 1
   telemetry_env
   pool_env "$svc"
   # Browser origins allowed to call services directly: the Expo web previews of the mobile apps (Java services read
@@ -818,6 +845,8 @@ cmd_down() {
   if [[ -d "$PIDS" ]]; then
     for f in "$PIDS"/*.pid; do [[ -e "$f" ]] && stop "$(basename "$f" .pid)"; done
   fi
+  # Leftovers this script no longer tracks (older runs): stop any of this repository's services still on their ports.
+  for svc in $ALL_SERVICES; do free_port_for "$svc" >/dev/null 2>&1 || true; done
   echo "==> stopping infrastructure (data kept; 'make reset' deletes it). Your own Postgres/Valkey keep running."
   # shellcheck disable=SC2086
   compose stop postgres valkey $INFRA_BASE >/dev/null 2>&1 || true
