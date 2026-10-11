@@ -52,8 +52,7 @@ export function DeliverToDialog({ open, onOpenChange }: { open: boolean; onOpenC
     void apply({ zip });
   };
 
-  const useGeo = () => {
-    const t = useT();
+  const locateMe = () => {
     if (!('geolocation' in navigator)) {
       setGeoMsg(t('location.geoUnavailable'));
       return;
@@ -80,7 +79,7 @@ export function DeliverToDialog({ open, onOpenChange }: { open: boolean; onOpenC
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} title={t('location.title')} description={t('location.intro')}>
-      <Button block onClick={useGeo} loading={geoBusy} icon={<Crosshair aria-hidden />}>
+      <Button block onClick={locateMe} loading={geoBusy} icon={<Crosshair aria-hidden />}>
         {geoBusy ? t('location.locating') : t('location.useGeo')}
       </Button>
       <p className={styles.msg} aria-live="polite">

@@ -34,7 +34,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const locale = await getLocale();
   const t = await getT();
   return (
-    <html lang={locale} dir={dirOf(locale)}>
+    // suppressHydrationWarning: browser extensions stamp classes / attributes onto <html> before React hydrates
+    // (e.g. Storylane's js-storylane-extension), which React reports as a root attribute mismatch. It covers
+    // <html>'s own attributes only -- children still warn normally.
+    <html lang={locale} dir={dirOf(locale)} suppressHydrationWarning>
       <body>
         <a href="#main" className="at-skip-link">
           {t('sc.layout.skip')}
