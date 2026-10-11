@@ -17,6 +17,7 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/postgres"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
@@ -30,9 +31,7 @@ var discard = slog.New(slog.NewTextHandler(io.Discard, nil))
 
 func startPostgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	image := os.Getenv("NOTIFICATIONS_TEST_PG_IMAGE")
 	if image == "" {
 		image = defaultImage

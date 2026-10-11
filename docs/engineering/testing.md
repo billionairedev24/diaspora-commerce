@@ -47,7 +47,7 @@ Rules of thumb
 | Kind | File | Package |
 |---|---|---|
 | Unit | `xxx_test.go` beside `xxx.go` | external `xxx_test` package by default (tests the exported API); internal package only to test unexported logic |
-| Integration | `xxx_integration_test.go` | `xxx_test`; first line of each test: `if testing.Short() \|\| os.Getenv("SKIP_DOCKER_TESTS") == "1" { t.Skip(...) }` |
+| Integration | `xxx_integration_test.go` | `xxx_test`; first line of each test: `testdocker.Require(t)` (`go/pkg/testdocker`) |
 | Contract | `contract_test.go`, `conformance_test.go` | see §4 |
 
 - Test names `TestThing_Behaviour` / table cases with readable `name` fields; `t.Parallel()` where state allows.
@@ -81,7 +81,9 @@ Rules of thumb
    CI leaves it off.
 3. **Isolation by data, not by container.** Each test creates its own aggregate ids (UUIDs) or truncates the
    tables it owns in `@BeforeEach`; never depend on test order.
-4. **Fail fast without Docker in the fast loop.** Go integration tests skip under `-short`/`SKIP_DOCKER_TESTS=1`;
+4. **Fail fast without Docker in the fast loop.** Go integration tests call `testdocker.Require(t)`: they skip under
+   `-short`/`SKIP_DOCKER_TESTS=1` and when no Docker daemon answers (stopped Docker Desktop, none installed), but fail
+   when `CI` is set, so CI never silently drops them (`REQUIRE_DOCKER_TESTS=1` runs them without the probe);
    Java ITs only run in Failsafe. No test talks to the docker-compose stack on fixed ports.
 5. **Wait strategies, not sleeps**: `wait.ForHTTP`, `wait.ForListeningPort`, log-message waits.
 6. **Resources**: Elasticsearch at 512 MB heap, one container per package (Go `TestMain`) or per JVM (Java).

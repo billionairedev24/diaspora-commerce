@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -15,13 +14,12 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/s3store"
 )
 
 func TestPresignedUploadRoundTripOnMinIO(t *testing.T) {
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	ctx := context.Background()
 	ctr, err := testcontainers.Run(ctx, "pgsty/minio:latest",
 		testcontainers.WithEnv(map[string]string{"MINIO_ROOT_USER": "minioadmin", "MINIO_ROOT_PASSWORD": "minioadmin"}),

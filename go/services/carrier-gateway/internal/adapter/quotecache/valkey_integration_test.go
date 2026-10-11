@@ -2,7 +2,6 @@ package quotecache_test
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
@@ -10,14 +9,13 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/quotecache"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/domain"
 )
 
 func TestValkeyQuoteCache(t *testing.T) {
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	ctx := context.Background()
 	ctr, err := testcontainers.Run(ctx, "valkey/valkey:8.1-alpine",
 		testcontainers.WithExposedPorts("6379/tcp"),

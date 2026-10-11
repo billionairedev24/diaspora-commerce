@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	authzsync "github.com/billionairedev24/diaspora-commerce/go/services/authz-sync"
 	"github.com/billionairedev24/diaspora-commerce/go/services/authz-sync/internal/adapter/openfga"
 	"github.com/billionairedev24/diaspora-commerce/go/services/authz-sync/internal/app"
@@ -24,9 +24,7 @@ import (
 // TestSyncAgainstOpenFGA provisions a real OpenFGA (local image openfga/openfga:v1.10.0) with the embedded model and
 // replays identity / seller-org events through the syncer, checking the resulting permissions.
 func TestSyncAgainstOpenFGA(t *testing.T) {
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	ctx := context.Background()
 	ctr, err := testcontainers.Run(ctx, "openfga/openfga:v1.10.0",
 		testcontainers.WithCmd("run"),

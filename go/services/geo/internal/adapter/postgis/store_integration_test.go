@@ -10,6 +10,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/adapter/postgis"
 	"github.com/billionairedev24/diaspora-commerce/go/services/geo/internal/domain"
@@ -31,9 +32,7 @@ func TestMain(m *testing.M) {
 // postgisPool starts one local postgis/postgis:17-3.5 container for the package (Docker Hub is never needed).
 func postgisPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	if sharedPool != nil {
 		return sharedPool
 	}

@@ -3,7 +3,6 @@ package pgrepo_test
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/adapter/pgrepo"
 	"github.com/billionairedev24/diaspora-commerce/go/services/media/internal/domain"
@@ -21,9 +21,7 @@ const image = "postgres:17"
 
 func startPostgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	ctx := context.Background()
 	ctr, err := testcontainers.Run(ctx, image,
 		testcontainers.WithEnv(map[string]string{"POSTGRES_USER": "media", "POSTGRES_PASSWORD": "media", "POSTGRES_DB": "media"}),

@@ -16,6 +16,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/searchindex"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 )
 
 // image is the local Elasticsearch image (Docker Hub is rate-limited; never pull another tag in CI).
@@ -40,9 +41,7 @@ func TestMain(m *testing.M) {
 // sharedES starts (once) and returns the package's Elasticsearch client, or skips without Docker.
 func sharedES(t *testing.T) *elasticsearch.Client {
 	t.Helper()
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	esOnce.Do(func() {
 		ctx := context.Background()
 		ctr, err := testcontainers.Run(ctx, image,

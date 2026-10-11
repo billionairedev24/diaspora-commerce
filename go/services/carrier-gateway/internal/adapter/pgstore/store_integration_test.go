@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/events"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	carriergateway "github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/adapter/pgstore"
 	"github.com/billionairedev24/diaspora-commerce/go/services/carrier-gateway/internal/app"
@@ -24,9 +24,7 @@ import (
 
 func startPostgres(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	ctx := context.Background()
 	ctr, err := testcontainers.Run(ctx, "postgis/postgis:17-3.5",
 		testcontainers.WithEnv(map[string]string{"POSTGRES_USER": "carriers", "POSTGRES_PASSWORD": "carriers", "POSTGRES_DB": "carriers"}),

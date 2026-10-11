@@ -3,7 +3,6 @@ package elastic_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -13,14 +12,13 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/searchindex"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/elastic"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/port"
 )
 
 func TestVersionGuardedProjection(t *testing.T) {
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	ctx := context.Background()
 	ctr, err := testcontainers.Run(ctx, "elasticsearch:9.3.0",
 		testcontainers.WithEnv(map[string]string{

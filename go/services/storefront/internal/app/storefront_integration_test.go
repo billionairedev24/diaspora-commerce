@@ -3,7 +3,6 @@ package app_test
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/auth"
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	"github.com/billionairedev24/diaspora-commerce/go/services/storefront"
 	"github.com/billionairedev24/diaspora-commerce/go/services/storefront/internal/adapter/cdn"
 	"github.com/billionairedev24/diaspora-commerce/go/services/storefront/internal/adapter/pgrepo"
@@ -26,9 +26,7 @@ func (limits) For(string) domain.Limits {
 }
 
 func TestDesignPublishModerateFlow(t *testing.T) {
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	ctx := context.Background()
 	ctr, err := testcontainers.Run(ctx, "postgis/postgis:17-3.5",
 		testcontainers.WithEnv(map[string]string{"POSTGRES_USER": "s", "POSTGRES_PASSWORD": "s", "POSTGRES_DB": "s"}),

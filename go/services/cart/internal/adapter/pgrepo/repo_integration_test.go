@@ -3,7 +3,6 @@ package pgrepo_test
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -11,15 +10,14 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/adapter/pgrepo"
 	"github.com/billionairedev24/diaspora-commerce/go/services/cart/internal/domain"
 )
 
 func TestVersionedSave(t *testing.T) {
-	if testing.Short() || os.Getenv("SKIP_DOCKER_TESTS") == "1" {
-		t.Skip("integration test needs Docker")
-	}
+	testdocker.Require(t)
 	ctx := context.Background()
 	ctr, err := testcontainers.Run(ctx, "postgis/postgis:17-3.5",
 		testcontainers.WithEnv(map[string]string{"POSTGRES_USER": "cart", "POSTGRES_PASSWORD": "cart", "POSTGRES_DB": "cart"}),
