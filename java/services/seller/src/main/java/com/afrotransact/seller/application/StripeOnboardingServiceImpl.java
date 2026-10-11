@@ -67,8 +67,9 @@ class StripeOnboardingServiceImpl implements StripeOnboardingService {
                         Map.of("business.entityType", "Required", "business.country", "Required"));
             }
             Instant now = Instant.now(clock);
+            // The key names the account settings (v2: Stripe-liable): Stripe refuses a key reused with other parameters.
             accountId = stripe.createAccount(new CreateConnectedAccount(app.orgId(), app.id(), b.country(),
-                    b.contactEmail(), businessType(b.entityType()), "connect-account-" + app.orgId()));
+                    b.contactEmail(), businessType(b.entityType()), "connect-account-v2-" + app.orgId()));
             apps.update(app.withStripe(StripeVerification.created(accountId, now), now));
             accounts.insert(ConnectAccount.open(accountId, app.orgId(), now));
         }

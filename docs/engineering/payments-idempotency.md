@@ -52,6 +52,32 @@ its tests.
 | Late add expiry | — | The job cancels the PaymentIntent (`<orderId>:cancel`), then voids the order. The pay page refuses the link as soon as it expires. |
 | Booking deposits (web and app) | `bk-<uuid>` / `bk_<uuid>` per attempt | The key is kept after timeouts and deposit errors and changes only after success or a refusal. The BFF's minute-bucket key is used only when a client sends none. |
 
+## Seller accounts and liability
+
+Sellers onboard on AfroTransact: the Stripe verification step embeds Stripe's account onboarding and account
+management components (an Account Session per visit), so there is no redirect to Stripe and no Stripe login. The
+connected account is created with:
+
+| Setting | Value | Meaning |
+|---|---|---|
+| `controller[requirement_collection]` | `stripe` | Stripe decides and verifies KYC/KYB (identity, TIN, owners) and asks for updates through the embedded components |
+| `controller[losses][payments]` | `stripe` | Stripe, not AfroTransact, covers the connected account's negative balances |
+| `controller[fees][payer]` | `account` | the seller's account pays its own Stripe account and payout fees |
+| `controller[stripe_dashboard][type]` | `none` | no Stripe dashboard: sellers see balances and payouts in Seller Center |
+| `settings[payouts][schedule][interval]` | `manual` | payments-service releases payouts after delivery |
+
+This is the liability of the Standard accounts the current platform sends sellers to Stripe to create, without the
+redirect. Idempotency key: `connect-account-v2-<orgId>` (the version names these settings; a reused key with other
+parameters is refused by Stripe).
+
+What these settings do **not** move: checkout uses *separate charges and transfers* (one charge on the platform
+account per order, transfers per seller, `transfer_group` = order id). AfroTransact is the merchant of record for
+that charge, so refunds and disputes are debited from the platform balance whatever the connected-account settings
+say. The platform recovers a seller's share by reversing that seller's transfer, which is why payouts are manual
+and released only after delivery; if the seller's balance cannot cover a reversal, the negative balance is Stripe's.
+Only *direct charges* (each seller charges the customer on its own account) would make the seller the merchant of
+record for disputes, at the cost of one card charge per seller in a multi-seller cart.
+
 ## Tests that hold these guarantees
 
 | Area | Tests |

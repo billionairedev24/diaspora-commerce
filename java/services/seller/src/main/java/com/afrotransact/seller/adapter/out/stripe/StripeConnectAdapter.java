@@ -35,12 +35,11 @@ import com.stripe.param.FileCreateParams;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * stripe-java adapter for Connect. Accounts are platform-controlled: the platform collects requirements (through
- * Stripe's embedded onboarding and account management components), pays Stripe fees and owns negative balances,
- * there is no Stripe dashboard and payouts are manual (released by payments-service). Stripe refuses
- * requirement_collection=stripe with no dashboard unless Stripe is liable for losses, which a marketplace that
- * charges on the platform account cannot choose; application collection needs the platform profile completed in
- * the Stripe Dashboard (Connect → Settings → Platform profile).
+ * stripe-java adapter for Connect. Sellers onboard on AfroTransact through Stripe's embedded components (no redirect
+ * to Stripe, no Stripe dashboard), and Stripe keeps the liability, as with Standard accounts: Stripe collects and
+ * verifies requirements and is liable for the connected account's negative balances, and the account pays its own
+ * Stripe account fees. Payouts are manual (released by payments-service after delivery). Disputes and refunds on
+ * the platform's own charges (separate charges and transfers) stay with the platform whatever these settings say.
  */
 public class StripeConnectAdapter implements StripeConnectGateway {
 
@@ -64,10 +63,10 @@ public class StripeConnectAdapter implements StripeConnectGateway {
                 })
                 .setController(AccountCreateParams.Controller.builder()
                         .setFees(AccountCreateParams.Controller.Fees.builder()
-                                .setPayer(AccountCreateParams.Controller.Fees.Payer.APPLICATION).build())
+                                .setPayer(AccountCreateParams.Controller.Fees.Payer.ACCOUNT).build())
                         .setLosses(AccountCreateParams.Controller.Losses.builder()
-                                .setPayments(AccountCreateParams.Controller.Losses.Payments.APPLICATION).build())
-                        .setRequirementCollection(AccountCreateParams.Controller.RequirementCollection.APPLICATION)
+                                .setPayments(AccountCreateParams.Controller.Losses.Payments.STRIPE).build())
+                        .setRequirementCollection(AccountCreateParams.Controller.RequirementCollection.STRIPE)
                         .setStripeDashboard(AccountCreateParams.Controller.StripeDashboard.builder()
                                 .setType(AccountCreateParams.Controller.StripeDashboard.Type.NONE).build())
                         .build())

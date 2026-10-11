@@ -111,12 +111,12 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(accountId).startsWith("acct_");
         LoggedRequest create = StripeStub.requests(STRIPE, "POST", "/v1/accounts").stream()
                 .filter(r -> StripeStub.decoded(r).contains("metadata[org_id]=" + orgId)).findFirst().orElseThrow();
-        assertThat(StripeStub.decoded(create)).contains("controller[fees][payer]=application",
-                "controller[losses][payments]=application", "controller[requirement_collection]=application",
+        assertThat(StripeStub.decoded(create)).contains("controller[fees][payer]=account",
+                "controller[losses][payments]=stripe", "controller[requirement_collection]=stripe",
                 "controller[stripe_dashboard][type]=none", "settings[payouts][schedule][interval]=manual",
                 "capabilities[card_payments][requested]=true", "capabilities[transfers][requested]=true",
                 "business_type=individual", "country=US");
-        assertThat(create.getHeader("Idempotency-Key")).isEqualTo("connect-account-" + orgId);
+        assertThat(create.getHeader("Idempotency-Key")).isEqualTo("connect-account-v2-" + orgId);
         assertThat(create.getHeader("Authorization")).isEqualTo("Bearer sk_test_seller_it");
         assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/account_sessions")).anySatisfy(b -> assertThat(b)
                 .contains("account=" + accountId, "components[account_onboarding][enabled]=true",
