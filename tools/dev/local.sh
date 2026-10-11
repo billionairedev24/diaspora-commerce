@@ -22,8 +22,9 @@
 #
 # `up` seeds the demo dataset when the catalog is empty (tools/seed/seed.py --if-empty; SEED=0 skips it).
 #
-# Only the infrastructure the apps need is started (no Grafana/Prometheus/Loki/Tempo/Kibana: `make up-infra` has
-# those, ~12 GB). Java services start one at a time (Flyway migrations). Connection pools are kept small (DB_POOL,
+# The infrastructure the apps need is started, plus monitoring: Grafana http://localhost:3200 (Prometheus metrics,
+# Loki logs of every service and web app from .local/logs, Tempo traces). OBS=0 leaves monitoring out (~2 GB less);
+# Kibana and Kafka UI only come with `make up-infra` (~12 GB). Java services start one at a time (Flyway migrations). Connection pools are kept small (DB_POOL,
 # default 3) because ~20 services share one Postgres.
 #
 # Your own Postgres / Valkey: if something already listens on localhost:5432 (or 6379) and it is not this stack's
@@ -59,6 +60,9 @@ COMPOSE_FILE="$ROOT/infra/local/docker-compose.yml"
 OVERRIDE="$STATE/compose.external-postgres.yml"
 
 INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal minio minio-init mailpit openfga-migrate openfga"
+# Monitoring (OBS=1, the default): collector, metrics, logs (host-log-shipper tails .local/logs), traces, Grafana.
+# Postgres / Valkey exporters are added only when this stack runs those containers.
+OBS_BASE="otel-collector prometheus alertmanager loki tempo grafana host-log-shipper elasticsearch-exporter kafka-exporter"
 
 # Everything the storefront (incl. services/bookings), checkout, pre-orders, AfroTransact Retail (1P), delivery dispatch,
 # returns and the staff console use. Identity first.
@@ -371,6 +375,13 @@ infra_up() {
   else
     infra="valkey $infra"
   fi
+  if [[ "${OBS:-1}" != 0 ]]; then
+    infra="$infra $OBS_BASE"
+    [[ "$infra" == "postgres "* ]] && infra="$infra postgres-exporter"
+    [[ "$infra" == *"valkey "* ]] && infra="$infra redis-exporter"
+    mkdir -p "$LOGS"
+    export AT_LOCAL_LOGS="$LOGS"
+  fi
   echo "==> infrastructure: $infra"
   # shellcheck disable=SC2086 # word splitting of the service lists is intended
   compose up -d $infra
@@ -402,10 +413,11 @@ build() {
   done
 }
 
-# Traces/metrics go to an OpenTelemetry collector on :4318, which this lean stack does not run: switch export off so
-# the logs stay readable. TELEMETRY=1 keeps it (your own collector on localhost:4318, e.g. feeding your Grafana).
+# Traces/metrics go to the OpenTelemetry collector on :4318 (started with the monitoring, OBS=1). With OBS=0 export is
+# switched off so the logs stay readable; TELEMETRY=1 keeps it (your own collector on localhost:4318).
+telemetry_on() { if [[ "${TELEMETRY:-${OBS:-1}}" == 1 ]]; then echo 1; else echo 0; fi; }
 telemetry_env() {
-  if [[ "${TELEMETRY:-0}" == 1 ]]; then return 0; fi
+  if [[ "$(telemetry_on)" == 1 ]]; then return 0; fi
   export TRACE_SAMPLING=0 MANAGEMENT_TRACING_SAMPLING_PROBABILITY=0 MANAGEMENT_OTLP_METRICS_EXPORT_ENABLED=false
   export OTEL_EXPORTER_OTLP_ENDPOINT_HOST=""
 }
@@ -471,10 +483,14 @@ start() {
   platform_env
   if running "$svc"; then
     if [[ -f "$PIDS/$svc.sig" && "$(cat "$PIDS/$svc.sig")" == "$(build_sig "$svc")" ]] \
-      && [[ "$(cat "$PIDS/$svc.env" 2>/dev/null || echo localhost)" == "$(env_sig)" ]]; then
+      && [[ "$(cat "$PIDS/$svc.env" 2>/dev/null || echo localhost)" == "$(env_sig)" ]] \
+      && [[ "$(cat "$PIDS/$svc.otel" 2>/dev/null || echo 0)" == "$(telemetry_on)" ]]; then
       echo "  · $svc already running (pid $(cat "$PIDS/$svc.pid"))"; return 0
     fi
-    if [[ -f "$PIDS/$svc.sig" && "$(cat "$PIDS/$svc.sig")" == "$(build_sig "$svc")" ]]; then
+    if [[ -f "$PIDS/$svc.sig" && "$(cat "$PIDS/$svc.sig")" == "$(build_sig "$svc")" ]] \
+      && [[ "$(cat "$PIDS/$svc.env" 2>/dev/null || echo localhost)" == "$(env_sig)" ]]; then
+      echo "  · $svc: telemetry export switched $([[ "$(telemetry_on)" == 1 ]] && echo on || echo off): restarting"
+    elif [[ -f "$PIDS/$svc.sig" && "$(cat "$PIDS/$svc.sig")" == "$(build_sig "$svc")" ]]; then
       echo "  · $svc runs with the other addresses (localhost / LAN mode): restarting"
     else
       echo "  · $svc was rebuilt since it started: restarting"
@@ -512,6 +528,7 @@ start() {
   fi
   build_sig "$svc" >"$PIDS/$svc.sig"
   env_sig >"$PIDS/$svc.env"
+  telemetry_on >"$PIDS/$svc.otel"
 }
 
 stop() {
@@ -525,7 +542,7 @@ stop() {
     if running "$svc"; then kill -9 "$pid" 2>/dev/null || true; fi
     echo "  · stopped $svc"
   fi
-  rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig" "$PIDS/$svc.mode" "$PIDS/$svc.env"
+  rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig" "$PIDS/$svc.mode" "$PIDS/$svc.env" "$PIDS/$svc.otel"
 }
 
 # PROD=1 (make up PROD=1): the web apps run as production builds (next build + next start, output in .next-prod so
@@ -654,6 +671,22 @@ mobile_links() {
   echo "  Sign in              customer.houston@afrotransact.test / driver@afrotransact.test (Test1234!Local)"
 }
 
+monitoring_links() {
+  echo "Monitoring"
+  if [[ "${OBS:-1}" == 0 ]] || ! compose ps --status running --format '{{.Service}}' grafana 2>/dev/null | grep -q grafana; then
+    echo "  off (OBS=0 or not started): make up starts Grafana, Prometheus, Loki and Tempo"
+    return 0
+  fi
+  echo "  Grafana              http://localhost:3200          no sign-in locally (admin / admin if asked)"
+  echo "  Logs                 Grafana → Drilldown → Logs, or Explore → Loki: {service_name=\"orders\"} |= \"ERROR\""
+  echo "                       every service and web app (.local/logs/*.log; web apps as web-storefront etc.)"
+  echo "  Traces               Grafana → Explore → Tempo (log line → trace and back by trace id)"
+  echo "  Dashboards           Grafana → Dashboards → AfroTransact (platform overview, JVM, Go, Kafka lag, SLOs)"
+  echo "  Prometheus           http://localhost:9090          Alertmanager http://localhost:9093"
+  echo "  Your own Grafana     add data sources Prometheus http://localhost:9090, Loki http://localhost:3300,"
+  echo "                       Tempo http://localhost:3201 (dashboards: infra/observability/grafana/dashboards)"
+}
+
 links() {
   local svc
   echo
@@ -689,6 +722,7 @@ links() {
     [[ -f "$PIDS/$svc.pid" ]] || continue
     printf '  %-20s http://localhost:%s/docs\n' "$svc" "$(port_of "$svc")"
   done
+  monitoring_links
   echo "Infrastructure"
   echo "  Mailpit (mail, SMS)  http://localhost:8025"
   echo "  MinIO console        http://localhost:9001          minioadmin / minioadmin"
@@ -1044,7 +1078,7 @@ cmd_down() {
   for svc in $ALL_SERVICES; do free_port_for "$svc" >/dev/null 2>&1 || true; done
   echo "==> stopping infrastructure (data kept; 'make reset' deletes it). Your own Postgres/Valkey keep running."
   # shellcheck disable=SC2086
-  compose stop postgres valkey $INFRA_BASE >/dev/null 2>&1 || true
+  compose stop postgres valkey $INFRA_BASE $OBS_BASE postgres-exporter redis-exporter >/dev/null 2>&1 || true
 }
 
 case "${1:-}" in

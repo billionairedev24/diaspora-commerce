@@ -1,0 +1,87 @@
+# Ships the logs of everything `make up` runs as a local process (tools/dev/local.sh writes .local/logs/<name>.log,
+# mounted read-only at /host-logs) to Loki via the main collector. Each file becomes one service: service.name is the
+# file name (orders.log -> orders, web-storefront.log -> web-storefront), so Loki queries read {service_name="orders"}.
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  # Java and Go services: one record per log line, stack traces and wrapped lines joined to the line above.
+  filelog/services:
+    include: [/host-logs/*.log]
+    exclude: [/host-logs/web-*.log, /host-logs/mobile-*.log, /host-logs/docs-portal.log, /host-logs/storybook.log,
+              /host-logs/seed.log]
+    # The shipper starts with the infrastructure, before make up (re)starts a service and empties its log: new lines
+    # are all there is to read, and a restarted shipper does not resend old files.
+    start_at: end
+    include_file_name: true
+    multiline:
+      # Spring Boot console lines start with an ISO timestamp, Go slog text with time=, JSON logs with {, library
+      # loggers with "name: 2026/10/11"; anything else (a stack frame, "Caused by:") continues the record above.
+      line_start_pattern: '^(\d{4}-\d{2}-\d{2}T|time=|\{|[a-z][a-z0-9_-]*: \d{4}/)'
+    operators:
+      - type: regex_parser
+        parse_from: attributes["log.file.name"]
+        regex: '^(?P<log_service>.+)\.log$'
+      - type: move
+        from: attributes.log_service
+        to: resource["service.name"]
+      # Level: Spring "2026-…Z  INFO 123 ---", Go slog "level=INFO".
+      - type: regex_parser
+        regex: '^(?:\S+\s+(?P<level>TRACE|DEBUG|INFO|WARN|ERROR)\s|.*?\blevel=(?P<slog_level>[A-Za-z]+))'
+        on_error: send_quiet
+      - type: move
+        if: 'attributes.slog_level != nil and attributes.slog_level != ""'
+        from: attributes.slog_level
+        to: attributes.level
+      - type: severity_parser
+        if: 'attributes.level != nil and attributes.level != ""'
+        parse_from: attributes.level
+        on_error: send_quiet
+      # Spring's correlation field "[<trace id>-<span id>]" links a log line to its trace in Tempo.
+      - type: regex_parser
+        if: 'body matches "\\[\\s*[0-9a-f]{32}-[0-9a-f]{16}\\s*\\]"'
+        regex: '\[\s*(?P<trace_id>[0-9a-f]{32})-(?P<span_id>[0-9a-f]{16})\s*\]'
+        on_error: send_quiet
+      - type: regex_parser
+        if: 'body matches "trace_id=[0-9a-f]{32}"'
+        regex: 'trace_id=(?P<trace_id>[0-9a-f]{32})(?:.*?span_id=(?P<span_id>[0-9a-f]{16}))?'
+        on_error: send_quiet
+      - type: trace_parser
+        if: 'attributes.trace_id != nil'
+        trace_id: {parse_from: attributes.trace_id}
+        span_id: {parse_from: attributes.span_id}
+        on_error: send_quiet
+
+  # Web apps, docs portal, Storybook, Expo: free-form dev-server output, one record per line.
+  filelog/web:
+    include: [/host-logs/web-*.log, /host-logs/mobile-*.log, /host-logs/docs-portal.log, /host-logs/storybook.log]
+    start_at: end
+    include_file_name: true
+    operators:
+      - type: regex_parser
+        parse_from: attributes["log.file.name"]
+        regex: '^(?P<log_service>.+)\.log$'
+      - type: move
+        from: attributes.log_service
+        to: resource["service.name"]
+
+processors:
+  batch: {}
+  resource:
+    attributes:
+      - {key: service.namespace, value: afrotransact, action: upsert}
+      - {key: deployment.environment, value: local, action: upsert}
+
+exporters:
+  otlp:
+    endpoint: otel-collector:4317
+    tls: {insecure: true}
+
+service:
+  extensions: [health_check]
+  pipelines:
+    logs:
+      receivers: [filelog/services, filelog/web]
+      processors: [resource, batch]
+      exporters: [otlp]

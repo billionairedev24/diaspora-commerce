@@ -29,7 +29,7 @@ help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------------------------------------ local stack
-up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — PROD=1 runs the web apps as production builds, MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone
+up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — PROD=1 runs the web apps as production builds, MOBILE_HOST=lan serves it all on your Wi-Fi address for a phone, OBS=0 leaves out Grafana/Prometheus/Loki/Tempo
 	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
 
 up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo, Kibana; ~12 GB)

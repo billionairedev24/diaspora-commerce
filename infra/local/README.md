@@ -33,7 +33,7 @@ Credentials below are **for local use only**.
 | OTel Collector OTLP gRPC / HTTP | `localhost:4317` / `localhost:4318` | `otel-collector:4317/4318` | — |
 | Prometheus | http://localhost:9090 | `prometheus:9090` | — |
 | Alertmanager | http://localhost:9093 | | alerts are e-mailed to Mailpit |
-| Grafana | http://localhost:3200 | | `admin` / `admin` (anonymous = Viewer) |
+| Grafana | http://localhost:3200 | | `admin` / `admin` (locally anonymous visitors are admins: Explore, Drilldown, Alerting without signing in) |
 | Loki | http://localhost:3300 | `loki:3100` | — |
 | Tempo | http://localhost:3201 | `tempo:3200` | — |
 
@@ -87,6 +87,12 @@ Configs live in [`infra/observability/`](../observability) and are mounted read-
   Go runtime, Elasticsearch, Kafka consumer lag, Inventory reconciliation drift, Checkout & business SLOs.
 - Dashboards and SLO rules are generated: `make dashboards`, `make rules` (also emits the Kubernetes
   ConfigMaps / PrometheusRules under `infra/k8s/platform/observability/`). Runbooks: [`docs/runbooks/`](../../docs/runbooks).
+
+- `otel-host-log-shipper.yaml` — `make up` runs the services and web apps as local processes writing
+  `.local/logs/<name>.log`; the `host-log-shipper` container tails that folder (`AT_LOCAL_LOGS`) into Loki with
+  `service_name` = file name (`orders`, `gateway-bff`, `web-storefront`), the log level as severity, stack traces
+  joined to their line, and Spring/slog trace ids linked to Tempo. `make up` starts all of this by default (`OBS=0`
+  leaves monitoring out) and turns telemetry export on.
 
 Quick checks: Grafana → Explore → Tempo → Search; Loki `{service_name="search"}`;
 Prometheus → Status → Targets (services not running show as down — expected).

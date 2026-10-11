@@ -88,6 +88,23 @@ bucket is public-read locally (`infra/local/minio/create-buckets.sh`); `tools/de
 credentials. Content's slot schemas require `https://` images; the local profile accepts the local MinIO origin
 (`at.content.placements.local-image-origins`).
 
+## Monitoring: Grafana, logs, metrics, traces
+
+`make up` also starts the monitoring stack (`OBS=0` leaves it out, about 2 GB less memory) and turns OpenTelemetry
+export on for every service (`TELEMETRY=0` turns it off while keeping Grafana).
+
+| What | Where |
+|---|---|
+| Grafana | http://localhost:3200 (no sign-in locally; `admin` / `admin` if asked) |
+| Logs | Grafana → Drilldown → Logs, or Explore → Loki: `{service_name="orders"} \|= "ERROR"`. Every service and web app (`web-storefront`, `web-seller-center`, …) from `.local/logs` |
+| Traces | Grafana → Explore → Tempo; a log line's trace id opens the trace, a span opens its logs |
+| Dashboards | Grafana → Dashboards → AfroTransact (platform overview, JVM, Go runtime, Kafka lag, Elasticsearch, SLOs) |
+| Prometheus / Alertmanager | http://localhost:9090 · http://localhost:9093 |
+
+**Your own Grafana** (e.g. one already on :3000/:3001) is not this stack's: it has none of these data sources. Either
+use http://localhost:3200, or add data sources Prometheus `http://localhost:9090`, Loki `http://localhost:3300` and Tempo
+`http://localhost:3201` to it and import the dashboards from `infra/observability/grafana/dashboards`.
+
 ## Test users
 
 Identity's **local profile** creates ready-made accounts for every persona at start-up (`TestPersonas.java`, S276), so

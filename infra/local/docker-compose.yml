@@ -1,6 +1,8 @@
 # AfroTransact v2 — local development stack.
 #
-#   make up                      # infrastructure + observability (default profile)
+#   make up                      # the apps' infrastructure + observability, services as local processes (OBS=0: no
+#                                # Grafana/Prometheus/Loki/Tempo)
+#   make up-infra                # every container here (default profile), incl. Kibana and Kafka UI
 #   make apps-up                 # + containerised services (profile "apps")
 #   docker compose -f infra/local/docker-compose.yml --profile apps up -d catalog
 #
@@ -522,7 +524,9 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
       GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # Local only: anonymous visitors are admins, so Explore, Drilldown, Alerting and Connections are all there
+      # without signing in (a Viewer sees dashboards only). Deployed Grafana uses SSO roles.
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
       GF_SERVER_ROOT_URL: http://localhost:3200
       GF_FEATURE_TOGGLES_ENABLE: traceqlEditor,traceToMetrics
       GF_ANALYTICS_REPORTING_ENABLED: "false"
@@ -605,6 +609,28 @@ services:
     deploy:
       resources:
         limits: {memory: 64m}
+
+  # Ships the logs of the services, web apps and dev servers `make up` runs as local processes
+  # (.local/logs/<name>.log, AT_LOCAL_LOGS) to Loki via the main collector.
+  host-log-shipper:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    <<: [*restart, *logging]
+    depends_on:
+      otel-collector: {condition: service_healthy}
+      hc-tools: {condition: service_completed_successfully}
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../observability/otel-host-log-shipper.yaml:/etc/otelcol/config.yaml:ro
+      - ${AT_LOCAL_LOGS:-../../.local/logs}:/host-logs:ro
+      - hc-tools:/hc:ro
+    healthcheck:
+      test: ["CMD", "/hc/busybox", "wget", "-qO-", "http://127.0.0.1:13133/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: {memory: 256m}
 
   # ======================================== apps (profile "apps") ========================================
   # Ships the containerised services' stdout (json-file, tagged with the container name) to Loki via the
