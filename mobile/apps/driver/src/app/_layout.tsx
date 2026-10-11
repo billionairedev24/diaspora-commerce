@@ -7,16 +7,17 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { BootScreen } from '@/brand/BootScreen';
 import { AppI18nProvider } from '@/i18n';
 import { DriverProvider, useDriver } from '@/session/DriverProvider';
 import { c } from '@/theme';
 import { CrashScreen } from '@/ui/CrashScreen';
-import { Loading } from '@/ui/primitives';
+import { DevBuildNote } from '@/ui/DevBuildNote';
 import { ToastProvider } from '@/ui/Toast';
 
 function Gate() {
   const { phase } = useDriver();
-  if (phase === 'booting') return <Loading />;
+  if (phase === 'booting') return <BootScreen />;
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.canvas } }}>
       <Stack.Protected guard={phase === 'signed-out'}>
@@ -41,6 +42,7 @@ export default function RootLayout() {
       <ToastProvider>
         <DriverProvider>
           <Gate />
+          <DevBuildNote />
         </DriverProvider>
       </ToastProvider>
       </AppI18nProvider>

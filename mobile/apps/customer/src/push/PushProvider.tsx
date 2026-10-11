@@ -1,8 +1,9 @@
 /* S168: FCM/APNs push. The device push token is registered with identity (POST /v1/me/devices, app=customer) on every
    start and every token refresh, and unregistered on sign-out (DELETE /v1/me/devices). Tapping a notification opens
-   the right screen; per-category preferences decide whether a push is shown while the app is open. */
+   the right screen; per-category preferences decide whether a push is shown while the app is open.
+   Remote push needs our own build (capabilities.remotePush): in Expo Go the token half is skipped, so the app never
+   touches the APIs Expo Go removed, and expo-notifications is loaded lazily (notificationsModule). */
 import * as Device from 'expo-device';
-import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform } from 'react-native';
@@ -11,8 +12,10 @@ import { useApi } from '@/api/ApiProvider';
 import { type RegisterDeviceRequest } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
 import { type CategoryPrefs, DEFAULT_CATEGORY_PREFS, type PushData, routeForNotification, shouldDisplay } from '@/domain/notifications';
+import { capabilities } from '@/platform/runtime';
 
 import { loadCategoryPrefs, saveCategoryPrefs } from './categoryPrefs';
+import { loadNotifications, type NotificationsModule } from './notificationsModule';
 
 interface PushContextValue {
   /** Asks for notification permission (setup step 4 / settings) and registers the device. */
@@ -24,7 +27,11 @@ interface PushContextValue {
 }
 
 const PushContext = createContext<PushContextValue | null>(null);
-const supported = Platform.OS === 'ios' || Platform.OS === 'android';
+const supported = capabilities.localNotifications;
+/** Device-token registration: our own builds only (never Expo Go, never the web preview). */
+const remote = capabilities.remotePush;
+
+type NotificationResponse = Parameters<Parameters<NotificationsModule['addNotificationResponseReceivedListener']>[0]>[0];
 
 /** Native device token (APNs on iOS, FCM on Android) for identity's push sender. */
 export function registrationFor(token: string, platform: 'ios' | 'android', deviceName: string | null): RegisterDeviceRequest {
@@ -46,17 +53,17 @@ export function PushProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!supported) return;
-    Notifications.setNotificationHandler({
+    void loadNotifications().then((Notifications) => Notifications?.setNotificationHandler({
       handleNotification: async (n) => {
         const data = (n.request.content.data ?? {}) as PushData;
         const show = shouldDisplay(data.category, server.current, cats.current);
         return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: show, shouldSetBadge: false };
       }
-    });
+    }));
   }, []);
 
   const register = useCallback(async (t: string) => {
-    if (!supported) return;
+    if (!remote) return;
     token.current = t;
     try {
       await api.identity.registerDevice(registrationFor(t, Platform.OS as 'ios' | 'android', Device.deviceName));
@@ -67,29 +74,41 @@ export function PushProvider({ children }: { children: ReactNode }) {
 
   const enable = useCallback(async () => {
     if (!supported || !Device.isDevice) return false;
+    const Notifications = await loadNotifications();
+    if (!Notifications) return false;
     const current = await Notifications.getPermissionsAsync();
     const granted = current.granted || (await Notifications.requestPermissionsAsync()).granted;
     if (!granted) return false;
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('orders', { name: 'Orders & deliveries', importance: Notifications.AndroidImportance.HIGH });
     }
-    const t = await Notifications.getDevicePushTokenAsync();
-    await register(String(t.data));
-    return true;
+    // Expo Go: permission and channel only; the push token needs our own build (development build).
+    if (!remote) return false;
+    try {
+      const t = await Notifications.getDevicePushTokenAsync();
+      await register(String(t.data));
+      return true;
+    } catch {
+      return false; // no FCM/APNs set-up in this build (google-services.json, APNs entitlement): retried on next start
+    }
   }, [register]);
 
   /* Register on every start (when signed in and permission was granted) and on token refresh. */
   useEffect(() => {
-    if (!supported || !signedIn) return;
+    if (!remote || !signedIn) return;
     let cancelled = false;
+    let remove: (() => void) | null = null;
     void (async () => {
+      const Notifications = await loadNotifications();
+      if (!Notifications || cancelled) return;
+      const sub = Notifications.addPushTokenListener((t) => { void register(String(t.data)); });
+      remove = () => sub.remove();
       const perm = await Notifications.getPermissionsAsync();
       if (!perm.granted || !Device.isDevice || cancelled) return;
       const t = await Notifications.getDevicePushTokenAsync();
       if (!cancelled) await register(String(t.data));
-    })();
-    const sub = Notifications.addPushTokenListener((t) => { void register(String(t.data)); });
-    return () => { cancelled = true; sub.remove(); };
+    })().catch(() => undefined);
+    return () => { cancelled = true; remove?.(); };
   }, [signedIn, register]);
 
   /* Unregister on sign-out. */
@@ -101,13 +120,19 @@ export function PushProvider({ children }: { children: ReactNode }) {
   /* Deep links from taps (warm and cold start). */
   useEffect(() => {
     if (!supported || !signedIn) return;
-    const open = (r: Notifications.NotificationResponse | null) => {
-      if (!r) return;
+    let cancelled = false;
+    let remove: (() => void) | null = null;
+    const open = (r: NotificationResponse | null) => {
+      if (!r || cancelled) return;
       router.push(routeForNotification((r.notification.request.content.data ?? {}) as PushData) as never);
     };
-    void Notifications.getLastNotificationResponseAsync().then(open);
-    const sub = Notifications.addNotificationResponseReceivedListener(open);
-    return () => sub.remove();
+    void loadNotifications().then((Notifications) => {
+      if (!Notifications || cancelled) return;
+      void Notifications.getLastNotificationResponseAsync().then(open);
+      const sub = Notifications.addNotificationResponseReceivedListener(open);
+      remove = () => sub.remove();
+    });
+    return () => { cancelled = true; remove?.(); };
   }, [signedIn, router]);
 
   const value = useMemo<PushContextValue>(() => ({

@@ -8,7 +8,6 @@
 import * as Crypto from 'expo-crypto';
 import * as Device from 'expo-device';
 import * as Network from 'expo-network';
-import * as Notifications from 'expo-notifications';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Platform } from 'react-native';
 
@@ -20,9 +19,12 @@ import { decideAccess } from '@/domain/access';
 import { decodeJwt, isExpiring } from '@/domain/jwt';
 import { onShift } from '@/domain/shift';
 import { currentFix, ensureLocationPermission, watchForegroundFixes } from '@/lib/location';
+import { capabilities } from '@/platform/runtime';
 import { driverStore } from '@/storage';
 import { type EngineState, SyncEngine } from '@/sync/engine';
 import { LocationPinger } from '@/sync/locationPinger';
+
+import { loadNotifications } from './notificationsModule';
 
 const TOKENS = 'at.driver.tokens';
 const PAUSED = 'sync.paused';
@@ -112,8 +114,11 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   }, [api, engine]);
 
   const registerPush = useCallback(async () => {
-    if (Platform.OS === 'web' || !Device.isDevice) return;
+    // Remote push needs our own build: Expo Go (SDK 53+) has no push tokens for our app (capabilities.remotePush).
+    if (!capabilities.remotePush || !Device.isDevice) return;
     try {
+      const Notifications = await loadNotifications();
+      if (!Notifications) return;
       const perm = await Notifications.getPermissionsAsync();
       if (!(perm.granted || (await Notifications.requestPermissionsAsync()).granted)) return;
       const t = String((await Notifications.getDevicePushTokenAsync()).data);

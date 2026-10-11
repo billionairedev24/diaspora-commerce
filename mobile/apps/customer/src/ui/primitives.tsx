@@ -22,7 +22,7 @@ export function AppText({ variant = 'body', color, style, ...rest }: TextProps &
   return <Text allowFontScaling maxFontSizeMultiplier={MAX_FONT_SCALE} {...rest} style={[typeRamp[variant], { color: color ?? c.text }, style]} />;
 }
 
-export type ButtonKind = 'primary' | 'dark' | 'outline' | 'danger' | 'ghost' | 'muted';
+export type ButtonKind = 'primary' | 'dark' | 'outline' | 'danger' | 'ghost' | 'muted' | 'onDark';
 
 const KIND: Record<ButtonKind, { bg: string; fg: string; border: string }> = {
   primary: { bg: c.actionPrimary, fg: c.actionPrimaryText, border: c.actionPrimary },
@@ -30,7 +30,9 @@ const KIND: Record<ButtonKind, { bg: string; fg: string; border: string }> = {
   outline: { bg: c.surface, fg: c.text, border: c.borderStrong },
   danger: { bg: c.danger, fg: c.textInverse, border: c.danger },
   ghost: { bg: 'transparent', fg: c.text, border: 'transparent' },
-  muted: { bg: t.ink['100'], fg: c.text, border: t.ink['100'] }
+  muted: { bg: t.ink['100'], fg: c.text, border: t.ink['100'] },
+  /** Secondary action on a black canvas (welcome and onboarding screens). */
+  onDark: { bg: 'transparent', fg: c.textInverse, border: t.ink['600'] }
 };
 
 export interface ButtonProps {

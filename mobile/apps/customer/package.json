@@ -12,6 +12,8 @@
     "web": "expo start --web",
     "export:web": "expo export --platform web --output-dir dist",
     "doctor": "expo-doctor",
+    "brand": "node ../../scripts/brand-assets.mjs customer",
+    "check:brand": "node ../../scripts/brand-assets.mjs customer --check",
     "generate": "SPECS=bookings,identity node scripts/generate.mjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -29,14 +31,17 @@
     "@tanstack/react-query": "^5.104.1",
     "expo": "~57.0.27",
     "expo-auth-session": "~57.0.14",
+    "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.21",
     "expo-crypto": "~57.0.3",
+    "expo-dev-client": "~57.0.19",
     "expo-device": "~57.0.2",
     "expo-linking": "~57.0.12",
     "expo-local-authentication": "~57.0.3",
     "expo-notifications": "~57.0.22",
     "expo-router": "~57.0.25",
     "expo-secure-store": "~57.0.4",
+    "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-web-browser": "~57.0.3",
     "phosphor-react-native": "^3.0.6",
@@ -58,7 +63,15 @@
     "@types/react": "~19.2.18",
     "eslint": "^9.39.5",
     "openapi-typescript": "^7.13.0",
+    "sharp": "0.35.5",
     "typescript": "5.9.3",
     "vitest": "5.0.3"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "@sentry/react-native"
+      ]
+    }
   }
 }

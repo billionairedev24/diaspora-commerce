@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 
 import { mockRevokeAccess } from '@/api/mock/server';
+import { EnvRibbon } from '@/brand/EnvRibbon';
 import { env } from '@/config/env';
 import { type MessageKey, type Translator, useFormatters, useLocale, useT } from '@/i18n';
 import { EN_MESSAGES } from '@/i18n/catalogs';
@@ -81,6 +82,7 @@ export default function Profile() {
       <Button kind="outline" label={`${tr('dr.profile.language')} · ${localeInfo(locale).name}`} onPress={() => setLanguage(true)} />
       <LanguageSheet visible={language} onClose={() => setLanguage(false)} title={tr('dr.profile.chooseLanguage')} rtlNote={tr('dr.profile.rtlRestart')} />
       <Button kind="danger" label={tr('dr.profile.signOut')} onPress={() => void signOut()} />
+      <EnvRibbon />
       <AppText variant="caption" color={c.textMuted} style={{ textAlign: 'center' }}>{tr('dr.profile.device', { id: out.deviceId.slice(0, 12), env: env.appEnv })}</AppText>
     </DriverScreen>
   );

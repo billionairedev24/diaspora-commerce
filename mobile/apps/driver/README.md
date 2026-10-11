@@ -18,6 +18,10 @@ and `java/services/fulfilment/README.md` → "Driver app integration". Types are
 
 ## Run it
 
+On a real phone (Expo Go over Wi-Fi, development build over USB or EAS):
+[docs/engineering/mobile-on-your-phone.md](../../../docs/engineering/mobile-on-your-phone.md). Everything except
+remote push works in Expo Go (camera, barcode scanning, GPS, SQLite); push needs a development build.
+
 ```bash
 pnpm install
 pnpm --filter @afrotransact/driver-app start:mock   # local env + in-app mock fulfilment/media/identity

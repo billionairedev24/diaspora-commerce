@@ -1,8 +1,12 @@
-/* Today (design: HOME): inspection → load-out → route → end shift, each step unlocking the next. */
+/* Today (design: HOME): inspection → load-out → route → end shift, each step unlocking the next. The start-of-shift
+   greeting sits on a brand hero card (the welcome imagery, faded to black). */
 import { useRouter } from 'expo-router';
 import { CaretRightIcon as CaretRight, CheckIcon as Check, ClipboardTextIcon as ClipboardText, FlagCheckeredIcon as FlagCheckered, PackageIcon as Package, PathIcon as Path, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { DriverHeroArt } from '@/brand/DriverHeroArt';
+import { Hero } from '@/brand/Hero';
+import heroPhoto from '@/brand/heroPhoto';
 import { type Phase, phases, primaryAction } from '@/domain/shift';
 import { useT } from '@/i18n';
 import { useDriver } from '@/session/DriverProvider';
@@ -46,10 +50,14 @@ export default function Today() {
   const pkgs = r.packages.length;
   return (
     <DriverScreen title={tr('dr.index.today')} inTabs footer={<Button label={primary.label} disabled={primary.disabled} onPress={() => void onPrimary()} />}>
-      <View style={styles.hello}>
-        <AppText variant="title">Hi {user?.name.split(' ')[0]}</AppText>
-        <AppText color={c.textMuted}>{r.zone} · {r.window} · {r.stops.length} stops · {pkgs} packages</AppText>
-        <AppText variant="small" color={c.textMuted}>Vehicle {r.vehicleLabel} · from {r.depotName}</AppText>
+      <View style={styles.shift}>
+        <Hero photo={heroPhoto} art={<DriverHeroArt crop="wide" />} accessibilityLabel="Your shift">
+          <View style={styles.hello}>
+            <AppText variant="title" color={c.textInverse}>Hi {user?.name.split(' ')[0]}</AppText>
+            <AppText color={c.headerMuted}>{r.zone} · {r.window} · {r.stops.length} stops · {pkgs} packages</AppText>
+            <AppText variant="small" color={t.gold['500']}>Vehicle {r.vehicleLabel} · from {r.depotName}</AppText>
+          </View>
+        </Hero>
       </View>
       {r.blocked ? <Banner tone="danger" icon={WarningCircle}>{tr('dr.index.defectSentToDispatchA')}</Banner> : null}
       {sync.outbox.issues.length ? (
@@ -77,7 +85,8 @@ export default function Today() {
 }
 
 const styles = StyleSheet.create({
-  hello: { gap: 2 },
+  shift: { height: 196, borderRadius: t.radius.lg * 1.5, overflow: 'hidden' },
+  hello: { gap: 2, padding: sp['4'] },
   phase: { flexDirection: 'row', alignItems: 'center', gap: sp['3'], padding: sp['3'], borderRadius: t.radius.lg, borderWidth: 1, borderColor: c.border, backgroundColor: c.surface },
   dot: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' }
 });

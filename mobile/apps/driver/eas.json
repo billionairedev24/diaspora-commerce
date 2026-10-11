@@ -13,9 +13,6 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
-      "ios": {
-        "simulator": true
-      },
       "env": {
         "EXPO_PUBLIC_APP_ENV": "dev",
         "EXPO_PUBLIC_MOCKS": "0",
@@ -23,6 +20,15 @@
         "EXPO_PUBLIC_MEDIA_URL": "https://api.dev.afrotransact.com/media",
         "EXPO_PUBLIC_OIDC_ISSUER": "https://auth.dev.afrotransact.com",
         "EXPO_PUBLIC_IDENTITY_URL": "https://api.dev.afrotransact.com/identity"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "development-simulator": {
+      "extends": "development",
+      "ios": {
+        "simulator": true
       }
     },
     "development-mocks": {
@@ -30,12 +36,12 @@
       "developmentClient": true,
       "distribution": "internal",
       "channel": "development",
-      "ios": {
-        "simulator": true
-      },
       "env": {
         "EXPO_PUBLIC_APP_ENV": "local",
         "EXPO_PUBLIC_MOCKS": "1"
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "preview": {
@@ -49,6 +55,9 @@
         "EXPO_PUBLIC_MEDIA_URL": "https://api.uat.afrotransact.com/media",
         "EXPO_PUBLIC_OIDC_ISSUER": "https://auth.uat.afrotransact.com",
         "EXPO_PUBLIC_IDENTITY_URL": "https://api.uat.afrotransact.com/identity"
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "production": {

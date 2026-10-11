@@ -6,16 +6,19 @@ import { type OrderConfirmation } from '@/api/types';
 import { env } from '@/config/env';
 
 import { mockPayments } from './mockPayments';
+import { stripeReturnUrl, walletPayAvailable } from './stripeLinks';
 import { type Payments, type PayResult } from './types';
 
-const RETURN_URL = `${env.redirectScheme}://stripe-redirect`;
+const RETURN_URL = stripeReturnUrl();
 const COMMON = {
   merchantDisplayName: 'AfroTransact',
   returnURL: RETURN_URL,
   allowsDelayedPaymentMethods: true,
   billingDetailsCollectionConfiguration: { address: AddressCollectionMode.AUTOMATIC },
-  applePay: { merchantCountryCode: 'US' },
-  googlePay: { merchantCountryCode: 'US', currencyCode: 'USD', testEnv: env.appEnv !== 'prod' }
+  // Wallets need our own build's merchant set-up (Expo Go: cards only).
+  ...(walletPayAvailable
+    ? { applePay: { merchantCountryCode: 'US' }, googlePay: { merchantCountryCode: 'US', currencyCode: 'USD', testEnv: env.appEnv !== 'prod' } }
+    : {})
 };
 
 export function usePayments(): Payments {

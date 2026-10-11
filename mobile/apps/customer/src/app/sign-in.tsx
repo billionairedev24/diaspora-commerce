@@ -1,18 +1,24 @@
 /* S163 launch screen: the app opens on sign-in (no guest mode). Credentials, MFA, passkeys and social sign-in run on
-   identity's hosted pages via OIDC authorization code + PKCE; the email typed here is passed as login_hint. */
+   identity's hosted pages via OIDC authorization code + PKCE; the email typed here is passed as login_hint.
+   Welcome: full-bleed brand imagery (photo from assets/hero or the drawn Sunday-table art) fading to black, with the
+   sign-in form on a white sheet below it. */
+import { StatusBar } from 'expo-status-bar';
 import * as WebBrowser from 'expo-web-browser';
 import { AppleLogoIcon as AppleLogo, FacebookLogoIcon as FacebookLogo, FingerprintIcon as Fingerprint, GoogleLogoIcon as GoogleLogo, type Icon, InfoIcon as Info, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { SignInCancelled, type SignInIntent } from '@/auth/oidc';
+import { CustomerHeroArt } from '@/brand/CustomerHeroArt';
+import { Hero } from '@/brand/Hero';
+import heroPhoto from '@/brand/heroPhoto';
 import { env } from '@/config/env';
 import { useT } from '@/i18n';
 import { c, sp, t } from '@/theme';
 import { Logo } from '@/ui/Logo';
-import { AppText, Banner, Button, Field } from '@/ui/primitives';
-import { Screen } from '@/ui/Screen';
+import { AppText, Banner, Button, Field, MAX_FONT_SCALE } from '@/ui/primitives';
 
 const RE_EMAIL = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i;
 
@@ -48,14 +54,25 @@ export default function SignIn() {
   };
 
   const open = (path: string) => void WebBrowser.openBrowserAsync(`${env.webUrl}${path}`);
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const heroHeight = Math.max(280, Math.round(height * 0.46));
 
   return (
-    <Screen>
-      <View style={styles.brand}>
-        <Logo size={44} wordSize={t.fontSize['2xl']} />
-        <AppText variant="small" color={c.textMuted}>{tr('cu.signIn.everyDiasporaSMarketOne')}</AppText>
+    <View style={styles.root}>
+      <StatusBar style="light" />
+      <View style={{ height: heroHeight }}>
+        <Hero photo={heroPhoto} art={<CustomerHeroArt />} accessibilityLabel="A table set with groceries from the AfroTransact bag and a pot of jollof">
+          <View style={[styles.heroCopy, { paddingTop: insets.top + sp['3'] }]}>
+            <Logo size={40} wordSize={t.fontSize.xl} tone="light" />
+            <View style={styles.heroText}>
+              <AppText maxFontSizeMultiplier={MAX_FONT_SCALE} style={styles.headline} color={c.textInverse} accessibilityRole="header">{tr('cu.signIn.everyDiasporaSMarketOne')}</AppText>
+            </View>
+          </View>
+        </Hero>
       </View>
-      <AppText variant="display" accessibilityRole="header">{tr('cu.signIn.signIn')}</AppText>
+      <ScrollView style={styles.sheet} contentContainerStyle={[styles.sheetBody, { paddingBottom: insets.bottom + sp['6'] }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+      <AppText variant="display">{tr('cu.signIn.signIn')}</AppText>
       {flash ? <Banner tone="info" icon={Info}>{flash}</Banner> : null}
       <Field label={tr('cu.signIn.email')} value={email} onChangeText={(v) => { setEmail(v); setErr(''); }} placeholder={tr('cu.signIn.youExampleCom')} keyboardType="email-address" autoCapitalize="none" autoComplete="email" textContentType="emailAddress" returnKeyType="go" onSubmitEditing={submit} />
       <AppText variant="small" color={c.textMuted}>{tr('cu.signIn.youLlEnterYourPassword')}</AppText>
@@ -88,12 +105,18 @@ export default function SignIn() {
         <AppText variant="caption" style={{ textDecorationLine: 'underline' }} onPress={() => open('/legal/privacy')}>{tr('cu.signIn.privacyNotice')}</AppText>.
       </AppText>
       {env.mocks ? <AppText variant="caption" color={c.textSubtle}>{tr('cu.signIn.devMocksAreOnSign')}</AppText> : null}
-    </Screen>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  brand: { alignItems: 'center', gap: sp['2'], paddingVertical: sp['4'] },
+  root: { flex: 1, backgroundColor: t.ink['1000'] },
+  heroCopy: { flex: 1, justifyContent: 'space-between', paddingHorizontal: sp['5'], paddingBottom: sp['10'] },
+  heroText: { gap: sp['2'] },
+  headline: { fontSize: t.fontSize['3xl'], lineHeight: t.fontSize['3xl'] * t.leading.tight, fontWeight: t.fontWeight.black, letterSpacing: -0.45 },
+  sheet: { flex: 1, marginTop: -sp['6'], backgroundColor: c.canvas, borderTopLeftRadius: t.radius.lg * 2, borderTopRightRadius: t.radius.lg * 2 },
+  sheetBody: { paddingHorizontal: sp['4'], paddingTop: sp['6'], gap: sp['4'] },
   divider: { flexDirection: 'row', alignItems: 'center', gap: sp['3'] },
   rule: { flex: 1, height: 1, backgroundColor: c.border },
   socials: { flexDirection: 'row', gap: sp['2'] },

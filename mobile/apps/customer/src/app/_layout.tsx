@@ -10,6 +10,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ApiProvider } from '@/api/ApiProvider';
 import { AuthProvider, useAuth } from '@/auth/AuthProvider';
+import { BootScreen } from '@/brand/BootScreen';
 import { LockOverlay } from '@/features/lock/LockOverlay';
 import { PasscodePrompt } from '@/features/lock/PasscodePrompt';
 import { AppI18nProvider } from '@/i18n';
@@ -17,12 +18,12 @@ import { PaymentsProvider } from '@/payments/PaymentsProvider';
 import { PushProvider } from '@/push/PushProvider';
 import { c } from '@/theme';
 import { CrashScreen } from '@/ui/CrashScreen';
-import { Loading } from '@/ui/primitives';
+import { DevBuildNote } from '@/ui/DevBuildNote';
 import { ToastProvider } from '@/ui/Toast';
 
 function Gate() {
   const { ready, phase } = useAuth();
-  if (!ready) return <Loading />;
+  if (!ready) return <BootScreen />;
   const inApp = phase === 'locked' || phase === 'unlocked';
   return (
     <View style={{ flex: 1, backgroundColor: c.canvas }}>
@@ -40,6 +41,7 @@ function Gate() {
       </Stack>
       {phase === 'locked' ? <LockOverlay /> : null}
       <PasscodePrompt />
+      <DevBuildNote />
     </View>
   );
 }

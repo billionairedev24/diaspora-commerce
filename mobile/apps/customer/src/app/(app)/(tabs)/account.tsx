@@ -8,6 +8,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useAddresses, useMyBookings, useOrders, usePaymentMethods } from '@/api/queries';
 import { useAuth } from '@/auth/AuthProvider';
+import { EnvRibbon } from '@/brand/EnvRibbon';
 import { env } from '@/config/env';
 import { isActive } from '@/domain/bookings';
 import { stepIndex } from '@/domain/tracking';
@@ -91,6 +92,7 @@ export default function Account() {
       </View>
       <Button kind="outline" icon={LockSimple} label={tr('cu.account.lockApp')} onPress={lock} />
       <Button kind="outline" icon={SignOut} label={tr('cu.account.signOut')} onPress={() => setConfirm(true)} />
+      <EnvRibbon />
       <AppText variant="caption" color={c.textMuted} style={{ textAlign: 'center' }}>{tr('cu.account.version', { version: '2.0.0', env: env.appEnv })}</AppText>
       <LanguageSheet visible={language} onClose={() => setLanguage(false)} title={tr('cu.account.chooseLanguage')} rtlNote={tr('cu.account.rtlRestart')} />
       <Sheet visible={confirm} onClose={() => setConfirm(false)}>

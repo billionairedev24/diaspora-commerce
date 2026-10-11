@@ -20,9 +20,12 @@ pnpm --filter @afrotransact/customer-app start:mock   # local env + in-app mock 
 pnpm --filter @afrotransact/customer-app start        # uses EXPO_PUBLIC_* below
 ```
 
-- **Dev build required** for real sign-in (custom scheme redirect), Face ID and Stripe: `eas build --profile development`
-  (or `npx expo run:ios|android` on a machine with the native toolchains). Expo Go cannot receive the
-  `com.afrotransact.customer:/oauth2redirect` redirect.
+- **On a phone:** [docs/engineering/mobile-on-your-phone.md](../../../docs/engineering/mobile-on-your-phone.md) — Expo Go
+  over Wi-Fi (`make up MOBILE_HOST=lan`), a development build over USB (`make mobile-android-device APP=customer`,
+  `make mobile-ios-device APP=customer`) or from EAS (`eas build --profile development`).
+- **Expo Go** works with the local stack (sign-in returns to `exp://<ip>:8081/--/auth/callback`, registered in LAN
+  mode). It has no remote push (SDK 53+), no Face ID on iPhone and no Apple/Google Pay: `src/platform/runtime.ts`
+  detects it and the app falls back (no push registration, passcode, cards). A **development build** has everything.
 - **Mocks** (`EXPO_PUBLIC_MOCKS=1`, default for `local`): `src/api/mock/router.ts` answers BFF, identity and bookings
   routes from fixtures that pass the api-client Zod schemas; sign-in completes as `adaeze@example.com`; Stripe is
   simulated (`src/payments/mockPayments.ts`). Mocks are forced off in `prod`.
