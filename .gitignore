@@ -40,3 +40,5 @@ __pycache__/
 *.tsbuildinfo
 .next-e2e/
 .local/
+# Written by next dev (Next.js 16 agent notes)
+web/apps/*/AGENTS.md
