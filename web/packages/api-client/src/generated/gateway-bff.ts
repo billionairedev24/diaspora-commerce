@@ -60,6 +60,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/legal/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A legal document (current version, or an archived one with `version`), placeholders filled in
+         * @description Keys: conditions-of-use, privacy, cookies, privacy-choices, returns, seller-terms, prohibited-items,
+         *     accessibility, sms-terms. English is binding; other locales fall back to English with
+         *     `translationFallback: true`. Public and cacheable.
+         */
+        get: operations["getLegalDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/consent/cookie-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Cookie categories and the cookie table (banner, preferences and the Cookie Notice) */
+        get: operations["getCookiePolicy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/consent/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Store the visitor's cookie choice (auditable; GPC and "Do not sell or share" force advertising off)
+         * @description The subject is the signed-in user or the session's anonymous id (never chosen by the client). The browser's
+         *     `Sec-GPC: 1` header is forwarded; required categories are always on.
+         */
+        post: operations["recordConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/privacy/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a privacy request (access, delete, correct, opt out); answered within 45 days
+         * @description A signed-in customer's account is attached to the request; identity is verified by email.
+         */
+        post: operations["submitPrivacyRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/delivery-location": {
         parameters: {
             query?: never;
@@ -2066,6 +2146,133 @@ export interface components {
             /** @enum {string} */
             status: "pending_confirmation" | "subscribed";
         };
+        /** @description A rendered legal document (Markdown body with `##` sections; `outline` lists their anchors) */
+        LegalPage: {
+            /** @example conditions-of-use */
+            key: string;
+            /** @example Conditions of Use */
+            title: string;
+            /** @example 3.2 */
+            version: string;
+            /** Format: date */
+            effectiveDate: string;
+            /** @enum {string} */
+            status: "CURRENT" | "ARCHIVED";
+            /** @description Show "Draft for legal counsel review" until counsel signs off */
+            draftBanner: boolean;
+            /** @description Locale of the body (en when the translation falls back) */
+            locale: string;
+            /** @description The requested locale has no reviewed translation; the binding English text is served */
+            translationFallback: boolean;
+            /** @description Markdown */
+            body: string;
+            outline: components["schemas"]["LegalHeading"][];
+            /** @description Every version, newest first */
+            versions: components["schemas"]["LegalVersionRef"][];
+            /** @example /legal/conditions-of-use */
+            href: string;
+        };
+        LegalHeading: {
+            /** @example notifications-email-and-text-messages */
+            id: string;
+            title: string;
+        };
+        LegalVersionRef: {
+            version: string;
+            /** Format: date */
+            effectiveDate: string;
+            /** @enum {string} */
+            status: "CURRENT" | "ARCHIVED";
+            changeSummary?: string | null;
+        };
+        CookiePolicy: {
+            /** @example 2.1 */
+            noticeVersion: string;
+            /** Format: date */
+            effectiveDate: string;
+            /** @example /legal/cookies */
+            noticeHref: string;
+            categories: components["schemas"]["CookieCategory"][];
+            cookies: components["schemas"]["CookieDefinition"][];
+        };
+        CookieCategory: {
+            /** @example analytics */
+            key: string;
+            name: string;
+            description: string;
+            /** @description Always on (strictly necessary) */
+            required: boolean;
+            /** @description Switched off and locked by Global Privacy Control or a sale/sharing opt-out */
+            gpcOptOut: boolean;
+        };
+        CookieDefinition: {
+            /** @example _gcl_au */
+            name: string;
+            provider: string;
+            purpose: string;
+            duration: string;
+            category: string;
+        };
+        ConsentRequest: {
+            /** @description Choice per category key (unknown keys are rejected) */
+            categories: {
+                [key: string]: boolean;
+            };
+            /** @description Do not sell or share my personal information */
+            saleOptOut?: boolean;
+            /** @description navigator.globalPrivacyControl (the Sec-GPC header is also read) */
+            gpc?: boolean;
+            /**
+             * @default banner
+             * @enum {string}
+             */
+            source: "banner" | "preferences" | "privacy-choices";
+        };
+        ConsentRecord: {
+            /** Format: uuid */
+            id: string;
+            categories: {
+                [key: string]: boolean;
+            };
+            gpc: boolean;
+            saleOptOut: boolean;
+            /** @description Cookie Notice version the choice was made under */
+            policyVersion: string;
+            /** Format: date-time */
+            recordedAt: string;
+        };
+        PrivacyRequest: {
+            /** @enum {string} */
+            type: "access" | "delete" | "correct" | "optout";
+            /**
+             * Format: email
+             * @description Email on the requester's account
+             */
+            email: string;
+            /**
+             * @description US state of residence (DC included)
+             * @example TX
+             */
+            state: string;
+            details?: string;
+            /** @example en */
+            locale?: string;
+        };
+        PrivacyRequestReceipt: {
+            /** @example PR-100001 */
+            reference: string;
+            /** @enum {string} */
+            type: "access" | "delete" | "correct" | "optout";
+            /** @enum {string} */
+            status: "RECEIVED" | "COMPLETED" | "DENIED";
+            /** Format: date-time */
+            submittedAt: string;
+            /**
+             * Format: date-time
+             * @description Response deadline (45 days)
+             */
+            dueAt: string;
+        };
         Me: {
             authenticated: boolean;
             user: {
@@ -3131,6 +3338,113 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NewsletterResponse"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getLegalDocument: {
+        parameters: {
+            query?: {
+                /**
+                 * @description An archived or the current version
+                 * @example 3.1
+                 */
+                version?: string;
+                locale?: string;
+            };
+            header?: never;
+            path: {
+                /** @example sms-terms */
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The document */
+            200: {
+                headers: {
+                    /** @example public, max-age=60 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LegalPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    getCookiePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Categories in display order and every cookie we use */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CookiePolicy"];
+                };
+            };
+        };
+    };
+    recordConsent: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Sec-GPC"?: "1";
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsentRequest"];
+            };
+        };
+        responses: {
+            /** @description Stored decision after normalisation */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsentRecord"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    submitPrivacyRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrivacyRequest"];
+            };
+        };
+        responses: {
+            /** @description Request received */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrivacyRequestReceipt"];
                 };
             };
             422: components["responses"]["ValidationProblem"];

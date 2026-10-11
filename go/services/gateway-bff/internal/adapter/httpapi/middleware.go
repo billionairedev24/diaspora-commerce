@@ -86,7 +86,7 @@ func cors(o SecurityOptions) func(http.Handler) http.Handler {
 			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
 				if allowed {
 					w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-					w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Authorization, Content-Type, Idempotency-Key, If-None-Match, X-Guest-Cart, X-Correlation-Id")
+					w.Header().Set("Access-Control-Allow-Headers", "Accept, Accept-Language, Authorization, Content-Type, Idempotency-Key, If-None-Match, Sec-GPC, X-Guest-Cart, X-Correlation-Id")
 					w.Header().Set("Access-Control-Max-Age", "600")
 				}
 				w.WriteHeader(http.StatusNoContent)

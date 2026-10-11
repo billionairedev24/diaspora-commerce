@@ -478,6 +478,12 @@ func (f *fakePlatform) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJ(w, 200, map[string]any{"documents": []any{map[string]any{"key": "terms", "title": "Conditions of Use", "version": "3.2", "effectiveDate": "2026-09-01"}}})
 	case strings.HasPrefix(p, "/v1/legal/"):
 		writeJ(w, 200, []any{map[string]any{"version": "3.2", "effectiveDate": "2026-09-01", "status": "CURRENT"}})
+	case p == "/v1/privacy/requests":
+		writeJ(w, 200, []any{map[string]any{"id": "0b1c", "reference": "PR-100001", "type": "access", "email": "ada@example.com", "state": "TX",
+			"status": "RECEIVED", "overdue": false, "submittedAt": now, "dueAt": now, "version": 0}})
+	case strings.HasPrefix(p, "/v1/privacy/requests/"):
+		writeJ(w, 200, map[string]any{"id": "0b1c", "reference": "PR-100001", "type": "access", "email": "ada@example.com", "state": "TX",
+			"status": "RECEIVED", "overdue": false, "submittedAt": now, "dueAt": now, "version": 0})
 	case p == "/v1/placements" || strings.HasPrefix(p, "/v1/placements/"):
 		pl := map[string]any{"id": "plc-1", "slot": "announcement_bar", "name": "Free delivery", "status": "DRAFT", "payload": map[string]any{"text": "Free delivery over $49"},
 			"schedule": map[string]any{"startsAt": now}, "version": 1}

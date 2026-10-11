@@ -130,6 +130,12 @@ type Upstreams struct {
 	team          *teamState
 	// LastWaitlist is the last delivery-runs POST /v1/public/subscriptions body (pre-order waitlist).
 	LastWaitlist map[string]any
+	// LastConsent / LastConsentGPC are the last content POST /v1/consent/records body and Sec-GPC header.
+	LastConsent    map[string]any
+	LastConsentGPC string
+	// LastPrivacyRequest / LastPrivacyBearer are the last content POST /v1/privacy/requests body and bearer token.
+	LastPrivacyRequest map[string]any
+	LastPrivacyBearer  string
 }
 
 type issuedCode struct {
@@ -973,6 +979,53 @@ func (u *Upstreams) contentRoutes(mux *http.ServeMux) {
 	})
 	mux.HandleFunc("POST /v1/newsletter/subscriptions", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 202, map[string]any{"status": "pending_confirmation"})
+	})
+	mux.HandleFunc("GET /v1/legal/{key}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("key") != "sms-terms" {
+			problem(w, 422, "content.unknown-legal-document", "Unknown legal document", nil)
+			return
+		}
+		w.Header().Set("Cache-Control", "public, max-age=60")
+		loc := r.URL.Query().Get("locale")
+		writeJSON(w, 200, map[string]any{"key": "sms-terms", "title": "SMS & Notification Terms", "version": "1.0", "effectiveDate": "2026-10-10",
+			"status": "CURRENT", "draftBanner": true, "locale": "en", "binding": true, "translationFallback": loc != "en", "bindingLocale": "en",
+			"body": "# SMS & Notification Terms\n\n## Program\n\nAfroTransact Alerts sends order updates.\n", "outline": []map[string]any{{"id": "program", "title": "Program"}},
+			"versions": []map[string]any{{"version": "1.0", "effectiveDate": "2026-10-10", "status": "CURRENT", "archivedAt": nil, "changeSummary": "First draft"}},
+			"href":     "/legal/sms-terms", "archivedAt": nil})
+	})
+	mux.HandleFunc("GET /v1/legal/{key}/versions/{version}", func(w http.ResponseWriter, r *http.Request) {
+		problem(w, 404, "content.legal-version-not-found", "No such version", nil)
+	})
+	mux.HandleFunc("GET /v1/consent/cookie-policy", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age=300")
+		writeJSON(w, 200, map[string]any{"noticeVersion": "2.1", "effectiveDate": "2026-09-01", "noticeHref": "/legal/cookies",
+			"categories": []map[string]any{{"key": "necessary", "name": "Strictly necessary", "description": "Sign-in", "required": true, "gpcOptOut": false, "order": 0},
+				{"key": "advertising", "name": "Advertising", "description": "Ads", "required": false, "gpcOptOut": true, "order": 30}},
+			"cookies": []map[string]any{{"name": "at_session", "provider": "AfroTransact", "purpose": "Keeps you signed in", "duration": "Session", "category": "necessary"}}})
+	})
+	mux.HandleFunc("POST /v1/consent/records", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		u.LastConsent, u.LastConsentGPC = b, r.Header.Get("Sec-GPC")
+		u.mu.Unlock()
+		optOut, _ := b["saleOptOut"].(bool)
+		gpc, _ := b["gpc"].(bool)
+		ads := false
+		if cats, ok := b["categories"].(map[string]any); ok {
+			ads, _ = cats["advertising"].(bool)
+		}
+		writeJSON(w, 201, map[string]any{"id": "7d8a1c2e-0000-4000-8000-000000000001", "categories": map[string]bool{"necessary": true, "advertising": ads && !optOut && !gpc},
+			"gpc": gpc, "saleOptOut": optOut || gpc, "policyVersion": "2.1", "recordedAt": "2026-10-11T00:00:00Z"})
+	})
+	mux.HandleFunc("POST /v1/privacy/requests", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		u.mu.Lock()
+		u.LastPrivacyRequest, u.LastPrivacyBearer = b, strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		u.mu.Unlock()
+		writeJSON(w, 201, map[string]any{"reference": "PR-100001", "type": b["type"], "status": "RECEIVED",
+			"submittedAt": "2026-10-11T00:00:00Z", "dueAt": "2026-11-25T00:00:00Z"})
 	})
 	mux.HandleFunc("GET /v1/careers/jobs", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, 200, map[string]any{"teams": []string{"Platform"}, "locations": []string{"Remote (US)"}, "jobs": []map[string]any{

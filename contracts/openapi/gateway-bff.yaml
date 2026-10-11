@@ -48,6 +48,11 @@ servers:
 tags:
   - name: Site
     description: Site configuration, home placements, newsletter
+  - name: Legal
+    description: |
+      Legal & privacy center (content-service): versioned policy pages, the cookie banner configuration and
+      auditable consent records (Global Privacy Control and "Do not sell or share" honoured), and privacy requests
+      from Your Privacy Choices.
   - name: Location
     description: Deliver-to location and address autocomplete
   - name: Search
@@ -128,6 +133,85 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/NewsletterResponse'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/legal/{key}:
+    get:
+      tags: [Legal]
+      operationId: getLegalDocument
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: A legal document (current version, or an archived one with `version`), placeholders filled in
+      description: |
+        Keys: conditions-of-use, privacy, cookies, privacy-choices, returns, seller-terms, prohibited-items,
+        accessibility, sms-terms. English is binding; other locales fall back to English with
+        `translationFallback: true`. Public and cacheable.
+      parameters:
+        - {name: key, in: path, required: true, schema: {type: string}, example: sms-terms}
+        - {name: version, in: query, required: false, schema: {type: string}, description: An archived or the current version, example: '3.1'}
+        - {name: locale, in: query, required: false, schema: {type: string, default: en}}
+      responses:
+        '200':
+          description: The document
+          headers:
+            Cache-Control: {schema: {type: string}, example: 'public, max-age=60'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LegalPage'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/consent/cookie-policy:
+    get:
+      tags: [Legal]
+      operationId: getCookiePolicy
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Cookie categories and the cookie table (banner, preferences and the Cookie Notice)
+      responses:
+        '200':
+          description: Categories in display order and every cookie we use
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CookiePolicy'}
+  /v1/consent/records:
+    post:
+      tags: [Legal]
+      operationId: recordConsent
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Store the visitor's cookie choice (auditable; GPC and "Do not sell or share" force advertising off)
+      description: |
+        The subject is the signed-in user or the session's anonymous id (never chosen by the client). The browser's
+        `Sec-GPC: 1` header is forwarded; required categories are always on.
+      parameters:
+        - {name: Sec-GPC, in: header, required: false, schema: {type: string, enum: ['1']}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConsentRequest'}
+      responses:
+        '201':
+          description: Stored decision after normalisation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConsentRecord'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+  /v1/privacy/requests:
+    post:
+      tags: [Legal]
+      operationId: submitPrivacyRequest
+      security: [{}, {sessionCookie: []}, {bearer: []}]
+      summary: Make a privacy request (access, delete, correct, opt out); answered within 45 days
+      description: A signed-in customer's account is attached to the request; identity is verified by email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PrivacyRequest'}
+      responses:
+        '201':
+          description: Request received
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PrivacyRequestReceipt'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '429': {$ref: '#/components/responses/TooManyRequests'}
   /v1/delivery-location:
@@ -2524,6 +2608,114 @@ components:
       required: [status]
       properties:
         status: {type: string, enum: [pending_confirmation, subscribed]}
+    LegalPage:
+      type: object
+      description: A rendered legal document (Markdown body with `##` sections; `outline` lists their anchors)
+      required: [key, title, version, effectiveDate, status, draftBanner, locale, translationFallback, body, outline, versions, href]
+      properties:
+        key: {type: string, example: conditions-of-use}
+        title: {type: string, example: Conditions of Use}
+        version: {type: string, example: '3.2'}
+        effectiveDate: {type: string, format: date}
+        status: {type: string, enum: [CURRENT, ARCHIVED]}
+        draftBanner: {type: boolean, description: 'Show "Draft for legal counsel review" until counsel signs off'}
+        locale: {type: string, description: Locale of the body (en when the translation falls back)}
+        translationFallback: {type: boolean, description: The requested locale has no reviewed translation; the binding English text is served}
+        body: {type: string, description: Markdown}
+        outline:
+          type: array
+          items: {$ref: '#/components/schemas/LegalHeading'}
+        versions:
+          type: array
+          description: Every version, newest first
+          items: {$ref: '#/components/schemas/LegalVersionRef'}
+        href: {type: string, example: /legal/conditions-of-use}
+    LegalHeading:
+      type: object
+      required: [id, title]
+      properties:
+        id: {type: string, example: notifications-email-and-text-messages}
+        title: {type: string}
+    LegalVersionRef:
+      type: object
+      required: [version, effectiveDate, status]
+      properties:
+        version: {type: string}
+        effectiveDate: {type: string, format: date}
+        status: {type: string, enum: [CURRENT, ARCHIVED]}
+        changeSummary: {type: [string, 'null']}
+    CookiePolicy:
+      type: object
+      required: [noticeVersion, effectiveDate, noticeHref, categories, cookies]
+      properties:
+        noticeVersion: {type: string, example: '2.1'}
+        effectiveDate: {type: string, format: date}
+        noticeHref: {type: string, example: /legal/cookies}
+        categories:
+          type: array
+          items: {$ref: '#/components/schemas/CookieCategory'}
+        cookies:
+          type: array
+          items: {$ref: '#/components/schemas/CookieDefinition'}
+    CookieCategory:
+      type: object
+      required: [key, name, description, required, gpcOptOut]
+      properties:
+        key: {type: string, example: analytics}
+        name: {type: string}
+        description: {type: string}
+        required: {type: boolean, description: Always on (strictly necessary)}
+        gpcOptOut: {type: boolean, description: Switched off and locked by Global Privacy Control or a sale/sharing opt-out}
+    CookieDefinition:
+      type: object
+      required: [name, provider, purpose, duration, category]
+      properties:
+        name: {type: string, example: _gcl_au}
+        provider: {type: string}
+        purpose: {type: string}
+        duration: {type: string}
+        category: {type: string}
+    ConsentRequest:
+      type: object
+      required: [categories]
+      properties:
+        categories:
+          type: object
+          description: Choice per category key (unknown keys are rejected)
+          additionalProperties: {type: boolean}
+        saleOptOut: {type: boolean, description: Do not sell or share my personal information}
+        gpc: {type: boolean, description: navigator.globalPrivacyControl (the Sec-GPC header is also read)}
+        source: {type: string, enum: [banner, preferences, privacy-choices], default: banner}
+    ConsentRecord:
+      type: object
+      required: [id, categories, gpc, saleOptOut, policyVersion, recordedAt]
+      properties:
+        id: {type: string, format: uuid}
+        categories:
+          type: object
+          additionalProperties: {type: boolean}
+        gpc: {type: boolean}
+        saleOptOut: {type: boolean}
+        policyVersion: {type: string, description: Cookie Notice version the choice was made under}
+        recordedAt: {type: string, format: date-time}
+    PrivacyRequest:
+      type: object
+      required: [type, email, state]
+      properties:
+        type: {type: string, enum: [access, delete, correct, optout]}
+        email: {type: string, format: email, description: Email on the requester's account}
+        state: {type: string, pattern: '^[A-Z]{2}$', description: US state of residence (DC included), example: TX}
+        details: {type: string, maxLength: 2000}
+        locale: {type: string, example: en}
+    PrivacyRequestReceipt:
+      type: object
+      required: [reference, type, status, submittedAt, dueAt]
+      properties:
+        reference: {type: string, example: PR-100001}
+        type: {type: string, enum: [access, delete, correct, optout]}
+        status: {type: string, enum: [RECEIVED, COMPLETED, DENIED]}
+        submittedAt: {type: string, format: date-time}
+        dueAt: {type: string, format: date-time, description: Response deadline (45 days)}
     Me:
       type: object
       required: [authenticated, user, counts]

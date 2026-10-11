@@ -27,6 +27,14 @@ type SiteService interface {
 	Subscribe(ctx context.Context, email string) (string, error)
 	Jobs(ctx context.Context) ([]domain.Job, error)
 	Apply(ctx context.Context, jobID string, a domain.JobApplication) (domain.ApplicationReceipt, error)
+	// LegalDocument serves a legal page (current version, or `version`); unknown documents/versions are 404.
+	LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error)
+	// CookiePolicy is the cookie banner configuration and the cookie table.
+	CookiePolicy(ctx context.Context) (domain.CookiePolicy, error)
+	// RecordConsent stores the caller's cookie choice under the BFF-chosen subject; secGPC is the Sec-GPC header.
+	RecordConsent(ctx context.Context, c *domain.Caller, in domain.ConsentChoice, secGPC bool) (domain.ConsentRecord, error)
+	// SubmitPrivacyRequest validates and forwards a privacy request (the signed-in account is attached).
+	SubmitPrivacyRequest(ctx context.Context, c *domain.Caller, in domain.PrivacyRequest) (domain.PrivacyRequestReceipt, error)
 }
 
 // SiteDeps are the SiteService's collaborators.

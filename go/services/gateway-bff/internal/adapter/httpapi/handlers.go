@@ -88,6 +88,11 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/site-config", h.siteConfig)
 	route("GET /v1/home", h.home)
 	route("POST /v1/newsletter/subscriptions", lookup(h.newsletter))
+	// Legal & privacy center
+	route("GET /v1/legal/{key}", h.legalDocument)
+	route("GET /v1/consent/cookie-policy", h.cookiePolicy)
+	route("POST /v1/consent/records", lookup(h.recordConsent))
+	route("POST /v1/privacy/requests", lookup(h.privacyRequest))
 	// Location
 	route("GET /v1/delivery-location", h.getLocation)
 	route("PUT /v1/delivery-location", h.setLocation)
@@ -232,6 +237,47 @@ func (h *handlersImpl) newsletter(w http.ResponseWriter, r *http.Request) {
 	}
 	status, err := h.s.Site.Subscribe(r.Context(), b.Email)
 	h.reply(w, r, http.StatusAccepted, map[string]string{"status": status}, err)
+}
+
+// publicJSON replies with a public, briefly cacheable document (legal pages and the cookie policy are the same for
+// every visitor).
+func (h *handlersImpl) publicJSON(w http.ResponseWriter, r *http.Request, v any, err error) {
+	if err == nil {
+		w.Header().Set("Cache-Control", "public, max-age=60, stale-while-revalidate=600")
+		w.Header().Set("Vary", "Accept-Encoding")
+	}
+	h.reply(w, r, http.StatusOK, v, err)
+}
+
+func (h *handlersImpl) legalDocument(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	v, err := h.s.Site.LegalDocument(r.Context(), r.PathValue("key"), q.Get("version"), q.Get("locale"))
+	h.publicJSON(w, r, v, err)
+}
+
+func (h *handlersImpl) cookiePolicy(w http.ResponseWriter, r *http.Request) {
+	v, err := h.s.Site.CookiePolicy(r.Context())
+	h.publicJSON(w, r, v, err)
+}
+
+func (h *handlersImpl) recordConsent(w http.ResponseWriter, r *http.Request) {
+	var b domain.ConsentChoice
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Site.RecordConsent(r.Context(), callerFrom(r.Context()), b, r.Header.Get("Sec-GPC") == "1")
+	h.reply(w, r, http.StatusCreated, v, err)
+}
+
+func (h *handlersImpl) privacyRequest(w http.ResponseWriter, r *http.Request) {
+	var b domain.PrivacyRequest
+	if err := decode(r, &b, false); err != nil {
+		h.reply(w, r, 0, nil, err)
+		return
+	}
+	v, err := h.s.Site.SubmitPrivacyRequest(r.Context(), callerFrom(r.Context()), b)
+	h.reply(w, r, http.StatusCreated, v, err)
 }
 
 func (h *handlersImpl) jobs(w http.ResponseWriter, r *http.Request) {

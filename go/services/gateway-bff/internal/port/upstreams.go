@@ -418,6 +418,23 @@ type ContentClient interface {
 	Jobs(ctx context.Context) ([]domain.Job, error)
 	Apply(ctx context.Context, jobID string, a domain.JobApplication) (domain.ApplicationReceipt, error)
 	Eligibility(ctx context.Context, country, state, zip string) (domain.MarketEligibility, error)
+	// LegalDocument is a document's current version (version "") or one version; port.ErrNotFound when unknown.
+	LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error)
+	// CookiePolicy is the consent banner configuration and cookie table.
+	CookiePolicy(ctx context.Context) (domain.CookiePolicy, error)
+	// RecordConsent stores a consent decision (content normalises it).
+	RecordConsent(ctx context.Context, in ContentConsent) (domain.ConsentRecord, error)
+	// SubmitPrivacyRequest stores a privacy request; bearer (may be empty) attaches the signed-in account.
+	SubmitPrivacyRequest(ctx context.Context, bearer string, in domain.PrivacyRequest) (domain.PrivacyRequestReceipt, error)
+}
+
+// ContentConsent is content's ConsentRequest: the subject is decided by the BFF, never the browser.
+type ContentConsent struct {
+	Subject    string          `json:"subject"`
+	Categories map[string]bool `json:"categories"`
+	GPC        bool            `json:"gpc"`
+	SaleOptOut bool            `json:"saleOptOut"`
+	Source     string          `json:"source"`
 }
 
 // ---------------------------------------------------------------- payments, promise, orders, notifications (being built)

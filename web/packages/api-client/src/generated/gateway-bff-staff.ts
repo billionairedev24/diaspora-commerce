@@ -65,7 +65,8 @@ export interface paths {
          *     `GET /v1/lots`; purchase-orders: retail `GET /v1/purchase-orders`; routes: fulfilment `GET /v1/dispatch/routes`;
          *     support-cases: trust-ops `GET /v1/support-cases`; audit: trust-ops `GET /v1/audit/entries`; markets: content
          *     `GET /v1/markets/draft/countries`; site-settings: content `GET /v1/site-config/settings`; legal-documents: content
-         *     `GET /v1/legal`; announcements and placements: content `GET /v1/placements`; identity-providers: identity
+         *     `GET /v1/legal`; privacy-requests: content `GET /v1/privacy/requests` (content:legal.view); announcements and
+         *     placements: content `GET /v1/placements`; identity-providers: identity
          *     `GET /v1/admin/identity-providers`; fee-schedules: payments `GET /v1/fee-schedules`; tax-rates: tax-returns
          *     `GET /v1/tax/rates`. Needs VIEW on the resource's module.
          */
@@ -127,7 +128,9 @@ export interface paths {
          *     applications:review) and `final-approve` / `send-back` / `reject` (seller `POST /v1/applications/{id}/decision`,
          *     applications:approve, never by the step-one reviewer); claims `refund` / `deny` (trust-ops
          *     `POST /v1/claims/{id}/decision`, disputes:manage, refunds capped by the role's refund limit); payouts `approve` /
-         *     `hold` / `release` (payments, payouts:approve); orders `shipment-status` (orders `POST /v1/shipments/{id}/transitions`).
+         *     `hold` / `release` (payments, payouts:approve); orders `shipment-status` (orders `POST /v1/shipments/{id}/transitions`);
+         *     privacy-requests `complete` / `deny` (content `POST /v1/privacy/requests/{reference}/resolution`, content:legal.edit;
+         *     a denial needs a note).
          *     `Idempotency-Key` is relayed to upstreams that accept one.
          */
         post: operations["runStaffAction"];
@@ -1189,7 +1192,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates";
+        ResourceKey: "users" | "roles" | "applications" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;

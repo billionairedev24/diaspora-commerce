@@ -351,3 +351,47 @@ func (n *notificationsImpl) RemoveStockAlert(ctx context.Context, bearer, atin s
 	_, err := call(ctx, n.c, httpclient.Request{Method: http.MethodDelete, Path: "/v1/stock-alerts/" + url.PathEscape(atin), Bearer: bearer}, nil)
 	return err
 }
+
+// ---------------------------------------------------------------- legal & privacy center (content)
+
+func (k *contentImpl) LegalDocument(ctx context.Context, key, version, locale string) (domain.LegalPage, error) {
+	path := "/v1/legal/" + url.PathEscape(key)
+	if version != "" {
+		path += "/versions/" + url.PathEscape(version)
+	}
+	return cached(k.cache, "content:legal:"+key+":"+version+":"+locale, func() (domain.LegalPage, http.Header, error) {
+		var out domain.LegalPage
+		res, err := call(ctx, k.c, httpclient.Request{Path: path, Query: url.Values{"locale": {locale}}}, &out)
+		if err != nil {
+			return out, nil, err
+		}
+		return out, res.Header, nil
+	}, k.ttl)
+}
+
+func (k *contentImpl) CookiePolicy(ctx context.Context) (domain.CookiePolicy, error) {
+	return cached(k.cache, "content:cookie-policy", func() (domain.CookiePolicy, http.Header, error) {
+		var out domain.CookiePolicy
+		res, err := call(ctx, k.c, httpclient.Request{Path: "/v1/consent/cookie-policy"}, &out)
+		if err != nil {
+			return out, nil, err
+		}
+		return out, res.Header, nil
+	}, k.ttl)
+}
+
+func (k *contentImpl) RecordConsent(ctx context.Context, in port.ContentConsent) (domain.ConsentRecord, error) {
+	var out domain.ConsentRecord
+	req := httpclient.Request{Method: http.MethodPost, Path: "/v1/consent/records", JSON: in}
+	if in.GPC {
+		req.Header = http.Header{"Sec-GPC": {"1"}}
+	}
+	_, err := call(ctx, k.c, req, &out)
+	return out, err
+}
+
+func (k *contentImpl) SubmitPrivacyRequest(ctx context.Context, bearer string, in domain.PrivacyRequest) (domain.PrivacyRequestReceipt, error) {
+	var out domain.PrivacyRequestReceipt
+	_, err := call(ctx, k.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/privacy/requests", JSON: in, Bearer: bearer}, &out)
+	return out, err
+}

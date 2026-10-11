@@ -431,3 +431,51 @@ func identityProvidersResource() *staffResource {
 		},
 	}
 }
+
+// ---------------------------------------------------------------- privacy requests (content)
+
+func privacyRequestsResource() *staffResource {
+	load := func(ctx context.Context, sc staffCtx, q staffQuery) ([]jobj, error) {
+		var raw any
+		var query url.Values
+		if q.Status != "" {
+			query = url.Values{"status": {q.Status}}
+		}
+		if err := sc.get(ctx, sc.up.Content, "/v1/privacy/requests", query, &raw); err != nil {
+			return nil, err
+		}
+		return jpage(raw).items, nil
+	}
+	resolve := func(outcome string) func(context.Context, staffCtx, jobj, jobj) error {
+		return func(ctx context.Context, sc staffCtx, o jobj, v jobj) error {
+			return sc.post(ctx, sc.up.Content, "/v1/privacy/requests/"+url.PathEscape(jstr(o, "reference"))+"/resolution",
+				omitEmpty(jobj{"outcome": outcome, "note": vs(v, "note")}), nil)
+		}
+	}
+	open := func(_ staffCtx, o jobj) string {
+		if jstr(o, "status") != "RECEIVED" {
+			return "This request is already " + strings.ToLower(jstr(o, "status")) + "."
+		}
+		return ""
+	}
+	return &staffResource{
+		key: "privacy-requests", module: "siteCfg", title: "Privacy requests", statusKey: "status",
+		columns: []domain.Column{col("reference", "Reference", "mono", 14), col("type", "Request", "strong", 14), col("email", "Email", "text", 26),
+			col("state", "State", "text", 8), col("dueAt", "Due", "date", 14), col("submittedAt", "Received", "datetime", 14), col("status", "Status", "status", 10)},
+		facets:  domain.StaffFacets("RECEIVED", "COMPLETED", "DENIED"),
+		idOf:    func(o jobj) string { return jstr(o, "reference") },
+		list:    listAll(load),
+		get:     getByPath("/v1/privacy/requests/", upContent),
+		titleOf: func(o jobj) string { return jstr(o, "reference") + " · " + domain.Humanize(jstr(o, "type")) },
+		subtitleOf: func(o jobj) string {
+			return jstr(o, "email") + " · " + jstr(o, "state") + " · due " + jstr(o, "dueAt")
+		},
+		sections: func(o jobj) []domain.DetailSection { return autoSections(o, "status", "id", "version") },
+		actions: []staffAction{
+			{key: "complete", label: "Mark completed", tone: "primary", permission: "content:legal.edit", when: open,
+				form: noteForm("What was done (kept with the request)", "Mark completed", false), run: resolve("COMPLETED")},
+			{key: "deny", label: "Deny", tone: "danger", permission: "content:legal.edit", when: open,
+				form: noteForm("Why the request is denied (the requester can appeal)", "Deny request", true), run: resolve("DENIED")},
+		},
+	}
+}
