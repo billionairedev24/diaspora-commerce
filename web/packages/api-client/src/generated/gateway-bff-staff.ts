@@ -69,6 +69,14 @@ export interface paths {
          *     placements: content `GET /v1/placements`; identity-providers: identity
          *     `GET /v1/admin/identity-providers`; fee-schedules: payments `GET /v1/fee-schedules`; tax-rates: tax-returns
          *     `GET /v1/tax/rates`. Needs VIEW on the resource's module.
+         *
+         *     One search box, every column: `q` matches every column the table shows (ids, names, SKUs, statuses raw and
+         *     humanised, amounts in currency units with or without separators, dates as ISO, "Oct 11, 2026" or "10/11/2026");
+         *     every whitespace-separated term must match some column. `sort` orders by any column. Upstreams search few fields
+         *     and sort by a fixed order, so with `q` or `sort` the BFF reads the table with the caller's token (up to 5,000
+         *     rows, cached per caller for 20 seconds and dropped on any write through the BFF), filters, sorts and pages it
+         *     itself; such pages are page-numbered (`total` set, `nextCursor` null) and say `partial: true` when the table had
+         *     more rows than were read. Without `q` and `sort` the upstream's order and paging (page numbers or cursors) apply.
          */
         get: operations["listStaffResource"];
         put?: never;
@@ -172,10 +180,13 @@ export interface paths {
         get: operations["listStaffExports"];
         put?: never;
         /**
-         * Export a whole table (all pages matching the filters) as CSV or XLSX
-         * @description Streams every page of the resource's upstream list with the caller's token and writes the file on the server.
-         *     Up to 5,000 rows finish within the request (201 READY); larger exports are queued (202 QUEUED) and built in the
-         *     background — poll `GET /v1/staff/exports/{id}`. Capped at 200,000 rows. Needs VIEW on the resource's module.
+         * Export a table as CSV, Excel (with a Summary sheet of native charts) or PDF (with a summary page of charts)
+         * @description A resource export covers the table's search and sort (or only the selected rows, `ids`) with the visible columns
+         *     in order. Without search, sort or selection every page of the resource's upstream list is streamed with the
+         *     caller's token; with them the BFF reads up to 50,000 rows, filters and sorts them. A client-side table sends its
+         *     rows (`dataset`, at most 5,000, always built within the request). Up to 5,000 rows finish within the request
+         *     (201 READY); larger exports are queued (202 QUEUED) and built in the background — poll
+         *     `GET /v1/staff/exports/{id}`. Capped at 200,000 rows. Needs VIEW on the resource's module.
          */
         post: operations["createStaffExport"];
         delete?: never;
@@ -982,8 +993,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The window's orders (search by order / customer / phone / address / zip)
-         * @description delivery-runs `GET /v1/preorders/{id}/orders?status=&channel=&q=&page=&size=`.
+         * The window's orders (one search over every column, sort by any column)
+         * @description delivery-runs `GET /v1/preorders/{id}/orders?status=&channel=&page=&size=`. delivery-runs searches order,
+         *     customer, phone, address and ZIP only, so with `q` or `sort` the BFF reads the window's orders (up to 5,000),
+         *     matches `q` against every column the table shows (order, customer, phone, email, address, city, ZIP, delivery
+         *     note, placed, channel, tracking tag, units, fulfilment, total as text, status) and sorts and pages them itself;
+         *     the page then also carries `sort` and `partial`. Export the table with `POST /v1/staff/exports`
+         *     (`table: preorder-orders`, `parent: <preorderId>`).
          */
         get: operations["listStaffPreorderOrders"];
         put?: never;
@@ -1202,8 +1218,10 @@ export interface components {
             key: string;
             label: string;
             kind: components["schemas"]["ColumnKind"];
-            /** @description Share of the table width in percent (tables never scroll sideways) */
+            /** @description Share of the table width in percent (the table sizes columns from it; people may resize them) */
             width: number;
+            /** @description The column accepts `sort=<key>,asc|desc` (every column of a server-driven table) */
+            sortable?: boolean;
         };
         Facet: {
             value: string;
@@ -1259,6 +1277,10 @@ export interface components {
             canCreate: boolean;
             createForm: components["schemas"]["Form"] | null;
             exportable: boolean;
+            /** @description The applied sort (`<column>,asc|desc`); empty for the upstream order */
+            sort: string[];
+            /** @description The search or sort covered the first 5,000 rows of a bigger table */
+            partial: boolean;
         };
         DetailField: {
             label: string;
@@ -1335,17 +1357,63 @@ export interface components {
         NoteRequest: {
             text: string;
         };
-        /** @enum {string} */
-        ExportFormat: "csv" | "xlsx";
+        /**
+         * @description csv: the data only (CSV cannot carry charts). xlsx: a "Summary" sheet (first) with key totals and native Excel
+         *     charts over small aggregate tables, plus a "Data" sheet (typed cells, frozen header, an Excel table with
+         *     filters). pdf: a summary page with the same charts and totals, then the table in landscape with the header
+         *     repeated on every page (at most 10,000 table rows; the summary covers every row). Charts follow the column
+         *     kinds: rows by status (pie, bar past six values), the first amount (or rows) by day or month (line), the top 10
+         *     rows by amount (bar), rows by a low-cardinality text column (bar).
+         * @enum {string}
+         */
+        ExportFormat: "csv" | "xlsx" | "pdf";
+        ExportColumn: {
+            key: string;
+            label: string;
+            kind: components["schemas"]["ColumnKind"];
+        };
+        /** @description A client-side table (small lists the console holds in full) exported as shown, through the same pipeline. */
+        ExportDataset: {
+            /** @description The table's key (file name) */
+            table: string;
+            title?: string;
+            /** @description Which rows are in the file, e.g. "Search “lagos” · 3 selected rows" */
+            scope?: string;
+            columns: components["schemas"]["ExportColumn"][];
+            /** @description One array per row, one cell per column; money in currency units, dates as ISO strings. */
+            rows: (string | number | boolean | null)[][];
+        };
+        /**
+         * @description A server table (`resource`, or `table` + `parent`) with its search, sort and visible columns, optionally only the
+         *     selected rows (`ids`); or a client-side table (`dataset`). One of `resource`, `table` and `dataset` is required.
+         */
         ExportRequest: {
-            resource: components["schemas"]["ResourceKey"];
+            resource?: components["schemas"]["ResourceKey"];
+            /**
+             * @description A staff table outside the resources (with `parent`)
+             * @enum {string}
+             */
+            table?: "preorder-orders";
+            /** @description The record the table belongs to (the pre-order window of `preorder-orders`) */
+            parent?: string;
             format: components["schemas"]["ExportFormat"];
+            /** @description The table's search (every column) */
             q?: string;
             status?: string;
+            /** @description The table's sort (`<column>,asc|desc`) */
+            sort?: string[];
+            /** @description Only these rows (the selection); search and sort still apply */
+            ids?: string[];
+            /** @description The visible columns in order (default every column) */
+            columns?: string[];
+            dataset?: components["schemas"]["ExportDataset"];
         };
         ExportJob: {
             id: string;
-            resource: components["schemas"]["ResourceKey"];
+            /** @description The table exported (a resource key or a client-side table's key) */
+            resource: string;
+            /** @description The table's name */
+            title: string;
             format: components["schemas"]["ExportFormat"];
             /** @enum {string} */
             status: "QUEUED" | "RUNNING" | "READY" | "FAILED" | "EXPIRED";
@@ -2261,6 +2329,11 @@ export interface components {
         };
     };
     parameters: {
+        /**
+         * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+         *     3). Any column of the table. Empty cells sort last in both directions.
+         */
+        Sort: string[];
         Resource: components["schemas"]["ResourceKey"];
         RecordId: string;
         ExportId: string;
@@ -2333,9 +2406,14 @@ export interface operations {
     listStaffResource: {
         parameters: {
             query?: {
-                /** @description Free-text search where the upstream supports it */
+                /** @description Search over every column the table shows */
                 q?: string;
-                /** @description One of the page's facet values */
+                /**
+                 * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+                 *     3). Any column of the table. Empty cells sort last in both directions.
+                 */
+                sort?: components["parameters"]["Sort"];
+                /** @description One of the page's facet values (deep links; the console shows no facet chips) */
                 status?: string;
                 page?: number;
                 size?: number;
@@ -2674,6 +2752,7 @@ export interface operations {
                 content: {
                     "text/csv": string;
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "application/pdf": string;
                 };
             };
             403: components["responses"]["Problem"];
@@ -3885,7 +3964,13 @@ export interface operations {
                 /** @description PAID, LATE_ADD, CANCELLED */
                 status?: string;
                 channel?: string;
+                /** @description Search over every column */
                 q?: string;
+                /**
+                 * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+                 *     3). Any column of the table. Empty cells sort last in both directions.
+                 */
+                sort?: components["parameters"]["Sort"];
                 page?: number;
                 size?: number;
             };
@@ -3910,6 +3995,7 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

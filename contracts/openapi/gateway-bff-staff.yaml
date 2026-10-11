@@ -132,10 +132,19 @@ paths:
         placements: content `GET /v1/placements`; identity-providers: identity
         `GET /v1/admin/identity-providers`; fee-schedules: payments `GET /v1/fee-schedules`; tax-rates: tax-returns
         `GET /v1/tax/rates`. Needs VIEW on the resource's module.
+
+        One search box, every column: `q` matches every column the table shows (ids, names, SKUs, statuses raw and
+        humanised, amounts in currency units with or without separators, dates as ISO, "Oct 11, 2026" or "10/11/2026");
+        every whitespace-separated term must match some column. `sort` orders by any column. Upstreams search few fields
+        and sort by a fixed order, so with `q` or `sort` the BFF reads the table with the caller's token (up to 5,000
+        rows, cached per caller for 20 seconds and dropped on any write through the BFF), filters, sorts and pages it
+        itself; such pages are page-numbered (`total` set, `nextCursor` null) and say `partial: true` when the table had
+        more rows than were read. Without `q` and `sort` the upstream's order and paging (page numbers or cursors) apply.
       parameters:
         - {$ref: '#/components/parameters/Resource'}
-        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: Free-text search where the upstream supports it}
-        - {name: status, in: query, schema: {type: string, maxLength: 60}, description: One of the page's facet values}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: Search over every column the table shows}
+        - {$ref: '#/components/parameters/Sort'}
+        - {name: status, in: query, schema: {type: string, maxLength: 60}, description: One of the page's facet values (deep links; the console shows no facet chips)}
         - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
         - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
         - {name: cursor, in: query, schema: {type: string, maxLength: 200}, description: nextCursor of the previous page (cursor-paged upstreams)}
@@ -277,11 +286,14 @@ paths:
       tags: [Exports]
       operationId: createStaffExport
       security: [{sessionCookie: []}]
-      summary: Export a whole table (all pages matching the filters) as CSV or XLSX
+      summary: Export a table as CSV, Excel (with a Summary sheet of native charts) or PDF (with a summary page of charts)
       description: |
-        Streams every page of the resource's upstream list with the caller's token and writes the file on the server.
-        Up to 5,000 rows finish within the request (201 READY); larger exports are queued (202 QUEUED) and built in the
-        background — poll `GET /v1/staff/exports/{id}`. Capped at 200,000 rows. Needs VIEW on the resource's module.
+        A resource export covers the table's search and sort (or only the selected rows, `ids`) with the visible columns
+        in order. Without search, sort or selection every page of the resource's upstream list is streamed with the
+        caller's token; with them the BFF reads up to 50,000 rows, filters and sorts them. A client-side table sends its
+        rows (`dataset`, at most 5,000, always built within the request). Up to 5,000 rows finish within the request
+        (201 READY); larger exports are queued (202 QUEUED) and built in the background — poll
+        `GET /v1/staff/exports/{id}`. Capped at 200,000 rows. Needs VIEW on the resource's module.
       parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
       requestBody:
         required: true
@@ -344,6 +356,7 @@ paths:
           content:
             text/csv: {schema: {type: string}}
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+            application/pdf: {schema: {type: string, format: binary}}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
         '410': {$ref: '#/components/responses/Problem'}
@@ -1151,13 +1164,20 @@ paths:
       tags: [Pre-orders]
       operationId: listStaffPreorderOrders
       security: [{sessionCookie: []}]
-      summary: The window's orders (search by order / customer / phone / address / zip)
-      description: delivery-runs `GET /v1/preorders/{id}/orders?status=&channel=&q=&page=&size=`.
+      summary: The window's orders (one search over every column, sort by any column)
+      description: |
+        delivery-runs `GET /v1/preorders/{id}/orders?status=&channel=&page=&size=`. delivery-runs searches order,
+        customer, phone, address and ZIP only, so with `q` or `sort` the BFF reads the window's orders (up to 5,000),
+        matches `q` against every column the table shows (order, customer, phone, email, address, city, ZIP, delivery
+        note, placed, channel, tracking tag, units, fulfilment, total as text, status) and sorts and pages them itself;
+        the page then also carries `sort` and `partial`. Export the table with `POST /v1/staff/exports`
+        (`table: preorder-orders`, `parent: <preorderId>`).
       parameters:
         - {$ref: '#/components/parameters/PreorderId'}
         - {name: status, in: query, schema: {type: string, maxLength: 20}, description: 'PAID, LATE_ADD, CANCELLED'}
         - {name: channel, in: query, schema: {type: string, maxLength: 20}}
-        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: Search over every column}
+        - {$ref: '#/components/parameters/Sort'}
         - {name: page, in: query, schema: {type: integer, minimum: 0}}
         - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
       responses:
@@ -1165,6 +1185,7 @@ paths:
         '401': {$ref: '#/components/responses/Problem'}
         '403': {$ref: '#/components/responses/Problem'}
         '404': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
   /v1/staff/preorders/{preorderId}/summary:
     get:
@@ -1261,6 +1282,18 @@ components:
       name: at_session
       description: Opaque BFF session id (HttpOnly, Secure, SameSite=Lax). Tokens stay server-side.
   parameters:
+    Sort:
+      name: sort
+      in: query
+      style: form
+      explode: true
+      description: |
+        Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+        3). Any column of the table. Empty cells sort last in both directions.
+      schema:
+        type: array
+        maxItems: 3
+        items: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_.]{0,79}(,(asc|desc|ASC|DESC))?$'}
     Resource:
       name: resource
       in: path
@@ -1420,7 +1453,8 @@ components:
         key: {type: string}
         label: {type: string}
         kind: {$ref: '#/components/schemas/ColumnKind'}
-        width: {type: integer, minimum: 1, maximum: 100, description: Share of the table width in percent (tables never scroll sideways)}
+        width: {type: integer, minimum: 1, maximum: 100, description: Share of the table width in percent (the table sizes columns from it; people may resize them)}
+        sortable: {type: boolean, description: 'The column accepts `sort=<key>,asc|desc` (every column of a server-driven table)'}
     Facet:
       type: object
       required: [value, label]
@@ -1474,7 +1508,7 @@ components:
         fields: {type: array, items: {$ref: '#/components/schemas/FormField'}}
     ResourcePage:
       type: object
-      required: [resource, title, columns, rows, page, size, total, nextCursor, hasNext, facets, searchable, canCreate, createForm, exportable]
+      required: [resource, title, columns, rows, page, size, total, nextCursor, hasNext, facets, searchable, canCreate, createForm, exportable, sort, partial]
       properties:
         resource: {$ref: '#/components/schemas/ResourceKey'}
         title: {type: string}
@@ -1491,6 +1525,8 @@ components:
         canCreate: {type: boolean}
         createForm: {oneOf: [{$ref: '#/components/schemas/Form'}, {type: 'null'}]}
         exportable: {type: boolean}
+        sort: {type: array, items: {type: string}, description: 'The applied sort (`<column>,asc|desc`); empty for the upstream order'}
+        partial: {type: boolean, description: 'The search or sort covered the first 5,000 rows of a bigger table'}
     DetailField:
       type: object
       required: [label, value, kind]
@@ -1577,21 +1613,61 @@ components:
       properties:
         text: {type: string, minLength: 1, maxLength: 2000}
     # ── exports
-    ExportFormat: {type: string, enum: [csv, xlsx]}
+    ExportFormat:
+      type: string
+      enum: [csv, xlsx, pdf]
+      description: |
+        csv: the data only (CSV cannot carry charts). xlsx: a "Summary" sheet (first) with key totals and native Excel
+        charts over small aggregate tables, plus a "Data" sheet (typed cells, frozen header, an Excel table with
+        filters). pdf: a summary page with the same charts and totals, then the table in landscape with the header
+        repeated on every page (at most 10,000 table rows; the summary covers every row). Charts follow the column
+        kinds: rows by status (pie, bar past six values), the first amount (or rows) by day or month (line), the top 10
+        rows by amount (bar), rows by a low-cardinality text column (bar).
+    ExportColumn:
+      type: object
+      required: [key, label, kind]
+      properties:
+        key: {type: string, maxLength: 80}
+        label: {type: string, minLength: 1, maxLength: 80}
+        kind: {$ref: '#/components/schemas/ColumnKind'}
+    ExportDataset:
+      type: object
+      description: A client-side table (small lists the console holds in full) exported as shown, through the same pipeline.
+      required: [table, columns, rows]
+      properties:
+        table: {type: string, pattern: '^[a-z0-9-]{1,60}$', description: The table's key (file name)}
+        title: {type: string, maxLength: 120}
+        scope: {type: string, maxLength: 200, description: 'Which rows are in the file, e.g. "Search “lagos” · 3 selected rows"'}
+        columns: {type: array, minItems: 1, maxItems: 40, items: {$ref: '#/components/schemas/ExportColumn'}}
+        rows:
+          type: array
+          maxItems: 5000
+          description: One array per row, one cell per column; money in currency units, dates as ISO strings.
+          items: {type: array, items: {type: [string, number, boolean, 'null']}}
     ExportRequest:
       type: object
-      required: [resource, format]
+      description: |
+        A server table (`resource`, or `table` + `parent`) with its search, sort and visible columns, optionally only the
+        selected rows (`ids`); or a client-side table (`dataset`). One of `resource`, `table` and `dataset` is required.
+      required: [format]
       properties:
         resource: {$ref: '#/components/schemas/ResourceKey'}
+        table: {type: string, enum: [preorder-orders], description: A staff table outside the resources (with `parent`)}
+        parent: {type: string, maxLength: 64, description: 'The record the table belongs to (the pre-order window of `preorder-orders`)'}
         format: {$ref: '#/components/schemas/ExportFormat'}
-        q: {type: string, maxLength: 120}
+        q: {type: string, maxLength: 120, description: The table's search (every column)}
         status: {type: string, maxLength: 60}
+        sort: {type: array, maxItems: 3, items: {type: string, maxLength: 90}, description: 'The table''s sort (`<column>,asc|desc`)'}
+        ids: {type: array, maxItems: 1000, items: {type: string, maxLength: 200}, description: Only these rows (the selection); search and sort still apply}
+        columns: {type: array, maxItems: 40, items: {type: string, maxLength: 80}, description: The visible columns in order (default every column)}
+        dataset: {$ref: '#/components/schemas/ExportDataset'}
     ExportJob:
       type: object
-      required: [id, resource, format, status, rows, async, fileName, createdAt, finishedAt, expiresAt, downloadUrl, error]
+      required: [id, resource, title, format, status, rows, async, fileName, createdAt, finishedAt, expiresAt, downloadUrl, error]
       properties:
         id: {type: string}
-        resource: {$ref: '#/components/schemas/ResourceKey'}
+        resource: {type: string, description: The table exported (a resource key or a client-side table's key)}
+        title: {type: string, description: The table's name}
         format: {$ref: '#/components/schemas/ExportFormat'}
         status: {type: string, enum: [QUEUED, RUNNING, READY, FAILED, EXPIRED]}
         rows: {type: integer, description: Rows written so far}

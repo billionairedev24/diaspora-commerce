@@ -114,7 +114,10 @@ export interface paths {
         };
         /**
          * Shipment queue of the active organisation (server-driven table)
-         * @description orders `GET /v1/seller/shipments` (newest first, cursor pagination, status filter).
+         * @description orders `GET /v1/seller/shipments` (newest first, cursor pagination, status filter). `q` searches every column
+         *     the table shows (order, placed date, buyer, ship-to, items, units, total, fulfilment, status, tracking) and `sort`
+         *     orders by any of them: the BFF then reads the queue (up to 5,000 shipments, cached 20 seconds per member) and
+         *     pages it itself; the cursor is then an offset and `partial` says when the queue had more rows than were read.
          */
         get: operations["listSellerOrders"];
         put?: never;
@@ -347,7 +350,9 @@ export interface paths {
         };
         /**
          * The organisation's listings (server-driven table)
-         * @description catalog `GET /v1/products` (own organisation; status, q, page, size).
+         * @description catalog `GET /v1/products` (own organisation; status, page, size). `q` searches every column the table shows
+         *     (product, ATIN, SKU, variants, price, stock, fulfilment, status, updated) and `sort` orders by any of them: the BFF
+         *     then reads the organisation's listings (up to 5,000, cached 20 seconds per member) and pages them itself.
          */
         get: operations["listListings"];
         put?: never;
@@ -558,6 +563,86 @@ export interface paths {
          * @description offers `PUT /v1/offers/stock/{sellerSku}` (planned — offers is being built).
          */
         post: operations["adjustStock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My exports of the active organisation, newest first (kept 24 hours after they finish) */
+        get: operations["listSellerExports"];
+        put?: never;
+        /**
+         * Export a table as CSV, Excel (with a Summary sheet of native charts) or PDF (with a summary page of charts)
+         * @description Always scoped to the active organisation and the member's token. `table: orders` (needs VIEW on orders) and
+         *     `table: listings` (VIEW on listings) are read by the BFF (orders `GET /v1/seller/shipments`, catalog
+         *     `GET /v1/products`, up to 50,000 rows) with the table's search, sort and visible columns, or only the selected
+         *     rows (`ids`). Client-side tables (inventory, team, payouts, invoices, fees, earnings, services) send their rows
+         *     (`dataset`). Up to 5,000 rows finish within the request (201 READY, download right away); larger exports are
+         *     queued (202 QUEUED) — poll `GET /v1/seller/exports/{exportId}`.
+         */
+        post: operations["createSellerExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/exports/{exportId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Status of one export (poll until READY or FAILED); only its member, in the organisation it was made for */
+        get: operations["getSellerExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/exports/{exportId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Redirect to the signed download URL of a ready export
+         * @description 302 to the signed URL (valid until `expiresAt`); 409 while the job is not ready, 410 once it expired.
+         */
+        get: operations["downloadSellerExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/export-files/{exportId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The export file behind a signed link (no session needed; the signature and expiry are checked) */
+        get: operations["getSellerExportFile"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1046,7 +1131,8 @@ export interface components {
             instance?: string;
             /**
              * @description Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, NOT_APPROVED,
-             *     NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR; team: LAST_OWNER, INVALID_ROLE,
+             *     NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR; exports: EXPORT_NOT_READY,
+             *     EXPORT_EXPIRED; team: LAST_OWNER, INVALID_ROLE,
              *     OWNER_ONLY, OWN_ROLE, ALREADY_MEMBER, INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED,
              *     INVITATION_EMAIL_MISMATCH; AfroTransact pickup (S255): PICKUP_ORG_NOT_APPROVED, PICKUP_INVALID_HOURS,
              *     PICKUP_NOT_GEOCODED, PICKUP_OUTSIDE_DELIVERY_AREA.
@@ -1231,6 +1317,10 @@ export interface components {
             items: components["schemas"]["SellerOrderRow"][];
             nextCursor: string | null;
             total: number;
+            /** @description The applied sort (`<column>,asc|desc`); empty for newest first */
+            sort: string[];
+            /** @description The search or sort covered the first 5,000 shipments only */
+            partial: boolean;
         };
         ShipFromAddress: {
             id: string;
@@ -1484,6 +1574,73 @@ export interface components {
             total: number;
             page: number;
             size: number;
+            /** @description The applied sort (`<column>,asc|desc`); empty for the catalog order */
+            sort: string[];
+            /** @description The search or sort covered the first 5,000 listings only */
+            partial: boolean;
+        };
+        /**
+         * @description csv: the data only (CSV cannot carry charts). xlsx: a "Summary" sheet (first) with key totals and native Excel
+         *     charts, plus a "Data" sheet. pdf: a summary page with the same charts and totals, then the table in landscape
+         *     with the header repeated on every page. Charts follow the column kinds: rows by status, the first amount (or rows)
+         *     by day or month, the top 10 rows by amount, rows by a low-cardinality text column.
+         * @enum {string}
+         */
+        ExportFormat: "csv" | "xlsx" | "pdf";
+        ExportColumn: {
+            key: string;
+            label: string;
+            /** @enum {string} */
+            kind: "text" | "strong" | "mono" | "money" | "number" | "date" | "datetime" | "status" | "percent";
+        };
+        /** @description A client-side table exported as shown, through the same pipeline. */
+        ExportDataset: {
+            /** @description The table's key (file name) */
+            table: string;
+            title?: string;
+            scope?: string;
+            columns: components["schemas"]["ExportColumn"][];
+            /** @description One array per row, one cell per column; money in currency units, dates as ISO strings. */
+            rows: (string | number | boolean | null)[][];
+        };
+        /** @description A server table (`table`) with its search, sort, visible columns and optional selection, or a client-side table (`dataset`). */
+        SellerExportRequest: {
+            /** @enum {string} */
+            table?: "orders" | "listings";
+            format: components["schemas"]["ExportFormat"];
+            q?: string;
+            status?: string;
+            sort?: string[];
+            /** @description Only these rows: shipment ids for orders, product ids for listings */
+            ids?: string[];
+            /** @description The visible columns in order */
+            columns?: string[];
+            dataset?: components["schemas"]["ExportDataset"];
+        };
+        ExportJob: {
+            id: string;
+            /** @description The table exported */
+            resource: string;
+            title: string;
+            format: components["schemas"]["ExportFormat"];
+            /** @enum {string} */
+            status: "QUEUED" | "RUNNING" | "READY" | "FAILED" | "EXPIRED";
+            rows: number;
+            /** @description Built in the background (more than 5,000 rows) */
+            async: boolean;
+            fileName: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            finishedAt: string | null;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** @description App-relative download path (redirects to the signed URL) */
+            downloadUrl: string | null;
+            error: string | null;
+        };
+        ExportJobList: {
+            items: components["schemas"]["ExportJob"][];
         };
         ListingStatusRequest: {
             active: boolean;
@@ -2201,6 +2358,12 @@ export interface components {
         };
     };
     parameters: {
+        /**
+         * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+         *     3). Empty cells sort last in both directions.
+         */
+        Sort: string[];
+        ExportId: string;
         OrderNumber: string;
         ShipmentId: string;
         ProductId: string;
@@ -2346,6 +2509,13 @@ export interface operations {
     listSellerOrders: {
         parameters: {
             query?: {
+                /** @description Search over every column */
+                q?: string;
+                /**
+                 * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+                 *     3). Empty cells sort last in both directions.
+                 */
+                sort?: components["parameters"]["Sort"];
                 status?: components["schemas"]["ShipmentStatus"];
                 cursor?: string;
                 limit?: number;
@@ -2739,7 +2909,13 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["ListingStatus"];
+                /** @description Search over every column */
                 q?: string;
+                /**
+                 * @description Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+                 *     3). Empty cells sort last in both directions.
+                 */
+                sort?: components["parameters"]["Sort"];
                 page?: number;
                 size?: number;
             };
@@ -3068,6 +3244,151 @@ export interface operations {
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
+        };
+    };
+    listSellerExports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Export jobs */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportJobList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createSellerExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SellerExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Export ready */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportJob"];
+                };
+            };
+            /** @description Export queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportJob"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exportId: components["parameters"]["ExportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Export job */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportJob"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+        };
+    };
+    downloadSellerExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                exportId: components["parameters"]["ExportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed download URL */
+            302: {
+                headers: {
+                    /** @description Signed URL of the file */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
+        };
+    };
+    getSellerExportFile: {
+        parameters: {
+            query: {
+                /** @description Unix seconds */
+                expires: number;
+                sig: string;
+            };
+            header?: never;
+            path: {
+                exportId: components["parameters"]["ExportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description File */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                    "application/pdf": string;
+                };
+            };
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            410: components["responses"]["Problem"];
         };
     };
     getPayouts: {

@@ -54,6 +54,8 @@ tags:
     description: Members, invitations and role capability cards
   - name: Provider Hub
     description: Calendar, booking requests, working hours, services, cancellation policy, public page and earnings
+  - name: Exports
+    description: Every table exports as CSV, Excel (with a Summary sheet of native charts) or PDF (with a summary page of charts)
 security:
   - sessionCookie: []
 paths:
@@ -143,8 +145,14 @@ paths:
       operationId: listSellerOrders
       security: [{sessionCookie: []}]
       summary: Shipment queue of the active organisation (server-driven table)
-      description: orders `GET /v1/seller/shipments` (newest first, cursor pagination, status filter).
+      description: |
+        orders `GET /v1/seller/shipments` (newest first, cursor pagination, status filter). `q` searches every column
+        the table shows (order, placed date, buyer, ship-to, items, units, total, fulfilment, status, tracking) and `sort`
+        orders by any of them: the BFF then reads the queue (up to 5,000 shipments, cached 20 seconds per member) and
+        pages it itself; the cursor is then an offset and `partial` says when the queue had more rows than were read.
       parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: Search over every column}
+        - {$ref: '#/components/parameters/Sort'}
         - {name: status, in: query, schema: {$ref: '#/components/schemas/ShipmentStatus'}}
         - {name: cursor, in: query, schema: {type: string}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
@@ -399,10 +407,14 @@ paths:
       operationId: listListings
       security: [{sessionCookie: []}]
       summary: The organisation's listings (server-driven table)
-      description: catalog `GET /v1/products` (own organisation; status, q, page, size).
+      description: |
+        catalog `GET /v1/products` (own organisation; status, page, size). `q` searches every column the table shows
+        (product, ATIN, SKU, variants, price, stock, fulfilment, status, updated) and `sort` orders by any of them: the BFF
+        then reads the organisation's listings (up to 5,000, cached 20 seconds per member) and pages them itself.
       parameters:
         - {name: status, in: query, schema: {$ref: '#/components/schemas/ListingStatus'}}
-        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: q, in: query, schema: {type: string, maxLength: 120}, description: Search over every column}
+        - {$ref: '#/components/parameters/Sort'}
         - {name: page, in: query, schema: {type: integer, minimum: 0, default: 0}}
         - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 25}}
       responses:
@@ -587,6 +599,92 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── exports
+  /v1/seller/exports:
+    get:
+      tags: [Exports]
+      operationId: listSellerExports
+      security: [{sessionCookie: []}]
+      summary: My exports of the active organisation, newest first (kept 24 hours after they finish)
+      responses:
+        '200': {description: Export jobs, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJobList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Exports]
+      operationId: createSellerExport
+      security: [{sessionCookie: []}]
+      summary: Export a table as CSV, Excel (with a Summary sheet of native charts) or PDF (with a summary page of charts)
+      description: |
+        Always scoped to the active organisation and the member's token. `table: orders` (needs VIEW on orders) and
+        `table: listings` (VIEW on listings) are read by the BFF (orders `GET /v1/seller/shipments`, catalog
+        `GET /v1/products`, up to 50,000 rows) with the table's search, sort and visible columns, or only the selected
+        rows (`ids`). Client-side tables (inventory, team, payouts, invoices, fees, earnings, services) send their rows
+        (`dataset`). Up to 5,000 rows finish within the request (201 READY, download right away); larger exports are
+        queued (202 QUEUED) — poll `GET /v1/seller/exports/{exportId}`.
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SellerExportRequest'}}}
+      responses:
+        '201': {description: Export ready, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJob'}}}}
+        '202': {description: Export queued, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJob'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/exports/{exportId}:
+    get:
+      tags: [Exports]
+      operationId: getSellerExport
+      security: [{sessionCookie: []}]
+      summary: Status of one export (poll until READY or FAILED); only its member, in the organisation it was made for
+      parameters: [{$ref: '#/components/parameters/ExportId'}]
+      responses:
+        '200': {description: Export job, content: {application/json: {schema: {$ref: '#/components/schemas/ExportJob'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+  /v1/seller/exports/{exportId}/download:
+    get:
+      tags: [Exports]
+      operationId: downloadSellerExport
+      security: [{sessionCookie: []}]
+      summary: Redirect to the signed download URL of a ready export
+      description: 302 to the signed URL (valid until `expiresAt`); 409 while the job is not ready, 410 once it expired.
+      parameters: [{$ref: '#/components/parameters/ExportId'}]
+      responses:
+        '302':
+          description: Signed download URL
+          headers:
+            Location: {description: Signed URL of the file, schema: {type: string}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
+  /v1/seller/export-files/{exportId}:
+    get:
+      tags: [Exports]
+      operationId: getSellerExportFile
+      security: []
+      summary: The export file behind a signed link (no session needed; the signature and expiry are checked)
+      parameters:
+        - {$ref: '#/components/parameters/ExportId'}
+        - {name: expires, in: query, required: true, schema: {type: integer, format: int64}, description: Unix seconds}
+        - {name: sig, in: query, required: true, schema: {type: string, maxLength: 128}}
+      responses:
+        '200':
+          description: File
+          content:
+            text/csv: {schema: {type: string}}
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet: {schema: {type: string, format: binary}}
+            application/pdf: {schema: {type: string, format: binary}}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '410': {$ref: '#/components/responses/Problem'}
   # ───────────────────────────────────────────────────────────── money
   /v1/seller/payouts:
     get:
@@ -1053,6 +1151,19 @@ components:
       name: at_session
       description: Opaque BFF session id (HttpOnly, Secure, SameSite=Lax). Tokens stay server-side.
   parameters:
+    Sort:
+      name: sort
+      in: query
+      style: form
+      explode: true
+      description: |
+        Sort column and direction, `<column>,asc|desc` (the Spring Data convention); repeat for secondary keys (at most
+        3). Empty cells sort last in both directions.
+      schema:
+        type: array
+        maxItems: 3
+        items: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_.]{0,79}(,(asc|desc|ASC|DESC))?$'}
+    ExportId: {name: exportId, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9_-]{1,64}$'}}
     OrderNumber: {name: orderNumber, in: path, required: true, schema: {type: string}}
     ShipmentId: {name: shipmentId, in: path, required: true, schema: {type: string}}
     ProductId: {name: productId, in: path, required: true, schema: {type: string}}
@@ -1084,7 +1195,8 @@ components:
           type: string
           description: |
             Stable machine code: VALIDATION_FAILED, UNAUTHENTICATED, FORBIDDEN, NOT_FOUND, CONFLICT, NOT_APPROVED,
-            NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR; team: LAST_OWNER, INVALID_ROLE,
+            NO_ORGANISATION, RATE_LIMITED, UPSTREAM_UNAVAILABLE, UPSTREAM_ERROR; exports: EXPORT_NOT_READY,
+            EXPORT_EXPIRED; team: LAST_OWNER, INVALID_ROLE,
             OWNER_ONLY, OWN_ROLE, ALREADY_MEMBER, INVITATION_EXPIRED, INVITATION_USED, INVITATION_REVOKED,
             INVITATION_EMAIL_MISMATCH; AfroTransact pickup (S255): PICKUP_ORG_NOT_APPROVED, PICKUP_INVALID_HOURS,
             PICKUP_NOT_GEOCODED, PICKUP_OUTSIDE_DELIVERY_AREA.
@@ -1295,11 +1407,13 @@ components:
         canBuyLabel: {type: boolean}
     SellerOrderPage:
       type: object
-      required: [items, nextCursor, total]
+      required: [items, nextCursor, total, sort, partial]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/SellerOrderRow'}}
         nextCursor: {type: [string, 'null']}
         total: {type: integer}
+        sort: {type: array, items: {type: string}, description: 'The applied sort (`<column>,asc|desc`); empty for newest first'}
+        partial: {type: boolean, description: 'The search or sort covered the first 5,000 shipments only'}
     ShipFromAddress:
       type: object
       required: [id, label, name, company, phone, line1, line2, city, state, postalCode, country, isDefault, version, position, afrotransactPickup]
@@ -1568,12 +1682,79 @@ components:
         updatedAt: {type: string, format: date-time}
     ListingPage:
       type: object
-      required: [items, total, page, size]
+      required: [items, total, page, size, sort, partial]
       properties:
         items: {type: array, items: {$ref: '#/components/schemas/ListingRow'}}
         total: {type: integer}
         page: {type: integer}
         size: {type: integer}
+        sort: {type: array, items: {type: string}, description: 'The applied sort (`<column>,asc|desc`); empty for the catalog order'}
+        partial: {type: boolean, description: 'The search or sort covered the first 5,000 listings only'}
+    # ── exports
+    ExportFormat:
+      type: string
+      enum: [csv, xlsx, pdf]
+      description: |
+        csv: the data only (CSV cannot carry charts). xlsx: a "Summary" sheet (first) with key totals and native Excel
+        charts, plus a "Data" sheet. pdf: a summary page with the same charts and totals, then the table in landscape
+        with the header repeated on every page. Charts follow the column kinds: rows by status, the first amount (or rows)
+        by day or month, the top 10 rows by amount, rows by a low-cardinality text column.
+    ExportColumn:
+      type: object
+      required: [key, label, kind]
+      properties:
+        key: {type: string, maxLength: 80}
+        label: {type: string, minLength: 1, maxLength: 80}
+        kind: {type: string, enum: [text, strong, mono, money, number, date, datetime, status, percent]}
+    ExportDataset:
+      type: object
+      description: A client-side table exported as shown, through the same pipeline.
+      required: [table, columns, rows]
+      properties:
+        table: {type: string, pattern: '^[a-z0-9-]{1,60}$', description: The table's key (file name)}
+        title: {type: string, maxLength: 120}
+        scope: {type: string, maxLength: 200}
+        columns: {type: array, minItems: 1, maxItems: 40, items: {$ref: '#/components/schemas/ExportColumn'}}
+        rows:
+          type: array
+          maxItems: 5000
+          description: One array per row, one cell per column; money in currency units, dates as ISO strings.
+          items: {type: array, items: {type: [string, number, boolean, 'null']}}
+    SellerExportRequest:
+      type: object
+      description: A server table (`table`) with its search, sort, visible columns and optional selection, or a client-side table (`dataset`).
+      required: [format]
+      properties:
+        table: {type: string, enum: [orders, listings]}
+        format: {$ref: '#/components/schemas/ExportFormat'}
+        q: {type: string, maxLength: 120}
+        status: {type: string, maxLength: 60}
+        sort: {type: array, maxItems: 3, items: {type: string, maxLength: 90}}
+        ids: {type: array, maxItems: 1000, items: {type: string, maxLength: 200}, description: 'Only these rows: shipment ids for orders, product ids for listings'}
+        columns: {type: array, maxItems: 40, items: {type: string, maxLength: 80}, description: The visible columns in order}
+        dataset: {$ref: '#/components/schemas/ExportDataset'}
+    ExportJob:
+      type: object
+      required: [id, resource, title, format, status, rows, async, fileName, createdAt, finishedAt, expiresAt, downloadUrl, error]
+      properties:
+        id: {type: string}
+        resource: {type: string, description: The table exported}
+        title: {type: string}
+        format: {$ref: '#/components/schemas/ExportFormat'}
+        status: {type: string, enum: [QUEUED, RUNNING, READY, FAILED, EXPIRED]}
+        rows: {type: integer}
+        async: {type: boolean, description: 'Built in the background (more than 5,000 rows)'}
+        fileName: {type: string}
+        createdAt: {type: string, format: date-time}
+        finishedAt: {type: [string, 'null'], format: date-time}
+        expiresAt: {type: [string, 'null'], format: date-time}
+        downloadUrl: {type: [string, 'null'], description: App-relative download path (redirects to the signed URL)}
+        error: {type: [string, 'null']}
+    ExportJobList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/ExportJob'}}
     ListingStatusRequest:
       type: object
       required: [active]
