@@ -10443,6 +10443,16 @@ operations:
       SKU; no shipping charge; inventory SKU = the received SKU) and the buy box is recomputed. The own-store offer stays
       open (one offer per channel). Lines without any offer of the seller stay stranded. Other inbound events are ignored;
       inbox-deduplicated (consumer offers-inventory-inbound).'
+  consumeOffersRetailEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/retailEvents'
+    summary: 'S281: AfroTransact Retail''s "list on storefront". retail.item.listing-changed (and retail.item.updated for
+      a new ATIN link) with a linked atin drive the open first-party (AfroTransact Retail, Fulfilled by AfroTransact) offer
+      of that variant: LIVE sets the offer''s inventory SKU to the retail item SKU (the SKU retail goods receipts stock lots
+      under), takes the item''s retail price when the currency matches and resumes a paused offer; PAUSED pauses an active
+      offer; DRAFT and unlinked items change nothing. offers.offer.updated is published and the buy box recomputed. Other
+      retail events are ignored; inbox-deduplicated (consumer offers-retail).'
   consumeOffersSellerComplianceEvents:
     action: receive
     channel:

@@ -123,6 +123,8 @@ at:
       inventory-inbound-topic: at.inventory-inbound.events
       seller-compliance-topic: at.seller-compliance.events
       seller-org-topic: at.seller-org.events
+      # S281: AfroTransact Retail's item listing (LIVE / PAUSED) drives its first-party offer
+      retail-topic: at.retail.events
     buy-box:
       price-points: 600
       fulfilment-points: 100
