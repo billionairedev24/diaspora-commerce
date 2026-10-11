@@ -54,6 +54,7 @@ jobs:
     with:
       service: ai-gateway
       publish: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+      image-max-mb: "550"
 
   deploy-dev:
     needs: pipeline
