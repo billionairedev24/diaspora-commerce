@@ -83,6 +83,9 @@ EXCEPTIONS: tuple[Exception_, ...] = (
     Exception_("java/services/identity/src/main/resources/application.yml",
                r"IDENTITY_STAFF_EMAIL_DOMAINS:afrotransact\.com\}",
                "staff email domain (an email domain, not a host); overridable with IDENTITY_STAFF_EMAIL_DOMAINS"),
+    Exception_("go/services/gateway-bff/internal/domain/account.go",
+               r'StaffEmailDomain = "afrotransact\.com"',
+               "staff email domain (an email domain, not a host): staff work emails are read-only in My account"),
     Exception_("java/libs/platform-web/src/main/java/com/afrotransact/platform/web/docs/ApiDocsProperties.java",
                r'DEVELOPER_PORTAL_URL = "https://developers\.afrotransact\.com"',
                "public developer portal (canonical in every environment; home of the problem types); "
