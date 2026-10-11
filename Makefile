@@ -18,7 +18,7 @@ ENV          ?= dev
 TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
-.PHONY: help up up-infra down logs ps reset apps-up apps-down \
+.PHONY: help up up-infra down logs ps reset apps-up apps-down mobile \
         java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links \
         helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers \
@@ -28,7 +28,7 @@ help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------------------------------------ local stack
-up: ## Start EVERYTHING locally (infra, services, web apps) and print all links — same as dev-up
+up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — same as dev-up
 	tools/dev/local.sh up $(SERVICES)
 
 up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo, Kibana; ~12 GB)
@@ -147,7 +147,7 @@ smoke-carriers: ## Carrier sandbox smoke against a running carrier-gateway (CARR
 	tools/smoke/carriers.sh
 
 # ------------------------------------------------------------------------------------------------ web / misc
-dev-up: ## Run everything locally: infra (Docker), services and the 3 web apps, then print all links (SERVICES=… subset, WEB=0)
+dev-up: ## Run everything locally: infra, services, the 3 web apps, docs portal and the 2 Expo apps, then print all links (SERVICES=… subset, WEB=0, DOCS=0, MOBILE=0)
 	tools/dev/local.sh up $(SERVICES)
 
 dev-down: ## Stop what dev-up started (keeps data)
@@ -162,7 +162,10 @@ dev-logs: ## Follow one service's log: make dev-logs SERVICE=orders
 dev-restart: ## Rebuild and restart one service: make dev-restart SERVICE=delivery-runs
 	tools/dev/local.sh restart $(SERVICE)
 
-dev-links: ## Print every local URL (apps, API docs, infra) of what dev-up started
+mobile: ## Only the Expo apps against the running stack: customer :8081, driver :8082 (MOBILE_HOST=<LAN IP> for a phone, 10.0.2.2 for the Android emulator; MOBILE_MOCKS=1 for in-app mocks)
+	tools/dev/local.sh mobile
+
+dev-links: ## Print every local URL (apps, docs portal, MCP, mobile, API docs, infra) of what dev-up started
 	tools/dev/local.sh links
 
 seed: ## Demo data via the services' APIs: sellers, products with real photos, offers, stock, home content, pre-orders (ARGS="--only products")

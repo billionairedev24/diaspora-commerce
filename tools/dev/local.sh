@@ -5,9 +5,10 @@
 #   tools/dev/local.sh up                      # infra + the default services + web apps, then prints every link
 #   tools/dev/local.sh up identity catalog     # only these services (plus infra and the web apps; WEB=0 skips them)
 #   tools/dev/local.sh status                  # what is running and healthy
-#   tools/dev/local.sh links                   # print every link again
+#   tools/dev/local.sh links                   # print every link again (apps, docs portal, MCP, API docs)
 #   tools/dev/local.sh logs delivery-runs      # follow one log (web apps: web-storefront, web-staff-console, …)
 #   tools/dev/local.sh restart orders          # rebuild + restart one service
+#   tools/dev/local.sh mobile                  # only the Expo apps (customer :8081, driver :8082)
 #   tools/dev/local.sh seed                    # demo data (tools/seed): sellers, products with photos, home content
 #   tools/dev/local.sh down                    # stop everything (keeps data; `make reset` wipes the Docker volumes)
 #
@@ -37,9 +38,10 @@ OVERRIDE="$STATE/compose.external-postgres.yml"
 
 INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal minio minio-init mailpit openfga-migrate openfga"
 
-# Everything the storefront (incl. services/bookings), checkout, pre-orders and the staff console use. Identity first.
+# Everything the storefront (incl. services/bookings), checkout, pre-orders, AfroTransact Retail (1P), delivery dispatch
+# and the staff console use. Identity first.
 DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops seller bookings
-  geo media cart notifications search indexer promise gateway-bff"
+  retail fulfilment mcp-server geo media cart notifications search indexer promise gateway-bff"
 
 ALL_SERVICES="identity catalog offers inventory orders payments seller retail fulfilment bookings trust-ops tax-returns
   content ai-gateway mcp-server delivery-runs gateway-bff search indexer cart promise geo storefront media
@@ -119,7 +121,7 @@ port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 # export the apps' addresses for identity, gateway-bff, notifications and the apps themselves.
 resolve_web_ports() {
   local app var port taken="" before="" after="" svc
-  if [[ -f "$WEB_PORTS_FILE" ]]; then before=$(cat "$WEB_PORTS_FILE")
+  if [[ -f "$WEB_PORTS_FILE" ]]; then before=$(grep -v '^DOCS_PORT=' "$WEB_PORTS_FILE" || true)
   else before=$(printf 'STOREFRONT_PORT=3000\nSELLER_CENTER_PORT=3001\nSTAFF_CONSOLE_PORT=3002'); fi
   for app in $WEB_APPS; do
     var=$(web_port_var "$app")
@@ -140,12 +142,14 @@ resolve_web_ports() {
     after="$after$var=$port"$'\n'
   done
   mkdir -p "$STATE"
-  printf '%s' "$after" >"$WEB_PORTS_FILE"
+  local docs_line=""
+  if [[ -f "$WEB_PORTS_FILE" ]]; then docs_line=$(grep '^DOCS_PORT=' "$WEB_PORTS_FILE" || true); fi
+  printf '%s%s' "$after" "${docs_line:+$docs_line$'\n'}" >"$WEB_PORTS_FILE"
   export PUBLIC_WEB_URL="http://localhost:$(web_port_of storefront)"
   export SELLER_CENTER_URL="http://localhost:$(web_port_of seller-center)"
   export STAFF_CONSOLE_URL="http://localhost:$(web_port_of staff-console)"
   # Services started with other addresses would send sign-in back to the old ports: restart them with the new ones.
-  if [[ "$before" != "$(cat "$WEB_PORTS_FILE")" ]]; then
+  if [[ "$before" != "$(grep -v '^DOCS_PORT=' "$WEB_PORTS_FILE" || true)" ]]; then
     # The web apps link to each other too (storefront "Sell on AfroTransact" → Seller Center).
     for svc in identity gateway-bff notifications web-storefront web-seller-center web-staff-console; do
       if running "$svc"; then echo "  · web app ports changed: restarting $svc"; stop "$svc"; fi
@@ -348,6 +352,11 @@ start() {
   if running "$svc"; then echo "  · $svc already running (pid $(cat "$PIDS/$svc.pid"))"; return 0; fi
   telemetry_env
   pool_env "$svc"
+  # Browser origins allowed to call services directly: the Expo web previews of the mobile apps (Java services read
+  # at.security.cors-allowed-origins; the BFF's list also keeps the three web apps).
+  local mobile_origins="http://localhost:$(mobile_port_of customer),http://localhost:$(mobile_port_of driver)"
+  export AT_SECURITY_CORS_ALLOWED_ORIGINS="$mobile_origins"
+  export WEB_ORIGINS="http://localhost:$(web_port_of storefront),http://localhost:$(web_port_of seller-center),http://localhost:$(web_port_of staff-console),$mobile_origins"
   # media signs uploads for this stack's MinIO (infra/local/docker-compose.yml root credentials).
   export MINIO_ACCESS_KEY="${MINIO_ACCESS_KEY:-minioadmin}" MINIO_SECRET_KEY="${MINIO_SECRET_KEY:-minioadmin}"
   : >"$LOGS/$svc.log"
@@ -457,7 +466,28 @@ links() {
   printf '  %-20s %s\n' "Seller Center" "$sc"
   printf '  %-20s %-30s %s\n' "Staff console" "$st" "pre-orders: $st/preorders"
   test_users "$sf" "$sc" "$st"
-  echo "API docs (Scalar; each service also serves /swagger-ui.html or /openapi.yaml, and /redoc)"
+  local dp; dp="http://localhost:$(docs_port)"
+  if [[ -f "$PIDS/mobile-customer.pid" || -f "$PIDS/mobile-driver.pid" ]]; then
+    local ip; ip=$(lan_ip)
+    echo "Mobile apps (Expo; logs: make dev-logs SERVICE=mobile-customer | mobile-driver)"
+    printf '  %-20s %-30s %s\n' "Customer app" "http://localhost:$(mobile_port_of customer)" "web preview · Expo Go: exp://$ip:$(mobile_port_of customer)"
+    printf '  %-20s %-30s %s\n' "Driver app" "http://localhost:$(mobile_port_of driver)" "web preview · Expo Go: exp://$ip:$(mobile_port_of driver)"
+    echo "  iOS simulator        cd mobile/apps/customer && npx expo run:ios   (or open the exp:// URL in the simulator)"
+    echo "  Android emulator     MOBILE_HOST=10.0.2.2 make up   then: cd mobile/apps/customer && npx expo run:android"
+    echo "  Phone on your Wi-Fi  MOBILE_HOST=$ip make up   then open the exp:// URL in Expo Go"
+    echo "  Sign in              customer.houston@afrotransact.test / driver@afrotransact.test (Test1234!Local)"
+  fi
+  echo "Documentation"
+  printf '  %-20s %-30s %s\n' "Developer portal" "$dp" "guides, architecture, runbooks, backlog"
+  printf '  %-20s %s\n' "API reference (all)" "$dp/api   (every service's contract, rendered with Scalar)"
+  printf '  %-20s %s\n' "MCP guide + tools" "$dp/mcp   and $dp/mcp/tools"
+  echo "MCP server (Model Context Protocol, Streamable HTTP, JSON-RPC 2.0)"
+  echo "  Endpoint             POST http://localhost:8114/mcp   (local: security off, runs as the local super admin)"
+  echo "  Tool catalogue       http://localhost:8114/v1/tools   (JSON schemas per tool; ?mine=true for the caller's own)"
+  echo "  OAuth metadata       http://localhost:8114/.well-known/oauth-protected-resource"
+  echo "  Try it               npx @modelcontextprotocol/inspector  → Streamable HTTP, URL http://localhost:8114/mcp"
+  echo "  Claude Code          claude mcp add --transport http afrotransact http://localhost:8114/mcp"
+  echo "API docs per service (Scalar at /docs; also /swagger-ui.html, /redoc and /v3/api-docs or /openapi.yaml)"
   for svc in $ALL_SERVICES; do
     [[ -f "$PIDS/$svc.pid" ]] || continue
     printf '  %-20s http://localhost:%s/docs\n' "$svc" "$(port_of "$svc")"
@@ -473,6 +503,95 @@ links() {
   echo "  Checkout needs a Stripe test key: export STRIPE_SECRET_KEY=sk_test_... before make up, then"
   echo "  stripe listen --forward-to localhost:8105/v1/webhooks/stripe"
   echo "──────────────────────────────────────────────────────────────────────────────────────────────"
+}
+
+# Developer portal (Docusaurus, docs/portal): guides, architecture, every API reference, the MCP pages. Port 3100, or
+# DOCS_PORT, or the next free one from 3110 when something else holds it. DOCS=0 skips it.
+docs_port() {
+  local saved=""
+  if [[ -n "${DOCS_PORT:-}" ]]; then echo "$DOCS_PORT"; return 0; fi
+  if [[ -f "$WEB_PORTS_FILE" ]]; then saved=$( { grep -E "^DOCS_PORT=" "$WEB_PORTS_FILE" || true; } | head -1 | cut -d= -f2); fi
+  echo "${saved:-3100}"
+}
+
+docs_up() {
+  local port i
+  if [[ "${DOCS:-1}" == 0 || "${WEB:-1}" == 0 ]]; then return 0; fi
+  command -v pnpm >/dev/null || return 0
+  if running docs-portal; then echo "  · docs portal already running"; return 0; fi
+  port=$(docs_port)
+  if [[ -z "${DOCS_PORT:-}" ]] && port_open "$port"; then
+    local want=$port
+    port=3110
+    while port_open "$port"; do port=$((port + 1)); done
+    echo "  ! localhost:$want is in use by another program: the docs portal runs on localhost:$port instead (set DOCS_PORT)"
+  fi
+  { grep -v '^DOCS_PORT=' "$WEB_PORTS_FILE" 2>/dev/null || true; echo "DOCS_PORT=$port"; } >"$WEB_PORTS_FILE.tmp"
+  mv "$WEB_PORTS_FILE.tmp" "$WEB_PORTS_FILE"
+  echo "==> starting the developer portal (Docusaurus; the first build takes a minute or two)"
+  : >"$LOGS/docs-portal.log"
+  (cd "$ROOT/docs/portal" || exit 1
+    node scripts/sync-contracts.mjs >>"$LOGS/docs-portal.log" 2>&1
+    nohup ./node_modules/.bin/docusaurus start --port "$port" --host localhost --no-open >>"$LOGS/docs-portal.log" 2>&1 &
+    echo $! >"$PIDS/docs-portal.pid")
+  for ((i = 0; i < 240; i += 3)); do
+    if grep -q "Docusaurus website is running" "$LOGS/docs-portal.log" 2>/dev/null; then echo "  ✓ docs portal  http://localhost:$port"; return 0; fi
+    if ! running docs-portal; then echo "  ✗ docs portal exited; last log lines:" >&2; tail -n 15 "$LOGS/docs-portal.log" >&2; return 0; fi
+    sleep 3
+  done
+  echo "  … docs portal still compiling: tools/dev/local.sh logs docs-portal"
+}
+
+# Mobile apps (Expo, mobile/apps/{customer,driver}) against the local stack: one Metro server each (customer :8081,
+# driver :8082; identity's local OIDC clients redirect there for the web preview). MOBILE=0 skips them.
+# Open them in a browser (web preview), an iOS simulator / Android emulator, or Expo Go on a phone (exp://<LAN IP>:port).
+# EXPO_PUBLIC_DEV_HOST tells the apps where the stack is: localhost (browser, iOS simulator) by default; MOBILE_HOST=<ip>
+# for a phone on the same Wi-Fi, 10.0.2.2 for the Android emulator. MOBILE_MOCKS=1 runs them on the in-app mock backend.
+MOBILE_APPS="customer driver"
+
+mobile_port_of() {
+  case "$1" in customer) echo "${CUSTOMER_APP_PORT:-8081}" ;; driver) echo "${DRIVER_APP_PORT:-8082}" ;; esac
+}
+
+lan_ip() {
+  local ip=""
+  if command -v ipconfig >/dev/null 2>&1; then ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true); fi
+  if [[ -z "$ip" ]] && command -v hostname >/dev/null 2>&1; then ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true); fi
+  echo "${ip:-localhost}"
+}
+
+mobile_up() {
+  local app name port i mocks host
+  if [[ "${MOBILE:-1}" == 0 ]]; then return 0; fi
+  command -v pnpm >/dev/null || return 0
+  if [[ ! -x "$ROOT/mobile/apps/customer/node_modules/.bin/expo" ]]; then
+    echo "==> installing mobile dependencies (pnpm install)"
+    (cd "$ROOT" && pnpm install --frozen-lockfile)
+  fi
+  mocks=0; if [[ "${MOBILE_MOCKS:-0}" == 1 ]]; then mocks=1; fi
+  host="${MOBILE_HOST:-localhost}"
+  echo "==> starting the mobile apps (Expo/Metro; the first bundle builds when you open the app)"
+  for app in $MOBILE_APPS; do
+    name="mobile-$app"; port=$(mobile_port_of "$app")
+    if running "$name"; then echo "  · $app app already running"; continue; fi
+    if port_open "$port"; then
+      echo "  ! localhost:$port is in use: $app app skipped (set CUSTOMER_APP_PORT / DRIVER_APP_PORT)" >&2; continue
+    fi
+    : >"$LOGS/$name.log"
+    (cd "$ROOT/mobile/apps/$app" || exit 1
+      CI=1 EXPO_NO_TELEMETRY=1 EXPO_NO_TYPESCRIPT_SETUP=1 EXPO_PUBLIC_APP_ENV=local EXPO_PUBLIC_MOCKS=$mocks EXPO_PUBLIC_DEV_HOST="$host" \
+        nohup ./node_modules/.bin/expo start --port "$port" --lan >>"$LOGS/$name.log" 2>&1 &
+      echo $! >"$PIDS/$name.pid")
+  done
+  for app in $MOBILE_APPS; do
+    name="mobile-$app"; port=$(mobile_port_of "$app")
+    [[ -f "$PIDS/$name.pid" ]] || continue
+    for ((i = 0; i < 120; i += 3)); do
+      if grep -qE "Waiting on http|Metro waiting|Logs for your project" "$LOGS/$name.log" 2>/dev/null; then echo "  ✓ $app app  http://localhost:$port"; break; fi
+      if ! running "$name"; then echo "  ✗ $app app exited; last log lines:" >&2; tail -n 15 "$LOGS/$name.log" >&2; break; fi
+      sleep 3
+    done
+  done
 }
 
 cmd_up() {
@@ -497,6 +616,8 @@ cmd_up() {
     echo "Started with problems:$failed — see: tools/dev/local.sh logs <service>" >&2
   fi
   web_up
+  docs_up
+  mobile_up
   seed_if_empty
   links
 }
@@ -525,6 +646,15 @@ cmd_status() {
     state=down; if running "web-$app"; then state=running; fi
     printf '%-18s %-6s %-9s %s\n' "web-$app" "$(web_port_of "$app")" "$state" "http://localhost:$(web_port_of "$app")"
   done
+  if [[ -f "$PIDS/docs-portal.pid" ]]; then
+    state=down; if running docs-portal; then state=running; fi
+    printf '%-18s %-6s %-9s %s\n' docs-portal "$(docs_port)" "$state" "http://localhost:$(docs_port)"
+  fi
+  for app in $MOBILE_APPS; do
+    [[ -f "$PIDS/mobile-$app.pid" ]] || continue
+    state=down; if running "mobile-$app"; then state=running; fi
+    printf '%-18s %-6s %-9s %s\n' "mobile-$app" "$(mobile_port_of "$app")" "$state" "http://localhost:$(mobile_port_of "$app")"
+  done
   echo
   if [[ -f "$OVERRIDE" ]]; then echo "Postgres: yours (localhost:5432)"; fi
   compose ps --format 'table {{.Service}}\t{{.Status}}' 2>/dev/null || true
@@ -546,6 +676,7 @@ case "${1:-}" in
   down) cmd_down ;;
   status) cmd_status ;;
   links) links ;;
+  mobile) mkdir -p "$LOGS" "$PIDS"; mobile_up; links ;;
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
   seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }

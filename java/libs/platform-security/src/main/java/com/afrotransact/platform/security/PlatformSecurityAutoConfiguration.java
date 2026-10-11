@@ -17,6 +17,9 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /** Stateless resource-server defaults. API docs, health and metrics stay public; everything else needs a JWT. */
 @AutoConfiguration(beforeName = "org.springframework.boot.security.autoconfigure.web.servlet.ServletWebSecurityAutoConfiguration")
@@ -38,6 +41,25 @@ public class PlatformSecurityAutoConfiguration {
     @ConditionalOnMissingBean
     public PermissionChecker permissionChecker(ActorResolver actors) {
         return new DefaultPermissionChecker(actors);
+    }
+
+    /**
+     * CORS for browsers calling the service directly; no origins configured = cross-origin calls stay refused. Matched by
+     * name: Spring MVC's HandlerMappingIntrospector is also a CorsConfigurationSource, and Spring Security's
+     * {@code cors()} looks the source up as the bean named corsConfigurationSource.
+     */
+    @Bean
+    @ConditionalOnMissingBean(name = "corsConfigurationSource")
+    public CorsConfigurationSource corsConfigurationSource(PlatformSecurityProperties props) {
+        CorsConfiguration cors = new CorsConfiguration();
+        cors.setAllowedOrigins(props.corsAllowedOrigins());
+        cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        cors.setAllowedHeaders(List.of("*"));
+        cors.setExposedHeaders(List.of("Location", "ETag", "Retry-After"));
+        cors.setMaxAge(3600L);
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", cors);
+        return source;
     }
 
     @Bean

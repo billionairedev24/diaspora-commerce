@@ -41,6 +41,9 @@ at:
       - ${PUBLIC_WEB_URL:http://localhost:3000}
       - ${SELLER_CENTER_URL:http://localhost:3001}
       - ${STAFF_CONSOLE_URL:http://localhost:3002}
+      # Expo web previews of the customer and driver apps (make up / make mobile): OIDC discovery and token calls.
+      - http://localhost:8081
+      - http://localhost:8082
     bootstrap-admin:
       email: ${BOOTSTRAP_ADMIN_EMAIL:admin@afrotransact.com}
       password: ${BOOTSTRAP_ADMIN_PASSWORD:LocalAdmin2026!}
