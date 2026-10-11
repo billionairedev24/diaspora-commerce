@@ -14,6 +14,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/searchindex"
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/testdocker"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/adapter/elastic"
+	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/domain"
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/port"
 )
 
@@ -79,6 +80,18 @@ func TestVersionGuardedProjection(t *testing.T) {
 	}
 	if got.AvailableQty != 12 || !got.InStock {
 		t.Fatalf("available = %d in_stock = %v, want 12 true", got.AvailableQty, got.InStock)
+	}
+
+	// S281: a buy box entry replaces the variant's node entries (stock under a retail SKU never reaches them).
+	_, err = idx.ApplyAvailability(ctx, "us", "AT0000000A", domain.BuyBoxNode, 95, 310)
+	must(t, err)
+	if got = get(t, es, "AT00000001"); got.AvailableQty != 100 || !got.InStock {
+		t.Fatalf("available with buy box = %d, want 95 + 5", got.AvailableQty)
+	}
+	_, err = idx.ApplyAvailability(ctx, "us", "AT0000000A", domain.BuyBoxNode, 0, 320)
+	must(t, err)
+	if got = get(t, es, "AT00000001"); got.AvailableQty != 5 {
+		t.Fatalf("available after the buy box emptied = %d, want 5", got.AvailableQty)
 	}
 
 	missing, err := idx.ApplyAvailability(ctx, "us", "ATZZZZZZZZ", "HOU1", 3, 400)

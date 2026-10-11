@@ -32,7 +32,8 @@ class JdbcBuyBoxRepository implements BuyBoxRepository {
     public Optional<CurrentBuyBox> find(String atin, String currency) {
         return jdbc.sql("""
                 select atin, currency, winner_offer_id, winner_seller_org, winner_price_minor, winner_landed_minor,
-                       offer_count, min_landed_minor, score, reasons::text as reasons, computed_at
+                       offer_count, min_landed_minor, score, reasons::text as reasons, computed_at,
+                       winner_available_qty
                 from buy_box where atin = :atin and currency = :currency
                 """)
                 .param("atin", atin).param("currency", currency)
@@ -49,15 +50,17 @@ class JdbcBuyBoxRepository implements BuyBoxRepository {
     public void save(CurrentBuyBox c) {
         jdbc.sql("""
                 insert into buy_box (atin, currency, winner_offer_id, winner_seller_org, winner_price_minor,
-                                     winner_landed_minor, offer_count, min_landed_minor, score, reasons, computed_at)
+                                     winner_landed_minor, offer_count, min_landed_minor, score, reasons, computed_at,
+                                     winner_available_qty)
                 values (:atin, :currency, :winner, :org, :price, :landed, :count, :minLanded, :score,
-                        cast(:reasons as jsonb), :at)
+                        cast(:reasons as jsonb), :at, :availableQty)
                 on conflict (atin, currency) do update
                    set winner_offer_id = excluded.winner_offer_id, winner_seller_org = excluded.winner_seller_org,
                        winner_price_minor = excluded.winner_price_minor,
                        winner_landed_minor = excluded.winner_landed_minor, offer_count = excluded.offer_count,
                        min_landed_minor = excluded.min_landed_minor, score = excluded.score,
-                       reasons = excluded.reasons, computed_at = excluded.computed_at
+                       reasons = excluded.reasons, computed_at = excluded.computed_at,
+                       winner_available_qty = excluded.winner_available_qty
                 """)
                 .param("atin", c.atin())
                 .param("currency", c.currency())
@@ -70,6 +73,7 @@ class JdbcBuyBoxRepository implements BuyBoxRepository {
                 .param("score", c.score())
                 .param("reasons", json.write(c.reasons()))
                 .param("at", Timestamp.from(c.computedAt()))
+                .param("availableQty", c.winnerAvailableQty())
                 .update();
     }
 
@@ -114,7 +118,13 @@ class JdbcBuyBoxRepository implements BuyBoxRepository {
                 rs.getObject("winner_offer_id", UUID.class), rs.getString("winner_seller_org"),
                 nullableLong(rs, "winner_price_minor"), nullableLong(rs, "winner_landed_minor"),
                 rs.getInt("offer_count"), nullableLong(rs, "min_landed_minor"), rs.getDouble("score"),
-                json.reasons(rs.getString("reasons")), rs.getTimestamp("computed_at").toInstant());
+                json.reasons(rs.getString("reasons")), rs.getTimestamp("computed_at").toInstant(),
+                nullableInt(rs, "winner_available_qty"));
+    }
+
+    private static Integer nullableInt(ResultSet rs, String column) throws SQLException {
+        int v = rs.getInt(column);
+        return rs.wasNull() ? null : v;
     }
 
     private static Long nullableLong(ResultSet rs, String column) throws SQLException {

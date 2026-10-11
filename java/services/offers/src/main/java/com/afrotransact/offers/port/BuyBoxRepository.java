@@ -28,7 +28,7 @@ public interface BuyBoxRepository {
     /** The stored winner; {@code winnerOfferId} is null when nothing is eligible. */
     record CurrentBuyBox(String atin, String currency, UUID winnerOfferId, String winnerSellerOrgId,
                          Long winnerPriceMinor, Long winnerLandedPriceMinor, int offerCount, Long minLandedPriceMinor,
-                         double score, List<BuyBoxReason> reasons, Instant computedAt) {
+                         double score, List<BuyBoxReason> reasons, Instant computedAt, Integer winnerAvailableQty) {
 
         public CurrentBuyBox {
             reasons = List.copyOf(reasons);

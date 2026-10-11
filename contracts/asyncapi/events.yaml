@@ -1819,7 +1819,8 @@ components:
         $ref: '#/components/schemas/OffersOfferEvent'
     offersBuyBoxChanged:
       name: offers.buybox.changed
-      title: Buy box winner or headline numbers of an ATIN changed (winnerOfferId null = currently unavailable)
+      title: Buy box winner or headline numbers (prices, offer count, the winner's availableQty) of an ATIN changed (winnerOfferId
+        null = currently unavailable)
       headers:
         $ref: '#/components/schemas/EventHeaders'
       payload:
@@ -10265,6 +10266,14 @@ operations:
       restores it. Each document also carries an embedding of its text (title, brand, category path) from ai-gateway's POST
       /v1/embeddings (purpose search-document, client indexer-service, scope ai:use) for hybrid search (S036); an embedding
       failure never blocks the event, and a backfill embeds LIVE documents without one.
+  consumeIndexerOffersEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/offersEvents'
+    summary: offers.buybox.changed sets the variant's sellable quantity to the winner's availableQty (0 when winnerOfferId
+      is null), stored as variant entry "<atin>|BUYBOX" (version = decidedAt). When present it replaces the per-node inventory
+      entries for that variant, so stock held under a retail SKU or FBA FNSKU reaches search the same way it reaches the PDP
+      (S281).
   consumeIndexerSellerOrgEvents:
     action: receive
     channel:

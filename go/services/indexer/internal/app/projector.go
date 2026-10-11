@@ -87,6 +87,19 @@ func (p *projectorImpl) Handle(ctx context.Context, e events.Envelope) error {
 			p.log.InfoContext(ctx, "availability for unknown variant ignored", "sku", ae.SKU)
 		}
 		return nil
+	case domain.BuyBoxChanged:
+		var be domain.BuyBoxEvent
+		if err := json.Unmarshal(e.Payload, &be); err != nil || be.ATIN == "" {
+			p.log.WarnContext(ctx, "skipping malformed buy box event", "event_id", e.ID, "error", err)
+			return nil
+		}
+		if !be.DecidedAt.IsZero() {
+			version = domain.VersionOf(be.DecidedAt)
+		}
+		if _, err := p.index.ApplyAvailability(ctx, p.market, be.ATIN, domain.BuyBoxNode, be.Quantity(), version); err != nil {
+			return fmt.Errorf("buy box %s: %w", be.ATIN, err)
+		}
+		return nil
 	case domain.SellerOrgApproved, domain.SellerOrgUpdated:
 		var se domain.SellerOrgEvent
 		if err := json.Unmarshal(e.Payload, &se); err != nil {

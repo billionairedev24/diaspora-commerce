@@ -3,6 +3,7 @@ package com.afrotransact.offers.adapter.in.messaging;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 import com.afrotransact.offers.application.BuyBoxView;
@@ -78,11 +79,25 @@ class RetailListingOfferIT extends OffersIntegrationTest {
                 item.formatted(itemId, variant, "LIVE")));
         assertThat(listing.offers(variant, "USD").winner().view().availableQty()).isEqualTo(24);
 
+        // The winner's quantity is buy box headline: received or sold units republish offers.buybox.changed (search
+        // follows it) even though the winner and its price stay the same.
+        availability.onMessage(record("at.inventory.events", "inventory.availability.changed", UUID.randomUUID(),
+                stock("AT-JOL-200061", 95, 2)));
+        assertThat(buyBoxQuantities(variant)).last().isEqualTo(95);
+
         // Unlinked items, drafts and other retail events change nothing.
         retail.onMessage(record("at.retail.events", "retail.item.listing-changed", UUID.randomUUID(),
                 "{\"itemId\":\"%s\",\"sku\":\"AT-X-1\",\"listingStatus\":\"LIVE\"}".formatted(UUID.randomUUID())));
         retail.onMessage(record("at.retail.events", "retail.po.approved", UUID.randomUUID(), "{}"));
         assertThat(jdbcStatus(variant)).isEqualTo(OfferStatus.ACTIVE.name());
+    }
+
+    private List<Integer> buyBoxQuantities(String variant) {
+        return jdbc.sql("""
+                select (payload ->> 'availableQty')::int from platform_outbox
+                where aggregate_id = :atin and type = 'offers.buybox.changed' and payload ->> 'availableQty' is not null
+                order by occurred_at
+                """).param("atin", variant).query(Integer.class).list();
     }
 
     private String jdbcStatus(String variant) {

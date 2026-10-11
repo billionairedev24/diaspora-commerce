@@ -74,7 +74,8 @@ class BuyBoxServiceImpl implements BuyBoxService {
                 winner.map(w -> w.candidate().sellerOrgId()).orElse(null),
                 winner.map(w -> w.candidate().priceMinor()).orElse(null),
                 winner.map(w -> w.candidate().landedPriceMinor()).orElse(null), listed.size(), minLanded,
-                winner.map(OfferEvaluation::score).orElse(0.0), d.reasons(), now);
+                winner.map(OfferEvaluation::score).orElse(0.0), d.reasons(), now,
+                winner.map(w -> w.candidate().availableQty()).orElse(null));
         buyBoxes.save(current);
 
         UUID previousWinner = previous.map(CurrentBuyBox::winnerOfferId).orElse(null);
@@ -106,7 +107,10 @@ class BuyBoxServiceImpl implements BuyBoxService {
                 && Objects.equals(a.winnerPriceMinor(), b.winnerPriceMinor())
                 && Objects.equals(a.winnerLandedPriceMinor(), b.winnerLandedPriceMinor())
                 && a.offerCount() == b.offerCount()
-                && Objects.equals(a.minLandedPriceMinor(), b.minLandedPriceMinor());
+                && Objects.equals(a.minLandedPriceMinor(), b.minLandedPriceMinor())
+                // S281: the winner's sellable quantity is headline too (search cards show it; a repointed retail
+                // offer changes it without changing the winner or the price).
+                && Objects.equals(a.winnerAvailableQty(), b.winnerAvailableQty());
     }
 
     private static AuditedOffer audited(OfferEvaluation e) {

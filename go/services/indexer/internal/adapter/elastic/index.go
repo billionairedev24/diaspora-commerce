@@ -16,13 +16,22 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/indexer/internal/port"
 )
 
-// recompute sums per-variant×node quantities for variants the product still has.
+// recompute sums per-variant×node quantities for variants the product still has. A variant with a buy box entry
+// (key "<atin>|BUYBOX", from offers.buybox.changed) counts that entry only: it is the quantity the PDP sells.
 const recompute = `
 long total = 0;
 if (ctx._source.variant_qty != null && ctx._source.variant_atins != null) {
+  Set boxed = new HashSet();
   for (def e : ctx._source.variant_qty.entrySet()) {
-    String sku = e.getKey().splitOnToken('|')[0];
-    if (ctx._source.variant_atins.contains(sku)) { total += Long.parseLong(e.getValue().toString()); }
+    String[] k = e.getKey().splitOnToken('|');
+    if (k.length > 1 && k[1] == 'BUYBOX') { boxed.add(k[0]); }
+  }
+  for (def e : ctx._source.variant_qty.entrySet()) {
+    String[] k = e.getKey().splitOnToken('|');
+    String sku = k[0];
+    boolean box = k.length > 1 && k[1] == 'BUYBOX';
+    if (!ctx._source.variant_atins.contains(sku) || (boxed.contains(sku) && !box)) { continue; }
+    total += Long.parseLong(e.getValue().toString());
   }
 }
 ctx._source.available_qty = total;

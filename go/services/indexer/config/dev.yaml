@@ -6,7 +6,7 @@ market: us
 kafka:
   brokers: [kafka:9092]
   group: indexer
-  topics: [at.product.events, at.inventory.events, at.seller-org.events]
+  topics: [at.product.events, at.inventory.events, at.offers.events, at.seller-org.events]
 elasticsearch:
   urls: [http://elasticsearch:9200]
   refresh: false

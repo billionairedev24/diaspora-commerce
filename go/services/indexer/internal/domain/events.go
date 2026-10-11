@@ -15,6 +15,7 @@ const (
 	ProductTakenDown    = "catalog.product.taken_down"
 	ProductReinstated   = "catalog.product.reinstated"
 	AvailabilityChanged = "inventory.availability.changed"
+	BuyBoxChanged       = "offers.buybox.changed"
 	SellerOrgApproved   = "seller.org.approved"
 	SellerOrgUpdated    = "seller.org.updated"
 )
@@ -78,6 +79,27 @@ type AvailabilityEvent struct {
 	Node      string `json:"nodeId"`
 	Available int    `json:"available"`
 	Version   int64  `json:"version"`
+}
+
+// BuyBoxNode is the availability key under which the buy box quantity of a variant is stored. When present it is
+// authoritative for the variant: inventory keys stock by the selling SKU (retail SKU, FBA FNSKU), which is not
+// always the variant ATIN, so the per-node entries alone can miss or double count it (S281).
+const BuyBoxNode = "BUYBOX"
+
+// BuyBoxEvent mirrors offers-service's offers.buybox.changed payload (fields the indexer uses).
+type BuyBoxEvent struct {
+	ATIN          string    `json:"atin"`
+	WinnerOfferID *string   `json:"winnerOfferId"`
+	AvailableQty  *int      `json:"availableQty"`
+	DecidedAt     time.Time `json:"decidedAt"`
+}
+
+// Quantity is the sellable quantity of the variant: the winner's available units, 0 when nothing can win.
+func (b BuyBoxEvent) Quantity() int {
+	if b.WinnerOfferID == nil || *b.WinnerOfferID == "" || b.AvailableQty == nil || *b.AvailableQty < 0 {
+		return 0
+	}
+	return *b.AvailableQty
 }
 
 // Category is the resolved department and path for a category id.

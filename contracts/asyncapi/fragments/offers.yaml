@@ -90,7 +90,9 @@ components:
       payload: {$ref: '#/components/schemas/OffersOfferEvent'}
     offersBuyBoxChanged:
       name: offers.buybox.changed
-      title: Buy box winner or headline numbers of an ATIN changed (winnerOfferId null = currently unavailable)
+      title: >-
+        Buy box winner or headline numbers (prices, offer count, the winner's availableQty) of an ATIN changed
+        (winnerOfferId null = currently unavailable)
       headers: {$ref: '#/components/schemas/EventHeaders'}
       payload: {$ref: '#/components/schemas/OffersBuyBoxChanged'}
     offersCouponCreated:

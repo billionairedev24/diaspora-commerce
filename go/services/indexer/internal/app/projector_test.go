@@ -23,6 +23,7 @@ type fakeIndex struct {
 	docs    []searchindex.ProductDocument
 	opts    []port.UpsertOptions
 	avail   []string
+	qtys    []int
 	renames []string
 	fail    int
 	missing []domain.EmbeddingCandidate
@@ -49,6 +50,7 @@ func (f *fakeIndex) RenameSeller(_ context.Context, _, sellerID, name string) (i
 
 func (f *fakeIndex) ApplyAvailability(_ context.Context, _, sku, node string, qty int, _ int64) (bool, error) {
 	f.avail = append(f.avail, sku+"@"+node)
+	f.qtys = append(f.qtys, qty)
 	return true, nil
 }
 
@@ -317,5 +319,26 @@ func TestRestartKeepsSellerNamesFromTheWarmedDirectory(t *testing.T) {
 		if idx.docs[0].SellerName != "Kemi's Pantry" || idx.opts[0].PreserveSellerName {
 			t.Fatalf("restart %d: %q %+v", restart, idx.docs[0].SellerName, idx.opts[0])
 		}
+	}
+}
+
+// S281: the buy box quantity becomes the variant's sellable quantity (0 when nothing can win), so stock held under a
+// retail SKU or FBA FNSKU reaches search the way it reaches the PDP.
+func TestBuyBoxChangeSetsTheVariantQuantity(t *testing.T) {
+	idx := &fakeIndex{}
+	p := app.NewProjector(idx, fakeCatalog{}, fakeSellers{}, "us", quiet)
+	for _, payload := range []string{
+		`{"atin":"AT0000000A","winnerOfferId":"0b9f0c1e-5d55-4b1e-9d6a-1f0f0f0f0f0f","availableQty":95,"decidedAt":"2026-10-11T10:00:00Z"}`,
+		`{"atin":"AT0000000A","winnerOfferId":null,"availableQty":95,"decidedAt":"2026-10-11T11:00:00Z"}`,
+		`{"atin":"","availableQty":3}`,
+		`{not json`,
+	} {
+		e := events.Envelope{ID: "b", Type: domain.BuyBoxChanged, Payload: []byte(payload), OccurredAt: time.Now()}
+		if err := p.Handle(context.Background(), e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(idx.avail) != 2 || idx.avail[0] != "AT0000000A@BUYBOX" || idx.qtys[0] != 95 || idx.qtys[1] != 0 {
+		t.Fatalf("buy box availability = %v %v, want two BUYBOX entries 95 then 0", idx.avail, idx.qtys)
 	}
 }
