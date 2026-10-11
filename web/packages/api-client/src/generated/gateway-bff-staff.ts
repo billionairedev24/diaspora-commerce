@@ -681,6 +681,404 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/preorders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pre-order windows (tabs All / Open / Scheduled / Closed / Drafts)
+         * @description delivery-runs `GET /v1/preorders?status=&q=&page=&size=` (delivery-runs:read). Needs VIEW on preorders.
+         */
+        get: operations["listStaffPreorders"];
+        put?: never;
+        /**
+         * Open a pre-order (saved as a draft)
+         * @description delivery-runs `POST /v1/preorders` (preorders:manage, EDIT). `Idempotency-Key` is relayed.
+         */
+        post: operations["createStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Platform pre-order settings (master switch, fallback, placements, payment setup)
+         * @description delivery-runs `GET /v1/preorder-settings`. Needs VIEW on preorders.
+         */
+        get: operations["getStaffPreorderSettings"];
+        /**
+         * Change the settings, including the payment setup (FULL only)
+         * @description delivery-runs `PUT /v1/preorder-settings` (If-Match relayed; preorders:manage). Only FULL on preorders (Super
+         *     Admin, Marketing) may change settings: Operations (EDIT) gets 403.
+         */
+        put: operations["updateStaffPreorderSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/areas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Coverage areas (country → region → city, on-count and window count)
+         * @description delivery-runs `GET /v1/preorder-areas?country=&region=&q=&page=&size=`.
+         */
+        get: operations["listStaffPreorderAreas"];
+        put?: never;
+        /**
+         * Add a coverage area ("US/TX" or "US/TX/Lubbock")
+         * @description delivery-runs `POST /v1/preorder-areas {key}` (preorders:manage, EDIT).
+         */
+        post: operations["addStaffPreorderArea"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Turn areas on or off in bulk (a country or region at once)
+         * @description delivery-runs `PATCH /v1/preorder-areas {keys[], on}` (preorders:manage, EDIT). 1 to 500 keys.
+         */
+        patch: operations["toggleStaffPreorderAreas"];
+        trace?: never;
+    };
+    "/v1/staff/preorders/areas/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a coverage area
+         * @description delivery-runs `DELETE /v1/preorder-areas/{key}` (preorders:manage, EDIT). The key is one path segment with its
+         *     slashes encoded (`US%2FTX%2FLubbock`). Answers the refreshed area page.
+         */
+        delete: operations["deleteStaffPreorderArea"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/places/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Country / region / city suggestions for the area picker
+         * @description delivery-runs `GET /v1/places/search?country=&region=&q=` (geo-service backed, built-in list fallback) → {items, regionLabel}.
+         */
+        get: operations["searchStaffPreorderPlaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/address-verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify a new late-add address (geo, Google Places with Nominatim fallback)
+         * @description geo `POST /v1/addresses/validate`. `verified` for VALID or CORRECTED; `placeId` is geo's place id, else a stable
+         *     reference of the standardised address (delivery-runs re-verifies it). Needs the late-add ability.
+         */
+        post: operations["verifyStaffPreorderAddress"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign a direct media upload for a creative
+         * @description media `POST /v1/uploads` (purpose storefront; JPEG, PNG or WebP up to 10 MB). The console PUTs the file to
+         *     `upload.url`, then sets the slot (`PUT /v1/staff/preorders/{id}/creatives/{slot} {assetId}`), where the BFF
+         *     finalises the asset with media and delivery-runs verifies it. Needs EDIT and preorders:manage.
+         */
+        post: operations["requestStaffPreorderUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The window's products (late-add item list)
+         * @description delivery-runs `GET /v1/preorders/{id}/products` → items [{atin, name, price (minor units), sellerName}].
+         */
+        get: operations["listStaffPreorderProducts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One window (detail header, wizard)
+         * @description delivery-runs `GET /v1/preorders/{id}`.
+         */
+        get: operations["getStaffPreorder"];
+        /**
+         * Edit a window (If-Match)
+         * @description delivery-runs `PUT /v1/preorders/{id}` (If-Match relayed; preorders:manage, EDIT).
+         */
+        put: operations["updateStaffPreorder"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish a draft (422 lists the failed checks)
+         * @description delivery-runs `POST /v1/preorders/{id}/publish` (preorders:manage, EDIT).
+         */
+        post: operations["publishStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pause a window
+         * @description delivery-runs `POST /v1/preorders/{id}/pause` (preorders:manage, EDIT).
+         */
+        post: operations["pauseStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume a paused window
+         * @description delivery-runs `POST /v1/preorders/{id}/resume` (preorders:manage, EDIT).
+         */
+        post: operations["resumeStaffPreorder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/creatives/{slot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set a creative slot from an uploaded media asset
+         * @description delivery-runs `PUT /v1/preorders/{id}/creatives/{slot} {assetId}` (verifies with media-service and stores the
+         *     size; a ratio more than 12 % off spec is flagged RATIO_OFF). preorders:manage, EDIT.
+         */
+        put: operations["putStaffPreorderCreative"];
+        post?: never;
+        /**
+         * Remove a creative
+         * @description delivery-runs `DELETE /v1/preorders/{id}/creatives/{slot}` (preorders:manage, EDIT).
+         */
+        delete: operations["deleteStaffPreorderCreative"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The window's orders (search by order / customer / phone / address / zip)
+         * @description delivery-runs `GET /v1/preorders/{id}/orders?status=&channel=&q=&page=&size=`.
+         */
+        get: operations["listStaffPreorderOrders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * KPIs, orders by day, by channel, top products, door / pickup split, placements
+         * @description delivery-runs `GET /v1/preorders/{id}/summary`.
+         */
+        get: operations["getStaffPreorderSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/exports/{file}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a CSV (streamed from delivery-runs)
+         * @description delivery-runs `GET /v1/preorders/{id}/exports/{file}` (preorders:export; audit event preorders.export.created),
+         *     relayed without buffering. `orders-filtered.csv` takes the orders list's status / channel / q.
+         */
+        get: operations["exportStaffPreorder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/preorders/{preorderId}/late-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a late order for a customer (tagged Agent (late))
+         * @description delivery-runs `POST /v1/preorders/{id}/late-orders` (preorders:late-add; APPROVE, EDIT or FULL on preorders),
+         *     which creates the on-behalf order in orders-service (saved card charged off-session, or a payment link sent by
+         *     SMS when lateAdd.paymentLink is allowed in the payment settings). Only while the window is CLOSED (or OPEN, as
+         *     an assisted order); refused once DELIVERED. `Idempotency-Key` is relayed.
+         */
+        post: operations["addStaffPreorderLateOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/customers/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Late-add customer picker (identity people search with saved addresses)
+         * @description identity `GET /v1/admin/users?q=&size=10` (customers only) and, per hit, `GET /v1/admin/users/{id}/addresses`
+         *     (best effort: `addressesUnavailable` when identity can't list them — enter a new address). Needs the late-add
+         *     ability on preorders. Fewer than 2 characters answer no one. `windowId` is the window the late add is for
+         *     (validated; reserved for ranking customers of the window's areas first). Addresses are default first; the
+         *     customer's city / region / country are the default address's.
+         */
+        get: operations["searchStaffCustomers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1612,6 +2010,234 @@ export interface components {
             channel: components["schemas"]["NotificationChannel"];
             provider: string | null;
         };
+        PreorderCan: {
+            /** @description EDIT or FULL and preorders:manage: windows, creatives, areas */
+            manage: boolean;
+            /** @description FULL and preorders:manage: master switch, fallback, placements, payment setup */
+            settings: boolean;
+            /** @description preorders:export */
+            export: boolean;
+            /** @description APPROVE, EDIT or FULL and preorders:late-add */
+            lateAdd: boolean;
+        };
+        StaffPreorderObject: {
+            [key: string]: unknown;
+        };
+        StaffPreorderItems: {
+            items: {
+                [key: string]: unknown;
+            }[];
+            total?: number | null;
+            page?: number;
+            size?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        StaffPreorderList: {
+            items: {
+                [key: string]: unknown;
+            }[];
+            total?: number | null;
+            /** @description Tab counts */
+            counts?: {
+                [key: string]: number;
+            };
+            can: components["schemas"]["PreorderCan"];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * @description Window fields (delivery-runs PreorderWindow): name, targets[] (country/region[/city] keys), opensAt, closesAt,
+         *     deliversOn, ribbon (≤ 80), headline (≤ 140), smsCopy (≤ 160, GSM-7), categories[], door, pickup, pickupPoint,
+         *     doorFeeOverride / pickupFeeOverride (minor units, null = the settings' fees), showCount, socialBudget, comms[]
+         *     (ANNOUNCE, REMIND_48H, LAST_CALL_6H, CLOSED, OUT_FOR_DELIVERY, PAID_SOCIAL).
+         */
+        StaffPreorderDraft: {
+            name?: string;
+            targets?: string[];
+            /** Format: date-time */
+            opensAt?: string;
+            /** Format: date-time */
+            closesAt?: string;
+            /** Format: date */
+            deliversOn?: string;
+            ribbon?: string;
+            headline?: string;
+            smsCopy?: string;
+            categories?: string[];
+            door?: boolean;
+            pickup?: boolean;
+            pickupPoint?: {
+                [key: string]: unknown;
+            } | null;
+            doorFeeOverride?: number | null;
+            pickupFeeOverride?: number | null;
+            showCount?: boolean;
+            comms?: string[];
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        StaffPreorderWindow: {
+            id?: string;
+            /** @example LBK-7 */
+            code?: string;
+            name?: string;
+            /** @description DRAFT, PAUSED, UPCOMING, OPEN, CLOSED, DELIVERED (derived) */
+            status?: string;
+            /** @description Window override in minor units (null = the settings' fee for its currency) */
+            doorFeeOverride?: number | null;
+            pickupFeeOverride?: number | null;
+            /** @description Door fee shoppers pay (override, else settings), minor units */
+            effectiveDoorFee?: number;
+            effectivePickupFee?: number;
+            currency?: string;
+            pickupWindow?: string | null;
+            allowedMethods?: ("CARD" | "WALLET" | "ACH")[];
+            creatives?: {
+                [key: string]: unknown;
+            };
+            /** @description Publish checks that fail */
+            violations?: {
+                [key: string]: unknown;
+            }[];
+            version?: number;
+            can: components["schemas"]["PreorderCan"];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * @description Platform settings (delivery-runs): enabled, fallback (SHIP | WAITLIST), placements {ribbon, hero, badge, pdp,
+         *     cart, family}, payment {doorFee and pickupFee (per currency, minor units), pickupWindow, allowedMethods
+         *     [CARD, WALLET, ACH], lateAdd {savedCard, paymentLink, linkExpiryHours}, missedDelivery {offerRefund,
+         *     offerNewDate}}. Answers carry `can`.
+         */
+        StaffPreorderSettings: {
+            enabled?: boolean;
+            /** @enum {string} */
+            fallback?: "SHIP" | "WAITLIST";
+            placements?: {
+                [key: string]: boolean;
+            };
+            payment?: {
+                /**
+                 * @description Minor units per currency
+                 * @example {
+                 *       "USD": 799,
+                 *       "CAD": 999
+                 *     }
+                 */
+                doorFee?: {
+                    [key: string]: number;
+                };
+                /**
+                 * @description Minor units per currency
+                 * @example {
+                 *       "USD": 0,
+                 *       "CAD": 0
+                 *     }
+                 */
+                pickupFee?: {
+                    [key: string]: number;
+                };
+                /** @example 10am–2pm */
+                pickupWindow?: string;
+                allowedMethods?: ("CARD" | "WALLET" | "ACH")[];
+                lateAdd?: {
+                    savedCard?: boolean;
+                    paymentLink?: boolean;
+                    /** @description Payment link lifetime in hours; orders-service creates links for at most 24 h */
+                    linkExpiryHours?: number;
+                };
+                missedDelivery?: {
+                    offerRefund?: boolean;
+                    offerNewDate?: boolean;
+                };
+            } & {
+                [key: string]: unknown;
+            };
+            version?: number;
+            can?: components["schemas"]["PreorderCan"];
+        } & {
+            [key: string]: unknown;
+        };
+        StaffPreorderAreas: {
+            items?: {
+                [key: string]: unknown;
+            }[];
+            total?: number | null;
+            can: components["schemas"]["PreorderCan"];
+        } & {
+            [key: string]: unknown;
+        };
+        StaffPreorderLateOrder: {
+            customerId: string;
+            addressId?: string;
+            newAddress?: {
+                line1?: string;
+                zip?: string;
+                placeId?: string;
+            };
+            address?: components["schemas"]["StaffPreorderLateAddress"];
+            /** @constant */
+            phoneConfirmed: true;
+            items: {
+                atin: string;
+                qty: number;
+            }[];
+            /** @enum {string} */
+            payment: "SAVED_CARD" | "PAYMENT_LINK";
+            /** @enum {string} */
+            fulfilment?: "DOOR" | "PICKUP";
+            /** @example Customer called */
+            reason: string;
+            note?: string;
+        };
+        /**
+         * @description Delivery address snapshot (delivery-runs PreorderLateAddress). With `addressId` the BFF fills every blank field
+         *     from the customer's saved address in identity (fields sent here win); delivery-runs answers 422
+         *     `delivery-runs.address-details-required` when street, city, state or postal code is still missing. A saved
+         *     address id that is not the customer's is a 422 on `addressId`.
+         */
+        StaffPreorderLateAddress: {
+            fullName?: string;
+            phone?: string;
+            line1?: string;
+            line2?: string;
+            city?: string;
+            /** @description State / region code */
+            region?: string;
+            zip?: string;
+            country?: string;
+            instructions?: string;
+        };
+        LateAddAddress: {
+            id: string;
+            label: string;
+            fullName?: string;
+            phone?: string;
+            line1: string;
+            line2?: string;
+            city: string;
+            region: string;
+            zip: string;
+            country?: string;
+            instructions?: string;
+        };
+        LateAddCustomers: {
+            items: {
+                id: string;
+                name: string;
+                phone: string;
+                email: string;
+                city: string;
+                region: string;
+                country: string;
+                addresses: components["schemas"]["LateAddAddress"][];
+                /** @description identity could not list the addresses (enter a new one) */
+                addressesUnavailable?: boolean;
+            }[];
+        };
     };
     responses: {
         /** @description RFC 9457 problem */
@@ -1638,6 +2264,9 @@ export interface components {
         RecordId: string;
         ExportId: string;
         ShipmentId: string;
+        /** @description Window id or code */
+        PreorderId: string;
+        CreativeSlot: "HERO" | "PDP" | "STORY" | "FEED" | "EMAIL";
         /** @example order.confirmed */
         TemplateKey: string;
         /** @description Makes retries safe (same key = same result). */
@@ -2656,6 +3285,753 @@ export interface operations {
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
             502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPreorders: {
+        parameters: {
+            query?: {
+                /** @description OPEN, UPCOMING, CLOSED, DELIVERED, DRAFT, PAUSED */
+                status?: string;
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Windows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    createStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderDraft"];
+            };
+        };
+        responses: {
+            /** @description Draft created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPreorderSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Settings */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>"); send it back as If-Match */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffPreorderSettings: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderSettings"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>"); send it back as If-Match */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderSettings"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPreorderAreas: {
+        parameters: {
+            query?: {
+                country?: string;
+                region?: string;
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Areas */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderAreas"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    addStaffPreorderArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @example US/TX/Lubbock */
+                    key: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    toggleStaffPreorderAreas: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    keys: string[];
+                    on: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteStaffPreorderArea: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Areas after the removal */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderAreas"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffPreorderPlaces: {
+        parameters: {
+            query?: {
+                country?: string;
+                region?: string;
+                q?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Places */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderItems"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    verifyStaffPreorderAddress: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    line1: string;
+                    zip: string;
+                    city?: string;
+                    region?: string;
+                    country?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Verification */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        verified: boolean;
+                        placeId: string | null;
+                        formatted: string | null;
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    requestStaffPreorderUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    fileName: string;
+                    /** @enum {string} */
+                    contentType: "image/jpeg" | "image/png" | "image/webp";
+                    size: number;
+                    width?: number;
+                    height?: number;
+                };
+            };
+        };
+        responses: {
+            /** @description Upload ticket */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        assetId: string;
+                        upload: {
+                            /** @enum {string} */
+                            method: "PUT" | "POST";
+                            url: string;
+                            headers: {
+                                [key: string]: string;
+                            };
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPreorderProducts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Products */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderItems"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Window */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>"); send it back as If-Match */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    updateStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "If-Match"?: string;
+            };
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderDraft"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description Optimistic-lock version ("<version>"); send it back as If-Match */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            412: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    publishStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Published */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    pauseStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paused */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resumeStaffPreorder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resumed */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffPreorderCreative: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+                slot: components["parameters"]["CreativeSlot"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    assetId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Window with the creative */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    deleteStaffPreorderCreative: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+                slot: components["parameters"]["CreativeSlot"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Window without the creative */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderWindow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listStaffPreorderOrders: {
+        parameters: {
+            query?: {
+                /** @description PAID, LATE_ADD, CANCELLED */
+                status?: string;
+                channel?: string;
+                q?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Orders */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderItems"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPreorderSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    exportStaffPreorder: {
+        parameters: {
+            query?: {
+                status?: string;
+                channel?: string;
+                q?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+                file: "orders.csv" | "orders-filtered.csv" | "picking-list.csv" | "advertorial-report.csv";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    addStaffPreorderLateOrder: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Window id or code */
+                preorderId: components["parameters"]["PreorderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffPreorderLateOrder"];
+            };
+        };
+        responses: {
+            /** @description Late order added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffPreorderObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    searchStaffCustomers: {
+        parameters: {
+            query?: {
+                q?: string;
+                windowId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Customers */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LateAddCustomers"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
             503: components["responses"]["Problem"];
         };
     };

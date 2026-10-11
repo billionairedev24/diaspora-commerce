@@ -3,6 +3,9 @@ at:
   security:
     enabled: false
   delivery-runs:
+    # The delivery-runs-service client of identity's local profile (geo:zones:write, orders:on-behalf, media:read).
+    geo:
+      client-secret: ${DELIVERY_RUNS_CLIENT_SECRET:local-delivery-runs-service-secret}
     preorders:
       # The design's demo coverage areas (Lubbock, Amarillo, El Paso, Midland, Odessa, Toronto, Mississauga,
       # Brampton on; Laredo off). Local only: no demo data in migrations.

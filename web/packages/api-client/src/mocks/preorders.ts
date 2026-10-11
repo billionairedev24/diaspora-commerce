@@ -80,7 +80,9 @@ const isoDate = (t: number) => new Date(t).toISOString().slice(0, 10);
 const dateMs = (d: string) => new Date(`${d}T12:00:00Z`).getTime();
 
 function seed(now: number): PreorderMockState {
-  const today = Math.floor(now / DAY) * DAY;
+  // The Central calendar day (UTC-5 in October) at UTC midnight: windows close at 23:59 Central, so a UTC day would keep
+  // "closed yesterday" windows open between 00:00 and 04:59 UTC.
+  const today = Math.floor((now - 5 * HOUR) / DAY) * DAY;
   // 09:00 and 23:59 Central (UTC-5 in October) expressed in UTC.
   const opens = (d: number) => today + d * DAY + 14 * HOUR;
   const closes = (d: number) => today + (d + 1) * DAY + 4 * HOUR + 59 * 60_000;

@@ -348,7 +348,8 @@ class PreorderCheckoutIT extends OrdersIntegrationTest {
 
         // The delivery date passes undelivered → orders.preorder.delivery_missed, once.
         String shipmentId = created.path("shipmentIds").get(0).asString();
-        jdbc.sql("update shipment set promised_by = :d where id = :id").param("d", LocalDate.now().minusDays(1))
+        // Two days back: the job compares with today in the market zone, which trails UTC by up to a day.
+        jdbc.sql("update shipment set promised_by = :d where id = :id").param("d", LocalDate.now().minusDays(2))
                 .param("id", UUID.fromString(shipmentId)).update();
         assertThat(deliveries.flagMissedDeliveries()).isGreaterThanOrEqualTo(1);
         deliveries.flagMissedDeliveries();

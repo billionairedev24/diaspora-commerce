@@ -17,7 +17,7 @@
 | content | Spring Boot | 8112 | announcements, placements, ads campaigns, site/legal config, markets | Postgres `content` |
 | ai-gateway | Spring Boot + Spring AI | 8113 | Lola agent, OpenRouter routing, budgets, redaction | Postgres `ai` |
 | mcp-server | Spring Boot + Spring AI MCP | 8114 | MCP tools for shoppers, sellers, staff | — |
-| delivery-runs | Spring Boot | 8115 | community delivery runs: locations, runs (cutoff, minimum, capacity), run slots, subscriptions, run economics | Postgres `deliveryruns` |
+| delivery-runs | Spring Boot | 8115 | community delivery runs: locations, runs (cutoff, minimum, capacity), run slots, subscriptions, run economics; pre-order windows, coverage, waitlist, late adds | Postgres `deliveryruns` |
 | gateway-bff | Go | 8200 | screen-shaped APIs for web/mobile, token relay | Redis |
 | search | Go | 8201 | query, facets, autocomplete, hybrid retrieval | Elasticsearch |
 | indexer | Go | 8202 | Kafka → Elasticsearch projection | Elasticsearch |
@@ -29,6 +29,21 @@
 | notifications | Go | 8208 | email (Resend, SendGrid, SES), SMS (Twilio, Vonage), push, WhatsApp | Postgres `notifications` |
 | carrier-gateway | Go | 8209 | USPS, UPS, FedEx, DHL rates/labels/tracking | Postgres `carriers` |
 | authz-sync | Go | 8210 | identity/seller events → OpenFGA relationship tuples | OpenFGA |
+
+### Pre-order wiring (local defaults)
+
+Every caller of delivery-runs reads `DELIVERY_RUNS_URL` (default `http://localhost:8115`); service tokens come from
+identity's local clients (`application-local.yml`), whose secrets default to the values below on both sides.
+
+| Caller | Setting | Default | Client (secret env, local default) | Scope |
+|---|---|---|---|---|
+| gateway-bff | `DELIVERY_RUNS_URL` (`upstreams.deliveryRuns.url`) | `http://localhost:8115` | storefront: public routes; staff: the staff member's token | — |
+| orders | `DELIVERY_RUNS_URL` (`at.orders.upstreams.delivery-runs-url`) | `http://localhost:8115` | `orders-service` (`ORDERS_CLIENT_SECRET`, `local-orders-service-secret`) | `delivery-runs:reserve` |
+| cart | `DELIVERY_RUNS_URL` (`deliveryRuns.url`) | `http://localhost:8115` | `cart-service` (`CART_CLIENT_SECRET`, `local-cart-service-secret`) | `delivery-runs:reserve` |
+| notifications | `deliveryRuns.baseUrl` | `http://localhost:8115` | `notifications-service` | `delivery-runs:audience.read` |
+| delivery-runs → media / orders / geo | `MEDIA_URL` / `ORDERS_URL` / `GEO_URL` | `:8207` / `:8104` / `:8205` | `delivery-runs-service` (`DELIVERY_RUNS_CLIENT_SECRET`, `local-delivery-runs-service-secret`) | `media:read`, `orders:on-behalf`, `geo:zones:write` |
+
+The web apps need none of this with `API_MOCKS=1` (storefront and staff console serve the BFF from MSW mocks).
 
 | Front-end | Port |
 |---|---|

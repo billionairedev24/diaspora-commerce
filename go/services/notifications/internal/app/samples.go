@@ -256,7 +256,7 @@ var _ port.PreorderAudience = sampleAudienceImpl{}
 func SampleAudience() port.PreorderAudience { return sampleAudienceImpl{} }
 
 func (sampleAudienceImpl) Audience(_ context.Context, windowID string, _ domain.Channel, segment, _ string, _ int) (port.AudiencePage, error) {
-	unsub := "https://afrotransact.com/pre-orders/unsubscribe?t=sample-" + windowID
+	unsub := "http://localhost:3000/pre-orders/waitlist/unsubscribe?token=sample-" + windowID
 	if segment == port.AudienceWaitlist {
 		return port.AudiencePage{Members: []port.AudienceMember{{SubscriptionID: "3e7a1c2b-0000-4000-8000-000000000001",
 			Email: "cust-1@example.com", UnsubscribeURL: unsub}}}, nil

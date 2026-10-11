@@ -815,6 +815,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/cart/preorder-fulfilment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Choose door delivery or pickup for the cart's pre-order package of a window
+         * @description Relayed to the cart service (`PUT /v1/cart/preorder-fulfilment {windowId, fulfilment}`). The fee is the
+         *     window's effective door fee (Back office → Pre-orders → Settings → payment, or the window's override) or the
+         *     pickup fee; only options the window offers (`preorder.options[]`) are accepted.
+         */
+        put: operations["setPreorderFulfilment"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/preorders/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The pre-order window covering the shopper's delivery location (or an explicit place)
+         * @description Without `country`/`region` the BFF uses the session's delivery location (`/v1/delivery-location`: market
+         *     country, state, city); `place.source` says which (`session`, `default` or `query`). delivery-runs
+         *     `GET /v1/public/preorders/resolve` answers: the first OPEN, else UPCOMING, else CLOSED window that covers the
+         *     place, whether pre-order is `on` (master switch, window active, area on; metro cities never), the countdown
+         *     target, creatives, live count and the fallback when off. Cached 30 seconds.
+         */
+        get: operations["resolvePreorder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/preorders/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open and upcoming windows for the /pre-orders page
+         * @description delivery-runs `GET /v1/public/preorders/open`. Cached 30 seconds.
+         */
+        get: operations["listOpenPreorders"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/preorders/waitlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hear when a pre-order opens in an area (email, double opt-in)
+         * @description delivery-runs `POST /v1/public/subscriptions {email, area, country, region, city, source: preorder-waitlist}`.
+         *     The place defaults to the session's delivery location. Always 202 for a valid email (whether or not it was
+         *     known); notifications sends the confirmation link, then `preorder.waitlist.opened` when a window opens.
+         *     Rate limited like other lookups.
+         */
+        post: operations["joinPreorderWaitlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/preorders/waitlist/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Leave a pre-order waitlist (token from the waitlist email's unsubscribe link)
+         * @description delivery-runs `POST /v1/public/preorders/waitlist/unsubscribe {token}` (no sign-in). The storefront page
+         *     `/pre-orders/waitlist/unsubscribe?token=` calls it. Leaving twice is fine (200 again); an unknown token is a 422
+         *     on `token`. Rate limited like other lookups.
+         */
+        post: operations["leavePreorderWaitlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/checkout/orders": {
         parameters: {
             query?: never;
@@ -1915,6 +2026,8 @@ export interface components {
                 remainingMinor: number;
                 thresholdMinor: number;
             } | null;
+            /** @description Pre-order block (packageId ends in `:preorder`); null for packages that ship now */
+            preorder?: components["schemas"]["CartPreorder"] | null;
         };
         SavedItem: {
             savedId: string;
@@ -2366,7 +2479,157 @@ export interface components {
             durationMinutes: number | null;
             chargeMinor: number;
         };
+        /**
+         * @description Last-touch marketing source (`src` = ig | fb | tt | wa | email | sms | app | hero | ribbon | pdp | page, `cr`
+         *     creative or comm slot, `po` window code). Stored on the order and echoed in `orders.order.placed`. Malformed
+         *     values are dropped; without a body value the BFF reads the `at_attr` cookie.
+         */
+        Attribution: {
+            /** @example ig */
+            src?: string;
+            /** @example story */
+            cr?: string;
+            /** @example LBK-7 */
+            po?: string;
+        };
+        /** @description Settings placements (all on by default) */
+        PreorderPlacements: {
+            ribbon?: boolean;
+            hero?: boolean;
+            badge?: boolean;
+            pdp?: boolean;
+            cart?: boolean;
+            family?: boolean;
+        };
+        PreorderPlace: {
+            /** @example US */
+            country: string;
+            /** @example TX */
+            region: string;
+            /** @example Lubbock */
+            city: string;
+            /**
+             * @description Where the BFF took the place from
+             * @enum {string}
+             */
+            source?: "query" | "session" | "default";
+        };
+        PreorderCreative: {
+            url?: string;
+            width?: number;
+            height?: number;
+        } | null;
+        /**
+         * @description Money and payment setup of a window, all money in minor units: the window's doorFeeOverride / pickupFeeOverride,
+         *     else Back office → Pre-orders → Settings → payment for the window's currency.
+         */
+        PreorderTerms: {
+            door?: boolean;
+            pickup?: boolean;
+            /** @example 799 */
+            doorFeeMinor?: number;
+            /** @example 0 */
+            pickupFeeMinor?: number;
+            /** @example USD */
+            currency?: string;
+            /** @example 10am–2pm */
+            pickupWindow?: string;
+            allowedMethods?: ("CARD" | "WALLET" | "ACH")[];
+        };
+        /** @description A window as the storefront shows it (no PII); relayed from delivery-runs. */
+        PreorderWindowCard: components["schemas"]["PreorderTerms"] & {
+            id?: string;
+            /** @example LBK-7 */
+            code?: string;
+            /** @example Lubbock Pre-order #7 */
+            name?: string;
+            ribbon?: string;
+            headline?: string;
+            categories?: string[];
+            departments?: string[];
+            /** Format: date-time */
+            opensAt?: string;
+            /** Format: date-time */
+            closesAt?: string;
+            /** Format: date */
+            deliversOn?: string;
+            /** @example America/Chicago */
+            timeZone?: string;
+            showCount?: boolean;
+            /** @description Paid pre-orders so far; null when hidden or not open yet */
+            count?: number | null;
+            creatives?: {
+                hero?: components["schemas"]["PreorderCreative"];
+                pdp?: components["schemas"]["PreorderCreative"];
+            };
+        };
+        PreorderListItem: {
+            id?: string;
+            code?: string;
+            name?: string;
+            /** @example Lubbock, TX */
+            where?: string;
+            /** @enum {string} */
+            stage?: "UPCOMING" | "OPEN";
+            /** Format: date-time */
+            opensAt?: string;
+            /** Format: date-time */
+            closesAt?: string;
+            /** Format: date */
+            deliversOn?: string;
+            timeZone?: string;
+            place?: components["schemas"]["PreorderPlace"];
+            zip?: string | null;
+            heroUrl?: string | null;
+            doorFeeMinor?: number;
+            currency?: string;
+        };
+        PreorderResolution: {
+            place: components["schemas"]["PreorderPlace"];
+            /** @description Next-day metro city (geo zones) — never pre-order */
+            metro: boolean;
+            /** @description A published window covers the place (even when switched off) */
+            covered: boolean;
+            /** @description Window found, master switch on, window active and the area switched on */
+            on: boolean;
+            /** @description UPCOMING, OPEN or CLOSED; null without a window */
+            stage?: string | null;
+            /** @description closesAt when open, opensAt when upcoming, the delivery day when closed */
+            countdownTo?: string | null;
+            window?: components["schemas"]["PreorderWindowCard"] | null;
+            /**
+             * @description What the storefront does when `on` is false
+             * @enum {string}
+             */
+            fallback: "SHIP" | "WAITLIST";
+            placements: components["schemas"]["PreorderPlacements"];
+            /** @description "Missed it? Call …" */
+            supportPhone?: string;
+        };
+        /** @description Pre-order block of a PREORDER package (relayed from the cart service), money in minor units. */
+        CartPreorder: components["schemas"]["PreorderTerms"] & {
+            windowId?: string;
+            code?: string;
+            name?: string;
+            /** @enum {string} */
+            stage?: "UPCOMING" | "OPEN" | "CLOSED";
+            /** Format: date-time */
+            opensAt?: string;
+            /** Format: date-time */
+            closesAt?: string;
+            /** Format: date */
+            deliversOn?: string;
+            timeZone?: string;
+            /** @enum {string} */
+            fulfilment?: "DOOR" | "PICKUP";
+            options?: {
+                /** @enum {string} */
+                fulfilment: "DOOR" | "PICKUP";
+                feeMinor: number;
+            }[];
+        };
         PlaceOrderRequest: {
+            attribution?: components["schemas"]["Attribution"];
             addressId: string;
             /** @description A Stripe PaymentMethod id — saved, or new from PaymentSheet / the Payment Element; omit when paying with a wallet */
             paymentMethodId?: string;
@@ -2401,6 +2664,19 @@ export interface components {
             paymentClientSecret?: string | null;
             totalMinor: number;
             currency: string;
+            /** @description The "You're in" facts when the order holds a pre-order package (relayed from orders) */
+            preorder?: {
+                /** @example LBK-1042 */
+                number?: string;
+                windowName?: string;
+                /** Format: date */
+                deliversOn?: string;
+                /** Format: date-time */
+                closesAt?: string;
+                timeZone?: string;
+                /** @description Units in the same order that ship now */
+                otherItemCount?: number;
+            } | null;
             shipments: {
                 shipmentId: string;
                 label: string;
@@ -4151,6 +4427,151 @@ export interface operations {
             };
             401: components["responses"]["Problem"];
             409: components["responses"]["StockProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    setPreorderFulfilment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    windowId: string;
+                    /** @enum {string} */
+                    fulfilment: "DOOR" | "PICKUP";
+                };
+            };
+        };
+        responses: {
+            200: components["responses"]["Cart"];
+            404: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    resolvePreorder: {
+        parameters: {
+            query?: {
+                /** @description ISO 3166-1 alpha-2 (default the market) */
+                country?: string;
+                /** @description State / region code */
+                region?: string;
+                city?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resolution */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreorderResolution"];
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    listOpenPreorders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Windows */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        windows: components["schemas"]["PreorderListItem"][];
+                        placements: components["schemas"]["PreorderPlacements"];
+                    };
+                };
+            };
+            503: components["responses"]["Problem"];
+        };
+    };
+    joinPreorderWaitlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** Format: email */
+                    email: string;
+                    place?: components["schemas"]["PreorderPlace"];
+                };
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "subscribed";
+                        /** @example Lubbock */
+                        city: string;
+                        /** @example US/TX/Lubbock */
+                        area?: string;
+                    };
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    leavePreorderWaitlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Off the waitlist */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "unsubscribed";
+                    };
+                };
+            };
+            422: components["responses"]["ValidationProblem"];
+            429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Problem"];
         };
     };
