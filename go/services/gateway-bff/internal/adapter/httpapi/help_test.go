@@ -7,7 +7,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/testkit"
 )
 
-// S278: help pages come from content, are public and cacheable, page by cursor and filter by topic; unknown pages
+// S279: help pages come from content, are public and cacheable, page by cursor and filter by topic; unknown pages
 // are 404 and bad filters 422.
 func TestHelpCenter(t *testing.T) {
 	bff, b := setup(t, testkit.Options{Content: true})

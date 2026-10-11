@@ -3462,7 +3462,7 @@ export interface operations {
         parameters: {
             query?: {
                 topic?: components["schemas"]["HelpTopicKey"];
-                /** @description Matches titles */
+                /** @description Matches titles, summaries and section text */
                 q?: string;
                 /** @description The previous page's nextCursor */
                 cursor?: string;

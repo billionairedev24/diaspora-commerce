@@ -171,7 +171,7 @@ paths:
       description: Load the next page with `cursor` = the previous page's `nextCursor` (infinite scroll). Public and cacheable.
       parameters:
         - {name: topic, in: query, required: false, schema: {$ref: '#/components/schemas/HelpTopicKey'}}
-        - {name: q, in: query, required: false, schema: {type: string, maxLength: 100}, description: Matches titles, summaries and section text}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 100}, description: 'Matches titles, summaries and section text'}
         - {name: cursor, in: query, required: false, schema: {type: string}, description: The previous page's nextCursor}
         - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 50, default: 20}}
       responses:

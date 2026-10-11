@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import { expectNoSeriousA11yViolations } from '../support/a11y';
 
-/* Help center (S278) against the mock BFF: every footer link opens a real page (no 404, no "next phase" placeholder),
+/* Help center (S279) against the mock BFF: every footer link opens a real page (no 404, no "next phase" placeholder),
    the hub lists the help pages and each page renders the content-service copy as in the Shop design. */
 
 test.describe('storefront · help center', () => {
