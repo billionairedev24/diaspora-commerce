@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { type ApiClientOptions, createRequester } from './http';
+import { createSellerFbaApi } from './inventory-hub';
 import { type ExportDataset, type ExportFormat, type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema, type TableExportQuery } from './schemas/exports';
 import {
   type AcceptedInvitation,
@@ -245,7 +246,10 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request('/v1/seller/provider/earnings', EarningsSchema, { query: { from, to }, signal }),
     getPublicPage: (signal?: AbortSignal): Promise<PublicPage> => request('/v1/seller/storefront', PublicPageSchema, { signal }),
     savePublicPage: (input: PublicPageInput): Promise<PublicPage> => request('/v1/seller/storefront', PublicPageSchema, { method: 'PUT', body: input }),
-    publishPublicPage: (): Promise<PublicPage> => request('/v1/seller/storefront/publish', PublicPageSchema, { method: 'POST' })
+    publishPublicPage: (): Promise<PublicPage> => request('/v1/seller/storefront/publish', PublicPageSchema, { method: 'POST' }),
+
+    /* Send to AfroTransact (S281): inbound plans, labels, lots and expiry for the active organisation */
+    fba: createSellerFbaApi(request, options)
   };
 }
 

@@ -1,4 +1,5 @@
 import { type ApiClientOptions, createRequester } from './http';
+import { createInventoryHubApi } from './inventory-hub';
 import { type ExportJob, type ExportJobList, ExportJobListSchema, ExportJobSchema } from './schemas/exports';
 import {
   type Customer360,
@@ -148,7 +149,10 @@ export function createStaffApiClient(options: ApiClientOptions) {
       request(`/v1/staff/notifications/templates/${enc(key)}/test-send`, NotificationTestSendResultSchema, { method: 'POST', body }),
 
     /* Pre-orders (S274): /v1/staff/preorders/** mirrors delivery-runs' staff API */
-    preorders: createStaffPreordersApi(request, options)
+    preorders: createStaffPreordersApi(request, options),
+
+    /* Inventory hub and AfroTransact Retail (1P) (S281): /v1/staff/inventory/** and /v1/staff/retail/** */
+    inventory: createInventoryHubApi(request, options)
   };
 }
 

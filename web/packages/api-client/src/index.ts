@@ -2,6 +2,7 @@ export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike,
 export { ApiError, isApiError } from './errors';
 export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
 export { type RequestOptions } from './http';
+export * from './inventory-hub';
 export { readSse, type SseMessage, streamLola, toLolaEvent } from './lola';
 export { formatMoney, percentOff, splitMoney } from './money';
 export { countSmsSegments, MAX_SMS_SEGMENTS, missingPlaceholders, templatePlaceholders } from './notifications';

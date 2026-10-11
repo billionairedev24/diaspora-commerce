@@ -2,6 +2,8 @@ export { AddressAutocomplete, type AddressAutocompleteProps } from './address/Ad
 export { createFixtureAddressSearch, type FixtureAddress, SAMPLE_ADDRESSES } from './address/fixture';
 export { createNominatimSearch, fromNominatim, type NominatimOptions } from './address/nominatim';
 export type { AddressParts, AddressSuggestionItem, SearchAddresses } from './address/types';
+export { Barcode, type BarcodeProps } from './barcode/Barcode';
+export { type Bar, BarcodeError, caseLabelData, code128, code128Values, ean13, encode, FNC1, gs1_128, gs1CheckDigit, gs1Date, type Gs1Element, gs1Hri, gs1Values, gtin14, gtinValid, modules, parseGs1, sscc, type Symbology } from './barcode/encode';
 export { AppleLogo, FacebookLogo, GoogleG } from './brand/BrandIcons';
 export { Logo, logoClassName, LogoMark, type LogoProps, wordmarkClassName } from './brand/Logo';
 export { SocialButton, type SocialButtonProps, type SocialProvider } from './brand/SocialButton';

@@ -136,3 +136,23 @@
   overflow-wrap: anywhere;
   vertical-align: top;
 }
+
+/* Label printing (Inventory hub, S281): while html has .printing-labels, print only the label sheet portal. */
+.at-print-root {
+  display: none;
+}
+
+@media print {
+  html.printing-labels body > *:not(.at-print-root) {
+    display: none !important;
+  }
+
+  html.printing-labels .at-print-root {
+    display: block;
+    color: var(--at-ink-1000);
+  }
+
+  .at-label {
+    break-inside: avoid;
+  }
+}

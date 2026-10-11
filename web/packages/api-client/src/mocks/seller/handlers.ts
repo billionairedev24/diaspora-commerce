@@ -46,6 +46,7 @@ import {
   validatePickupHours
 } from '../../schemas/seller';
 import { exportFileOf } from '../export-file';
+import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, SELLER_ORG } from './db';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
@@ -543,6 +544,18 @@ function publicPage(ctx: Ctx) {
   if (!page) throw notFound('No storefront yet.');
   return page;
 }
+
+/** Seller Center FBA routes (S281): approved seller organisations, Inventory module, lists limited to the active org. */
+const fbaGate: HubGate = (request, _area, level) => {
+  try {
+    const ctx = context(request);
+    require(ctx, 'inventory', level === 'VIEW' ? 'VIEW' : 'EDIT', 'SELLER');
+    return { ownerOrg: ctx.org.id, actor: ctx.role };
+  } catch (e) {
+    if (e instanceof SellerProblem) return { status: e.status, code: e.code, title: e.title, detail: e.message };
+    throw e;
+  }
+};
 
 export const sellerHandlers = [
   /* ── Shell ── */
@@ -1342,6 +1355,8 @@ export const sellerHandlers = [
       return o;
     })
   ),
+  /* Send to AfroTransact (S281) */
+  ...sellerFbaHandlers(W, fbaGate),
   /* Anything else under /v1/seller is not part of the contract. */
   http.all(`${W}/*`, () => problemResponse(notFound('No such seller route.')))
 ];

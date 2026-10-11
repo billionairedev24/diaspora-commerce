@@ -39,6 +39,7 @@ import {
 } from '../../schemas/staff';
 import { validateStaffForm } from '../../validation/staff-form';
 import { exportFileOf, type MockExportColumn } from '../export-file';
+import { type HubGate, inventoryHubHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey } from '../table';
 import { getStaffDb, type MockRecord, type MockStaffDb, type Scalar } from './db';
 import { createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, searchFeeOrgs } from './fees';
@@ -583,6 +584,21 @@ function syncFeeRecords(ctx: Ctx) {
   ctx.db.records['fee-schedules'] = feeRecords(ctx.db.feeSchedules, ctx.now);
 }
 
+/** Module levels of the Inventory hub and Retail (1P) routes (S281), as the BFF checks them. */
+const hubGate: HubGate = (request, area, level) => {
+  try {
+    const ctx = context(request);
+    const module = area === 'retail' ? 'retail' : 'inventory';
+    if (!allows(ctx.roles, module, level)) {
+      return { status: 403, code: 'FORBIDDEN', title: 'Forbidden', detail: `Your roles can’t ${level === 'VIEW' ? 'open' : 'change'} ${module === 'retail' ? 'AfroTransact Retail (1P)' : 'inventory'}.` };
+    }
+    return { ownerOrg: null, actor: ctx.action.actor };
+  } catch (e) {
+    if (e instanceof StaffProblem) return { status: e.status, code: e.code, title: e.title, detail: e.message };
+    throw e;
+  }
+};
+
 export const staffHandlers = [
   http.get(
     `${W}/session`,
@@ -1072,6 +1088,8 @@ export const staffHandlers = [
   ),
   /* ── pre-orders (S274): delivery-runs' staff API through the BFF ── */
   ...preorderHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  /* Inventory hub and AfroTransact Retail (1P) (S281) */
+  ...inventoryHubHandlers(W, hubGate),
   /* Anything else under /v1/staff is not part of the contract. */
   http.all(`${W}/*`, () => problemResponse(notFound('No such staff route.')))
 ];

@@ -2,10 +2,10 @@
 
 import { sellerKeys, sellerQueries, type StockPosition, type StockReason } from '@afrotransact/api-client';
 import { DataTable, useTableState } from '@afrotransact/data-table';
-import { Button, Dialog, Select, TextField, useToast } from '@afrotransact/ui';
+import { Button, Dialog, Select, Tabs, TextField, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ColumnDef } from '@tanstack/react-table';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useRef, useState } from 'react';
 
 import { ModulePage } from '@/components/ui/ModulePage';
@@ -14,6 +14,8 @@ import { sellerApi } from '@/lib/api';
 import { idempotencyKey } from '@/lib/format';
 import { useSeller } from '@/lib/session';
 import { exportDataset, pollExport } from '@/lib/table-export';
+
+import { FbaLots, FbaShipments } from './FbaInbound';
 
 const columns: ColumnDef<StockPosition>[] = [
   { id: 'sku', accessorFn: (p) => p.sku, header: 'SKU', size: 220, meta: { kind: 'mono' }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku}</span> },
@@ -38,15 +40,38 @@ const REASONS: { value: StockReason; label: string }[] = [
   { value: 'OTHER', label: 'Other' }
 ];
 
-/** Inventory: FBA stock by warehouse (inventory) and quantity adjustments for seller-shipped SKUs (offers). */
+/** Inventory & FBA: stock by warehouse, shipments to AfroTransact (S281) and lots with expiry. */
 export function InventoryView() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const tab = useSearchParams().get('tab') ?? 'stock';
+  const { can } = useSeller();
+  const [adjusting, setAdjusting] = useState(false);
+  return (
+    <ModulePage module="inventory" actions={tab === 'stock' && can('inventory') ? <Button variant="neutral" onClick={() => setAdjusting(true)}>Adjust stock</Button> : null}>
+      <Tabs
+        label="Inventory"
+        value={tab}
+        onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
+        items={[
+          { value: 'stock', label: 'Stock', content: tab === 'stock' ? <StockView adjusting={adjusting} setAdjusting={setAdjusting} /> : null },
+          { value: 'send', label: 'Send to AfroTransact', content: tab === 'send' ? <FbaShipments /> : null },
+          { value: 'lots', label: 'Lots & expiry', content: tab === 'lots' ? <FbaLots /> : null }
+        ]}
+      />
+    </ModulePage>
+  );
+}
+
+/** FBA stock by warehouse (inventory) and quantity adjustments for seller-shipped SKUs (offers). */
+function StockView({ adjusting: open, setAdjusting: setOpen }: { adjusting: boolean; setAdjusting: (v: boolean) => void }) {
   const api = sellerApi();
+  const router = useRouter();
   const qc = useQueryClient();
   const toast = useToast();
-  const { orgId, can } = useSeller();
+  const { orgId } = useSeller();
   const state = useTableState({ searchParams: useSearchParams() });
   const q = useQuery(sellerQueries.inventory(api, orgId, false));
-  const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ sku: '', quantity: '', reason: 'STOCK_TAKE' as StockReason });
   const [error, setError] = useState<string | null>(null);
   const key = useRef(idempotencyKey());
@@ -62,7 +87,7 @@ export function InventoryView() {
   });
   const t = q.data?.totals;
   return (
-    <ModulePage module="inventory" actions={can('inventory') ? <Button variant="neutral" onClick={() => { setError(null); setOpen(true); }}>Adjust stock</Button> : null}>
+    <>
       {t ? (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,160px),1fr))] gap-3">
           {[['Available', t.available], ['Reserved', t.reserved], ['Inbound', t.inbound], ['Low-stock SKUs', t.lowStockSkus]].map(([k, v]) => (
@@ -74,7 +99,7 @@ export function InventoryView() {
         rowLabel={(p) => `${p.sku} at ${p.nodeId}`} state={state} mode="client" loading={q.isPending} fetching={q.isFetching}
         error={q.isError ? <ErrorState error={q.error} onRetry={() => void q.refetch()} /> : undefined}
         searchPlaceholder="Search SKU, warehouse, quantities, “low stock”…"
-        empty="No stock in AfroTransact fulfilment centres yet. Send an inbound shipment to earn the “Fulfilled by AfroTransact” badge."
+        empty={<>No stock in AfroTransact fulfilment centres yet. <button type="button" className="font-semibold text-link underline" onClick={() => router.replace('/inventory?tab=send')}>Send stock to AfroTransact</button> to earn the “Fulfilled by AfroTransact” badge.</>}
         onExport={exportDataset} pollExport={pollExport} />
       <Dialog open={open} onOpenChange={setOpen} title="Adjust stock" description="Set the quantity you have for a seller-shipped SKU after counting it.">
         <form className="flex flex-col gap-2" onSubmit={(e) => {
@@ -91,6 +116,6 @@ export function InventoryView() {
           <Button type="submit" loading={adjust.isPending}>Save quantity</Button>
         </form>
       </Dialog>
-    </ModulePage>
+    </>
   );
 }
