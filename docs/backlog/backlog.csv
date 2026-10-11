@@ -829,30 +829,30 @@
 - City switch overrides region switch; master switch turns all off
 - Public resolve returns stage, countdown target, creatives, count and fallback
 - Comms due events at opening, close-48h, close-6h, closing
-- Closed window orders attach to a run for dispatch","E34","","High","13","delivery-runs preorder","delivery-runs","In Progress"
+- Closed window orders attach to a run for dispatch","E34","","High","13","delivery-runs preorder","delivery-runs","Done"
 "S271","Story","Pre-order orders projection, analytics, exports and late adds","Project orders into each window with channel attribution; KPIs, by-day, by-channel, top products, fulfilment split, placement performance; CSV exports (all, filtered, picking list, advertorial report) with audit; customer-service late adds through orders-service with saved card or SMS payment link.","- Orders list filters by status, channel and text, 12 per page
 - Summary KPIs match the orders list
 - Four CSV exports stream and are audit-logged
 - Late add needs customer, verified address, phone confirmed, items and reason; shows as Late add
-- Late add refused once delivered","E34","","High","8","delivery-runs preorder","delivery-runs","In Progress"
+- Late add refused once delivered","E34","","High","8","delivery-runs preorder","delivery-runs","Done"
 "S272","Story","Pre-order checkout: packages, fulfilment, cancellation and attribution (orders, catalog)","Cart lines in an open window become a PREORDER package with delivery date; door $7.99 or free pickup; one payment at checkout; customers cancel pre-order shipments for a full refund until close; checkout blocked for upcoming/closed windows; attribution stored on orders; on-behalf late-preorder endpoint; product flags preorderEligible and shipsNow.","- Mixed cart splits into pre-order and ships-now packages under one payment
 - Pickup is free and door is 7.99 to ledger 4250
 - Cancel before close refunds line plus delivery fee
 - Upcoming or closed window lines return orders.preorder-not-open
 - order.placed carries attribution src/cr/po
-- Late preorder charges saved card off-session or sends a payment link","E34","","High","13","orders catalog preorder","delivery-runs","In Progress"
+- Late preorder charges saved card off-session or sends a payment link","E34","","High","13","orders catalog preorder","delivery-runs","Done"
 "S273","Story","Storefront pre-order experience","Ribbon with countdown, send-to-family banner, home hero, /pre-orders list and window page, product badges, PDP banner and delivery box, split cart with door/pickup, confirmation, off-state fallback (ship or waitlist), attribution capture with consent.","- Ribbon shows open/upcoming/closed copy and live countdown
 - Badge and add-to-cart reflect window stage
 - Cart groups pre-order items with delivery date and fulfilment choice
 - Checkout blocked with explanation when window not open
 - Waitlist fallback hides checkout and collects email
-- src/cr/po captured, 30 days only with consent","E34","","High","13","storefront preorder","delivery-runs","In Progress"
+- src/cr/po captured, 30 days only with consent","E34","","High","13","storefront preorder","delivery-runs","Done"
 "S274","Story","Back office Pre-orders module","Staff console module per design: list with status tabs, detail (overview KPIs and charts, orders, creatives, analytics), open/edit wizard (details, advertorials, comms, review with checks), settings (master switch, fallback, placements, coverage areas drill-down), late add dialog, exports, role-based actions.","- Managers open, edit, publish, pause and upload; support only views and late-adds; finance exports
 - Wizard blocks publish until all checks pass and saves drafts
 - Creatives show spec and ratio warnings
 - Coverage drill-down country to region to city with bulk toggles
-- Exports download CSV","E34","","High","13","staff-console preorder","delivery-runs","In Progress"
+- Exports download CSV","E34","","High","13","staff-console preorder","delivery-runs","Done"
 "S275","Story","Pre-order notifications and permissions","Notification templates and rules for announce, reminder, last call, closed, out for delivery, confirmed, waitlist opened, payment link and delivery missed; identity permissions preorders:manage/export/late-add with role grants.","- Templates render in the gallery with sample data
 - Comms due events fan out to consented subscribers and past buyers
 - SMS within one segment
-- Role grants match the back office matrix","E34","","High","5","notifications identity preorder","delivery-runs","In Progress"
+- Role grants match the back office matrix","E34","","High","5","notifications identity preorder","delivery-runs","Done"
