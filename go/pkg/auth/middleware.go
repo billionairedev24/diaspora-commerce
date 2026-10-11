@@ -7,13 +7,14 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/pkg/problem"
 )
 
-// Middleware authenticates requests. With a nil verifier (local profile) every request runs as LocalSuperAdmin.
+// Middleware authenticates requests. With a nil verifier (local profile) every request runs as LocalSuperAdmin, except
+// customers, drivers and organisation members sending their token, who act as themselves (LocalActor).
 // When optional is true, anonymous requests pass through without an actor (public reads such as search).
 func Middleware(v Verifier, optional bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if v == nil {
-				next.ServeHTTP(w, r.WithContext(WithActor(r.Context(), LocalSuperAdmin())))
+				next.ServeHTTP(w, r.WithContext(WithActor(r.Context(), LocalActor(r.Header.Get("Authorization")))))
 				return
 			}
 			h := r.Header.Get("Authorization")
