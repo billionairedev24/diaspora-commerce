@@ -100,10 +100,16 @@ Prices and free tiers change: check the provider's pricing page.
   `Your webhook signing secret is whsec_…` → `STRIPE_WEBHOOK_SECRET`, then `tools/dev/local.sh restart payments`. Keep
   it running. The secret stays the same for your machine across runs. For seller events run a second listener:
   `stripe listen --forward-connect-to localhost:8106/v1/webhooks/stripe-connect` → `STRIPE_CONNECT_WEBHOOK_SECRET`, and
-  `stripe listen --events customer.subscription.updated,invoice.paid,invoice.payment_failed --forward-to
+  `stripe listen --events customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.finalized,invoice.paid,invoice.payment_failed --forward-to
   localhost:8106/v1/webhooks/stripe-billing` → `STRIPE_BILLING_WEBHOOK_SECRET` (each listener prints its own secret).
 - **Deployed:** Developers → **Webhooks** → Add endpoint `https://<api host>/payments/v1/webhooks/stripe` (and the two
-  seller endpoints); the endpoint's *Signing secret* goes into the secret store.
+  seller endpoints); the endpoint's *Signing secret* goes into the secret store. Events per endpoint:
+
+  | Endpoint | Listen to | Events |
+  |---|---|---|
+  | payments `/v1/webhooks/stripe` | Your account | `payment_intent.succeeded`, `payment_intent.amount_capturable_updated`, `payment_intent.payment_failed`, `payment_intent.requires_action`, `payment_intent.canceled`, `charge.refunded`, `charge.dispute.created`, `charge.dispute.closed`, `payout.paid`, `payout.failed`, `setup_intent.succeeded`, `setup_intent.requires_action` |
+  | seller `/v1/webhooks/stripe-connect` | Connected accounts | `account.updated`, `capability.updated`, `person.created`, `person.updated`, `account.external_account.updated`, `payout.failed`, `account.application.deauthorized` |
+  | seller `/v1/webhooks/stripe-billing` | Your account | `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.finalized`, `invoice.paid`, `invoice.payment_failed` |
 - **Test cards:** `4242 4242 4242 4242` (any future date, any CVC, any ZIP), `4000 0027 6000 3184` (3-D Secure),
   `4000 0000 0000 9995` (declined).
 - **Guards:** payments refuses live keys outside prod; gateway-bff refuses `pk_live_` locally; `make secrets-check`
