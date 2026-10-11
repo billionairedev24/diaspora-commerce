@@ -423,12 +423,52 @@ func TestSellerContractConformance(t *testing.T) {
 	mustStatus(t, b.do("PUT", "/v1/seller/storefront", map[string]any{"primaryColor": "gold", "social": []map[string]any{{"network": "tiktok", "url": "https://instagram.com/x"}}}), 422)
 	mustStatus(t, b.do("POST", "/v1/seller/storefront/publish", nil), 200)
 
+	// Onboarding wizard (S289): each step's save, embedded Stripe, plans, documents and submit, with their failures.
+	wup, w := startedApplicant(t, "pk_test_x")
+	w.onResponse = check
+	addr := map[string]any{"line1": "9800 Westheimer Rd", "city": "Houston", "state": "TX", "postalCode": "77042"}
+	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/owners", map[string]any{"owners": []map[string]any{
+		{"firstName": "Kofi", "lastName": "Mensah", "title": "CEO", "email": "kofi@example.com", "ownershipPercent": 60, "significantControl": true,
+			"dateOfBirth": "1980-02-02", "address": addr}}}), 200)
+	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/owners", map[string]any{"owners": []map[string]any{
+		{"firstName": "Kofi", "lastName": "Mensah", "ownershipPercent": 70}, {"firstName": "Ama", "lastName": "Mensah", "ownershipPercent": 40}}}), 422)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/stripe/session", nil), 200)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/stripe/refresh", nil), 200)
+	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/payouts", map[string]any{"accountHolderName": "Kofi Mensah", "accountType": "checking",
+		"routingNumber": "021000021", "accountNumber": "000123456789", "accountNumberConfirmation": "000123456789"}), 200)
+	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/payouts", map[string]any{"accountHolderName": "Kofi Mensah"}), 422)
+	mustStatus(t, w.do("GET", "/v1/seller/onboarding/plans", nil), 200)
+	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/plan", map[string]any{"planCode": "seller_growth", "cadence": "monthly", "paymentMethodKind": "card",
+		"stripePaymentMethodId": "pm_1", "cardBrand": "visa", "cardLast4": "4242", "cardExpMonth": 8, "cardExpYear": 2029}), 200)
+	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/plan", map[string]any{"cadence": "monthly"}), 422)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/uploads", map[string]any{"fileName": "permit.pdf", "contentType": "application/pdf", "size": 120000}), 201)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/uploads", map[string]any{"fileName": "permit.exe", "contentType": "application/x-msdownload", "size": 10}), 422)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/uploads/asset-1/complete", nil), 200)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/uploads/"+testkit.MissingAssetID+"/complete", nil), 404)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/submit", nil), 422)
+	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/catalog-compliance", map[string]any{"categories": []string{"groceries"},
+		"foodPermit": map[string]any{"permitType": "liquor", "permitNumber": "L-1", "expiresOn": "2027-06-30"}}), 422)
+	mustStatus(t, w.do("PUT", "/v1/seller/onboarding/catalog-compliance", map[string]any{"categories": []string{"groceries"},
+		"foodPermit":         map[string]any{"permitType": "cottage_food", "permitNumber": "CF-1", "expiresOn": "2027-06-30", "documentAssetId": "asset-1"},
+		"agreementsAccepted": true, "w9Certified": true, "w9SignerName": "Kofi Mensah"}), 200)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/submit", nil), 200)
+	// Without an application the wizard's routes answer 404; without a Stripe key the embedded session can't load.
+	wup.Application = nil
+	mustStatus(t, w.do("GET", "/v1/seller/onboarding/plans", nil), 404)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/stripe/refresh", nil), 404)
+	mustStatus(t, w.do("POST", "/v1/seller/onboarding/submit", nil), 404)
+	_, nokey := startedApplicant(t, "")
+	nokey.onResponse = check
+	mustStatus(t, nokey.do("POST", "/v1/seller/onboarding/stripe/session", nil), 503)
+
 	for _, op := range []string{"getSellerSession", "setActiveOrg", "getOnboarding", "getCompliance", "getDashboard", "listSellerOrders", "getSellerOrder",
 		"updateShipmentStatus", "quoteShippingRates", "buyShippingLabel", "listListings", "setListingActive", "submitProduct", "getCategoryTree",
 		"getProductType", "checkGtin", "listCategoryRequests", "requestCategory", "requestUpload", "completeUpload", "getInventory", "adjustStock",
 		"getPayouts", "requestPayout", "getSellerFees", "getBilling", "changePlan", "makeDefaultPaymentMethod", "removePaymentMethod", "getTeam", "inviteMember",
 		"assignRole", "removeMember", "revokeInvitation", "lookupInvitation", "acceptInvitation", "getCalendar", "listBookingRequests", "actOnBooking", "getWorkingHours", "saveWorkingHours", "listServices", "createService",
-		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings", "getPublicPage", "savePublicPage", "publishPublicPage"} {
+		"updateService", "getCancellationPolicy", "saveCancellationPolicy", "getEarnings", "getPublicPage", "savePublicPage", "publishPublicPage",
+		"saveOnboardingOwners", "saveOnboardingPayouts", "saveOnboardingPlan", "saveOnboardingCompliance", "getOnboardingPlans", "createOnboardingStripeSession",
+		"refreshOnboardingStripe", "submitOnboarding", "requestOnboardingUpload", "completeOnboardingUpload"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)
 		}

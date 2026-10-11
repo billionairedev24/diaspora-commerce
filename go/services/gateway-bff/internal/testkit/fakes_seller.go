@@ -16,6 +16,9 @@ const (
 	PendingOrgID  = "33333333-3333-3333-3333-333333333333"
 )
 
+// MissingAssetID is an upload media does not know (POST /v1/assets/{id}/complete answers 404).
+const MissingAssetID = "asset-missing"
+
 // MemberOrg is an organisation the fake identity lists in GET /v1/me.
 type MemberOrg struct {
 	ID, Kind, Name, Status, Role string
@@ -219,6 +222,18 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			}
 			u.Application["businessDetails"] = d
 		case "owners":
+			total := 0.0
+			list, _ := b["owners"].([]any)
+			for _, o := range list {
+				if m, ok := o.(map[string]any); ok {
+					pct, _ := m["ownershipPercent"].(float64)
+					total += pct
+				}
+			}
+			if total > 100 {
+				problem(w, 422, "seller.invalid-application", "Some fields are invalid", map[string]any{"fieldErrors": map[string]string{"owners": "Ownership can't exceed 100%"}})
+				return
+			}
 			u.Application["owners"] = b["owners"]
 		case "payouts":
 			acct, _ := b["accountNumber"].(string)
@@ -229,10 +244,21 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 			u.Application["payouts"] = map[string]any{"accountHolderName": b["accountHolderName"], "accountType": b["accountType"], "bankName": "STRIPE TEST BANK",
 				"routingLast4": "0021", "accountLast4": acct[len(acct)-4:], "externalAccountLinked": true}
 		case "plan":
+			if c, _ := b["planCode"].(string); c == "" {
+				problem(w, 422, "seller.invalid-application", "Some fields are invalid", map[string]any{"fieldErrors": map[string]string{"plan.planCode": "Choose a plan"}})
+				return
+			}
 			b["planName"] = "Seller Growth"
 			b["firstCharge"] = map[string]any{"chargeOn": "2026-11-09", "amountCents": 3900, "sentence": "Free for 30 days. First charge of $39.00 on Nov 9, 2026."}
 			u.Application["plan"] = b
 		case "catalog-compliance":
+			if fp, ok := b["foodPermit"].(map[string]any); ok {
+				if t, _ := fp["permitType"].(string); !slices.Contains([]string{"FOOD_ESTABLISHMENT", "COTTAGE_FOOD", "FDA_FACILITY", "FOOD_HANDLER"}, t) {
+					problem(w, 422, "seller.invalid-application", "Some fields are invalid",
+						map[string]any{"fieldErrors": map[string]string{"compliance.foodPermit.permitType": "Choose the permit type"}})
+					return
+				}
+			}
 			u.Application["compliance"] = b
 		}
 		done, _ := u.Application["completedSteps"].([]string)
@@ -261,6 +287,10 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 		}
 		u.mu.Lock()
 		defer u.mu.Unlock()
+		if u.Application == nil {
+			problem(w, 404, "seller.no-application", "You haven't started an application yet", nil)
+			return
+		}
 		u.Application["stripe"] = map[string]any{"accountId": "acct_local_1", "detailsSubmitted": true, "chargesEnabled": true, "payoutsEnabled": true,
 			"identityStatus": "verified", "taxIdStatus": "verified", "currentlyDue": []string{}}
 		done, _ := u.Application["completedSteps"].([]string)
@@ -273,6 +303,10 @@ func (u *Upstreams) sellerServiceRoutes(mux *http.ServeMux) {
 		}
 		u.mu.Lock()
 		defer u.mu.Unlock()
+		if u.Application == nil {
+			problem(w, 404, "seller.no-application", "You haven't started an application yet", nil)
+			return
+		}
 		if u.Application["compliance"] == nil {
 			problem(w, 422, "seller.application-incomplete", "Some steps are incomplete or invalid; fix the highlighted fields and submit again",
 				map[string]any{"fieldErrors": map[string]string{"compliance.agreementsAccepted": "Required"}})
@@ -665,6 +699,10 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 			"url": "https://uploads.example/asset-1", "headers": map[string]string{"Content-Type": "image/webp"}, "publicUrl": "https://img.example/asset-1.webp", "expiresAt": "2026-10-10T12:15:00Z"}})
 	})
 	mux.HandleFunc("POST /v1/assets/{id}/complete", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") == MissingAssetID {
+			problem(w, 404, "media.asset-not-found", "No such upload", nil)
+			return
+		}
 		writeJSON(w, 200, map[string]any{"id": r.PathValue("id"), "url": "https://img.example/asset-1.webp", "contentType": "image/webp", "bytes": 182000, "width": 1600, "height": 1600, "status": "READY"})
 	})
 	mux.HandleFunc("POST /v1/rates", func(w http.ResponseWriter, _ *http.Request) {
