@@ -40,16 +40,14 @@ class LocalTestPaymentsConfigurationTest {
         assertThat(PaymentsConfiguration.useLocalTest(policy, props("auto", null).stripe(), Set.of("local"))).isTrue();
         assertThat(PaymentsConfiguration.useLocalTest(policy, props("local-test", "sk_test_abc").stripe(),
                 Set.of("local"))).isTrue();
-        assertThat(new PaymentsConfiguration().stripeGateway(props("auto", PLACEHOLDER), policy, env("local"),
-                "http://localhost:3000/orders/paid")).isInstanceOf(LocalTestStripeGateway.class);
+        assertThat(new PaymentsConfiguration().stripeGateway(props("auto", PLACEHOLDER), policy, env("local"))).isInstanceOf(LocalTestStripeGateway.class);
     }
 
     @Test
     void localWithAStripeTestKeyUsesStripe() {
         assertThat(PaymentsConfiguration.useLocalTest(policy, props("auto", "sk_test_51abc").stripe(), Set.of("local")))
                 .isFalse();
-        assertThat(new PaymentsConfiguration().stripeGateway(props("auto", "sk_test_51abc"), policy, env("local"),
-                "http://localhost:3000/orders/paid")).isInstanceOf(StripeJavaGateway.class);
+        assertThat(new PaymentsConfiguration().stripeGateway(props("auto", "sk_test_51abc"), policy, env("local"))).isInstanceOf(StripeJavaGateway.class);
     }
 
     @Test
@@ -75,7 +73,7 @@ class LocalTestPaymentsConfigurationTest {
                         .as(mode + " on local + " + profile).isInstanceOf(IllegalStateException.class);
             }
             assertThatThrownBy(() -> new PaymentsConfiguration().stripeGateway(props("local-test", null), policy,
-                    env(profile), "https://www.afrotransact.com/orders/paid"))
+                    env(profile)))
                     .as("gateway bean on " + profile).isInstanceOf(IllegalStateException.class);
         }
     }

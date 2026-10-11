@@ -131,10 +131,11 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
 
     /**
      * Applies a status reported by Stripe. Captures are tracked by AfroTransact, so Stripe's {@code succeeded} after a
-     * capture we recorded keeps our CAPTURED / PARTIALLY_CAPTURED view; a status never moves back from a final one.
+     * capture we recorded keeps our CAPTURED / PARTIALLY_CAPTURED view; a status never moves back from a final one,
+     * and an authorised payment never moves back to an earlier state (see {@link #isStaleReport}).
      */
     public Payment syncStatus(PaymentStatus reported, String failure, Instant now) {
-        if (status.isFinal() || reported == status) {
+        if (status.isFinal() || reported == status || isStaleReport(reported)) {
             return this;
         }
         PaymentStatus next = reported;
@@ -151,6 +152,17 @@ public record Payment(UUID id, String orderId, String customerId, Money amount, 
         return new Payment(id, orderId, customerId, amount, next, stripePaymentIntentId, clientSecret, feeScheduleId,
                 placedAt, captured, refunded, authorised, failureText, metadata, lines, createdAt, now, version,
                 parentPaymentId);
+    }
+
+    /**
+     * True when {@code reported} would move an authorised payment (AUTHORIZED or PARTIALLY_CAPTURED) back to an earlier
+     * state: FAILED, REQUIRES_ACTION, REQUIRES_PAYMENT_METHOD, REQUIRES_CONFIRMATION or PROCESSING. Stripe never takes
+     * a {@code requires_capture} intent back there, so such a report is an older event delivered late (webhooks are
+     * not ordered) and must not downgrade the payment. Capture and cancellation still apply.
+     */
+    public boolean isStaleReport(PaymentStatus reported) {
+        return status.isCapturable() && reported != PaymentStatus.AUTHORIZED && reported != PaymentStatus.CAPTURED
+                && reported != PaymentStatus.CANCELED && reported != PaymentStatus.PARTIALLY_CAPTURED;
     }
 
     /** Records a capture of {@code lineIds}; the payment becomes CAPTURED when everything (or the final one) is. */

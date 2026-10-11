@@ -78,13 +78,11 @@ class PaymentsConfiguration {
      * for the stand-in anywhere else stops the service at start-up.
      */
     @Bean
-    StripeGateway stripeGateway(PaymentsProperties props, LocalTestPaymentsPolicy policy, Environment env,
-                                @Value("${at.payments.payment-links.success-url:http://localhost:3000/orders/paid}")
-                                String linkSuccessUrl) {
+    StripeGateway stripeGateway(PaymentsProperties props, LocalTestPaymentsPolicy policy, Environment env) {
         if (useLocalTest(policy, props.stripe(), activeProfiles(env))) {
-            return new LocalTestStripeGateway(linkSuccessUrl);
+            return new LocalTestStripeGateway();
         }
-        return new StripeJavaGateway(stripeClient(props), linkSuccessUrl);
+        return new StripeJavaGateway(stripeClient(props));
     }
 
     /** Active profiles, or the default profile when none is active. */

@@ -51,6 +51,24 @@ class PaymentTest {
     }
 
     @Test
+    void anAuthorisedPaymentIsNeverDowngradedByALateReport() {
+        Payment authorised = payment().syncStatus(PaymentStatus.AUTHORIZED, null, NOW);
+        for (PaymentStatus stale : List.of(PaymentStatus.FAILED, PaymentStatus.REQUIRES_ACTION,
+                PaymentStatus.REQUIRES_PAYMENT_METHOD, PaymentStatus.REQUIRES_CONFIRMATION, PaymentStatus.PROCESSING)) {
+            assertThat(authorised.isStaleReport(stale)).as(stale.name()).isTrue();
+            assertThat(authorised.syncStatus(stale, "Your card was declined.", NOW)).as(stale.name())
+                    .isSameAs(authorised);
+        }
+        LineSplit l1 = new LineSplit("L1", "org_a", 1000, Fixtures.usd(100), Fixtures.usd(0), false);
+        Payment partial = authorised.capture(UUID.randomUUID(), Fixtures.usd(1100), List.of(l1), false, NOW);
+        assertThat(partial.syncStatus(PaymentStatus.FAILED, "late", NOW).status())
+                .isEqualTo(PaymentStatus.PARTIALLY_CAPTURED);
+        // A real cancellation (authorisation expired, cancelled at Stripe) still applies.
+        assertThat(authorised.syncStatus(PaymentStatus.CANCELED, null, NOW).status()).isEqualTo(PaymentStatus.CANCELED);
+        assertThat(payment().isStaleReport(PaymentStatus.FAILED)).isFalse();
+    }
+
+    @Test
     void declinedThenRetriedSuccessfully() {
         Payment failed = payment().syncStatus(PaymentStatus.FAILED, "Your card was declined.", NOW);
         assertThat(failed.status()).isEqualTo(PaymentStatus.FAILED);

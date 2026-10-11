@@ -9,7 +9,9 @@ import com.afrotransact.payments.domain.Money;
 /**
  * Outbound port to Stripe (PaymentIntents with manual capture, Connect transfers and payouts, balance
  * transactions). Every mutating call takes an idempotency key that callers derive from business ids
- * ({@code <orderId>:capture:<shipmentId>} …) so retries never move money twice.
+ * ({@code <orderId>:capture:<shipmentId>} …) so retries never move money twice. There is deliberately no hosted
+ * payment page (Checkout Session / Payment Link): customers always pay on AfroTransact's own pages with Stripe
+ * Elements, confirming the order's PaymentIntent (docs/engineering/payments-idempotency.md).
  */
 public interface StripeGateway {
 
@@ -39,13 +41,6 @@ public interface StripeGateway {
      * {@code card_declined}): they come back as the attempt's error with the intent's state.
      */
     OffSessionAttempt createOffSessionIntent(OffSessionIntent request, String idempotencyKey);
-
-    /**
-     * Hosted payment link (S272 late pre-order adds): a Stripe Checkout Session in payment mode for {@code amount}
-     * whose PaymentIntent is manual-capture and carries {@code metadata} (order and payment ids), so the
-     * {@code payment_intent.*} webhooks of the paid link are matched to the AfroTransact payment.
-     */
-    PaymentLinkSnapshot createPaymentLink(PaymentLinkRequest request, String idempotencyKey);
 
     /**
      * Account debit: moves {@code amount} from a connected account's Stripe balance to the platform balance
@@ -153,26 +148,6 @@ public interface StripeGateway {
             return AUTHENTICATION_REQUIRED.equals(errorCode) || AUTHENTICATION_REQUIRED.equals(declineCode)
                     || intent != null && "requires_action".equals(intent.status());
         }
-    }
-
-    /**
-     * Payment link parameters.
-     *
-     * @param customerId         Stripe Customer (cus_…) or null
-     * @param paymentMethodTypes explicit types (card, us_bank_account, link …); empty = the account's defaults
-     * @param expiresAt          when the link stops accepting payments (Stripe: 30 minutes to 24 hours ahead)
-     */
-    record PaymentLinkRequest(Money amount, String customerId, String description, Map<String, String> metadata,
-                              String transferGroup, List<String> paymentMethodTypes, Instant expiresAt) {
-
-        public PaymentLinkRequest {
-            metadata = Map.copyOf(metadata);
-            paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
-        }
-    }
-
-    /** A hosted payment link (Checkout Session cs_…). */
-    record PaymentLinkSnapshot(String id, String url, Instant expiresAt) {
     }
 
     /** A Stripe account debit (py_…). */

@@ -19,7 +19,8 @@ import org.testcontainers.utility.DockerImageName;
  * S282 contract test: the PaymentIntents checkout's Stripe Elements confirm (deferred intent, manual capture,
  * setup_future_usage when the shopper saves the method, automatic or restricted payment methods) are requests Stripe's
  * API accepts. stripe/stripe-mock validates every parameter against Stripe's OpenAPI specification and answers with
- * fixture objects, so this checks the request shapes of {@link StripeJavaGateway}, not Stripe's behaviour.
+ * fixture objects, so this checks the request shapes of {@link StripeJavaGateway}, not Stripe's behaviour. Late
+ * pre-order adds paid through the AfroTransact pay-now page use the same PaymentIntent request (no Checkout Session).
  */
 class StripeMockContractIT {
 
@@ -36,7 +37,7 @@ class StripeMockContractIT {
                 .setApiKey("sk_test_123")
                 .setApiBase("http://" + STRIPE_MOCK.getHost() + ":" + STRIPE_MOCK.getMappedPort(12111))
                 .build();
-        gateway = new StripeJavaGateway(client, "http://localhost:3000/orders/paid");
+        gateway = new StripeJavaGateway(client);
     }
 
     @AfterAll
@@ -62,5 +63,16 @@ class StripeMockContractIT {
 
         assertThat(intent.id()).startsWith("pi_");
         assertThat(intent.clientSecret()).isNotBlank();
+    }
+
+    @Test
+    void aLateAddPayNowIntentAndItsCancellationAreValidStripeRequests() {
+        StripeGateway.IntentSnapshot intent = gateway.createIntent(new StripeGateway.CreateIntent(Money.of(1799, "USD"),
+                "cus_123", List.of(), "AfroTransact order o-3", Map.of("order_id", "o-3", "channel", "AGENT_LATE"),
+                "o-3", false), "o-3:create-intent");
+
+        assertThat(intent.id()).startsWith("pi_");
+        assertThat(intent.clientSecret()).isNotBlank();
+        assertThat(gateway.cancel(intent.id(), "o-3:cancel").id()).isNotBlank();
     }
 }

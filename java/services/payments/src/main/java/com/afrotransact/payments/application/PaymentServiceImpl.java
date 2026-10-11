@@ -1,7 +1,6 @@
 package com.afrotransact.payments.application;
 
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -21,7 +20,6 @@ import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.OrderLine;
 import com.afrotransact.payments.domain.Payment;
 import com.afrotransact.payments.domain.PaymentLine;
-import com.afrotransact.payments.domain.PaymentLink;
 import com.afrotransact.payments.domain.PaymentMethodType;
 import com.afrotransact.payments.domain.PaymentSplit;
 import com.afrotransact.payments.domain.PaymentSplitter;
@@ -61,7 +59,6 @@ import org.springframework.stereotype.Service;
 class PaymentServiceImpl implements PaymentService {
 
     private static final int MAX_LINES = 200;
-    private static final int MAX_LINK_HOURS = 24;
 
     private final PaymentRepository payments;
     private final FeeScheduleRepository feeSchedules;
@@ -139,9 +136,6 @@ class PaymentServiceImpl implements PaymentService {
             if (saved != null) {
                 return offSessionCreate(payment, saved, metadata, idempotencyKey, now);
             }
-            if (cmd.paymentLink()) {
-                return linkCreate(payment, cmd, metadata, idempotencyKey, now);
-            }
             IntentSnapshot intent = stripe.createIntent(new StripeGateway.CreateIntent(cmd.amount(),
                     payment.customerId(), cmd.paymentMethodTypes(), "AfroTransact order " + cmd.orderId(), metadata,
                     cmd.orderId(), cmd.saveForOffSession()), cmd.orderId() + ":create-intent");
@@ -184,25 +178,6 @@ class PaymentServiceImpl implements PaymentService {
         return new PaymentResult(stored, false);
     }
 
-    /**
-     * S272 late pre-order add, payment link: a hosted Stripe page instead of a client secret. The payment waits in
-     * REQUIRES_PAYMENT_METHOD without an intent; the paid link's intent is attached by its first webhook.
-     */
-    private PaymentResult linkCreate(Payment payment, CreatePaymentCommand cmd, Map<String, String> metadata,
-                                     String idempotencyKey, Instant now) {
-        metadata.put("payment_link", "true");
-        Instant expiresAt = now.plus(Duration.ofHours(Math.clamp(cmd.paymentLinkHours(), 1,
-                MAX_LINK_HOURS)));
-        StripeGateway.PaymentLinkSnapshot link = stripe.createPaymentLink(new StripeGateway.PaymentLinkRequest(
-                payment.amount(), payment.customerId(), "AfroTransact order " + payment.orderId(), metadata,
-                payment.orderId(), cmd.paymentMethodTypes(), expiresAt), payment.orderId() + ":payment-link");
-        payments.insertLink(new PaymentLink(payment.id(), link.id(), link.url(),
-                link.expiresAt() == null ? expiresAt : link.expiresAt(), now));
-        statuses.publish(PaymentsEvents.INTENT_CREATED, payment);
-        idempotency.complete("payment-create", idempotencyKey, new StoredRef(payment.id()));
-        return new PaymentResult(payment, false);
-    }
-
     private StripeCustomer savedCustomer(String shopperId) {
         return savedMethods.findCustomer(shopperId).orElseThrow(() -> new PaymentsRuleViolation(
                 "payments.no-saved-method", "Customer " + shopperId + " has no saved payment method"));
@@ -223,12 +198,6 @@ class PaymentServiceImpl implements PaymentService {
                     + "charged off-session", Map.of("paymentMethodId", "Must be a card"));
         }
         return method;
-    }
-
-    @Override
-    public Optional<PaymentLink> link(UUID paymentId) {
-        access.reader();
-        return payments.findLink(paymentId);
     }
 
     private PaymentResult replayCreate(Payment existing, CreatePaymentCommand cmd, String idempotencyKey) {
@@ -618,19 +587,12 @@ class PaymentServiceImpl implements PaymentService {
                 || cmd.shopperId().isBlank())) {
             errors.put("shopperId", "Required to save or charge the payment method off-session");
         }
-        if (cmd.offSession() && cmd.paymentLink()) {
-            errors.put("paymentLinkHours", "A payment is either charged off-session or paid with a link");
-        }
-        if (cmd.paymentLink() && (cmd.paymentLinkHours() < 1 || cmd.paymentLinkHours() > MAX_LINK_HOURS)) {
-            errors.put("paymentLinkHours", "1 to " + MAX_LINK_HOURS + " hours");
-        }
         if (!errors.isEmpty()) {
             throw new PaymentsRuleViolation("payments.invalid-request", "Invalid payment request", errors);
         }
         return new CreatePaymentCommand(cmd.orderId().trim(), cmd.customerId(), cmd.amount(),
                 cmd.paymentMethodTypes(), cmd.placedAt(), cmd.metadata(), cmd.lines(),
-                cmd.shopperId() == null ? null : cmd.shopperId().trim(), cmd.saveForOffSession(), cmd.offSession(),
-                cmd.paymentLinkHours());
+                cmd.shopperId() == null ? null : cmd.shopperId().trim(), cmd.saveForOffSession(), cmd.offSession());
     }
 
     private static NotFoundException notFound(String what) {

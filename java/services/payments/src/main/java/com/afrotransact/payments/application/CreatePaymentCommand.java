@@ -17,14 +17,12 @@ import com.afrotransact.payments.domain.OrderLine;
  * @param saveForOffSession  attach the confirmed method to the shopper's Stripe Customer (setup_future_usage =
  *                           off_session) so later balances can be charged off-session (long-dated bookings)
  * @param offSession         S272 late pre-order adds: confirm the intent now, off-session, on the shopper's default
- *                           saved card (needs {@code shopperId})
- * @param paymentLinkHours   S272 late pre-order adds: instead of a client secret, create a hosted payment link that
- *                           expires after this many hours (1–24); null = no link
+ *                           saved card (needs {@code shopperId}). Late adds paid with a pay-now link are ordinary
+ *                           intents (the customer confirms them on AfroTransact's pay page with Stripe Elements).
  */
 public record CreatePaymentCommand(String orderId, String customerId, Money amount, List<String> paymentMethodTypes,
                                    Instant placedAt, Map<String, String> metadata, List<OrderLine> lines,
-                                   String shopperId, boolean saveForOffSession, boolean offSession,
-                                   Integer paymentLinkHours) {
+                                   String shopperId, boolean saveForOffSession, boolean offSession) {
 
     public CreatePaymentCommand {
         paymentMethodTypes = paymentMethodTypes == null ? List.of() : List.copyOf(paymentMethodTypes);
@@ -37,11 +35,6 @@ public record CreatePaymentCommand(String orderId, String customerId, Money amou
                                 Instant placedAt, Map<String, String> metadata, List<OrderLine> lines,
                                 String shopperId, boolean saveForOffSession) {
         this(orderId, customerId, amount, paymentMethodTypes, placedAt, metadata, lines, shopperId,
-                saveForOffSession, false, null);
-    }
-
-    /** True when a hosted payment link is wanted. */
-    public boolean paymentLink() {
-        return paymentLinkHours != null;
+                saveForOffSession, false);
     }
 }

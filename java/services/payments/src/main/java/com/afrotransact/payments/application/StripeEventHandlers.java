@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 
 import com.afrotransact.payments.domain.Dispute;
 import com.afrotransact.payments.domain.DisputeStatus;
@@ -107,43 +106,59 @@ class StripeEventHandlers {
         }
     }
 
+    /**
+     * Applies a {@code payment_intent.*} event. Webhooks are not ordered, so the event is never trusted blindly:
+     * <ul>
+     *   <li>a report that would move an authorised payment back (an older {@code payment_failed} or
+     *       {@code requires_action} delivered after {@code amount_capturable_updated}) re-reads the intent from Stripe
+     *       and applies only what Stripe says now, which never downgrades it and publishes no INTENT_FAILED;</li>
+     *   <li>an authorisation that reaches a payment AfroTransact already cancelled (the order expired or was cancelled
+     *       while the customer was paying) is cancelled at Stripe, so it can never be captured;</li>
+     *   <li>an authorised intent of a hosted Checkout Session created before those were removed (metadata
+     *       {@code payment_link}) matches no payment any more and is cancelled the same way.</li>
+     * </ul>
+     */
     private void intent(JsonNode pi, PaymentStatus reported, String failure) {
-        Optional<Payment> payment = payments.lockByIntentId(text(pi, "id"));
+        String intentId = text(pi, "id");
+        Optional<Payment> payment = payments.lockByIntentId(intentId);
         if (payment.isEmpty()) {
-            payment = paidLink(pi);
+            if (reported == PaymentStatus.AUTHORIZED && "true".equals(text(pi.path("metadata"), "payment_link"))) {
+                cancelIfAuthorised(intentId, intentId + ":cancel-orphan",
+                        "legacy hosted payment link, no longer accepted");
+            } else {
+                LOG.info("PaymentIntent {} is not an AfroTransact order payment; ignored", intentId);
+            }
+            return;
         }
-        if (payment.isEmpty()) {
-            LOG.info("PaymentIntent {} is not an AfroTransact order payment; ignored", text(pi, "id"));
+        Payment p = payment.get();
+        if (p.status() == PaymentStatus.CANCELED && reported == PaymentStatus.AUTHORIZED) {
+            cancelIfAuthorised(intentId, p.stripeKeyPrefix() + ":cancel-late-authorization",
+                    "payment of order " + p.orderId() + " was already cancelled");
+            return;
+        }
+        if (p.isStaleReport(reported)) {
+            StripeGateway.IntentSnapshot live = stripe.retrieveIntent(intentId);
+            LOG.info("Stale {} event for authorised PaymentIntent {} (Stripe now: {}); not downgrading", reported,
+                    intentId, live.status());
+            statuses.apply(p, PaymentStatus.fromStripe(live.status()), null);
             return;
         }
         if (reported == PaymentStatus.FAILED && "authentication_required".equals(text(pi.path("last_payment_error"),
-                "code")) && statuses.awaitingCustomer(payment.get(), text(pi, "status"))) {
-            LOG.info("Off-session PaymentIntent {} waits for customer authentication", text(pi, "id"));
+                "code")) && statuses.awaitingCustomer(p, text(pi, "status"))) {
+            LOG.info("Off-session PaymentIntent {} waits for customer authentication", intentId);
             return;
         }
-        statuses.apply(payment.get(), reported, failure);
+        statuses.apply(p, reported, failure);
     }
 
-    /**
-     * S272: the PaymentIntent of a paid hosted link is created by Stripe; its metadata names our payment, which waits
-     * without an intent. The intent is attached on its first event.
-     */
-    private Optional<Payment> paidLink(JsonNode pi) {
-        String paymentId = text(pi.path("metadata"), "payment_id");
-        if (paymentId == null) {
-            return Optional.empty();
+    /** Cancels an intent that Stripe still holds authorised (deterministic key: a redelivery replays the cancel). */
+    private void cancelIfAuthorised(String intentId, String idempotencyKey, String why) {
+        StripeGateway.IntentSnapshot live = stripe.retrieveIntent(intentId);
+        if (!"requires_capture".equals(live.status())) {
+            return;
         }
-        UUID id;
-        try {
-            id = UUID.fromString(paymentId);
-        } catch (IllegalArgumentException e) {
-            return Optional.empty();
-        }
-        if (payments.findLink(id).isEmpty()) {
-            return Optional.empty();
-        }
-        return payments.lockById(id).filter(p -> p.stripePaymentIntentId() == null)
-                .map(p -> payments.update(p.withIntent(text(pi, "id"), null, p.status(), Instant.now(clock))));
+        LOG.warn("Cancelling authorised PaymentIntent {}: {}", intentId, why);
+        stripe.cancel(intentId, idempotencyKey);
     }
 
     private static String failure(JsonNode pi) {

@@ -24,7 +24,6 @@ import com.stripe.model.SetupIntent;
 import com.stripe.model.StripeError;
 import com.stripe.model.Transfer;
 import com.stripe.model.TransferReversal;
-import com.stripe.model.checkout.Session;
 import com.stripe.net.RequestOptions;
 import com.stripe.param.BalanceTransactionListParams;
 import com.stripe.param.ChargeCreateParams;
@@ -40,7 +39,6 @@ import com.stripe.param.RefundCreateParams;
 import com.stripe.param.SetupIntentCreateParams;
 import com.stripe.param.TransferCreateParams;
 import com.stripe.param.TransferReversalCreateParams;
-import com.stripe.param.checkout.SessionCreateParams;
 
 /**
  * stripe-java ({@link StripeClient}) implementation of {@link StripeGateway}. The client's API base is configurable
@@ -50,47 +48,9 @@ import com.stripe.param.checkout.SessionCreateParams;
 public class StripeJavaGateway implements StripeGateway {
 
     private final StripeClient client;
-    private final String linkSuccessUrl;
 
-    public StripeJavaGateway(StripeClient client, String linkSuccessUrl) {
+    public StripeJavaGateway(StripeClient client) {
         this.client = client;
-        this.linkSuccessUrl = linkSuccessUrl;
-    }
-
-    @Override
-    public PaymentLinkSnapshot createPaymentLink(PaymentLinkRequest request, String idempotencyKey) {
-        SessionCreateParams.Builder params = SessionCreateParams.builder()
-                .setMode(SessionCreateParams.Mode.PAYMENT)
-                .setSuccessUrl(linkSuccessUrl)
-                .setExpiresAt(request.expiresAt().getEpochSecond())
-                .putAllMetadata(request.metadata())
-                .setPaymentIntentData(SessionCreateParams.PaymentIntentData.builder()
-                        .setCaptureMethod(SessionCreateParams.PaymentIntentData.CaptureMethod.MANUAL)
-                        .setTransferGroup(request.transferGroup())
-                        .setDescription(request.description())
-                        .putAllMetadata(request.metadata())
-                        .build())
-                .addLineItem(SessionCreateParams.LineItem.builder()
-                        .setQuantity(1L)
-                        .setPriceData(SessionCreateParams.LineItem.PriceData.builder()
-                                .setCurrency(lower(request.amount().currency()))
-                                .setUnitAmount(request.amount().minor())
-                                .setProductData(SessionCreateParams.LineItem.PriceData.ProductData.builder()
-                                        .setName(request.description()).build())
-                                .build())
-                        .build());
-        if (request.customerId() != null && !request.customerId().isBlank()) {
-            params.setCustomer(request.customerId());
-        }
-        for (String type : request.paymentMethodTypes()) {
-            params.addAllowedPaymentMethodType(SessionCreateParams.AllowedPaymentMethodType
-                    .valueOf(type.trim().toUpperCase(Locale.ROOT)));
-        }
-        return call(() -> {
-            Session s = client.v1().checkout().sessions().create(params.build(), key(idempotencyKey));
-            return new PaymentLinkSnapshot(s.getId(), s.getUrl(), s.getExpiresAt() == null ? request.expiresAt()
-                    : Instant.ofEpochSecond(s.getExpiresAt()));
-        });
     }
 
     @Override

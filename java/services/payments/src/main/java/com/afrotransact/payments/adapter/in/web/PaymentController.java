@@ -70,18 +70,17 @@ class PaymentController {
         PaymentResult result = payments.create(new CreatePaymentCommand(body.orderId(), body.customerId(),
                 Money.of(body.amountMinor(), currency), body.paymentMethodTypes(), body.placedAt(), body.metadata(),
                 body.lines().stream().map(l -> l.toLine(currency)).toList(), body.shopperId(),
-                Boolean.TRUE.equals(body.saveForOffSession()), Boolean.TRUE.equals(body.offSession()),
-                body.paymentLinkHours()), idempotencyKey);
+                Boolean.TRUE.equals(body.saveForOffSession()), Boolean.TRUE.equals(body.offSession())),
+                idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
-                .body(PaymentResponse.of(result.payment(), result.replayed(),
-                        payments.link(result.payment().id()).orElse(null)));
+                .body(PaymentResponse.of(result.payment(), result.replayed()));
     }
 
     @Operation(summary = "Get a payment", description = "refresh=true reads the intent's status from Stripe first "
             + "(confirmation, 3-D Secure, authorisation).")
     @GetMapping("/v1/payments/{id}")
     PaymentResponse get(@PathVariable UUID id, @RequestParam(defaultValue = "false") boolean refresh) {
-        return PaymentResponse.of(payments.get(id, refresh), false, payments.link(id).orElse(null));
+        return PaymentResponse.of(payments.get(id, refresh), false);
     }
 
     @Operation(summary = "Get the payment of an order",

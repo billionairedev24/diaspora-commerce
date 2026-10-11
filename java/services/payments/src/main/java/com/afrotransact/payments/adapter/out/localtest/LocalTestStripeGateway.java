@@ -32,10 +32,8 @@ public class LocalTestStripeGateway implements StripeGateway {
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Intent> intents = new ConcurrentHashMap<>();
     private final Map<String, String> byIdempotencyKey = new ConcurrentHashMap<>();
-    private final String linkSuccessUrl;
 
-    public LocalTestStripeGateway(String linkSuccessUrl) {
-        this.linkSuccessUrl = linkSuccessUrl;
+    public LocalTestStripeGateway() {
         LOG.warn("[local] Payments use the local test stand-in for Stripe: every payment is authorised like test card "
                 + "4242 4242 4242 4242 and no money moves. Put STRIPE_SECRET_KEY in .local/secrets.env for Stripe test "
                 + "mode.");
@@ -117,11 +115,6 @@ public class LocalTestStripeGateway implements StripeGateway {
     public OffSessionAttempt createOffSessionIntent(OffSessionIntent request, String idempotencyKey) {
         return new OffSessionAttempt(create(request.amount().minor(), REQUIRES_CAPTURE, idempotencyKey).snapshot(),
                 null, null, null);
-    }
-
-    @Override
-    public PaymentLinkSnapshot createPaymentLink(PaymentLinkRequest request, String idempotencyKey) {
-        return new PaymentLinkSnapshot(id("cs"), linkSuccessUrl, request.expiresAt());
     }
 
     @Override

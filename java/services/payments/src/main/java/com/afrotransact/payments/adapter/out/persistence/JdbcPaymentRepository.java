@@ -14,7 +14,6 @@ import com.afrotransact.payments.domain.Money;
 import com.afrotransact.payments.domain.OrderLine;
 import com.afrotransact.payments.domain.Payment;
 import com.afrotransact.payments.domain.PaymentLine;
-import com.afrotransact.payments.domain.PaymentLink;
 import com.afrotransact.payments.domain.PaymentStatus;
 import com.afrotransact.payments.domain.Refund;
 import com.afrotransact.payments.domain.RefundLine;
@@ -224,27 +223,6 @@ class JdbcPaymentRepository implements PaymentRepository {
             select c.*, c.line_ids::text as line_ids_json, p.currency from payment_capture c
             join payment p on p.id = c.payment_id
             """;
-
-    @Override
-    public void insertLink(PaymentLink link) {
-        jdbc.sql("""
-                insert into payment_link (payment_id, stripe_session_id, url, expires_at, created_at)
-                values (:pid, :session, :url, :expiresAt, :createdAt)
-                on conflict (payment_id) do nothing
-                """)
-                .param("pid", link.paymentId()).param("session", link.stripeSessionId()).param("url", link.url())
-                .param("expiresAt", Sql.ts(link.expiresAt())).param("createdAt", Sql.ts(link.createdAt()))
-                .update();
-    }
-
-    @Override
-    public Optional<PaymentLink> findLink(UUID paymentId) {
-        return jdbc.sql("select * from payment_link where payment_id = :pid").param("pid", paymentId)
-                .query((rs, n) -> new PaymentLink(rs.getObject("payment_id", UUID.class),
-                        rs.getString("stripe_session_id"), rs.getString("url"), Sql.instant(rs, "expires_at"),
-                        Sql.instant(rs, "created_at")))
-                .optional();
-    }
 
     @Override
     public Optional<Capture> findCapture(UUID captureId) {

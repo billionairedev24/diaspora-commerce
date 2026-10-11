@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.afrotransact.payments.application.PaymentsEvents;
+import com.github.tomakehurst.wiremock.client.WireMock;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 
@@ -106,5 +107,51 @@ class WebhookInboxIT extends PaymentsIntegrationTest {
         assertThat(row.path("status").asString()).isEqualTo("RECEIVED");
         assertThat(row.path("attempts").asInt()).isEqualTo(1);
         assertThat(row.path("last_error").asString()).contains("will retry");
+    }
+
+    /** Webhooks are not ordered: a payment_failed sent before the successful retry may arrive after it. */
+    @Test
+    void aStalePaymentFailedAfterAuthorisationLeavesThePaymentAuthorised() {
+        String order = id("STALE");
+        String pi = "pi_" + order;
+        pendingPayment(order);
+        webhook(event("evt_ok_" + order, "payment_intent.amount_capturable_updated",
+                StripeStubs.intent(pi, 2500, "requires_capture", null, 0)));
+        assertThat(status(order)).isEqualTo("AUTHORIZED");
+
+        STRIPE.retrieveIntent(pi, 2500, "requires_capture");
+        String declined = StripeStubs.intent(pi, 2500, "requires_payment_method", null, 0).replace("}",
+                ",\"last_payment_error\":{\"code\":\"card_declined\",\"decline_code\":\"insufficient_funds\","
+                        + "\"message\":\"Your card has insufficient funds.\"}}");
+        webhook(event("evt_old_fail_" + order, "payment_intent.payment_failed", declined));
+        webhook(event("evt_old_action_" + order, "payment_intent.requires_action",
+                StripeStubs.intent(pi, 2500, "requires_action", null, 0)));
+
+        assertThat(status(order)).isEqualTo("AUTHORIZED");
+        assertThat(outbox(PaymentsEvents.INTENT_FAILED, order)).isZero();
+        assertThat(outbox(PaymentsEvents.INTENT_SUCCEEDED, order)).isEqualTo(1);
+    }
+
+    /** The order expired (or was cancelled) while the customer was paying: the late authorisation is released. */
+    @Test
+    void anAuthorisationOfACancelledPaymentIsCancelledAtStripe() {
+        String order = id("LATECXL");
+        String pi = "pi_" + order;
+        JsonNode p = pendingPayment(order);
+        STRIPE.cancel(pi, 2500);
+        TestSupport.as(TestSupport.ORDERS_SERVICE);
+        ok(send("POST", "/v1/payments/" + p.path("id").asString() + "/cancel", Map.of("reason", "expired"),
+                "cancel-" + order));
+        TestSupport.reset();
+        assertThat(status(order)).isEqualTo("CANCELED");
+
+        STRIPE.retrieveIntent(pi, 2500, "requires_capture");
+        webhook(event("evt_late_" + order, "payment_intent.amount_capturable_updated",
+                StripeStubs.intent(pi, 2500, "requires_capture", null, 0)));
+
+        assertThat(status(order)).isEqualTo("CANCELED");
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payment_intents/" + pi + "/cancel"))
+                .withHeader("Idempotency-Key", WireMock.equalTo(order + ":cancel-late-authorization")));
+        assertThat(outbox(PaymentsEvents.INTENT_SUCCEEDED, order)).isZero();
     }
 }

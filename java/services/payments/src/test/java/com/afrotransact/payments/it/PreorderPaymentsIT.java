@@ -2,7 +2,6 @@ package com.afrotransact.payments.it;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -15,8 +14,8 @@ import tools.jackson.databind.JsonNode;
 /**
  * S272 pre-orders: PREORDER lines book their delivery fee (the line's shipping) to 4250 Local delivery fees, for
  * marketplace sellers and AfroTransact Retail alike, and refunds debit it there; late adds confirm the order's intent
- * off-session on the customer's default saved card or create a hosted payment link whose paid intent is attached by
- * its first webhook.
+ * off-session on the customer's default saved card, or get an ordinary manual-capture PaymentIntent that the customer
+ * confirms on AfroTransact's pay-now page (never a Stripe-hosted Checkout Session).
  */
 class PreorderPaymentsIT extends PaymentsIntegrationTest {
 
@@ -88,6 +87,14 @@ class PreorderPaymentsIT extends PaymentsIntegrationTest {
         assertThat(stripe.getBodyAsString()).contains("off_session=true", "confirm=true", "customer=" + cus,
                 "payment_method=pm_card_" + customer, "capture_method=manual");
 
+        // A replay (orders retrying after a timeout) returns the same payment and charges the card once.
+        JsonNode replayed = ok(send("POST", "/v1/payments", Map.of("orderId", order, "amountMinor", 2399,
+                "currency", "USD", "shopperId", customer, "offSession", true, "lines",
+                List.of(line("P1", "org_a", "Groceries", "PREORDER", 2, 1600, 799, 0))), "create-" + order), 200);
+        assertThat(replayed.path("id").asString()).isEqualTo(created.path("id").asString());
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withHeader("Idempotency-Key", WireMock.equalTo(order + ":create-intent")));
+
         // Without a saved card the request is refused.
         problem(send("POST", "/v1/payments", Map.of("orderId", id("LATE"), "amountMinor", 100, "currency", "USD",
                 "shopperId", id("nobody"), "offSession", true, "lines",
@@ -96,39 +103,44 @@ class PreorderPaymentsIT extends PaymentsIntegrationTest {
     }
 
     @Test
-    void lateAddsPayThroughAHostedLinkWhoseIntentIsAttachedByItsWebhook() {
+    void payNowLateAddsGetAPaymentIntentNeverACheckoutSession() {
         String order = id("LINK");
-        String session = "cs_test_" + order;
-        WIREMOCK.stubFor(WireMock.post(WireMock.urlPathEqualTo("/v1/checkout/sessions"))
-                .withHeader("Idempotency-Key", WireMock.equalTo(order + ":payment-link"))
-                .willReturn(WireMock.aResponse().withStatus(200).withHeader("Content-Type", "application/json")
-                        .withBody("{\"id\":\"" + session + "\",\"object\":\"checkout.session\",\"url\":"
-                                + "\"https://checkout.stripe.com/c/pay/" + session + "\",\"expires_at\":"
-                                + (TestSupport.CLOCK.instant().getEpochSecond() + 12 * 3600) + "}")));
-        Map<String, Object> body = new HashMap<>(Map.of("orderId", order, "amountMinor", 1799, "currency", "USD",
-                "shopperId", "cust-link", "paymentLinkHours", 12, "paymentMethodTypes", List.of("card"), "lines",
-                List.of(line("P1", "org_a", "Groceries", "PREORDER", 1, 1000, 799, 0))));
+        String pi = "pi_" + order;
+        STRIPE.createIntent(order, pi, 1799);
+        Map<String, Object> body = Map.of("orderId", order, "amountMinor", 1799, "currency", "USD",
+                "shopperId", "cust-link", "metadata", Map.of("channel", "AGENT_LATE"), "lines",
+                List.of(line("P1", "org_a", "Groceries", "PREORDER", 1, 1000, 799, 0)));
         TestSupport.as(TestSupport.ORDERS_SERVICE);
         JsonNode created = ok(send("POST", "/v1/payments", body, "create-" + order), 201);
-        String paymentId = created.path("id").asString();
-        assertThat(created.path("paymentLinkUrl").asString()).isEqualTo("https://checkout.stripe.com/c/pay/"
-                + session);
-        assertThat(created.path("paymentLinkExpiresAt").isNull()).isFalse();
-        assertThat(created.path("status").asString()).isEqualTo("REQUIRES_PAYMENT_METHOD");
-        assertThat(created.path("stripePaymentIntentId").isNull()).isTrue();
-        String sent = WIREMOCK.findAll(WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/checkout/sessions")))
-                .getLast().getBodyAsString();
-        assertThat(sent).contains("mode=payment", "payment_intent_data[capture_method]=manual",
-                "payment_intent_data[metadata][payment_id]=" + paymentId, "line_items[0][price_data][unit_amount]=1799");
 
-        // The shopper pays on the hosted page: Stripe's intent names our payment in its metadata.
-        String pi = "pi_link_" + order;
-        String intent = StripeStubs.intent(pi, 1799, "requires_capture", null, 0)
-                .replace("}", ",\"metadata\":{\"payment_id\":\"" + paymentId + "\",\"order_id\":\"" + order + "\"}}");
-        webhook(event(id("evt"), "payment_intent.amount_capturable_updated", intent));
-        JsonNode paid = ok(send("GET", "/v1/payments/" + paymentId, null, null));
-        assertThat(paid.path("status").asString()).isEqualTo("AUTHORIZED");
-        assertThat(paid.path("stripePaymentIntentId").asString()).isEqualTo(pi);
-        assertThat(outbox("payments.intent.succeeded", order)).isEqualTo(1);
+        assertThat(created.path("stripePaymentIntentId").asString()).isEqualTo(pi);
+        assertThat(created.path("clientSecret").asString()).isNotBlank();
+        assertThat(created.has("paymentLinkUrl")).isFalse();
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payment_intents"))
+                .withHeader("Idempotency-Key", WireMock.equalTo(order + ":create-intent"))
+                .withRequestBody(WireMock.containing("capture_method=manual")));
+        WIREMOCK.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/checkout/.*")));
+        WIREMOCK.verify(0, WireMock.postRequestedFor(WireMock.urlPathMatching("/v1/payment_links.*")));
+    }
+
+    @Test
+    void cancellingAnUnpaidPayNowLateAddCancelsItsPaymentIntent() {
+        String order = id("LINKX");
+        String pi = "pi_" + order;
+        STRIPE.createIntent(order, pi, 1799);
+        TestSupport.as(TestSupport.ORDERS_SERVICE);
+        String paymentId = ok(send("POST", "/v1/payments", Map.of("orderId", order, "amountMinor", 1799,
+                "currency", "USD", "shopperId", "cust-link", "lines",
+                List.of(line("P1", "org_a", "Groceries", "PREORDER", 1, 1000, 799, 0))), "create-" + order), 201)
+                .path("id").asString();
+        STRIPE.cancel(pi, 1799);
+
+        // orders' expiry job: the pay-now link expired unpaid.
+        JsonNode cancelled = ok(send("POST", "/v1/payments/" + paymentId + "/cancel", Map.of("reason",
+                "Late pre-order add was not paid in time"), "cancel-" + order), 200);
+
+        assertThat(cancelled.path("status").asString()).isEqualTo("CANCELED");
+        WIREMOCK.verify(1, WireMock.postRequestedFor(WireMock.urlPathEqualTo("/v1/payment_intents/" + pi + "/cancel"))
+                .withHeader("Idempotency-Key", WireMock.equalTo(order + ":cancel")));
     }
 }

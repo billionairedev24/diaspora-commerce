@@ -13,7 +13,7 @@ import org.junit.jupiter.api.Test;
 /** The local stand-in behaves like Stripe test mode with card 4242: confirm, authorise, capture per shipment. */
 class LocalTestStripeGatewayTest {
 
-    private final StripeGateway gateway = new LocalTestStripeGateway("http://localhost:3000/orders/paid");
+    private final StripeGateway gateway = new LocalTestStripeGateway();
 
     private IntentSnapshot create(long amount, String key) {
         return gateway.createIntent(new StripeGateway.CreateIntent(Money.of(amount, "USD"), null, List.of(),

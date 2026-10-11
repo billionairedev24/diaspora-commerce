@@ -465,8 +465,9 @@ paths:
       summary: Create the order's PaymentIntent (manual capture) and return its client secret
       description: Stripe idempotency key = <orderId>:create-intent. Replays (same order, same lines) return 200 with replayed=true;
         a different amount or lines for the same order is 409. S272 late pre-order adds set offSession (confirmed now on
-        the default saved card; 422 payments.no-saved-method without one) or paymentLinkHours (hosted payment link,
-        Stripe idempotency key <orderId>:payment-link).
+        the default saved card; 422 payments.no-saved-method without one); a late add paid with a pay-now link is an
+        ordinary intent that the customer confirms with Stripe Elements on AfroTransact's pay page. payments never
+        creates a Stripe-hosted page (Checkout Session or Payment Link).
       operationId: create
       parameters:
       - name: Idempotency-Key
@@ -1726,14 +1727,6 @@ components:
           description: 'S272 late pre-order adds: confirm the intent now, off-session, on the shopper''s default saved card
             (shopperId required); the response status is AUTHORIZED, REQUIRES_ACTION (the customer must authenticate) or
             FAILED'
-        paymentLinkHours:
-          type: integer
-          format: int32
-          description: 'S272 late pre-order adds: create a hosted Stripe payment link (Checkout, manual capture) that expires
-            after this many hours instead of returning a client secret; the response carries paymentLinkUrl. The paid
-            link''s PaymentIntent is attached to the payment by its first webhook (metadata payment_id).'
-          maximum: 24
-          minimum: 1
       required:
       - amountMinor
       - currency
@@ -1928,13 +1921,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PaymentLineResponse'
-        paymentLinkUrl:
-          type: string
-          description: Hosted payment link (created with paymentLinkHours)
-        paymentLinkExpiresAt:
-          type: string
-          format: date-time
-          description: When the payment link expires
     ReleaseRequest:
       type: object
       description: Release the uncaptured rest of the authorisation (e.g. booking cancelled or no-show after the deposit capture)
