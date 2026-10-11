@@ -514,6 +514,9 @@ func mayUse(actor auth.Actor, p domain.Purpose) bool {
 	if err != nil {
 		return false
 	}
+	if readerClient(actor) {
+		return false // read-only clients never upload, complete or manage assets
+	}
 	if actor.Type == principalService {
 		if rules.Restricted() {
 			return rules.AllowsServiceClient(actor.Subject)
@@ -526,6 +529,11 @@ func mayUse(actor auth.Actor, p domain.Purpose) bool {
 // mayRead reports whether the actor may read a private (or not yet approved) asset: its uploader, its owner
 // organisation, or staff and service principals allowed for the purpose.
 func mayRead(actor auth.Actor, a domain.Asset) bool {
+	if readerClient(actor) {
+		// A reader client (delivery-runs) checks public assets that are not published yet (pending, held).
+		rules, err := domain.RulesFor(a.Purpose)
+		return err == nil && rules.Public && actor.Can(domain.PermissionMediaRead)
+	}
 	if actor.Subject == a.UploadedBy && actor.Subject != "" {
 		return true
 	}
@@ -547,4 +555,9 @@ func sanitize(s string) string {
 		}
 		return '_'
 	}, s)
+}
+
+// readerClient reports whether the actor is a read-only service client's own token (domain.ReaderClients).
+func readerClient(actor auth.Actor) bool {
+	return actor.Type == principalService && slices.Contains(domain.ReaderClients(), actor.Subject)
 }

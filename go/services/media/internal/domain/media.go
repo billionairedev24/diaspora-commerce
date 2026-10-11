@@ -35,9 +35,29 @@ const (
 
 // Service clients (client-credentials token subjects) named in purpose rules.
 const (
-	ClientRetailService = "retail-service"
-	ClientGatewayBFF    = "gateway-bff"
+	ClientRetailService       = "retail-service"
+	ClientGatewayBFF          = "gateway-bff"
+	ClientDeliveryRunsService = "delivery-runs-service"
 )
+
+// PermissionMediaRead is the scope a reader client's token must carry.
+const PermissionMediaRead = "media:read"
+
+// ReaderClients are service clients whose own client-credentials tokens, with scope media:read, may read public
+// assets (GET /v1/assets/{id}: delivery-runs verifies pre-order creatives and stores their size). They never upload.
+func ReaderClients() []string { return []string{ClientDeliveryRunsService} }
+
+// AcceptedServiceClients are the service clients whose own client-credentials tokens media accepts: the clients the
+// purpose rules name and the reader clients.
+func AcceptedServiceClients() []string {
+	out := ServiceClients()
+	for _, c := range ReaderClients() {
+		if !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
 
 // Rules for a purpose.
 type Rules struct {

@@ -66,3 +66,16 @@ func TestAcceptsUserTokensForwardedByTheBFF(t *testing.T) {
 		}
 	}
 }
+
+func TestAcceptsDeliveryRunsOwnReaderToken(t *testing.T) {
+	dr := auth.Actor{Subject: "delivery-runs-service", Type: "SERVICE", Permissions: []string{"media:read"}}
+	v := newVerifier(stubVerifier{}, []string{"delivery-runs-service"},
+		[]auth.Verifier{stubVerifier{"dr-token": dr, "dr-user-token": {Subject: "u-1", Type: "STAFF"}}})
+	ctx := context.Background()
+	if got, err := v.Verify(ctx, "dr-token"); err != nil || got.Subject != dr.Subject || !got.Can("media:read") {
+		t.Fatalf("delivery-runs-service token: %+v %v", got, err)
+	}
+	if _, err := v.Verify(ctx, "dr-user-token"); !errors.Is(err, auth.ErrUnauthenticated) {
+		t.Fatalf("a user token for that audience must be refused, got %v", err)
+	}
+}

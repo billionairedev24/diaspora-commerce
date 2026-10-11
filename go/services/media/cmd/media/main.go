@@ -105,9 +105,9 @@ func run() error {
 
 	var verifier auth.Verifier
 	if cfg.Auth.Enabled {
-		// Tokens for media, the own client-credentials tokens of the service clients the purposes name, and user
-		// tokens forwarded by the BFF (S250).
-		verifier = authn.NewVerifier(cfg.Auth.Issuer, cfg.Auth.Audience, domain.ServiceClients(),
+		// Tokens for media, the own client-credentials tokens of the service clients the purposes name and of the
+		// reader clients (delivery-runs-service, media:read), and user tokens forwarded by the BFF (S250).
+		verifier = authn.NewVerifier(cfg.Auth.Issuer, cfg.Auth.Audience, domain.AcceptedServiceClients(),
 			cfg.Auth.ForwardedAudiences, httpClient)
 	}
 	openapi, err := media.Files.ReadFile("api/openapi.yaml")

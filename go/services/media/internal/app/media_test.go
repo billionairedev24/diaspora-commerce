@@ -175,3 +175,43 @@ func TestDisguisedFileIsRejectedAndDeleted(t *testing.T) {
 		t.Fatalf("expected rejection and deletion: %+v deleted=%v", done, pub.deleted)
 	}
 }
+
+// delivery-runs-service verifies pre-order creatives (storefront purpose) with its own token (scope media:read),
+// including ones not published yet; it may not upload, nor read private purposes, nor read without the scope.
+func TestDeliveryRunsReadsCreativesWithMediaRead(t *testing.T) {
+	pub, priv := &memStore{objects: map[string][]byte{}}, &memStore{objects: map[string][]byte{}}
+	repo := &memRepo{assets: map[string]domain.Asset{}}
+	svc := app.NewMediaService(map[domain.Purpose]port.ObjectStore{
+		domain.PurposeStorefront: pub, domain.PurposeKYCDocument: priv,
+	}, repo, inspect.New(40_000_000), domain.LinkPolicy{})
+	staff := auth.Actor{Subject: "stf-1", Type: "STAFF", Permissions: []string{"preorders:manage"}}
+	reader := auth.Actor{Subject: domain.ClientDeliveryRunsService, Type: "SERVICE", Permissions: []string{domain.PermissionMediaRead}}
+	ctx := context.Background()
+
+	hero, _, err := svc.RequestUpload(ctx, staff, domain.PurposeStorefront, "hero.jpg", "image/jpeg", 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := svc.Get(ctx, reader, hero.ID, 0); err != nil || got.ID != hero.ID {
+		t.Fatalf("delivery-runs must read a pending creative: %+v %v", got, err)
+	}
+	noScope := reader
+	noScope.Permissions = nil
+	if _, err := svc.Get(ctx, noScope, hero.ID, 0); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("without media:read the read must be refused, got %v", err)
+	}
+	if _, _, err := svc.RequestUpload(ctx, reader, domain.PurposeStorefront, "x.jpg", "image/jpeg", 1000); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("a reader client must not upload, got %v", err)
+	}
+	kyc, _, err := svc.RequestUpload(ctx, auth.Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "org_lagos"},
+		domain.PurposeKYCDocument, "ein.pdf", "application/pdf", 2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Get(ctx, reader, kyc.ID, 0); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("a reader client must not read private purposes, got %v", err)
+	}
+	if !slices.Contains(domain.AcceptedServiceClients(), domain.ClientDeliveryRunsService) {
+		t.Fatal("media must accept delivery-runs-service's own token")
+	}
+}
