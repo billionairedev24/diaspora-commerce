@@ -59,6 +59,11 @@ pre-order. Details: [docs/engineering/local-development.md](../../docs/engineeri
 | web/apps/storefront | 3000 |
 | web/apps/seller-center | 3001 |
 | web/apps/staff-console | 3002 |
+
+If one of these is taken by another program (Grafana often sits on 3000 or 3001), `make up` moves that app to the next
+free port from 3010, prints it, and gives the new addresses to identity (sign-in return URLs), gateway-bff and
+notifications. Pin a port yourself with `STOREFRONT_PORT`, `SELLER_CENTER_PORT` or `STAFF_CONSOLE_PORT`; the choice is
+remembered in `.local/web-ports`.
 | docs/portal (Docusaurus) | 3100 |
 
 | Infrastructure | Port |

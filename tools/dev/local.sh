@@ -47,6 +47,10 @@ ALL_SERVICES="identity catalog offers inventory orders payments seller retail fu
 
 # Web apps (Next.js dev servers) against the local BFF, no mocks. WEB=0 skips them.
 WEB_APPS="storefront seller-center staff-console"
+# Their ports: 3000 / 3001 / 3002, or STOREFRONT_PORT / SELLER_CENTER_PORT / STAFF_CONSOLE_PORT. When a port is taken
+# by something else (your Grafana, another dev server), `up` picks the next free one from 3010 and passes the apps'
+# addresses to identity (sign-in return URLs), gateway-bff and notifications. The choice is kept in .local/web-ports.
+WEB_PORTS_FILE="$STATE/web-ports"
 
 port_of() {
   case "$1" in
@@ -61,8 +65,21 @@ port_of() {
   esac
 }
 
-web_port_of() {
+web_port_var() {
+  case "$1" in storefront) echo STOREFRONT_PORT ;; seller-center) echo SELLER_CENTER_PORT ;; staff-console) echo STAFF_CONSOLE_PORT ;; esac
+}
+
+web_default_port() {
   case "$1" in storefront) echo 3000 ;; seller-center) echo 3001 ;; staff-console) echo 3002 ;; esac
+}
+
+# The port an app uses: your *_PORT variable, else the one chosen earlier (.local/web-ports), else the default.
+web_port_of() {
+  local var saved=""
+  var=$(web_port_var "$1")
+  if [[ -n "${!var:-}" ]]; then echo "${!var}"; return 0; fi
+  if [[ -f "$WEB_PORTS_FILE" ]]; then saved=$( { grep -E "^$var=" "$WEB_PORTS_FILE" || true; } | head -1 | cut -d= -f2); fi
+  if [[ -n "$saved" ]]; then echo "$saved"; else web_default_port "$1"; fi
 }
 
 compose() {
@@ -97,6 +114,43 @@ wait_healthy() {
 }
 
 port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+
+# Choose each web app's port before the services start (identity registers the apps' sign-in return URLs), then
+# export the apps' addresses for identity, gateway-bff, notifications and the apps themselves.
+resolve_web_ports() {
+  local app var port taken="" before="" after="" svc
+  if [[ -f "$WEB_PORTS_FILE" ]]; then before=$(cat "$WEB_PORTS_FILE")
+  else before=$(printf 'STOREFRONT_PORT=3000\nSELLER_CENTER_PORT=3001\nSTAFF_CONSOLE_PORT=3002'); fi
+  for app in $WEB_APPS; do
+    var=$(web_port_var "$app")
+    if [[ -n "${!var:-}" ]]; then port=${!var}
+    else
+      port=$(web_default_port "$app")
+      # Keep the port our own running app already has; otherwise move off a port something else holds.
+      if running "web-$app"; then port=$(web_port_of "$app")
+      elif port_open "$port"; then
+        local want=$port
+        port=3010
+        while port_open "$port" || [[ " $taken " == *" $port "* ]]; do port=$((port + 1)); done
+        echo "  ! localhost:$want is in use by another program: $app runs on localhost:$port instead" \
+          "(set $var to choose)"
+      fi
+    fi
+    taken="$taken $port"
+    after="$after$var=$port"$'\n'
+  done
+  mkdir -p "$STATE"
+  printf '%s' "$after" >"$WEB_PORTS_FILE"
+  export PUBLIC_WEB_URL="http://localhost:$(web_port_of storefront)"
+  export SELLER_CENTER_URL="http://localhost:$(web_port_of seller-center)"
+  export STAFF_CONSOLE_URL="http://localhost:$(web_port_of staff-console)"
+  # Services started with other addresses would send sign-in back to the old ports: restart them with the new ones.
+  if [[ "$before" != "$(cat "$WEB_PORTS_FILE")" ]]; then
+    for svc in identity gateway-bff notifications; do
+      if running "$svc"; then echo "  · web app ports changed: restarting $svc"; stop "$svc"; fi
+    done
+  fi
+}
 
 ours_running() { [[ -n "$(docker compose -f "$COMPOSE_FILE" ps -q --status running "$1" 2>/dev/null)" ]]; }
 
@@ -339,8 +393,7 @@ web_up() {
     if running "$name"; then echo "  · $app already running"; continue; fi
     : >"$LOGS/$name.log"
     (cd "$ROOT/web/apps/$app" || exit 1
-      NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 PUBLIC_WEB_URL=http://localhost:3000 \
-        SELLER_CENTER_URL=http://localhost:3001 STAFF_CONSOLE_URL=http://localhost:3002 \
+      NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 \
         nohup ./node_modules/.bin/next dev --port "$port" >>"$LOGS/$name.log" 2>&1 &
       echo $! >"$PIDS/$name.pid")
   done
@@ -359,9 +412,12 @@ links() {
   echo
   echo "──────────────────────────────── AfroTransact on this machine ────────────────────────────────"
   echo "Apps"
-  echo "  Storefront           http://localhost:3000          pre-orders: http://localhost:3000/pre-orders"
-  echo "  Seller Center        http://localhost:3001"
-  echo "  Staff console        http://localhost:3002          pre-orders: http://localhost:3002/preorders"
+  local sf sc st
+  sf="http://localhost:$(web_port_of storefront)"; sc="http://localhost:$(web_port_of seller-center)"
+  st="http://localhost:$(web_port_of staff-console)"
+  printf '  %-20s %-30s %s\n' "Storefront" "$sf" "pre-orders: $sf/pre-orders"
+  printf '  %-20s %s\n' "Seller Center" "$sc"
+  printf '  %-20s %-30s %s\n' "Staff console" "$st" "pre-orders: $st/preorders"
   echo "  Staff sign-in        admin@afrotransact.com / LocalAdmin2026!  (identity's local bootstrap admin)"
   echo "API docs (Scalar; each service also serves /swagger-ui.html or /openapi.yaml, and /redoc)"
   for svc in $ALL_SERVICES; do
@@ -385,6 +441,7 @@ cmd_up() {
   local services="$DEFAULT_SERVICES" svc failed=""
   if [[ $# -gt 0 ]]; then services="$*"; fi
   for svc in $services; do runtime_of "$svc" >/dev/null; done
+  if [[ "${WEB:-1}" != 0 ]]; then resolve_web_ports; fi
   infra_up
   # shellcheck disable=SC2086
   build $services
@@ -454,6 +511,9 @@ case "${1:-}" in
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
   seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
+    export PUBLIC_WEB_URL="http://localhost:$(web_port_of storefront)"
+    export SELLER_CENTER_URL="http://localhost:$(web_port_of seller-center)"
+    export STAFF_CONSOLE_URL="http://localhost:$(web_port_of staff-console)"
     stop "$2"; build "$2"; start "$2"; wait_healthy "$2" 240 ;;
   *) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac
