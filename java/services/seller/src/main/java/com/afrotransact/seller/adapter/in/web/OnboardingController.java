@@ -71,7 +71,7 @@ class OnboardingController {
     @PostMapping("/v1/applications/me/stripe/account-session")
     AccountSessionResponse createAccountSession() {
         AccountSession s = stripe.accountSession();
-        return new AccountSessionResponse(s.accountId(), s.clientSecret(), s.expiresAt());
+        return new AccountSessionResponse(s.accountId(), s.clientSecret(), s.expiresAt(), s.localTest());
     }
 
     @Operation(summary = "Refresh Stripe verification results (identity, IRS name/TIN match, requirements)")

@@ -1584,6 +1584,8 @@ components:
           type: string
     Owner:
       type: object
+      description: A beneficial owner (25%+) or person with significant control, with their home address. Identity and
+        tax numbers are collected by Stripe's embedded onboarding, not here.
       properties:
         firstName:
           type: string
@@ -1600,6 +1602,8 @@ components:
         dateOfBirth:
           type: string
           format: date
+        address:
+          $ref: '#/components/schemas/Address'
     OwnersStep:
       type: object
       description: Step 'owners' (not for sole proprietors)
@@ -1610,8 +1614,9 @@ components:
             $ref: '#/components/schemas/Owner'
     PayoutsStep:
       type: object
-      description: Step 'payouts'. Only last 4 digits are stored; the bank account itself goes to Stripe as externalAccountToken
-        (btok_…, Stripe.js).
+      description: Step 'payouts'. Only last 4 digits are stored. The bank account goes to Stripe as the connected account's
+        payout account, either externalAccountToken (btok_…, Stripe.js) or the routing and account numbers, sent once to
+        Stripe and never stored. The step is complete only once Stripe accepted the account (externalAccountLinked).
       properties:
         accountHolderName:
           type: string
@@ -1696,6 +1701,13 @@ components:
           format: date
         documentAssetId:
           type: string
+        permitType:
+          type: string
+          enum:
+          - FOOD_ESTABLISHMENT
+          - COTTAGE_FOOD
+          - FDA_FACILITY
+          - FOOD_HANDLER
     ServiceLicence:
       type: object
       description: A service offered; regulated services need licence number, issuing state, expiry (expired licences are
@@ -2564,6 +2576,8 @@ components:
         birthYear:
           type: integer
           format: int32
+        address:
+          $ref: '#/components/schemas/Address'
     PayoutSection:
       type: object
       properties:
@@ -2686,7 +2700,9 @@ components:
           $ref: '#/components/schemas/Address'
     AccountSession:
       type: object
-      description: client_secret for Stripe's embedded Connect components
+      description: 'client_secret for Stripe''s embedded Connect components. localTest is true only on the local profile
+        without a Stripe key (LocalTestStripePolicy): there is no Stripe to load and the client shows its labelled local
+        verification instead.'
       properties:
         accountId:
           type: string
@@ -2695,6 +2711,8 @@ components:
         expiresAt:
           type: string
           format: date-time
+        localTest:
+          type: boolean
     RenameOrgRequest:
       type: object
       properties:

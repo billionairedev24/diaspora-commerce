@@ -181,12 +181,18 @@ public class DefaultApplicationRules implements ApplicationRules {
                 e.put(p + "ownershipPercent", "List everyone who owns 25% or more; people below 25% are listed "
                         + "only when they have significant control");
             }
-            if (o.email() != null && !EMAIL.matcher(o.email().trim()).matches()) {
+            if (o.email() != null && !o.email().isBlank() && !EMAIL.matcher(o.email().trim()).matches()) {
                 e.put(p + "email", "Enter a valid email address");
             }
             if (o.dateOfBirth() != null && o.dateOfBirth().isAfter(ctx.today().minusYears(MIN_AGE))) {
                 e.put(p + "dateOfBirth", "Owners must be 18 or older");
             }
+            if (complete) {
+                e.required(blank(o.title()), p + "title");
+                e.required(blank(o.email()), p + "email");
+                e.required(o.dateOfBirth() == null, p + "dateOfBirth");
+            }
+            personAddress(e, p + "address", o.address(), complete);
             total = total.add(pct);
             control |= o.significantControl();
         }
@@ -309,10 +315,15 @@ public class DefaultApplicationRules implements ApplicationRules {
         if (permit != null && permit.expiresOn() != null && permit.expiresOn().isBefore(ctx.today())) {
             e.put("foodPermit.expiresOn", "This permit has expired");
         }
+        if (permit != null && !blank(permit.permitType())
+                && !ComplianceSection.PERMIT_TYPES.contains(permit.permitType().trim().toUpperCase(Locale.ROOT))) {
+            e.put("foodPermit.permitType", "Choose the kind of permit");
+        }
         if (complete && food) {
             if (permit == null) {
                 e.put("foodPermit", "Food sellers need a food establishment or cottage food permit");
             } else {
+                e.required(blank(permit.permitType()), "foodPermit.permitType");
                 e.required(blank(permit.permitNumber()), "foodPermit.permitNumber");
                 e.required(permit.expiresOn() == null, "foodPermit.expiresOn");
                 e.required(blank(permit.documentAssetId()), "foodPermit.documentAssetId");
@@ -404,18 +415,62 @@ public class DefaultApplicationRules implements ApplicationRules {
         if (et == null || et.needsOwners()) {
             out.put(OnboardingStep.OWNERS, owners(data.owners(), et, ctx, true).errors());
         }
-        Errors stripe = new Errors("stripe");
-        if (data.stripe() == null || data.stripe().accountId() == null) {
-            stripe.put("account", "Start Stripe verification");
-        } else if (!data.stripe().detailsSubmitted()) {
-            stripe.put("detailsSubmitted", "Finish Stripe verification");
-        }
-        out.put(OnboardingStep.STRIPE_VERIFICATION, stripe.map());
-        out.put(OnboardingStep.PAYOUTS, payouts(null, data.payouts(), true).errors());
+        out.put(OnboardingStep.STRIPE_VERIFICATION, stripeErrors(data.stripe()));
+        out.put(OnboardingStep.PAYOUTS, payoutErrors(data.payouts()));
         out.put(OnboardingStep.PLAN, plan(data.plan(), plan, data, ctx, true).errors());
         Offering offering = data.business() == null ? null : data.business().offering();
         out.put(OnboardingStep.CATALOG_COMPLIANCE, compliance(data.compliance(), offering, ctx, true).errors());
         return out;
+    }
+
+    /**
+     * Stripe verification is complete when Stripe says so: the details were submitted, nothing is currently due and
+     * the account was not rejected. Pending verification (Stripe still checking) does not hold the applicant up.
+     */
+    static Map<String, String> stripeErrors(StripeVerification s) {
+        Errors e = new Errors("stripe");
+        if (s == null || s.accountId() == null) {
+            e.put("account", "Start Stripe verification");
+        } else if (s.disabledReason() != null && s.disabledReason().startsWith("rejected")) {
+            e.put("account", "Stripe could not verify this business");
+        } else if (!s.detailsSubmitted()) {
+            e.put("detailsSubmitted", "Finish Stripe verification");
+        } else if (!s.currentlyDue().isEmpty()) {
+            e.put("currentlyDue", "Stripe needs more information: " + String.join(", ", s.currentlyDue()));
+        }
+        return e.map();
+    }
+
+    /**
+     * Payouts are complete only once a bank account is linked to the Stripe connected account. A prefilled account
+     * holder name, or numbers typed but never sent to Stripe, are not a payout account.
+     */
+    static Map<String, String> payoutErrors(PayoutSection p) {
+        Errors e = new Errors("payouts");
+        if (p == null || !p.externalAccountLinked()) {
+            e.put("externalAccount", "Add the bank account for your payouts");
+        } else if (p.accountLast4() == null) {
+            e.put("accountNumber", "Required");
+        }
+        return e.map();
+    }
+
+    /** An owner's home address: optional while drafting, every line but line 2 when complete. */
+    private static void personAddress(Errors e, String field, Address a, boolean complete) {
+        if (a == null) {
+            e.required(complete, field);
+            return;
+        }
+        e.required(complete && blank(a.line1()), field + ".line1");
+        e.required(complete && blank(a.city()), field + ".city");
+        if (a.state() != null && !a.state().isBlank() && !US_STATES.contains(a.state().trim().toUpperCase(Locale.ROOT))) {
+            e.put(field + ".state", "Use the two-letter state code");
+        }
+        e.required(complete && blank(a.state()), field + ".state");
+        if (a.postalCode() != null && !a.postalCode().isBlank() && !ZIP.matcher(a.postalCode().trim()).matches()) {
+            e.put(field + ".postalCode", "Enter a 5-digit ZIP code");
+        }
+        e.required(complete && blank(a.postalCode()), field + ".postalCode");
     }
 
     private static void address(Errors e, Address a, boolean complete) {

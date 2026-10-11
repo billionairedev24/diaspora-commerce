@@ -151,8 +151,8 @@ abstract class SellerIntegrationTest {
         onboarding.saveStep(OnboardingStep.BUSINESS_DETAILS, StepInput.businessDetails(new BusinessDetailsInput(null,
                 null, "Store " + user + " LLC", null, "12-3456789", null, "TX", LocalDate.of(2020, 1, 1), ADDRESS,
                 "asset-formation", null)));
-        onboarding.saveStep(OnboardingStep.OWNERS, StepInput.owners(List.of(new Owner("Ade", "Ade", "CEO", null,
-                BigDecimal.valueOf(100), true, LocalDate.of(1981, 1, 1)))));
+        onboarding.saveStep(OnboardingStep.OWNERS, StepInput.owners(List.of(new Owner("Ade", "Ade", "CEO",
+                "ade@example.com", BigDecimal.valueOf(100), true, LocalDate.of(1981, 1, 1), ADDRESS))));
         stripeOnboarding.accountSession();
         stripeOnboarding.refreshVerification();
         onboarding.saveStep(OnboardingStep.PAYOUTS, StepInput.payouts(new PayoutInput("Store LLC", "checking",

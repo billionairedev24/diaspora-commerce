@@ -9,14 +9,19 @@ import java.util.Set;
 
 import com.afrotransact.seller.domain.RequirementAnswer;
 import com.afrotransact.seller.domain.RequirementsSnapshot;
+import com.afrotransact.seller.domain.TaxIds;
 import com.afrotransact.seller.port.AccountSession;
+import com.afrotransact.seller.port.BankAccountDetails;
 import com.afrotransact.seller.port.CreateConnectedAccount;
 import com.afrotransact.seller.port.GatewayException;
+import com.afrotransact.seller.port.LinkedBankAccount;
 import com.afrotransact.seller.port.MediaAsset;
 import com.afrotransact.seller.port.RequirementSubmission;
 import com.afrotransact.seller.port.StripeConnectGateway;
 import com.stripe.StripeClient;
 import com.stripe.model.Account;
+import com.stripe.model.BankAccount;
+import com.stripe.model.ExternalAccount;
 import com.stripe.model.Person;
 import com.stripe.model.StripeCollection;
 import com.stripe.net.RequestOptions;
@@ -87,7 +92,10 @@ public class StripeConnectAdapter implements StripeConnectGateway {
     public AccountSession createAccountSession(String accountId, Set<String> components) {
         AccountSessionCreateParams.Components.Builder c = AccountSessionCreateParams.Components.builder();
         if (components.contains("account_onboarding")) {
+            // The payout bank account is the wizard's own "Payouts" step, so onboarding does not ask for it twice.
             c.setAccountOnboarding(AccountSessionCreateParams.Components.AccountOnboarding.builder().setEnabled(true)
+                    .setFeatures(AccountSessionCreateParams.Components.AccountOnboarding.Features.builder()
+                            .setExternalAccountCollection(false).build())
                     .build());
         }
         if (components.contains("account_management")) {
@@ -103,7 +111,7 @@ public class StripeConnectAdapter implements StripeConnectGateway {
         var session = StripeCalls.call("account session",
                 () -> client.v1().accountSessions().create(params));
         return new AccountSession(accountId, session.getClientSecret(),
-                session.getExpiresAt() == null ? null : Instant.ofEpochSecond(session.getExpiresAt()));
+                session.getExpiresAt() == null ? null : Instant.ofEpochSecond(session.getExpiresAt()), false);
     }
 
     @Override
@@ -117,6 +125,26 @@ public class StripeConnectAdapter implements StripeConnectGateway {
         AccountExternalAccountCreateParams params = AccountExternalAccountCreateParams.builder()
                 .setExternalAccount(bankAccountToken).setDefaultForCurrency(true).build();
         StripeCalls.call("bank account", () -> client.v1().accounts().externalAccounts().create(accountId, params));
+    }
+
+    @Override
+    public LinkedBankAccount attachBankAccount(String accountId, BankAccountDetails bank) {
+        Map<String, Object> account = new LinkedHashMap<>();
+        account.put("object", "bank_account");
+        account.put("country", "US");
+        account.put("currency", "usd");
+        account.put("account_holder_name", bank.holderName());
+        account.put("account_holder_type", bank.holderType());
+        account.put("routing_number", bank.routingNumber());
+        account.put("account_number", bank.accountNumber());
+        AccountExternalAccountCreateParams params = AccountExternalAccountCreateParams.builder()
+                .putExtraParam("external_account", account).setDefaultForCurrency(true).build();
+        ExternalAccount created = StripeCalls.call("bank account",
+                () -> client.v1().accounts().externalAccounts().create(accountId, params));
+        if (created instanceof BankAccount b) {
+            return new LinkedBankAccount(b.getBankName(), b.getLast4(), b.getStatus());
+        }
+        return new LinkedBankAccount(null, TaxIds.last4(bank.accountNumber()), "new");
     }
 
     @Override

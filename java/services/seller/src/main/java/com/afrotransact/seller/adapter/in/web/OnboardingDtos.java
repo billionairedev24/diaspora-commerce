@@ -96,13 +96,14 @@ final class OnboardingDtos {
         }
     }
 
-    @Schema(name = "Owner")
+    @Schema(name = "Owner", description = "A beneficial owner (25%+) or person with significant control, with their "
+            + "home address. Identity and tax numbers are collected by Stripe's embedded onboarding, not here.")
     record OwnerDto(String firstName, String lastName, String title, String email, BigDecimal ownershipPercent,
-                    Boolean significantControl, LocalDate dateOfBirth) {
+                    Boolean significantControl, LocalDate dateOfBirth, Address address) {
 
         Owner toOwner() {
             return new Owner(firstName, lastName, title, email, ownershipPercent,
-                    Boolean.TRUE.equals(significantControl), dateOfBirth);
+                    Boolean.TRUE.equals(significantControl), dateOfBirth, address);
         }
     }
 
@@ -110,8 +111,10 @@ final class OnboardingDtos {
     record OwnersStep(List<OwnerDto> owners) {
     }
 
-    @Schema(name = "PayoutsStep", description = "Step 'payouts'. Only last 4 digits are stored; the bank account "
-            + "itself goes to Stripe as externalAccountToken (btok_…, Stripe.js).")
+    @Schema(name = "PayoutsStep", description = "Step 'payouts'. Only last 4 digits are stored. The bank account "
+            + "goes to Stripe as the connected account's payout account: either externalAccountToken (btok_…, "
+            + "Stripe.js) or the routing and account numbers, sent once to Stripe and never stored. The step is "
+            + "complete only once Stripe accepted the account (externalAccountLinked).")
     record PayoutsStep(String accountHolderName, @Schema(allowableValues = {"checking", "savings"}) String accountType,
                        String bankName, String routingNumber, String accountNumber, String accountNumberConfirmation,
                        String externalAccountToken) {
@@ -170,7 +173,7 @@ final class OnboardingDtos {
 
     @Schema(name = "OwnerView")
     record OwnerView(String firstName, String lastName, String title, String email, BigDecimal ownershipPercent,
-                     boolean significantControl, String dateOfBirth, Integer birthYear) {
+                     boolean significantControl, String dateOfBirth, Integer birthYear, Address address) {
     }
 
     @Schema(name = "PlanSelection")
@@ -221,7 +224,7 @@ final class OnboardingDtos {
                     bd.irsDeterminationLetterAssetId());
             List<OwnerView> owners = d.owners() == null ? null : d.owners().stream().map(o -> new OwnerView(
                     o.firstName(), o.lastName(), o.title(), o.email(), o.ownershipPercent(), o.significantControl(),
-                    dob(o.dateOfBirth(), mask), year(o.dateOfBirth()))).toList();
+                    dob(o.dateOfBirth(), mask), year(o.dateOfBirth()), o.address())).toList();
             PlanSection p = d.plan();
             PlanView plan = p == null ? null : new PlanView(p.planCode(), v.planName(),
                     p.cadence() == null ? null : p.cadence().name(),
@@ -249,7 +252,9 @@ final class OnboardingDtos {
         }
     }
 
-    @Schema(name = "AccountSession", description = "client_secret for Stripe's embedded Connect components")
-    record AccountSessionResponse(String accountId, String clientSecret, Instant expiresAt) {
+    @Schema(name = "AccountSession", description = "client_secret for Stripe's embedded Connect components. localTest "
+            + "is true only on the local profile without a Stripe key (LocalTestStripePolicy): there is no Stripe to "
+            + "load and the client shows its labelled local verification instead.")
+    record AccountSessionResponse(String accountId, String clientSecret, Instant expiresAt, boolean localTest) {
     }
 }

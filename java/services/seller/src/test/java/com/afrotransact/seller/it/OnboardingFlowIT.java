@@ -51,6 +51,8 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(strings(started.body().path("prefilledFields"))).containsExactlyInAnyOrder("business.contactEmail",
                 "business.phone", "businessDetails.legalFirstName", "businessDetails.legalLastName",
                 "payouts.accountHolderName");
+        // A prefilled account holder name is not a payout account: Payouts stays incomplete until Stripe links one.
+        assertThat(strings(started.body().path("completedSteps"))).doesNotContain("payouts", "stripe-verification");
         Response resumed = post("/v1/applications/me", Map.of("kind", "SELLER"));
         assertThat(resumed.status()).isEqualTo(200);
         assertThat(resumed.text("/id")).isEqualTo(appId);
@@ -142,6 +144,21 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(strings(payouts.body().path("prefilledFields"))).contains("payouts.accountHolderName");
         assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/accounts/" + accountId + "/external_accounts"))
                 .anySatisfy(b -> assertThat(b).contains("external_account=btok_us_verified"));
+        assertThat(strings(payouts.body().path("completedSteps"))).contains("payouts");
+
+        // Without a client-side token the numbers go to Stripe once (as the payout account) and are never stored.
+        Response typed = put("/v1/applications/me/steps/payouts", Map.of("accountHolderName", "Adaeze Nwosu",
+                "accountType", "checking", "routingNumber", "021000021", "accountNumber", "000987654321",
+                "accountNumberConfirmation", "000987654321"));
+        assertThat(typed.status()).isEqualTo(200);
+        assertThat(typed.body().at("/payouts/externalAccountLinked").asBoolean()).isTrue();
+        assertThat(typed.body().toString()).doesNotContain("000987654321");
+        assertThat(jdbc.sql("select data::text from application where id = :id").param("id", appId)
+                .query(String.class).single()).doesNotContain("000987654321").doesNotContain("000123456789");
+        assertThat(StripeStub.bodies(STRIPE, "POST", "/v1/accounts/" + accountId + "/external_accounts"))
+                .anySatisfy(b -> assertThat(b).contains("external_account[routing_number]=021000021",
+                        "external_account[account_number]=000987654321",
+                        "external_account[account_holder_type]=individual"));
 
         Response plan = put("/v1/applications/me/steps/plan", Map.of("planCode", "seller_growth",
                 "cadence", "quarterly", "paymentMethodKind", "card", "stripePaymentMethodId", "pm_card_visa",
@@ -157,7 +174,8 @@ class OnboardingFlowIT extends SellerIntegrationTest {
 
         Map<String, Object> compliance = Map.of("categories", List.of("groceries"),
                 "foodPermit", Map.of("permitNumber", "FE-1001", "issuingAuthority", "Harris County",
-                        "expiresOn", "2027-12-31", "documentAssetId", "asset-permit-1"),
+                        "expiresOn", "2027-12-31", "documentAssetId", "asset-permit-1",
+                        "permitType", "FOOD_ESTABLISHMENT"),
                 "agreementsAccepted", true, "w9Certified", true, "w9SignerName", "Adaeze Nwosu");
         assertThat(put("/v1/applications/me/steps/catalog-compliance", compliance).status()).isEqualTo(200);
 
@@ -216,7 +234,8 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         assertThat(get("/v1/applications/me").text("/status")).isEqualTo("INFO_REQUESTED");
         Map<String, Object> newPermit = Map.of("categories", List.of("groceries"),
                 "foodPermit", Map.of("permitNumber", "FE-2002", "issuingAuthority", "Harris County",
-                        "expiresOn", "2028-06-30", "documentAssetId", "asset-permit-2"),
+                        "expiresOn", "2028-06-30", "documentAssetId", "asset-permit-2",
+                        "permitType", "FOOD_ESTABLISHMENT"),
                 "agreementsAccepted", true, "w9Certified", true, "w9SignerName", "Adaeze Nwosu");
         assertThat(put("/v1/applications/me/steps/catalog-compliance", newPermit).status()).isEqualTo(200);
         Response resubmitted = post("/v1/applications/me/submit", Map.of());

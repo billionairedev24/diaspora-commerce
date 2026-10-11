@@ -29,6 +29,7 @@ import com.afrotransact.seller.domain.OrgMember;
 import com.afrotransact.seller.domain.OrgStatus;
 import com.afrotransact.seller.domain.Organisation;
 import com.afrotransact.seller.domain.Owner;
+import com.afrotransact.seller.domain.PayoutInput;
 import com.afrotransact.seller.domain.PayoutSection;
 import com.afrotransact.seller.domain.PhoneNumbers;
 import com.afrotransact.seller.domain.Plan;
@@ -41,10 +42,12 @@ import com.afrotransact.seller.domain.TaxIdType;
 import com.afrotransact.seller.domain.TimelineEntry;
 import com.afrotransact.seller.domain.Validated;
 import com.afrotransact.seller.port.ApplicationRepository;
+import com.afrotransact.seller.port.BankAccountDetails;
 import com.afrotransact.seller.port.CallerProfile;
 import com.afrotransact.seller.port.CallerProfileProvider;
 import com.afrotransact.seller.port.FieldCipher;
 import com.afrotransact.seller.port.LaunchListRepository;
+import com.afrotransact.seller.port.LinkedBankAccount;
 import com.afrotransact.seller.port.OrganisationRepository;
 import com.afrotransact.seller.port.StripeConnectGateway;
 import com.afrotransact.platform.events.DomainEventPublisher;
@@ -389,22 +392,45 @@ class OnboardingServiceImpl implements OnboardingService {
         return data.withOwners(owners);
     }
 
+    /**
+     * Payouts: the bank account goes to Stripe as the connected account's payout account (a client-side token, or the
+     * numbers the applicant typed, sent once and never stored). The step is complete only once Stripe accepted it.
+     */
     private ApplicationData savePayouts(ApplicationData data, StepInput in) {
         if (in.payouts() == null) {
             throw missing("payouts");
         }
-        PayoutSection p = valid(rules.payouts(in.payouts(), data.payouts(), false));
-        String token = clean(in.payouts().externalAccountToken());
-        if (token != null) {
-            if (data.stripe() == null || data.stripe().accountId() == null) {
-                throw new SellerRuleViolation("seller.stripe-account-required",
-                        "Start Stripe verification before linking a payout bank account");
-            }
-            stripe.attachExternalAccount(data.stripe().accountId(), token);
-            p = new PayoutSection(p.accountHolderName(), p.accountType(), p.bankName(), p.routingLast4(),
-                    p.accountLast4(), true);
+        PayoutInput raw = in.payouts();
+        PayoutSection p = valid(rules.payouts(raw, data.payouts(), false));
+        String token = clean(raw.externalAccountToken());
+        String routing = clean(raw.routingNumber());
+        String account = clean(raw.accountNumber());
+        if (token == null && (routing == null || account == null)) {
+            return data.withPayouts(p);
         }
-        return data.withPayouts(p);
+        if (data.stripe() == null || data.stripe().accountId() == null) {
+            throw new SellerRuleViolation("seller.stripe-account-required",
+                    "Finish Stripe verification before adding your payout bank account",
+                    Map.of("payouts.externalAccount", "Finish Stripe verification first"));
+        }
+        if (p.accountHolderName() == null) {
+            throw new SellerRuleViolation("seller.invalid-application", "Some fields are invalid",
+                    Map.of("payouts.accountHolderName", "Required"));
+        }
+        String bankName = p.bankName();
+        String last4 = p.accountLast4();
+        if (token != null) {
+            stripe.attachExternalAccount(data.stripe().accountId(), token);
+        } else {
+            EntityType et = data.entityType();
+            String holderType = et == null || et == EntityType.SOLE_PROPRIETOR ? "individual" : "company";
+            LinkedBankAccount linked = stripe.attachBankAccount(data.stripe().accountId(),
+                    new BankAccountDetails(p.accountHolderName(), holderType, routing, account));
+            bankName = clean(linked.bankName()) != null ? linked.bankName() : bankName;
+            last4 = clean(linked.last4()) != null ? linked.last4() : last4;
+        }
+        return data.withPayouts(new PayoutSection(p.accountHolderName(), p.accountType(), bankName, p.routingLast4(),
+                last4, true));
     }
 
     private ApplicationView applicantView(Application app) {

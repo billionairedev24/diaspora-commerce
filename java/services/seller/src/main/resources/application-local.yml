@@ -6,6 +6,12 @@ at:
   seller:
     # POST /v1/orgs: staff provision approved demo organisations (make seed). Never on in uat or prod.
     provisioning-enabled: true
+    # With STRIPE_SECRET_KEY=sk_test_… onboarding uses Stripe test mode (embedded Connect onboarding). Without a key
+    # (mode auto) Stripe Connect and Billing are a local stand-in: Seller Center shows a labelled local verification,
+    # payout accounts and plan subscriptions are accepted and nothing reaches Stripe (LocalTestStripePolicy; refused
+    # on every other profile). STRIPE_MODE=stripe or local-test forces one or the other.
+    stripe:
+      mode: ${STRIPE_MODE:auto}
     crypto:
       keys:
         k1: ${FIELD_ENCRYPTION_KEY:ZGV2LW9ubHktZmllbGQta2V5LTMyLWJ5dGVzLWxvbiE=}

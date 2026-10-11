@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -178,11 +179,71 @@ class DefaultApplicationRulesTest {
                 "compliance.foodPermit", "compliance.beautyLabellingConfirmed", "compliance.agreementsAccepted",
                 "compliance.w9Certified");
         ComplianceSection complete = new ComplianceSection(List.of("groceries"), new ComplianceSection.FoodPermit(
-                "FE-1", "Harris County", TODAY.plusYears(1), "asset-permit"), null, List.of(), null, true, true, "Ade");
+                "FE-1", "Harris County", TODAY.plusYears(1), "asset-permit", "COTTAGE_FOOD"), null, List.of(), null, true, true, "Ade");
         assertThat(rules.compliance(complete, Offering.PRODUCTS, SELLER, true).errors()).isEmpty();
     }
 
+    @Test
+    void ownersNeedTitleEmailBirthDateAndHomeAddressOnlyWhenComplete() {
+        Owner bare = new Owner("Kofi", "Mensah", null, null, BigDecimal.valueOf(100), true, null, null);
+        assertThat(rules.owners(List.of(bare), EntityType.CORPORATION, SELLER, false).errors()).isEmpty();
+        assertThat(rules.owners(List.of(bare), EntityType.CORPORATION, SELLER, true).errors()).containsOnlyKeys(
+                "owners[0].title", "owners[0].email", "owners[0].dateOfBirth", "owners[0].address");
+        Owner badAddress = new Owner("Kofi", "Mensah", "CEO", "kofi@example.com", BigDecimal.valueOf(100), true,
+                LocalDate.of(1980, 2, 2), new Address("1 Main St", null, "Houston", "Texas", "7704", "US"));
+        assertThat(rules.owners(List.of(badAddress), EntityType.CORPORATION, SELLER, false).errors())
+                .containsOnlyKeys("owners[0].address.state", "owners[0].address.postalCode");
+    }
+
+    @Test
+    void payoutsAreCompleteOnlyOnceStripeLinkedTheBankAccount() {
+        RuleContext ctx = SELLER;
+        ApplicationData prefilledHolder = ApplicationData.empty().withPayouts(new PayoutSection("Adaeze Okafor", null,
+                null, null, null, false));
+        assertThat(rules.completedSteps(prefilledHolder, Optional.empty(), ctx)).doesNotContain(OnboardingStep.PAYOUTS);
+        assertThat(rules.submission(prefilledHolder, Optional.empty(), ctx)).containsKey("payouts.externalAccount");
+        ApplicationData typedNotLinked = ApplicationData.empty().withPayouts(new PayoutSection("Adaeze Okafor",
+                "checking", "Chase", "0021", "6789", false));
+        assertThat(rules.completedSteps(typedNotLinked, Optional.empty(), ctx)).doesNotContain(OnboardingStep.PAYOUTS);
+        ApplicationData linked = ApplicationData.empty().withPayouts(new PayoutSection("Adaeze Okafor", "checking",
+                "Chase", "0021", "6789", true));
+        assertThat(rules.completedSteps(linked, Optional.empty(), ctx)).contains(OnboardingStep.PAYOUTS);
+    }
+
+    @Test
+    void stripeVerificationIsCompleteOnlyWhenStripeHasNothingDue() {
+        Instant now = Instant.parse("2026-10-10T12:00:00Z");
+        assertThat(DefaultApplicationRules.stripeErrors(null)).containsOnlyKeys("stripe.account");
+        assertThat(DefaultApplicationRules.stripeErrors(StripeVerification.created("acct_1", now)))
+                .containsOnlyKeys("stripe.detailsSubmitted");
+        StripeVerification due = new StripeVerification("acct_1", true, false, false, "pending", "pending",
+                List.of("individual.verification.document"), null, now);
+        assertThat(DefaultApplicationRules.stripeErrors(due)).containsOnlyKeys("stripe.currentlyDue");
+        StripeVerification rejected = new StripeVerification("acct_1", true, false, false, "unverified", "failed",
+                List.of(), "rejected.fraud", now);
+        assertThat(DefaultApplicationRules.stripeErrors(rejected)).containsOnlyKeys("stripe.account");
+        StripeVerification pending = new StripeVerification("acct_1", true, true, false, "pending", "pending",
+                List.of(), null, now);
+        assertThat(DefaultApplicationRules.stripeErrors(pending)).as("still verifying is not the applicant's job")
+                .isEmpty();
+    }
+
+    @Test
+    void foodPermitNeedsAKnownType() {
+        ComplianceSection.FoodPermit noType = new ComplianceSection.FoodPermit("FE-1", null, TODAY.plusYears(1),
+                "asset-permit", null);
+        ComplianceSection c = new ComplianceSection(List.of("prepared_food"), noType, null, List.of(), null, true,
+                true, "Ade");
+        assertThat(rules.compliance(c, Offering.PRODUCTS, SELLER, true).errors())
+                .containsOnlyKeys("compliance.foodPermit.permitType");
+        ComplianceSection.FoodPermit odd = new ComplianceSection.FoodPermit("FE-1", null, TODAY.plusYears(1),
+                "asset-permit", "LIQUOR");
+        assertThat(rules.compliance(new ComplianceSection(List.of("groceries"), odd, null, List.of(), null, null, null,
+                null), Offering.PRODUCTS, SELLER, false).errors()).containsOnlyKeys("compliance.foodPermit.permitType");
+    }
+
     private static Owner owner(String name, int pct, boolean control) {
-        return new Owner(name, "Ade", "Owner", null, BigDecimal.valueOf(pct), control, LocalDate.of(1981, 1, 1));
+        return new Owner(name, "Ade", "Owner", name.toLowerCase() + "@example.com", BigDecimal.valueOf(pct), control,
+                LocalDate.of(1981, 1, 1), ADDRESS);
     }
 }
