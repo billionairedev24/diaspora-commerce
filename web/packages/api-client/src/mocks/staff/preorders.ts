@@ -27,6 +27,7 @@ import {
   type PlaceList,
   type PreorderAreaPage,
   type PreorderAreaRow,
+  type PreorderBulkSwitch,
   type PreorderChannel,
   PreorderChannelSchema,
   preorderChecks,
@@ -36,6 +37,7 @@ import {
   type PreorderOrder,
   type PreorderOrderPage,
   PreorderOrderStatusSchema,
+  type PreorderRegion,
   type PreorderSettings,
   PreorderSettingsSchema,
   preorderStatus,
@@ -44,7 +46,10 @@ import {
   type PreorderWindowInput,
   PreorderWindowInputSchema,
   ratioOff,
+  regionAreas,
   setAreasOn,
+  strandedTargets,
+  switchStateOf,
   tabOf,
   toCsvText,
   windowAreaOn
@@ -283,6 +288,8 @@ export function windowView(s: MockPreorderState, w: MockPreorderWindow): Preorde
     effectivePickupFee: fees.pickup,
     status: statusOf(s, w),
     areaOff: areaOffOf(s, w),
+    switchState: switchStateOf({ draft: w.draft, active: w.active, status: statusOf(s, w) }, s.settings.enabled, windowAreaOn(s.areas, w.targets)),
+    switchable: switchStateOf({ draft: w.draft, active: w.active, status: statusOf(s, w) }, true, true) !== 'NOT_LIVE',
     orderCount: paid.length,
     revenue: paid.reduce((a, o) => a + o.total, 0),
     creatives: CREATIVE_SLOTS.flatMap((sl) => w.creatives.filter((c) => c.slot === sl.slot))
@@ -291,7 +298,10 @@ export function windowView(s: MockPreorderState, w: MockPreorderWindow): Preorde
 
 const rowOf = (s: MockPreorderState, w: MockPreorderWindow): PreorderListRow => {
   const v = windowView(s, w);
-  return { id: v.id, code: v.code, name: v.name, where: v.where, opensAt: v.opensAt, closesAt: v.closesAt, deliversOn: v.deliversOn, status: v.status, areaOff: v.areaOff, orderCount: v.orderCount, revenue: v.revenue, currency: v.currency };
+  return {
+    id: v.id, code: v.code, name: v.name, where: v.where, opensAt: v.opensAt, closesAt: v.closesAt, deliversOn: v.deliversOn, status: v.status, areaOff: v.areaOff,
+    orderCount: v.orderCount, revenue: v.revenue, currency: v.currency, active: v.active, switchable: v.switchable, switchState: v.switchState, version: v.version
+  };
 };
 
 function summary(s: MockPreorderState, w: MockPreorderWindow): PreorderSummary {
@@ -392,6 +402,26 @@ const ordersCsv = (w: MockPreorderWindow, list: PreorderOrder[]) =>
   ]);
 
 /* Coverage areas (drill-down country → region → area) */
+
+/** FNV-1a of the region's rows: changes whenever a row is added, removed or switched. */
+function regionVersion(rows: CoverageArea[]): number {
+  let h = 2166136261;
+  for (const ch of rows.map((a) => `${a.key.toLowerCase()}|${a.on}`).join(';')) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return h >>> 0;
+}
+
+function regionOf(s: MockPreorderState, country: string, region: string): PreorderRegion {
+  const rows = regionAreas(s.areas, country, region);
+  const live = s.windows.filter((w) => !w.draft && statusOf(s, w) !== 'DELIVERED');
+  const sellers = (a: CoverageArea) => live.filter((w) => w.targets.some((t) => keyWithin(t, a.key) || keyWithin(a.key, t))).map((w) => w.name);
+  const regionName = GEO[country]?.regions[region]?.name ?? region;
+  const toRow = (a: CoverageArea) => ({ key: a.key, name: a.city ?? `Every city in ${regionName}`, on: a.on, version: 0, windows: sellers(a) });
+  const whole = rows.find((a) => !a.city);
+  return {
+    country, region, countryName: countryName(country), regionName, regionLabel: GEO[country]?.regionLabel ?? 'State',
+    wholeRegion: whole ? toRow(whole) : null, cities: rows.filter((a) => a.city).map(toRow), version: regionVersion(rows)
+  };
+}
 
 function areaPage(s: MockPreorderState, country: string | null, region: string | null, q: string, page: number): PreorderAreaPage {
   const A = s.areas;
@@ -556,6 +586,16 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
       if (!st(ctx).areas.some((a) => a.key === k)) st(ctx).areas.push(areaFromKey(k));
     });
   };
+  /** Sets one window's own switch (never the master switch): switched, unchanged, or skipped (draft / delivered). */
+  const switchOne = (ctx: PreorderCtx, w: MockPreorderWindow, active: boolean): 'switched' | 'unchanged' | 'skipped' => {
+    const st0 = statusOf(st(ctx), w);
+    if (w.draft || st0 === 'DELIVERED') return 'skipped';
+    if (w.active === active) return 'unchanged';
+    w.active = active;
+    w.version += 1;
+    audit(ctx, active ? 'preorder.window.resumed' : 'preorder.window.paused', w.id, `Switched ${active ? 'on' : 'off'} ${w.name}`);
+    return 'switched';
+  };
   const ordersQuery = (ctx: PreorderCtx): OrdersFilter & { page: number; size: number } => {
     const qs = new URL(ctx.request.url).searchParams;
     const status = qs.get('status') ?? '';
@@ -677,6 +717,67 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         audit(ctx, 'preorder.area.removed', key, `${areaLabel(key)} removed from pre-order areas`);
         const a = areaFromKey(key);
         return areaPage(s, a.country, a.region, '', 0);
+      })
+    ),
+    http.get(
+      `${W}/preorders/areas/regions/:country/:region`,
+      route((ctx, p) => {
+        view(ctx);
+        return withEtag(regionOf(st(ctx), String(p.country ?? '').toUpperCase(), String(p.region ?? '').toUpperCase()));
+      })
+    ),
+    http.put(
+      `${W}/preorders/areas/regions/:country/:region`,
+      route(async (ctx, p) => {
+        const b = await json(ctx.request, z.object({ everyCity: z.boolean().nullable().default(null), cities: z.array(z.object({ city: z.string().trim().min(1).max(80).regex(/^[^/]+$/), on: z.boolean() })).max(2000) }));
+        manage(ctx);
+        const s = st(ctx);
+        const c = String(p.country ?? '').toUpperCase();
+        const r = String(p.region ?? '').toUpperCase();
+        ifMatch(ctx, regionOf(s, c, r).version);
+        const want: CoverageArea[] = [];
+        if (b.everyCity !== null) want.push(areaFromKey(`${c}/${r}`, b.everyCity));
+        const seen = new Map<string, CoverageArea>();
+        b.cities.forEach((x) => seen.set(x.city.toLowerCase(), areaFromKey(`${c}/${r}/${x.city}`, x.on)));
+        want.push(...seen.values());
+        const after = s.areas.filter((a) => !(a.country === c && a.region === r)).concat(want);
+        const live = s.windows.filter((w) => !w.draft && statusOf(s, w) !== 'DELIVERED');
+        const stranded = strandedTargets(s.areas, after, live.flatMap((w) => w.targets));
+        if (stranded.length) {
+          const names = live.filter((w) => w.targets.some((t) => stranded.includes(t))).map((w) => w.name);
+          throw problem(409, 'delivery-runs.area-in-use', 'Area in use', `${stranded.map(areaLabel).join(', ')} can’t be removed while ${names.join(', ')} ${names.length > 1 ? 'sell' : 'sells'} there. Switch it off instead, or change those pre-orders first.`);
+        }
+        s.areas = after;
+        audit(ctx, 'preorder.areas.changed', `${c}/${r}`, `Pre-order coverage of ${c}/${r} edited`);
+        return withEtag(regionOf(s, c, r));
+      })
+    ),
+    http.patch(
+      `${W}/preorders`,
+      route(async (ctx): Promise<PreorderBulkSwitch> => {
+        const b = await json(ctx.request, z.object({ ids: z.array(z.string()).min(1).max(100), active: z.boolean() }));
+        manage(ctx);
+        const s = st(ctx);
+        const items = b.ids.map((id) => {
+          const w = s.windows.find((x) => x.id === id);
+          if (!w) return { id, outcome: 'SKIPPED' as const, window: null, code: 'delivery-runs.preorder-not-found', reason: 'Pre-order not found' };
+          const sw = switchOne(ctx, w, b.active);
+          if (sw === 'skipped') return { id, outcome: 'SKIPPED' as const, window: rowOf(s, w), code: 'delivery-runs.invalid-transition', reason: w.draft ? 'A draft has no switch; publish it first' : 'A delivered pre-order cannot be switched' };
+          return { id, outcome: sw === 'switched' ? ('SWITCHED' as const) : ('UNCHANGED' as const), window: rowOf(s, w), code: null, reason: null };
+        });
+        const n = (o: string) => items.filter((i) => i.outcome === o).length;
+        return { items, switched: n('SWITCHED'), unchanged: n('UNCHANGED'), skipped: n('SKIPPED') };
+      })
+    ),
+    http.patch(
+      `${W}/preorders/:id`,
+      route(async (ctx, p) => {
+        const b = await json(ctx.request, z.object({ active: z.boolean() }));
+        manage(ctx);
+        const w = windowOf(ctx, p.id);
+        if (ctx.request.headers.get('if-match')) ifMatch(ctx, w.version);
+        if (switchOne(ctx, w, b.active) === 'skipped') throw problem(409, 'delivery-runs.invalid-transition', 'Invalid transition', w.draft ? 'A draft has no switch; publish it first.' : 'A delivered pre-order cannot be switched.');
+        return withEtag(windowView(st(ctx), w));
       })
     ),
     http.get(

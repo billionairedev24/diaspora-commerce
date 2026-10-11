@@ -17,6 +17,7 @@ import { fD, fDT, fS, href, money2, num, STATUS_PILL, wholeMoney } from './model
 import { ByDayChart, channelRows, HBars } from './PreorderCharts';
 import { PreorderOrders } from './PreorderOrders';
 import { outlineButton, Pill, smallButton, usePreorderAccess,usePreordersApi } from './primitives';
+import { switchText, WindowSwitchToggle } from './WindowSwitch';
 
 type DetailTab = 'overview' | 'orders' | 'creatives' | 'analytics';
 const TABS: DetailTab[] = ['overview', 'orders', 'creatives', 'analytics'];
@@ -154,14 +155,18 @@ export function PreorderDetail({ id }: { id: string }) {
   const [ordersKey, setOrdersKey] = useState(0);
   const query = useQuery(staffPreorderQueries.window(api, id));
   const summary = useQuery(staffPreorderQueries.summary(api, id));
+  /** Pause / Resume = this pre-order's own switch (PATCH {active}); the global switch is never touched. */
   const pause = useMutation({
-    mutationFn: (w: PreorderWindow) => (w.active ? api.pause(w.id) : api.resume(w.id)),
+    mutationFn: (w: PreorderWindow) => api.setActive(w.id, !w.active, w.version),
     onSuccess: (w) => {
       qc.setQueryData(staffPreorderKeys.window(w.id), w);
       void qc.invalidateQueries({ queryKey: staffPreorderKeys.lists() });
       toast.show(w.active ? `${w.name} resumed` : `${w.name} paused`);
     },
-    onError: (e) => toast.show(problemMessage(e), 'error')
+    onError: (e) => {
+      void qc.invalidateQueries({ queryKey: staffPreorderKeys.window(id) });
+      toast.show(problemMessage(e), 'error');
+    }
   });
   const exportCsv = async (kind: PreorderExportKind) => {
     try {
@@ -187,7 +192,12 @@ export function PreorderDetail({ id }: { id: string }) {
             <Pill className={STATUS_PILL[w.status]} testId="detail-status">
               {PREORDER_STATUS_LABEL[w.status]}
             </Pill>
-            {w.areaOff && w.status !== 'DRAFT' && w.status !== 'DELIVERED' ? <Pill className="bg-red-50 text-red-700">Area off</Pill> : null}
+            {w.switchState === 'GLOBAL_OFF' || w.switchState === 'AREA_OFF' ? (
+              <Pill className="bg-red-50 text-red-700" testId="detail-switch-held">
+                {switchText(w)}
+              </Pill>
+            ) : null}
+            {w.switchable ? <WindowSwitchToggle w={w} size="md" className="ml-1" /> : null}
           </span>
           <span className="text-sm text-muted">
             <MapPin aria-hidden className="inline align-[-2px]" /> {`${w.where} · Opens ${fDT(w.opensAt)} · Closes ${fDT(w.closesAt)} · Delivers ${fD(w.deliversOn)}`}

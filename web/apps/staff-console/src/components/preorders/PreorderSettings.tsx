@@ -14,7 +14,7 @@ import {
   type PreorderSettingsInput
 } from '@afrotransact/api-client/staff-preorders';
 import { cx, useToast } from '@afrotransact/ui';
-import { CaretRight, FunnelSimple, ListChecks, Package, X } from '@phosphor-icons/react/ssr';
+import { CaretRight, FunnelSimple, ListChecks, Package, PencilSimple, X } from '@phosphor-icons/react/ssr';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
@@ -23,6 +23,7 @@ import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 import { AreaPicker } from './AreaPicker';
 import { amountText, NO_SETTINGS_TITLE, parseAmount } from './model';
 import { controlClass, labelClass, smallButton, Toggle, usePreorderAccess, usePreordersApi } from './primitives';
+import { RegionCoverageEditor, RegionEditorLauncher } from './RegionEditor';
 
 const FALLBACKS: [PreorderFallback, typeof Package, string, string][] = [
   ['SHIP', Package, 'Ship by UPS Ground', 'Shoppers can still buy, at the quoted rate (3–5 days).'],
@@ -73,6 +74,7 @@ function Areas({ canEdit, canAdd }: { canEdit: boolean; canAdd: boolean }) {
   const [q, setQ] = useState('');
   const [page, setPage] = useState(0);
   const [free, setFree] = useState('');
+  const [editing, setEditing] = useState<{ c: string; r: string } | null>(null);
   const query = useQuery(staffPreorderQueries.areas(api, { country: nav.c, region: nav.r, q: q.trim() || undefined, page }));
   const root = useQuery(staffPreorderQueries.areas(api, { page: 0 }));
   const refresh = () => qc.invalidateQueries({ queryKey: staffPreorderKeys.all });
@@ -144,6 +146,11 @@ function Areas({ canEdit, canAdd }: { canEdit: boolean; canAdd: boolean }) {
           </button>
         </form>
       </div>
+      <div className="flex max-w-[760px] flex-col gap-1 rounded-md border border-border bg-ink-25 p-3">
+        <span className="text-xs font-semibold text-muted">Edit a state&apos;s or province&apos;s cities in place: add or remove many at once, switch each on or off.</span>
+        <RegionEditorLauncher onOpen={(c, r) => setEditing({ c, r })} disabled={!canAdd} />
+      </div>
+      {editing ? <RegionCoverageEditor key={`${editing.c}/${editing.r}`} country={editing.c} region={editing.r} canEdit={canAdd} onClose={() => setEditing(null)} /> : null}
       <div className="flex flex-col overflow-hidden rounded-md border border-border">
         <div className="flex flex-wrap items-center gap-2 bg-ink-50 px-3 py-2">
           <nav aria-label="Area level" className="flex flex-wrap items-center gap-1 text-sm">
@@ -238,9 +245,24 @@ function Areas({ canEdit, canAdd }: { canEdit: boolean; canAdd: boolean }) {
                         <X aria-hidden />
                       </button>
                     ) : (
-                      <button type="button" onClick={open} aria-label={`Open ${a.name}`} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent text-ink-500">
-                        <CaretRight aria-hidden />
-                      </button>
+                      <span className="flex items-center">
+                        {a.key.includes('/') ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const [c, r] = a.key.split('/');
+                              if (c && r) setEditing({ c, r });
+                            }}
+                            aria-label={`Edit cities in ${a.name}`}
+                            className="size-7 cursor-pointer rounded-sm border-0 bg-transparent text-ink-500"
+                          >
+                            <PencilSimple aria-hidden />
+                          </button>
+                        ) : null}
+                        <button type="button" onClick={open} aria-label={`Open ${a.name}`} className="size-7 cursor-pointer rounded-sm border-0 bg-transparent text-ink-500">
+                          <CaretRight aria-hidden />
+                        </button>
+                      </span>
                     )}
                   </td>
                 </tr>

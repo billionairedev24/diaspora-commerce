@@ -52,6 +52,18 @@ export type PlacementKey = z.infer<typeof PlacementKeySchema>;
 
 /* ── Labels (design copy) ──────────────────────────────── */
 
+/**
+ * Effective state of a window = master switch AND its own switch AND an area on. PAUSED = the window's own switch is
+ * off; GLOBAL_OFF = the master switch holds it; AREA_OFF = every target area is off; NOT_LIVE = draft or delivered.
+ */
+export const PreorderSwitchStateSchema = z.enum(['ON', 'PAUSED', 'GLOBAL_OFF', 'AREA_OFF', 'NOT_LIVE']);
+export type PreorderSwitchState = z.infer<typeof PreorderSwitchStateSchema>;
+
+/** What the list and detail say about a window's switch ("Off" is the window's own switch, distinct from the global one). */
+export const PREORDER_SWITCH_LABEL: Record<PreorderSwitchState, string> = {
+  ON: 'On', PAUSED: 'Off', GLOBAL_OFF: 'Off (global switch)', AREA_OFF: 'Area off', NOT_LIVE: '—'
+};
+
 export const PREORDER_STATUS_LABEL: Record<PreorderStatus, string> = {
   OPEN: 'Open', UPCOMING: 'Scheduled', CLOSED: 'Closed · delivering', DELIVERED: 'Delivered', DRAFT: 'Draft', PAUSED: 'Paused'
 };
@@ -161,8 +173,12 @@ export const PreorderWindowSchema = z.object({
   draft: z.boolean(),
   active: z.boolean(),
   status: PreorderStatusSchema,
-  /** True when the master switch or every target area is off (the list shows "Area off"). */
+  /** True when the master switch or every target area is off. */
   areaOff: z.boolean(),
+  /** Published and not delivered: the window has its own on/off switch. */
+  switchable: z.boolean().default(false),
+  /** Which switch holds the window off the storefront (ON when live). */
+  switchState: PreorderSwitchStateSchema.default('NOT_LIVE'),
   creatives: z.array(PreorderCreativeSchema),
   orderCount: z.number().int(),
   revenue: z.number().int(),
@@ -172,8 +188,9 @@ export const PreorderWindowSchema = z.object({
 export type PreorderWindow = z.infer<typeof PreorderWindowSchema>;
 
 export const PreorderListRowSchema = PreorderWindowSchema.pick({
-  id: true, code: true, name: true, where: true, opensAt: true, closesAt: true, deliversOn: true, status: true, areaOff: true, orderCount: true, revenue: true, currency: true
-});
+  id: true, code: true, name: true, where: true, opensAt: true, closesAt: true, deliversOn: true, status: true, areaOff: true, orderCount: true, revenue: true, currency: true,
+  active: true, switchable: true, switchState: true, version: true
+}).extend({ active: z.boolean().default(true), version: z.number().int().default(0) });
 export type PreorderListRow = z.infer<typeof PreorderListRowSchema>;
 
 export const PreorderListSchema = z.object({
@@ -341,6 +358,50 @@ export const PreorderAreaPageSchema = z.object({
   saved: z.array(PreorderTargetSchema)
 });
 export type PreorderAreaPage = z.infer<typeof PreorderAreaPageSchema>;
+
+export const PreorderSwitchOutcomeSchema = z.object({
+  id: z.string(),
+  outcome: z.enum(['SWITCHED', 'UNCHANGED', 'SKIPPED']),
+  window: PreorderListRowSchema.partial().nullable().default(null),
+  code: z.string().nullable().default(null),
+  reason: z.string().nullable().default(null)
+});
+export const PreorderBulkSwitchSchema = z.object({
+  items: z.array(PreorderSwitchOutcomeSchema),
+  switched: z.number().int(),
+  unchanged: z.number().int(),
+  skipped: z.number().int()
+});
+export type PreorderBulkSwitch = z.infer<typeof PreorderBulkSwitchSchema>;
+
+export const PreorderRegionRowSchema = z.object({
+  key: z.string(),
+  name: z.string(),
+  on: z.boolean(),
+  version: z.number().int(),
+  /** Live pre-orders selling here: removing the row is refused while they do. */
+  windows: z.array(z.string())
+});
+export type PreorderRegionRow = z.infer<typeof PreorderRegionRowSchema>;
+
+/** One state's / province's coverage for the in-place editor; `version` goes back as If-Match. */
+export const PreorderRegionSchema = z.object({
+  country: z.string(),
+  region: z.string(),
+  countryName: z.string(),
+  regionName: z.string(),
+  regionLabel: z.string(),
+  wholeRegion: PreorderRegionRowSchema.nullable(),
+  cities: z.array(PreorderRegionRowSchema),
+  version: z.number().int()
+});
+export type PreorderRegion = z.infer<typeof PreorderRegionSchema>;
+
+/** Body of PUT …/areas/regions/{country}/{region}: the region as it should be (cities left out are removed). */
+export interface PreorderRegionInput {
+  everyCity: boolean | null;
+  cities: { city: string; on: boolean }[];
+}
 
 export const PlaceTypeSchema = z.enum(['COUNTRY', 'REGION', 'CITY']);
 export const PlaceSchema = z.object({ key: z.string(), code: z.string(), name: z.string(), label: z.string(), sub: z.string(), type: PlaceTypeSchema });
@@ -553,6 +614,35 @@ export const setAreasOn = (areas: CoverageArea[], keys: string[], on: boolean): 
   areas.map((a) => (keys.some((k) => keyWithin(a.key, k)) ? { ...a, on } : a));
 
 /** Whether a window still reaches shoppers in at least one target (city targets use areaOn; region targets need their own row on). */
+/**
+ * The design's effective state: master switch AND the window's own switch AND an area on. The window's own switch is
+ * read first, so a paused window says "Off" whatever the master switch says; the master switch never rewrites it.
+ */
+export function switchStateOf(w: { draft: boolean; active: boolean; status: PreorderStatus }, masterOn: boolean, anyAreaOn: boolean): PreorderSwitchState {
+  if (w.draft || w.status === 'DRAFT' || w.status === 'DELIVERED') return 'NOT_LIVE';
+  if (!w.active) return 'PAUSED';
+  if (!masterOn) return 'GLOBAL_OFF';
+  if (!anyAreaOn) return 'AREA_OFF';
+  return 'ON';
+}
+
+/** Rows of one region ("Every city" first, then cities by name). */
+export const regionAreas = (areas: CoverageArea[], country: string, region: string): CoverageArea[] =>
+  areas
+    .filter((a) => a.country === country && a.region === region)
+    .sort((a, b) => (a.city ? 1 : 0) - (b.city ? 1 : 0) || String(a.city ?? '').localeCompare(String(b.city ?? '')));
+
+/** Whether a row decides a target's switch: its own row, or for a city its region's "Every city" row. */
+export function areaGoverns(areas: CoverageArea[], target: string): boolean {
+  const t = areaFromKey(target);
+  const same = (a: CoverageArea) => a.key.toLowerCase() === t.key.toLowerCase();
+  return areas.some(same) || (!!t.city && areas.some((a) => a.country === t.country && a.region === t.region && !a.city));
+}
+
+/** Targets that `after` no longer covers at all (removed, not just switched off). */
+export const strandedTargets = (before: CoverageArea[], after: CoverageArea[], liveTargets: string[]): string[] =>
+  [...new Set(liveTargets.filter((t) => areaGoverns(before, t) && !areaGoverns(after, t)))];
+
 export const windowAreaOn = (areas: CoverageArea[], targets: string[]): boolean =>
   targets.some((k) => {
     const a = areaFromKey(k);
@@ -719,6 +809,11 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
     publish: (id: string): Promise<PreorderWindow> => request(`${P}/${enc(id)}/publish`, PreorderWindowSchema, { method: 'POST' }),
     pause: (id: string): Promise<PreorderWindow> => request(`${P}/${enc(id)}/pause`, PreorderWindowSchema, { method: 'POST' }),
     resume: (id: string): Promise<PreorderWindow> => request(`${P}/${enc(id)}/resume`, PreorderWindowSchema, { method: 'POST' }),
+    /** The window's own on/off switch (never the master switch). Idempotent; 409 for drafts and delivered windows. */
+    setActive: (id: string, active: boolean, version?: number): Promise<PreorderWindow> =>
+      request(`${P}/${enc(id)}`, PreorderWindowSchema, { method: 'PATCH', body: { active }, headers: version === undefined ? undefined : ifMatch(version) }),
+    /** Switch several windows on or off, each on its own (SWITCHED / UNCHANGED / SKIPPED with the reason). */
+    setActiveMany: (ids: string[], active: boolean): Promise<PreorderBulkSwitch> => request(P, PreorderBulkSwitchSchema, { method: 'PATCH', body: { ids, active } }),
     setCreative: (id: string, slot: CreativeSlot, assetId: string): Promise<PreorderWindow> =>
       request(`${P}/${enc(id)}/creatives/${slot}`, PreorderWindowSchema, { method: 'PUT', body: { assetId } }),
     removeCreative: (id: string, slot: CreativeSlot): Promise<PreorderWindow> => request(`${P}/${enc(id)}/creatives/${slot}`, PreorderWindowSchema, { method: 'DELETE' }),
@@ -743,6 +838,11 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
     /** Bulk switch every area at or under each key (a country, a region or one area). */
     setAreas: (keys: string[], on: boolean): Promise<PreorderAreaPage> => request(`${P}/areas`, PreorderAreaPageSchema, { method: 'PATCH', body: { keys, on } }),
     removeArea: (key: string): Promise<PreorderAreaPage> => request(`${P}/areas/${enc(key)}`, PreorderAreaPageSchema, { method: 'DELETE' }),
+    region: (country: string, region: string, signal?: AbortSignal): Promise<PreorderRegion> =>
+      request(`${P}/areas/regions/${enc(country)}/${enc(region)}`, PreorderRegionSchema, { signal }),
+    /** Replaces the region's cities in place; 412 when anyone changed the region since `version`, 409 area-in-use. */
+    updateRegion: (country: string, region: string, body: PreorderRegionInput, version: number): Promise<PreorderRegion> =>
+      request(`${P}/areas/regions/${enc(country)}/${enc(region)}`, PreorderRegionSchema, { method: 'PUT', body, headers: ifMatch(version) }),
     places: (q: PlacesQuery, signal?: AbortSignal): Promise<PlaceList> =>
       request(`${P}/places/search`, PlaceListSchema, { query: { country: q.country, region: q.region, q: q.q || undefined }, signal }),
     /** URL of a CSV export (the BFF streams it; `preorders:export`). */
@@ -785,6 +885,7 @@ export const staffPreorderKeys = {
   settings: () => [...staffPreorderKeys.all, 'settings'] as const,
   areas: () => [...staffPreorderKeys.all, 'areas'] as const,
   areaPage: (q: PreorderAreasQuery) => [...staffPreorderKeys.areas(), q] as const,
+  region: (country: string, region: string) => [...staffPreorderKeys.areas(), 'region', country, region] as const,
   places: (q: PlacesQuery) => [...staffPreorderKeys.all, 'places', q] as const
 };
 
@@ -801,6 +902,8 @@ export const staffPreorderQueries = {
   settings: (api: StaffPreordersApi) => queryOptions({ queryKey: staffPreorderKeys.settings(), queryFn: ({ signal }) => api.getSettings(signal), staleTime: 15_000 }),
   areas: (api: StaffPreordersApi, q: PreorderAreasQuery) =>
     queryOptions({ queryKey: staffPreorderKeys.areaPage(q), queryFn: ({ signal }) => api.areas(q, signal), placeholderData: keepPreviousData, staleTime: 10_000 }),
+  region: (api: StaffPreordersApi, country: string, region: string) =>
+    queryOptions({ queryKey: staffPreorderKeys.region(country, region), queryFn: ({ signal }) => api.region(country, region, signal), staleTime: 5_000 }),
   places: (api: StaffPreordersApi, q: PlacesQuery) =>
     queryOptions({ queryKey: staffPreorderKeys.places(q), queryFn: ({ signal }) => api.places(q, signal), staleTime: 5 * 60_000 })
 };
