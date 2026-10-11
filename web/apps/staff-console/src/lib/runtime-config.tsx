@@ -25,5 +25,5 @@ export function useStorefrontUrl(): string {
 
 /** Developer portal origin of this environment (DOCS_PORTAL_URL; http://localhost:3100 locally). */
 export function useDocsUrl(): string {
-  return useContext(RuntimeConfigContext).docsUrl ?? 'https://developers.afrotransact.com';
+  return useContext(RuntimeConfigContext).docsUrl ?? 'http://localhost:3100';
 }

@@ -86,6 +86,9 @@ EXCEPTIONS: tuple[Exception_, ...] = (
     Exception_("go/services/gateway-bff/internal/domain/account.go",
                r'StaffEmailDomain = "afrotransact\.com"',
                "staff email domain (an email domain, not a host): staff work emails are read-only in My account"),
+    Exception_("web/apps/staff-console/src/lib/config.ts",
+               r"https://developers\.afrotransact\.com",
+               "public developer portal (canonical in every environment); DOCS_PORTAL_URL overrides"),
     Exception_("java/libs/platform-web/src/main/java/com/afrotransact/platform/web/docs/ApiDocsProperties.java",
                r'DEVELOPER_PORTAL_URL = "https://developers\.afrotransact\.com"',
                "public developer portal (canonical in every environment; home of the problem types); "
@@ -219,7 +222,7 @@ def iter_files(root: Path, targets: list[Path], excludes: list[str]):
             yield target
             continue
         for dirpath, dirnames, filenames in os.walk(target):
-            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS)
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".next-"))
             for f in sorted(filenames):
                 yield Path(dirpath) / f
 
@@ -253,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         seen.add(rel)
         if rel.startswith(SKIP_PREFIXES) or any((rel + "/").startswith(e) for e in excludes):
             continue
-        if any(part in SKIP_DIRS for part in rel.split("/")[:-1]):
+        if any(part in SKIP_DIRS or part.startswith(".next-") for part in rel.split("/")[:-1]):
             continue
         cls = classify(rel)
         if cls is None:
