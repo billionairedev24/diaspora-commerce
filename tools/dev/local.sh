@@ -422,10 +422,30 @@ pool_env() {
   fi
 }
 
+# Fingerprint of a service's build (the Java jar or the Go binary): `up` restarts a running service whose build
+# changed since it started, so new code and routes (a pull, another branch) are never served by an old process.
+artifact_of() {
+  if [[ "$(runtime_of "$1")" == java ]]; then
+    { ls "$ROOT"/java/services/"$1"/target/"$1"-service-*.jar 2>/dev/null || true; } | grep -v -- '-plain' | head -1 || true
+  else
+    echo "$BIN/$1"
+  fi
+}
+build_sig() {
+  local f; f=$(artifact_of "$1")
+  if [[ -n "$f" && -f "$f" ]]; then cksum <"$f" | awk '{print $1 "-" $2}'; fi
+}
+
 start() {
   local svc=$1 jar
   mkdir -p "$LOGS" "$PIDS"
-  if running "$svc"; then echo "  · $svc already running (pid $(cat "$PIDS/$svc.pid"))"; return 0; fi
+  if running "$svc"; then
+    if [[ -f "$PIDS/$svc.sig" && "$(cat "$PIDS/$svc.sig")" == "$(build_sig "$svc")" ]]; then
+      echo "  · $svc already running (pid $(cat "$PIDS/$svc.pid"))"; return 0
+    fi
+    echo "  · $svc was rebuilt since it started: restarting"
+    stop "$svc"
+  fi
   telemetry_env
   pool_env "$svc"
   # Browser origins allowed to call services directly: the Expo web previews of the mobile apps (Java services read
@@ -459,6 +479,7 @@ start() {
       APP_ENV=local nohup "$BIN/$svc" >>"$LOGS/$svc.log" 2>&1 &
       echo $! >"$PIDS/$svc.pid")
   fi
+  build_sig "$svc" >"$PIDS/$svc.sig"
 }
 
 stop() {
@@ -472,7 +493,7 @@ stop() {
     if running "$svc"; then kill -9 "$pid" 2>/dev/null || true; fi
     echo "  · stopped $svc"
   fi
-  rm -f "$PIDS/$svc.pid"
+  rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig"
 }
 
 web_up() {
