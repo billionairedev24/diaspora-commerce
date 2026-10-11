@@ -134,10 +134,12 @@ export function ProductCard({ product: p, href, variant = 'grid', availability: 
     </span>
   ) : null;
   const locked = !!av?.lockedLabel;
+  // The image link's name must contain its visible text (WCAG 2.5.3), so it includes the pre-order badge.
+  const mediaLabel = av?.badge ? `${p.title}, ${av.badge}` : p.title;
   if (variant === 'rail') {
     return (
       <article className={cx(styles.rail, className)}>
-        <Link href={href} className={cx(styles.imageLink, styles.withBadge)} tabIndex={-1} aria-label={p.title}>
+        <Link href={href} className={cx(styles.imageLink, styles.withBadge)} tabIndex={-1} aria-label={mediaLabel}>
           <ImagePlaceholder src={p.imageUrl} alt={p.title} />
           {badge}
         </Link>
@@ -153,7 +155,7 @@ export function ProductCard({ product: p, href, variant = 'grid', availability: 
   }
   return (
     <article className={cx(styles.card, className)} aria-label={p.title}>
-      <Link href={href} className={cx(styles.media, styles.withBadge)} tabIndex={-1} aria-label={p.title}>
+      <Link href={href} className={cx(styles.media, styles.withBadge)} tabIndex={-1} aria-label={mediaLabel}>
         <ImagePlaceholder src={p.imageUrl} alt={p.title} />
         {badge}
       </Link>
