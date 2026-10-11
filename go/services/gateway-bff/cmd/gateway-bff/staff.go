@@ -21,12 +21,12 @@ import (
 // staffClients are the upstream clients the staff console shares with the rest of the BFF (one breaker per upstream);
 // the remaining ones are created here.
 type staffClients struct {
-	identity, catalog, inventory, payments, orders, deliveryRuns httpclient.Client
+	identity, catalog, inventory, payments, orders, deliveryRuns, offers httpclient.Client
 }
 
 // staffServices wires the staff console (contracts/openapi/gateway-bff-staff.yaml): shell, tables and sheets,
 // dashboard, exports, the support console, the fee-schedule editor, the seller pickups of dispatch and the
-// notification templates.
+// notification templates, and the Inventory hub with AfroTransact Retail (1P) (S281).
 // It also returns Seller Center's export stores (same job store, renderer and file directory; seller links are served by
 // /v1/seller/export-files/{id}).
 func staffServices(cfg config.Config, client func(string, config.Upstream) httpclient.Client, sc staffClients, rdb redis.UniversalClient,
@@ -43,6 +43,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 			Content: upstreams.NewStaffUpstream(client("content", up.Content)), Notifications: upstreams.NewStaffUpstream(client("notifications", up.Notifications)),
 			Bookings: upstreams.NewStaffUpstream(client("bookings", up.Bookings)), DeliveryRuns: upstreams.NewStaffUpstream(sc.deliveryRuns),
 			Media: upstreams.NewStaffUpstream(media), Geo: upstreams.NewStaffUpstream(client("geo", up.Geo)),
+			Offers: upstreams.NewStaffUpstream(sc.offers), Search: upstreams.NewStaffUpstream(client("search", up.Search)),
 		},
 		Matrix: upstreams.NewOrgAccess(sc.identity), Cache: cache, MatrixTTL: cfg.Cache.DefaultTTL,
 		Jobs: valkey.NewExportJobs(rdb), Renderer: exportfiles.NewRenderer(), ExportBasePath: cfg.Web.BFFPath, Log: log, RetailOrgID: cfg.Commerce.RetailOrgID,
@@ -73,6 +74,7 @@ func staffServices(cfg config.Config, client func(string, config.Upstream) httpc
 	out.Exports, out.Support, out.Fees = app.NewStaffExportsService(d), app.NewStaffSupportService(d), app.NewStaffFeesService(d)
 	out.Dispatch, out.Notifications = app.NewStaffDispatchService(d), app.NewStaffNotificationsService(d)
 	out.Preorders = app.NewStaffPreordersService(d)
+	out.Inventory = app.NewStaffInventoryService(d)
 	return out, seller, sellerFiles, nil
 }
 

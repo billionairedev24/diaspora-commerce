@@ -39,6 +39,11 @@ func (h *handlersImpl) registerSeller(route func(pattern string, fn http.Handler
 		route("GET /v1/seller/offers", h.sellerOffers)
 		route("PUT /v1/seller/offers/{offerId}/fulfilment", h.offerFulfilment)
 	}
+	if h.s.SellerFba != nil {
+		for _, m := range []string{http.MethodGet, http.MethodPost, http.MethodPut} {
+			route(m+" /v1/seller/fba/{rest...}", h.sellerFba)
+		}
+	}
 	// Listings, builder, stock
 	route("GET /v1/seller/listings", h.listings)
 	route("POST /v1/seller/listings/{productId}/status", h.listingStatus)

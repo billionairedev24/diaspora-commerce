@@ -1146,6 +1146,1554 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/staff/inventory/flow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The pipeline from a purchase order to "Sold & shipped by AfroTransact" with live counts
+         * @description Nine steps (create the product, raise a PO, approve & send, announce the inbound, transit, receive & count,
+         *     lots into stock, sell on the storefront, match the invoice) with what is waiting at each, counted from
+         *     retail-service (items, POs by status, open goods receipts, live listings, invoice exceptions) and
+         *     inventory-service (inbound shipments by status, sellable lots). A step whose service cannot be reached has
+         *     `count: null` and names it in `unavailable`; retail steps need the `retail` module at VIEW. Module `inventory`
+         *     at VIEW.
+         */
+        get: operations["getStaffInventoryFlow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Follow one product from its retail item to the product page
+         * @description Given a variant ATIN and / or an inventory SKU: the retail item and its listing, the latest inbound shipment,
+         *     the sellable lots (next pick by FEFO), availability, the open Fulfilled-by-AfroTransact offer (its inventory SKU
+         *     must be the SKU the lots are under, else BROKEN), the search index and the public buy box the product page
+         *     shows (badges, delivery days). Module `inventory` at VIEW.
+         */
+        get: operations["getStaffInventoryTrace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/overview`
+         * @description Mirrors inventory `GET /v1/overview` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again).
+         */
+        get: operations["getStaffOverview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/nodes`
+         * @description Mirrors inventory `GET /v1/nodes` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again).
+         */
+        get: operations["getStaffNodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/inbound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/inbound/shipments`
+         * @description Mirrors inventory `GET /v1/inbound/shipments` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory's `InboundShipmentPage` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getStaffInbound"];
+        put?: never;
+        /**
+         * inventory `POST /v1/inbound/shipments`
+         * @description Mirrors inventory `POST /v1/inbound/shipments` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffInbound"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/inbound/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/inbound/shipments/{id}`
+         * @description Mirrors inventory `GET /v1/inbound/shipments/{id}` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getStaffInboundById"];
+        /**
+         * inventory `PUT /v1/inbound/shipments/{id}`
+         * @description Mirrors inventory `PUT /v1/inbound/shipments/{id}` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        put: operations["putStaffInboundById"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/inbound/{id}/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * inventory `PUT /v1/inbound/shipments/{id}/tracking`
+         * @description Mirrors inventory `PUT /v1/inbound/shipments/{id}/tracking` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `InboundTrackingResult` (contracts/openapi/inventory.yaml).
+         */
+        put: operations["putStaffInboundTracking"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/inbound/{id}/ship": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/inbound/shipments/{id}/ship`
+         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/ship` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffInboundShip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/inbound/{id}/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/inbound/shipments/{id}/receipts`
+         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/receipts` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `InboundReceiptResult` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffInboundReceipts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/inbound/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/inbound/shipments/{id}/close`
+         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/close` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffInboundClose"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/inbound/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/inbound/shipments/{id}/cancel`
+         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/cancel` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffInboundCancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/inbound/{id}/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/inbound/shipments/{id}/labels`
+         * @description Mirrors inventory `GET /v1/inbound/shipments/{id}/labels` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again).
+         */
+        get: operations["getStaffInboundLabels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/lots`
+         * @description Mirrors inventory `GET /v1/lots` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory's `LotPage` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getStaffLots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/lots/markdown`
+         * @description Mirrors inventory `GET /v1/lots/markdown` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again).
+         */
+        get: operations["getStaffLotsMarkdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/expiry-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/lots/expiry-runs`
+         * @description Mirrors inventory `POST /v1/lots/expiry-runs` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again).
+         */
+        post: operations["postStaffLotsExpiryRuns"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/markdown-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/lots/markdown-runs`
+         * @description Mirrors inventory `POST /v1/lots/markdown-runs` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again).
+         */
+        post: operations["postStaffLotsMarkdownRuns"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/lots/{id}`
+         * @description Mirrors inventory `GET /v1/lots/{id}` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory's `Lot` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getStaffLotsById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/{id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/lots/{id}/trace`
+         * @description Mirrors inventory `GET /v1/lots/{id}/trace` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory's `LotTrace` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getStaffLotsTrace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/{id}/quarantine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/lots/{id}/quarantine`
+         * @description Mirrors inventory `POST /v1/lots/{id}/quarantine` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `Lot` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffLotsQuarantine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/{id}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/lots/{id}/release`
+         * @description Mirrors inventory `POST /v1/lots/{id}/release` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `Lot` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffLotsRelease"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/{id}/adjust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/lots/{id}/adjust`
+         * @description Mirrors inventory `POST /v1/lots/{id}/adjust` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `Lot` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffLotsAdjust"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/{id}/transfer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/lots/{id}/transfer`
+         * @description Mirrors inventory `POST /v1/lots/{id}/transfer` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again).
+         */
+        post: operations["postStaffLotsTransfer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/lots/{id}/write-off": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/lots/{id}/write-off`
+         * @description Mirrors inventory `POST /v1/lots/{id}/write-off` 1:1 with the staff member's token (module `inventory` at APPROVE or above; inventory checks its own permissions again). The body is inventory's `Lot` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffLotsWriteOff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/positions`
+         * @description Mirrors inventory `GET /v1/positions` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again).
+         */
+        get: operations["getStaffPositions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/movements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/movements`
+         * @description Mirrors inventory `GET /v1/movements` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again).
+         */
+        get: operations["getStaffMovements"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/reservations/{orderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/reservations/{orderId}`
+         * @description Mirrors inventory `GET /v1/reservations/{orderId}` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again).
+         */
+        get: operations["getStaffReservationsById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/reconciliation/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/reconciliation/runs/latest`
+         * @description Mirrors inventory `GET /v1/reconciliation/runs/latest` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again).
+         */
+        get: operations["getStaffReconciliationLatest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/reconciliation/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/reconciliation/runs`
+         * @description Mirrors inventory `POST /v1/reconciliation/runs` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again).
+         */
+        post: operations["postStaffReconciliationRuns"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/cycle-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/cycle-counts`
+         * @description Mirrors inventory `GET /v1/cycle-counts` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory's `CycleCountPage` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getStaffCycleCounts"];
+        put?: never;
+        /**
+         * inventory `POST /v1/cycle-counts`
+         * @description Mirrors inventory `POST /v1/cycle-counts` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `CycleCount` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffCycleCounts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/cycle-counts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/cycle-counts/{id}`
+         * @description Mirrors inventory `GET /v1/cycle-counts/{id}` 1:1 with the staff member's token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory's `CycleCount` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getStaffCycleCountsById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/cycle-counts/{id}/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * inventory `PUT /v1/cycle-counts/{id}/counts`
+         * @description Mirrors inventory `PUT /v1/cycle-counts/{id}/counts` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `CycleCount` (contracts/openapi/inventory.yaml).
+         */
+        put: operations["putStaffCycleCountsCounts"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/cycle-counts/{id}/post": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/cycle-counts/{id}/post`
+         * @description Mirrors inventory `POST /v1/cycle-counts/{id}/post` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `CycleCount` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffCycleCountsPost"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/inventory/cycle-counts/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/cycle-counts/{id}/cancel`
+         * @description Mirrors inventory `POST /v1/cycle-counts/{id}/cancel` 1:1 with the staff member's token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory's `CycleCount` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postStaffCycleCountsCancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/items`
+         * @description Mirrors retail `GET /v1/items` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffItems"];
+        put?: never;
+        /**
+         * retail `POST /v1/items`
+         * @description Mirrors retail `POST /v1/items` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `Item` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffItems"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/items/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/items/{id}`
+         * @description Mirrors retail `GET /v1/items/{id}` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again). The body is retail's `Item` (contracts/openapi/retail.yaml).
+         */
+        get: operations["getStaffItemsById"];
+        /**
+         * retail `PUT /v1/items/{id}`
+         * @description Mirrors retail `PUT /v1/items/{id}` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `Item` (contracts/openapi/retail.yaml).
+         */
+        put: operations["putStaffItemsById"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/items/{id}/atin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * retail `PUT /v1/items/{id}/atin`
+         * @description Mirrors retail `PUT /v1/items/{id}/atin` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `Item` (contracts/openapi/retail.yaml).
+         */
+        put: operations["putStaffItemsAtin"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/items/{id}/listing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * retail `PUT /v1/items/{id}/listing`
+         * @description Mirrors retail `PUT /v1/items/{id}/listing` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `Item` (contracts/openapi/retail.yaml).
+         */
+        put: operations["putStaffItemsListing"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/suppliers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/suppliers`
+         * @description Mirrors retail `GET /v1/suppliers` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffSuppliers"];
+        put?: never;
+        /**
+         * retail `POST /v1/suppliers`
+         * @description Mirrors retail `POST /v1/suppliers` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffSuppliers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/suppliers/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/suppliers/{id}`
+         * @description Mirrors retail `GET /v1/suppliers/{id}` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffSuppliersById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/purchase-orders`
+         * @description Mirrors retail `GET /v1/purchase-orders` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffPurchaseOrders"];
+        put?: never;
+        /**
+         * retail `POST /v1/purchase-orders`
+         * @description Mirrors retail `POST /v1/purchase-orders` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffPurchaseOrders"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/purchase-orders/{id}`
+         * @description Mirrors retail `GET /v1/purchase-orders/{id}` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        get: operations["getStaffPurchaseOrdersById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * retail `PUT /v1/purchase-orders/{id}/lines`
+         * @description Mirrors retail `PUT /v1/purchase-orders/{id}/lines` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        put: operations["putStaffPurchaseOrdersLines"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/purchase-orders/{id}/submit`
+         * @description Mirrors retail `POST /v1/purchase-orders/{id}/submit` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffPurchaseOrdersSubmit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/purchase-orders/{id}/approve`
+         * @description Mirrors retail `POST /v1/purchase-orders/{id}/approve` 1:1 with the staff member's token (module `retail` at APPROVE or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffPurchaseOrdersApprove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/send-back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/purchase-orders/{id}/send-back`
+         * @description Mirrors retail `POST /v1/purchase-orders/{id}/send-back` 1:1 with the staff member's token (module `retail` at APPROVE or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffPurchaseOrdersSendBack"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/purchase-orders/{id}/send`
+         * @description Mirrors retail `POST /v1/purchase-orders/{id}/send` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffPurchaseOrdersSend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/purchase-orders/{id}/confirm`
+         * @description Mirrors retail `POST /v1/purchase-orders/{id}/confirm` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffPurchaseOrdersConfirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/purchase-orders/{id}/close`
+         * @description Mirrors retail `POST /v1/purchase-orders/{id}/close` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffPurchaseOrdersClose"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/purchase-orders/{id}/cancel`
+         * @description Mirrors retail `POST /v1/purchase-orders/{id}/cancel` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `PurchaseOrder` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffPurchaseOrdersCancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/dispatches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/purchase-orders/{id}/dispatches`
+         * @description Mirrors retail `GET /v1/purchase-orders/{id}/dispatches` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffPurchaseOrdersDispatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/dispatches/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/purchase-orders/{id}/dispatches/retry`
+         * @description Mirrors retail `POST /v1/purchase-orders/{id}/dispatches/retry` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffPurchaseOrdersDispatchesRetry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/purchase-orders/{id}/pdf`
+         * @description Mirrors retail `GET /v1/purchase-orders/{id}/pdf` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffPurchaseOrdersPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/purchase-orders/{id}/edi850": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/purchase-orders/{id}/edi850`
+         * @description Mirrors retail `GET /v1/purchase-orders/{id}/edi850` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffPurchaseOrdersEdi850"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/shipments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/shipments`
+         * @description Mirrors retail `GET /v1/shipments` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffShipments"];
+        put?: never;
+        /**
+         * retail `POST /v1/shipments`
+         * @description Mirrors retail `POST /v1/shipments` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffShipments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/shipments/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/shipments/{id}`
+         * @description Mirrors retail `GET /v1/shipments/{id}` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffShipmentsById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/shipments/{id}/asn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * retail `PUT /v1/shipments/{id}/asn`
+         * @description Mirrors retail `PUT /v1/shipments/{id}/asn` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again).
+         */
+        put: operations["putStaffShipmentsAsn"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/shipments/{id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/shipments/{id}/documents`
+         * @description Mirrors retail `POST /v1/shipments/{id}/documents` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffShipmentsDocuments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/shipments/{id}/charges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * retail `PUT /v1/shipments/{id}/charges`
+         * @description Mirrors retail `PUT /v1/shipments/{id}/charges` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again).
+         */
+        put: operations["putStaffShipmentsCharges"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/shipments/{id}/advance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/shipments/{id}/advance`
+         * @description Mirrors retail `POST /v1/shipments/{id}/advance` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffShipmentsAdvance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/shipments/{id}/landed-cost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/shipments/{id}/landed-cost`
+         * @description Mirrors retail `GET /v1/shipments/{id}/landed-cost` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffShipmentsLandedCost"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/receipts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/receipts`
+         * @description Mirrors retail `GET /v1/receipts` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffReceipts"];
+        put?: never;
+        /**
+         * retail `POST /v1/receipts`
+         * @description Mirrors retail `POST /v1/receipts` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `GoodsReceipt` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffReceipts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/receipts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/receipts/{id}`
+         * @description Mirrors retail `GET /v1/receipts/{id}` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again). The body is retail's `GoodsReceipt` (contracts/openapi/retail.yaml).
+         */
+        get: operations["getStaffReceiptsById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/receipts/{id}/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * retail `PUT /v1/receipts/{id}/lines`
+         * @description Mirrors retail `PUT /v1/receipts/{id}/lines` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `GoodsReceipt` (contracts/openapi/retail.yaml).
+         */
+        put: operations["putStaffReceiptsLines"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/receipts/{id}/charges": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * retail `PUT /v1/receipts/{id}/charges`
+         * @description Mirrors retail `PUT /v1/receipts/{id}/charges` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `GoodsReceipt` (contracts/openapi/retail.yaml).
+         */
+        put: operations["putStaffReceiptsCharges"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/receipts/{id}/approve-over-receipt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/receipts/{id}/approve-over-receipt`
+         * @description Mirrors retail `POST /v1/receipts/{id}/approve-over-receipt` 1:1 with the staff member's token (module `retail` at APPROVE or above; retail checks its own permissions again). The body is retail's `GoodsReceipt` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffReceiptsApproveOverReceipt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/receipts/{id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/receipts/{id}/validate`
+         * @description Mirrors retail `POST /v1/receipts/{id}/validate` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffReceiptsValidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/receipts/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/receipts/{id}/complete`
+         * @description Mirrors retail `POST /v1/receipts/{id}/complete` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `GoodsReceipt` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffReceiptsComplete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/receipts/{id}/claims/{claimRef}/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/receipts/{id}/claims/{claimRef}/resolve`
+         * @description Mirrors retail `POST /v1/receipts/{id}/claims/{claimRef}/resolve` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail's `GoodsReceipt` (contracts/openapi/retail.yaml).
+         */
+        post: operations["postStaffReceiptsClaimsResolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/invoices`
+         * @description Mirrors retail `GET /v1/invoices` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffInvoices"];
+        put?: never;
+        /**
+         * retail `POST /v1/invoices`
+         * @description Mirrors retail `POST /v1/invoices` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffInvoices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/invoices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/invoices/{id}`
+         * @description Mirrors retail `GET /v1/invoices/{id}` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffInvoicesById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/invoices/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/invoices/{id}/approve`
+         * @description Mirrors retail `POST /v1/invoices/{id}/approve` 1:1 with the staff member's token (module `retail` at APPROVE or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffInvoicesApprove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/invoices/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/invoices/{id}/reject`
+         * @description Mirrors retail `POST /v1/invoices/{id}/reject` 1:1 with the staff member's token (module `retail` at APPROVE or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffInvoicesReject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/invoices/{id}/rematch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * retail `POST /v1/invoices/{id}/rematch`
+         * @description Mirrors retail `POST /v1/invoices/{id}/rematch` 1:1 with the staff member's token (module `retail` at EDIT or above; retail checks its own permissions again).
+         */
+        post: operations["postStaffInvoicesRematch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/gl/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/gl/accounts`
+         * @description Mirrors retail `GET /v1/gl/accounts` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffGlAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/staff/retail/gl/journal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * retail `GET /v1/gl/journal`
+         * @description Mirrors retail `GET /v1/gl/journal` 1:1 with the staff member's token (module `retail` at VIEW or above; retail checks its own permissions again).
+         */
+        get: operations["getStaffGlJournal"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2413,6 +3961,283 @@ export interface components {
                 addressesUnavailable?: boolean;
             }[];
         };
+        /** @description The upstream service's answer, relayed as is (see the operation's description for its schema). */
+        MirroredObject: {
+            [key: string]: unknown;
+        };
+        /** @description An upstream list answer wrapped as {items}. */
+        MirroredList: {
+            items: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** @description A page of an upstream list. */
+        MirroredPage: {
+            items?: {
+                [key: string]: unknown;
+            }[];
+            /** Format: int64 */
+            total?: number;
+            page?: number;
+            size?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description The upstream request body (see the operation's description). */
+        MirroredBody: {
+            [key: string]: unknown;
+        };
+        InboundShipmentLine: {
+            lineNo?: number;
+            sku?: string;
+            atin?: string | null;
+            /** @description AT-FN unit label code */
+            unitLabel?: string | null;
+            expectedQty?: number;
+            receivedGood?: number;
+            receivedDamaged?: number;
+            shortQty?: number;
+            overQty?: number;
+            /** @description Units per case */
+            casePack?: number | null;
+            cases?: number;
+            /** @description Batch on the packing list (GS1 AI 10) */
+            lotNo?: string | null;
+            /** Format: date */
+            mfgDate?: string | null;
+            /** Format: date */
+            expDate?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description An FBA inbound plan or a retail ASN (inventory `InboundShipment`) */
+        InboundShipment: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** @enum {string} */
+            source?: "FBA" | "RETAIL_ASN";
+            ownerOrg?: string | null;
+            nodeId?: string;
+            /** @enum {string} */
+            status: "WORKING" | "SHIPPED" | "RECEIVING" | "CLOSED" | "CANCELLED";
+            carrier?: string | null;
+            trackingNumber?: string | null;
+            /** Format: date */
+            expectedArrival?: string | null;
+            expectedUnits?: number;
+            receivedUnits?: number;
+            lines: components["schemas"]["InboundShipmentLine"][];
+            boxes?: {
+                [key: string]: unknown;
+            }[];
+            /** Format: int64 */
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        InboundShipmentPage: {
+            items: components["schemas"]["InboundShipment"][];
+            /** Format: int64 */
+            total: number;
+            page?: number;
+            size?: number;
+        };
+        InboundReceiptResult: {
+            shipment?: components["schemas"]["InboundShipment"];
+            receiptRef?: string | null;
+            lots?: components["schemas"]["InventoryLot"][];
+            replayed?: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        InboundTrackingResult: {
+            shipment?: components["schemas"]["InboundShipment"];
+            trackingRegistered?: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description A batch of one SKU at one node (inventory `Lot`) */
+        InventoryLot: {
+            /** Format: uuid */
+            id: string;
+            sku: string;
+            lotNo: string;
+            nodeId: string;
+            ownerOrg?: string | null;
+            bin?: string | null;
+            qtyOnHand?: number;
+            qtyReserved?: number;
+            qtyAvailable?: number;
+            /** Format: date */
+            mfgDate?: string | null;
+            /** Format: date */
+            expDate?: string | null;
+            /** @enum {string} */
+            status: "SELLABLE" | "QUARANTINE" | "EXPIRED" | "WRITTEN_OFF" | "DAMAGED";
+            /** @enum {string} */
+            markdownFlag?: "NONE" | "WITHIN_60" | "WITHIN_30";
+            receiptRef?: string | null;
+            /** Format: int64 */
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        InventoryLotPage: {
+            items: components["schemas"]["InventoryLot"][];
+            /** Format: int64 */
+            total: number;
+            page?: number;
+            size?: number;
+        };
+        LotTrace: {
+            lot?: components["schemas"]["InventoryLot"];
+            movements?: {
+                [key: string]: unknown;
+            }[];
+            relatedLots?: components["schemas"]["InventoryLot"][];
+            orders?: {
+                [key: string]: unknown;
+            }[];
+        } & {
+            [key: string]: unknown;
+        };
+        CycleCountLine: {
+            lineNo?: number;
+            /** Format: uuid */
+            lotId?: string;
+            sku?: string;
+            lotNo?: string;
+            bin?: string | null;
+            /** Format: date */
+            expDate?: string | null;
+            expectedQty?: number;
+            countedQty?: number | null;
+            variance?: number;
+            /** @enum {string|null} */
+            reasonCode?: "FOUND" | "LOST" | "DAMAGED" | "MISPICK" | "RECEIVING_ERROR" | "THEFT" | "DATA_ENTRY" | "OTHER" | null;
+            postedDelta?: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description inventory `CycleCount` (S281) */
+        CycleCount: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            nodeId: string;
+            sku?: string | null;
+            binPrefix?: string | null;
+            blind?: boolean;
+            /** @enum {string} */
+            status: "OPEN" | "COUNTED" | "POSTED" | "CANCELLED";
+            netVariance?: number;
+            varianceLines?: number;
+            lines: components["schemas"]["CycleCountLine"][];
+            /** Format: int64 */
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        CycleCountPage: {
+            items: components["schemas"]["CycleCount"][];
+            /** Format: int64 */
+            total: number;
+            page?: number;
+            size?: number;
+        };
+        /** @description retail `PurchaseOrder` (amounts in the supplier currency's minor units) */
+        PurchaseOrder: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: uuid */
+            supplierId?: string;
+            supplierCode?: string;
+            currency?: string;
+            destinationNodeId?: string;
+            status: string;
+            /** Format: int64 */
+            totalMinor?: number;
+            lines?: {
+                [key: string]: unknown;
+            }[];
+            /** Format: int64 */
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description retail `GoodsReceipt` (counted batches, variances, over-receipt approval) */
+        GoodsReceipt: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: uuid */
+            poId?: string;
+            status: string;
+            lines?: {
+                [key: string]: unknown;
+            }[];
+            /** Format: int64 */
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description retail `Item` (product master with GTIN, ATIN link and listing) */
+        RetailItem: {
+            /** Format: uuid */
+            id: string;
+            sku: string;
+            gtin?: string;
+            atin?: string | null;
+            name: string;
+            /** @enum {string} */
+            listingStatus?: "DRAFT" | "LIVE" | "PAUSED";
+            /** Format: int64 */
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        InventoryFlowStage: {
+            key: string;
+            title: string;
+            who: string;
+            what: string;
+            effect: string;
+            /**
+             * Format: int64
+             * @description null when the service behind the step is unreachable
+             */
+            count: number | null;
+            countLabel: string;
+            href: string;
+            unavailable?: string;
+        };
+        InventoryFlow: {
+            stages: components["schemas"]["InventoryFlowStage"][];
+            /** Format: date-time */
+            asOf: string;
+        };
+        InventoryTraceStep: {
+            key: string;
+            title: string;
+            /** @enum {string} */
+            status: "DONE" | "WAITING" | "BROKEN";
+            detail: string;
+            href?: string;
+        };
+        InventoryTrace: {
+            atin?: string;
+            sku?: string;
+            title?: string;
+            steps: components["schemas"]["InventoryTraceStep"][];
+            /** Format: int64 */
+            availableUnits: number | null;
+            storefrontPath?: string;
+            badges: string[];
+            /** Format: int64 */
+            deliveryDays: number | null;
+        };
     };
     responses: {
         /** @description RFC 9457 problem */
@@ -2453,6 +4278,8 @@ export interface components {
         IdempotencyKey: string;
         /** @description Same key = same refund; never refunds twice. */
         IdempotencyKeyRequired: string;
+        /** @description The version from the ETag (optimistic locking). */
+        IfMatch: string;
     };
     requestBodies: never;
     headers: never;
@@ -4370,6 +6197,2932 @@ export interface operations {
             403: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffInventoryFlow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Flow */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryFlow"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffInventoryTrace: {
+        parameters: {
+            query?: {
+                atin?: string;
+                sku?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trace */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryTrace"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffOverview: {
+        parameters: {
+            query?: {
+                nodeId?: string;
+                ownerOrg?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffNodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffInbound: {
+        parameters: {
+            query?: {
+                ownerOrg?: string;
+                nodeId?: string;
+                status?: string;
+                source?: string;
+                sku?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipmentPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffInbound: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffInboundById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffInboundById: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffInboundTracking: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundTrackingResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffInboundShip: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffInboundReceipts: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundReceiptResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffInboundClose: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffInboundCancel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffInboundLabels: {
+        parameters: {
+            query?: {
+                kind?: string;
+                format?: string;
+                lineNo?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The document (PDF, ZPL as text/plain, or EDI X12) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "text/plain": string;
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffLots: {
+        parameters: {
+            query?: {
+                sku?: string;
+                nodeId?: string;
+                ownerOrg?: string;
+                status?: string;
+                lotNo?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLotPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffLotsMarkdown: {
+        parameters: {
+            query?: {
+                within?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffLotsExpiryRuns: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffLotsMarkdownRuns: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffLotsById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLot"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffLotsTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LotTrace"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffLotsQuarantine: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLot"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffLotsRelease: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLot"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffLotsAdjust: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLot"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffLotsTransfer: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffLotsWriteOff: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLot"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPositions: {
+        parameters: {
+            query?: {
+                sku?: string;
+                nodeId?: string;
+                ownerOrg?: string;
+                lowStock?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffMovements: {
+        parameters: {
+            query?: {
+                sku?: string;
+                nodeId?: string;
+                lotId?: string;
+                reference?: string;
+                ownerOrg?: string;
+                type?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffReservationsById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orderId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffReconciliationLatest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffReconciliationRuns: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffCycleCounts: {
+        parameters: {
+            query?: {
+                nodeId?: string;
+                status?: string;
+                sku?: string;
+                ownerOrg?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleCountPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffCycleCounts: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleCount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffCycleCountsById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleCount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffCycleCountsCounts: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleCount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffCycleCountsPost: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleCount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffCycleCountsCancel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CycleCount"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffItems: {
+        parameters: {
+            query?: {
+                q?: string;
+                supplierId?: string;
+                listing?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffItems: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetailItem"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffItemsById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetailItem"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffItemsById: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetailItem"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffItemsAtin: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetailItem"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffItemsListing: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetailItem"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffSuppliers: {
+        parameters: {
+            query?: {
+                q?: string;
+                status?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffSuppliers: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffSuppliersById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPurchaseOrders: {
+        parameters: {
+            query?: {
+                status?: string;
+                supplierId?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffPurchaseOrders: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPurchaseOrdersById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffPurchaseOrdersLines: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffPurchaseOrdersSubmit: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffPurchaseOrdersApprove: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffPurchaseOrdersSendBack: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffPurchaseOrdersSend: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffPurchaseOrdersConfirm: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffPurchaseOrdersClose: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffPurchaseOrdersCancel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PurchaseOrder"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPurchaseOrdersDispatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffPurchaseOrdersDispatchesRetry: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPurchaseOrdersPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The document (PDF, ZPL as text/plain, or EDI X12) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "text/plain": string;
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffPurchaseOrdersEdi850: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The document (PDF, ZPL as text/plain, or EDI X12) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "text/plain": string;
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffShipments: {
+        parameters: {
+            query?: {
+                stage?: string;
+                poId?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffShipments: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffShipmentsById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffShipmentsAsn: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffShipmentsDocuments: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffShipmentsCharges: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffShipmentsAdvance: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffShipmentsLandedCost: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffReceipts: {
+        parameters: {
+            query?: {
+                status?: string;
+                poId?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffReceipts: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoodsReceipt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffReceiptsById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoodsReceipt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffReceiptsLines: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoodsReceipt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putStaffReceiptsCharges: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoodsReceipt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffReceiptsApproveOverReceipt: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoodsReceipt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffReceiptsValidate: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffReceiptsComplete: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoodsReceipt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffReceiptsClaimsResolve: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+                claimRef: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoodsReceipt"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffInvoices: {
+        parameters: {
+            query?: {
+                status?: string;
+                poId?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffInvoices: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffInvoicesById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffInvoicesApprove: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffInvoicesReject: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postStaffInvoicesRematch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The retail request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredObject"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffGlAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getStaffGlJournal: {
+        parameters: {
+            query?: {
+                source?: string;
+                sourceRef?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };
     };

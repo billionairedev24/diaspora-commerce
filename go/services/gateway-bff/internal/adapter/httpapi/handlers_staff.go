@@ -32,6 +32,8 @@ type StaffServices struct {
 	Notifications app.StaffNotificationsService
 	// Preorders serves the Pre-orders module (S270–S275); routes are registered when it is set.
 	Preorders app.StaffPreordersService
+	// Inventory serves the Inventory hub and AfroTransact Retail (1P) workspace (S281); routes are registered when it is set.
+	Inventory app.StaffInventoryService
 	// Files serves exports kept by the BFF itself (nil when exports live in media).
 	Files port.LocalExportFiles
 }
@@ -82,6 +84,9 @@ func (h *handlersImpl) registerStaff(route func(pattern string, fn http.HandlerF
 	}
 	if s.Preorders != nil {
 		h.registerStaffPreorders(route)
+	}
+	if s.Inventory != nil {
+		h.registerStaffInventory(route)
 	}
 }
 

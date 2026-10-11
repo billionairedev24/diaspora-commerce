@@ -56,6 +56,12 @@ tags:
     description: Calendar, booking requests, working hours, services, cancellation policy, public page and earnings
   - name: Exports
     description: Every table exports as CSV, Excel (with a Summary sheet of native charts) or PDF (with a summary page of charts)
+  - name: Inventory & FBA
+    description: |
+      Send to AfroTransact (S281): inbound plans with the packing-list batch (case pack, lot, made and expiry dates),
+      unit and carton labels, tracking, shipping, receiving progress, and the organisation's lots with expiry. Mirrors
+      inventory-service with the member's token for the active organisation only. Inventory module: VIEW to read,
+      EDIT to change plans.
 security:
   - sessionCookie: []
 paths:
@@ -1143,6 +1149,271 @@ paths:
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '502': {$ref: '#/components/responses/Problem'}
         '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── S281 inventory
+  /v1/seller/fba/nodes:
+    get:
+      tags: [Inventory & FBA]
+      operationId: getSellerFbaNodes
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/nodes`
+      description: 'Mirrors inventory `GET /v1/nodes` with the member''s token for the active organisation (Inventory module VIEW).'
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/inventory:
+    get:
+      tags: [Inventory & FBA]
+      operationId: getSellerFbaInventory
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/fba/inventory`
+      description: 'Mirrors inventory `GET /v1/fba/inventory` with the member''s token for the active organisation (Inventory module VIEW). Filtered to the active organisation (ownerOrg is set by the BFF).'
+      parameters:
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: sku, in: query, schema: {type: string, maxLength: 120}}
+        - {name: stranded, in: query, schema: {type: boolean}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/inbound:
+    get:
+      tags: [Inventory & FBA]
+      operationId: getSellerFbaInbound
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/inbound/shipments`
+      description: 'Mirrors inventory `GET /v1/inbound/shipments` with the member''s token for the active organisation (Inventory module VIEW). Filtered to the active organisation (ownerOrg is set by the BFF). The body is inventory''s `InboundShipmentPage` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: status, in: query, schema: {type: string, maxLength: 120}}
+        - {name: sku, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipmentPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Inventory & FBA]
+      operationId: postSellerFbaInbound
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/inbound/shipments`
+      description: 'Mirrors inventory `POST /v1/inbound/shipments` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/inbound/{id}:
+    get:
+      tags: [Inventory & FBA]
+      operationId: getSellerFbaInboundById
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/inbound/shipments/{id}`
+      description: 'Mirrors inventory `GET /v1/inbound/shipments/{id}` with the member''s token for the active organisation (Inventory module VIEW). The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Inventory & FBA]
+      operationId: putSellerFbaInboundById
+      security: [{sessionCookie: []}]
+      summary: inventory `PUT /v1/inbound/shipments/{id}`
+      description: 'Mirrors inventory `PUT /v1/inbound/shipments/{id}` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/inbound/{id}/tracking:
+    put:
+      tags: [Inventory & FBA]
+      operationId: putSellerFbaInboundTracking
+      security: [{sessionCookie: []}]
+      summary: inventory `PUT /v1/inbound/shipments/{id}/tracking`
+      description: 'Mirrors inventory `PUT /v1/inbound/shipments/{id}/tracking` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundTrackingResult` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundTrackingResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/inbound/{id}/ship:
+    post:
+      tags: [Inventory & FBA]
+      operationId: postSellerFbaInboundShip
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/inbound/shipments/{id}/ship`
+      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/ship` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/inbound/{id}/cancel:
+    post:
+      tags: [Inventory & FBA]
+      operationId: postSellerFbaInboundCancel
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/inbound/shipments/{id}/cancel`
+      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/cancel` with the member''s token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/inbound/{id}/labels:
+    get:
+      tags: [Inventory & FBA]
+      operationId: getSellerFbaInboundLabels
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/inbound/shipments/{id}/labels`
+      description: 'Mirrors inventory `GET /v1/inbound/shipments/{id}/labels` with the member''s token for the active organisation (Inventory module VIEW).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {name: kind, in: query, schema: {type: string, maxLength: 120}}
+        - {name: format, in: query, schema: {type: string, maxLength: 120}}
+        - {name: lineNo, in: query, schema: {type: integer}}
+      responses:
+        '200':
+          description: The document (PDF, ZPL as text/plain, or EDI X12)
+          content:
+            application/pdf: {schema: {type: string, format: binary}}
+            text/plain: {schema: {type: string}}
+            application/octet-stream: {schema: {type: string, format: binary}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/lots:
+    get:
+      tags: [Inventory & FBA]
+      operationId: getSellerFbaLots
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/lots`
+      description: 'Mirrors inventory `GET /v1/lots` with the member''s token for the active organisation (Inventory module VIEW). Filtered to the active organisation (ownerOrg is set by the BFF). The body is inventory''s `LotPage` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: sku, in: query, schema: {type: string, maxLength: 120}}
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: status, in: query, schema: {type: string, maxLength: 120}}
+        - {name: lotNo, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryLotPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/lots/markdown:
+    get:
+      tags: [Inventory & FBA]
+      operationId: getSellerFbaLotsMarkdown
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/lots/markdown`
+      description: 'Mirrors inventory `GET /v1/lots/markdown` with the member''s token for the active organisation (Inventory module VIEW). Filtered to the active organisation (ownerOrg is set by the BFF).'
+      parameters:
+        - {name: within, in: query, schema: {type: string, maxLength: 120}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/seller/fba/lots/{id}:
+    get:
+      tags: [Inventory & FBA]
+      operationId: getSellerFbaLotsById
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/lots/{id}`
+      description: 'Mirrors inventory `GET /v1/lots/{id}` with the member''s token for the active organisation (Inventory module VIEW). The body is inventory''s `Lot` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryLot'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     sessionCookie:
@@ -1170,6 +1441,7 @@ components:
     PaymentMethodId: {name: paymentMethodId, in: path, required: true, schema: {type: string}}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
     IdempotencyKeyRequired: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}, description: Same key = same label; never buys twice.}
+    IfMatch: {name: If-Match, in: header, required: false, schema: {type: string, maxLength: 40}, description: The version from the ETag (optimistic locking).}
   responses:
     Problem:
       description: RFC 9457 problem
@@ -2512,3 +2784,103 @@ components:
         current: {$ref: '#/components/schemas/SellerFeeVersion'}
         upcoming: {oneOf: [{$ref: '#/components/schemas/SellerFeeVersion'}, {type: 'null'}], description: 'The next scheduled version, if any'}
         changes: {type: array, items: {$ref: '#/components/schemas/SellerFeeChange'}, description: What changes for this organisation with the upcoming version}
+    MirroredList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+      description: An upstream list answer wrapped as {items}.
+    MirroredPage:
+      type: object
+      additionalProperties: true
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+      description: A page of an upstream list.
+    MirroredBody:
+      type: object
+      additionalProperties: true
+      description: The upstream request body (see the operation's description).
+    InboundShipmentLine:
+      type: object
+      additionalProperties: true
+      properties:
+        lineNo: {type: integer}
+        sku: {type: string}
+        atin: {type: [string, 'null']}
+        unitLabel: {type: [string, 'null'], description: AT-FN unit label code}
+        expectedQty: {type: integer}
+        receivedGood: {type: integer}
+        receivedDamaged: {type: integer}
+        shortQty: {type: integer}
+        overQty: {type: integer}
+        casePack: {type: [integer, 'null'], description: Units per case}
+        cases: {type: integer}
+        lotNo: {type: [string, 'null'], description: Batch on the packing list (GS1 AI 10)}
+        mfgDate: {type: [string, 'null'], format: date}
+        expDate: {type: [string, 'null'], format: date}
+    InboundShipment:
+      type: object
+      additionalProperties: true
+      required: [id, number, status, lines]
+      description: An FBA inbound plan or a retail ASN (inventory `InboundShipment`)
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: string}
+        source: {type: string, enum: [FBA, RETAIL_ASN]}
+        ownerOrg: {type: [string, 'null']}
+        nodeId: {type: string}
+        status: {type: string, enum: [WORKING, SHIPPED, RECEIVING, CLOSED, CANCELLED]}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
+        expectedArrival: {type: [string, 'null'], format: date}
+        expectedUnits: {type: integer}
+        receivedUnits: {type: integer}
+        lines: {type: array, items: {$ref: '#/components/schemas/InboundShipmentLine'}}
+        boxes: {type: array, items: {type: object, additionalProperties: true}}
+        version: {type: integer, format: int64}
+    InboundShipmentPage:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/InboundShipment'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+    InboundTrackingResult:
+      type: object
+      additionalProperties: true
+      properties:
+        shipment: {$ref: '#/components/schemas/InboundShipment'}
+        trackingRegistered: {type: boolean}
+    InventoryLot:
+      type: object
+      additionalProperties: true
+      required: [id, sku, lotNo, nodeId, status]
+      description: A batch of one SKU at one node (inventory `Lot`)
+      properties:
+        id: {type: string, format: uuid}
+        sku: {type: string}
+        lotNo: {type: string}
+        nodeId: {type: string}
+        ownerOrg: {type: [string, 'null']}
+        bin: {type: [string, 'null']}
+        qtyOnHand: {type: integer}
+        qtyReserved: {type: integer}
+        qtyAvailable: {type: integer}
+        mfgDate: {type: [string, 'null'], format: date}
+        expDate: {type: [string, 'null'], format: date}
+        status: {type: string, enum: [SELLABLE, QUARANTINE, EXPIRED, WRITTEN_OFF, DAMAGED]}
+        markdownFlag: {type: string, enum: [NONE, WITHIN_60, WITHIN_30]}
+        receiptRef: {type: [string, 'null']}
+        version: {type: integer, format: int64}
+    InventoryLotPage:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/InventoryLot'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}

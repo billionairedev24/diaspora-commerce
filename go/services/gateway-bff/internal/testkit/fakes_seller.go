@@ -314,6 +314,66 @@ func (u *Upstreams) catalogSellerRoutes(mux *http.ServeMux) {
 			{"sku": "OFADA-5LB", "nodeId": "HOU1", "ownerOrg": SellerOrgID, "onHand": 120, "reserved": 8, "available": 112, "inbound": 40},
 			{"sku": "OFADA-10LB", "nodeId": "ATL1", "ownerOrg": SellerOrgID, "onHand": 9, "reserved": 2, "available": 7, "inbound": 0}}, "total": 2})
 	})
+	// inventory: Send to AfroTransact (S281). The BFF must filter lists to the active org and never relay ownerOrg.
+	fbaShipment := func(status string) map[string]any {
+		return map[string]any{"id": "7d4a3c2e-0000-4000-8000-000000000001", "number": "FBA-IN-006601", "source": "FBA", "ownerOrg": SellerOrgID,
+			"nodeId": "ATL-FC", "status": status, "expectedUnits": 12, "receivedUnits": 0, "version": 0,
+			"lines": []map[string]any{{"lineNo": 1, "sku": "ATF1234567", "atin": "AT00000042", "unitLabel": "ATF1234567", "expectedQty": 12,
+				"receivedGood": 0, "receivedDamaged": 0, "shortQty": 12, "overQty": 0, "casePack": 6, "cases": 2, "lotNo": "B-77",
+				"mfgDate": "2026-09-01", "expDate": "2027-09-01"}}, "boxes": []map[string]any{}}
+	}
+	mux.HandleFunc("GET /v1/inbound/shipments", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("ownerOrg") != SellerOrgID {
+			writeJSON(w, 400, map[string]any{"status": 400, "title": "ownerOrg must be the active org", "code": "test.owner"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"items": []map[string]any{fbaShipment("WORKING")}, "total": 1, "page": 0, "size": 25})
+	})
+	mux.HandleFunc("POST /v1/inbound/shipments", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		if _, ok := b["ownerOrg"]; ok {
+			writeJSON(w, 400, map[string]any{"status": 400, "title": "ownerOrg must not be relayed", "code": "test.owner"})
+			return
+		}
+		writeJSON(w, 201, fbaShipment("WORKING"))
+	})
+	mux.HandleFunc("GET /v1/inbound/shipments/{id}", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, fbaShipment("WORKING")) })
+	mux.HandleFunc("PUT /v1/inbound/shipments/{id}", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, fbaShipment("WORKING")) })
+	mux.HandleFunc("PUT /v1/inbound/shipments/{id}/tracking", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, map[string]any{"shipment": fbaShipment("WORKING"), "trackingRegistered": true})
+	})
+	mux.HandleFunc("POST /v1/inbound/shipments/{id}/cancel", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, fbaShipment("CANCELLED")) })
+	mux.HandleFunc("GET /v1/nodes", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, []map[string]any{{"id": "ATL-FC", "name": "Atlanta FC", "kind": "FULFILMENT_CENTRE", "country": "US", "active": true}})
+	})
+	mux.HandleFunc("GET /v1/fba/inventory", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("ownerOrg") != SellerOrgID {
+			writeJSON(w, 400, map[string]any{"status": 400, "title": "ownerOrg must be the active org", "code": "test.owner"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"ownerOrg": SellerOrgID, "items": []map[string]any{}, "total": 0, "page": 0, "size": 50})
+	})
+	mux.HandleFunc("GET /v1/lots/markdown", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, []map[string]any{}) })
+	mux.HandleFunc("GET /v1/lots/{id}", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, 200, map[string]any{"id": "5b1d0c9e-0000-4000-8000-000000000002", "sku": "ATF1234567", "lotNo": "B-77", "nodeId": "ATL-FC",
+			"ownerOrg": SellerOrgID, "qtyOnHand": 11, "qtyReserved": 1, "qtyAvailable": 10, "status": "SELLABLE", "markdownFlag": "NONE", "version": 0})
+	})
+	mux.HandleFunc("POST /v1/inbound/shipments/{id}/ship", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, fbaShipment("SHIPPED")) })
+	mux.HandleFunc("GET /v1/inbound/shipments/{id}/labels", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", `inline; filename="box-FBA-IN-006601.pdf"`)
+		_, _ = w.Write([]byte("%PDF-1.7 labels"))
+	})
+	mux.HandleFunc("GET /v1/lots", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("ownerOrg") != SellerOrgID {
+			writeJSON(w, 400, map[string]any{"status": 400, "title": "ownerOrg must be the active org", "code": "test.owner"})
+			return
+		}
+		writeJSON(w, 200, map[string]any{"items": []map[string]any{{"id": "5b1d0c9e-0000-4000-8000-000000000002", "sku": "ATF1234567", "lotNo": "B-77",
+			"nodeId": "ATL-FC", "ownerOrg": SellerOrgID, "qtyOnHand": 11, "qtyReserved": 1, "qtyAvailable": 10, "expDate": "2027-09-01",
+			"status": "SELLABLE", "markdownFlag": "NONE", "version": 0}}, "total": 1, "page": 0, "size": 50})
+	})
 	// seller ship-from addresses (one org's list, default first)
 	shipFrom := []map[string]any{}
 	listShipFrom := func(w http.ResponseWriter, status int) {

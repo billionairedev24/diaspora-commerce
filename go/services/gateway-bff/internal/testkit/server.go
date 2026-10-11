@@ -114,8 +114,8 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		Offers: upstreams.NewOffers(offersClient), Media: media,
 		Orders: upstreams.NewSellerOrders(client("orders", pending)), Carrier: upstreams.NewCarrier(client("carrier-gateway", base)),
 		Payouts: upstreams.NewPayouts(client("payments", base)), Fees: upstreams.NewFees(client("payments", base), upstreams.NewServiceTokens(identityClient, clientCreds)),
-		Storefront: upstreams.NewStorefront(client("storefront", base)),
-		Bookings:   upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
+		Storefront: upstreams.NewStorefront(client("storefront", base)), InventoryAPI: upstreams.NewStaffUpstream(client("inventory", base)),
+		Bookings: upstreams.NewBookings(client("bookings", pending), clock.Now), Cache: cache, MatrixTTL: time.Millisecond, Location: chicago(),
 		Clock: clock.Now, Log: log}
 
 	estimator := domain.NewEstimator(domain.DeliveryPolicy{SellerShippingMinor: 599, FreeShippingThresholdMinor: 4900})
@@ -153,6 +153,7 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
 		SellerOffers:    app.NewSellerOffersService(sellerDeps),
+		SellerFba:       app.NewSellerFbaService(sellerDeps),
 	}
 	// Seller Center exports: the BFF's own file store (signed links served by /v1/seller/export-files/{id}).
 	if files, err := exportfiles.NewLocal(exportfiles.Options{Dir: filepath.Join(os.TempDir(), "gateway-bff-testkit-exports"), SigningKey: "testkit",

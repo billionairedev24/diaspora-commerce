@@ -111,7 +111,8 @@ func run() error {
 		Orgs: upstreams.NewOrgAccess(identityClient), Sellers: upstreams.NewSellerService(client("seller", up.Seller)),
 		Catalog: upstreams.NewSellerCatalog(catalogClient, cache, cfg.Cache.ReferenceTTL),
 		Stock:   upstreams.NewStock(inventoryClient), Offers: upstreams.NewOffers(offersClient),
-		Media: media, Orders: upstreams.NewSellerOrders(ordersClient),
+		InventoryAPI: upstreams.NewStaffUpstream(inventoryClient),
+		Media:        media, Orders: upstreams.NewSellerOrders(ordersClient),
 		Carrier: upstreams.NewCarrier(client("carrier-gateway", up.Carrier)), Payouts: upstreams.NewPayouts(paymentsClient),
 		Fees:       upstreams.NewFees(paymentsClient, serviceTokens),
 		Storefront: upstreams.NewStorefront(client("storefront", up.Storefront)), Bookings: upstreams.NewBookings(client("bookings", up.Bookings), nil),
@@ -164,6 +165,7 @@ func run() error {
 		ProviderHub:     app.NewProviderHubService(sellerDeps),
 		SellerShipFrom:  app.NewSellerShipFromService(sellerDeps),
 		SellerOffers:    app.NewSellerOffersService(sellerDeps),
+		SellerFba:       app.NewSellerFbaService(sellerDeps),
 	}
 	// Storefront account, checkout payment, services & bookings, Lola (cmd/gateway-bff/shopper.go).
 	services.Shopper = shopperServices(cfg, client, shopperClients{payments: paymentsClient, orders: ordersClient, identity: identityClient,
@@ -171,7 +173,7 @@ func run() error {
 	// Staff console (cmd/gateway-bff/staff.go).
 	var exportDeps app.ExportDeps
 	if services.Staff, exportDeps, services.SellerExportFiles, err = staffServices(cfg, client, staffClients{identity: identityClient, catalog: catalogClient,
-		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient}, rdb, cache, log); err != nil {
+		inventory: inventoryClient, payments: paymentsClient, orders: ordersClient, deliveryRuns: deliveryRunsClient, offers: offersClient}, rdb, cache, log); err != nil {
 		return err
 	}
 	// Seller Center exports share the staff console's job store, renderer and file directory.

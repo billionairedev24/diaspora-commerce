@@ -24,6 +24,8 @@ type StaffCall struct {
 	IdempotencyKey string
 	// IfMatch is relayed as If-Match (optimistic locking, e.g. retail purchase orders).
 	IfMatch string
+	// Accept is the media type a streamed document is asked for (default text/csv).
+	Accept string
 }
 
 // StaffUpstream is one domain service as the staff routes see it: authenticated JSON calls decoded into out
@@ -54,6 +56,9 @@ type StaffUpstreams struct {
 	// Media signs creative uploads; Geo verifies late-add addresses (Pre-orders module).
 	Media StaffUpstream
 	Geo   StaffUpstream
+	// Offers and Search are read by the Inventory hub's trace (offer inventory SKU, buy box, search index; S281).
+	Offers StaffUpstream
+	Search StaffUpstream
 }
 
 // ExportJobStore keeps export jobs (shared by every BFF replica; jobs live 24 hours after they finish).

@@ -29,6 +29,8 @@ type SellerDeps struct {
 	Fees       port.FeesClient
 	Storefront port.StorefrontClient
 	Bookings   port.BookingsClient
+	// InventoryAPI relays Seller Center's FBA inbound plans and lots to inventory-service with the member's token (S281).
+	InventoryAPI port.StaffUpstream
 	// Cache holds identity's module matrix per portal (not personal data).
 	Cache     port.Cache
 	MatrixTTL time.Duration

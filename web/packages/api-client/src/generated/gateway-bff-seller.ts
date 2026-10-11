@@ -1118,6 +1118,234 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/seller/fba/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/nodes`
+         * @description Mirrors inventory `GET /v1/nodes` with the member's token for the active organisation (Inventory module VIEW).
+         */
+        get: operations["getSellerFbaNodes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/fba/inventory`
+         * @description Mirrors inventory `GET /v1/fba/inventory` with the member's token for the active organisation (Inventory module VIEW). Filtered to the active organisation (ownerOrg is set by the BFF).
+         */
+        get: operations["getSellerFbaInventory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/inbound": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/inbound/shipments`
+         * @description Mirrors inventory `GET /v1/inbound/shipments` with the member's token for the active organisation (Inventory module VIEW). Filtered to the active organisation (ownerOrg is set by the BFF). The body is inventory's `InboundShipmentPage` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getSellerFbaInbound"];
+        put?: never;
+        /**
+         * inventory `POST /v1/inbound/shipments`
+         * @description Mirrors inventory `POST /v1/inbound/shipments` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postSellerFbaInbound"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/inbound/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/inbound/shipments/{id}`
+         * @description Mirrors inventory `GET /v1/inbound/shipments/{id}` with the member's token for the active organisation (Inventory module VIEW). The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getSellerFbaInboundById"];
+        /**
+         * inventory `PUT /v1/inbound/shipments/{id}`
+         * @description Mirrors inventory `PUT /v1/inbound/shipments/{id}` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        put: operations["putSellerFbaInboundById"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/inbound/{id}/tracking": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * inventory `PUT /v1/inbound/shipments/{id}/tracking`
+         * @description Mirrors inventory `PUT /v1/inbound/shipments/{id}/tracking` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundTrackingResult` (contracts/openapi/inventory.yaml).
+         */
+        put: operations["putSellerFbaInboundTracking"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/inbound/{id}/ship": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/inbound/shipments/{id}/ship`
+         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/ship` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postSellerFbaInboundShip"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/inbound/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * inventory `POST /v1/inbound/shipments/{id}/cancel`
+         * @description Mirrors inventory `POST /v1/inbound/shipments/{id}/cancel` with the member's token for the active organisation (Inventory module EDIT). ownerOrg in the body is ignored. The body is inventory's `InboundShipment` (contracts/openapi/inventory.yaml).
+         */
+        post: operations["postSellerFbaInboundCancel"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/inbound/{id}/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/inbound/shipments/{id}/labels`
+         * @description Mirrors inventory `GET /v1/inbound/shipments/{id}/labels` with the member's token for the active organisation (Inventory module VIEW).
+         */
+        get: operations["getSellerFbaInboundLabels"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/lots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/lots`
+         * @description Mirrors inventory `GET /v1/lots` with the member's token for the active organisation (Inventory module VIEW). Filtered to the active organisation (ownerOrg is set by the BFF). The body is inventory's `LotPage` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getSellerFbaLots"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/lots/markdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/lots/markdown`
+         * @description Mirrors inventory `GET /v1/lots/markdown` with the member's token for the active organisation (Inventory module VIEW). Filtered to the active organisation (ownerOrg is set by the BFF).
+         */
+        get: operations["getSellerFbaLotsMarkdown"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/seller/fba/lots/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * inventory `GET /v1/lots/{id}`
+         * @description Mirrors inventory `GET /v1/lots/{id}` with the member's token for the active organisation (Inventory module VIEW). The body is inventory's `Lot` (contracts/openapi/inventory.yaml).
+         */
+        get: operations["getSellerFbaLotsById"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2336,6 +2564,123 @@ export interface components {
             /** @description What changes for this organisation with the upcoming version */
             changes: components["schemas"]["SellerFeeChange"][];
         };
+        /** @description An upstream list answer wrapped as {items}. */
+        MirroredList: {
+            items: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** @description A page of an upstream list. */
+        MirroredPage: {
+            items?: {
+                [key: string]: unknown;
+            }[];
+            /** Format: int64 */
+            total?: number;
+            page?: number;
+            size?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description The upstream request body (see the operation's description). */
+        MirroredBody: {
+            [key: string]: unknown;
+        };
+        InboundShipmentLine: {
+            lineNo?: number;
+            sku?: string;
+            atin?: string | null;
+            /** @description AT-FN unit label code */
+            unitLabel?: string | null;
+            expectedQty?: number;
+            receivedGood?: number;
+            receivedDamaged?: number;
+            shortQty?: number;
+            overQty?: number;
+            /** @description Units per case */
+            casePack?: number | null;
+            cases?: number;
+            /** @description Batch on the packing list (GS1 AI 10) */
+            lotNo?: string | null;
+            /** Format: date */
+            mfgDate?: string | null;
+            /** Format: date */
+            expDate?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description An FBA inbound plan or a retail ASN (inventory `InboundShipment`) */
+        InboundShipment: {
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** @enum {string} */
+            source?: "FBA" | "RETAIL_ASN";
+            ownerOrg?: string | null;
+            nodeId?: string;
+            /** @enum {string} */
+            status: "WORKING" | "SHIPPED" | "RECEIVING" | "CLOSED" | "CANCELLED";
+            carrier?: string | null;
+            trackingNumber?: string | null;
+            /** Format: date */
+            expectedArrival?: string | null;
+            expectedUnits?: number;
+            receivedUnits?: number;
+            lines: components["schemas"]["InboundShipmentLine"][];
+            boxes?: {
+                [key: string]: unknown;
+            }[];
+            /** Format: int64 */
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        InboundShipmentPage: {
+            items: components["schemas"]["InboundShipment"][];
+            /** Format: int64 */
+            total: number;
+            page?: number;
+            size?: number;
+        };
+        InboundTrackingResult: {
+            shipment?: components["schemas"]["InboundShipment"];
+            trackingRegistered?: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** @description A batch of one SKU at one node (inventory `Lot`) */
+        InventoryLot: {
+            /** Format: uuid */
+            id: string;
+            sku: string;
+            lotNo: string;
+            nodeId: string;
+            ownerOrg?: string | null;
+            bin?: string | null;
+            qtyOnHand?: number;
+            qtyReserved?: number;
+            qtyAvailable?: number;
+            /** Format: date */
+            mfgDate?: string | null;
+            /** Format: date */
+            expDate?: string | null;
+            /** @enum {string} */
+            status: "SELLABLE" | "QUARANTINE" | "EXPIRED" | "WRITTEN_OFF" | "DAMAGED";
+            /** @enum {string} */
+            markdownFlag?: "NONE" | "WITHIN_60" | "WITHIN_30";
+            receiptRef?: string | null;
+            /** Format: int64 */
+            version?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        InventoryLotPage: {
+            items: components["schemas"]["InventoryLot"][];
+            /** Format: int64 */
+            total: number;
+            page?: number;
+            size?: number;
+        };
     };
     responses: {
         /** @description RFC 9457 problem */
@@ -2372,6 +2717,8 @@ export interface components {
         IdempotencyKey: string;
         /** @description Same key = same label; never buys twice. */
         IdempotencyKeyRequired: string;
+        /** @description The version from the ETag (optimistic locking). */
+        IfMatch: string;
     };
     requestBodies: never;
     headers: never;
@@ -4161,6 +4508,432 @@ export interface operations {
             401: components["responses"]["Problem"];
             403: components["responses"]["Problem"];
             422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerFbaNodes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerFbaInventory: {
+        parameters: {
+            query?: {
+                nodeId?: string;
+                sku?: string;
+                stranded?: boolean;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerFbaInbound: {
+        parameters: {
+            query?: {
+                nodeId?: string;
+                status?: string;
+                sku?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipmentPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postSellerFbaInbound: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerFbaInboundById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putSellerFbaInboundById: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    putSellerFbaInboundTracking: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundTrackingResult"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postSellerFbaInboundShip: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    postSellerFbaInboundCancel: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description The version from the ETag (optimistic locking). */
+                "If-Match"?: components["parameters"]["IfMatch"];
+                /** @description Makes retries safe (same key = same result). */
+                "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description The inventory request body, relayed as is. */
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MirroredBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InboundShipment"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            422: components["responses"]["ValidationProblem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerFbaInboundLabels: {
+        parameters: {
+            query?: {
+                kind?: string;
+                format?: string;
+                lineNo?: number;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The document (PDF, ZPL as text/plain, or EDI X12) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "text/plain": string;
+                    "application/octet-stream": string;
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerFbaLots: {
+        parameters: {
+            query?: {
+                sku?: string;
+                nodeId?: string;
+                status?: string;
+                lotNo?: string;
+                page?: number;
+                size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLotPage"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerFbaLotsMarkdown: {
+        parameters: {
+            query?: {
+                within?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirroredList"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            502: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
+        };
+    };
+    getSellerFbaLotsById: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryLot"];
+                };
+            };
+            401: components["responses"]["Problem"];
+            403: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
             502: components["responses"]["Problem"];
             503: components["responses"]["Problem"];
         };

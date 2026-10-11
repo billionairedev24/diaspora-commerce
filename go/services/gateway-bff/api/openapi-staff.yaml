@@ -73,6 +73,20 @@ tags:
       APPROVE (view + late add), Finance / Auditor / Product owner / Fulfilment / Retail VIEW. Writes need EDIT and
       `preorders:manage`, settings need FULL and `preorders:manage`, exports `preorders:export`, late adds
       `preorders:late-add` with APPROVE or above. Window, list, settings and area answers carry `can`.
+  - name: Inventory hub
+    description: |
+      Inventory hub (S281): mirrors inventory-service 1:1 with the staff member's token — inbound shipments (ASNs with
+      the packing-list batch, labels, tracking, receiving at the dock, close), lots (FEFO order, trace, quarantine,
+      release, transfer, write-off), expiry and markdown runs, positions, movements, reservations, reconciliation and
+      cycle counts — plus the pipeline (flow) and the product trace to the storefront. Module `inventory`: VIEW to
+      read, EDIT to change, APPROVE to write off.
+  - name: Retail (1P)
+    description: |
+      AfroTransact Retail (S281): mirrors retail-service 1:1 — items (ATIN link, listing), suppliers, purchase orders
+      (lines, submit, approve, send PDF / EDI 850, confirm, close, cancel, dispatches), inbound shipments (ASN, documents,
+      charges, milestones, landed cost), goods receipts (counts, over-receipt approval, validation, completion,
+      claims), supplier invoices (three-way match) and the GL. Module `retail`: VIEW to read, EDIT to change, APPROVE
+      for PO approval, over-receipts and invoice exceptions.
 security:
   - sessionCookie: []
 paths:
@@ -1391,6 +1405,1817 @@ paths:
         '404': {$ref: '#/components/responses/Problem'}
         '422': {$ref: '#/components/responses/ValidationProblem'}
         '503': {$ref: '#/components/responses/Problem'}
+  # ───────────────────────────────────────────────────────────── S281 inventory
+  /v1/staff/inventory/flow:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffInventoryFlow
+      security: [{sessionCookie: []}]
+      summary: The pipeline from a purchase order to "Sold & shipped by AfroTransact" with live counts
+      description: |
+        Nine steps (create the product, raise a PO, approve & send, announce the inbound, transit, receive & count,
+        lots into stock, sell on the storefront, match the invoice) with what is waiting at each, counted from
+        retail-service (items, POs by status, open goods receipts, live listings, invoice exceptions) and
+        inventory-service (inbound shipments by status, sellable lots). A step whose service cannot be reached has
+        `count: null` and names it in `unavailable`; retail steps need the `retail` module at VIEW. Module `inventory`
+        at VIEW.
+      responses:
+        '200': {description: Flow, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryFlow'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/trace:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffInventoryTrace
+      security: [{sessionCookie: []}]
+      summary: Follow one product from its retail item to the product page
+      description: |
+        Given a variant ATIN and / or an inventory SKU: the retail item and its listing, the latest inbound shipment,
+        the sellable lots (next pick by FEFO), availability, the open Fulfilled-by-AfroTransact offer (its inventory SKU
+        must be the SKU the lots are under, else BROKEN), the search index and the public buy box the product page
+        shows (badges, delivery days). Module `inventory` at VIEW.
+      parameters:
+        - {name: atin, in: query, schema: {type: string, pattern: '^[A-Za-z0-9]{10}$'}}
+        - {name: sku, in: query, schema: {type: string, maxLength: 64}}
+      responses:
+        '200': {description: Trace, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryTrace'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/overview:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffOverview
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/overview`
+      description: 'Mirrors inventory `GET /v1/overview` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again).'
+      parameters:
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: ownerOrg, in: query, schema: {type: string, maxLength: 120}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/nodes:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffNodes
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/nodes`
+      description: 'Mirrors inventory `GET /v1/nodes` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again).'
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/inbound:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffInbound
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/inbound/shipments`
+      description: 'Mirrors inventory `GET /v1/inbound/shipments` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory''s `InboundShipmentPage` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: ownerOrg, in: query, schema: {type: string, maxLength: 120}}
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: status, in: query, schema: {type: string, maxLength: 120}}
+        - {name: source, in: query, schema: {type: string, maxLength: 120}}
+        - {name: sku, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipmentPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffInbound
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/inbound/shipments`
+      description: 'Mirrors inventory `POST /v1/inbound/shipments` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/inbound/{id}:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffInboundById
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/inbound/shipments/{id}`
+      description: 'Mirrors inventory `GET /v1/inbound/shipments/{id}` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Inventory hub]
+      operationId: putStaffInboundById
+      security: [{sessionCookie: []}]
+      summary: inventory `PUT /v1/inbound/shipments/{id}`
+      description: 'Mirrors inventory `PUT /v1/inbound/shipments/{id}` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/inbound/{id}/tracking:
+    put:
+      tags: [Inventory hub]
+      operationId: putStaffInboundTracking
+      security: [{sessionCookie: []}]
+      summary: inventory `PUT /v1/inbound/shipments/{id}/tracking`
+      description: 'Mirrors inventory `PUT /v1/inbound/shipments/{id}/tracking` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `InboundTrackingResult` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundTrackingResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/inbound/{id}/ship:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffInboundShip
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/inbound/shipments/{id}/ship`
+      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/ship` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/inbound/{id}/receipts:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffInboundReceipts
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/inbound/shipments/{id}/receipts`
+      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/receipts` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `InboundReceiptResult` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundReceiptResult'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/inbound/{id}/close:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffInboundClose
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/inbound/shipments/{id}/close`
+      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/close` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/inbound/{id}/cancel:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffInboundCancel
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/inbound/shipments/{id}/cancel`
+      description: 'Mirrors inventory `POST /v1/inbound/shipments/{id}/cancel` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `InboundShipment` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InboundShipment'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/inbound/{id}/labels:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffInboundLabels
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/inbound/shipments/{id}/labels`
+      description: 'Mirrors inventory `GET /v1/inbound/shipments/{id}/labels` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {name: kind, in: query, schema: {type: string, maxLength: 120}}
+        - {name: format, in: query, schema: {type: string, maxLength: 120}}
+        - {name: lineNo, in: query, schema: {type: integer}}
+      responses:
+        '200':
+          description: The document (PDF, ZPL as text/plain, or EDI X12)
+          content:
+            application/pdf: {schema: {type: string, format: binary}}
+            text/plain: {schema: {type: string}}
+            application/octet-stream: {schema: {type: string, format: binary}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffLots
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/lots`
+      description: 'Mirrors inventory `GET /v1/lots` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory''s `LotPage` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: sku, in: query, schema: {type: string, maxLength: 120}}
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: ownerOrg, in: query, schema: {type: string, maxLength: 120}}
+        - {name: status, in: query, schema: {type: string, maxLength: 120}}
+        - {name: lotNo, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryLotPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/markdown:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffLotsMarkdown
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/lots/markdown`
+      description: 'Mirrors inventory `GET /v1/lots/markdown` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again).'
+      parameters:
+        - {name: within, in: query, schema: {type: string, maxLength: 120}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/expiry-runs:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffLotsExpiryRuns
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/lots/expiry-runs`
+      description: 'Mirrors inventory `POST /v1/lots/expiry-runs` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/markdown-runs:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffLotsMarkdownRuns
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/lots/markdown-runs`
+      description: 'Mirrors inventory `POST /v1/lots/markdown-runs` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/{id}:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffLotsById
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/lots/{id}`
+      description: 'Mirrors inventory `GET /v1/lots/{id}` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory''s `Lot` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryLot'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/{id}/trace:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffLotsTrace
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/lots/{id}/trace`
+      description: 'Mirrors inventory `GET /v1/lots/{id}/trace` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory''s `LotTrace` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/LotTrace'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/{id}/quarantine:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffLotsQuarantine
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/lots/{id}/quarantine`
+      description: 'Mirrors inventory `POST /v1/lots/{id}/quarantine` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `Lot` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryLot'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/{id}/release:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffLotsRelease
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/lots/{id}/release`
+      description: 'Mirrors inventory `POST /v1/lots/{id}/release` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `Lot` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryLot'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/{id}/adjust:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffLotsAdjust
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/lots/{id}/adjust`
+      description: 'Mirrors inventory `POST /v1/lots/{id}/adjust` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `Lot` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryLot'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/{id}/transfer:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffLotsTransfer
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/lots/{id}/transfer`
+      description: 'Mirrors inventory `POST /v1/lots/{id}/transfer` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/lots/{id}/write-off:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffLotsWriteOff
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/lots/{id}/write-off`
+      description: 'Mirrors inventory `POST /v1/lots/{id}/write-off` 1:1 with the staff member''s token (module `inventory` at APPROVE or above; inventory checks its own permissions again). The body is inventory''s `Lot` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/InventoryLot'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/positions:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffPositions
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/positions`
+      description: 'Mirrors inventory `GET /v1/positions` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again).'
+      parameters:
+        - {name: sku, in: query, schema: {type: string, maxLength: 120}}
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: ownerOrg, in: query, schema: {type: string, maxLength: 120}}
+        - {name: lowStock, in: query, schema: {type: boolean}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/movements:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffMovements
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/movements`
+      description: 'Mirrors inventory `GET /v1/movements` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again).'
+      parameters:
+        - {name: sku, in: query, schema: {type: string, maxLength: 120}}
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: lotId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: reference, in: query, schema: {type: string, maxLength: 120}}
+        - {name: ownerOrg, in: query, schema: {type: string, maxLength: 120}}
+        - {name: type, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/reservations/{orderId}:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffReservationsById
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/reservations/{orderId}`
+      description: 'Mirrors inventory `GET /v1/reservations/{orderId}` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again).'
+      parameters:
+        - {name: orderId, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/reconciliation/latest:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffReconciliationLatest
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/reconciliation/runs/latest`
+      description: 'Mirrors inventory `GET /v1/reconciliation/runs/latest` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again).'
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/reconciliation/runs:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffReconciliationRuns
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/reconciliation/runs`
+      description: 'Mirrors inventory `POST /v1/reconciliation/runs` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/cycle-counts:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffCycleCounts
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/cycle-counts`
+      description: 'Mirrors inventory `GET /v1/cycle-counts` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory''s `CycleCountPage` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: nodeId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: status, in: query, schema: {type: string, maxLength: 120}}
+        - {name: sku, in: query, schema: {type: string, maxLength: 120}}
+        - {name: ownerOrg, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/CycleCountPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffCycleCounts
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/cycle-counts`
+      description: 'Mirrors inventory `POST /v1/cycle-counts` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `CycleCount` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/CycleCount'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/cycle-counts/{id}:
+    get:
+      tags: [Inventory hub]
+      operationId: getStaffCycleCountsById
+      security: [{sessionCookie: []}]
+      summary: inventory `GET /v1/cycle-counts/{id}`
+      description: 'Mirrors inventory `GET /v1/cycle-counts/{id}` 1:1 with the staff member''s token (module `inventory` at VIEW or above; inventory checks its own permissions again). The body is inventory''s `CycleCount` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/CycleCount'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/cycle-counts/{id}/counts:
+    put:
+      tags: [Inventory hub]
+      operationId: putStaffCycleCountsCounts
+      security: [{sessionCookie: []}]
+      summary: inventory `PUT /v1/cycle-counts/{id}/counts`
+      description: 'Mirrors inventory `PUT /v1/cycle-counts/{id}/counts` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `CycleCount` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/CycleCount'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/cycle-counts/{id}/post:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffCycleCountsPost
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/cycle-counts/{id}/post`
+      description: 'Mirrors inventory `POST /v1/cycle-counts/{id}/post` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `CycleCount` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/CycleCount'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/inventory/cycle-counts/{id}/cancel:
+    post:
+      tags: [Inventory hub]
+      operationId: postStaffCycleCountsCancel
+      security: [{sessionCookie: []}]
+      summary: inventory `POST /v1/cycle-counts/{id}/cancel`
+      description: 'Mirrors inventory `POST /v1/cycle-counts/{id}/cancel` 1:1 with the staff member''s token (module `inventory` at EDIT or above; inventory checks its own permissions again). The body is inventory''s `CycleCount` (contracts/openapi/inventory.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The inventory request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/CycleCount'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/items:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffItems
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/items`
+      description: 'Mirrors retail `GET /v1/items` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: supplierId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: listing, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffItems
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/items`
+      description: 'Mirrors retail `POST /v1/items` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `Item` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RetailItem'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/items/{id}:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffItemsById
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/items/{id}`
+      description: 'Mirrors retail `GET /v1/items/{id}` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again). The body is retail''s `Item` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RetailItem'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    put:
+      tags: [Retail (1P)]
+      operationId: putStaffItemsById
+      security: [{sessionCookie: []}]
+      summary: retail `PUT /v1/items/{id}`
+      description: 'Mirrors retail `PUT /v1/items/{id}` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `Item` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RetailItem'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/items/{id}/atin:
+    put:
+      tags: [Retail (1P)]
+      operationId: putStaffItemsAtin
+      security: [{sessionCookie: []}]
+      summary: retail `PUT /v1/items/{id}/atin`
+      description: 'Mirrors retail `PUT /v1/items/{id}/atin` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `Item` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RetailItem'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/items/{id}/listing:
+    put:
+      tags: [Retail (1P)]
+      operationId: putStaffItemsListing
+      security: [{sessionCookie: []}]
+      summary: retail `PUT /v1/items/{id}/listing`
+      description: 'Mirrors retail `PUT /v1/items/{id}/listing` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `Item` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/RetailItem'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/suppliers:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffSuppliers
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/suppliers`
+      description: 'Mirrors retail `GET /v1/suppliers` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: q, in: query, schema: {type: string, maxLength: 120}}
+        - {name: status, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffSuppliers
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/suppliers`
+      description: 'Mirrors retail `POST /v1/suppliers` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/suppliers/{id}:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffSuppliersById
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/suppliers/{id}`
+      description: 'Mirrors retail `GET /v1/suppliers/{id}` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffPurchaseOrders
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/purchase-orders`
+      description: 'Mirrors retail `GET /v1/purchase-orders` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: status, in: query, schema: {type: string, maxLength: 120}}
+        - {name: supplierId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffPurchaseOrders
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/purchase-orders`
+      description: 'Mirrors retail `POST /v1/purchase-orders` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffPurchaseOrdersById
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/purchase-orders/{id}`
+      description: 'Mirrors retail `GET /v1/purchase-orders/{id}` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/lines:
+    put:
+      tags: [Retail (1P)]
+      operationId: putStaffPurchaseOrdersLines
+      security: [{sessionCookie: []}]
+      summary: retail `PUT /v1/purchase-orders/{id}/lines`
+      description: 'Mirrors retail `PUT /v1/purchase-orders/{id}/lines` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/submit:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffPurchaseOrdersSubmit
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/purchase-orders/{id}/submit`
+      description: 'Mirrors retail `POST /v1/purchase-orders/{id}/submit` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/approve:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffPurchaseOrdersApprove
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/purchase-orders/{id}/approve`
+      description: 'Mirrors retail `POST /v1/purchase-orders/{id}/approve` 1:1 with the staff member''s token (module `retail` at APPROVE or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/send-back:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffPurchaseOrdersSendBack
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/purchase-orders/{id}/send-back`
+      description: 'Mirrors retail `POST /v1/purchase-orders/{id}/send-back` 1:1 with the staff member''s token (module `retail` at APPROVE or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/send:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffPurchaseOrdersSend
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/purchase-orders/{id}/send`
+      description: 'Mirrors retail `POST /v1/purchase-orders/{id}/send` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/confirm:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffPurchaseOrdersConfirm
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/purchase-orders/{id}/confirm`
+      description: 'Mirrors retail `POST /v1/purchase-orders/{id}/confirm` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/close:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffPurchaseOrdersClose
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/purchase-orders/{id}/close`
+      description: 'Mirrors retail `POST /v1/purchase-orders/{id}/close` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/cancel:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffPurchaseOrdersCancel
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/purchase-orders/{id}/cancel`
+      description: 'Mirrors retail `POST /v1/purchase-orders/{id}/cancel` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `PurchaseOrder` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/PurchaseOrder'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/dispatches:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffPurchaseOrdersDispatches
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/purchase-orders/{id}/dispatches`
+      description: 'Mirrors retail `GET /v1/purchase-orders/{id}/dispatches` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/dispatches/retry:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffPurchaseOrdersDispatchesRetry
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/purchase-orders/{id}/dispatches/retry`
+      description: 'Mirrors retail `POST /v1/purchase-orders/{id}/dispatches/retry` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/pdf:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffPurchaseOrdersPdf
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/purchase-orders/{id}/pdf`
+      description: 'Mirrors retail `GET /v1/purchase-orders/{id}/pdf` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200':
+          description: The document (PDF, ZPL as text/plain, or EDI X12)
+          content:
+            application/pdf: {schema: {type: string, format: binary}}
+            text/plain: {schema: {type: string}}
+            application/octet-stream: {schema: {type: string, format: binary}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/purchase-orders/{id}/edi850:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffPurchaseOrdersEdi850
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/purchase-orders/{id}/edi850`
+      description: 'Mirrors retail `GET /v1/purchase-orders/{id}/edi850` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200':
+          description: The document (PDF, ZPL as text/plain, or EDI X12)
+          content:
+            application/pdf: {schema: {type: string, format: binary}}
+            text/plain: {schema: {type: string}}
+            application/octet-stream: {schema: {type: string, format: binary}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/shipments:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffShipments
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/shipments`
+      description: 'Mirrors retail `GET /v1/shipments` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: stage, in: query, schema: {type: string, maxLength: 120}}
+        - {name: poId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffShipments
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/shipments`
+      description: 'Mirrors retail `POST /v1/shipments` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/shipments/{id}:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffShipmentsById
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/shipments/{id}`
+      description: 'Mirrors retail `GET /v1/shipments/{id}` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/shipments/{id}/asn:
+    put:
+      tags: [Retail (1P)]
+      operationId: putStaffShipmentsAsn
+      security: [{sessionCookie: []}]
+      summary: retail `PUT /v1/shipments/{id}/asn`
+      description: 'Mirrors retail `PUT /v1/shipments/{id}/asn` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/shipments/{id}/documents:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffShipmentsDocuments
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/shipments/{id}/documents`
+      description: 'Mirrors retail `POST /v1/shipments/{id}/documents` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/shipments/{id}/charges:
+    put:
+      tags: [Retail (1P)]
+      operationId: putStaffShipmentsCharges
+      security: [{sessionCookie: []}]
+      summary: retail `PUT /v1/shipments/{id}/charges`
+      description: 'Mirrors retail `PUT /v1/shipments/{id}/charges` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/shipments/{id}/advance:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffShipmentsAdvance
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/shipments/{id}/advance`
+      description: 'Mirrors retail `POST /v1/shipments/{id}/advance` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/shipments/{id}/landed-cost:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffShipmentsLandedCost
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/shipments/{id}/landed-cost`
+      description: 'Mirrors retail `GET /v1/shipments/{id}/landed-cost` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/receipts:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffReceipts
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/receipts`
+      description: 'Mirrors retail `GET /v1/receipts` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: status, in: query, schema: {type: string, maxLength: 120}}
+        - {name: poId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffReceipts
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/receipts`
+      description: 'Mirrors retail `POST /v1/receipts` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `GoodsReceipt` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/GoodsReceipt'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/receipts/{id}:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffReceiptsById
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/receipts/{id}`
+      description: 'Mirrors retail `GET /v1/receipts/{id}` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again). The body is retail''s `GoodsReceipt` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/GoodsReceipt'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/receipts/{id}/lines:
+    put:
+      tags: [Retail (1P)]
+      operationId: putStaffReceiptsLines
+      security: [{sessionCookie: []}]
+      summary: retail `PUT /v1/receipts/{id}/lines`
+      description: 'Mirrors retail `PUT /v1/receipts/{id}/lines` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `GoodsReceipt` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/GoodsReceipt'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/receipts/{id}/charges:
+    put:
+      tags: [Retail (1P)]
+      operationId: putStaffReceiptsCharges
+      security: [{sessionCookie: []}]
+      summary: retail `PUT /v1/receipts/{id}/charges`
+      description: 'Mirrors retail `PUT /v1/receipts/{id}/charges` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `GoodsReceipt` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/GoodsReceipt'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/receipts/{id}/approve-over-receipt:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffReceiptsApproveOverReceipt
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/receipts/{id}/approve-over-receipt`
+      description: 'Mirrors retail `POST /v1/receipts/{id}/approve-over-receipt` 1:1 with the staff member''s token (module `retail` at APPROVE or above; retail checks its own permissions again). The body is retail''s `GoodsReceipt` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/GoodsReceipt'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/receipts/{id}/validate:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffReceiptsValidate
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/receipts/{id}/validate`
+      description: 'Mirrors retail `POST /v1/receipts/{id}/validate` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/receipts/{id}/complete:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffReceiptsComplete
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/receipts/{id}/complete`
+      description: 'Mirrors retail `POST /v1/receipts/{id}/complete` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `GoodsReceipt` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/GoodsReceipt'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/receipts/{id}/claims/{claimRef}/resolve:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffReceiptsClaimsResolve
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/receipts/{id}/claims/{claimRef}/resolve`
+      description: 'Mirrors retail `POST /v1/receipts/{id}/claims/{claimRef}/resolve` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again). The body is retail''s `GoodsReceipt` (contracts/openapi/retail.yaml).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {name: claimRef, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/GoodsReceipt'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/invoices:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffInvoices
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/invoices`
+      description: 'Mirrors retail `GET /v1/invoices` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: status, in: query, schema: {type: string, maxLength: 120}}
+        - {name: poId, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffInvoices
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/invoices`
+      description: 'Mirrors retail `POST /v1/invoices` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again).'
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '201': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/invoices/{id}:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffInvoicesById
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/invoices/{id}`
+      description: 'Mirrors retail `GET /v1/invoices/{id}` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/invoices/{id}/approve:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffInvoicesApprove
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/invoices/{id}/approve`
+      description: 'Mirrors retail `POST /v1/invoices/{id}/approve` 1:1 with the staff member''s token (module `retail` at APPROVE or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/invoices/{id}/reject:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffInvoicesReject
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/invoices/{id}/reject`
+      description: 'Mirrors retail `POST /v1/invoices/{id}/reject` 1:1 with the staff member''s token (module `retail` at APPROVE or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/invoices/{id}/rematch:
+    post:
+      tags: [Retail (1P)]
+      operationId: postStaffInvoicesRematch
+      security: [{sessionCookie: []}]
+      summary: retail `POST /v1/invoices/{id}/rematch`
+      description: 'Mirrors retail `POST /v1/invoices/{id}/rematch` 1:1 with the staff member''s token (module `retail` at EDIT or above; retail checks its own permissions again).'
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._~-]{1,80}$'}}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: false
+        description: The retail request body, relayed as is.
+        content: {application/json: {schema: {$ref: '#/components/schemas/MirroredBody'}}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredObject'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '409': {$ref: '#/components/responses/Problem'}
+        '422': {$ref: '#/components/responses/ValidationProblem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/gl/accounts:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffGlAccounts
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/gl/accounts`
+      description: 'Mirrors retail `GET /v1/gl/accounts` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredList'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
+  /v1/staff/retail/gl/journal:
+    get:
+      tags: [Retail (1P)]
+      operationId: getStaffGlJournal
+      security: [{sessionCookie: []}]
+      summary: retail `GET /v1/gl/journal`
+      description: 'Mirrors retail `GET /v1/gl/journal` 1:1 with the staff member''s token (module `retail` at VIEW or above; retail checks its own permissions again).'
+      parameters:
+        - {name: source, in: query, schema: {type: string, maxLength: 120}}
+        - {name: sourceRef, in: query, schema: {type: string, maxLength: 120}}
+        - {name: page, in: query, schema: {type: integer, minimum: 0}}
+        - {name: size, in: query, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        '200': {description: OK, content: {application/json: {schema: {$ref: '#/components/schemas/MirroredPage'}}}}
+        '401': {$ref: '#/components/responses/Problem'}
+        '403': {$ref: '#/components/responses/Problem'}
+        '404': {$ref: '#/components/responses/Problem'}
+        '502': {$ref: '#/components/responses/Problem'}
+        '503': {$ref: '#/components/responses/Problem'}
 components:
   securitySchemes:
     sessionCookie:
@@ -1424,6 +3249,7 @@ components:
     TemplateKey: {name: key, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_.-]{0,119}$'}, example: order.confirmed}
     IdempotencyKey: {name: Idempotency-Key, in: header, required: false, schema: {type: string, maxLength: 128}, description: Makes retries safe (same key = same result).}
     IdempotencyKeyRequired: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 8, maxLength: 128}, description: Same key = same refund; never refunds twice.}
+    IfMatch: {name: If-Match, in: header, required: false, schema: {type: string, maxLength: 40}, description: The version from the ETag (optimistic locking).}
   responses:
     Problem:
       description: RFC 9457 problem
@@ -2668,3 +4494,244 @@ components:
               country: {type: string}
               addresses: {type: array, items: {$ref: '#/components/schemas/LateAddAddress'}}
               addressesUnavailable: {type: boolean, description: identity could not list the addresses (enter a new one)}
+    MirroredObject:
+      type: object
+      additionalProperties: true
+      description: The upstream service's answer, relayed as is (see the operation's description for its schema).
+    MirroredList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+      description: An upstream list answer wrapped as {items}.
+    MirroredPage:
+      type: object
+      additionalProperties: true
+      properties:
+        items: {type: array, items: {type: object, additionalProperties: true}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+      description: A page of an upstream list.
+    MirroredBody:
+      type: object
+      additionalProperties: true
+      description: The upstream request body (see the operation's description).
+    InboundShipmentLine:
+      type: object
+      additionalProperties: true
+      properties:
+        lineNo: {type: integer}
+        sku: {type: string}
+        atin: {type: [string, 'null']}
+        unitLabel: {type: [string, 'null'], description: AT-FN unit label code}
+        expectedQty: {type: integer}
+        receivedGood: {type: integer}
+        receivedDamaged: {type: integer}
+        shortQty: {type: integer}
+        overQty: {type: integer}
+        casePack: {type: [integer, 'null'], description: Units per case}
+        cases: {type: integer}
+        lotNo: {type: [string, 'null'], description: Batch on the packing list (GS1 AI 10)}
+        mfgDate: {type: [string, 'null'], format: date}
+        expDate: {type: [string, 'null'], format: date}
+    InboundShipment:
+      type: object
+      additionalProperties: true
+      required: [id, number, status, lines]
+      description: An FBA inbound plan or a retail ASN (inventory `InboundShipment`)
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: string}
+        source: {type: string, enum: [FBA, RETAIL_ASN]}
+        ownerOrg: {type: [string, 'null']}
+        nodeId: {type: string}
+        status: {type: string, enum: [WORKING, SHIPPED, RECEIVING, CLOSED, CANCELLED]}
+        carrier: {type: [string, 'null']}
+        trackingNumber: {type: [string, 'null']}
+        expectedArrival: {type: [string, 'null'], format: date}
+        expectedUnits: {type: integer}
+        receivedUnits: {type: integer}
+        lines: {type: array, items: {$ref: '#/components/schemas/InboundShipmentLine'}}
+        boxes: {type: array, items: {type: object, additionalProperties: true}}
+        version: {type: integer, format: int64}
+    InboundShipmentPage:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/InboundShipment'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+    InboundReceiptResult:
+      type: object
+      additionalProperties: true
+      properties:
+        shipment: {$ref: '#/components/schemas/InboundShipment'}
+        receiptRef: {type: [string, 'null']}
+        lots: {type: array, items: {$ref: '#/components/schemas/InventoryLot'}}
+        replayed: {type: boolean}
+    InboundTrackingResult:
+      type: object
+      additionalProperties: true
+      properties:
+        shipment: {$ref: '#/components/schemas/InboundShipment'}
+        trackingRegistered: {type: boolean}
+    InventoryLot:
+      type: object
+      additionalProperties: true
+      required: [id, sku, lotNo, nodeId, status]
+      description: A batch of one SKU at one node (inventory `Lot`)
+      properties:
+        id: {type: string, format: uuid}
+        sku: {type: string}
+        lotNo: {type: string}
+        nodeId: {type: string}
+        ownerOrg: {type: [string, 'null']}
+        bin: {type: [string, 'null']}
+        qtyOnHand: {type: integer}
+        qtyReserved: {type: integer}
+        qtyAvailable: {type: integer}
+        mfgDate: {type: [string, 'null'], format: date}
+        expDate: {type: [string, 'null'], format: date}
+        status: {type: string, enum: [SELLABLE, QUARANTINE, EXPIRED, WRITTEN_OFF, DAMAGED]}
+        markdownFlag: {type: string, enum: [NONE, WITHIN_60, WITHIN_30]}
+        receiptRef: {type: [string, 'null']}
+        version: {type: integer, format: int64}
+    InventoryLotPage:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/InventoryLot'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+    LotTrace:
+      type: object
+      additionalProperties: true
+      properties:
+        lot: {$ref: '#/components/schemas/InventoryLot'}
+        movements: {type: array, items: {type: object, additionalProperties: true}}
+        relatedLots: {type: array, items: {$ref: '#/components/schemas/InventoryLot'}}
+        orders: {type: array, items: {type: object, additionalProperties: true}}
+    CycleCountLine:
+      type: object
+      additionalProperties: true
+      properties:
+        lineNo: {type: integer}
+        lotId: {type: string, format: uuid}
+        sku: {type: string}
+        lotNo: {type: string}
+        bin: {type: [string, 'null']}
+        expDate: {type: [string, 'null'], format: date}
+        expectedQty: {type: integer}
+        countedQty: {type: [integer, 'null']}
+        variance: {type: integer}
+        reasonCode: {type: [string, 'null'], enum: [FOUND, LOST, DAMAGED, MISPICK, RECEIVING_ERROR, THEFT, DATA_ENTRY, OTHER, null]}
+        postedDelta: {type: [integer, 'null']}
+    CycleCount:
+      type: object
+      additionalProperties: true
+      required: [id, number, nodeId, status, lines]
+      description: inventory `CycleCount` (S281)
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: string}
+        nodeId: {type: string}
+        sku: {type: [string, 'null']}
+        binPrefix: {type: [string, 'null']}
+        blind: {type: boolean}
+        status: {type: string, enum: [OPEN, COUNTED, POSTED, CANCELLED]}
+        netVariance: {type: integer}
+        varianceLines: {type: integer}
+        lines: {type: array, items: {$ref: '#/components/schemas/CycleCountLine'}}
+        version: {type: integer, format: int64}
+    CycleCountPage:
+      type: object
+      required: [items, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/CycleCount'}}
+        total: {type: integer, format: int64}
+        page: {type: integer}
+        size: {type: integer}
+    PurchaseOrder:
+      type: object
+      additionalProperties: true
+      required: [id, number, status]
+      description: retail `PurchaseOrder` (amounts in the supplier currency's minor units)
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: string}
+        supplierId: {type: string, format: uuid}
+        supplierCode: {type: string}
+        currency: {type: string}
+        destinationNodeId: {type: string}
+        status: {type: string}
+        totalMinor: {type: integer, format: int64}
+        lines: {type: array, items: {type: object, additionalProperties: true}}
+        version: {type: integer, format: int64}
+    GoodsReceipt:
+      type: object
+      additionalProperties: true
+      required: [id, number, status]
+      description: retail `GoodsReceipt` (counted batches, variances, over-receipt approval)
+      properties:
+        id: {type: string, format: uuid}
+        number: {type: string}
+        poId: {type: string, format: uuid}
+        status: {type: string}
+        lines: {type: array, items: {type: object, additionalProperties: true}}
+        version: {type: integer, format: int64}
+    RetailItem:
+      type: object
+      additionalProperties: true
+      required: [id, sku, name]
+      description: retail `Item` (product master with GTIN, ATIN link and listing)
+      properties:
+        id: {type: string, format: uuid}
+        sku: {type: string}
+        gtin: {type: string}
+        atin: {type: [string, 'null']}
+        name: {type: string}
+        listingStatus: {type: string, enum: [DRAFT, LIVE, PAUSED]}
+        version: {type: integer, format: int64}
+    InventoryFlowStage:
+      type: object
+      required: [key, title, who, what, effect, count, countLabel, href]
+      properties:
+        key: {type: string}
+        title: {type: string}
+        who: {type: string}
+        what: {type: string}
+        effect: {type: string}
+        count: {type: [integer, 'null'], format: int64, description: null when the service behind the step is unreachable}
+        countLabel: {type: string}
+        href: {type: string}
+        unavailable: {type: string}
+    InventoryFlow:
+      type: object
+      required: [stages, asOf]
+      properties:
+        stages: {type: array, items: {$ref: '#/components/schemas/InventoryFlowStage'}}
+        asOf: {type: string, format: date-time}
+    InventoryTraceStep:
+      type: object
+      required: [key, title, status, detail]
+      properties:
+        key: {type: string}
+        title: {type: string}
+        status: {type: string, enum: [DONE, WAITING, BROKEN]}
+        detail: {type: string}
+        href: {type: string}
+    InventoryTrace:
+      type: object
+      required: [steps, availableUnits, badges, deliveryDays]
+      properties:
+        atin: {type: string}
+        sku: {type: string}
+        title: {type: string}
+        steps: {type: array, items: {$ref: '#/components/schemas/InventoryTraceStep'}}
+        availableUnits: {type: [integer, 'null'], format: int64}
+        storefrontPath: {type: string}
+        badges: {type: array, items: {type: string}}
+        deliveryDays: {type: [integer, 'null'], format: int64}

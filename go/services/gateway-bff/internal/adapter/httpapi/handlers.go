@@ -39,6 +39,8 @@ type Services struct {
 	SellerShipFrom  app.SellerShipFromService
 	// SellerOffers is the fulfilment choice of offers (S255); its routes are registered when set.
 	SellerOffers app.SellerOffersService
+	// SellerFba is Seller Center's Send to AfroTransact (S281); its routes are registered when set.
+	SellerFba app.SellerFbaService
 	// SellerExports exports Seller Center tables; SellerExportFiles serves the files the BFF keeps itself (nil when
 	// exports live in media). Routes are registered when SellerExports is set.
 	SellerExports     app.SellerExportsService
