@@ -139,7 +139,7 @@ func TestPreorderOrderPlacedAndLatePayment(t *testing.T) {
 		if r.TemplateKey == "preorder.confirmed" {
 			d := r.Data
 			if d["name"] != "Lubbock Pre-order #7" || d["preorderNumber"] != "LBK-1042" || d["doorFee"] != "$7.99" || d["total"] != "$51.96" ||
-				d["nowNote"] != "2 other items ship now with tracking." || d["cancelUntil"] != "Wed, Oct 21 11:59 PM" {
+				d["nowNote"] != "1 other item ships now with tracking." || d["cancelUntil"] != "Wed, Oct 21 11:59 PM" {
 				t.Fatalf("confirmed data = %v", d)
 			}
 		}

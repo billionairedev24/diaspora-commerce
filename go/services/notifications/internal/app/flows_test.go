@@ -190,7 +190,7 @@ func TestTemplatePreviewOfAnUnsavedDraft(t *testing.T) {
 	ctx := context.Background()
 	draft := &app.TemplateDraft{Subject: "Your order {{.n}} is in", BodyHTML: "<p>{{.n}} &amp; more</p>", BodyText: "Order {{.n}}"}
 	prev, err := svc.Preview(ctx, app.PreviewRequest{Key: "promo.weekly", Channel: domain.ChannelEmail, Data: map[string]any{"n": "AT-7"}, Draft: draft})
-	if err != nil || prev.Subject != "Your order AT-7 is in" || prev.HTML != "<p>AT-7 &amp; more</p>" || prev.Version != 0 ||
+	if err != nil || prev.Subject != "Your order AT-7 is in" || !strings.Contains(prev.HTML, ">AT-7 &amp; more</p>") || !strings.Contains(prev.HTML, "<!DOCTYPE html>") || prev.Version != 0 ||
 		prev.Category != domain.CategoryMarketing {
 		t.Fatalf("draft preview keeps the stored category: %+v %v", prev, err)
 	}

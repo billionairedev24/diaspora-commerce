@@ -52,10 +52,34 @@ type templateSamplesImpl struct{ byKey map[string]TemplateSample }
 
 var _ TemplateSamples = (*templateSamplesImpl)(nil)
 
+// SampleOption configures the samples.
+type SampleOption func(*sampleOptions)
+
+type sampleOptions struct {
+	products  []SampleProduct
+	assetBase string
+}
+
+// WithSampleProducts replaces the sample orders' products (in line order) with real catalog products, so previews
+// show real photos. Missing entries keep the defaults.
+func WithSampleProducts(p []SampleProduct) SampleOption {
+	return func(o *sampleOptions) { o.products = p }
+}
+
+// WithSampleAssets sets the email asset base the default sample photos (placeholder-product.png) come from
+// (default <storefront>/email).
+func WithSampleAssets(base string) SampleOption { return func(o *sampleOptions) { o.assetBase = base } }
+
 // NewTemplateSamples builds the samples by running SampleEvents and SampleRequests through the real ingest (with a
 // sample identity: first name "Ada", market us) and a restock event through the back-in-stock alerts, capturing the
-// data each rule's Enrich produces. Keys nothing produces come from SampleData.
-func NewTemplateSamples(ctx context.Context, links Links) (TemplateSamples, error) {
+// data each rule's Enrich produces. Keys nothing produces come from SampleData. Keys AdvertorialPolicy allows
+// promotions for get sample advertorials (DataAdvertorials) built by the real Advertorials from sample catalogs.
+func NewTemplateSamples(ctx context.Context, links Links, opts ...SampleOption) (TemplateSamples, error) {
+	o := sampleOptions{assetBase: join(links.Storefront, "/email")}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	products := sampleProducts(o)
 	capture := &captureNotifier{data: map[string]map[string]any{}, source: map[string]SampleSource{}}
 	discard := slog.New(slog.DiscardHandler)
 	alerts := NewStockAlerts(sampleAlertStore{}, capture, sampleIdentity{}, links, discard)
@@ -63,6 +87,7 @@ func NewTemplateSamples(ctx context.Context, links Links) (TemplateSamples, erro
 		Audience: SampleAudience()}, discard)
 
 	handle := func(typ string, i int, payload map[string]any, src SampleSource) error {
+		payload = swapProducts(payload, products).(map[string]any)
 		raw, err := json.Marshal(payload)
 		if err != nil {
 			return fmt.Errorf("sample %s[%d]: %w", typ, i, err)
@@ -104,13 +129,131 @@ func NewTemplateSamples(ctx context.Context, links Links) (TemplateSamples, erro
 		}
 		out.byKey[key] = TemplateSample{Key: key, Area: TemplateArea(key), Source: SampleFromMap, EventTypes: triggers[key], Data: d}
 	}
+	ads := NewAdvertorials(AdvertorialsConfig{Products: sampleProductCatalog{products: products},
+		Preorders: samplePreorderCatalog{}, Campaigns: sampleCampaignCatalog{image: products[0].ImageURL}, Links: links},
+		slog.New(slog.DiscardHandler))
 	for key, s := range out.byKey {
 		if s.EventTypes == nil {
 			s.EventTypes = []string{}
-			out.byKey[key] = s
+		}
+		if _, allowed := AdvertorialPolicy[key]; allowed {
+			if found := ads.For(ctx, AdvertorialRequest{TemplateKey: key, Category: domain.CategoryTransactional, Market: "us",
+				Data: s.Data}); len(found) > 0 {
+				s.Data[DataAdvertorials] = advertorialsJSON(found)
+			}
+		}
+		out.byKey[key] = s
+	}
+	return out, nil
+}
+
+// advertorialsJSON is advertorials as plain JSON values, the shape the staff console edits and sends back.
+func advertorialsJSON(ads []domain.Advertorial) any {
+	raw, err := json.Marshal(ads)
+	if err != nil {
+		return nil
+	}
+	var v any
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return nil
+	}
+	return v
+}
+
+// sampleProducts are the default sample catalog over the configured real products, with the hosted placeholder
+// photo where a product has none.
+func sampleProducts(o sampleOptions) []SampleProduct {
+	out := slices.Clone(sampleCatalog)
+	for i := range out {
+		if i < len(o.products) && o.products[i].Title != "" && domain.SafeURL(o.products[i].ImageURL) {
+			out[i] = o.products[i]
+		}
+		if out[i].ImageURL == "" {
+			out[i].ImageURL = strings.TrimRight(o.assetBase, "/") + "/placeholder-product.png"
+		}
+	}
+	// Extra products for "Complete your pantry".
+	for i := len(sampleCatalog); i < len(o.products); i++ {
+		if o.products[i].Title != "" && domain.SafeURL(o.products[i].ImageURL) {
+			out = append(out, o.products[i])
+		}
+	}
+	return out
+}
+
+// swapProducts replaces the default sample catalog's products in a payload (matched by ATIN) with products.
+func swapProducts(v any, products []SampleProduct) any {
+	switch x := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for k, e := range x {
+			out[k] = swapProducts(e, products)
+		}
+		for i, def := range sampleCatalog {
+			if str(out, "variantAtin") == def.Atin && i < len(products) {
+				p := products[i]
+				out["variantAtin"], out["productAtin"], out["title"], out["imageUrl"] = p.Atin, p.Atin, p.Title, p.ImageURL
+				if _, has := out["unitPriceMinor"]; has {
+					out["unitPriceMinor"] = def.PriceMinor
+				}
+			}
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = swapProducts(e, products)
+		}
+		return out
+	default:
+		return v
+	}
+}
+
+// Sample catalogs for the sample advertorials.
+type sampleProductCatalog struct{ products []SampleProduct }
+
+var _ port.ProductCatalog = sampleProductCatalog{}
+
+func (c sampleProductCatalog) Related(_ context.Context, _, _ string, limit int) ([]domain.PromoProduct, error) {
+	out := []domain.PromoProduct{}
+	extra := []SampleProduct{
+		{Atin: "ATPEPP0001", Title: "Ata Rodo Scotch Bonnet Pepper Mix", PriceMinor: 599},
+		{Atin: "ATSUYA0001", Title: "Suya Spice (Yaji), 100 g", PriceMinor: 499},
+		{Atin: "ATPALM0001", Title: "Red Palm Oil, 1 L", PriceMinor: 899},
+	}
+	pool := append(slices.Clone(c.products[min(len(c.products), len(sampleCatalog)):]), extra...)
+	for _, p := range pool {
+		img := p.ImageURL
+		if img == "" {
+			img = c.products[0].ImageURL
+		}
+		out = append(out, domain.PromoProduct{Atin: p.Atin, Title: p.Title, ImageURL: img, PriceMinor: p.PriceMinor, Currency: "USD"})
+		if len(out) == limit {
+			break
 		}
 	}
 	return out, nil
+}
+
+type samplePreorderCatalog struct{}
+
+var _ port.PreorderCatalog = samplePreorderCatalog{}
+
+func (samplePreorderCatalog) OpenPreorders(context.Context) ([]domain.OpenPreorder, error) {
+	return []domain.OpenPreorder{{ID: "8c2f3d4e-0000-4000-8000-000000000008", Code: "HOU-3", Name: "Houston Pre-order #3",
+		Where: "Houston, TX", City: "Houston", Region: "TX", Country: "US", Stage: "OPEN", Open: true,
+		Label: "Order by Oct 19, delivered Oct 22."}}, nil
+}
+
+type sampleCampaignCatalog struct{ image string }
+
+var _ port.CampaignCatalog = sampleCampaignCatalog{}
+
+func (c sampleCampaignCatalog) Campaigns(context.Context, string) ([]domain.Campaign, error) {
+	return []domain.Campaign{{ID: "plc_sample_jollof", Kicker: "AfroTransact Brand", Title: "Party jollof, sorted.",
+		Body: "Our own seasoning, rice and pepper sauce, sold and fulfilled by AfroTransact.", ImageURL: c.image,
+		ImageAlt: "A pot of party jollof rice", CTA: "Shop AfroTransact Brand", Href: "/s?q=AfroTransact+Brand"}}, nil
 }
 
 func (s *templateSamplesImpl) Sample(key string) (TemplateSample, bool) {

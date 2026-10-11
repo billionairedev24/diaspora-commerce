@@ -96,3 +96,38 @@ testSend:
   localPhone: "+15555550100"
 providers:
   smtp: {host: localhost, port: 1025}
+# Email layout (S277): logo, social icons and store badges are PNGs under assetBaseUrl (default
+# <links.storefront>/email = web/apps/storefront/public/email). Footer socials, the WhatsApp community link, app links,
+# phone, address and legal links come from content's site config (siteConfigUrl, refreshed every refresh).
+brand:
+  name: AfroTransact
+  siteConfigUrl: http://localhost:8112/v1/site-config
+  refresh: 1m
+  # Local placeholder: set the real invite in the staff console (Site settings → WhatsApp community link).
+  whatsappCommunityUrl: https://chat.whatsapp.com/AfroTransactLocalDev
+  # Defaults until content's site config answers (and for fields it leaves empty). Staff edit the live values in
+  # the staff console: Site settings (content GET /v1/site-config).
+  supportPhone: "+1 (833) 555-0199"
+  supportPhoneE164: "+18335550199"
+  supportEmail: help@afrotransact.com
+  address: "AfroTransact, Inc. · 1001 Texas Ave, Suite 1400 · Houston, TX 77002"
+  socials:
+    - {network: tiktok, url: "https://www.tiktok.com/@afrotransact"}
+    - {network: instagram, url: "https://www.instagram.com/afrotransact"}
+    - {network: facebook, url: "https://www.facebook.com/afrotransact"}
+    - {network: x, url: "https://x.com/afrotransact"}
+    - {network: youtube, url: "https://www.youtube.com/@afrotransact"}
+    - {network: linkedin, url: "https://www.linkedin.com/company/afrotransact"}
+  legal:
+    - {label: Privacy Notice, url: /legal/privacy}
+    - {label: Your Privacy Choices, url: /legal/privacy-choices}
+    - {label: Conditions of Use, url: /legal/conditions-of-use}
+    - {label: SMS & Notification Terms, url: /legal/sms-terms}
+# Promotions below the main content of the emails app.AdvertorialPolicy allows (never security emails, never for
+# recipients who opted out of promotional email). Public read APIs; best-effort within timeout.
+advertorials:
+  enabled: true
+  timeout: 800ms
+  searchUrl: http://localhost:8201
+  contentUrl: http://localhost:8112
+  campaignSlot: hero_carousel

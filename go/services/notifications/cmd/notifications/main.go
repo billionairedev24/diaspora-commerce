@@ -30,6 +30,8 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/jwtcontact"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/mediafetch"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/postgres"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/promos"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/sitecontent"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/webhooksig"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/config"
@@ -104,8 +106,21 @@ func run() error {
 		signingKey = "local-only-unsubscribe-key"
 	}
 	unsub := app.NewUnsubscriber(cfg.PublicBaseURL, cfg.Email.UnsubscribeMailto, []byte(signingKey))
-	renderer := app.NewRenderer()
-	notifier := app.NewNotifier(templateStore, renderer, store, unsub)
+	// ---- email brand (site config) and advertorials (S277) ----
+	links := app.Links{Storefront: cfg.Links.Storefront, SellerCenter: cfg.Links.SellerCenter, ProviderHub: cfg.Links.ProviderHub}
+	brand := sitecontent.New(cfg.Brand.SiteConfigURL, cfg.EmailBrand(), &http.Client{Timeout: 5 * time.Second}, log)
+	renderer := app.NewRenderer(app.WithBrand(brand))
+	promoClient := &http.Client{Timeout: 2 * time.Second}
+	promoCfg := promos.Config{SearchURL: cfg.Advertorials.SearchURL, DeliveryRunsURL: cfg.Advertorials.DeliveryRunsURL,
+		ContentURL: cfg.Advertorials.ContentURL, CampaignSlot: cfg.Advertorials.CampaignSlot}
+	products := promos.NewProducts(promoCfg, promoClient)
+	var notifierOpts []app.NotifierOption
+	if cfg.Advertorials.Enabled {
+		ads := app.NewAdvertorials(app.AdvertorialsConfig{Products: products, Preorders: promos.NewPreorders(promoCfg, promoClient),
+			Campaigns: promos.NewCampaigns(promoCfg, promoClient), Links: links, Timeout: cfg.Advertorials.Timeout}, log)
+		notifierOpts = append(notifierOpts, app.WithAdvertorials(ads, consentStore))
+	}
+	notifier := app.NewNotifier(templateStore, renderer, store, unsub, notifierOpts...)
 	retry := domain.DefaultRetryPolicy
 	if cfg.Dispatcher.MaxAttempts > 0 {
 		retry.MaxAttempts = cfg.Dispatcher.MaxAttempts
@@ -139,8 +154,8 @@ func run() error {
 	if c := recipientResolver(cfg, local, log); c != nil {
 		resolver, contactCache = c, c
 	}
-	links := app.Links{Storefront: cfg.Links.Storefront, SellerCenter: cfg.Links.SellerCenter, ProviderHub: cfg.Links.ProviderHub}
-	samples, err := app.NewTemplateSamples(ctx, links)
+	samples, err := app.NewTemplateSamples(ctx, links, app.WithSampleAssets(cfg.Brand.AssetBaseURL),
+		app.WithSampleProducts(sampleProducts(ctx, products, log)))
 	if err != nil {
 		return fmt.Errorf("template samples: %w", err)
 	}
@@ -178,6 +193,7 @@ func run() error {
 
 	// ---- background workers ----
 	var wg sync.WaitGroup
+	wg.Go(func() { brand.Run(ctx, cfg.Brand.Refresh) })
 	if cfg.Dispatcher.Enabled {
 		wg.Go(func() { _ = dispatcher.Run(ctx) })
 	}
@@ -333,4 +349,24 @@ func (r readiness) Check(ctx context.Context) error {
 		return fmt.Errorf("ping: %w", err)
 	}
 	return nil
+}
+
+// sampleProducts takes real catalog products (with photos) for the template previews, best-effort: without
+// search, the previews use the hosted placeholder photo.
+func sampleProducts(ctx context.Context, catalog port.ProductCatalog, log *slog.Logger) []app.SampleProduct {
+	if catalog == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	found, err := catalog.Related(ctx, "", "us", 12)
+	if err != nil {
+		log.Info("template previews use placeholder photos: search unavailable", "error", err)
+		return nil
+	}
+	out := make([]app.SampleProduct, 0, len(found))
+	for _, p := range found {
+		out = append(out, app.SampleProduct{Atin: p.Atin, Title: p.Title, ImageURL: p.ImageURL, PriceMinor: p.PriceMinor})
+	}
+	return out
 }

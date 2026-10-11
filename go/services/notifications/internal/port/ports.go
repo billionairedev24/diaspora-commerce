@@ -191,3 +191,25 @@ type StockAlertStore interface {
 	// already claimed by the same eventID are returned again, so a redelivered event can finish its work.
 	ClaimForRestock(ctx context.Context, atin, eventID string, limit int) ([]domain.StockAlert, error)
 }
+
+// BrandSource serves the brand snapshot every email layout renders: footer socials, WhatsApp community link, app
+// links, phone, address and legal links (the content service's site config over the configured defaults). Brand
+// never blocks: it returns the last good snapshot.
+type BrandSource interface {
+	Brand() domain.Brand
+}
+
+// ProductCatalog finds products to promote (catalog search): related to a seed title, in stock, with a photo.
+type ProductCatalog interface {
+	Related(ctx context.Context, seed, market string, limit int) ([]domain.PromoProduct, error)
+}
+
+// PreorderCatalog lists the published pre-order windows (delivery-runs GET /v1/public/preorders/open).
+type PreorderCatalog interface {
+	OpenPreorders(ctx context.Context) ([]domain.OpenPreorder, error)
+}
+
+// CampaignCatalog lists live house campaigns for a market (content GET /v1/placements/resolve).
+type CampaignCatalog interface {
+	Campaigns(ctx context.Context, market string) ([]domain.Campaign, error)
+}

@@ -1,0 +1,297 @@
+{{- /*
+  The shared AfroTransact email layout (S277). Every email template's body is a content fragment rendered inside it.
+  Email-client safe: tables for layout, inline styles (the <style> block only adds the mobile and dark-mode
+  refinements clients that support it apply), 600 px max, hosted PNG images with alt text, a hidden preheader, a gold
+  bulletproof button with a VML fallback for Outlook, Figtree with a safe fallback stack. Colours mirror
+  web/packages/tokens (gold-500 #FFD400, green-600 #067457, ink-1000 #000000, ink-900 #191816, ink-50 #F6F4EF).
+  html/template drops HTML comments, so Outlook's conditional comments come from the mso* functions.
+*/ -}}
+{{define "layout" -}}
+<!DOCTYPE html>
+<html lang="{{.Lang}}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="format-detection" content="telephone=no, date=no, address=no, email=no, url=no">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>{{.Subject}}</title>
+{{msoHead}}
+<style>
+:root { color-scheme: light dark; supported-color-schemes: light dark; }
+body { margin: 0 !important; padding: 0 !important; width: 100% !important; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+table { border-collapse: collapse; mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+img { border: 0; outline: none; text-decoration: none; -ms-interpolation-mode: bicubic; }
+a { text-decoration: underline; }
+a[x-apple-data-detectors] { color: inherit !important; text-decoration: none !important; font-size: inherit !important; font-family: inherit !important; font-weight: inherit !important; line-height: inherit !important; }
+u + #body a { color: inherit; text-decoration: none; font-size: inherit; font-family: inherit; font-weight: inherit; line-height: inherit; }
+.at-btn:hover { background-color: #E6BF00 !important; }
+@media only screen and (max-width: 620px) {
+  .at-container { width: 100% !important; max-width: 100% !important; }
+  .at-pad { padding-left: 20px !important; padding-right: 20px !important; }
+  .at-stack, .at-stack > tbody, .at-stack > tbody > tr, .at-col { display: block !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box; }
+  .at-col-pad { padding: 0 0 16px 0 !important; }
+  .at-hide-mobile { display: none !important; max-height: 0 !important; overflow: hidden !important; mso-hide: all; }
+  .at-h1 { font-size: 24px !important; line-height: 30px !important; }
+  .at-full { width: 100% !important; height: auto !important; }
+  .at-btn-table { width: 100% !important; }
+  .at-btn { display: block !important; }
+  .at-promo-img { width: 100% !important; height: auto !important; }
+  .at-promo-thumb { width: 100% !important; height: auto !important; }
+}
+@media (prefers-color-scheme: dark) {
+  .at-canvas { background-color: #191816 !important; }
+  .at-card { background-color: #2D2B27 !important; }
+  .at-card p, .at-card li, .at-card td, .at-card h1, .at-card h2, .at-card h3, .at-text { color: #F6F4EF !important; }
+  .at-muted { color: #C8C3B8 !important; }
+  .at-panel { background-color: #191816 !important; border-color: #44413B !important; }
+  .at-line { border-color: #44413B !important; }
+  .at-link { color: #93D2BC !important; }
+}
+[data-ogsc] .at-canvas { background-color: #191816 !important; }
+[data-ogsc] .at-card { background-color: #2D2B27 !important; }
+[data-ogsc] .at-text, [data-ogsc] .at-card p, [data-ogsc] .at-card td { color: #F6F4EF !important; }
+[data-ogsc] .at-muted { color: #C8C3B8 !important; }
+</style>
+</head>
+<body id="body" class="at-canvas" style="margin:0;padding:0;width:100%;background-color:#F6F4EF;">
+<div role="article" aria-roledescription="email" aria-label="{{.Subject}}" lang="{{.Lang}}" class="at-canvas" style="background-color:#F6F4EF;">
+{{- if .Preheader}}
+<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;color:#F6F4EF;">{{.Preheader}}{{preheaderPad}}</div>
+{{- end}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="at-canvas" style="background-color:#F6F4EF;">
+<tr>
+<td align="center" style="padding:24px 12px;">
+{{msoContainerStart}}
+<table role="presentation" class="at-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+  {{/* ---- header: black bar, gold bag logo, gold rule ---- */}}
+  <tr>
+    <td style="background-color:#000000;border-radius:16px 16px 0 0;padding:20px 32px;" class="at-pad">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td align="left" valign="middle">
+            <a href="{{.HomeURL}}" style="text-decoration:none;"><img src="{{.LogoURL}}" width="200" height="36" alt="{{.Brand.Name}}" style="display:block;width:200px;height:36px;border:0;color:#FFD400;font-family:Figtree,Helvetica,Arial,sans-serif;font-size:20px;font-weight:800;"></a>
+          </td>
+          <td align="right" valign="middle" class="at-hide-mobile" style="font-family:Figtree,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13px;line-height:18px;">
+            {{- range $i, $l := .HeaderLinks}}{{if $i}}<span style="color:#5D5951;">&nbsp;&nbsp;·&nbsp;&nbsp;</span>{{end}}<a href="{{$l.URL}}" style="color:#FFFFFF;text-decoration:none;font-weight:600;">{{$l.Label}}</a>{{end -}}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr><td style="background-color:#FFD400;height:4px;line-height:4px;font-size:4px;">&nbsp;</td></tr>
+  {{/* ---- main content ---- */}}
+  <tr>
+    <td class="at-card at-pad" style="background-color:#FFFFFF;padding:32px 40px 16px 40px;font-family:Figtree,'Segoe UI',Helvetica,Arial,sans-serif;color:#191816;font-size:16px;line-height:24px;">
+{{.Content}}
+    </td>
+  </tr>
+  {{- if .Ads}}
+  {{/* ---- advertorials: always below the main content ---- */}}
+  <tr>
+    <td class="at-card at-pad" style="background-color:#FFFFFF;padding:8px 40px 32px 40px;font-family:Figtree,'Segoe UI',Helvetica,Arial,sans-serif;">
+      {{- range .Ads}}{{template "advertorial" .}}{{end}}
+    </td>
+  </tr>
+  {{- else}}
+  <tr><td class="at-card" style="background-color:#FFFFFF;height:16px;line-height:16px;font-size:16px;">&nbsp;</td></tr>
+  {{- end}}
+  {{- if .WhatsAppURL}}
+  {{/* ---- WhatsApp community ---- */}}
+  <tr>
+    <td style="background-color:#067457;padding:24px 32px;font-family:Figtree,'Segoe UI',Helvetica,Arial,sans-serif;" class="at-pad">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="at-stack">
+        <tr>
+          <td class="at-col at-col-pad" valign="middle" width="56" style="width:56px;padding-right:16px;">
+            <img src="{{.WhatsAppIcon}}" width="44" height="44" alt="WhatsApp" style="display:block;width:44px;height:44px;border:0;">
+          </td>
+          <td class="at-col at-col-pad" valign="middle" style="color:#FFFFFF;">
+            <p style="margin:0;font-size:18px;line-height:24px;font-weight:800;color:#FFFFFF;">Join our WhatsApp community</p>
+            <p style="margin:4px 0 0 0;font-size:14px;line-height:20px;color:#E8F5F0;">Pre-order drops in your city, restock alerts and recipes from home, shared first with the community.</p>
+          </td>
+          <td class="at-col" valign="middle" align="right" style="padding-left:16px;white-space:nowrap;">
+            {{waButton .WhatsAppURL}}
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  {{- end}}
+  {{/* ---- footer: socials, apps, help, address, legal, why you got this ---- */}}
+  <tr>
+    <td style="background-color:#000000;border-radius:0 0 16px 16px;padding:28px 32px 32px 32px;font-family:Figtree,'Segoe UI',Helvetica,Arial,sans-serif;color:#C8C3B8;font-size:13px;line-height:20px;" class="at-pad" align="center">
+      {{- if .Socials}}
+      <p style="margin:0 0 12px 0;font-size:13px;line-height:18px;font-weight:700;color:#FFD400;letter-spacing:0.4px;text-transform:uppercase;">Follow AfroTransact</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 20px auto;">
+        <tr>
+          {{- range .Socials}}
+          <td style="padding:0 5px;"><a href="{{.URL}}" title="{{.Label}}" style="text-decoration:none;"><img src="{{.Icon}}" width="32" height="32" alt="{{.Label}}" style="display:block;width:32px;height:32px;border:0;"></a></td>
+          {{- end}}
+        </tr>
+      </table>
+      {{- end}}
+      {{- if or .AppStoreURL .PlayStoreURL}}
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 20px auto;">
+        <tr>
+          {{- if .AppStoreURL}}<td style="padding:0 4px;"><a href="{{.AppStoreURL}}" style="text-decoration:none;"><img src="{{.AppStoreBadge}}" width="120" height="40" alt="Download on the App Store" style="display:block;width:120px;height:40px;border:0;"></a></td>{{end}}
+          {{- if .PlayStoreURL}}<td style="padding:0 4px;"><a href="{{.PlayStoreURL}}" style="text-decoration:none;"><img src="{{.PlayStoreBadge}}" width="135" height="40" alt="Get it on Google Play" style="display:block;width:135px;height:40px;border:0;"></a></td>{{end}}
+        </tr>
+      </table>
+      {{- end}}
+      <p style="margin:0 0 8px 0;color:#FFFFFF;font-size:14px;line-height:20px;">Questions? We're here to help{{if .Brand.SupportPhone}}: <a href="tel:{{.Brand.SupportPhoneE164}}" style="color:#FFD400;text-decoration:none;font-weight:700;">{{.Brand.SupportPhone}}</a>{{end}}{{if .HelpURL}} or <a href="{{.HelpURL}}" style="color:#FFD400;text-decoration:none;font-weight:700;">Help Center</a>{{end}}.</p>
+      {{- if .Brand.Address}}
+      <p style="margin:0 0 16px 0;color:#A29D92;font-size:12px;line-height:18px;">{{.Brand.Address}}</p>
+      {{- end}}
+      <p style="margin:0 0 16px 0;font-size:12px;line-height:20px;">
+        {{- range $i, $l := .FooterLinks}}{{if $i}}<span style="color:#5D5951;">&nbsp;|&nbsp;</span>{{end}}<a href="{{$l.URL}}" style="color:#E0DCD2;text-decoration:underline;">{{$l.Label}}</a>{{end -}}
+      </p>
+      <p style="margin:0 0 8px 0;color:#A29D92;font-size:12px;line-height:18px;">{{.WhyText}}</p>
+      {{- if .Marketing}}
+      <p style="margin:0 0 8px 0;color:#A29D92;font-size:12px;line-height:18px;">Don't want these emails? <a href="{{.UnsubscribeURL}}" style="color:#FFD400;text-decoration:underline;font-weight:700;">Unsubscribe</a> with one click, no sign-in needed. We'll honour it within 10 business days.</p>
+      {{- end}}
+      <p style="margin:0;color:#7C776D;font-size:12px;line-height:18px;">© {{.Year}} {{.LegalName}} All rights reserved.</p>
+    </td>
+  </tr>
+</table>
+{{msoContainerEnd}}
+</td>
+</tr>
+</table>
+</div>
+</body>
+</html>
+{{- end}}
+
+{{define "advertorial" -}}
+{{- if eq .Kind "products"}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 0 0;">
+  <tr><td class="at-line" style="border-top:1px solid #E0DCD2;padding-top:24px;">
+    {{- if .Eyebrow}}<p style="margin:0 0 4px 0;font-size:12px;line-height:16px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#055E47;" class="at-link">{{.Eyebrow}}</p>{{end}}
+    <p class="at-text" style="margin:0 0 16px 0;font-size:20px;line-height:26px;font-weight:800;color:#191816;">{{.Title}}</p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        {{- range $i, $p := .Products}}
+        <td width="33%" valign="top" style="width:33%;padding:0 {{if lt $i 2}}12px{{else}}0{{end}} 0 0;">
+          <a href="{{$p.URL}}" style="text-decoration:none;color:#191816;">
+            <img src="{{$p.ImageURL}}" width="160" height="160" alt="{{$p.Title}}" class="at-promo-thumb" style="display:block;width:160px;max-width:100%;height:160px;object-fit:cover;border-radius:12px;border:0;background-color:#F6F4EF;">
+            <span class="at-text" style="display:block;margin-top:8px;font-size:14px;line-height:20px;font-weight:600;color:#191816;">{{$p.Title}}</span>
+            {{- if $p.Price}}<span class="at-text" style="display:block;font-size:14px;line-height:20px;font-weight:800;color:#191816;">{{$p.Price}}</span>{{end}}
+          </a>
+        </td>
+        {{- end}}
+      </tr>
+    </table>
+    {{- if .CTAURL}}<p style="margin:12px 0 0 0;font-size:14px;line-height:20px;"><a href="{{.CTAURL}}" class="at-link" style="color:#055E47;font-weight:700;text-decoration:underline;">{{.CTALabel}}</a></p>{{end}}
+  </td></tr>
+</table>
+{{- else}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:16px 0 0 0;">
+  <tr><td class="at-line" style="border-top:1px solid #E0DCD2;padding-top:24px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="at-panel at-stack" style="background-color:{{if eq .Kind "preorder"}}#FFFBE6{{else}}#E8F5F0{{end}};border-radius:12px;">
+      <tr>
+        {{- if .ImageURL}}
+        <td class="at-col" width="200" valign="top" style="width:200px;">
+          <a href="{{.CTAURL}}" style="text-decoration:none;"><img src="{{.ImageURL}}" width="200" height="160" alt="{{if .ImageAlt}}{{.ImageAlt}}{{else}}{{.Title}}{{end}}" class="at-promo-img" style="display:block;width:200px;height:160px;object-fit:cover;border-radius:12px 0 0 12px;border:0;"></a>
+        </td>
+        {{- end}}
+        <td class="at-col" valign="middle" style="padding:20px 24px;">
+          {{- if .Eyebrow}}<p style="margin:0 0 4px 0;font-size:12px;line-height:16px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:{{if eq .Kind "preorder"}}#7A6400{{else}}#055E47{{end}};">{{.Eyebrow}}</p>{{end}}
+          <p style="margin:0 0 6px 0;font-size:18px;line-height:24px;font-weight:800;color:#191816;">{{.Title}}</p>
+          {{- if .Body}}<p style="margin:0 0 12px 0;font-size:14px;line-height:20px;color:#44413B;">{{.Body}}</p>{{end}}
+          {{- if .CTAURL}}<a href="{{.CTAURL}}" style="display:inline-block;background-color:#000000;color:#FFD400;font-size:14px;line-height:20px;font-weight:700;text-decoration:none;padding:8px 16px;border-radius:999px;">{{if .CTALabel}}{{.CTALabel}}{{else}}Shop now{{end}} &rarr;</a>{{end}}
+          {{- if .Sponsor}}<p style="margin:8px 0 0 0;font-size:11px;line-height:14px;color:#69645B;">Sponsored · {{.Sponsor}}</p>{{end}}
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+</table>
+{{- end}}
+{{- end}}
+
+{{/* ---- components content templates call: {{template "packages" .packages}}, "totals", "address" ---- */}}
+{{define "packages" -}}
+{{- range .}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="at-panel" style="margin:0 0 16px 0;border:1px solid #E0DCD2;border-radius:12px;">
+  <tr>
+    <td style="padding:14px 16px;border-bottom:1px solid #E0DCD2;" class="at-line">
+      <p style="margin:0;font-size:13px;line-height:18px;font-weight:800;letter-spacing:0.3px;text-transform:uppercase;color:{{if eq .kind "afrotransact"}}#055E47{{else if eq .kind "preorder"}}#7A6400{{else}}#44413B{{end}};" class="at-text">{{.label}}</p>
+      {{- if .promise}}<p style="margin:2px 0 0 0;font-size:14px;line-height:20px;color:#191816;font-weight:600;" class="at-text">{{.promise}}</p>{{end}}
+    </td>
+  </tr>
+  {{- range .items}}
+  <tr>
+    <td style="padding:12px 16px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td width="72" valign="top" style="width:72px;padding-right:12px;">
+            {{- if .imageUrl}}<a href="{{.url}}" style="text-decoration:none;"><img src="{{.imageUrl}}" width="64" height="64" alt="{{.title}}" style="display:block;width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid #EEEBE4;background-color:#F6F4EF;"></a>
+            {{- else}}<img src="{{placeholderImage}}" width="64" height="64" alt="{{.title}}" style="display:block;width:64px;height:64px;border-radius:8px;border:0;">{{end}}
+          </td>
+          <td valign="top" style="font-size:15px;line-height:20px;">
+            <a href="{{.url}}" style="color:#191816;text-decoration:none;font-weight:700;" class="at-text">{{.title}}</a>
+            {{- if .variant}}<br><span style="font-size:13px;line-height:18px;color:#69645B;" class="at-muted">{{.variant}}</span>{{end}}
+            <br><span style="font-size:13px;line-height:18px;color:#69645B;" class="at-muted">Qty {{.quantity}}{{if .unitPrice}} · {{.unitPrice}} each{{end}}</span>
+          </td>
+          <td valign="top" align="right" style="font-size:15px;line-height:20px;font-weight:700;color:#191816;white-space:nowrap;padding-left:8px;" class="at-text">{{.lineTotal}}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  {{- end}}
+  {{- if .note}}
+  <tr><td style="padding:0 16px 14px 16px;font-size:13px;line-height:18px;color:#69645B;" class="at-muted">{{.note}}</td></tr>
+  {{- end}}
+</table>
+{{- end}}
+{{- end}}
+
+{{define "totals" -}}
+{{- with .}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 20px 0;font-size:15px;line-height:22px;">
+  {{- range .rows}}
+  <tr>
+    <td style="padding:3px 0;color:#44413B;" class="at-muted">{{.label}}</td>
+    <td align="right" style="padding:3px 0;color:{{if .credit}}#055E47{{else}}#191816{{end}};" class="at-text">{{.value}}</td>
+  </tr>
+  {{- end}}
+  <tr>
+    <td style="padding:10px 0 0 0;border-top:2px solid #191816;font-size:17px;font-weight:800;color:#191816;" class="at-text at-line">Total</td>
+    <td align="right" style="padding:10px 0 0 0;border-top:2px solid #191816;font-size:17px;font-weight:800;color:#191816;" class="at-text at-line">{{.total}}</td>
+  </tr>
+</table>
+{{- end}}
+{{- end}}
+
+{{define "address" -}}
+{{- if and . (index . "name")}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="at-panel" style="margin:0 0 20px 0;background-color:#F6F4EF;border-radius:12px;">
+  <tr>
+    <td style="padding:14px 16px;font-size:14px;line-height:20px;color:#191816;" class="at-text">
+      <span style="display:block;font-size:12px;line-height:16px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:#69645B;" class="at-muted">{{if .label}}{{.label}}{{else}}Delivering to{{end}}</span>
+      <strong>{{.name}}</strong>{{range .lines}}<br>{{.}}{{end}}
+    </td>
+  </tr>
+</table>
+{{- end}}
+{{- end}}
+
+{{/* Booking card: provider photo (or monogram), service, when, where, reference, price. Optional fields via index. */}}
+{{define "bookingCard" -}}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="at-panel" style="margin:0 0 20px 0;border:1px solid #E0DCD2;border-radius:12px;">
+  <tr>
+    <td width="88" valign="top" style="width:88px;padding:16px 0 16px 16px;">
+      {{- with index . "providerPhotoUrl"}}<img src="{{.}}" width="64" height="64" alt="{{index $ "providerName"}}" style="display:block;width:64px;height:64px;border-radius:32px;object-fit:cover;border:0;">
+      {{- else}}<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" valign="middle" width="64" height="64" style="width:64px;height:64px;border-radius:32px;background-color:#000000;color:#FFD400;font-family:Figtree,'Segoe UI',Helvetica,Arial,sans-serif;font-size:22px;font-weight:800;" role="img" aria-label="{{index . "providerName"}}">{{index . "providerInitials"}}</td></tr></table>{{end}}
+    </td>
+    <td valign="top" style="padding:16px;font-family:Figtree,'Segoe UI',Helvetica,Arial,sans-serif;">
+      <p style="margin:0;font-size:18px;line-height:24px;font-weight:800;color:#191816;" class="at-text">{{index . "serviceName"}}</p>
+      <p style="margin:2px 0 10px 0;font-size:14px;line-height:20px;color:#69645B;" class="at-muted">with {{index . "providerName"}}</p>
+      <p style="margin:0;font-size:15px;line-height:22px;color:#191816;" class="at-text"><strong>{{index . "startsAt"}}</strong>{{with index . "duration"}} · {{.}}{{end}}</p>
+      {{- with index . "location"}}<p style="margin:0;font-size:15px;line-height:22px;color:#191816;" class="at-text">{{.}}</p>{{end}}
+      {{- with index . "bookingReference"}}<p style="margin:8px 0 0 0;font-size:13px;line-height:18px;color:#69645B;" class="at-muted">Reference {{.}}{{with index $ "price"}} · {{.}}{{end}}{{with index $ "deposit"}} ({{.}} deposit paid){{end}}</p>{{end}}
+    </td>
+  </tr>
+</table>
+{{- end}}

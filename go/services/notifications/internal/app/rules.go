@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -221,7 +222,7 @@ var DefaultEventRules = map[string][]EventRule{
 			IDField: "customerId", When: shipmentStatusTo("delivery_failed"), Enrich: enrichShipment},
 	},
 	"orders.shipment.delivered": {{Topic: TopicOrders, Template: "shipment.delivered", Channels: chEmailPush,
-		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichOrder}},
+		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichDelivered}},
 	"orders.shipment.cancelled": {{Topic: TopicOrders, Template: "shipment.cancelled", Channels: chEmailPush,
 		Recipient: RecipientUser, IDField: "customerId", Enrich: enrichShipmentCancelled}},
 
@@ -349,12 +350,23 @@ func enrichWelcome(d map[string]any, l Links) {
 	}
 }
 
+// enrichOrder links an order email to the order's page and the Help Center.
 func enrichOrder(d map[string]any, l Links) {
-	d["orderUrl"] = join(l.Storefront, "/orders")
+	d["orderUrl"] = orderLink(d, l)
+	d["ordersUrl"] = join(l.Storefront, "/orders")
+	d["helpUrl"] = join(l.Storefront, "/help")
+	d["smsOrderUrl"] = smsLink(str(d, "orderUrl"))
+}
+
+// enrichDelivered is a delivered shipment: its items (when the event carries them) and the order link.
+func enrichDelivered(d map[string]any, l Links) {
+	enrichShipmentView(d, l)
+	d["deliveredDate"] = friendlyDate(str(d, "deliveredAt"))
+	d["reviewUrl"] = d["orderUrl"]
 }
 
 func enrichOrderPlaced(d map[string]any, l Links) {
-	enrichOrder(d, l)
+	enrichOrderView(d, l)
 	d["total"] = moneyField(d, "totalMinor")
 	items, earliest := int64(0), ""
 	for _, s := range objects(d, "shipments") {
@@ -367,6 +379,7 @@ func enrichOrderPlaced(d map[string]any, l Links) {
 		}
 	}
 	d["itemCount"] = items
+	d["itemCountText"] = itemsCountText(items)
 	d["estimatedDelivery"] = "soon"
 	if f := friendlyDate(earliest); f != "" {
 		d["estimatedDelivery"] = "by " + f
@@ -390,7 +403,7 @@ func shipped(d map[string]any) bool {
 }
 
 func enrichShipment(d map[string]any, l Links) {
-	enrichOrder(d, l)
+	enrichShipmentView(d, l)
 	d["trackingLine"] = ""
 	if c, n := str(d, "carrier"), str(d, "trackingNumber"); n != "" {
 		d["trackingLine"] = strings.TrimSpace(strings.ToUpper(c) + " tracking: " + n)
@@ -402,8 +415,10 @@ func enrichShipment(d map[string]any, l Links) {
 }
 
 func enrichShipmentCancelled(d map[string]any, l Links) {
-	enrichOrder(d, l)
+	enrichShipmentView(d, l)
+	d["refund"] = ""
 	if boolean(d, "captured") {
+		d["refund"] = moneyField(d, "totalMinor")
 		d["refundNote"] = "We're refunding " + moneyField(d, "totalMinor") + " to your original payment method. It can take 5–10 business days to show."
 	} else {
 		d["refundNote"] = "You haven't been charged for these items."
@@ -476,6 +491,37 @@ func enrichPayout(d map[string]any, l Links) {
 func enrichBooking(d map[string]any, _ Links) {
 	if s := str(d, "startsAt"); s != "" {
 		d["startsAt"] = smsSafeDisplay(s)
+	}
+	// Booking card fields (S277): provider photo when the producer sends one, else the provider's initials.
+	nullable(d, "providerPhotoUrl", "location")
+	if !domain.SafeURL(str(d, "providerPhotoUrl")) {
+		d["providerPhotoUrl"] = ""
+	}
+	initials := ""
+	for _, w := range strings.Fields(strings.NewReplacer("'s", "", "’s", "").Replace(str(d, "providerName"))) {
+		if r := []rune(w); len(initials) < 2 && len(r) > 0 {
+			initials += strings.ToUpper(string(r[0]))
+		}
+	}
+	d["providerInitials"] = initials
+	d["price"] = moneyField(d, "priceMinor")
+	d["deposit"] = ""
+	if n, ok := integer(d, "depositMinor"); ok && n > 0 {
+		d["deposit"] = moneyField(d, "depositMinor")
+	}
+	d["duration"] = ""
+	if a, err1 := time.Parse(time.RFC3339, str(d, "startAt")); err1 == nil {
+		if b, err2 := time.Parse(time.RFC3339, str(d, "endAt")); err2 == nil && b.After(a) {
+			m := int(b.Sub(a).Minutes())
+			switch {
+			case m%60 == 0:
+				d["duration"] = strconv.Itoa(m/60) + " hr"
+			case m > 60:
+				d["duration"] = strconv.Itoa(m/60) + " hr " + strconv.Itoa(m%60) + " min"
+			default:
+				d["duration"] = strconv.Itoa(m) + " min"
+			}
+		}
 	}
 }
 

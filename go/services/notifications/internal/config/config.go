@@ -9,6 +9,7 @@ import (
 	"time"
 
 	pkgconfig "github.com/billionairedev24/diaspora-commerce/go/pkg/config"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
 )
 
 // Routes are ordered provider names per market ("default" is the fallback) for one channel.
@@ -77,6 +78,43 @@ type Config struct {
 		MaxTotalBytes    int64         `yaml:"maxTotalBytes" env:"ATTACHMENTS_MAX_TOTAL_BYTES"`
 		Timeout          time.Duration `yaml:"timeout" env:"ATTACHMENTS_TIMEOUT"`
 	} `yaml:"attachments"`
+	// Brand is what the shared email layout shows (S277). The footer's socials, WhatsApp community link, app links,
+	// phone, address and legal links come from the content service's site config (siteConfigUrl, refreshed every
+	// refresh); the values here are the defaults used until it answers and for fields it leaves empty.
+	Brand struct {
+		Name string `yaml:"name"`
+		// AssetBaseURL hosts the email images (logo-header.png, social/*.png, badges/*.png); default
+		// <links.storefront>/email (web/apps/storefront/public/email).
+		AssetBaseURL         string        `yaml:"assetBaseUrl" env:"EMAIL_ASSET_BASE_URL"`
+		SiteConfigURL        string        `yaml:"siteConfigUrl" env:"SITE_CONFIG_URL"`
+		Refresh              time.Duration `yaml:"refresh"`
+		WhatsAppCommunityURL string        `yaml:"whatsappCommunityUrl" env:"WHATSAPP_COMMUNITY_URL"`
+		AppStoreURL          string        `yaml:"appStoreUrl"`
+		PlayStoreURL         string        `yaml:"playStoreUrl"`
+		SupportPhone         string        `yaml:"supportPhone"`
+		SupportPhoneE164     string        `yaml:"supportPhoneE164"`
+		SupportEmail         string        `yaml:"supportEmail"`
+		Address              string        `yaml:"address"`
+		Socials              []struct {
+			Network string `yaml:"network"`
+			URL     string `yaml:"url"`
+		} `yaml:"socials"`
+		Legal []struct {
+			Label string `yaml:"label"`
+			URL   string `yaml:"url"`
+		} `yaml:"legal"`
+	} `yaml:"brand"`
+	// Advertorials are the promotions below the main content of the emails app.AdvertorialPolicy allows (never
+	// security emails, never for recipients who opted out of promotional email). Each source is a public read API;
+	// an empty URL turns that source off. timeout bounds all lookups for one email.
+	Advertorials struct {
+		Enabled         bool          `yaml:"enabled" env:"ADVERTORIALS_ENABLED"`
+		Timeout         time.Duration `yaml:"timeout"`
+		SearchURL       string        `yaml:"searchUrl" env:"SEARCH_URL"`
+		DeliveryRunsURL string        `yaml:"deliveryRunsUrl"`
+		ContentURL      string        `yaml:"contentUrl" env:"CONTENT_URL"`
+		CampaignSlot    string        `yaml:"campaignSlot"`
+	} `yaml:"advertorials"`
 	Auth struct {
 		Enabled  bool   `yaml:"enabled" env:"AUTH_ENABLED"`
 		Issuer   string `yaml:"issuer" env:"AUTH_ISSUER_URL"`
@@ -199,6 +237,8 @@ type Providers struct {
 func (c *Config) Resolve() {
 	c.PublicBaseURL = pkgconfig.FirstNonEmpty(c.PublicBaseURL, pkgconfig.JoinURL(c.APIBaseURL, "/notifications"))
 	c.Links.ProviderHub = pkgconfig.FirstNonEmpty(c.Links.ProviderHub, c.Links.SellerCenter)
+	c.Brand.AssetBaseURL = pkgconfig.FirstNonEmpty(c.Brand.AssetBaseURL, pkgconfig.JoinURL(c.Links.Storefront, "/email"))
+	c.Advertorials.DeliveryRunsURL = pkgconfig.FirstNonEmpty(c.Advertorials.DeliveryRunsURL, c.DeliveryRuns.BaseURL)
 	if u, err := url.Parse(c.Attachments.MediaPublicURL); err == nil && u.Host != "" &&
 		!slices.Contains(c.Attachments.AllowedHosts, u.Host) {
 		c.Attachments.AllowedHosts = append(slices.Clone(c.Attachments.AllowedHosts), u.Host)
@@ -211,4 +251,19 @@ func (c *Config) Resolve() {
 			c.Attachments.AllowedHosts = append(slices.Clone(c.Attachments.AllowedHosts), entry)
 		}
 	}
+}
+
+// EmailBrand is the configured email brand (brand.*): the defaults the site config overlays.
+func (c Config) EmailBrand() domain.Brand {
+	b := domain.Brand{Name: c.Brand.Name, StorefrontURL: c.Links.Storefront, AssetBaseURL: c.Brand.AssetBaseURL,
+		WhatsAppCommunityURL: c.Brand.WhatsAppCommunityURL, AppStoreURL: c.Brand.AppStoreURL, PlayStoreURL: c.Brand.PlayStoreURL,
+		SupportPhone: c.Brand.SupportPhone, SupportPhoneE164: c.Brand.SupportPhoneE164, SupportEmail: c.Brand.SupportEmail,
+		Address: c.Brand.Address}
+	for _, s := range c.Brand.Socials {
+		b.Socials = append(b.Socials, domain.SocialLink{Network: s.Network, URL: s.URL})
+	}
+	for _, l := range c.Brand.Legal {
+		b.Legal = append(b.Legal, domain.BrandLink{Label: l.Label, URL: l.URL})
+	}
+	return b
 }

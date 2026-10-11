@@ -156,6 +156,12 @@ func preorderComms(cr string) func(map[string]any, Links) {
 		if sms == "" {
 			sms = "AfroTransact: " + str(d, "name") + " is open until " + str(d, "closesDisplay") + ". {link} Reply STOP to opt out"
 		}
+		if !strings.Contains(strings.ToUpper(sms), "STOP") {
+			sms = strings.TrimRight(sms, ". ") + ". Reply STOP to opt out"
+		}
+		if !strings.HasPrefix(sms, "AfroTransact") {
+			sms = "AfroTransact: " + sms
+		}
 		d["smsCopy"] = smsSafeDisplay(strings.ReplaceAll(sms, "{link}", str(d, "smsUrl")))
 	}
 }
@@ -277,6 +283,16 @@ func enrichPreorderMissed(d map[string]any, l Links) {
 	d["refundUrl"] = withAttribution(refund, "email", code, "missed")
 	d["newDateUrl"] = withAttribution(newDate, "email", code, "missed")
 	d["orderUrl"] = withAttribution(join(l.Storefront, "/orders"), "email", code, "missed")
+	d["helpUrl"] = join(l.Storefront, "/help")
+	items := []any{}
+	for _, line := range objects(d, "items") {
+		items = append(items, viewItem(line, currencyOf(d), l))
+	}
+	d["packages"] = []any{}
+	if len(items) > 0 {
+		d["packages"] = []any{map[string]any{"label": "Pre-order · " + str(d, "name"), "kind": "preorder",
+			"promise": "Was due " + str(d, "missedDisplay"), "note": "", "items": items}}
+	}
 }
 
 // enrichPreorderLatePayment formats the late add's payment-link SMS.

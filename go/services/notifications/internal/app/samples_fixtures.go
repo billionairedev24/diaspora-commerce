@@ -1,5 +1,7 @@
 package app
 
+import "fmt"
+
 // Sample payloads shaped like contracts/asyncapi/events.yaml: one per mapped event type, and one per rule for
 // multi-rule types (shipment statuses, suspension variants, both parties of a claim). They drive the template gallery,
 // GET /v1/templates/{key}/sample and the Postgres integration test that renders every mapped event. Templates use
@@ -25,17 +27,12 @@ func SampleEvents(l Links) map[string][]map[string]any {
 		"identity.user.registered": {{"userId": "u-1", "email": "ada@example.com", "firstName": "Ada", "lastName": "Obi",
 			"intent": "SELL", "roles": []string{"account.seller_applicant"}, "method": "PASSWORD", "emailVerified": false,
 			"smsConsent": false, "registeredAt": "2026-10-10T10:00:00Z"}},
-		"orders.order.placed": {{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "orderNumber": "AT-2026-7KQ3MD",
-			"customerId": "cust-1", "currency": "USD", "itemsMinor": 4000, "shippingMinor": 500, "taxMinor": 300,
-			"discountMinor": 0, "totalMinor": 4800, "placedAt": "2026-10-10T10:00:00Z",
-			"shipments": []any{map[string]any{"shipmentId": "1a7d2e6b-3c4f-4d8e-9fa0-b1c2d3e4f502", "sellerOrgId": "org_1",
-				"fulfilmentType": "RETAIL_1P", "deliveryMethod": "CARRIER", "promisedBy": "2026-10-14", "totalMinor": 4800,
-				"lines": []any{map[string]any{"variantAtin": "ATGARI0001", "quantity": 2}}}}},
-			samplePreorderOrder()},
+		"orders.order.placed": {sampleOrderPlaced(), samplePreorderOrder()},
 		"orders.preorder.delivery_missed": {{"orderId": "5c2d8e1f-3a4b-4c5d-8e6f-7a8b9c0d1e21", "orderNumber": "AT-2026-PRE7LB",
 			"customerId": "cust-1", "windowId": samplePreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7",
 			"deliversOn": "2026-10-25", "newDate": "2026-10-28", "offerRefund": true, "offerNewDate": true, "refundUrl": nil,
-			"newDateUrl": nil, "totalMinor": 5196, "currency": "USD", "reason": "VEHICLE_BREAKDOWN"}},
+			"newDateUrl": nil, "totalMinor": 5196, "currency": "USD", "reason": "VEHICLE_BREAKDOWN",
+			"items": []any{sampleItem(0, 2)}}},
 		"preorder.comms.due": {
 			samplePreorderComms(PreorderAnnounce, "AfroTransact: Lubbock pre-order is open until Wed 11:59PM. {link} Reply STOP to opt out"),
 			samplePreorderComms(PreorderAnnounce, ""),
@@ -53,11 +50,14 @@ func SampleEvents(l Links) map[string][]map[string]any {
 			sampleShipment("packed", "ready", "PICKUP"), sampleShipment("out_for_delivery", "delivery_failed", "AFROTRANSACT_DELIVERY"),
 		},
 		"orders.shipment.delivered": {{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "orderNumber": "AT-2026-7KQ3MD",
-			"customerId": "cust-1", "shipmentId": "1a7d2e6b-3c4f-4d8e-9fa0-b1c2d3e4f502", "sellerOrgId": "org_1",
-			"deliveredAt": "2026-10-10T10:00:00Z", "totalMinor": 4800, "lineIds": []string{}, "source": "driver"}},
+			"customerId": "cust-1", "shipmentId": "1a7d2e6b-3c4f-4d8e-9fa0-b1c2d3e4f502", "sellerOrgId": "org_afrotransact_retail",
+			"deliveredAt": "2026-10-13T16:20:00Z", "totalMinor": 2500, "lineIds": []string{}, "source": "driver",
+			"fulfilmentType": "RETAIL_1P", "sellerName": "AfroTransact Retail", "currency": "USD",
+			"items": []any{sampleItem(0, 2), sampleItem(1, 1)}}},
 		"orders.shipment.cancelled": {{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "orderNumber": "AT-2026-7KQ3MD",
 			"customerId": "cust-1", "shipmentId": "1a7d2e6b-3c4f-4d8e-9fa0-b1c2d3e4f502", "sellerOrgId": "org_1",
-			"actorType": "CUSTOMER", "captured": true, "totalMinor": 1999, "currency": "USD", "cancelledAt": "2026-10-10T10:00:00Z"}},
+			"actorType": "CUSTOMER", "captured": true, "totalMinor": 1500, "currency": "USD", "cancelledAt": "2026-10-10T10:00:00Z",
+			"fulfilmentType": "SELLER_FULFILLED", "sellerName": "Mama Put Foods", "items": []any{sampleItem(2, 1)}}},
 		"seller.application.submitted":      {sampleApplication("SUBMITTED", nil)},
 		"seller.application.info_requested": {sampleApplication("REQUEST_INFO", []string{"business_permit", "tax_id"})},
 		"seller.application.approved":       {sampleApplication("FINAL_APPROVE", nil)},
@@ -164,16 +164,17 @@ func samplePreorderOrder() map[string]any {
 	return map[string]any{"orderId": "5c2d8e1f-3a4b-4c5d-8e6f-7a8b9c0d1e21", "orderNumber": "AT-2026-PRE7LB", "customerId": "cust-1",
 		"currency": "USD", "itemsMinor": 4198, "shippingMinor": 799, "taxMinor": 199, "discountMinor": 0, "totalMinor": 5196,
 		"placedAt": "2026-10-10T10:00:00Z", "attribution": map[string]any{"src": "ig", "cr": "story", "po": "LBK-7"},
+		"shipToName": "Ada Obi", "shipToLine1": "4410 19th St", "shipToCity": "Lubbock", "shipToState": "TX", "shipToPostalCode": "79416",
 		"shipments": []any{
 			map[string]any{"shipmentId": "2b8e3f7c-0000-4e9f-a0b1-c2d3e4f5a611", "sellerOrgId": "org_afrotransact_retail",
 				"fulfilmentType": "PREORDER", "deliveryMethod": "AFROTRANSACT_DELIVERY", "promisedBy": "2026-10-25", "totalMinor": 3398,
 				"preorder": map[string]any{"windowId": samplePreorderWindowID, "code": "LBK-7", "name": "Lubbock Pre-order #7",
 					"number": "LBK-1042", "deliversOn": "2026-10-25", "deliversDisplay": "Sun, Oct 25", "closesAt": "2026-10-22T04:59:00Z",
 					"closesDisplay": "Wed, Oct 21 11:59 PM", "fulfilment": "DOOR", "feeMinor": 799, "pickupWindow": nil},
-				"lines": []any{map[string]any{"variantAtin": "ATGARI0001", "quantity": 2}}},
-			map[string]any{"shipmentId": "3c9f4a8d-0000-4fa0-b1c2-d3e4f5a6b722", "sellerOrgId": "org_1", "fulfilmentType": "SELLER_FULFILLED",
-				"deliveryMethod": "CARRIER", "promisedBy": "2026-10-15", "totalMinor": 1798,
-				"lines": []any{map[string]any{"variantAtin": "ATSHEA0001", "quantity": 2}}},
+				"lines": []any{sampleItem(0, 2), sampleItem(1, 1)}},
+			map[string]any{"shipmentId": "3c9f4a8d-0000-4fa0-b1c2-d3e4f5a6b722", "sellerOrgId": "org_1", "sellerName": "Mama Put Foods",
+				"fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "CARRIER", "promisedBy": "2026-10-15", "totalMinor": 1798,
+				"lines": []any{sampleItem(2, 1)}},
 		}}
 }
 
@@ -182,7 +183,49 @@ func sampleShipment(from, to, method string) map[string]any {
 		"customerId": "cust-1", "shipmentId": "1a7d2e6b-3c4f-4d8e-9fa0-b1c2d3e4f502", "sellerOrgId": "org_1",
 		"fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": method, "from": from, "to": to, "actorType": "CARRIER",
 		"actorId": "ups", "source": "carrier", "occurredAt": "2026-10-10T10:00:00Z", "carrier": "ups",
-		"trackingNumber": "1Z999AA10123456784", "promisedBy": "2026-10-14"}
+		"trackingNumber": "1Z999AA10123456784", "promisedBy": "2026-10-14", "sellerName": "Mama Put Foods", "currency": "USD",
+		"items": []any{sampleItem(2, 1)}}
+}
+
+// SampleProduct is a product the order samples use (title, photo, price). Defaults use the hosted placeholder
+// photo; the running service swaps in real catalog products (search) so previews show real photos.
+type SampleProduct struct {
+	Atin       string
+	Title      string
+	ImageURL   string
+	PriceMinor int64
+}
+
+// sampleCatalog are the products in the sample orders, in line order (2 × garri and 1 × rice ship from
+// AfroTransact, the shea butter from a seller; the pre-order cart reuses the first two).
+var sampleCatalog = []SampleProduct{
+	{Atin: "ATGARI0001", Title: "Yellow Garri, 1.5 kg", PriceMinor: 650},
+	{Atin: "ATOFAD0001", Title: "Ofada Rice, Destoned 2 lb", PriceMinor: 1200},
+	{Atin: "ATSHEA0001", Title: "Unrefined Shea Butter, Grade A 16 oz", PriceMinor: 1500},
+}
+
+// sampleItem is order line i of the sample catalog with a quantity (event line / item shape).
+func sampleItem(i int, qty int64) map[string]any {
+	p := sampleCatalog[i]
+	return map[string]any{"lineId": fmt.Sprintf("9a1b2c3d-0000-4000-8000-00000000000%d", i+1), "variantAtin": p.Atin,
+		"productAtin": p.Atin, "title": p.Title, "imageUrl": p.ImageURL, "quantity": qty, "unitPriceMinor": p.PriceMinor}
+}
+
+// sampleOrderPlaced is orders.order.placed for a cart with an AfroTransact package and a seller package.
+func sampleOrderPlaced() map[string]any {
+	return map[string]any{"orderId": "0f6c1d5a-2b3e-4c7d-8e9f-a0b1c2d3e401", "orderNumber": "AT-2026-7KQ3MD",
+		"customerId": "cust-1", "currency": "USD", "itemsMinor": 4000, "shippingMinor": 500, "taxMinor": 300,
+		"discountMinor": 0, "totalMinor": 4800, "placedAt": "2026-10-10T10:00:00Z", "shipToName": "Ada Obi",
+		"shipToLine1": "2207 Bagby St", "shipToLine2": "Apt 4B", "shipToCity": "Houston", "shipToState": "TX",
+		"shipToPostalCode": "77006", "shipToCountry": "US",
+		"shipments": []any{
+			map[string]any{"shipmentId": "1a7d2e6b-3c4f-4d8e-9fa0-b1c2d3e4f502", "sellerOrgId": "org_afrotransact_retail",
+				"sellerName": "AfroTransact Retail", "fulfilmentType": "RETAIL_1P", "deliveryMethod": "AFROTRANSACT_DELIVERY",
+				"promisedBy": "2026-10-14", "totalMinor": 2500, "lines": []any{sampleItem(0, 2), sampleItem(1, 1)}},
+			map[string]any{"shipmentId": "4d0a5b9e-0000-4c1f-a2b3-c4d5e6f7a833", "sellerOrgId": "org_1", "sellerName": "Mama Put Foods",
+				"fulfilmentType": "SELLER_FULFILLED", "deliveryMethod": "CARRIER", "promisedBy": "2026-10-16", "totalMinor": 1500,
+				"lines": []any{sampleItem(2, 1)}},
+		}}
 }
 
 func sampleApplication(action string, items []string) map[string]any {

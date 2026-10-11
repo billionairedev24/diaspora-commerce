@@ -176,7 +176,7 @@ func TestSamplesComeFromTheRealIngest(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]map[string]any{
-		"order.confirmed":                 {"total": "$48.00", "estimatedDelivery": "by Wed, Oct 14", "orderUrl": "https://afrotransact.com/orders", "firstName": "Ada"},
+		"order.confirmed":                 {"total": "$48.00", "estimatedDelivery": "by Wed, Oct 14", "orderUrl": "https://afrotransact.com/orders/AT-2026-7KQ3MD", "firstName": "Ada"},
 		"org.invitation":                  {"inviterName": "A teammate", "programName": "Seller Center"},
 		"seller.payouts.paused.suspended": {"reasonText": "prohibited items"},
 		"stock.back_in_stock":             {"productUrl": "https://afrotransact.com/p/ATOGBO0500", "firstName": "Ada"},

@@ -92,6 +92,39 @@ alerts for the SKU are claimed (`notified_event_id` = the event, so a redelivery
 prevents a second send) and `stock.back_in_stock` goes out by email (the alert's `email`, else identity's) and push.
 Table `stock_alert` (migration `0004`).
 
+## Email layout, brand and advertorials (S277)
+
+Every email body is a **content fragment** rendered inside the shared layout `internal/app/email/layout.html.tmpl`
+(a body that is a complete HTML document is sent as-is). The layout is table-based with inline styles, 600 px max,
+a mobile media query, `color-scheme` + `prefers-color-scheme` dark-mode refinements, a hidden preheader
+(`{{define "preheader"}}…{{end}}` in the body) and Figtree with a safe fallback stack. It has a black header with the
+logo, a gold rule, the content, advertorials, a green **Join our WhatsApp community** block and a black footer. The
+footer has social icons, App Store and Google Play badges when app links exist, the customer service phone, the postal
+address, email preferences, unsubscribe (promotional emails) and legal links, plus wording for transactional,
+reminder, security or promotional (CAN-SPAM) emails. The plain-text part gets the same footer.
+
+Content helpers: `{{button url label}}` (gold, VML fallback for Outlook), `{{secondaryButton}}`, `{{otp code}}`,
+`{{badge tone text}}`, `{{callout tone text}}`, `{{facts "Label" value …}}`, and the components
+`{{template "packages" (index . "packages")}}` (line items with photo, quantity and price, grouped as Fulfilled by
+AfroTransact, seller and pre-order packages), `"totals"`, `"address"` and `"bookingCard"`. Bare `<p>`, `<h1>`, `<a>`
+and similar tags get the brand's inline styles.
+
+* **Brand**: `adapter/sitecontent` refreshes content's public `GET /v1/site-config`, the same source as the
+  storefront footer (socials, `whatsappCommunityUrl`, app links, phone, address and legal docs), over the
+  `brand.*` defaults in config. Images are hosted PNGs under `brand.assetBaseUrl` (default `<links.storefront>/email`
+  = `web/apps/storefront/public/email`): no SVG and no data URIs.
+* **Advertorials**: `app.AdvertorialPolicy` lists the templates that may show a promotion below the content, and of
+  which kinds: "Complete your pantry" (search), an open pre-order in the customer's city (delivery-runs
+  `/v1/public/preorders/open`) or a house campaign (content `hero_carousel` placements). Sources are best-effort within
+  `advertorials.timeout`. Advertorials never appear in security emails, nor for recipients with an
+  email/marketing preference set to off.
+* **Orders events** carry line photos (`lines[].imageUrl`), and shipment events carry `items`, `sellerName` and
+  `currency` (additive, `contracts/asyncapi/fragments/orders.yaml`).
+* **Tests**: `internal/app/emaillayout_test.go` renders every seeded email against golden files
+  (`testdata/golden`; to refresh, run `go test ./internal/app -run Branded -update`). It checks the footer, socials,
+  WhatsApp, unsubscribe on promotional emails, no ads in security emails, alt text, hosted PNGs, no external CSS and
+  size under 100 KB. It also checks that every SMS has the brand, STOP and fits one GSM-7 segment.
+
 ## Events consumed
 
 Consumer group `notifications`. Topics are configurable per environment (`kafka.topics.<name>` in

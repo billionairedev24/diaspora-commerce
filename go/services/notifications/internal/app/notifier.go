@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -30,14 +31,63 @@ type notifierImpl struct {
 	renderer  Renderer
 	store     port.NotificationStore
 	unsub     Unsubscriber
+	ads       Advertorials
+	prefs     port.ConsentStore
 	now       func() time.Time
 }
 
 var _ Notifier = (*notifierImpl)(nil)
 
+// NotifierOption configures the notifier.
+type NotifierOption func(*notifierImpl)
+
+// WithAdvertorials shows promotions below the main content of the emails AdvertorialPolicy allows them in, unless
+// the recipient switched promotional email off (an email/marketing preference set to false in prefs).
+func WithAdvertorials(ads Advertorials, prefs port.ConsentStore) NotifierOption {
+	return func(n *notifierImpl) { n.ads, n.prefs = ads, prefs }
+}
+
 // NewNotifier returns the Notifier.
-func NewNotifier(templates port.TemplateStore, renderer Renderer, store port.NotificationStore, unsub Unsubscriber) Notifier {
-	return &notifierImpl{templates: templates, renderer: renderer, store: store, unsub: unsub, now: time.Now}
+func NewNotifier(templates port.TemplateStore, renderer Renderer, store port.NotificationStore, unsub Unsubscriber,
+	opts ...NotifierOption) Notifier {
+	n := &notifierImpl{templates: templates, renderer: renderer, store: store, unsub: unsub, now: time.Now}
+	for _, o := range opts {
+		o(n)
+	}
+	return n
+}
+
+// emailData adds the layout's per-recipient data to an email's template data: the signed unsubscribe link of a
+// marketing email and the advertorials the template allows (never in security emails, never for recipients who
+// opted out of promotional email).
+func (n *notifierImpl) emailData(ctx context.Context, req domain.Request, tpl domain.Template, addr string, now time.Time) map[string]any {
+	d := make(map[string]any, len(req.Data)+2)
+	for k, v := range req.Data {
+		d[k] = v
+	}
+	key := domain.Key(req.Recipient.ID, addr)
+	if tpl.Category == domain.CategoryMarketing && n.unsub != nil {
+		d[DataUnsubscribeURL] = n.unsub.URL(UnsubscribeClaims{RecipientKey: key, Address: strings.ToLower(addr),
+			Channel: domain.ChannelEmail, Category: tpl.Category, IssuedAt: now.Unix()})
+	}
+	if _, preset := d[DataAdvertorials]; preset || n.ads == nil || !AdvertorialsAllowed(tpl.Key, tpl.Category) {
+		return d
+	}
+	if n.prefs != nil {
+		prefs, err := n.prefs.Preferences(ctx, key)
+		if err != nil {
+			return d // unknown consent: no promotions
+		}
+		for _, p := range prefs {
+			if p.Channel == domain.ChannelEmail && p.Category == domain.CategoryMarketing && !p.Enabled {
+				return d
+			}
+		}
+	}
+	if ads := n.ads.For(ctx, AdvertorialRequest{TemplateKey: tpl.Key, Category: tpl.Category, Market: req.Market, Data: req.Data}); len(ads) > 0 {
+		d[DataAdvertorials] = ads
+	}
+	return d
 }
 
 func (n *notifierImpl) Submit(ctx context.Context, req domain.Request) ([]domain.Notification, error) {
@@ -138,11 +188,15 @@ func (n *notifierImpl) build(ctx context.Context, req domain.Request) ([]domain.
 		if err != nil {
 			return nil, fmt.Errorf("template %s/%s: %w", req.TemplateKey, ch, err)
 		}
-		rendered, err := n.renderer.Render(tpl, req.Data)
-		if err != nil {
-			return nil, errors.Join(domain.ErrInvalidRequest, fmt.Errorf("render %s/%s: %w", req.TemplateKey, ch, err))
-		}
 		for _, addr := range addrs {
+			data := req.Data
+			if ch == domain.ChannelEmail {
+				data = n.emailData(ctx, req, tpl, addr, now)
+			}
+			rendered, err := n.renderer.Render(tpl, data)
+			if err != nil {
+				return nil, errors.Join(domain.ErrInvalidRequest, fmt.Errorf("render %s/%s: %w", req.TemplateKey, ch, err))
+			}
 			row := domain.Notification{
 				ID:              uuid.NewString(),
 				IdempotencyKey:  base + ":" + string(ch) + ":" + shortHash(addr),

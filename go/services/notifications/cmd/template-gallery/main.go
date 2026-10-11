@@ -27,6 +27,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/postgres"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/app"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/config"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/domain"
 )
 
 const defaultImage = "imresamu/postgis:17-3.5.4-alpine3.22"
@@ -71,11 +72,11 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 	if err := postgres.Migrate(ctx, pool); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	links, err := environmentLinks(o.env)
+	links, brand, err := environmentLinks(o.env)
 	if err != nil {
 		return err
 	}
-	entries, err := galleryEntries(ctx, pool, links)
+	entries, err := galleryEntries(ctx, pool, links, brand)
 	if err != nil {
 		return err
 	}
@@ -108,12 +109,13 @@ func run(ctx context.Context, o options, log *slog.Logger) error {
 	return nil
 }
 
-func galleryEntries(ctx context.Context, pool *pgxpool.Pool, links app.Links) ([]app.GalleryEntry, error) {
-	samples, err := app.NewTemplateSamples(ctx, links)
+func galleryEntries(ctx context.Context, pool *pgxpool.Pool, links app.Links, brand domain.Brand) ([]app.GalleryEntry, error) {
+	samples, err := app.NewTemplateSamples(ctx, links, app.WithSampleAssets(brand.AssetBaseURL))
 	if err != nil {
 		return nil, fmt.Errorf("sample data: %w", err)
 	}
-	entries, err := app.NewTemplateGallery(postgres.NewTemplateStore(pool), app.NewRenderer(), samples).Entries(ctx)
+	renderer := app.NewRenderer(app.WithBrand(app.StaticBrand(brand)))
+	entries, err := app.NewTemplateGallery(postgres.NewTemplateStore(pool), renderer, samples).Entries(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("render templates: %w", err)
 	}
@@ -124,14 +126,16 @@ func galleryEntries(ctx context.Context, pool *pgxpool.Pool, links app.Links) ([
 }
 
 // environmentLinks reads the links templates point to from the service's own config for env (with the same env
-// overrides and derivations as the service: PUBLIC_WEB_URL, SELLER_CENTER_URL, PROVIDER_HUB_URL).
-func environmentLinks(env string) (app.Links, error) {
+// overrides and derivations as the service: PUBLIC_WEB_URL, SELLER_CENTER_URL, PROVIDER_HUB_URL) and the email
+// brand defaults (brand.*; the gallery does not call the content service).
+func environmentLinks(env string) (app.Links, domain.Brand, error) {
 	var cfg config.Config
 	if err := pkgconfig.NewLoaderFor(notifications.Files, env, os.LookupEnv).Load(&cfg); err != nil {
-		return app.Links{}, fmt.Errorf("load %s config: %w", env, err)
+		return app.Links{}, domain.Brand{}, fmt.Errorf("load %s config: %w", env, err)
 	}
 	cfg.Resolve()
-	return app.Links{Storefront: cfg.Links.Storefront, SellerCenter: cfg.Links.SellerCenter, ProviderHub: cfg.Links.ProviderHub}, nil
+	return app.Links{Storefront: cfg.Links.Storefront, SellerCenter: cfg.Links.SellerCenter, ProviderHub: cfg.Links.ProviderHub},
+		cfg.EmailBrand(), nil
 }
 
 // database returns the DSN to use: --dsn, or a throwaway Testcontainers Postgres that cleanup terminates.
