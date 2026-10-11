@@ -228,6 +228,9 @@ export type PreorderWindowInput = z.infer<typeof PreorderWindowInputSchema>;
 export const PreorderOrderLineSchema = z.object({ atin: z.string(), name: z.string(), sellerName: z.string(), qty: z.number().int() });
 export type PreorderOrderLine = z.infer<typeof PreorderOrderLineSchema>;
 
+/** A late add's Idempotency-Key (16–64 characters), made when the dialog opens and kept until the order is added. */
+export const newLateAddKey = (random: () => string = () => crypto.randomUUID()): string => `late-${random()}`;
+
 export const PreorderOrderSchema = z.object({
   orderId: z.string(),
   number: z.string(),
@@ -826,7 +829,25 @@ export function createStaffPreordersApi(request: Requester, options: ApiClientOp
     summary: (id: string, signal?: AbortSignal): Promise<PreorderSummary> => request(`${P}/${enc(id)}/summary`, PreorderSummarySchema, { signal }),
     products: (id: string, signal?: AbortSignal): Promise<PreorderProduct[]> =>
       request(`${P}/${enc(id)}/products`, PreorderProductListSchema, { signal }).then((r) => r.items),
-    addLateOrder: (id: string, body: LateAddRequest): Promise<PreorderOrder> => request(`${P}/${enc(id)}/late-orders`, PreorderOrderSchema, { method: 'POST', body }),
+    /**
+     * Required Idempotency-Key: make it once per dialog ({@link newLateAddKey}) and reuse it on every retry until the
+     * order is added, so a retry after a timeout returns the same order instead of charging the saved card again.
+     */
+    addLateOrder: (id: string, body: LateAddRequest, idempotencyKey: string): Promise<PreorderOrder> =>
+      request(`${P}/${enc(id)}/late-orders`, PreorderOrderSchema, { method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey } }),
+    /**
+     * After a timeout: did the late add go through anyway? The window's newest late add (Agent, late) for this phone
+     * number with the same items, placed at or after `since`, or null.
+     */
+    findLateAdd: async (id: string, phone: string, atins: string[], since: string, signal?: AbortSignal): Promise<PreorderOrder | null> => {
+      const page = await request(`${P}/${enc(id)}/orders`, PreorderOrderPageSchema, {
+        query: tableSearchParams(ordersQuery({ status: 'LATE_ADD', channel: 'AGENT_LATE', q: phone, page: 0, size: 50 }), undefined),
+        signal
+      });
+      const want = [...new Set(atins)].sort().join('|');
+      const same = (o: PreorderOrder) => [...new Set(o.lines.map((l) => l.atin))].sort().join('|') === want;
+      return page.items.filter((o) => o.placedAt >= since && same(o)).sort((a, b) => b.placedAt.localeCompare(a.placedAt))[0] ?? null;
+    },
     customers: (q: string, windowId: string, signal?: AbortSignal): Promise<LateAddCustomerList> =>
       request('/v1/staff/customers/search', LateAddCustomerListSchema, { query: { q: q || undefined, windowId }, signal }),
     verifyAddress: (body: { line1: string; zip: string; city: string; region: string; country: string }): Promise<AddressVerification> =>

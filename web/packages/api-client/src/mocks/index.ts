@@ -9,3 +9,4 @@ export { completePhrases, levenshtein, matchScore, PHRASES, SYNONYMS, words } fr
 export { handleMockRequest } from './runtime';
 export { buildCart, productDetail, search, suggest } from './service';
 export { MOCK_STRIPE_KEY_COOKIE } from './shopper';
+export { MOCK_PAY_LINK } from './shopper';

@@ -4356,7 +4356,8 @@ components:
           - string
           - 'null'
           format: uri
-          description: Stripe payment link (PAYMENT_LINK)
+          description: 'Pay-now link (PAYMENT_LINK): AfroTransact''s own pay page with its signed token; never a Stripe-hosted
+            page'
         expiresAt:
           type:
           - string
@@ -6818,7 +6819,8 @@ components:
           - 'null'
         url:
           type: string
-          description: Hosted Stripe payment page
+          description: 'Pay-now link: AfroTransact''s own pay page with its signed token (/orders/{number}/pay?token=…); never
+            a Stripe-hosted page'
         expiresAt:
           type: string
           format: date-time

@@ -1,4 +1,5 @@
 /* Checkout rules shared by the screen and the payment adapters (pure; unit-tested). */
+import { definitiveFailure } from '@afrotransact/api-client';
 import { type components } from '@afrotransact/api-client/generated/gateway-bff';
 
 export type CheckoutSummary = components['schemas']['CheckoutSummary'];
@@ -78,6 +79,23 @@ export function paymentSheetIntent(summary: CheckoutSummary, totalMinor: number)
 }
 
 /** Idempotency-Key for POST /v1/checkout/orders (16–64 chars): one per checkout attempt, reused on retry. */
+/**
+ * After a failed purchase attempt: keep the Idempotency-Key (a retry replays the same order and PaymentIntent, so the
+ * customer is never charged twice) unless the failure is definitive. A failure is definitive when the request was
+ * refused (a 4xx, not "still in progress") or orders reports the known order failed; network errors, timeouts, 5xx and
+ * PaymentSheet errors keep the key. `status` asks orders about the known order, if any.
+ */
+export async function keyAfterFailure(key: string | null, error: unknown, status?: () => Promise<{ status: string }>): Promise<string | null> {
+  if (definitiveFailure(error)) return null;
+  if (!status) return key;
+  try {
+    await status();
+    return key;
+  } catch (e) {
+    return definitiveFailure(e) ? null : key;
+  }
+}
+
 export function idempotencyKey(random: () => string): string {
   const key = `co_${random().replace(/-/g, '')}`;
   return key.length > 64 ? key.slice(0, 64) : key.padEnd(16, '0');

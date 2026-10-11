@@ -30,6 +30,12 @@ export interface QuickPayProps {
 
 const WALLETS: Record<string, Wallet> = { apple_pay: 'apple_pay', google_pay: 'google_pay', link: 'link' };
 
+/** Closes the wallet sheet without paying (Express Checkout confirm event's paymentFailed). */
+function failWalletSheet(ev: Record<string, unknown>): void {
+  const paymentFailed = ev.paymentFailed;
+  if (typeof paymentFailed === 'function') paymentFailed.call(ev, { reason: 'fail' });
+}
+
 /**
  * Apple Pay, Google Pay and Link (S047, S282): Stripe's Express Checkout Element on the deferred-intent options the
  * Payment Element uses (amount, currency, manual capture). On confirm: elements.submit(), the order is placed, then
@@ -38,8 +44,8 @@ const WALLETS: Record<string, Wallet> = { apple_pay: 'apple_pay', google_pay: 'g
 export function QuickPay({ publishableKey, amountMinor, currency = 'USD', paymentMethodTypes, disabled, onPay, onConfirmed }: QuickPayProps) {
   const t = useT();
   const mount = useRef<HTMLDivElement>(null);
-  const handlers = useRef({ onPay, onConfirmed, amountMinor });
-  handlers.current = { onPay, onConfirmed, amountMinor };
+  const handlers = useRef({ onPay, onConfirmed, amountMinor, disabled });
+  handlers.current = { onPay, onConfirmed, amountMinor, disabled };
   const elementsRef = useRef<StripeElements | null>(null);
   const [unavailable, setUnavailable] = useState(false);
   const mock = isMockKey(publishableKey);
@@ -55,12 +61,18 @@ export function QuickPay({ publishableKey, amountMinor, currency = 'USD', paymen
         const elements = stripe.elements(deferredIntentOptions({ amountMinor: handlers.current.amountMinor, currency, paymentMethodTypes: types ? types.split(',') : undefined }));
         const express = elements.create('expressCheckout', { buttonHeight: 44, buttonTheme: { applePay: 'black', googlePay: 'black' }, paymentMethods: { applePay: 'always', googlePay: 'always', link: 'auto' } });
         express.on('confirm', (ev) => {
+          // While an order is being placed (another click, a saved card), a wallet confirmation is refused: closing
+          // the sheet with paymentFailed() never creates a second order or PaymentIntent.
+          if (handlers.current.disabled) {
+            failWalletSheet(ev);
+            return;
+          }
           void (async () => {
             const wallet = WALLETS[String(ev.expressPaymentType ?? '')] ?? 'link';
             const submitted = await elements.submit();
             if (submitted.error) return handlers.current.onConfirmed({ ok: false, message: submitted.error.message ?? t('pay.walletFailed') });
             const order = await handlers.current.onPay(wallet);
-            if (!order) return;
+            if (!order) return failWalletSheet(ev);
             handlers.current.onConfirmed(await confirmWithElements(stripe, elements, order.clientSecret, order.returnUrl));
           })();
         });
@@ -83,6 +95,7 @@ export function QuickPay({ publishableKey, amountMinor, currency = 'USD', paymen
   if (!mock) return unavailable ? null : <div ref={mount} className={styles.express} aria-label={t('co.quickPay')} data-testid="stripe-express-checkout" />;
 
   const pay = async (w: Wallet) => {
+    if (disabled) return;
     const order = await onPay(w);
     if (order) onConfirmed({ ok: true });
   };

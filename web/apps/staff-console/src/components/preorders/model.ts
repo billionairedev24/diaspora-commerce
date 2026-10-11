@@ -99,3 +99,7 @@ export const href = {
   create: () => '/preorders/new',
   settings: () => '/preorders/settings'
 };
+
+/** The late-add pay-now option (settings and the late-add dialog): the SMS opens AfroTransact's own payment page,
+ *  where the customer pays with Stripe Elements; customers never get a Stripe-hosted page. */
+export const PAY_NOW_LINK_LABEL = 'Send a pay-now link by SMS (opens the AfroTransact payment page)';

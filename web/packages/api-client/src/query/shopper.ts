@@ -55,7 +55,15 @@ export const lolaKeys = {
   history: (sessionId: string) => [...lolaKeys.all, 'history', sessionId] as const
 };
 
+/** Pay-now page of a late pre-order add; the token is part of the key so another link never reuses an answer. */
+export const payLinkKeys = {
+  all: ['pay-link'] as const,
+  detail: (orderNumber: string, token: string) => [...payLinkKeys.all, orderNumber, token] as const
+};
+
 export const shopperQueries = {
+  payLink: (api: ApiClient, orderNumber: string, token: string) =>
+    queryOptions({ queryKey: payLinkKeys.detail(orderNumber, token), queryFn: ({ signal }) => api.lookupPayLink(orderNumber, token, signal), staleTime: 0, retry: false }),
   addresses: (api: ApiClient) => queryOptions({ queryKey: accountKeys.addresses(), queryFn: () => api.getAddresses(), staleTime: MINUTE }),
   paymentMethods: (api: ApiClient) => queryOptions({ queryKey: accountKeys.paymentMethods(), queryFn: () => api.getPaymentMethods(), staleTime: MINUTE }),
   orders: (api: ApiClient) => queryOptions({ queryKey: orderKeys.lists(), queryFn: ({ signal }) => api.getOrderPage(undefined, signal), staleTime: 30_000 }),

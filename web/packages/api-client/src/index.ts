@@ -2,6 +2,7 @@ export { type ApiClient, type ApiClientOptions, createApiClient, type FetchLike,
 export { ApiError, isApiError } from './errors';
 export { applyBps, bpsToPercentText, formatBps, parsePercent, quoteTariff, type TariffLike, tariffSummary } from './fees';
 export { type RequestOptions } from './http';
+export { definitiveFailure, keepIdempotencyKey } from './idempotency';
 export * from './inventory-hub';
 export { readSse, type SseMessage, streamLola, toLolaEvent } from './lola';
 export { formatMoney, percentOff, splitMoney } from './money';
@@ -12,7 +13,7 @@ export { accountKeys, careersKeys, cartKeys, helpKeys, legalKeys, productKeys, s
 export { accountQueries, careersQueries, cartQueries, helpQueries, legalQueries, productQueries, searchQueries, siteQueries } from './query/options';
 export { sellerKeys, sellerQueries } from './query/seller';
 export { settingsKeys, settingsQueries } from './query/settings';
-export { bookingKeys, checkoutKeys, lolaKeys, orderKeys, returnKeys, securityKeys, serviceKeys, shopperQueries } from './query/shopper';
+export { bookingKeys, checkoutKeys, lolaKeys, orderKeys, payLinkKeys, returnKeys, securityKeys, serviceKeys, shopperQueries } from './query/shopper';
 export { staffKeys, staffQueries } from './query/staff';
 export * from './schemas/account';
 export * from './schemas/auth';

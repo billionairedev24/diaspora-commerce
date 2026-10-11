@@ -7,17 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CheckoutComplete } from '@/components/checkout/CheckoutComplete';
 import { CheckoutView } from '@/components/checkout/CheckoutView';
-import {
-  deferredIntentOptions,
-  type ElementsOptions,
-  type PaymentIntentResult,
-  resetStripe,
-  stripeAppearance,
-  type StripeElementChange,
-  type StripeInstance,
-  stripePaymentMethodTypes
-} from '@/lib/payments/stripe';
+import { deferredIntentOptions, resetStripe, stripeAppearance, stripePaymentMethodTypes } from '@/lib/payments/stripe';
 
+import { fakeStripe } from './fakeStripe';
 import { addCookie, installMockBff, signInDemo } from './mockBff';
 import { renderWithProviders } from './render';
 
@@ -27,68 +19,6 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/checkout',
   useSearchParams: () => nav.params
 }));
-
-type Handler = (e: StripeElementChange & Record<string, unknown>) => void;
-
-interface FakeElements {
-  options: ElementsOptions;
-  created: string[];
-  handlers: Record<string, Record<string, Handler>>;
-  updates: Record<string, unknown>[];
-}
-
-/** A fake Stripe.js: records every call in order and lets a test decide submit / confirm results. */
-function fakeStripe() {
-  const log: string[] = [];
-  const elements: FakeElements[] = [];
-  const confirms: Parameters<StripeInstance['confirmPayment']>[0][] = [];
-  const results: { submit: { error?: { type?: string; message?: string } }; confirm: PaymentIntentResult } = {
-    submit: {},
-    confirm: { paymentIntent: { id: 'pi_1', status: 'requires_capture' } }
-  };
-  const factory = vi.fn((key: string): StripeInstance => {
-    log.push(`Stripe(${key})`);
-    return {
-      elements: (options) => {
-        const rec: FakeElements = { options, created: [], handlers: {}, updates: [] };
-        elements.push(rec);
-        return {
-          create: (type) => {
-            rec.created.push(type);
-            const on: Record<string, Handler> = {};
-            rec.handlers[type] = on;
-            return {
-              mount: (el: HTMLElement) => {
-                el.setAttribute('data-fake-stripe', type);
-                setTimeout(() => act(() => on.ready?.({})), 0);
-              },
-              unmount: () => undefined,
-              on: (event: string, fn: Handler) => {
-                on[event] = fn;
-              }
-            };
-          },
-          submit: async () => {
-            log.push(`submit:${rec.created.join('+')}`);
-            return results.submit;
-          },
-          update: (u) => {
-            rec.updates.push(u);
-          }
-        };
-      },
-      confirmPayment: async (o) => {
-        log.push('confirmPayment');
-        confirms.push(o);
-        return results.confirm;
-      },
-      confirmSetup: async () => ({})
-    };
-  });
-  const payment = () => elements.find((e) => e.created.includes('payment'));
-  const express = () => elements.find((e) => e.created.includes('expressCheckout'));
-  return { factory, log, elements, confirms, results, payment, express };
-}
 
 const TOKENS: Record<string, string> = {
   '--at-color-action-primary': '#FFD400',

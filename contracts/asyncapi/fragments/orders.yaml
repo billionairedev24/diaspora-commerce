@@ -164,7 +164,7 @@ components:
         customerId: {type: string}
         windowId: {type: [string, 'null']}
         windowCode: {type: [string, 'null']}
-        url: {type: string, description: Hosted Stripe payment page}
+        url: {type: string, description: "Pay-now link: AfroTransact's own pay page with its signed token (/orders/{number}/pay?token=…); never a Stripe-hosted page"}
         expiresAt: {type: string, format: date-time}
         amountMinor: {type: integer, format: int64}
         currency: {type: string}

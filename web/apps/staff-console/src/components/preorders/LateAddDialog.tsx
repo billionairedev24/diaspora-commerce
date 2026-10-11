@@ -1,6 +1,6 @@
 'use client';
 
-import { staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
+import { keepIdempotencyKey, staffPreorderKeys, staffPreorderQueries } from '@afrotransact/api-client';
 import {
   LATE_ADD_REASON_LABEL,
   lateAddAddressSnapshot,
@@ -9,26 +9,44 @@ import {
   lateAddProblems,
   LateAddReasonSchema,
   type LateAddRequest,
+  newLateAddKey,
+  type PreorderOrder,
   type PreorderWindow
 } from '@afrotransact/api-client/staff-preorders';
 import { Dialog, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { problemMessage } from '@/components/ui/States';
 import { useDebounced } from '@/lib/use-debounced';
 
-import { money2 } from './model';
+import { money2, PAY_NOW_LINK_LABEL } from './model';
 import { Chip, controlClass, labelClass, selectClass, usePreordersApi } from './primitives';
 
 const EMPTY: LateAddDraft = { customerId: '', addressId: '', newAddress: null, phoneConfirmed: false, items: [], payment: 'SAVED_CARD', reason: 'CUSTOMER_CALLED', note: '' };
 
-/** Late add (customer service): customer, saved or verified new address, phone read back, items, payment, reason, note. */
+/**
+ * Late add (customer service): customer, saved or verified new address, phone read back, items, payment, reason, note.
+ * One Idempotency-Key per dialog: made when it opens, reused on every retry until the order is added, so a retry after
+ * a timeout can never charge the saved card twice. After a timeout or server error the dialog first looks the late add
+ * up (it may have gone through) and only then offers to retry, with the same key.
+ */
 export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderWindow; open: boolean; onOpenChange: (open: boolean) => void; onAdded: (number: string) => void }) {
   const api = usePreordersApi();
   const qc = useQueryClient();
   const toast = useToast();
   const [d, setD] = useState<LateAddDraft>(EMPTY);
+  const keyRef = useRef<string | null>(null);
+  const startedAt = useRef<string>(new Date().toISOString());
+  const [checking, setChecking] = useState(false);
+  const [unsure, setUnsure] = useState(false);
+  useEffect(() => {
+    if (open && !keyRef.current) {
+      keyRef.current = newLateAddKey();
+      // Generous: the server's clock decides placedAt; the item set and phone narrow the match.
+      startedAt.current = new Date(Date.now() - 15 * 60_000).toISOString();
+    }
+  }, [open]);
   const [find, setFind] = useState('');
   const q = useDebounced(find.trim(), 250);
   const customers = useQuery({ ...staffPreorderQueries.customers(api, w.id, q), enabled: open });
@@ -39,7 +57,7 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
   const lateAdd = settings.data?.payment.lateAdd;
   const payOptions: [LateAddPayment, string][] = [
     ...(lateAdd?.savedCard !== false ? [['SAVED_CARD', 'Charge the saved card on file'] as [LateAddPayment, string]] : []),
-    ...(lateAdd?.paymentLink !== false ? [['PAYMENT_LINK', `Send a payment link by SMS${lateAdd ? ` (expires in ${lateAdd.linkExpiryHours} h)` : ''}`] as [LateAddPayment, string]] : [])
+    ...(lateAdd?.paymentLink !== false ? [['PAYMENT_LINK', `${PAY_NOW_LINK_LABEL}${lateAdd ? ` · expires in ${lateAdd.linkExpiryHours} h` : ''}`] as [LateAddPayment, string]] : [])
   ];
   const payment: LateAddPayment = payOptions.some(([k]) => k === d.payment) ? d.payment : (payOptions[0]?.[0] ?? 'SAVED_CARD');
   const sub = (products.data ?? []).filter((p) => d.items.includes(p.atin)).reduce((a, p) => a + p.price, 0);
@@ -49,6 +67,8 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
     if (!o) {
       setD(EMPTY);
       setFind('');
+      keyRef.current = null;
+      setUnsure(false);
     }
     onOpenChange(o);
   };
@@ -84,17 +104,42 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
         reason: d.reason,
         note: d.note.trim()
       };
-      return api.addLateOrder(w.id, body);
+      keyRef.current ??= newLateAddKey();
+      return api.addLateOrder(w.id, body, keyRef.current);
     },
-    onSuccess: (o) => {
-      void qc.invalidateQueries({ queryKey: staffPreorderKeys.window(w.id) });
-      void qc.invalidateQueries({ queryKey: staffPreorderKeys.lists() });
-      toast.show(`Late order ${o.number} added and logged`);
-      close(false);
-      onAdded(o.number);
-    },
-    onError: (e) => toast.show(problemMessage(e), 'error')
+    onSuccess: (o) => added(o),
+    onError: (e) => {
+      if (!keepIdempotencyKey(e)) {
+        // Refused (validation, declined card, duplicate…): nothing was added, a corrected attempt is a new one.
+        keyRef.current = newLateAddKey();
+        toast.show(problemMessage(e), 'error');
+        return;
+      }
+      // Timeout or server error: it may have gone through. Look it up before allowing a retry (same key).
+      void checkOutcome();
+    }
   });
+  const checkOutcome = async () => {
+    setChecking(true);
+    try {
+      const found = cust ? await api.findLateAdd(w.id, cust.phone, d.items, startedAt.current) : null;
+      if (found) return added(found);
+      setUnsure(true);
+      toast.show('We couldn’t confirm the late add. Retry: it is sent with the same key, so it can’t be added or charged twice.', 'error');
+    } catch {
+      setUnsure(true);
+      toast.show('We couldn’t reach the pre-order service to check. Retry when it’s back: it can’t be charged twice.', 'error');
+    } finally {
+      setChecking(false);
+    }
+  };
+  function added(o: PreorderOrder) {
+    void qc.invalidateQueries({ queryKey: staffPreorderKeys.window(w.id) });
+    void qc.invalidateQueries({ queryKey: staffPreorderKeys.lists() });
+    toast.show(`Late order ${o.number} added and logged`);
+    close(false);
+    onAdded(o.number);
+  }
   const onVerify = () => {
     const na = d.newAddress;
     if (!na || !na.line1.trim() || na.zip.trim().length < 3) {
@@ -243,11 +288,11 @@ export function LateAddDialog({ w, open, onOpenChange, onAdded }: { w: PreorderW
           <button
             type="button"
             onClick={() => save.mutate()}
-            disabled={problems.length > 0 || save.isPending}
+            disabled={problems.length > 0 || save.isPending || checking}
             data-problems={problems.join(' ')}
             className="h-10 cursor-pointer rounded-md border-0 bg-green-600 px-5 font-bold text-ink-0 disabled:cursor-not-allowed disabled:opacity-45"
           >
-            {`Add ${money2(total, w.currency)} order`}
+            {checking ? 'Checking…' : unsure ? `Retry · add ${money2(total, w.currency)} order` : `Add ${money2(total, w.currency)} order`}
           </button>
         </div>
       </div>

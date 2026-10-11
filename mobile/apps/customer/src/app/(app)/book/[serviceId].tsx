@@ -1,12 +1,12 @@
 /* Choose a time (design: PICK A TIME, S167): days from the provider's live calendar, open slots, deposit summary.
    New bookings pay the deposit with Stripe's PaymentSheet on the PaymentIntent bookings-service creates; with
    ?bookingId= this screen reschedules instead. */
-import { formatMoney, isApiError } from '@afrotransact/api-client';
+import { definitiveFailure, formatMoney, isApiError } from '@afrotransact/api-client';
 import { useQueryClient } from '@tanstack/react-query';
 import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowsClockwiseIcon as ArrowsClockwise, CalendarCheckIcon as CalendarCheck, WarningCircleIcon as WarningCircle } from 'phosphor-react-native';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 
 import { useApi } from '@/api/ApiProvider';
@@ -40,6 +40,9 @@ export default function PickTime() {
   const [note, setNote] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  /** One key per booking attempt (service + time): a retry after a timeout or a deposit error replays the same
+   *  booking and deposit PaymentIntent instead of booking (and charging) twice. New after success or a refusal. */
+  const bookingKey = useRef<{ start: string; key: string } | null>(null);
   const firstOpen = useMemo(() => days.data?.find((d) => (d.slots ?? 0) > 0)?.date ?? null, [days.data]);
   const selectedDay = day ?? firstOpen;
   const slots = useServiceSlots(serviceId ?? '', selectedDay);
@@ -63,9 +66,10 @@ export default function PickTime() {
         return;
       }
       if ((s.depositNowMinor ?? 0) > DEPOSIT_DEVICE_AUTH_MINOR && !(await confirmWithDevice(`Pay a ${formatMoney(s.depositNowMinor ?? 0, cur)} deposit`))) return;
+      if (bookingKey.current?.start !== start) bookingKey.current = { start, key: `bk_${Crypto.randomUUID().replace(/-/g, '')}` };
       const res = await api.bookings.create(
         { serviceId: serviceId ?? '', startAt: start, mode: 'IN_PERSON', customer: { name: `${user?.first ?? ''} ${user?.last ?? ''}`.trim(), email: user?.email, phone: user?.phone || undefined }, notes: note || undefined, channel: 'app' },
-        `bk_${Crypto.randomUUID().replace(/-/g, '')}`
+        bookingKey.current.key
       );
       const b = res.booking;
       if (!b?.id) throw new Error('Booking failed');
@@ -75,10 +79,12 @@ export default function PickTime() {
         if (typeof paid === 'object') throw new Error(paid.error);
         await api.bookings.syncPayment(b.id);
       }
+      bookingKey.current = null;
       void qc.invalidateQueries({ queryKey: bookingKeys.all });
       toast(b.status === 'CONFIRMED' ? 'You’re booked' : `Request sent to ${s.providerName}`);
       router.replace(`/bookings/${b.id}`);
     } catch (e) {
+      if (definitiveFailure(e)) bookingKey.current = null;
       if (isApiError(e) && e.code === 'bookings.slot-taken') { setStart(null); void qc.invalidateQueries({ queryKey: bookingKeys.slots(serviceId ?? '', selectedDay ?? '') }); }
       setErr(isApiError(e) ? e.message : e instanceof Error ? e.message : 'Booking failed. Try again.');
     } finally {

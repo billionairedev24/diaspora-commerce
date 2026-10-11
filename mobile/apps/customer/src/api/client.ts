@@ -46,7 +46,9 @@ export function createCustomerApi(tokens: TokenSource, network: FetchLike = (r) 
     checkout: {
       summary: (addressId?: string) => bffJson<CheckoutSummary>('/v1/checkout/summary', { query: { addressId } }),
       placeOrder: (body: PlaceOrderRequest, idempotencyKey: string) =>
-        bffJson<OrderConfirmation>('/v1/checkout/orders', { method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey } })
+        bffJson<OrderConfirmation>('/v1/checkout/orders', { method: 'POST', body, headers: { 'Idempotency-Key': idempotencyKey } }),
+      /** What orders knows of an attempt (placed, awaiting payment; a failed order answers 4xx). */
+      status: (orderNumber: string) => bffJson<OrderConfirmation>(`/v1/checkout/orders/${encodeURIComponent(orderNumber)}`)
     },
     account: {
       createSetupIntent: () => bffJson<SetupIntent>('/v1/account/payment-methods/setup-intents', { method: 'POST' }),

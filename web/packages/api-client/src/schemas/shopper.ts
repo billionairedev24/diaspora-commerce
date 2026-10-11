@@ -308,6 +308,25 @@ export const OrderConfirmationSchema = z.object({
 });
 export type OrderConfirmation = z.infer<typeof OrderConfirmationSchema>;
 
+/** The pay-now page of a late pre-order add (/orders/{orderNumber}/pay?token=…): AfroTransact's own page, where the
+ *  customer confirms the order's existing PaymentIntent with Stripe Elements. No client secret once paid. */
+export const PayLinkSchema = z.object({
+  orderNumber: z.string(),
+  status: z.enum(['awaiting_payment', 'paid']),
+  totalMinor: MinorSchema,
+  deliveryFeeMinor: MinorSchema,
+  currency: z.string(),
+  clientSecret: nullableString,
+  publishableKey: z.string(),
+  failureMessage: nullableString.optional(),
+  expiresAt: nullableString.optional(),
+  windowName: nullableString.optional(),
+  deliversOn: nullableString.optional(),
+  fulfilment: nullableString.optional(),
+  lines: z.array(z.object({ title: z.string(), quantity: z.number().int(), totalMinor: MinorSchema }))
+});
+export type PayLink = z.infer<typeof PayLinkSchema>;
+
 /* ── Services & bookings ───────────────────────────────────────── */
 
 export const ServiceModeSchema = z.enum(['IN_PERSON', 'AT_HOME', 'VIRTUAL']);

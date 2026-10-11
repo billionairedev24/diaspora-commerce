@@ -15,7 +15,7 @@ import { accountKeys, cartKeys, checkoutKeys } from '@/api/keys';
 import { useCheckoutSummary } from '@/api/queries';
 import { type CheckoutSummary } from '@/api/types';
 import { useAuth } from '@/auth/AuthProvider';
-import { buildPlaceOrderRequest, defaultChoices, idempotencyKey, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '@/domain/checkout';
+import { buildPlaceOrderRequest, defaultChoices, idempotencyKey, keyAfterFailure, type PackageChoice, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '@/domain/checkout';
 import { usePayments } from '@/payments/usePayments';
 import { c, sp, t } from '@/theme';
 import { AppText, Banner, Button, Card, Chip, Empty, KeyValue, Loading, SectionLabel } from '@/ui/primitives';
@@ -58,6 +58,8 @@ export default function Checkout() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const key = useRef<string | null>(null);
+  /** The order the current key created (asked about after a failure before a new key is made). */
+  const placedNumber = useRef<string | null>(null);
 
   useEffect(() => {
     if (!s) return;
@@ -95,6 +97,7 @@ export default function Checkout() {
       let orderNumber: string;
       if (pay.kind === 'saved') {
         const conf = await api.checkout.placeOrder(buildPlaceOrderRequest(address.id, choices, { paymentMethodId: pay.id }), idem);
+        placedNumber.current = conf.orderNumber;
         if (conf.status === 'requires_action' && conf.paymentClientSecret) {
           const r = await payments.handleNextAction(conf.paymentClientSecret);
           if (!r.ok) throw new Error(r.message);
@@ -105,19 +108,28 @@ export default function Checkout() {
         const r = await payments.payWithSheet({
           amountMinor: intent.amount,
           currency: intent.currencyCode,
-          placeOrder: (paymentMethodId) => api.checkout.placeOrder(buildPlaceOrderRequest(address.id, choices, { paymentMethodId }), idem)
+          placeOrder: async (paymentMethodId) => {
+            const conf = await api.checkout.placeOrder(buildPlaceOrderRequest(address.id, choices, { paymentMethodId }), idem);
+            placedNumber.current = conf.orderNumber;
+            return conf;
+          }
         });
         if (r.status === 'cancelled') return;
         if (r.status === 'failed') throw new Error(r.message);
         orderNumber = r.confirmation.orderNumber;
       }
       key.current = null;
+      placedNumber.current = null;
       void qc.invalidateQueries({ queryKey: cartKeys.all });
       void qc.invalidateQueries({ queryKey: accountKeys.orders() });
       void qc.invalidateQueries({ queryKey: checkoutKeys.all });
       toast('Order placed');
       router.replace({ pathname: '/orders/[orderNumber]', params: { orderNumber, placed: '1' } });
     } catch (e) {
+      // Keep the key for a retry unless the attempt is definitely over (then the next tap is a new purchase).
+      const known = placedNumber.current;
+      key.current = await keyAfterFailure(key.current, e, known ? () => api.checkout.status(known) : undefined);
+      if (!key.current) placedNumber.current = null;
       setErr(isApiError(e) ? e.message : e instanceof Error ? e.message : 'Payment failed. Try again.');
     } finally {
       setBusy(false);

@@ -5,6 +5,7 @@ import {
   cartKeys,
   checkoutKeys,
   type CheckoutPackage,
+  definitiveFailure,
   type DeliveryMethod,
   type DeliveryPreferences,
   type DeliverySelection,
@@ -269,6 +270,12 @@ const STEPS = ['co.placing.payment', 'co.placing.confirm', 'co.placing.stock', '
  * order runs elements.submit(), places the order (orders creates the PaymentIntent, manual capture), confirms it with
  * stripe.confirmPayment({ elements, clientSecret }) and lets orders continue; redirect-based methods come back to
  * /checkout/complete. Saved methods confirm with their PaymentMethod id as before.
+ *
+ * No double charge: one Idempotency-Key per purchase attempt, kept until the order is placed or has definitely failed
+ * (a 4xx about it, or orders reports the order failed). After a timeout, a 5xx or a Stripe confirmation error the
+ * known order is checked first (getCheckoutStatus) and the next Place order replays the same order and
+ * PaymentIntent. A ref (not state) makes Place order, Express Checkout and saved cards single-flight, so a double click
+ * places once.
  */
 export function CheckoutView() {
   const fmt = useFormatters();
@@ -291,6 +298,10 @@ export function CheckoutView() {
   const [placing, setPlacing] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const keyRef = useRef<string>(crypto.randomUUID());
+  /** Single-flight guard, set synchronously before any await (state updates are too late for a double click). */
+  const busyRef = useRef(false);
+  /** The order the current key created, once orders answered (checked after an error before a new key is made). */
+  const orderRef = useRef<string | null>(null);
 
   // Saved addresses and payment methods load by default (the default one preselected).
   useEffect(() => {
@@ -360,23 +371,61 @@ export function CheckoutView() {
       };
     });
 
-  const fail = (e: unknown) => {
+  /** Starts a purchase attempt unless one is running (synchronous: a second click in the same tick is ignored). */
+  const begin = (): boolean => {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+    setError(null);
+    setPlacing(0);
+    return true;
+  };
+  const end = () => {
+    busyRef.current = false;
     setPlacing(-1);
-    keyRef.current = crypto.randomUUID();
+  };
+
+  const placed = async (status: OrderConfirmation) => {
+    setPlacing(3);
+    await Promise.all([qc.invalidateQueries({ queryKey: cartKeys.all }), qc.invalidateQueries({ queryKey: orderKeys.all })]);
+    router.push(`/orders?placed=${encodeURIComponent(status.orderNumber)}`);
+  };
+
+  /**
+   * Ends a failed attempt. The key is kept unless the attempt is definitely over: a 4xx about it, or orders reports
+   * the known order failed when asked (it may also turn out placed after all, e.g. the answer was lost).
+   */
+  const fail = async (e: unknown) => {
+    let over = definitiveFailure(e);
+    const known = orderRef.current;
+    if (!over && known) {
+      try {
+        // Read-only: what orders knows of the attempt (placed after all, still awaiting payment, or failed → 4xx).
+        const status = await api.getCheckoutStatus(known);
+        if (status.status === 'placed') return placed(status);
+      } catch (check) {
+        over = definitiveFailure(check);
+      }
+    }
+    if (over) {
+      keyRef.current = crypto.randomUUID();
+      orderRef.current = null;
+    }
+    end();
     setError(isApiError(e) ? (Object.values(e.fieldErrors)[0] ?? e.message) : e instanceof Error ? e.message : t('auth.genericError'));
     void qc.invalidateQueries({ queryKey: checkoutKeys.all });
   };
 
+  /** Places (or, with the same key, replays) the order. Call after begin(). */
   const place = async (pay: PaySpec): Promise<OrderConfirmation | null> => {
-    if (!address) return (setStep(1), setError(t('co.needAddress')), null);
-    setError(null);
-    setPlacing(0);
+    if (!address) return (end(), setStep(1), setError(t('co.needAddress')), null);
     try {
       // Last-touch channel (?src=&cr=&po= or the pre-order placement clicked) is stored on the order.
       const attribution = readAttribution() ?? undefined;
-      return await api.placeOrder({ addressId: address.id, ...pay, deliverySelections: selections(), attribution }, keyRef.current);
+      const conf = await api.placeOrder({ addressId: address.id, ...pay, deliverySelections: selections(), attribution }, keyRef.current);
+      orderRef.current = conf.orderNumber;
+      return conf;
     } catch (e) {
-      fail(e);
+      await fail(e);
       return null;
     }
   };
@@ -391,16 +440,15 @@ export function CheckoutView() {
         await new Promise((r) => setTimeout(r, 1000));
         status = await api.getCheckoutStatus(conf.orderNumber);
       }
-      setPlacing(3);
-      await Promise.all([qc.invalidateQueries({ queryKey: cartKeys.all }), qc.invalidateQueries({ queryKey: orderKeys.all })]);
-      router.push(`/orders?placed=${encodeURIComponent(status.orderNumber)}`);
+      await placed(status);
     } catch (e) {
-      fail(e);
+      await fail(e);
     }
   };
 
   const placeWithCard = async () => {
     if (!pm) return (setStep(2), setError(t('co.needPayment')));
+    if (!begin()) return;
     const conf = await place({ paymentMethodId: pm.id });
     if (!conf) return;
     setPlacing(1);
@@ -414,9 +462,9 @@ export function CheckoutView() {
   const placeWithElement = async () => {
     const el = payEl.current;
     if (!el) return (setStep(2), setError(t('co.needPayment')));
-    setError(null);
+    if (!begin()) return;
     const submitted = await el.submit();
-    if (!submitted.ok) return (setStep(2), setError(submitted.message));
+    if (!submitted.ok) return (end(), setStep(2), setError(submitted.message));
     const conf = await place({ newPaymentMethod: true, savePaymentMethod: save });
     if (!conf) return;
     setPlacing(1);
@@ -523,12 +571,16 @@ export function CheckoutView() {
                 paymentMethodTypes={methodTypes}
                 disabled={busy || preLocked}
                 onPay={async (w) => {
+                  if (!begin()) return null;
                   const conf = await place({ wallet: w });
                   walletConf.current = conf;
                   if (conf) setPlacing(1);
                   return conf?.paymentClientSecret ? { clientSecret: conf.paymentClientSecret, returnUrl: checkoutReturnUrl(conf.orderNumber) } : null;
                 }}
-                onConfirmed={(r) => { if (walletConf.current) void finish(walletConf.current, r); else if (!r.ok) fail(new Error(r.message)); }}
+                onConfirmed={(r) => {
+                  if (walletConf.current) void finish(walletConf.current, r);
+                  else if (!r.ok) setError(r.message);
+                }}
               />
               <div className={styles.or}>
                 <span />

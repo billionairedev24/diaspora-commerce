@@ -1,6 +1,7 @@
+import { ApiError } from '@afrotransact/api-client';
 import { describe, expect, it } from 'vitest';
 
-import { buildPlaceOrderRequest, type CheckoutSummary, defaultChoices, idempotencyKey, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '../src/domain/checkout';
+import { buildPlaceOrderRequest, type CheckoutSummary, defaultChoices, idempotencyKey, keyAfterFailure, paymentSheetIntent, requiresDeviceAuth, totalFor, validateChoices } from '../src/domain/checkout';
 
 const promise = { days: 0, label: 'Today', prefix: 'FREE delivery', free: true, feeMinor: 0, expressLabel: null, cutoff: null };
 const summary = {
@@ -63,5 +64,30 @@ describe('checkout rules', () => {
     expect(idempotencyKey(() => '0b9e2c5e-1111-4a3b-9c8d-123456789abc')).toMatch(/^co_[0-9a-f]{32}$/);
     expect(idempotencyKey(() => 'x').length).toBe(16);
     expect(idempotencyKey(() => 'y'.repeat(100)).length).toBe(64);
+  });
+});
+
+describe('idempotency key after a failed attempt (no double charge)', () => {
+  const problem = (status: number, code?: string) => new ApiError({ type: 'about:blank', title: 't', status, ...(code ? { code } : {}) });
+  const awaiting = async () => ({ status: 'awaiting_payment' });
+  const failed = async (): Promise<{ status: string }> => {
+    throw problem(402, 'PAYMENT_DECLINED');
+  };
+  const offline = async (): Promise<{ status: string }> => {
+    throw new TypeError('Network request failed');
+  };
+
+  it('keeps the key after a network error, a timeout, a 5xx or a PaymentSheet error', async () => {
+    expect(await keyAfterFailure('co_1', new TypeError('Network request failed'))).toBe('co_1');
+    expect(await keyAfterFailure('co_1', problem(503))).toBe('co_1');
+    expect(await keyAfterFailure('co_1', new Error('Your card was declined.'), awaiting)).toBe('co_1');
+    expect(await keyAfterFailure('co_1', new Error('Your card was declined.'), offline)).toBe('co_1');
+    expect(await keyAfterFailure('co_1', problem(409, 'CHECKOUT_IN_PROGRESS'))).toBe('co_1');
+  });
+
+  it('makes a new key only once the attempt is definitely over', async () => {
+    expect(await keyAfterFailure('co_1', problem(422, 'VALIDATION_FAILED'))).toBeNull();
+    expect(await keyAfterFailure('co_1', problem(409, 'IDEMPOTENCY_CONFLICT'))).toBeNull();
+    expect(await keyAfterFailure('co_1', new Error('Your card was declined.'), failed)).toBeNull();
   });
 });

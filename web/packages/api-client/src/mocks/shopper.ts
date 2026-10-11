@@ -270,6 +270,9 @@ function setStatus(b: AccountState['bookings'][number], status: string) {
 
 const seenClicks = new Set<string>();
 
+/** The mock pay-now link (Playwright mock mode): /orders/AT-2026-PAY001/pay?token=mock-pay-token. */
+export const MOCK_PAY_LINK = { orderNumber: 'AT-2026-PAY001', token: 'mock-pay-token', expiredToken: 'mock-expired-token' } as const;
+
 export const shopperHandlers = [
   /* Search result clicks (S240): once per search and product; a mock ad token is "charged" once. */
   http.post('*/v1/search/clicks', route(async (ctx) => {
@@ -593,6 +596,23 @@ export const shopperHandlers = [
       ctx.session.lines = ctx.session.lines.filter((l) => !c.lineIds.includes(l.lineId));
     }
     return json(confirmation(c));
+  })),
+
+  /* Pay-now links of late pre-order adds (mock fixtures: MOCK_PAY_LINK; any other token is unknown) */
+  http.post('*/v1/pay-links/:orderNumber/:action', route(async (ctx, p) => {
+    const { token } = await body(ctx.request, z.object({ token: z.string() }));
+    if (p.orderNumber !== MOCK_PAY_LINK.orderNumber || (token !== MOCK_PAY_LINK.token && token !== MOCK_PAY_LINK.expiredToken))
+      throw new MockProblem(404, 'PAY_LINK_NOT_FOUND', 'Payment link not valid', 'This payment link is not valid. Open the whole link from the text message, or contact us.');
+    if (token === MOCK_PAY_LINK.expiredToken)
+      throw new MockProblem(410, 'PAY_LINK_EXPIRED', 'Payment link expired', 'This payment link has expired, so nothing was charged. Contact us if you still want this pre-order.');
+    const paid = new Set(ctx.session.payLinksPaid ?? []);
+    if (p.action === 'confirm') paid.add(p.orderNumber);
+    ctx.session.payLinksPaid = [...paid];
+    const done = paid.has(p.orderNumber);
+    return json({ orderNumber: MOCK_PAY_LINK.orderNumber, status: done ? 'paid' : 'awaiting_payment', totalMinor: 4297, deliveryFeeMinor: 799, currency: 'USD',
+      clientSecret: done ? null : 'pi_mock_paylink_secret_mock', publishableKey: publishableKey(ctx), failureMessage: null, expiresAt: '2030-01-01T00:00:00Z',
+      windowName: 'Lubbock Harvest Pre-order', deliversOn: '2026-10-24', fulfilment: 'DOOR',
+      lines: [{ title: 'Egusi seeds 1 lb', quantity: 2, totalMinor: 3498 }] });
   })),
 
   /* Services & bookings */

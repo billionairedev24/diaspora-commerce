@@ -189,13 +189,19 @@ describe('mock /v1/staff/preorders', () => {
     const c = customers.items[0];
     if (!c) throw new Error('no customers');
     const products = await cs.products('ama-4');
-    const o = await cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'a1', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'PAYMENT_LINK', reason: 'LIVE_CHAT', note: 'Gate 2' });
+    const o = await cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'a1', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'PAYMENT_LINK', reason: 'LIVE_CHAT', note: 'Gate 2' }, 'late-dialog-key-0001');
     expect(o).toMatchObject({ status: 'LATE_ADD', channel: 'AGENT_LATE', total: (products[0]?.price ?? 0) + 799 });
-    expect(o.note).toContain('Live chat · payment link sent by SMS');
-    const snap = await cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'a1', address: { line1: '9 Override Rd' }, phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'SAVED_CARD', reason: 'CUSTOMER_CALLED', note: '' });
+    expect(o.note).toContain('Live chat · pay-now link sent by SMS');
+    // A retry with the same key (the answer was lost) is the same order; the order is found by the status lookup too.
+    const again = await cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'a1', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'PAYMENT_LINK', reason: 'LIVE_CHAT', note: 'Gate 2' }, 'late-dialog-key-0001');
+    expect(again.orderId).toBe(o.orderId);
+    expect((await cs.findLateAdd('ama-4', o.phone, [products[0]?.atin ?? ''], o.placedAt))?.orderId).toBe(o.orderId);
+    expect(await cs.findLateAdd('ama-4', o.phone, ['OTHER-ATIN'], o.placedAt)).toBeNull();
+    await expect(cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'a1', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'PAYMENT_LINK', reason: 'LIVE_CHAT', note: '' }, '')).rejects.toMatchObject({ status: 422 });
+    const snap = await cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'a1', address: { line1: '9 Override Rd' }, phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'SAVED_CARD', reason: 'CUSTOMER_CALLED', note: '' }, 'late-dialog-key-0002');
     expect(snap).toMatchObject({ addressLine: '9 Override Rd', zip: c.addresses[0]?.zip, city: c.addresses[0]?.city });
-    await expect(cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'zz', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'SAVED_CARD', reason: 'CUSTOMER_CALLED', note: '' })).rejects.toMatchObject({ status: 422 });
-    await expect(cs.addLateOrder('lbk-6', { customerId: c.id, addressId: 'a1', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'SAVED_CARD', reason: 'GOODWILL', note: '' })).rejects.toMatchObject({ status: 409 });
+    await expect(cs.addLateOrder('ama-4', { customerId: c.id, addressId: 'zz', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'SAVED_CARD', reason: 'CUSTOMER_CALLED', note: '' }, 'late-dialog-key-0003')).rejects.toMatchObject({ status: 422 });
+    await expect(cs.addLateOrder('lbk-6', { customerId: c.id, addressId: 'a1', phoneConfirmed: true, items: [{ atin: products[0]?.atin ?? '', qty: 1 }], payment: 'SAVED_CARD', reason: 'GOODWILL', note: '' }, 'late-dialog-key-0004')).rejects.toMatchObject({ status: 409 });
   });
 
   it('drills coverage areas down and switches a country off in bulk', async () => {

@@ -373,7 +373,7 @@ components:
         customerId: {type: string}
         phone: {type: [string, 'null'], description: The number the agent confirmed with the customer (E.164)}
         payment: {type: string, enum: [SAVED_CARD, PAYMENT_LINK]}
-        paymentUrl: {type: [string, 'null'], format: uri, description: Stripe payment link (PAYMENT_LINK)}
+        paymentUrl: {type: [string, 'null'], format: uri, description: "Pay-now link (PAYMENT_LINK): AfroTransact's own pay page with its signed token; never a Stripe-hosted page"}
         expiresAt: {type: [string, 'null'], format: date-time}
         totalMinor: {type: integer, format: int64, description: Items + the window's door fee when DOOR}
         currency: {type: string}

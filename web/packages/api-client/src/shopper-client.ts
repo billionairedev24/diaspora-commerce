@@ -38,6 +38,8 @@ import {
   type OrderDetail,
   OrderDetailSchema,
   type PasswordChange,
+  type PayLink,
+  PayLinkSchema,
   type PlaceOrderRequest,
   type ProviderPage,
   ProviderPageSchema,
@@ -144,6 +146,12 @@ export function shopperMethods(request: Requester, options: ApiClientOptions) {
     getCheckoutStatus: (orderNumber: string): Promise<OrderConfirmation> => request(`/v1/checkout/orders/${enc(orderNumber)}`, OrderConfirmationSchema),
     confirmCheckoutPayment: (orderNumber: string): Promise<OrderConfirmation> =>
       request(`/v1/checkout/orders/${enc(orderNumber)}/confirm`, OrderConfirmationSchema, { method: 'POST' }),
+    /** Pay-now link of a late pre-order add (no session: the SMS token is the credential, sent in the body). */
+    lookupPayLink: (orderNumber: string, token: string, signal?: AbortSignal): Promise<PayLink> =>
+      request(`/v1/pay-links/${enc(orderNumber)}/lookup`, PayLinkSchema, { method: 'POST', body: { token }, signal }),
+    /** After stripe.confirmPayment on the pay-now page: orders places the order once the payment is authorised. */
+    confirmPayLink: (orderNumber: string, token: string): Promise<PayLink> =>
+      request(`/v1/pay-links/${enc(orderNumber)}/confirm`, PayLinkSchema, { method: 'POST', body: { token } }),
 
     /* Services & bookings (bookings) */
     searchServices: (q: { q?: string; category?: string; zip?: string }, signal?: AbortSignal): Promise<ServiceSearch> =>

@@ -128,6 +128,9 @@ const pick = <T>(r: () => number, a: readonly T[]): T => a[Math.floor(r() * a.le
 
 /* ── State ── */
 
+
+/** Late adds by Idempotency-Key, per mock state (replays answer the same order). */
+const LATE_ADD_REPLAYS = new WeakMap<object, Map<string, PreorderOrder>>();
 export interface MockPreorderWindow extends PreorderWindowInput {
   id: string;
   code: string;
@@ -986,6 +989,13 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
         view(ctx);
         if (!ctx.permissions.includes('preorders:late-add')) throw forbidden('Late adds need the preorders:late-add permission.');
         const s = st(ctx);
+        // Like the BFF and delivery-runs: the key is required, and a replay returns the same order (charged once).
+        const key = (ctx.request.headers.get('Idempotency-Key') ?? '').trim();
+        if (key.length < 16 || key.length > 64) throw problem(422, 'VALIDATION_FAILED', 'Validation failed', 'Send a 16–64 character Idempotency-Key header.', { 'Idempotency-Key': 'Required' });
+        const replays = LATE_ADD_REPLAYS.get(s) ?? new Map<string, PreorderOrder>();
+        LATE_ADD_REPLAYS.set(s, replays);
+        const replay = replays.get(key);
+        if (replay) return replay;
         const w = windowOf(ctx, p.id);
         const status = statusOf(s, w);
         if (status !== 'OPEN' && status !== 'CLOSED') throw problem(409, 'PREORDER_NOT_LATE_ADDABLE', 'Late add not possible', status === 'DELIVERED' ? 'This pre-order has been delivered.' : 'Late adds are possible while a pre-order is open or closed and delivering.');
@@ -1011,9 +1021,10 @@ export function preorderHandlers(W: string, deps: PreorderHandlerDeps) {
           customerName: cust.name, phone: cust.phone, email: cust.email, addressLine: addr.line1, city: addr.city, region: addr.region, zip: addr.zip, deliveryNote: b.note,
           placedAt: new Date(nowOf(s)).toISOString(), channel: 'AGENT_LATE', trackingTag: `src=agent&po=${w.code}`, lines: lines.map(({ price: _p, ...l }) => l),
           units: lines.reduce((a, l) => a + l.qty, 0), fulfilment: 'DOOR', total: lines.reduce((a, l) => a + l.price * l.qty, 0) + fee, status: 'LATE_ADD',
-          note: `${LATE_ADD_REASON_LABEL[b.reason]} · ${b.payment === 'PAYMENT_LINK' ? `payment link sent by SMS (expires in ${pay.linkExpiryHours} h)` : 'saved card charged'} · by ${ctx.action.actor}`
+          note: `${LATE_ADD_REASON_LABEL[b.reason]} · ${b.payment === 'PAYMENT_LINK' ? `pay-now link sent by SMS (expires in ${pay.linkExpiryHours} h)` : 'saved card charged'} · by ${ctx.action.actor}`
         };
         s.orders.push(order);
+        replays.set(key, order);
         audit(ctx, 'preorder.late_order.added', w.id, `Late order ${order.number} added to ${w.name}`);
         return order;
       }, 201)

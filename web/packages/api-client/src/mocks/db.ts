@@ -31,6 +31,8 @@ export interface MockSession {
   preorderFulfilment?: 'DOOR' | 'PICKUP';
   /** Dev/mocks only: "Preview pre-order city" overrides (place, stage, master switch, fallback). */
   preorderPreview?: PreorderPreview;
+  /** Pay-now links paid in this browser session (mock mode). */
+  payLinksPaid?: string[];
 }
 
 export interface MockChallenge {

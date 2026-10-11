@@ -19,7 +19,7 @@ import { useState } from 'react';
 
 import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
 
-import { amountText, NO_SETTINGS_TITLE, parseAmount } from './model';
+import { amountText, NO_SETTINGS_TITLE, parseAmount, PAY_NOW_LINK_LABEL } from './model';
 import { PreorderAreasTree } from './PreorderAreasTree';
 import { controlClass, labelClass, smallButton, Toggle, usePreorderAccess, usePreordersApi } from './primitives';
 
@@ -105,7 +105,7 @@ function PaymentFees({ s, canEdit }: { s: PreorderSettings; canEdit: boolean }) 
       pickupFee[c] = k ?? 0;
     }
     if (!p.allowedMethods.length) return setError('Allow at least one payment method.');
-    if (!p.lateAdd.savedCard && !p.lateAdd.paymentLink) return setError('Keep the saved card or the payment link on for late adds.');
+    if (!p.lateAdd.savedCard && !p.lateAdd.paymentLink) return setError('Keep the saved card or the pay-now link on for late adds.');
     if (!p.missedDelivery.offerRefund && !p.missedDelivery.offerNewDate) return setError('Offer a refund or a new date when a delivery is missed.');
     if (hoursProblem) return setError(`${hoursProblem} (${LINK_EXPIRY_MIN_HOURS}–${LINK_EXPIRY_MAX_HOURS}).`);
     setError(null);
@@ -197,8 +197,8 @@ function PaymentFees({ s, canEdit }: { s: PreorderSettings; canEdit: boolean }) 
             <strong className="text-sm">Charge the saved card on file</strong>
           </div>
           <div className={`${row} flex-wrap`}>
-            <Toggle on={p.lateAdd.paymentLink} label="Send a payment link by SMS" onClick={() => setP({ ...p, lateAdd: { ...p.lateAdd, paymentLink: !p.lateAdd.paymentLink } })} />
-            <strong className="flex-1 text-sm">Send a payment link by SMS</strong>
+            <Toggle on={p.lateAdd.paymentLink} label={PAY_NOW_LINK_LABEL} onClick={() => setP({ ...p, lateAdd: { ...p.lateAdd, paymentLink: !p.lateAdd.paymentLink } })} />
+            <strong className="flex-1 text-sm">{PAY_NOW_LINK_LABEL}</strong>
             <label className="flex items-center gap-2 text-xs text-muted">
               Link expires after
               <input
@@ -216,7 +216,7 @@ function PaymentFees({ s, canEdit }: { s: PreorderSettings; canEdit: boolean }) 
               hours
             </label>
             <span id="po-link-hours" className={cx('w-full text-xs', hoursProblem ? 'text-red-700' : 'text-muted')}>
-              {hoursProblem ?? `Between ${LINK_EXPIRY_MIN_HOURS} and ${LINK_EXPIRY_MAX_HOURS} hours: payment links can’t last longer than a day.`}
+              {hoursProblem ?? `Between ${LINK_EXPIRY_MIN_HOURS} and ${LINK_EXPIRY_MAX_HOURS} hours: pay-now links can’t last longer than a day.`}
             </span>
           </div>
         </div>
