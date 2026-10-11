@@ -4,7 +4,7 @@ import { CalendarCheck, List, LogoMark, MapPin, SealCheck, ShoppingCart, Sparkle
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { AttributionCapture } from '@/components/preorder/AttributionCapture';
 import { PREORDER_PATH, PreorderBanners } from '@/components/preorder/PreorderBanners';
@@ -21,8 +21,31 @@ import styles from './Header.module.css';
 import { useLolaLauncher } from './LolaLauncher';
 import { SearchBox } from './SearchBox';
 
+/** Publishes the sticky header's live height as --at-sticky-header-h (scroll-padding-top, so keyboard focus and in-page
+    anchors never land under it; WCAG 2.4.11). The height changes with the breakpoint (search row) and the font size. */
+function useStickyHeight() {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    const set = () => root.style.setProperty('--at-sticky-header-h', `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty('--at-sticky-header-h');
+    };
+  }, []);
+  return ref;
+}
+
+/** Storefront header: the top bar and the department bar stay fixed at the top while the page scrolls. The announcement
+    bar and the pre-order ribbon / send-to-family banner sit under it and scroll away with the page (Shop design). */
 export function Header() {
   const t = useT();
+  const headerRef = useStickyHeight();
   const api = browserApi();
   const { data: location } = useQuery(siteQueries.deliveryLocation(api));
   const { data: cart } = useQuery(cartQueries.current(api));
@@ -40,7 +63,7 @@ export function Header() {
 
   return (
     <>
-      <header className={styles.header}>
+      <header ref={headerRef} className={styles.header} data-testid="site-header">
         <div className={styles.bar}>
           <Link href="/" className={`${styles.chromeBtn} ${styles.logoBtn}`} aria-label={t('header.home')}>
             <LogoMark size={32} />

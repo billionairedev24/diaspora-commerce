@@ -254,29 +254,66 @@ describe('storefront pre-order states (mock BFF)', () => {
     expect(screen.queryByTestId('fulfil-door')).toBeNull();
   });
 
-  it('waitlist fallback: off ribbon and home card collect an email, no checkout of items', async () => {
+  /** Home slot (ribbon / family banner + pre-order hero) next to the /pre-orders view, sharing one query client. */
+  const homeAndPreorders = () =>
+    renderWithProviders(
+      <>
+        <div data-testid="home-slot">
+          <PreorderBanners />
+          <PreorderHome />
+        </div>
+        <PreorderView placeParam={null} />
+      </>
+    );
+
+  it('waitlist fallback: nothing on the home page or under the header; /pre-orders collects an email', async () => {
     await api().setDeliveryLocation({ zip: '79401' });
     await preview({ enabled: false, fallback: 'WAITLIST' });
     const user = userEvent.setup();
+    homeAndPreorders();
+    expect(await screen.findByRole('heading', { name: 'Pre-orders are coming to Lubbock.' })).toBeVisible();
+    // Shop design: the home page shows pre-order UI only where the city's pre-order is live (ribbon + hero).
+    expect(screen.getByTestId('home-slot')).toBeEmptyDOMElement();
+    await user.type(screen.getByLabelText('Email'), 'kwame@example.com');
+    await user.click(screen.getByRole('button', { name: 'Join the waitlist' }));
+    expect(await screen.findByText("You're on the list. We'll email kwame@example.com when a pre-order opens in Lubbock.")).toHaveAttribute('role', 'status');
+  });
+
+  it('ship fallback: no home card or strip; /pre-orders explains shipping', async () => {
+    await api().setDeliveryLocation({ zip: '79401' });
+    await preview({ enabled: false });
+    homeAndPreorders();
+    expect(await screen.findByRole('heading', { name: 'Shipping by UPS Ground for now.' })).toBeVisible();
+    expect(screen.getByTestId('home-slot')).toBeEmptyDOMElement();
+    expect(screen.queryByTestId('preorder-waitlist')).toBeNull();
+  });
+
+  it('metro city: no ribbon, hero or fallback on the home page, only the send-to-family banner', async () => {
+    await api().setDeliveryLocation({ zip: '77042' });
     renderWithProviders(
       <>
         <PreorderBanners />
         <PreorderHome />
       </>
     );
-    expect(await screen.findByTestId('preorder-off-ribbon')).toHaveTextContent("We don't deliver to Lubbock yet. Join the waitlist to hear when the next pre-order opens.");
-    expect(screen.getByRole('heading', { name: 'Pre-orders are coming to Lubbock.' })).toBeVisible();
-    await user.type(screen.getByLabelText('Email'), 'kwame@example.com');
-    await user.click(screen.getByRole('button', { name: 'Join the waitlist' }));
-    expect(await screen.findByText("You're on the list. We'll email kwame@example.com when a pre-order opens in Lubbock.")).toHaveAttribute('role', 'status');
+    expect(await screen.findByTestId('preorder-family')).toHaveTextContent('Pre-order open in');
+    expect(screen.queryByTestId('preorder-ribbon')).toBeNull();
+    expect(screen.queryByTestId('preorder-hero')).toBeNull();
+    expect(screen.queryByTestId('preorder-off')).toBeNull();
   });
 
-  it('ship fallback: off ribbon and headline', async () => {
+  it('live pre-order city: ribbon and home hero with the flat door fee', async () => {
     await api().setDeliveryLocation({ zip: '79401' });
-    await preview({ enabled: false });
-    renderWithProviders(<PreorderHome />);
-    expect(await screen.findByRole('heading', { name: 'Shipping by UPS Ground for now.' })).toBeVisible();
-    expect(screen.queryByTestId('preorder-waitlist')).toBeNull();
+    renderWithProviders(
+      <>
+        <PreorderBanners />
+        <PreorderHome />
+      </>
+    );
+    expect(await screen.findByTestId('preorder-ribbon')).toHaveTextContent('Lubbock pre-order is open');
+    const hero = await screen.findByTestId('preorder-hero');
+    expect(hero).toHaveTextContent(/Delivered \w{3}, \w{3} \d+ · \$7\.99 flat/);
+    expect(screen.queryByTestId('preorder-family')).toBeNull();
   });
 
   it('window page: rules, timeline, closed support block', async () => {

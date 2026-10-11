@@ -358,6 +358,14 @@ export type PreorderItemState =
   | { kind: 'waitlist' }
   | { kind: 'none' };
 
+/** The platform fallback (ship by carrier, or waitlist only) applies to a place a pre-order window covers while that
+    pre-order is off. A place no window covers (a next-day metro, or any other city) is a normal delivery place: no
+    pre-order UI and no fallback (design at-preorder.js `resolve` returns null there). */
+export function preorderFallback(r: PreorderResolution | null | undefined): PreorderResolution['fallback'] | null {
+  if (!r || r.metro || r.on || !r.covered) return null;
+  return r.fallback;
+}
+
 /** Pre-order item = the catalogue marks it eligible for the place's window and the pre-order is on there. */
 export function preorderItemState(eligible: boolean | undefined, r: PreorderResolution | null | undefined): PreorderItemState {
   if (!r) return { kind: 'none' };
@@ -366,6 +374,8 @@ export function preorderItemState(eligible: boolean | undefined, r: PreorderReso
     if (eligible) return { kind: 'preorder', stage: r.stage, locked: preorderLocked(r.stage), showBadge: r.placements.badge };
     return { kind: 'ships-now' };
   }
-  if (r.fallback === 'WAITLIST') return { kind: 'waitlist' };
-  return { kind: 'ships-now' };
+  const fallback = preorderFallback(r);
+  if (fallback === 'WAITLIST') return { kind: 'waitlist' };
+  if (fallback === 'SHIP') return { kind: 'ships-now' };
+  return { kind: 'none' };
 }

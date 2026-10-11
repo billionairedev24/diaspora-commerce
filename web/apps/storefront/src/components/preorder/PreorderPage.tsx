@@ -3,6 +3,7 @@
 import {
   cartKeys,
   isApiError,
+  preorderFallback,
   preorderKeys,
   type PreorderListItem,
   type PreorderPlace,
@@ -49,7 +50,6 @@ import { Countdown } from './Countdown';
 import styles from './Preorder.module.css';
 import { PREORDER_PATH } from './PreorderBanners';
 import { PreorderOffCard } from './PreorderHome';
-import { PreorderPreview } from './PreorderPreview';
 
 const PILL = { OPEN: styles.pillOpen, UPCOMING: styles.pillUpcoming, CLOSED: styles.pillClosed } as const;
 const RULE_ICONS: Icon[] = [CalendarCheck, CreditCard, Truck, Headset];
@@ -294,14 +294,9 @@ function parsePlace(raw: string | null): PreorderPlace | undefined {
 }
 
 /** /pre-orders: the window page for the shopper's place (or ?place=CC/RR/City), else the list of pre-orders elsewhere.
-    `preview` adds the dev-only "Preview pre-order city" control (mock BFF). */
-export function PreorderView({ placeParam, preview = false }: { placeParam: string | null; preview?: boolean }) {
-  return (
-    <>
-      {preview && <PreorderPreview />}
-      <PreorderViewBody placeParam={placeParam} />
-    </>
-  );
+    Everything shown comes from the resolution API (no prototype "preview as" controls). */
+export function PreorderView({ placeParam }: { placeParam: string | null }) {
+  return <PreorderViewBody placeParam={placeParam} />;
 }
 
 function PreorderViewBody({ placeParam }: { placeParam: string | null }) {
@@ -310,7 +305,8 @@ function PreorderViewBody({ placeParam }: { placeParam: string | null }) {
   const live = useLivePreorder(r);
   if (isPending) return <Skeleton height={420} />;
   if (live) return <PreorderWindowPage live={live} />;
-  if (r && !r.metro && !place) {
+  // The ship / waitlist fallback is for a covered city whose pre-order is off; other cities just see the list.
+  if (r && preorderFallback(r) && !place) {
     return (
       <>
         <PreorderOffCard r={r} />

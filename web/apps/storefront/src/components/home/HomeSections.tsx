@@ -40,12 +40,12 @@ export async function Banners({ banners }: { banners: Banner[] }) {
     <>
       {banners.map((b) => (
         <section key={b.id} className={styles.banner} aria-label={t('home.sponsored', { advertiser: b.advertiser })}>
-          <ImagePlaceholder src={b.imageUrl} alt={b.title} ratio="970 / 250" caption={t('home.advertiserCreative')} style={{ minHeight: 200, height: '100%' }} />
+          <ImagePlaceholder className={styles.bannerImage} src={b.imageUrl} alt="" ratio="970 / 250" />
           <div className={styles.bannerBody}>
             <span className={styles.muted}>{t('home.sponsored', { advertiser: b.advertiser })}</span>
             <h2 className={styles.bannerTitle}>{b.title}</h2>
             <p className={styles.bannerSub}>{b.sub}</p>
-            <Link href={b.href} className={buttonClassName({ size: 'sm' })} style={{ marginTop: 8 }}>
+            <Link href={b.href} className={buttonClassName({ size: 'sm' }, styles.bannerCta)}>
               {b.cta}
             </Link>
             <span className={styles.adNote}>{t('home.adNote')}</span>

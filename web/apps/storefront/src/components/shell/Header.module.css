@@ -1,4 +1,13 @@
-.header { background: var(--at-color-header-bg); color: var(--at-color-header-text); }
+/* Fixed at the top while the page scrolls (sticky: no layout jump, no spacer). The safe-area padding keeps the bar's
+   background under a notch / status bar when the page is shown edge to edge. */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: var(--at-z-sticky);
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--at-color-header-bg);
+  color: var(--at-color-header-text);
+}
 .bar { display: flex; align-items: center; gap: var(--at-space-2); padding: var(--at-space-2) var(--at-page-gutter); flex-wrap: nowrap; min-width: 0; }
 
 .chromeBtn {

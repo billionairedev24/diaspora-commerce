@@ -54,7 +54,8 @@ describe('tokens', () => {
     expect(css).toContain('font-family: var(--at-font-sans)');
     expect(css).toMatch(/scrollbar-width:\s*none/);
     expect(css).toMatch(/::-webkit-scrollbar\s*\{\s*display:\s*none/);
-    expect(css).toMatch(/overflow-x:\s*hidden/);
+    // clip, not hidden: hidden turns <body> into a scroll container and breaks position: sticky headers.
+    expect(css).toMatch(/html, body \{ overflow-x:\s*clip; \}/);
     expect(cssVariables['--at-font-sans']).toMatch(/^"Figtree"/);
   });
 

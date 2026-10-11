@@ -19,6 +19,14 @@ const nextConfig: NextConfig = {
   images: { unoptimized: true },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
+  },
+  // Content placements (hero, tiles, announcements, banners) may link to the canonical marketing paths; they all land on
+  // search (/s). /communities/<c> is a route of its own (it capitalises the community name).
+  async redirects() {
+    return [
+      { source: '/search', destination: '/s', permanent: false },
+      { source: '/brands/afrotransact', destination: '/s?soldBy=platform', permanent: false }
+    ];
   }
 };
 

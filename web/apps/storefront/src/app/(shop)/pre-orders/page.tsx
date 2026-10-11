@@ -2,7 +2,6 @@ import { type Metadata } from 'next';
 
 import { PreorderView } from '@/components/preorder/PreorderPage';
 import { getT } from '@/i18n/server';
-import { mocksEnabled } from '@/lib/config';
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getT();
@@ -14,5 +13,5 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PreordersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
   const place = typeof sp.place === 'string' ? sp.place : null;
-  return <PreorderView placeParam={place} preview={mocksEnabled()} />;
+  return <PreorderView placeParam={place} />;
 }

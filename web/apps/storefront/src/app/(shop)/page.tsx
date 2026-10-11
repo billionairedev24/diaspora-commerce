@@ -5,7 +5,8 @@ import { siteQueries } from '@/lib/api/queries';
 import { serverApi } from '@/lib/api/server';
 import { getQueryClient } from '@/lib/query/getQueryClient';
 
-/** Home: the shopper's pre-order hero (or fallback card), then hero, tiles, banners and rails from content placements. */
+/** Home (Shop design order): the pre-order hero only where the shopper's city has a live pre-order, then the campaign
+    carousel, tiles, sponsored banners and product rails from content placements. */
 export default async function HomePage() {
   const api = await serverApi();
   const home = await getQueryClient().fetchQuery(siteQueries.home(api));

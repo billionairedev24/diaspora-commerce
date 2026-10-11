@@ -45,7 +45,7 @@ export function Hero({ slides }: { slides: HeroSlide[] }) {
           </Link>
           <span className={styles.heroLabel}>{h.label}</span>
         </div>
-        <ImagePlaceholder className={styles.heroImage} src={h.imageUrl} alt={h.title} ratio="16 / 9" caption={t('home.campaignImage')} />
+        <ImagePlaceholder className={styles.heroImage} src={h.imageUrl} alt="" ratio="16 / 9" loading={idx === 0 ? 'eager' : 'lazy'} />
       </div>
       {n > 1 && (
         <>

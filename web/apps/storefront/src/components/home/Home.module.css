@@ -27,7 +27,7 @@
 .dots button { color: inherit; }
 /* 24×24 px targets (WCAG 2.5.8); the visible dot is drawn inside. Inactive dots are outlined in the text colour (3:1+ on every hero theme). */
 .dot { position: relative; min-width: 24px; height: 24px; border: 0; background: none; cursor: pointer; padding: 0; display: grid; place-items: center; }
-.dot::before { content: ''; width: 10px; height: 10px; border: 2px solid currentColor; border-radius: var(--at-radius-pill); }
+.dot::before { content: ''; width: 8px; height: 8px; border: 1.5px solid currentColor; border-radius: var(--at-radius-pill); }
 .dotOn { min-width: 36px; }
 .dotOn::before { width: 28px; background: currentColor; }
 .pause { position: relative; width: 24px; height: 24px; border: 0; background: none; color: inherit; cursor: pointer; padding: 0; display: grid; place-items: center; }
@@ -42,6 +42,8 @@
 .tileCta { align-self: flex-start; color: var(--at-color-link); font-size: var(--at-text-sm); }
 
 .banner { margin-top: var(--at-space-5); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); overflow: hidden; background: var(--at-color-surface); }
+.bannerImage { min-height: 200px; height: 100%; }
+.bannerCta { margin-top: var(--at-space-2); }
 .bannerBody { padding: var(--at-space-6); display: flex; flex-direction: column; gap: var(--at-space-2); justify-content: center; align-items: flex-start; }
 .muted { font-size: var(--at-text-xs); color: var(--at-color-text-muted); }
 .bannerTitle { margin: 0; font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); }
@@ -56,6 +58,7 @@
 
 @media (max-width: 640px) {
   .heroTitle { font-size: var(--at-text-4xl); }
-  .heroInner { padding-left: var(--at-page-gutter); padding-right: var(--at-page-gutter); }
+  /* The image stacks under the text: keep the dots clear of its bottom edge. */
+  .heroInner { padding-left: var(--at-page-gutter); padding-right: var(--at-page-gutter); padding-bottom: var(--at-space-8); }
   .arrow { display: none; }
 }

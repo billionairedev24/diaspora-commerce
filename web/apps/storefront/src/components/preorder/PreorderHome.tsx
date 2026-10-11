@@ -38,6 +38,7 @@ export function PreorderHero({ live }: { live: LivePreorder }) {
             </span>
             <span>
               {t('preorder.hero.delivered')} <strong>{dates.deliversT}</strong>
+              {w.door && ` · ${t('preorder.terms.door', { fee: live.doorFee })}`}
             </span>
           </div>
         </div>
@@ -89,7 +90,7 @@ export function WaitlistForm({ place }: { place: PreorderPlace }) {
   );
 }
 
-/** Covered city where the pre-order is off: fallback headline and body (and the waitlist form). */
+/** /pre-orders for a covered city whose pre-order is off: fallback headline and body (and the waitlist form). */
 export function PreorderOffCard({ r, headingLevel = 2 }: { r: PreorderResolution; headingLevel?: 1 | 2 }) {
   const t = useT();
   const waitlist = r.fallback === 'WAITLIST';
@@ -103,12 +104,10 @@ export function PreorderOffCard({ r, headingLevel = 2 }: { r: PreorderResolution
   );
 }
 
-/** Top of the home page: the pre-order hero where one is live, the fallback card where it is off. */
+/** Top of the home page (Shop design `preHero`): the pre-order hero only where the shopper's city has a live pre-order.
+    Every other city (next-day metros included) shows no pre-order or fallback UI on the home page. */
 export function PreorderHome() {
   const { data: r } = usePreorderResolution();
   const live = useLivePreorder(r);
-  if (!r) return null;
-  if (live) return <PreorderHero live={live} />;
-  if (!r.metro) return <PreorderOffCard r={r} />;
-  return null;
+  return live ? <PreorderHero live={live} /> : null;
 }

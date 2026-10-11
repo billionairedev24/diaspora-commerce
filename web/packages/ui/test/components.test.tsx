@@ -4,7 +4,7 @@ import { type CountryCode } from 'libphonenumber-js/mobile';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AddressAutocomplete, createFixtureAddressSearch, Dialog, ErrorSummary, fromNominatim, Menu, MenuItem, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, SocialButton, Stars } from '../src';
+import { AddressAutocomplete, createFixtureAddressSearch, Dialog, ErrorSummary, fromNominatim, ImagePlaceholder, Menu, MenuItem, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, SocialButton, Stars } from '../src';
 
 function Phone() {
   const [country, setCountry] = useState<CountryCode>('US');
@@ -173,5 +173,26 @@ describe('overlays (S194)', () => {
     const summary = screen.getByRole('alert');
     expect(summary).toHaveFocus();
     expect(screen.getByRole('link', { name: 'Enter an email' })).toHaveAttribute('href', '#f-email');
+  });
+});
+
+describe('ImagePlaceholder', () => {
+  it('renders the real image whenever there is a URL, with no placeholder caption over it', () => {
+    const { container } = render(<ImagePlaceholder src="https://cdn.example.com/hero.webp" alt="" caption="Campaign image · 1600×900" loading="eager" />);
+    const img = container.querySelector('img');
+    expect(img).toHaveAttribute('src', 'https://cdn.example.com/hero.webp');
+    expect(img).toHaveAttribute('loading', 'eager');
+    expect(screen.queryByText(/1600×900/)).toBeNull();
+  });
+
+  it('falls back to the striped placeholder when there is no URL or the image fails to load', () => {
+    const { container, rerender } = render(<ImagePlaceholder src={null} alt="Nigerian" />);
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByRole('img', { name: 'Nigerian' })).toBeInTheDocument();
+    rerender(<ImagePlaceholder src="https://cdn.example.com/missing.webp" alt="Nigerian" />);
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    img?.dispatchEvent(new Event('error'));
+    return waitFor(() => expect(container.querySelector('img')).toBeNull());
   });
 });

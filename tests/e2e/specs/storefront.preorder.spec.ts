@@ -119,11 +119,17 @@ test.describe('storefront · pre-orders (S273)', () => {
     await expect(page.getByRole('button', { name: /^Increase quantity/ })).toBeDisabled();
   });
 
-  test('off: waitlist fallback hides checkout and collects an email; ship fallback explains UPS Ground', async ({ page }, testInfo) => {
+  test('off: the home page shows no fallback; /pre-orders has the waitlist form or the ship explanation', async ({ page }, testInfo) => {
     await deliverTo(page, '79401');
     await preview(page, { enabled: false, fallback: 'WAITLIST' });
     await page.goto('/');
-    await expect(page.getByTestId('preorder-off-ribbon')).toHaveText("We don't deliver to Lubbock yet. Join the waitlist to hear when the next pre-order opens.");
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    // Shop design: pre-order UI on the home page only where the city's pre-order is live; no "no pre-order" strip or card.
+    await expect(page.getByTestId('preorder-ribbon')).toHaveCount(0);
+    await expect(page.getByTestId('preorder-hero')).toHaveCount(0);
+    await expect(page.getByTestId('preorder-off')).toHaveCount(0);
+    await expect(page.getByText(/UPS Ground|Join the waitlist/)).toHaveCount(0);
+    await page.goto('/pre-orders');
     await expect(page.getByRole('heading', { name: 'Pre-orders are coming to Lubbock.' })).toBeVisible();
     await page.getByLabel('Email').fill('kwame@example.com');
     await page.getByRole('button', { name: 'Join the waitlist' }).click();
@@ -132,8 +138,9 @@ test.describe('storefront · pre-orders (S273)', () => {
 
     await preview(page, { enabled: false, fallback: 'SHIP' });
     await page.goto('/');
+    await expect(page.getByTestId('preorder-off')).toHaveCount(0);
+    await page.goto('/pre-orders');
     await expect(page.getByRole('heading', { name: 'Shipping by UPS Ground for now.' })).toBeVisible();
-    await expect(page.getByTestId('preorder-off-ribbon')).toContainText('Orders ship by UPS Ground in 3–5 days.');
   });
 
   test('waitlist email unsubscribe link: asks, confirms, and explains a bad link', async ({ page }, testInfo) => {

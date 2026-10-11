@@ -7,6 +7,7 @@ import {
   countdownParts,
   createApiClient,
   formatCountdownShort,
+  preorderFallback,
   preorderItemState,
   preorderKeys,
   preorderOptions,
@@ -77,6 +78,12 @@ describe('pre-order helpers', () => {
     expect(preorderItemState(true, { ...base, metro: true, covered: false, on: false, stage: null })).toEqual({ kind: 'metro' });
     expect(preorderItemState(true, { ...base, on: false, fallback: 'WAITLIST' })).toEqual({ kind: 'waitlist' });
     expect(preorderItemState(true, { ...base, on: false })).toEqual({ kind: 'ships-now' });
+    // Not covered by any window (e.g. a metro the service did not flag): the usual delivery promise, no fallback tag.
+    expect(preorderItemState(true, { ...base, covered: false, on: false, stage: null })).toEqual({ kind: 'none' });
+    expect(preorderItemState(true, { ...base, covered: false, on: false, stage: null, fallback: 'WAITLIST' })).toEqual({ kind: 'none' });
+    expect(preorderFallback({ ...base, on: false, fallback: 'WAITLIST' })).toBe('WAITLIST');
+    expect(preorderFallback({ ...base, covered: false, on: false })).toBeNull();
+    expect(preorderFallback(base)).toBeNull();
     expect(preorderItemState(true, undefined)).toEqual({ kind: 'none' });
   });
 

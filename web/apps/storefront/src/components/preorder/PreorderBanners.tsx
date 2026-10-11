@@ -2,7 +2,7 @@
 
 import { preorderKeys } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
-import { CalendarCheck, cx, Package } from '@afrotransact/ui';
+import { CalendarCheck, cx } from '@afrotransact/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -38,7 +38,10 @@ export function PreorderRibbon({ live }: { live: LivePreorder }) {
   );
 }
 
-/** Pre-order and coverage banners between the header and the page. */
+/** Pre-order banners under the header (Shop design `preRibbon` / `preFamily`): the ribbon where the shopper's city has
+    a live pre-order; otherwise the send-to-family banner while a pre-order is open elsewhere (not on /pre-orders).
+    A city without a live pre-order shows no fallback strip here: the ship / waitlist fallback lives on /pre-orders and in
+    the product and cart delivery tags only. */
 export function PreorderBanners() {
   const t = useT();
   const fmt = useFormatters();
@@ -48,15 +51,6 @@ export function PreorderBanners() {
   const { data: open } = useOpenPreorders();
   if (!r) return null;
   if (live) return <PreorderRibbon live={live} />;
-  if (!r.metro) {
-    // Covered city where the pre-order is off: the platform fallback (ship by UPS Ground, or waitlist only).
-    return (
-      <div className={styles.offRibbon} role="note" data-testid="preorder-off-ribbon">
-        <Package size={18} aria-hidden />
-        {r.fallback === 'WAITLIST' ? t('preorder.off.ribbonWaitlist', { city: r.place.city }) : t('preorder.off.ribbonShip', { city: r.place.city })}
-      </div>
-    );
-  }
   const windows = open?.windows ?? [];
   if (!windows.length || !r.placements.family || pathname === PREORDER_PATH) return null;
   const first = windows[0];

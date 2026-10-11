@@ -88,6 +88,7 @@
   overflow: hidden;
 }
 
+.withImage { background: var(--at-color-surface-sunken); }
 .placeholder img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .placeholderCaption { position: relative; padding: var(--at-space-3); }
 

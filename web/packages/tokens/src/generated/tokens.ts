@@ -168,6 +168,7 @@ export const cssVariables = {
   "--at-shadow-lg": "0 16px 40px rgb(25 24 22 / .22)",
   "--at-shadow-focus": "0 0 0 3px var(--at-green-200)",
   "--at-z-dropdown": "20",
+  "--at-z-sticky": "30",
   "--at-z-drawer": "40",
   "--at-z-dialog": "50",
   "--at-z-toast": "60",
@@ -352,6 +353,7 @@ export const resolvedVariables = {
   "--at-shadow-lg": "0 16px 40px rgb(25 24 22 / .22)",
   "--at-shadow-focus": "0 0 0 3px #93D2BC",
   "--at-z-dropdown": "20",
+  "--at-z-sticky": "30",
   "--at-z-drawer": "40",
   "--at-z-dialog": "50",
   "--at-z-toast": "60",
@@ -571,6 +573,7 @@ export const tokens = {
   },
   "z": {
     "dropdown": "20",
+    "sticky": "30",
     "drawer": "40",
     "dialog": "50",
     "toast": "60"

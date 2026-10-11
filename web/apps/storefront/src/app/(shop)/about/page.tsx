@@ -41,7 +41,7 @@ export default async function AboutPage() {
             </a>
           </div>
         </div>
-        <ImagePlaceholder className={styles.photo} alt={t('about.photo')} caption={t('about.photo')} ratio="4 / 3" />
+        <ImagePlaceholder className={styles.photo} alt={t('about.photo')} ratio="4 / 3" />
       </section>
       <ul className={styles.pillars}>
         {pillars.map(({ Icon, title, text }) => (
@@ -83,7 +83,7 @@ export default async function AboutPage() {
         <ul className={styles.leaders}>
           {leaders.map((role) => (
             <li key={role} className={styles.leader}>
-              <ImagePlaceholder alt={`${t('about.portrait')}: ${role}`} caption={t('about.portrait')} />
+              <ImagePlaceholder alt={`${t('about.portrait')}: ${role}`} />
               <strong>{t('about.nameTbd')}</strong>
               <span className={styles.leaderRole}>{role}</span>
             </li>

@@ -113,7 +113,7 @@ export function ProductView({ atin }: { atin: string }) {
           ))}
         </ul>
         <div className={styles.main}>
-          <ImagePlaceholder src={current?.url} alt={current?.alt ?? p.title} caption={t('pdp.photography', { n: img + 1, total: images.length })} />
+          <ImagePlaceholder src={current?.url} alt={current?.alt ?? p.title} />
         </div>
         <div className={styles.info}>
           <h1 className={styles.title}>{p.title}</h1>

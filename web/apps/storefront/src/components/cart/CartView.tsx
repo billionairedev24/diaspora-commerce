@@ -1,6 +1,6 @@
 'use client';
 
-import { type CartLine, type CartPackage, SearchQuerySchema } from '@afrotransact/api-client';
+import { type CartLine, type CartPackage, preorderFallback, SearchQuerySchema } from '@afrotransact/api-client';
 import { useFormatters } from '@afrotransact/i18n/react';
 import { Button, buttonClassName, CheckCircle, FulfilmentBadge, ImagePlaceholder, QuantityStepper, Skeleton, Stars } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -237,7 +237,7 @@ export function CartView() {
                 const firstOther = cart.packages.some((x) => x.preorder) && cart.packages.findIndex((x) => !x.preorder) === i;
                 return (
                   <div key={p.packageId}>
-                    {firstOther && <CartShipsNowHeader metro={preorder?.metro} waitlist={!preorder?.on && preorder?.fallback === 'WAITLIST'} />}
+                    {firstOther && <CartShipsNowHeader metro={preorder?.metro} waitlist={preorderFallback(preorder) === 'WAITLIST'} />}
                     <Package pkg={p} n={i + 1} total={cart.packages.length} />
                   </div>
                 );
