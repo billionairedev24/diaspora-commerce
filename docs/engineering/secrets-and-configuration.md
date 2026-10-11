@@ -94,7 +94,11 @@ Prices and free tiers change: check the provider's pricing page.
 - **Create:** [dashboard.stripe.com](https://dashboard.stripe.com) → toggle **Test mode** → **Developers → API keys**:
   *Publishable key* (`pk_test_…`) → `STRIPE_PUBLISHABLE_KEY`; *Secret key* (`sk_test_…`, or a restricted `rk_test_…`)
   → `STRIPE_SECRET_KEY`. Both from the **same account**. For seller onboarding also enable **Connect** (Settings →
-  Connect → get started; test mode needs no business verification).
+  Connect → get started; test mode needs no business verification) and complete **Connect → Settings → Platform
+  profile**: sellers' accounts have no Stripe dashboard, AfroTransact collects their verification through Stripe's
+  embedded onboarding and is liable for negative balances (`controller[requirement_collection]=application`), which
+  Stripe only allows once the platform profile (and its loss-liability acknowledgement) is done. Without it account
+  creation fails with a "platform profile" or "liable for negative balances" error on the Stripe verification step.
 - **Webhooks locally:** install the [Stripe CLI](https://docs.stripe.com/stripe-cli), then
   `stripe login` and `stripe listen --forward-to localhost:8105/v1/webhooks/stripe`. It prints
   `Your webhook signing secret is whsec_…` → `STRIPE_WEBHOOK_SECRET`, then `tools/dev/local.sh restart payments`. Keep

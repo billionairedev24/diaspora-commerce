@@ -35,9 +35,12 @@ import com.stripe.param.FileCreateParams;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * stripe-java adapter for Connect. Accounts are platform-controlled: Stripe collects requirements through the
- * embedded components, the platform pays Stripe fees and owns negative balances, there is no Stripe dashboard and
- * payouts are manual (released by payments-service).
+ * stripe-java adapter for Connect. Accounts are platform-controlled: the platform collects requirements (through
+ * Stripe's embedded onboarding and account management components), pays Stripe fees and owns negative balances,
+ * there is no Stripe dashboard and payouts are manual (released by payments-service). Stripe refuses
+ * requirement_collection=stripe with no dashboard unless Stripe is liable for losses, which a marketplace that
+ * charges on the platform account cannot choose; application collection needs the platform profile completed in
+ * the Stripe Dashboard (Connect → Settings → Platform profile).
  */
 public class StripeConnectAdapter implements StripeConnectGateway {
 
@@ -64,7 +67,7 @@ public class StripeConnectAdapter implements StripeConnectGateway {
                                 .setPayer(AccountCreateParams.Controller.Fees.Payer.APPLICATION).build())
                         .setLosses(AccountCreateParams.Controller.Losses.builder()
                                 .setPayments(AccountCreateParams.Controller.Losses.Payments.APPLICATION).build())
-                        .setRequirementCollection(AccountCreateParams.Controller.RequirementCollection.STRIPE)
+                        .setRequirementCollection(AccountCreateParams.Controller.RequirementCollection.APPLICATION)
                         .setStripeDashboard(AccountCreateParams.Controller.StripeDashboard.builder()
                                 .setType(AccountCreateParams.Controller.StripeDashboard.Type.NONE).build())
                         .build())

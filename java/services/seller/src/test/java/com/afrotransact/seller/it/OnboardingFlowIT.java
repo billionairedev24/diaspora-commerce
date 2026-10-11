@@ -112,7 +112,7 @@ class OnboardingFlowIT extends SellerIntegrationTest {
         LoggedRequest create = StripeStub.requests(STRIPE, "POST", "/v1/accounts").stream()
                 .filter(r -> StripeStub.decoded(r).contains("metadata[org_id]=" + orgId)).findFirst().orElseThrow();
         assertThat(StripeStub.decoded(create)).contains("controller[fees][payer]=application",
-                "controller[losses][payments]=application", "controller[requirement_collection]=stripe",
+                "controller[losses][payments]=application", "controller[requirement_collection]=application",
                 "controller[stripe_dashboard][type]=none", "settings[payouts][schedule][interval]=manual",
                 "capabilities[card_payments][requested]=true", "capabilities[transfers][requested]=true",
                 "business_type=individual", "country=US");
