@@ -35,6 +35,8 @@ at:
       seller-url: ${SELLER_URL:http://seller}
       geo-url: ${GEO_URL:http://geo}
       delivery-runs-url: ${DELIVERY_RUNS_URL:http://delivery-runs}
+      # Customer pickup points chosen at checkout (public GET /v1/pickup-locations/{id}).
+      carrier-gateway-url: ${CARRIER_GATEWAY_URL:http://carrier-gateway}
 management:
   tracing:
     sampling:

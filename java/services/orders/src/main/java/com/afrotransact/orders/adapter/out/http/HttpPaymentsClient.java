@@ -38,7 +38,11 @@ class HttpPaymentsClient implements PaymentsClient {
         body.put("amountMinor", r.amountMinor());
         body.put("currency", r.currency());
         body.put("placedAt", r.placedAt() == null ? null : r.placedAt().toString());
-        body.put("metadata", r.metadata());
+        // Captures follow the order's shipments: a single-capture intent (no Stripe multicapture) is then captured
+        // whole with the first shipment instead of losing the rest of the authorisation.
+        Map<String, String> metadata = new LinkedHashMap<>(r.metadata() == null ? Map.of() : r.metadata());
+        metadata.putIfAbsent("capture_plan", "per_shipment");
+        body.put("metadata", metadata);
         if (r.shopperId() != null && !r.shopperId().isBlank()) {
             body.put("shopperId", r.shopperId());
         }
@@ -140,8 +144,12 @@ class HttpPaymentsClient implements PaymentsClient {
                 .body(Map.of("shipmentId", r.shipmentId(), "lineIds", r.lineIds(), "amountMinor", r.amountMinor(),
                         "finalCapture", r.finalCapture()))
                 .retrieve().body(JsonNode.class));
+        List<String> lineIds = new ArrayList<>();
+        if (body != null && body.path("lineIds").isArray()) {
+            body.path("lineIds").forEach(n -> lineIds.add(n.asString()));
+        }
         return new Capture(body == null ? null : body.path("id").asString(null),
-                body == null ? r.amountMinor() : body.path("amountMinor").asLong(r.amountMinor()));
+                body == null ? r.amountMinor() : body.path("amountMinor").asLong(r.amountMinor()), lineIds);
     }
 
     @Override

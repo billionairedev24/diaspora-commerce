@@ -206,6 +206,8 @@ at:
       tax-returns-url: ${TAX_RETURNS_URL:http://localhost:8111}
       # S272 pre-orders: eligibility of cart lines (delivery-runs-service, scope delivery-runs:reserve).
       delivery-runs-url: ${DELIVERY_RUNS_URL:http://localhost:8115}
+      # Customer pickup points chosen at checkout (public GET /v1/pickup-locations/{id}).
+      carrier-gateway-url: ${CARRIER_GATEWAY_URL:http://localhost:8209}
       tax-timeout: ${TAX_QUOTE_TIMEOUT:2s}
     topics:
       payment-events: at.payment.events

@@ -25,6 +25,7 @@ import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.OrdersRuleViolation;
 import com.afrotransact.orders.domain.OrdersStateConflict;
 import com.afrotransact.orders.domain.OrderOrigin;
+import com.afrotransact.orders.domain.PickupEligibility;
 import com.afrotransact.orders.domain.PreorderFulfilment;
 import com.afrotransact.orders.domain.PreorderPackage;
 import com.afrotransact.orders.domain.PreorderStage;
@@ -40,6 +41,7 @@ import com.afrotransact.orders.port.OrderCouponRepository;
 import com.afrotransact.orders.port.OrderRepository;
 import com.afrotransact.orders.port.PaymentsClient;
 import com.afrotransact.orders.port.PickupLocations;
+import com.afrotransact.orders.port.PickupPoints;
 import com.afrotransact.orders.port.PreorderEligibility;
 import com.afrotransact.orders.port.ProductFactsClient;
 import com.afrotransact.orders.port.PromiseClient;
@@ -75,6 +77,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
     private final OrderRepository orderRepository;
     private final OrderPlacementService placement;
     private final LocalDeliveryQuotes localDelivery;
+    private final PickupPoints pickupPoints;
     private final PreorderEligibility preorders;
     private final PreorderSettings preorderSettings;
     private final OrdersSettings settings;
@@ -86,7 +89,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                            OfferInventory offerInventory, PaymentsClient payments, CartClient cart, CouponsClient coupons,
                            OrderCouponRepository orderCoupons, OrderRepository orderRepository,
                            OrderPlacementService placement, LocalDeliveryQuotes localDelivery,
-                           PreorderEligibility preorders, PreorderSettings preorderSettings,
+                           PickupPoints pickupPoints, PreorderEligibility preorders, PreorderSettings preorderSettings,
                            OrdersSettings settings, Clock clock) {
         this.markets = markets;
         this.catalog = catalog;
@@ -105,6 +108,7 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         this.orderRepository = orderRepository;
         this.placement = placement;
         this.localDelivery = localDelivery;
+        this.pickupPoints = pickupPoints;
         this.preorders = preorders;
         this.preorderSettings = preorderSettings;
         this.settings = settings;
@@ -198,13 +202,17 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             CheckoutInput.Selection sel = selections.getOrDefault(e.getKey(), selections.get(packageId(first)));
             DeliveryMethod method = method(sel);
             if (sellerStore) {
+                // From the seller's store: AfroTransact Delivery, or collected by the customer at the seller's own
+                // pickup location (e.g. the store itself).
                 if (sel != null && sel.option() != null && !sel.option().isBlank()
-                        && method != DeliveryMethod.AFROTRANSACT_DELIVERY) {
+                        && method != DeliveryMethod.AFROTRANSACT_DELIVERY && method != DeliveryMethod.PICKUP) {
                     throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION, (first.sellerName() == null
                             ? first.sellerOrgId() : first.sellerName()) + " delivers this package with AfroTransact "
-                            + "Delivery from its store; choose afrotransact_delivery");
+                            + "Delivery from its store or has it picked up there; choose afrotransact_delivery or "
+                            + "pickup");
                 }
-                method = DeliveryMethod.AFROTRANSACT_DELIVERY;
+                method = method == DeliveryMethod.PICKUP ? DeliveryMethod.PICKUP
+                        : DeliveryMethod.AFROTRANSACT_DELIVERY;
             }
             String level = sel != null && sel.serviceLevel() != null && !sel.serviceLevel().isBlank()
                     ? sel.serviceLevel().trim().toLowerCase(Locale.ROOT)
@@ -214,6 +222,9 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
             if (method == DeliveryMethod.PICKUP && (pickup == null || pickup.isBlank())) {
                 throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION, "Choose a pickup location for "
                         + (first.sellerName() == null ? e.getKey() : first.sellerName()));
+            }
+            if (method == DeliveryMethod.PICKUP) {
+                checkPickupPoint(pickup.trim(), fulfilmentType(first), first);
             }
             DeliveryPreferences prefs = sel == null || sel.preferences() == null ? DeliveryPreferences.defaults()
                     : sel.preferences();
@@ -233,8 +244,9 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
                         f.map(ProductFactsClient.Facts::perishable).orElse(false), rate.jurisdiction(), lineDays,
                         i.offerId(), 0, f.map(ProductFactsClient.Facts::productType).orElse(null), null, 0));
             }
-            LocalDelivery quoted = sellerStore ? localDelivery.quote(first.sellerOrgId(), first.sellerName(),
-                    pickups.get(offerKey(first)), to) : null;
+            LocalDelivery quoted = sellerStore && method == DeliveryMethod.AFROTRANSACT_DELIVERY
+                    ? localDelivery.quote(first.sellerOrgId(), first.sellerName(), pickups.get(offerKey(first)), to)
+                    : null;
             packages.add(new CheckoutPlan.Package(e.getKey(), first.sellerOrgId(), first.sellerName(),
                     fulfilmentType(first), method, level, method == DeliveryMethod.PICKUP ? pickup.trim() : null,
                     prefs, days, lines, quoted));
@@ -252,6 +264,22 @@ class CheckoutActivitiesImpl implements CheckoutActivities {
         }
         return new CheckoutPlan(in.currency(), packages,
                 PreorderPayments.stripeTypes(PreorderPayments.allowed(allowedMethods)));
+    }
+
+    /**
+     * The chosen pickup point exists, takes orders and fits the package: an AfroTransact counter or locker for
+     * platform-fulfilled packages, one of the seller's own pickup locations for the seller's packages
+     * (422 orders.invalid-selection otherwise).
+     */
+    private void checkPickupPoint(String pointId, FulfilmentType fulfilment, CartClient.Item first) {
+        Optional<PickupPoints.PickupPoint> point = pickupPoints.find(pointId);
+        String refusal = PickupEligibility.refusal(point.map(PickupPoints.PickupPoint::kind).orElse(null),
+                point.map(PickupPoints.PickupPoint::ownerOrg).orElse(null),
+                point.map(PickupPoints.PickupPoint::active).orElse(false), fulfilment, first.sellerOrgId());
+        if (refusal != null) {
+            throw new OrdersRuleViolation(CheckoutCodes.INVALID_SELECTION, refusal + " ("
+                    + (first.sellerName() == null ? first.sellerOrgId() : first.sellerName()) + ")");
+        }
     }
 
     /** Package id prefix of a pre-order window's package (also the delivery selection key). */

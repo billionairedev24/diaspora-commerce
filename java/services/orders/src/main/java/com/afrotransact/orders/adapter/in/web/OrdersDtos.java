@@ -67,7 +67,11 @@ final class OrdersDtos {
                     + "package") String option,
             @Schema(description = "standard | express | local | pickup; derived from option when omitted")
             String serviceLevel,
-            @Schema(description = "Pickup point (pickup only)") String pickupPointId,
+            @Schema(description = "Pickup point (pickup only): a carrier-gateway pickup location that takes orders. "
+                    + "Platform-fulfilled packages (AfroTransact Retail, Fulfilled by AfroTransact) use an AfroTransact "
+                    + "counter or locker; a seller's packages (including AfroTransact Delivery from the store) one of "
+                    + "that seller's own pickup locations. Anything else is refused with 422 orders.invalid-selection. "
+                    + "A pickup package has no shipping charge.") String pickupPointId,
             @Valid Preferences preferences) {
 
         CheckoutInput.Selection toSelection() {

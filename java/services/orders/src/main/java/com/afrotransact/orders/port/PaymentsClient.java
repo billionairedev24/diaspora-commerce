@@ -123,8 +123,21 @@ public interface PaymentsClient {
     record CaptureRequest(String shipmentId, List<String> lineIds, long amountMinor, boolean finalCapture) {
     }
 
-    /** Capture result. */
-    record Capture(String captureId, long amountMinor) {
+    /**
+     * Capture result.
+     *
+     * @param lineIds the lines the capture took: more than the shipment's when the payment has no Stripe multicapture
+     *                (a single-capture payment takes every line not captured yet with its first shipment)
+     */
+    record Capture(String captureId, long amountMinor, List<String> lineIds) {
+
+        public Capture {
+            lineIds = lineIds == null ? List.of() : List.copyOf(lineIds);
+        }
+
+        public Capture(String captureId, long amountMinor) {
+            this(captureId, amountMinor, List.of());
+        }
     }
 
     /** Refund of one line. */

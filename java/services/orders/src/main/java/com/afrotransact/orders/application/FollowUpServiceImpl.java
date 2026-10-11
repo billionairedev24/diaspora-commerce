@@ -3,9 +3,12 @@ package com.afrotransact.orders.application;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import com.afrotransact.orders.domain.Order;
 import com.afrotransact.orders.domain.Shipment;
@@ -114,9 +117,13 @@ class FollowUpServiceImpl implements FollowUpService {
                     new PaymentsClient.CaptureRequest(s.id(), PaymentLines.lineIds(s), s.totalMinor(), last));
             tx.executeWithoutResult(status -> {
                 Order locked = orders.lockById(order.id()).orElseThrow();
-                Shipment current = locked.shipment(s.id());
-                if (!current.captured()) {
-                    orders.update(locked.withShipment(current.withCapture(capture.captureId(), Instant.now(clock))));
+                Instant now = Instant.now(clock);
+                Order next = locked;
+                for (Shipment other : coveredBy(locked, s.id(), capture)) {
+                    next = next.withShipment(other.withCapture(capture.captureId(), now));
+                }
+                if (next != locked) {
+                    orders.update(next);
                 }
             });
         }
@@ -131,6 +138,27 @@ class FollowUpServiceImpl implements FollowUpService {
                 inventory.commit(order.id());
             }
         }
+    }
+
+    /**
+     * The shipments a capture paid for, not yet marked captured: the one captured and, when the payment has no Stripe
+     * multicapture (payments captured every line not captured yet with this first shipment), every other live shipment
+     * whose lines are all in the capture. Those are later refunded, not released, if cancelled.
+     */
+    static List<Shipment> coveredBy(Order order, String shipmentId, PaymentsClient.Capture capture) {
+        Set<String> captured = new HashSet<>(capture.lineIds());
+        List<Shipment> out = new ArrayList<>();
+        for (Shipment o : order.shipments()) {
+            if (o.captured()) {
+                continue;
+            }
+            boolean self = o.id().equals(shipmentId);
+            List<String> lines = PaymentLines.lineIds(o);
+            if (self || o.live() && !lines.isEmpty() && captured.containsAll(lines)) {
+                out.add(o);
+            }
+        }
+        return out;
     }
 
     private void settleShipment(Order order, Shipment s) {
