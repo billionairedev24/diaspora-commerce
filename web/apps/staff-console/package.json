@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start --port 3002",
     "lint": "eslint . && stylelint \"src/**/*.css\"",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "cf:build": "opennextjs-cloudflare build",
     "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
