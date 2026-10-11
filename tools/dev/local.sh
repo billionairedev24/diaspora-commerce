@@ -9,6 +9,7 @@
 #   tools/dev/local.sh logs delivery-runs      # follow one log (web apps: web-storefront, web-staff-console, …)
 #   tools/dev/local.sh restart orders          # rebuild + restart one service
 #   tools/dev/local.sh mobile                  # only the Expo apps (customer :8081, driver :8082)
+#   tools/dev/local.sh docs                    # only the developer portal (:3100) and Storybook (:6006)
 #   tools/dev/local.sh seed                    # demo data (tools/seed): sellers, products with photos, home content
 #   tools/dev/local.sh down                    # stop everything (keeps data; `make reset` wipes the Docker volumes)
 #
@@ -121,7 +122,7 @@ port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
 # export the apps' addresses for identity, gateway-bff, notifications and the apps themselves.
 resolve_web_ports() {
   local app var port taken="" before="" after="" svc
-  if [[ -f "$WEB_PORTS_FILE" ]]; then before=$(grep -v '^DOCS_PORT=' "$WEB_PORTS_FILE" || true)
+  if [[ -f "$WEB_PORTS_FILE" ]]; then before=$(grep -vE '^(DOCS|STORYBOOK)_PORT=' "$WEB_PORTS_FILE" || true)
   else before=$(printf 'STOREFRONT_PORT=3000\nSELLER_CENTER_PORT=3001\nSTAFF_CONSOLE_PORT=3002'); fi
   for app in $WEB_APPS; do
     var=$(web_port_var "$app")
@@ -143,13 +144,13 @@ resolve_web_ports() {
   done
   mkdir -p "$STATE"
   local docs_line=""
-  if [[ -f "$WEB_PORTS_FILE" ]]; then docs_line=$(grep '^DOCS_PORT=' "$WEB_PORTS_FILE" || true); fi
+  if [[ -f "$WEB_PORTS_FILE" ]]; then docs_line=$(grep -E '^(DOCS|STORYBOOK)_PORT=' "$WEB_PORTS_FILE" || true); fi
   printf '%s%s' "$after" "${docs_line:+$docs_line$'\n'}" >"$WEB_PORTS_FILE"
   export PUBLIC_WEB_URL="http://localhost:$(web_port_of storefront)"
   export SELLER_CENTER_URL="http://localhost:$(web_port_of seller-center)"
   export STAFF_CONSOLE_URL="http://localhost:$(web_port_of staff-console)"
   # Services started with other addresses would send sign-in back to the old ports: restart them with the new ones.
-  if [[ "$before" != "$(grep -v '^DOCS_PORT=' "$WEB_PORTS_FILE" || true)" ]]; then
+  if [[ "$before" != "$(grep -vE '^(DOCS|STORYBOOK)_PORT=' "$WEB_PORTS_FILE" || true)" ]]; then
     # The web apps link to each other too (storefront "Sell on AfroTransact" → Seller Center).
     for svc in identity gateway-bff notifications web-storefront web-seller-center web-staff-console; do
       if running "$svc"; then echo "  · web app ports changed: restarting $svc"; stop "$svc"; fi
@@ -481,6 +482,7 @@ links() {
   printf '  %-20s %-30s %s\n' "Developer portal" "$dp" "guides, architecture, runbooks, backlog"
   printf '  %-20s %s\n' "API reference (all)" "$dp/api   (every service's contract, rendered with Scalar)"
   printf '  %-20s %s\n' "MCP guide + tools" "$dp/mcp   and $dp/mcp/tools"
+  printf '  %-20s %-30s %s\n' "Storybook" "http://localhost:$(storybook_port)" "design tokens, components, app screens (a11y checks)"
   echo "MCP server (Model Context Protocol, Streamable HTTP, JSON-RPC 2.0)"
   echo "  Endpoint             POST http://localhost:8114/mcp   (local: security off, runs as the local super admin)"
   echo "  Tool catalogue       http://localhost:8114/v1/tools   (JSON schemas per tool; ?mine=true for the caller's own)"
@@ -540,6 +542,42 @@ docs_up() {
     sleep 3
   done
   echo "  … docs portal still compiling: tools/dev/local.sh logs docs-portal"
+}
+
+# Storybook (web/packages/ui): design tokens, shared components and the app screens' stories, with the a11y addon.
+# Port 6006, or STORYBOOK_PORT, or the next free one from 6010. STORYBOOK=0 skips it.
+storybook_port() {
+  local saved=""
+  if [[ -n "${STORYBOOK_PORT:-}" ]]; then echo "$STORYBOOK_PORT"; return 0; fi
+  if [[ -f "$WEB_PORTS_FILE" ]]; then saved=$( { grep -E "^STORYBOOK_PORT=" "$WEB_PORTS_FILE" || true; } | head -1 | cut -d= -f2); fi
+  echo "${saved:-6006}"
+}
+
+storybook_up() {
+  local port i
+  if [[ "${STORYBOOK:-1}" == 0 || "${WEB:-1}" == 0 ]]; then return 0; fi
+  command -v pnpm >/dev/null || return 0
+  if running storybook; then echo "  · Storybook already running"; return 0; fi
+  port=$(storybook_port)
+  if [[ -z "${STORYBOOK_PORT:-}" ]] && port_open "$port"; then
+    local want=$port
+    port=6010
+    while port_open "$port"; do port=$((port + 1)); done
+    echo "  ! localhost:$want is in use by another program: Storybook runs on localhost:$port instead (set STORYBOOK_PORT)"
+  fi
+  { grep -v '^STORYBOOK_PORT=' "$WEB_PORTS_FILE" 2>/dev/null || true; echo "STORYBOOK_PORT=$port"; } >"$WEB_PORTS_FILE.tmp"
+  mv "$WEB_PORTS_FILE.tmp" "$WEB_PORTS_FILE"
+  echo "==> starting Storybook (web/packages/ui)"
+  : >"$LOGS/storybook.log"
+  (cd "$ROOT/web/packages/ui" || exit 1
+    nohup ./node_modules/.bin/storybook dev -p "$port" --ci --no-open >>"$LOGS/storybook.log" 2>&1 &
+    echo $! >"$PIDS/storybook.pid")
+  for ((i = 0; i < 180; i += 3)); do
+    if grep -qE "Storybook .* started|Local:" "$LOGS/storybook.log" 2>/dev/null; then echo "  ✓ Storybook  http://localhost:$port"; return 0; fi
+    if ! running storybook; then echo "  ✗ Storybook exited; last log lines:" >&2; tail -n 15 "$LOGS/storybook.log" >&2; return 0; fi
+    sleep 3
+  done
+  echo "  … Storybook still starting: tools/dev/local.sh logs storybook"
 }
 
 # Mobile apps (Expo, mobile/apps/{customer,driver}) against the local stack: one Metro server each (customer :8081,
@@ -617,6 +655,7 @@ cmd_up() {
   fi
   web_up
   docs_up
+  storybook_up
   mobile_up
   seed_if_empty
   links
@@ -650,6 +689,10 @@ cmd_status() {
     state=down; if running docs-portal; then state=running; fi
     printf '%-18s %-6s %-9s %s\n' docs-portal "$(docs_port)" "$state" "http://localhost:$(docs_port)"
   fi
+  if [[ -f "$PIDS/storybook.pid" ]]; then
+    state=down; if running storybook; then state=running; fi
+    printf '%-18s %-6s %-9s %s\n' storybook "$(storybook_port)" "$state" "http://localhost:$(storybook_port)"
+  fi
   for app in $MOBILE_APPS; do
     [[ -f "$PIDS/mobile-$app.pid" ]] || continue
     state=down; if running "mobile-$app"; then state=running; fi
@@ -677,6 +720,7 @@ case "${1:-}" in
   status) cmd_status ;;
   links) links ;;
   mobile) mkdir -p "$LOGS" "$PIDS"; mobile_up; links ;;
+  docs) mkdir -p "$LOGS" "$PIDS" "$STATE"; docs_up; storybook_up ;;
   logs) [[ -n "${2:-}" ]] || { echo "usage: $0 logs <service>" >&2; exit 2; }; tail -n 200 -f "$LOGS/$2.log" ;;
   seed) shift; python3 "$ROOT/tools/seed/seed.py" "$@" ;;
   restart) [[ -n "${2:-}" ]] || { echo "usage: $0 restart <service>" >&2; exit 2; }
