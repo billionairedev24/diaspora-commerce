@@ -59,6 +59,7 @@ class RegionCoverageTest {
     @Test
     void theRegionVersionChangesWhenAnyRowIsAddedRemovedOrSwitched() {
         long v = coverage.regionVersion(TX);
+        assertThat(v).as("exact as a JSON number").isBetween(0L, (1L << 53) - 1);
         assertThat(coverage.regionVersion(AreaKey.parse("US/TX/Lubbock"))).isEqualTo(v);
         assertThat(new Coverage(PreorderSettings.DEFAULT, coverage.areas()).regionVersion(TX)).isEqualTo(v);
         List<CoverageArea> switched = new ArrayList<>(coverage.areas());

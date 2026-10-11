@@ -16,6 +16,9 @@ import java.util.Optional;
  */
 public record Coverage(PreorderSettings settings, List<CoverageArea> areas) {
 
+    /** 2^53 - 1: versions travel as JSON numbers, which browsers and the BFF read as doubles. */
+    private static final long SAFE_INTEGER = (1L << 53) - 1;
+
     public Coverage {
         settings = settings == null ? PreorderSettings.DEFAULT : settings;
         areas = areas == null ? List.of() : List.copyOf(areas);
@@ -86,7 +89,7 @@ public record Coverage(PreorderSettings settings, List<CoverageArea> areas) {
                 h *= 0x100000001b3L;
             }
         }
-        return h & Long.MAX_VALUE;
+        return h & SAFE_INTEGER;
     }
 
     /** The stored row for exactly this key (city ignoring case). */
