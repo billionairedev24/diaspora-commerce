@@ -70,6 +70,34 @@ def call(key, method, path, params=None, idempotency_key=None):
         raise RuntimeError(body.get("error", {}).get("message", str(e))) from None
 
 
+# The controller settings StripeConnectAdapter creates sellers' accounts with (keep in sync).
+SELLER_ACCOUNT = {
+    "controller[requirement_collection]": "stripe",
+    "controller[losses][payments]": "stripe",
+    "controller[fees][payer]": "account",
+    "controller[stripe_dashboard][type]": "none",
+}
+
+
+def probe_connect(sk):
+    """Creates a throwaway test connected account with the seller settings, reports Stripe's answer, deletes it."""
+    params = dict(SELLER_ACCOUNT, country="US", business_type="individual",
+                  **{"capabilities[card_payments][requested]": "true", "capabilities[transfers][requested]": "true",
+                     "settings[payouts][schedule][interval]": "manual", "metadata[purpose]": "make stripe-setup probe"})
+    try:
+        acct = call(sk, "POST", "/accounts", params)
+    except RuntimeError as e:
+        print(f"  ✗ Seller account settings refused by Stripe: {e}")
+        print("    " + ", ".join(f"{k}={v}" for k, v in SELLER_ACCOUNT.items()))
+        return
+    print("  ✓ Seller account settings accepted (" + ", ".join(f"{k.split('[')[-1].rstrip(']')}={v}"
+                                                             for k, v in SELLER_ACCOUNT.items()) + ")")
+    try:
+        call(sk, "DELETE", f"/accounts/{acct['id']}")
+    except RuntimeError as e:
+        print(f"    (could not delete the probe account {acct['id']}: {e})")
+
+
 def main():
     s = secrets()
     sk, pk = s.get("STRIPE_SECRET_KEY", ""), s.get("STRIPE_PUBLISHABLE_KEY", "")
@@ -88,6 +116,8 @@ def main():
         print("  ✓ Connect is enabled")
     except RuntimeError as e:
         print(f"  ✗ Connect: {e}\n    Enable it: Dashboard (test mode) → Connect → Get started (any platform type).")
+
+    probe_connect(sk)
 
     created = 0
     for code, name, monthly in PLANS:
