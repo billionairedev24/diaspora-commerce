@@ -39,3 +39,4 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 .next-e2e/
+.local/

@@ -18,8 +18,8 @@ ENV          ?= dev
 TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
-.PHONY: help up down logs ps reset apps-up apps-down \
-        java-verify go-verify verify tools \
+.PHONY: help up up-infra down logs ps reset apps-up apps-down \
+        java-verify go-verify verify tools dev-up dev-down dev-status dev-logs dev-restart dev-links \
         helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers \
         web-dev web-build backlog
@@ -28,12 +28,16 @@ help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------------------------------------ local stack
-up: ## Start local infrastructure + observability (docker compose default profile) and wait for health
+up: ## Start EVERYTHING locally (infra, services, web apps) and print all links — same as dev-up
+	tools/dev/local.sh up $(SERVICES)
+
+up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo, Kibana; ~12 GB)
 	$(COMPOSE) up -d
 	@infra/local/wait-healthy.sh 600
 	@echo "Grafana http://localhost:3200 · Kafka UI http://localhost:8090 · Kibana http://localhost:5601 · Temporal http://localhost:8088 · Mailpit http://localhost:8025 · MinIO http://localhost:9001"
 
-down: ## Stop the local stack (keeps volumes)
+down: ## Stop everything make up started: web apps, services, infrastructure (keeps data; make reset wipes it)
+	tools/dev/local.sh down
 	$(COMPOSE) --profile apps down
 
 logs: ## Follow logs (SERVICE=<name> for one service)
@@ -143,11 +147,27 @@ smoke-carriers: ## Carrier sandbox smoke against a running carrier-gateway (CARR
 	tools/smoke/carriers.sh
 
 # ------------------------------------------------------------------------------------------------ web / misc
-web-dev: ## Run the web apps in dev mode (pnpm -C web dev); skipped if web/ or pnpm is missing
-	@if ! command -v pnpm >/dev/null; then echo "pnpm not installed — skipped"; \
-	elif [ -f web/package.json ]; then pnpm -C web dev; \
-	elif [ -d web/apps ]; then pnpm -r --parallel --filter "./web/apps/**" dev; \
-	else echo "web/ not present — skipped"; fi
+dev-up: ## Run everything locally: infra (Docker), services and the 3 web apps, then print all links (SERVICES=… subset, WEB=0)
+	tools/dev/local.sh up $(SERVICES)
+
+dev-down: ## Stop what dev-up started (keeps data)
+	tools/dev/local.sh down
+
+dev-status: ## Health of the services and infra started by dev-up
+	tools/dev/local.sh status
+
+dev-logs: ## Follow one service's log: make dev-logs SERVICE=orders
+	tools/dev/local.sh logs $(SERVICE)
+
+dev-restart: ## Rebuild and restart one service: make dev-restart SERVICE=delivery-runs
+	tools/dev/local.sh restart $(SERVICE)
+
+dev-links: ## Print every local URL (apps, API docs, infra) of what dev-up started
+	tools/dev/local.sh links
+
+web-dev: ## Web apps on mock data (no back end needed): storefront :3000, seller center :3001, staff console :3002
+	@command -v pnpm >/dev/null || { echo "pnpm not installed (corepack enable)"; exit 1; }
+	pnpm --parallel --filter storefront --filter seller-center --filter staff-console run dev:mocks
 
 web-build: ## Build the web apps (pnpm -C web build); skipped if web/ or pnpm is missing
 	@if ! command -v pnpm >/dev/null; then echo "pnpm not installed — skipped"; \
