@@ -1,3 +1,4 @@
+import { type HelpQuery } from '../schemas/help';
 import { type SearchQuery } from '../schemas/search';
 
 /* TanStack Query key factories. Keys are hierarchical so whole families can be invalidated
@@ -15,6 +16,14 @@ export const legalKeys = {
   documents: () => [...legalKeys.all, 'document'] as const,
   document: (key: string, locale: string, version?: string) => [...legalKeys.documents(), key, locale, version ?? 'current'] as const,
   cookiePolicy: () => [...legalKeys.all, 'cookie-policy'] as const
+};
+
+export const helpKeys = {
+  all: ['help'] as const,
+  articles: () => [...helpKeys.all, 'article'] as const,
+  article: (slug: string) => [...helpKeys.articles(), slug] as const,
+  lists: () => [...helpKeys.all, 'list'] as const,
+  list: (query: HelpQuery) => [...helpKeys.lists(), query] as const
 };
 
 export const productKeys = {

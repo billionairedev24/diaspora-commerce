@@ -82,6 +82,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/help/articles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Published help articles (the hub excluded), by topic and text, a page at a time
+         * @description Load the next page with `cursor` = the previous page's `nextCursor` (infinite scroll). Public and cacheable.
+         */
+        get: operations["listHelpArticles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/help/articles/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A published help page (`help-center` is the hub at /help) */
+        get: operations["getHelpArticle"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/consent/cookie-policy": {
         parameters: {
             query?: never;
@@ -2172,6 +2209,50 @@ export interface components {
             /** @example /legal/conditions-of-use */
             href: string;
         };
+        /** @enum {string} */
+        HelpTopicKey: "ORDERS_DELIVERY" | "RETURNS_REFUNDS" | "ACCOUNT_PAYMENTS" | "SELLING" | "COMPANY";
+        HelpSection: {
+            /** @example Pickup */
+            heading: string;
+            /** @description Markdown (paragraphs, `-` lists, **bold**, [links](…)); email addresses become mailto links */
+            body: string;
+        };
+        /** @description A help page — a title and its sections (Shop design info page) */
+        HelpArticle: {
+            /** @example shipping */
+            slug: string;
+            topic: components["schemas"]["HelpTopicKey"];
+            /** @example Orders & delivery */
+            topicTitle: string;
+            /** @example Shipping & delivery */
+            title: string;
+            summary: string;
+            sections: components["schemas"]["HelpSection"][];
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        HelpArticleSummary: {
+            slug: string;
+            topic: components["schemas"]["HelpTopicKey"];
+            topicTitle: string;
+            title: string;
+            summary: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        HelpTopicCount: {
+            key: components["schemas"]["HelpTopicKey"];
+            /** @example Orders & delivery */
+            title: string;
+            count: number;
+        };
+        HelpArticlePage: {
+            items: components["schemas"]["HelpArticleSummary"][];
+            /** @description Topics with at least one published article, in display order */
+            topics: components["schemas"]["HelpTopicCount"][];
+            /** @description Cursor of the next page; null on the last page */
+            nextCursor: string | null;
+        };
         LegalHeading: {
             /** @example notifications-email-and-text-messages */
             id: string;
@@ -3372,6 +3453,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LegalPage"];
+                };
+            };
+            404: components["responses"]["Problem"];
+        };
+    };
+    listHelpArticles: {
+        parameters: {
+            query?: {
+                topic?: components["schemas"]["HelpTopicKey"];
+                /** @description Matches titles */
+                q?: string;
+                /** @description The previous page's nextCursor */
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of articles and the topics with published articles */
+            200: {
+                headers: {
+                    /** @example public, max-age=60 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpArticlePage"];
+                };
+            };
+            422: components["responses"]["Problem"];
+        };
+    };
+    getHelpArticle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example shipping */
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The page */
+            200: {
+                headers: {
+                    /** @example public, max-age=60 */
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HelpArticle"];
                 };
             };
             404: components["responses"]["Problem"];

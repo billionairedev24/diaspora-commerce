@@ -11,7 +11,7 @@ export default async function NotFound() {
       <h1 style={{ margin: 0, fontSize: 'var(--at-text-4xl)' }}>{t('notFound.title')}</h1>
       <p style={{ margin: 0, color: 'var(--at-color-text-muted)' }}>{t('notFound.body')}</p>
       <Link href="/" className={buttonClassName()}>
-        {t('soon.home')}
+        {t('common.backToShop')}
       </Link>
     </main>
   );

@@ -15,6 +15,7 @@ import { suggestAddresses } from './addresses';
 import { getDb, type MockChallenge, nextId, userById } from './db';
 import { locationForZip, nearestZip } from './delivery';
 import { DEMO_CODE, JOBS, SITE_CONFIG } from './fixtures/content';
+import { helpHandlers } from './help-handlers';
 import { body, type Ctx, json, requireUser, route } from './http-kit';
 import { legalHandlers } from './legal-handlers';
 import { preorderHandlers } from './preorder-handlers';
@@ -231,6 +232,7 @@ export const handlers = [
   /* Addresses, payments, orders, returns, security, checkout, services & bookings, Lola */
   ...shopperHandlers,
   ...preorderHandlers,
-  ...legalHandlers
+  ...legalHandlers,
+  ...helpHandlers
 ];
 

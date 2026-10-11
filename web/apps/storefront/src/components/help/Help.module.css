@@ -1,0 +1,24 @@
+/* Help center pages (Shop design info pages: an 820px column, a black title, bold headings over muted paragraphs). */
+.page { max-width: 820px; padding: var(--at-space-10) 0; display: flex; flex-direction: column; gap: var(--at-space-4); }
+.crumb { display: flex; flex-wrap: wrap; gap: var(--at-space-2); align-items: center; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.crumb a { color: var(--at-color-link); }
+.title { margin: 0; font-size: var(--at-text-4xl); font-weight: var(--at-weight-black); }
+.section { display: flex; flex-direction: column; gap: var(--at-space-1); }
+.heading { margin: 0; font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
+.body { margin: 0; color: var(--at-color-text-muted); line-height: var(--at-leading-relaxed); }
+.body a { color: var(--at-color-link); }
+ul.body, ol.body { padding-inline-start: var(--at-space-5); }
+.browse { display: flex; flex-direction: column; gap: var(--at-space-4); padding-top: var(--at-space-6); border-top: 1px solid var(--at-color-border); }
+.h2 { margin: 0; font-size: var(--at-text-2xl); font-weight: var(--at-weight-bold); }
+.list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: var(--at-space-3); }
+.card {
+  display: flex; flex-direction: column; gap: var(--at-space-1); height: 100%; padding: var(--at-space-5);
+  background: var(--at-color-surface); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md);
+  color: var(--at-color-text); text-decoration: none;
+}
+.card:hover { background: var(--at-color-surface-hover); }
+.cardTopic { font-size: var(--at-text-xs); font-weight: var(--at-weight-bold); letter-spacing: var(--at-tracking-caps); text-transform: uppercase; color: var(--at-color-text-muted); }
+.cardTitle { font-size: var(--at-text-lg); }
+.cardSummary { font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
+.status { margin: 0; color: var(--at-color-text-muted); }
+.sentinel { height: 1px; }

@@ -19,8 +19,6 @@
 .leader { display: flex; flex-direction: column; gap: var(--at-space-2); }
 .leaderRole { font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
 .press { background: var(--at-color-surface); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); padding: var(--at-space-6); display: flex; flex-wrap: wrap; gap: var(--at-space-4); align-items: center; justify-content: space-between; }
-.soon { max-width: 640px; padding: var(--at-space-12) 0; display: flex; flex-direction: column; gap: var(--at-space-4); align-items: flex-start; }
-.soonTitle { margin: 0; font-size: var(--at-text-4xl); font-weight: var(--at-weight-black); }
 
 @media (max-width: 640px) {
   .display { font-size: var(--at-text-4xl); }

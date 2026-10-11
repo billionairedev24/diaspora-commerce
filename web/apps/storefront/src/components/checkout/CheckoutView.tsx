@@ -393,7 +393,7 @@ export function CheckoutView() {
         <h1 className={styles.title}>{empty ? t('co.emptyTitle') : t('co.errorTitle')}</h1>
         <p className={styles.muted}>{empty ? t('co.emptyBody') : t('acct.loadError')}</p>
         <Link href="/cart" className={buttonClassName()}>
-          {t('soon.cart')}
+          {t('common.goToCart')}
         </Link>
       </div>
     );

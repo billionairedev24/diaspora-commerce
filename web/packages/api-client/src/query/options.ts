@@ -1,9 +1,10 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { type ApiClient } from '../client';
+import { type HelpQuery } from '../schemas/help';
 import { type LegalDocumentKey } from '../schemas/legal';
 import { type SearchQuery } from '../schemas/search';
-import { accountKeys, careersKeys, cartKeys, legalKeys, productKeys, searchKeys, siteKeys } from './keys';
+import { accountKeys, careersKeys, cartKeys, helpKeys, legalKeys, productKeys, searchKeys, siteKeys } from './keys';
 
 /* queryOptions shared by server prefetch (RSC + HydrationBoundary) and client hooks, so both sides
    always use identical keys, fetchers and stale times. */
@@ -25,6 +26,20 @@ export const legalQueries = {
       staleTime: 5 * MINUTE
     }),
   cookiePolicy: (api: ApiClient) => queryOptions({ queryKey: legalKeys.cookiePolicy(), queryFn: ({ signal }) => api.getCookiePolicy(signal), staleTime: 10 * MINUTE })
+};
+
+export const helpQueries = {
+  article: (api: ApiClient, slug: string) =>
+    queryOptions({ queryKey: helpKeys.article(slug), queryFn: ({ signal }) => api.getHelpArticle(slug, signal), staleTime: 5 * MINUTE }),
+  /** The help center's article list: the next page loads as the shopper nears the end (no page numbers). */
+  infiniteArticles: (api: ApiClient, query: HelpQuery) =>
+    infiniteQueryOptions({
+      queryKey: helpKeys.list(query),
+      queryFn: ({ pageParam, signal }) => api.getHelpArticles({ ...query, cursor: pageParam }, signal),
+      initialPageParam: undefined as string | undefined,
+      getNextPageParam: (last) => last.nextCursor ?? undefined,
+      staleTime: 5 * MINUTE
+    })
 };
 
 export const productQueries = {

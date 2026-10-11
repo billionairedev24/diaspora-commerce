@@ -458,6 +458,26 @@ export const RESOURCES: Record<ResourceKey, MockResource> = {
       apply: (r, v) => { r.fields.effectiveDate = str(v.effectiveDate); r.fields.draftBanner = v.draftBanner === true; }
     }
   },
+  'help-articles': {
+    title: 'Help center',
+    columns: [col('title', 'Page', 'strong', 30), col('slug', 'Address', 'mono', 22), col('topicTitle', 'Topic', 'text', 20), col('status', 'Status', 'status', 13), col('updatedAt', 'Updated', 'date', 15)],
+    statusKey: 'status',
+    facets: facets('PUBLISHED', 'DRAFT'),
+    exportable: false,
+    titleOf: (r) => str(r.fields.title),
+    subtitleOf: (r) => `${str(r.fields.topicTitle)} · ${str(r.fields.href)}`,
+    actions: [],
+    edit: {
+      permission: 'content:site.edit',
+      form: (r) => form('Edit help page', 'Save', [
+        field('title', 'Title', 'text', true, { maxLength: 120, value: str(r.fields.title) }),
+        field('summary', 'Summary (shown in the help center list)', 'text', true, { maxLength: 300, value: str(r.fields.summary) }),
+        field('status', 'Status', 'select', true, { options: [{ value: 'PUBLISHED', label: 'Published' }, { value: 'DRAFT', label: 'Draft (staff only)' }], value: str(r.fields.status) }),
+        field('sections', 'Page (Markdown: a “## Heading” line before each section)', 'textarea', true, { value: str(r.fields.sections), help: 'Paragraphs, “-” lists, **bold** and [links](/orders); email addresses become links.' })
+      ]),
+      apply: (r, v) => { r.fields.title = str(v.title); r.fields.summary = str(v.summary); r.fields.status = str(v.status); r.fields.sections = str(v.sections); }
+    }
+  },
   'privacy-requests': {
     title: 'Privacy requests',
     columns: [col('reference', 'Reference', 'mono', 14), col('type', 'Request', 'strong', 14), col('email', 'Email', 'text', 26), col('state', 'State', 'text', 8), col('dueAt', 'Due', 'date', 14), col('submittedAt', 'Received', 'datetime', 14), col('status', 'Status', 'status', 10)],

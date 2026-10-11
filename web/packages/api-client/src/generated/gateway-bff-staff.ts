@@ -65,7 +65,7 @@ export interface paths {
          *     `GET /v1/lots`; purchase-orders: retail `GET /v1/purchase-orders`; routes: fulfilment `GET /v1/dispatch/routes`;
          *     support-cases: trust-ops `GET /v1/support-cases`; audit: trust-ops `GET /v1/audit/entries`; markets: content
          *     `GET /v1/markets/draft/countries`; site-settings: content `GET /v1/site-config/settings`; legal-documents: content
-         *     `GET /v1/legal`; privacy-requests: content `GET /v1/privacy/requests` (content:legal.view); announcements and
+         *     `GET /v1/legal`; help-articles: content `GET /v1/help/admin/articles` (content:site.view); privacy-requests: content `GET /v1/privacy/requests` (content:legal.view); announcements and
          *     placements: content `GET /v1/placements`; identity-providers: identity
          *     `GET /v1/admin/identity-providers`; fee-schedules: payments `GET /v1/fee-schedules`; tax-rates: tax-returns
          *     `GET /v1/tax/rates`. Needs VIEW on the resource's module.
@@ -82,7 +82,8 @@ export interface paths {
         put?: never;
         /**
          * Create a record from the table's create form (New)
-         * @description users: identity `POST /v1/admin/users` (access:admin); announcements and placements: content `POST /v1/placements`
+         * @description users: identity `POST /v1/admin/users` (access:admin); help-articles: content `PUT /v1/help/articles/{slug}` for an
+         *     unused address (content:site.edit); announcements and placements: content `POST /v1/placements`
          *     (content:placements.edit); fee-schedules: payments `POST /v1/fee-schedules` (payments:configure); tax-rates
          *     (local rate): tax-returns `PUT /v1/tax/rates/local/{state}/{zipPrefix}` (tax:configure). Fields are validated
          *     against the create form first (422 with per-field errors).
@@ -112,7 +113,8 @@ export interface paths {
          * Save the edit form of a record (Edit)
          * @description markets: content `PATCH /v1/markets/draft/countries/{code}` (content:markets.edit); site-settings: content
          *     `PUT /v1/site-config` with the revision read last (content:site.edit); legal-documents: content
-         *     `PATCH /v1/legal/{type}/current` (content:legal.edit); announcements and placements: content `PUT /v1/placements/{id}`
+         *     `PATCH /v1/legal/{type}/current` (content:legal.edit); help-articles: content `PUT /v1/help/articles/{slug}` with
+         *     `expectedVersion`, the page's Markdown split into sections at `## ` headings (content:site.edit); announcements and placements: content `PUT /v1/placements/{id}`
          *     with `expectedVersion` (content:placements.edit); tax-rates (state rule): tax-returns `PUT /v1/tax/rates/states/{state}`
          *     (tax:configure). A stale `version` answers 409 `CONFLICT`.
          */
@@ -1254,7 +1256,7 @@ export interface components {
             charts: components["schemas"]["ChartSpec"][];
         };
         /** @enum {string} */
-        ResourceKey: "users" | "roles" | "applications" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates";
+        ResourceKey: "users" | "roles" | "applications" | "orders" | "products" | "moderation" | "claims" | "returns" | "payouts" | "inventory" | "purchase-orders" | "routes" | "support-cases" | "audit" | "markets" | "site-settings" | "legal-documents" | "help-articles" | "privacy-requests" | "announcements" | "placements" | "identity-providers" | "fee-schedules" | "tax-rates";
         /** @enum {string} */
         Tone: "good" | "warn" | "bad" | "info" | "brand";
         CellValue: string | number | null;

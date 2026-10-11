@@ -17,6 +17,7 @@ import {
 } from './schemas/careers';
 import { type AddToCartRequest, type Cart, CartSchema, type UpdateCartLineRequest } from './schemas/cart';
 import { type ProductDetail, ProductDetailSchema, type StockAlert, StockAlertSchema } from './schemas/catalog';
+import { type HelpArticle, type HelpArticlePage, HelpArticlePageSchema, HelpArticleSchema, type HelpQuery } from './schemas/help';
 import { type Home, HomeSchema } from './schemas/home';
 import {
   type ConsentRecord,
@@ -56,6 +57,13 @@ export function createApiClient(options: ApiClientOptions) {
     /** A legal document: the current version, or an archived one with `version`. English is binding. */
     getLegalDocument: (key: LegalDocumentKey, opts: { version?: string; locale?: string } = {}, signal?: AbortSignal): Promise<LegalPage> =>
       request(`/v1/legal/${encodeURIComponent(key)}`, LegalPageSchema, { query: { version: opts.version, locale: opts.locale }, signal }),
+    /* Help center */
+    /** A page of published help articles (the hub excluded); pass the previous page's nextCursor for the next one. */
+    getHelpArticles: (query: HelpQuery & { cursor?: string } = {}, signal?: AbortSignal): Promise<HelpArticlePage> =>
+      request('/v1/help/articles', HelpArticlePageSchema, { query: { topic: query.topic, q: query.q || undefined, cursor: query.cursor, limit: query.limit === undefined ? undefined : String(query.limit) }, signal }),
+    /** A published help page; HELP_HUB is the help center hub. */
+    getHelpArticle: (slug: string, signal?: AbortSignal): Promise<HelpArticle> =>
+      request(`/v1/help/articles/${encodeURIComponent(slug)}`, HelpArticleSchema, { signal }),
     getCookiePolicy: (signal?: AbortSignal): Promise<CookiePolicy> => request('/v1/consent/cookie-policy', CookiePolicySchema, { signal }),
     /** Store a cookie choice (auditable). `gpc` also sends `Sec-GPC: 1`. */
     recordConsent: (input: ConsentRequest): Promise<ConsentRecord> =>

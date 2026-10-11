@@ -2,6 +2,7 @@
    it). Seeded from the Backoffice prototype (backoffice-data.js, backoffice-config.js, at-site.js) relative to today. */
 import { type ExportJob } from '../../schemas/exports';
 import { type ActivityEntry, type ResourceKey } from '../../schemas/staff';
+import { HELP_ARTICLES } from '../fixtures/help';
 import { type MockDispatch, seedDispatch } from './dispatch';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
@@ -360,6 +361,11 @@ function seed(now: Date): MockStaffDb {
     ['sms-terms', 'SMS & Notification Terms', '1.0', day(1)]
   ].map(([key, title, version, effective]) => rec(key as string, { key: key as string, title: title as string, version: version as string, effectiveDate: effective as string, draftBanner: true, href: `/legal/${key as string}` }));
 
+  const helpArticles = HELP_ARTICLES.map((a) => rec(a.slug, {
+    slug: a.slug, title: a.title, summary: a.summary, topic: a.topic, topicTitle: a.topicTitle, status: 'PUBLISHED', updatedAt: a.updatedAt,
+    sections: a.sections.map((x) => `## ${x.heading}\n\n${x.body}`).join('\n\n'), href: a.slug === 'help-center' ? '/help' : `/help/${a.slug}`
+  }));
+
   const privacyRequests = [
     ['PR-100004', 'delete', 'adaeze.n@example.com', 'TX', 'RECEIVED', 2, 'Please close my account and delete my order history where allowed.'],
     ['PR-100003', 'optout', 'kwame.m@example.com', 'CA', 'RECEIVED', 5, null],
@@ -412,7 +418,7 @@ function seed(now: Date): MockStaffDb {
     user: { id: 'stf-1', firstName: 'Ifeoma', lastName: 'Okafor', email: 'ifeoma@afrotransact.com' },
     records: {
       users, roles, applications, orders, products, moderation, claims, returns, payouts, inventory, 'purchase-orders': purchaseOrders, routes,
-      'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'privacy-requests': privacyRequests, announcements, placements,
+      'support-cases': supportCases, audit, markets, 'site-settings': siteSettings, 'legal-documents': legal, 'help-articles': helpArticles, 'privacy-requests': privacyRequests, announcements, placements,
       'identity-providers': providers, 'fee-schedules': fees, 'tax-rates': taxRates
     },
     notifications,

@@ -125,7 +125,7 @@ export function OrdersView() {
             <div className={pageStyles.empty}>
               <p className={pageStyles.muted}>{t('ord.none')}</p>
               <Link href="/" className={buttonClassName()}>
-                {t('soon.home')}
+                {t('common.backToShop')}
               </Link>
             </div>
           )}
