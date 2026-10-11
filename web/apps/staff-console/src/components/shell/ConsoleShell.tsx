@@ -1,5 +1,6 @@
 'use client';
 
+import { AccountFormatPreferences, accountSectionOf } from '@afrotransact/account';
 import { isApiError, staffQueries,type StaffSession } from '@afrotransact/api-client';
 import { Button } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { staffApi } from '@/lib/api';
 import { loginHref } from '@/lib/auth';
+import { setFormatPreferences } from '@/lib/format';
 import { hrefOf, moduleOf } from '@/lib/modules';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 import { StaffSessionProvider } from '@/lib/session';
@@ -89,7 +91,8 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     );
   }
   const sidebar = <Sidebar session={session} active={active} />;
-  const canOpen = allowed(session, active);
+  // My account (/account/…) is every staff member's own, whatever their roles open.
+  const canOpen = accountSectionOf(pathname) !== null || allowed(session, active);
   return (
     <StaffSessionProvider session={session}>
       <Header session={session} />
@@ -97,7 +100,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         <aside className="border-b border-border bg-surface md:sticky md:top-14 md:h-[calc(100vh-56px)] md:self-start md:overflow-y-auto md:overscroll-contain md:border-r md:border-b-0">{sidebar}</aside>
         <main id="main" tabIndex={-1} className="flex min-w-0 flex-col gap-5 px-4 pt-6 pb-12 outline-none sm:px-8">
           {canOpen ? (
-            children
+            <AccountFormatPreferences apply={setFormatPreferences}>{children}</AccountFormatPreferences>
           ) : (
             <>
               <NoAccess roles={session.roleLabel} />

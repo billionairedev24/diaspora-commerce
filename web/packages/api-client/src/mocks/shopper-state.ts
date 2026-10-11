@@ -183,8 +183,8 @@ export function bookingFor(svc: ServiceDetail, id: string, reference: string, st
 function seed(userId: string): AccountState {
   const empty: AccountState = {
     addresses: [], paymentMethods: [], orders: [], returns: [], bookings: [],
-    security: { mfa: { totp: false, sms: true, smsPhone: '•••• 0142', recoveryCodesLeft: 8, required: false, mayDisable: true },
-      passkeys: [], sessions: [{ id: 'sess-web', clientName: 'AfroTransact web · this browser', signedInAt: iso(daysAgo(0)), lastActiveAt: iso(new Date()), current: true }],
+    security: { mfa: { totp: false, sms: true, smsPhone: '•••• 0142', recoveryCodesLeft: 8, required: false, mayDisable: true, mayRemoveTotp: false, mayRemoveSms: true },
+      passkeys: [], trustedBrowsers: [], sessions: [{ id: 'sess-web', clientName: 'AfroTransact web · this browser', signedInAt: iso(daysAgo(0)), lastActiveAt: iso(new Date()), current: true }],
       devices: [], linkedAccounts: { accounts: [], hasPassword: true } },
     prefs: { email: true, sms: true, push: true, marketingOptIn: false },
     checkouts: new Map(), setupIntents: new Set(), pendingTotp: false, pendingSms: false
@@ -213,7 +213,7 @@ function seed(userId: string): AccountState {
     ],
     security: {
       ...empty.security,
-      mfa: { totp: true, sms: true, smsPhone: '•••• 0142', recoveryCodesLeft: 8, required: false, mayDisable: true },
+      mfa: { totp: true, sms: true, smsPhone: '•••• 0142', recoveryCodesLeft: 8, required: false, mayDisable: true, mayRemoveTotp: true, mayRemoveSms: true },
       passkeys: [{ credentialId: 'cred-macbook', label: 'MacBook Touch ID', createdAt: iso(daysAgo(40)), lastUsedAt: iso(daysAgo(2)) }],
       sessions: [
         { id: 'sess-web', clientName: 'AfroTransact web · this browser', signedInAt: iso(daysAgo(0)), lastActiveAt: iso(new Date()), current: true },

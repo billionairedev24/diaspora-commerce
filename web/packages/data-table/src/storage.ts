@@ -29,3 +29,23 @@ export function writePrefs(id: string, prefs: TablePrefs): void {
     // Storage full or blocked: the table still works, the preference just isn't remembered.
   }
 }
+
+const DEFAULT_DENSITY = 'at.table.defaultDensity';
+
+/** The viewer's default row density from My account › Preferences (tables they never adjusted use it). */
+export function readDefaultDensity(): 'comfortable' | 'compact' | undefined {
+  try {
+    const v = window.localStorage.getItem(DEFAULT_DENSITY);
+    return v === 'compact' || v === 'comfortable' ? v : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeDefaultDensity(density: 'comfortable' | 'compact'): void {
+  try {
+    window.localStorage.setItem(DEFAULT_DENSITY, density);
+  } catch {
+    // Blocked storage: tables fall back to comfortable rows.
+  }
+}

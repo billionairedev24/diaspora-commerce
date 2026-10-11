@@ -50,6 +50,7 @@ import { type HubGate, sellerFbaHandlers } from '../inventory-hub';
 import { parseSort, queryRows, type SortKey, type TableColumnLike } from '../table';
 import { CATEGORY_TREE, getSellerDb, type MockOrg, type MockSellerDb, plansFor, PRODUCT_TYPES, SELLER_ORG } from './db';
 import { allowedBookingActions, allows, BOOKING_LABELS, describePolicy, navigation, presetPolicy, roleCards, roleLabel, SHIPMENT_LABELS, takeHome } from './model';
+import { sellerSettingsHandlers } from './settings';
 
 export const MOCK_ROLE_COOKIE = 'at_mock_role';
 
@@ -1358,6 +1359,8 @@ export const sellerHandlers = [
   /* Send to AfroTransact (S281) */
   ...sellerFbaHandlers(W, fbaGate),
   /* Anything else under /v1/seller is not part of the contract. */
-  http.all(`${W}/*`, () => problemResponse(notFound('No such seller route.')))
+  http.all(`${W}/*`, () => problemResponse(notFound('No such seller route.'))),
+  /* My account (profile, sign-in & security, alerts, preferences): /v1/account/… */
+  ...sellerSettingsHandlers
 ];
 

@@ -1,19 +1,21 @@
 'use client';
 
+import { ACCOUNT_ROUTES, useAccountT } from '@afrotransact/account';
 import { type StaffSession } from '@afrotransact/api-client';
 import { LocaleSelect } from '@afrotransact/i18n/react';
 import { LogoMark, UserMenu } from '@afrotransact/ui';
-import { ShieldCheck, SignOut, Storefront, UserCircle } from '@phosphor-icons/react/ssr';
+import { BellSimple, ShieldCheck, SignOut, SlidersHorizontal, Storefront, UserCircle } from '@phosphor-icons/react/ssr';
 import { useRouter } from 'next/navigation';
 
 import { useT } from '@/i18n/t';
 import { signOutEverywhere } from '@/lib/auth';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 
-/** Black top bar: logo, gold "Staff console" tag, and the staff member's account menu (account, security, storefront, sign out). */
+/** Black top bar: logo, gold "Staff console" tag, and the staff member's account menu (My account in the console, the storefront as an external link, sign out). */
 export function Header({ session }: { session: StaffSession | null }) {
   const storefrontUrl = useStorefrontUrl();
   const t = useT();
+  const at = useAccountT();
   const router = useRouter();
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 bg-header px-4 text-header-text lg:px-5">
@@ -37,9 +39,11 @@ export function Header({ session }: { session: StaffSession | null }) {
           context={session.roleLabel}
           label={t('st.header.accountMenu', { name: `${session.user.firstName} ${session.user.lastName}` })}
           links={[
-            { label: t('st.header.yourAccount'), href: `${storefrontUrl}/account`, icon: <UserCircle aria-hidden /> },
-            { label: t('st.header.security'), href: `${storefrontUrl}/account/security`, icon: <ShieldCheck aria-hidden /> },
-            { label: t('st.header.openStorefront'), href: storefrontUrl, icon: <Storefront aria-hidden /> }
+            { label: at('nav.title'), href: ACCOUNT_ROUTES.profile, icon: <UserCircle aria-hidden /> },
+            { label: at('nav.security'), href: ACCOUNT_ROUTES.security, icon: <ShieldCheck aria-hidden /> },
+            { label: at('nav.notifications'), href: ACCOUNT_ROUTES.notifications, icon: <BellSimple aria-hidden /> },
+            { label: at('nav.preferences'), href: ACCOUNT_ROUTES.preferences, icon: <SlidersHorizontal aria-hidden /> },
+            { label: t('st.header.openStorefront'), href: storefrontUrl, icon: <Storefront aria-hidden />, external: true }
           ]}
           signOutLabel={t('st.header.signOut')}
           signOutIcon={<SignOut aria-hidden />}

@@ -5,6 +5,7 @@ export {
   AirplaneTilt,
   AppleLogo as AppleGlyph,
   ArrowsClockwise,
+  ArrowSquareOut,
   ArrowsSplit,
   ArrowUUpLeft,
   Bank,

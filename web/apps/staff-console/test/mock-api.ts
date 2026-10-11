@@ -1,4 +1,4 @@
-import { createStaffApiClient, type StaffApiClient } from '@afrotransact/api-client';
+import { createSettingsApiClient, createStaffApiClient, type SettingsApiClient, type StaffApiClient } from '@afrotransact/api-client';
 import { MOCK_STAFF_ROLE_COOKIE } from '@afrotransact/api-client/mocks/staff';
 import { handleStaffMockRequest } from '@afrotransact/api-client/mocks/staff-runtime';
 
@@ -11,6 +11,15 @@ export function asRoles(r: string | null): void {
 
 export function mockApi(): StaffApiClient {
   return createStaffApiClient({
+    baseUrl: 'http://staff.test/api/bff',
+    headers: roles ? { cookie: `${MOCK_STAFF_ROLE_COOKIE}=${roles}` } : {},
+    fetch: (req) => handleStaffMockRequest(req)
+  });
+}
+
+/** My account (/v1/account/…) against the same in-process mocks. */
+export function mockSettingsApi(): SettingsApiClient {
+  return createSettingsApiClient({
     baseUrl: 'http://staff.test/api/bff',
     headers: roles ? { cookie: `${MOCK_STAFF_ROLE_COOKIE}=${roles}` } : {},
     fetch: (req) => handleStaffMockRequest(req)

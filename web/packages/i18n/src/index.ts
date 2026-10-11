@@ -233,21 +233,86 @@ export interface Formatters {
   list(items: string[]): string;
 }
 
-export function createFormatters(locale: Locale): Formatters {
+/** Date order chosen in account preferences (AUTO follows the language). */
+export type DateOrder = 'AUTO' | 'MDY' | 'DMY' | 'YMD';
+/** Digit grouping and decimal mark: AUTO (language), 1,234.5 / 1.234,5 / 1 234,5. */
+export type NumberStyle = 'AUTO' | 'COMMA_DOT' | 'DOT_COMMA' | 'SPACE_COMMA';
+
+/** Display preferences of the signed-in person (My account › Preferences). */
+export interface FormatPreferences {
+  /** IANA zone dates and times are shown in (null = the device's zone). */
+  timeZone?: string | null;
+  dateFormat?: DateOrder;
+  numberFormat?: NumberStyle;
+}
+
+const NUMBER_TAGS: Record<Exclude<NumberStyle, 'AUTO'>, string> = { COMMA_DOT: 'en-US', DOT_COMMA: 'de-DE', SPACE_COMMA: 'fr-FR' };
+
+/** Intl tag for formatting numbers in a chosen style (the language's own tag for AUTO). */
+export function numberTag(style: NumberStyle | undefined, fallback: string): string {
+  return style && style !== 'AUTO' ? NUMBER_TAGS[style] : fallback;
+}
+
+/** The time zone when it is a valid IANA zone, else undefined (the device's zone). */
+export function validZone(tz: string | null | undefined): string | undefined {
+  if (!tz) return undefined;
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz });
+    return tz;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Formats a date in the language, then reorders day, month and year for a chosen date order. */
+export function formatDateParts(date: Date, tag: string, options: Intl.DateTimeFormatOptions, order: DateOrder = 'AUTO'): string {
+  const f = new Intl.DateTimeFormat(tag, options);
+  if (order === 'AUTO' || (!options.day && !options.month && !options.year)) return f.format(date);
+  const parts = f.formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value;
+  const day = get('day');
+  const month = get('month');
+  const year = get('year');
+  const weekday = get('weekday');
+  const numericMonth = options.month === 'numeric' || options.month === '2-digit';
+  const pieces = { D: day, M: month, Y: year };
+  const seq = (order === 'MDY' ? ['M', 'D', 'Y'] : order === 'DMY' ? ['D', 'M', 'Y'] : ['Y', 'M', 'D']) as Array<keyof typeof pieces>;
+  const present = seq.map((k) => pieces[k]).filter((v): v is string => Boolean(v));
+  let text: string;
+  if (numericMonth) text = present.join(order === 'YMD' ? '-' : '/');
+  else if (order === 'MDY' && month && day) text = `${month} ${day}${year ? `, ${year}` : ''}`;
+  else text = present.join(' ');
+  if (weekday) text = `${weekday}, ${text}`;
+  const hourAt = parts.findIndex((p) => p.type === 'hour');
+  if (hourAt >= 0) {
+    const time = parts.slice(hourAt).map((p) => p.value).join('').trim();
+    text = `${text}, ${time}`;
+  }
+  return text;
+}
+
+export function createFormatters(locale: Locale, prefs: FormatPreferences = {}): Formatters {
   const tag = intlTag(locale);
+  const numTag = numberTag(prefs.numberFormat, tag);
+  const zone = validZone(prefs.timeZone);
+  const order = prefs.dateFormat ?? 'AUTO';
+  const withZone = (o: Intl.DateTimeFormatOptions, timeZone?: string): Intl.DateTimeFormatOptions => {
+    const tz = timeZone ?? zone;
+    return tz ? { ...o, timeZone: tz } : o;
+  };
   return {
     locale,
     tag,
-    money: (minor, currency = 'USD') => new Intl.NumberFormat(tag, { style: 'currency', currency }).format(minor / 100),
+    money: (minor, currency = 'USD') => new Intl.NumberFormat(numTag, { style: 'currency', currency }).format(minor / 100),
     moneyMajor: (major, currency = 'USD') =>
-      new Intl.NumberFormat(tag, { style: 'currency', currency, maximumFractionDigits: major % 1 ? 2 : 0 }).format(major),
-    number: (n, options) => new Intl.NumberFormat(tag, options).format(n),
-    percent: (ratio) => new Intl.NumberFormat(tag, { style: 'percent', maximumFractionDigits: 0 }).format(ratio),
+      new Intl.NumberFormat(numTag, { style: 'currency', currency, maximumFractionDigits: major % 1 ? 2 : 0 }).format(major),
+    number: (n, options) => new Intl.NumberFormat(numTag, options).format(n),
+    percent: (ratio) => new Intl.NumberFormat(numTag, { style: 'percent', maximumFractionDigits: 0 }).format(ratio),
     date: (value, style = 'short', timeZone) =>
-      toDate(value).toLocaleDateString(tag, { ...(typeof style === 'string' ? DATE_OPTIONS[style] : style), ...(timeZone ? { timeZone } : {}) }),
+      formatDateParts(toDate(value), tag, withZone(typeof style === 'string' ? DATE_OPTIONS[style] : style, timeZone), order),
     dateTime: (value, timeZone) =>
-      toDate(value).toLocaleString(tag, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', ...(timeZone ? { timeZone } : {}) }),
-    time: (value, timeZone) => toDate(value).toLocaleTimeString(tag, { hour: 'numeric', minute: '2-digit', ...(timeZone ? { timeZone } : {}) }),
+      formatDateParts(toDate(value), tag, withZone({ month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }, timeZone), order),
+    time: (value, timeZone) => toDate(value).toLocaleTimeString(tag, withZone({ hour: 'numeric', minute: '2-digit' }, timeZone)),
     relative: (value, unit) => new Intl.RelativeTimeFormat(tag, { numeric: 'auto' }).format(value, unit),
     list: (items) => new Intl.ListFormat(tag, { style: 'long', type: 'conjunction' }).format(items)
   };

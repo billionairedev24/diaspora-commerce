@@ -1,5 +1,6 @@
 'use client';
 
+import { AccountFormatPreferences, accountSectionOf } from '@afrotransact/account';
 import { isApiError, type ModuleKey, sellerKeys, sellerQueries, type SellerSession } from '@afrotransact/api-client';
 import { Button, useToast } from '@afrotransact/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,6 +11,7 @@ import { ErrorState, NoAccess, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
 import { sellerApi } from '@/lib/api';
 import { loginHref } from '@/lib/auth';
+import { setFormatPreferences } from '@/lib/format';
 import { hrefOf, moduleOf } from '@/lib/routes';
 import { useStorefrontUrl } from '@/lib/runtime-config';
 import { SellerSessionProvider } from '@/lib/session';
@@ -69,6 +71,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
   const q = useQuery({ ...sellerQueries.session(api), retry: (n, e) => !(isApiError(e) && e.status < 500) && n < 2 });
   const session = q.data;
   const active = moduleOf(pathname);
+  // My account (/account/…) belongs to the person, not an organisation: open before approval and without one.
+  const accountPage = accountSectionOf(pathname) !== null;
 
   const switchOrg = useMutation({
     mutationFn: (orgId: string) => api.setActiveOrg(orgId),
@@ -81,7 +85,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
     onError: () => toast.show(t('sc.portalShell.switchFailed'), 'error')
   });
 
-  const needsOnboarding = !!session?.activeOrg && !session.approved && active !== 'onboarding';
+  const needsOnboarding = !!session?.activeOrg && !session.approved && active !== 'onboarding' && !accountPage;
   const leaveOnboarding = !!session?.approved && active === 'onboarding';
   useEffect(() => {
     if (needsOnboarding) router.replace('/onboarding');
@@ -120,13 +124,19 @@ export function PortalShell({ children }: { children: ReactNode }) {
     return (
       <>
         <Header session={session} />
-        <NoOrganisation />
+        {accountPage ? (
+          <main id="main" tabIndex={-1} className="px-4 pt-6 pb-12 outline-none sm:px-8">
+            <AccountFormatPreferences apply={setFormatPreferences}>{children}</AccountFormatPreferences>
+          </main>
+        ) : (
+          <NoOrganisation />
+        )}
       </>
     );
   }
 
   const sidebar = <Sidebar session={session} active={active} onSwitch={(id) => switchOrg.mutate(id)} switching={switchOrg.isPending} />;
-  const canOpen = allowed(session, active);
+  const canOpen = accountPage || allowed(session, active);
   return (
     <SellerSessionProvider session={session}>
       <Header session={session} />
@@ -140,7 +150,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
           {needsOnboarding || leaveOnboarding ? (
             <Spinner />
           ) : canOpen ? (
-            children
+            <AccountFormatPreferences apply={setFormatPreferences}>{children}</AccountFormatPreferences>
           ) : (
             <NoAccess role={session.activeOrg.roleLabel} />
           )}

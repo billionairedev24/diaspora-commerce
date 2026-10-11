@@ -73,3 +73,31 @@ describe('catalogue checks', () => {
     expect(placeholdersOf('{n, plural, one {There is # problem} other {There are # problems}}')).toEqual(['n']);
   });
 });
+
+describe('format preferences (My account › Preferences)', () => {
+  const at = '2026-10-10T15:05:00Z';
+  it('defaults to the language', () => {
+    const fmt = createFormatters('en', { timeZone: 'UTC' });
+    expect(fmt.date(at)).toBe('Oct 10, 2026');
+    expect(fmt.number(1234.5)).toBe('1,234.5');
+  });
+
+  it('reorders day, month and year', () => {
+    expect(createFormatters('en', { timeZone: 'UTC', dateFormat: 'DMY' }).date(at)).toBe('10 Oct 2026');
+    expect(createFormatters('en', { timeZone: 'UTC', dateFormat: 'YMD' }).date(at, { year: 'numeric', month: '2-digit', day: '2-digit' })).toBe('2026-10-10');
+    expect(createFormatters('en', { timeZone: 'UTC', dateFormat: 'MDY' }).date(at, 'weekday')).toBe('Sat, Oct 10');
+    expect(createFormatters('en', { timeZone: 'UTC', dateFormat: 'DMY' }).dateTime(at).replace(/\s/g, ' ')).toBe('10 Oct, 3:05 PM');
+  });
+
+  it('shows times in the chosen zone, an explicit zone still wins', () => {
+    const fmt = createFormatters('en', { timeZone: 'America/Chicago' });
+    expect(fmt.time(at).replace(/\s/g, ' ')).toBe('10:05 AM');
+    expect(fmt.time(at, 'UTC').replace(/\s/g, ' ')).toBe('3:05 PM');
+    expect(createFormatters('en', { timeZone: 'Not/AZone' }).time(at, 'UTC').replace(/\s/g, ' ')).toBe('3:05 PM');
+  });
+
+  it('groups digits in the chosen style', () => {
+    expect(createFormatters('en', { numberFormat: 'DOT_COMMA' }).number(1234.5)).toBe('1.234,5');
+    expect(createFormatters('en', { numberFormat: 'SPACE_COMMA' }).number(1234.5)).toMatch(/^1\s234,5$/);
+  });
+});

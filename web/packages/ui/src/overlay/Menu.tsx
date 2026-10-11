@@ -4,6 +4,7 @@ import { Content, Group, Item, Portal, Root, Separator, Trigger } from '@radix-u
 import { forwardRef, type ReactElement, type ReactNode } from 'react';
 
 import { cx } from '../cx';
+import { ArrowSquareOut } from '../icons';
 import styles from './overlay.module.css';
 
 export interface MenuProps {
@@ -43,10 +44,12 @@ export interface MenuItemProps {
   onSelect?: () => void;
   /** Render as a link. */
   href?: string;
+  /** The link leaves this app (opens in a new tab). */
+  external?: boolean;
   className?: string;
 }
 
-export const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(function MenuItem({ icon, count, children, onSelect, href, className }, ref) {
+export const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(function MenuItem({ icon, count, children, onSelect, href, external, className }, ref) {
   const inner = (
     <>
       {icon && <span className={styles.menuIcon}>{icon}</span>}
@@ -57,8 +60,9 @@ export const MenuItem = forwardRef<HTMLDivElement, MenuItemProps>(function MenuI
   if (href) {
     return (
       <Item asChild onSelect={onSelect} ref={ref}>
-        <a href={href} className={cx(styles.menuItem, className)}>
+        <a href={href} className={cx(styles.menuItem, className)} {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
           {inner}
+          {external ? <ArrowSquareOut size={16} aria-hidden className={styles.menuIcon} /> : null}
         </a>
       </Item>
     );

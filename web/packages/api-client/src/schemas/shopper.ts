@@ -187,9 +187,12 @@ export const SecurityOverviewSchema = z.object({
     smsPhone: nullableString,
     recoveryCodesLeft: z.number().int(),
     required: z.boolean(),
-    mayDisable: z.boolean()
+    mayDisable: z.boolean(),
+    mayRemoveTotp: z.boolean(),
+    mayRemoveSms: z.boolean()
   }),
   passkeys: z.array(z.object({ credentialId: z.string(), label: z.string(), createdAt: nullableString, lastUsedAt: nullableString })),
+  trustedBrowsers: z.array(z.object({ id: z.string(), label: z.string(), createdAt: nullableString, expiresAt: nullableString })),
   sessions: z.array(z.object({ id: z.string(), clientName: z.string(), signedInAt: nullableString, lastActiveAt: nullableString, current: z.boolean() })),
   devices: z.array(z.object({ id: z.string(), platform: z.string(), deviceName: z.string(), lastSeenAt: nullableString })),
   linkedAccounts: LinkedAccountsSchema,

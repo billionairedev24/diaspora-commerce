@@ -201,3 +201,13 @@ describe('DataTable', () => {
     expect(pageNumbers(19, 20)).toEqual([0, null, 16, 17, 18, 19]);
   });
 });
+
+describe('default density (My account › Preferences)', () => {
+  it('uses the saved default until the table has its own choice', async () => {
+    const { writeDefaultDensity, readDefaultDensity } = await import('../src');
+    writeDefaultDensity('compact');
+    expect(readDefaultDensity()).toBe('compact');
+    render(<Harness />);
+    await waitFor(() => expect(screen.getAllByRole('cell')[0]?.className).toContain('py-1.5'));
+  });
+});

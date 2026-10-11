@@ -1,4 +1,4 @@
-import { createSellerApiClient, type SellerApiClient } from '@afrotransact/api-client';
+import { createSellerApiClient, createSettingsApiClient, type SellerApiClient, type SettingsApiClient } from '@afrotransact/api-client';
 import { MOCK_ROLE_COOKIE } from '@afrotransact/api-client/mocks/seller';
 import { handleSellerMockRequest } from '@afrotransact/api-client/mocks/seller-runtime';
 
@@ -11,6 +11,15 @@ export function asRole(r: string | null): void {
 
 export function mockApi(): SellerApiClient {
   return createSellerApiClient({
+    baseUrl: 'http://seller.test/api/bff',
+    headers: role ? { cookie: `${MOCK_ROLE_COOKIE}=${role}` } : {},
+    fetch: (req) => handleSellerMockRequest(req)
+  });
+}
+
+/** My account (/v1/account/…) against the same in-process mocks. */
+export function mockSettingsApi(): SettingsApiClient {
+  return createSettingsApiClient({
     baseUrl: 'http://seller.test/api/bff',
     headers: role ? { cookie: `${MOCK_ROLE_COOKIE}=${role}` } : {},
     fetch: (req) => handleSellerMockRequest(req)

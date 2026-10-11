@@ -47,6 +47,7 @@ import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODUL
 import { type MockTemplateRow } from './notification-templates';
 import { ordersOf, PREORDER_ORDER_COLUMNS, preorderHandlers, preorderOrderRow } from './preorders';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
+import { staffSettingsHandlers } from './settings';
 import { MockRenderError, renderPart, type TemplatePart } from './template-render';
 
 export const MOCK_STAFF_ROLE_COOKIE = 'at_mock_staff_role';
@@ -1091,5 +1092,7 @@ export const staffHandlers = [
   /* Inventory hub and AfroTransact Retail (1P) (S281) */
   ...inventoryHubHandlers(W, hubGate),
   /* Anything else under /v1/staff is not part of the contract. */
-  http.all(`${W}/*`, () => problemResponse(notFound('No such staff route.')))
+  http.all(`${W}/*`, () => problemResponse(notFound('No such staff route.'))),
+  /* My account (profile, sign-in & security, alerts, preferences): /v1/account/… */
+  ...staffSettingsHandlers
 ];

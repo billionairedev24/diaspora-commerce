@@ -3,7 +3,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach, vi } from 'vitest';
 
-import { mockApi } from './mock-api';
+import { mockApi, mockSettingsApi } from './mock-api';
 
 afterEach(() => cleanup());
 
@@ -17,6 +17,7 @@ vi.mock('next/navigation', () => ({
 
 // Every screen talks to the in-process seller MSW runtime (the same handlers `pnpm dev:mocks` serves).
 vi.mock('@/lib/api', () => ({ sellerApi: () => mockApi() }));
+vi.mock('@/lib/settings', () => ({ settingsApi: () => mockSettingsApi() }));
 
 // Radix overlays and Recharts measure elements; jsdom lacks these APIs.
 class RO {

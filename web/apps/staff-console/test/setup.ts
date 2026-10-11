@@ -4,7 +4,7 @@ import { cleanup } from '@testing-library/react';
 import { useSyncExternalStore } from 'react';
 import { afterEach, vi } from 'vitest';
 
-import { mockApi } from './mock-api';
+import { mockApi, mockSettingsApi } from './mock-api';
 
 afterEach(() => cleanup());
 
@@ -41,6 +41,7 @@ vi.mock('next/navigation', () => ({
 
 // Every screen talks to the in-process staff MSW runtime (the same handlers `pnpm dev:mocks` serves).
 vi.mock('@/lib/api', () => ({ staffApi: () => mockApi() }));
+vi.mock('@/lib/settings', () => ({ settingsApi: () => mockSettingsApi() }));
 
 // Radix overlays and Recharts measure elements; jsdom lacks these APIs.
 class RO {

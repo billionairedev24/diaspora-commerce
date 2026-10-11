@@ -34,6 +34,7 @@ import {
   suggest,
   updateLine
 } from './service';
+import { shopperSettingsHandlers } from './settings-shopper';
 import { shopperHandlers } from './shopper';
 import { accountCounts } from './shopper-state';
 
@@ -229,7 +230,9 @@ export const handlers = [
     return json({ phoneVerified: true, verifiedAt: new Date().toISOString() });
   })),
 
-  /* Addresses, payments, orders, returns, security, checkout, services & bookings, Lola */
+  /* Profile, sign-in & security, notifications and preferences (shared with the back offices) */
+  ...shopperSettingsHandlers,
+  /* Addresses, payments, orders, returns, checkout, services & bookings, Lola */
   ...shopperHandlers,
   ...preorderHandlers,
   ...legalHandlers,

@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   // Workspace packages ship TypeScript source.
-  transpilePackages: ['@afrotransact/ui', '@afrotransact/data-table', '@afrotransact/api-client', '@afrotransact/tokens', '@afrotransact/i18n', '@afrotransact/telemetry'],
+  transpilePackages: ['@afrotransact/account', '@afrotransact/ui', '@afrotransact/data-table', '@afrotransact/api-client', '@afrotransact/tokens', '@afrotransact/i18n', '@afrotransact/telemetry'],
   distDir: process.env.NEXT_DIST_DIR || '.next',
   experimental: { optimizePackageImports: ['@phosphor-icons/react', 'recharts'] },
   images: { unoptimized: true },

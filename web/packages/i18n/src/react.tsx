@@ -2,7 +2,7 @@
 
 import { createContext, type ReactNode, useContext, useMemo } from 'react';
 
-import { createFormatters, DEFAULT_LOCALE, type Direction, dirOf, type Formatters, isLocale, type Locale, localeCookie, LOCALES, type Messages } from './index';
+import { createFormatters, DEFAULT_LOCALE, type Direction, dirOf, type FormatPreferences, type Formatters, isLocale, type Locale, localeCookie, LOCALES, type Messages } from './index';
 
 export interface I18nValue {
   locale: Locale;
@@ -20,6 +20,22 @@ const I18nContext = createContext<I18nValue>({ locale: DEFAULT_LOCALE, dir: 'ltr
  */
 export function I18nProvider({ locale, messages, children }: { locale: Locale; messages?: Messages; children: ReactNode }) {
   const value = useMemo<I18nValue>(() => ({ locale, dir: dirOf(locale), messages, fmt: createFormatters(locale) }), [locale, messages]);
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+/**
+ * Applies the signed-in person's display preferences (time zone, date order, number style) to every formatter below
+ * it. Back offices wrap their shell with it once the preferences have loaded.
+ */
+export function FormatPreferencesProvider({ prefs, children }: { prefs: FormatPreferences | undefined; children: ReactNode }) {
+  const parent = useContext(I18nContext);
+  const tz = prefs?.timeZone;
+  const date = prefs?.dateFormat;
+  const num = prefs?.numberFormat;
+  const value = useMemo<I18nValue>(
+    () => ({ ...parent, fmt: createFormatters(parent.locale, { timeZone: tz, dateFormat: date, numberFormat: num }) }),
+    [parent, tz, date, num]
+  );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

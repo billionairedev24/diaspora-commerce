@@ -1,7 +1,10 @@
 import { resetStaffDb } from '@afrotransact/api-client/mocks/staff';
-import { screen } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { AccountEnv } from '@/components/account/AccountEnv';
+import { StaffSecurityPage } from '@/components/account/AccountPages';
 import { ConsoleShell } from '@/components/shell/ConsoleShell';
 
 import { asRoles } from './mock-api';
@@ -68,5 +71,32 @@ describe('staff console shell', () => {
       </ConsoleShell>
     );
     expect(await screen.findByRole('heading', { name: /sign in to the staff console/i })).toBeInTheDocument();
+  });
+});
+
+describe('My account in the staff console', () => {
+  beforeEach(() => {
+    resetStaffDb();
+    asRoles('platform.customer_support');
+  });
+
+  it('opens for any role, with in-console account links, and keeps two-step verification mandatory', async () => {
+    nav.set('/account/security');
+    const user = userEvent.setup();
+    renderWithProviders(
+      <AccountEnv>
+        <ConsoleShell>
+          <StaffSecurityPage />
+        </ConsoleShell>
+      </AccountEnv>
+    );
+    await waitFor(() => expect(screen.getByTestId('two-step')).toHaveTextContent('Required'), { timeout: 5000 });
+    // SMS is the only method: it can't be turned off; the authenticator can be set up.
+    expect(within(screen.getByTestId('mfa-sms')).getByRole('button', { name: 'Turn off' })).toBeDisabled();
+    expect(within(screen.getByTestId('mfa-totp')).getByRole('button', { name: 'Set up' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: /Account menu for/ }));
+    const items = await screen.findAllByRole('menuitem');
+    expect(items.find((i) => i.textContent?.includes('My account'))).toHaveAttribute('href', '/account');
+    expect(items.find((i) => i.textContent?.includes('Open the storefront'))).toHaveAttribute('target', '_blank');
   });
 });

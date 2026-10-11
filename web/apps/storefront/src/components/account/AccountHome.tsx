@@ -1,55 +1,72 @@
 'use client';
 
-import { ArrowUUpLeft, CalendarCheck, CreditCard, MapPin, Package, ShieldCheck, Sparkle } from '@afrotransact/ui';
+import { type AccountMessageKey, useAccountT } from '@afrotransact/account';
+import { ArrowUUpLeft, BellRinging, CalendarCheck, CreditCard, IdentificationCard, MapPin, Package, ShieldCheck, Sparkle } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { type ReactNode } from 'react';
 
-import { type MessageKey, useT } from '@/i18n/t';
+import { useLolaLauncher } from '@/components/shell/LolaLauncher';
 import { browserApi } from '@/lib/api/browser';
 import { accountQueries } from '@/lib/api/queries';
 
 import styles from './Pages.module.css';
-import { PhoneVerificationCard } from './PhoneVerificationCard';
 
-const TILES: Array<{ href: string; title: MessageKey; sub: MessageKey; icon: ReactNode }> = [
-  { href: '/orders', title: 'account.orders', sub: 'acct.ordersSub', icon: <Package aria-hidden /> },
-  { href: '/account/returns', title: 'account.returns', sub: 'acct.returnsSub', icon: <ArrowUUpLeft aria-hidden /> },
-  { href: '/account/addresses', title: 'account.addresses', sub: 'acct.addressesSub', icon: <MapPin aria-hidden /> },
-  { href: '/account/payments', title: 'account.payments', sub: 'acct.paymentsSub', icon: <CreditCard aria-hidden /> },
-  { href: '/account/security', title: 'account.security', sub: 'acct.securitySub', icon: <ShieldCheck aria-hidden /> },
-  { href: '/account/bookings', title: 'acct.bookings', sub: 'acct.bookingsSub', icon: <CalendarCheck aria-hidden /> }
-];
+interface Tile {
+  title: AccountMessageKey;
+  sub: AccountMessageKey;
+  icon: ReactNode;
+  href?: string;
+  count?: number;
+}
 
-/** Your Account: tiles to every section (design: ACCOUNT › acctHome). */
-export function AccountHome() {
-  const t = useT();
-  const me = useQuery(accountQueries.me(browserApi()));
-  const name = me.data?.user?.firstName;
+function TileBody({ tile }: { tile: Tile }) {
+  const t = useAccountT();
   return (
-    <div className={styles.page}>
-      <h1 className={styles.h1}>{name ? t('acct.hello', { name }) : t('account.yourAccount')}</h1>
-      <div className={styles.grid}>
-        {TILES.map((tile) => (
-          <Link key={tile.href} href={tile.href} className={styles.tile}>
-            <span className={styles.tileIcon}>{tile.icon}</span>
-            <span className={styles.tileText}>
-              <strong>{t(tile.title)}</strong>
-              <span className={styles.tileSub}>{t(tile.sub)}</span>
-            </span>
+    <>
+      <span className={styles.tileIcon} aria-hidden>
+        {tile.icon}
+      </span>
+      <span className={styles.tileText}>
+        <strong className={styles.tileTitle}>{t(tile.title)}</strong>
+        <span className={styles.tileSub}>{t(tile.sub)}</span>
+      </span>
+    </>
+  );
+}
+
+/** Your Account (design: ACCOUNT › acctHome): one tile per customer area, Lola one click away. */
+export function AccountHome() {
+  const t = useAccountT();
+  const lola = useLolaLauncher();
+  const me = useQuery(accountQueries.me(browserApi()));
+  const user = me.data?.user;
+  const tiles: Tile[] = [
+    { href: '/account/security', title: 'hub.security', sub: 'hub.securitySub', icon: <ShieldCheck /> },
+    { href: '/orders', title: 'hub.orders', sub: 'hub.ordersSub', icon: <Package /> },
+    { href: '/account/returns', title: 'hub.returns', sub: 'hub.returnsSub', icon: <ArrowUUpLeft /> },
+    { href: '/account/addresses', title: 'hub.addresses', sub: 'hub.addressesSub', icon: <MapPin /> },
+    { href: '/account/payments', title: 'hub.payments', sub: 'hub.paymentsSub', icon: <CreditCard /> },
+    { href: '/account/bookings', title: 'hub.bookings', sub: 'hub.bookingsSub', icon: <CalendarCheck /> },
+    { href: '/account/profile', title: 'hub.profile', sub: 'hub.profileSub', icon: <IdentificationCard /> },
+    { href: '/account/notifications', title: 'hub.notifications', sub: 'hub.notificationsSub', icon: <BellRinging /> }
+  ];
+  return (
+    <div className={styles.accountPage}>
+      <header className={styles.hubHead}>
+        <h1 className={styles.h1}>{t('hub.title')}</h1>
+        {user ? <p className={styles.muted}>{t('hub.signedInAs', { email: user.email })}</p> : null}
+      </header>
+      <div className={styles.hubGrid}>
+        {tiles.map((tile) => (
+          <Link key={tile.href} href={tile.href ?? '/account'} className={styles.hubTile}>
+            <TileBody tile={tile} />
           </Link>
         ))}
-        <Link href="/services" className={styles.tile}>
-          <span className={styles.tileIcon}>
-            <Sparkle aria-hidden />
-          </span>
-          <span className={styles.tileText}>
-            <strong>{t('acct.services')}</strong>
-            <span className={styles.tileSub}>{t('acct.servicesSub')}</span>
-          </span>
-        </Link>
+        <button type="button" className={styles.hubTile} onClick={() => lola.open()}>
+          <TileBody tile={{ title: 'hub.lola', sub: 'hub.lolaSub', icon: <Sparkle weight="fill" /> }} />
+        </button>
       </div>
-      <PhoneVerificationCard />
     </div>
   );
 }

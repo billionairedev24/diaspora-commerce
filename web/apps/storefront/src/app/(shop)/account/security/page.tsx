@@ -1,6 +1,6 @@
 import { type Metadata } from 'next';
 
-import { SecurityView } from '@/components/account/SecurityView';
+import { SecurityView } from '@/components/account/AccountSettingsViews';
 import { getT } from '@/i18n/server';
 import { requireCustomer } from '@/lib/auth/session';
 

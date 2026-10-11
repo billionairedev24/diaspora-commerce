@@ -25,7 +25,7 @@ import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode
 import { ColumnsMenu, type Density } from './ColumnsMenu';
 import { columnLabel, datasetOf, exportable, type ExportOutcome, type TableExportRequest, tableKey } from './export';
 import { everyColumnFilter, kindSortingFn } from './search';
-import { readPrefs, writePrefs } from './storage';
+import { readDefaultDensity, readPrefs, writePrefs } from './storage';
 import { SELECT_COLUMN } from './types';
 import { PAGE_SIZES, type TableState } from './useTableState';
 
@@ -159,7 +159,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
     const p = readPrefs(id);
     setVisibility(p.visibility ?? {});
     setSizing(p.sizing ?? {});
-    setDensity(p.density ?? 'comfortable');
+    setDensity(p.density ?? readDefaultDensity() ?? 'comfortable');
     // Rows per page are remembered per table (a size in the URL, e.g. a shared link, wins).
     if (p.pageSize && pageSizes.includes(p.pageSize) && !state.sizeFromUrl && p.pageSize !== state.pagination.pageSize) {
       state.setPagination({ pageIndex: 0, pageSize: p.pageSize });

@@ -16,6 +16,7 @@
     "cf:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview"
   },
   "dependencies": {
+    "@afrotransact/account": "workspace:*",
     "@afrotransact/api-client": "workspace:*",
     "@afrotransact/data-table": "workspace:*",
     "@afrotransact/i18n": "workspace:*",

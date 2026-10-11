@@ -1,7 +1,10 @@
 import { PENDING_ORG, PROVIDER_ORG, resetSellerDb } from '@afrotransact/api-client/mocks/seller';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { AccountEnv } from '@/components/account/AccountEnv';
+import { SellerSecurityPage } from '@/components/account/AccountPages';
 import { PortalShell } from '@/components/shell/PortalShell';
 
 import { asRole, mockApi } from './mock-api';
@@ -53,5 +56,47 @@ describe('portal shell', () => {
     const hrefs = await navHrefs();
     expect(hrefs).toEqual(expect.arrayContaining(['/calendar', '/requests', '/hours', '/services', '/policy', '/public-page', '/earnings']));
     expect(hrefs).not.toContain('/orders');
+  });
+});
+
+describe('My account in Seller Center', () => {
+  beforeEach(() => {
+    resetSellerDb(new Date());
+    asRole(null);
+    nav.replace.mockReset();
+  });
+
+  it('keeps the account menu inside Seller Center; only the storefront link leaves it', async () => {
+    nav.pathname = '/';
+    const user = userEvent.setup();
+    renderWithProviders(
+      <AccountEnv>
+        <PortalShell>
+          <p>home</p>
+        </PortalShell>
+      </AccountEnv>
+    );
+    await user.click(await screen.findByRole('button', { name: /Account menu for/ }));
+    const items = await screen.findAllByRole('menuitem');
+    const links = Object.fromEntries(items.map((i) => [i.textContent?.trim() ?? '', i.getAttribute('href')]));
+    expect(links).toMatchObject({ 'My account': '/account', 'Sign-in & security': '/account/security', Notifications: '/account/notifications', Preferences: '/account/preferences' });
+    const storefront = items.find((i) => i.textContent?.includes('Open the storefront'));
+    expect(storefront).toHaveAttribute('target', '_blank');
+    expect(storefront?.getAttribute('href')).toMatch(/^http/);
+  });
+
+  it('opens the account pages before approval, without sending the member to onboarding', async () => {
+    await mockApi().setActiveOrg(PENDING_ORG);
+    nav.pathname = '/account/security';
+    renderWithProviders(
+      <AccountEnv>
+        <PortalShell>
+          <SellerSecurityPage />
+        </PortalShell>
+      </AccountEnv>
+    );
+    // The page re-mounts once when the saved display preferences arrive.
+    await waitFor(() => expect(screen.getByTestId('two-step')).toBeInTheDocument(), { timeout: 5000 });
+    expect(nav.replace).not.toHaveBeenCalledWith('/onboarding');
   });
 });

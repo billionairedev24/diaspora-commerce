@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, type ReactNode } from 'react';
+import { forwardRef, Fragment, type ReactNode } from 'react';
 
 import { CaretDown } from '../icons';
 import { Menu, MenuGroup, MenuItem, MenuSeparator } from '../overlay/Menu';
@@ -10,6 +10,8 @@ export interface UserMenuLink {
   label: string;
   href: string;
   icon?: ReactNode;
+  /** Leaves the back office (e.g. "Open the storefront"): shown in its own group and opened in a new tab. */
+  external?: boolean;
 }
 
 export interface UserMenuProps {
@@ -58,18 +60,20 @@ export function UserMenu({ initials, name, shortName, email, context, links, sig
         </span>
       </div>
       <MenuSeparator />
-      {links.length > 0 ? (
-        <>
-          <MenuGroup>
-            {links.map((l) => (
-              <MenuItem key={l.href} href={l.href} icon={l.icon}>
-                {l.label}
-              </MenuItem>
-            ))}
-          </MenuGroup>
-          <MenuSeparator />
-        </>
-      ) : null}
+      {[links.filter((l) => !l.external), links.filter((l) => l.external)].map((group, i) =>
+        group.length > 0 ? (
+          <Fragment key={i}>
+            <MenuGroup>
+              {group.map((l) => (
+                <MenuItem key={l.href} href={l.href} icon={l.icon} external={l.external}>
+                  {l.label}
+                </MenuItem>
+              ))}
+            </MenuGroup>
+            <MenuSeparator />
+          </Fragment>
+        ) : null
+      )}
       <MenuGroup>
         <MenuItem icon={signOutIcon} onSelect={onSignOut}>
           {signOutLabel}

@@ -2,7 +2,7 @@
 .page { padding: var(--at-space-5) 0 var(--at-space-10); display: flex; flex-direction: column; gap: var(--at-space-5); min-width: 0; }
 .crumb { display: flex; flex-wrap: wrap; gap: var(--at-space-2); align-items: center; font-size: var(--at-text-sm); color: var(--at-color-text-muted); }
 .crumb a { color: var(--at-color-link); }
-.h1 { margin: 0; font-size: var(--at-text-3xl); font-weight: var(--at-weight-semibold); }
+.h1 { margin: 0; font-size: var(--at-text-3xl); font-weight: var(--at-weight-bold); }
 .h2 { margin: 0; font-size: var(--at-text-xl); font-weight: var(--at-weight-bold); }
 .head { display: flex; flex-wrap: wrap; gap: var(--at-space-3); align-items: center; justify-content: space-between; }
 .muted { margin: 0; color: var(--at-color-text-muted); font-size: var(--at-text-sm); line-height: var(--at-leading-normal); }
@@ -38,7 +38,19 @@
 .dl dd { margin: 0; text-align: right; }
 .empty { padding: var(--at-space-6) 0; display: flex; flex-direction: column; gap: var(--at-space-3); align-items: flex-start; }
 
+/* Your Account hub and settings pages (design: ACCOUNT › acctHome / acctSecurity) */
+.accountPage { padding: var(--at-space-6) 0 var(--at-space-10); display: flex; flex-direction: column; gap: var(--at-space-5); min-width: 0; max-width: 1100px; }
+.crumbCurrent { color: var(--at-gold-900); }
+.hubHead { display: flex; flex-direction: column; gap: var(--at-space-1); }
+.hubGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--at-space-4); }
+.hubTile { display: flex; gap: var(--at-space-4); align-items: flex-start; padding: var(--at-space-5); background: var(--at-color-surface); border: 1px solid var(--at-color-border); border-radius: var(--at-radius-md); color: var(--at-color-text); text-align: left; text-decoration: none; font: inherit; cursor: pointer; transition: background var(--at-duration-fast) var(--at-ease), border-color var(--at-duration-fast) var(--at-ease); }
+.hubTile:hover { background: var(--at-color-surface-hover); border-color: var(--at-color-border-strong); color: var(--at-color-text); text-decoration: none; }
+.hubTile .tileIcon { flex: none; background: var(--at-gold-100); color: var(--at-ink-1000); }
+.tileTitle { font-size: var(--at-text-lg); font-weight: var(--at-weight-bold); }
+
 @media (max-width: 699px) {
+  .hubGrid { grid-template-columns: minmax(0, 1fr); }
+  .hubTile { padding: var(--at-space-4); }
   .two, .three { grid-template-columns: 1fr; }
   .row { grid-template-columns: auto minmax(0, 1fr); }
   .card { padding: var(--at-space-4); }
