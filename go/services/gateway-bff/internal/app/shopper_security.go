@@ -124,7 +124,7 @@ func (s *securityServiceImpl) Overview(ctx context.Context, c *domain.Caller) (d
 			CreatedAt: isoOrNil(b.CreatedAt), ExpiresAt: isoOrNil(b.ExpiresAt)})
 	}
 	for _, x := range sessions {
-		out.Sessions = append(out.Sessions, domain.SignedInSession{ID: x.ID, ClientName: firstNonEmpty(x.ClientName, x.ClientID, "AfroTransact"),
+		out.Sessions = append(out.Sessions, domain.SignedInSession{ID: x.ID, ClientName: sessionLabel(x),
 			SignedInAt: isoOrNil(x.SignedInAt), LastActiveAt: isoOrNil(x.LastActiveAt), Current: x.Current})
 	}
 	for _, d := range devices {
@@ -234,6 +234,14 @@ func (s *securityServiceImpl) RemovePasskey(ctx context.Context, c *domain.Calle
 		return err
 	}
 	return wrapSec(s.d.Security.RemovePasskey(ctx, c.BearerToken, id))
+}
+
+// sessionLabel names the app behind a session for people ("AfroTransact on the web" for the BFF's web sessions).
+func sessionLabel(x port.UpSession) string {
+	if x.ClientID != "" {
+		return domain.ClientLabel(x.ClientID, x.ClientName)
+	}
+	return firstNonEmpty(x.ClientName, "AfroTransact")
 }
 
 func toPasskey(p port.UpPasskey) domain.Passkey {
