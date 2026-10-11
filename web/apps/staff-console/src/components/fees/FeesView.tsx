@@ -22,7 +22,7 @@ export function FeesView() {
         onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
         items={[
           { value: 'fee-schedules', label: 'Fee schedules', content: <FeeSchedulesPanel /> },
-          { value: 'tax-rates', label: 'Tax rates', content: <ResourceTable resource="tax-rates" /> }
+          { value: 'tax-rates', label: 'Tax rates', content: <ResourceTable resource="tax-rates" urlPrefix="tax-rates" /> }
         ]}
       />
     </ModulePage>

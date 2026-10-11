@@ -76,6 +76,8 @@ export interface DataTableProps<T> {
   pageSizes?: number[];
   /** Below the pagination (notes). */
   footer?: ReactNode;
+  /** data-testid of every body row (end-to-end tests). */
+  rowTestId?: string;
 }
 
 const INTERACTIVE = 'button,a,input,label,select,textarea,summary,[role="menuitem"],[role="checkbox"],[data-no-row-click]';
@@ -127,7 +129,8 @@ export function DataTable<T>(props: DataTableProps<T>) {
     noMatches,
     enableSelection = true,
     pageSizes = PAGE_SIZES,
-    footer
+    footer,
+    rowTestId
   } = props;
   const toast = useToast();
   const searchId = useId();
@@ -546,6 +549,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                   <tr
                     key={row.id}
                     data-row-id={row.id}
+                    data-testid={rowTestId}
                     data-selected={row.getIsSelected() || undefined}
                     tabIndex={onRowClick ? 0 : undefined}
                     aria-current={active || undefined}

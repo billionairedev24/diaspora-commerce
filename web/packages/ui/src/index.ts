@@ -15,6 +15,7 @@ export { QuantityStepper, type QuantityStepperProps } from './commerce/QuantityS
 export { Stars, type StarsProps } from './commerce/Stars';
 export { cx } from './cx';
 export { Checkbox, type CheckboxProps } from './form/Checkbox';
+export { ChipGroup, type ChipGroupProps } from './form/ChipGroup';
 export { ErrorSummary, type ErrorSummaryItem, type ErrorSummaryProps } from './form/ErrorSummary';
 export { Field, type FieldProps, type FieldRenderProps, fieldStyles } from './form/Field';
 export { PasswordField, type PasswordFieldProps, type PasswordRuleView } from './form/PasswordField';

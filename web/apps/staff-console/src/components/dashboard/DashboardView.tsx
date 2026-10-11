@@ -1,11 +1,11 @@
 'use client';
 
 import { staffQueries } from '@afrotransact/api-client';
+import { ChipGroup } from '@afrotransact/ui';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ModulePage } from '@/components/module/ModulePage';
-import { FilterChips } from '@/components/resources/ResourceTable';
 import { KpiTile } from '@/components/ui/Kpi';
 import { ErrorState, Spinner } from '@/components/ui/States';
 import { useT } from '@/i18n/t';
@@ -23,10 +23,10 @@ export function DashboardView() {
     <ModulePage
       module="dash"
       actions={
-        <FilterChips
+        <ChipGroup
           label={t('st.dashboardView.period')}
           value={range}
-          onChange={(v) => setRange(v === '' ? '30' : v)}
+          onChange={setRange}
           options={[
             { value: '7', label: '7 days' },
             { value: '30', label: '30 days' },

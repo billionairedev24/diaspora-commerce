@@ -70,7 +70,7 @@ export function SupportView() {
         value={tab}
         onValueChange={(v) => go({ tab: v })}
         items={[
-          { value: 'cases', label: 'Lola hand-offs', content: <ResourceTable resource="support-cases" /> },
+          { value: 'cases', label: 'Lola hand-offs', content: <ResourceTable resource="support-cases" urlPrefix="cases" /> },
           {
             value: 'customer',
             label: 'Customer lookup',

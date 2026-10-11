@@ -23,7 +23,7 @@ export function DispatchView() {
         value={tab}
         onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
         items={[
-          { value: 'routes', label: t('st.pickups.routesTab'), content: <ResourceTable resource="routes" /> },
+          { value: 'routes', label: t('st.pickups.routesTab'), content: <ResourceTable resource="routes" urlPrefix="routes" /> },
           { value: 'pickups', label: t('st.pickups.tab'), content: <PickupsPanel /> }
         ]}
       />

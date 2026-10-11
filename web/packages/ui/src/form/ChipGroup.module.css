@@ -1,0 +1,27 @@
+.group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--at-space-1) * 1.5);
+}
+
+.chip {
+  height: 2rem;
+  padding: 0 var(--at-space-3);
+  border: 1px solid var(--at-color-border-strong);
+  border-radius: var(--at-radius-pill);
+  background: var(--at-color-surface);
+  color: var(--at-color-text);
+  font: inherit;
+  font-size: var(--at-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip:hover {
+  background: var(--at-color-surface-hover);
+}
+
+.chip[aria-pressed="true"] {
+  border-color: var(--at-gold-500);
+  background: var(--at-gold-50);
+}

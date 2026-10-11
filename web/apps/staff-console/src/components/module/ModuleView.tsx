@@ -28,7 +28,7 @@ export function ModuleView({ module }: { module: StaffModuleKey }) {
           label={t('st.moduleView.tables')}
           value={tab}
           onValueChange={(v) => router.replace(`${pathname}?tab=${encodeURIComponent(v)}`, { scroll: false })}
-          items={tables.map((t) => ({ value: t.resource, label: t.label, content: <ResourceTable resource={t.resource} /> }))}
+          items={tables.map((t) => ({ value: t.resource, label: t.label, content: <ResourceTable resource={t.resource} urlPrefix={t.resource} /> }))}
         />
       )}
     </ModulePage>

@@ -1,64 +1,55 @@
 'use client';
 
-import { staffPreorderQueries } from '@afrotransact/api-client';
-import {
-  PREORDER_CHANNEL_LABEL,
-  PREORDER_FILTER_CHANNELS,
-  PREORDER_ORDER_STATUS_LABEL,
-  type PreorderChannel,
-  PreorderChannelSchema,
-  type PreorderOrder,
-  type PreorderOrdersQuery,
-  type PreorderOrderStatus,
-  PreorderOrderStatusSchema,
-  type PreorderWindow
-} from '@afrotransact/api-client/staff-preorders';
+import { staffKeys, staffPreorderQueries } from '@afrotransact/api-client';
+import { PREORDER_CHANNEL_LABEL, PREORDER_ORDER_STATUS_LABEL, type PreorderOrder, type PreorderOrdersQuery, type PreorderWindow } from '@afrotransact/api-client/staff-preorders';
+import { DataTable, type TableExportRequest, useTableState } from '@afrotransact/data-table';
 import { useToast } from '@afrotransact/ui';
-import { FileCsv, ListChecks, MagnifyingGlass } from '@phosphor-icons/react/ssr';
-import { useQuery } from '@tanstack/react-query';
-import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { ListChecks } from '@phosphor-icons/react/ssr';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type ColumnDef } from '@tanstack/react-table';
+import { useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
 
-import { ErrorState, problemMessage, Spinner } from '@/components/ui/States';
-import { useDebounced } from '@/lib/use-debounced';
+import { ErrorState, problemMessage } from '@/components/ui/States';
+import { staffApi } from '@/lib/api';
+import { idempotencyKey } from '@/lib/format';
 
 import { fS, fTime, money2, ORDER_PILL } from './model';
 import { Pill, usePreordersApi } from './primitives';
 
 const PER = 12;
-const filterClass = 'h-10 rounded-sm border border-border-strong bg-ink-0 px-2 text-sm';
-const exportClass = 'flex h-10 cursor-pointer items-center gap-1 rounded-sm border border-border-strong bg-ink-0 px-3 font-semibold disabled:opacity-45';
+const exportClass = 'flex h-9 cursor-pointer items-center gap-1 rounded-pill border border-border-strong bg-surface px-3 text-sm font-semibold hover:bg-surface-hover disabled:opacity-45';
 
-/** Orders of a window: search (order, customer, phone, address, postal code), status and channel filters, 12 per page. */
+/** Orders of a window on the shared table: one search over every column, sort, select, export (Excel and PDF with
+    charts, CSV) and the picking list. */
 export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport: boolean }) {
   const api = usePreordersApi();
+  const qc = useQueryClient();
   const toast = useToast();
-  const [text, setText] = useState('');
-  const [status, setStatus] = useState<PreorderOrderStatus | ''>('');
-  const [channel, setChannel] = useState<PreorderChannel | ''>('');
-  const [page, setPage] = useState(0);
-  const q = useDebounced(text.trim(), 250);
-  const filters: PreorderOrdersQuery = { q: q || undefined, status, channel, page, size: PER };
-  const query = useQuery(staffPreorderQueries.orders(api, w.id, filters));
-  const [busy, setBusy] = useState<string | null>(null);
-  const exportCsv = async (kind: 'orders-filtered' | 'picking-list') => {
-    setBusy(kind);
+  const state = useTableState({ searchParams: useSearchParams(), prefix: 'orders', defaultPageSize: PER });
+  const filters: PreorderOrdersQuery = { q: state.q || undefined, sort: state.sort, page: state.pagination.pageIndex, size: state.pagination.pageSize };
+  const query = useQuery({ ...staffPreorderQueries.orders(api, w.id, filters), placeholderData: keepPreviousData });
+  const [busy, setBusy] = useState(false);
+  const pickingList = async () => {
+    setBusy(true);
     try {
-      const r = await api.downloadCsv(w.id, kind, { ...filters, page: 0 });
+      const r = await api.downloadCsv(w.id, 'picking-list', { page: 0, size: PER });
       toast.show(`Exported ${r.rows} rows · ${r.fileName}`);
     } catch (e) {
       toast.show(problemMessage(e), 'error');
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
   const columns = useMemo<ColumnDef<PreorderOrder>[]>(
     () => [
-      { id: 'order', header: 'Order', size: 9, cell: ({ row }) => <span className="font-mono text-xs">{row.original.number}</span> },
+      { id: 'number', accessorFn: (o) => o.number, meta: { kind: 'mono', label: 'Order' }, header: 'Order', size: 110, cell: ({ row }) => <span className="font-mono text-xs">{row.original.number}</span> },
       {
-        id: 'customer',
+        id: 'customerName',
+        accessorFn: (o) => o.customerName,
+        meta: { kind: 'strong', label: 'Customer', exportValue: (o) => o.customerName },
         header: 'Customer · phone',
-        size: 14,
+        size: 170,
         cell: ({ row }) => (
           <span className="flex min-w-0 flex-col">
             <span className="truncate">{row.original.customerName}</span>
@@ -67,9 +58,11 @@ export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport:
         )
       },
       {
-        id: 'address',
+        id: 'addressLine',
+        accessorFn: (o) => [o.addressLine, o.city, o.zip].filter(Boolean).join(' '),
+        meta: { label: 'Deliver to' },
         header: 'Deliver to',
-        size: 20,
+        size: 230,
         cell: ({ row }) => {
           const o = row.original;
           const line = [o.addressLine, o.city].filter(Boolean).join(', ') + (o.zip ? ` ${o.zip}` : '');
@@ -82,11 +75,13 @@ export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport:
           );
         }
       },
-      { id: 'placed', header: 'Placed', size: 10, cell: ({ row }) => <span className="text-xs">{`${fS(row.original.placedAt)} ${fTime(row.original.placedAt)}`}</span> },
+      { id: 'placedAt', accessorFn: (o) => o.placedAt, meta: { kind: 'datetime' }, header: 'Placed', size: 130, cell: ({ row }) => <span className="text-xs">{`${fS(row.original.placedAt)} ${fTime(row.original.placedAt)}`}</span> },
       {
         id: 'channel',
+        accessorFn: (o) => o.channel,
+        meta: { kind: 'status', exportValue: (o) => PREORDER_CHANNEL_LABEL[o.channel] },
         header: 'Channel',
-        size: 12,
+        size: 140,
         cell: ({ row }) => (
           <span className="flex flex-col text-xs">
             <span>{PREORDER_CHANNEL_LABEL[row.original.channel]}</span>
@@ -94,142 +89,60 @@ export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport:
           </span>
         )
       },
-      { id: 'units', header: 'Units', size: 5, cell: ({ row }) => row.original.units },
-      { id: 'fulfil', header: 'Fulfil', size: 7, cell: ({ row }) => <span className="text-xs">{row.original.fulfilment === 'DOOR' ? 'Door' : 'Pickup'}</span> },
-      { id: 'total', header: 'Total', size: 8, meta: { right: true }, cell: ({ row }) => <strong>{money2(row.original.total, w.currency)}</strong> },
+      { id: 'units', accessorFn: (o) => o.units, meta: { kind: 'number', align: 'end' }, header: 'Units', size: 72, cell: ({ row }) => row.original.units },
+      { id: 'fulfilment', accessorFn: (o) => o.fulfilment, meta: { kind: 'status' }, header: 'Fulfil', size: 90, cell: ({ row }) => <span className="text-xs">{row.original.fulfilment === 'DOOR' ? 'Door' : 'Pickup'}</span> },
+      { id: 'total', accessorFn: (o) => o.total, header: 'Total', size: 100, meta: { kind: 'money', align: 'end' }, cell: ({ row }) => <strong>{money2(row.original.total, w.currency)}</strong> },
       {
         id: 'status',
+        accessorFn: (o) => o.status,
+        meta: { kind: 'status', exportValue: (o) => PREORDER_ORDER_STATUS_LABEL[o.status] },
         header: 'Status',
-        size: 9,
+        size: 110,
         cell: ({ row }) => <Pill className={`px-2 py-px text-2xs ${ORDER_PILL[row.original.status]}`}>{PREORDER_ORDER_STATUS_LABEL[row.original.status]}</Pill>
       }
     ],
     [w.currency]
   );
-  const table = useReactTable({ data: query.data?.items ?? [], columns, getCoreRowModel: getCoreRowModel(), manualPagination: true, manualFiltering: true, getRowId: (o) => o.orderId });
   const total = query.data?.total ?? 0;
-  const cur = query.data?.page ?? 0;
-  const pages = Math.max(1, Math.ceil(total / PER));
-  const right = (meta: unknown) => (meta as { right?: boolean } | undefined)?.right;
+  const onExport = async (req: TableExportRequest) => {
+    const job = await staffApi().createExport(
+      { table: 'preorder-orders', parent: w.id, format: req.format, q: req.q || undefined, sort: req.sort, ids: req.ids.length ? req.ids : undefined, columns: req.columns },
+      idempotencyKey()
+    );
+    void qc.invalidateQueries({ queryKey: staffKeys.exports() });
+    return job;
+  };
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex h-10 flex-[1_1_220px] items-center gap-2 rounded-sm border border-border-strong px-3">
-          <MagnifyingGlass size={16} aria-hidden className="text-ink-500" />
-          <span className="at-visually-hidden">Search orders</span>
-          <input
-            type="search"
-            value={text}
-            onChange={(e) => {
-              setText(e.currentTarget.value);
-              setPage(0);
-            }}
-            placeholder="Search order # or customer"
-            className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none"
-          />
-        </label>
-        <select
-          aria-label="Status"
-          value={status}
-          onChange={(e) => {
-            const v = PreorderOrderStatusSchema.safeParse(e.currentTarget.value);
-            setStatus(v.success ? v.data : '');
-            setPage(0);
-          }}
-          className={filterClass}
-        >
-          <option value="">All statuses</option>
-          {PreorderOrderStatusSchema.options.map((s) => (
-            <option key={s} value={s}>
-              {PREORDER_ORDER_STATUS_LABEL[s]}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Channel"
-          value={channel}
-          onChange={(e) => {
-            const v = PreorderChannelSchema.safeParse(e.currentTarget.value);
-            setChannel(v.success ? v.data : '');
-            setPage(0);
-          }}
-          className={filterClass}
-        >
-          <option value="">All channels</option>
-          {PREORDER_FILTER_CHANNELS.map((c) => (
-            <option key={c} value={c}>
-              {PREORDER_CHANNEL_LABEL[c]}
-            </option>
-          ))}
-        </select>
-        {canExport ? (
-          <>
-            <button type="button" onClick={() => void exportCsv('orders-filtered')} disabled={busy !== null} className={exportClass}>
-              <FileCsv aria-hidden />
-              Export {total} rows
-            </button>
-            <button type="button" onClick={() => void exportCsv('picking-list')} disabled={busy !== null} className={exportClass}>
-              <ListChecks aria-hidden />
-              Picking list
-            </button>
-          </>
-        ) : null}
-      </div>
-      {query.isPending ? <Spinner /> : null}
-      {query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
-      {query.data ? (
-        <>
-          <div className="overflow-auto rounded-md border border-border">
-            <table className="w-full min-w-[1060px] border-collapse text-sm" aria-label="Pre-order orders" aria-busy={query.isFetching || undefined}>
-              <colgroup>
-                {table.getAllLeafColumns().map((c) => (
-                  <col key={c.id} style={{ width: `${c.getSize()}%` }} />
-                ))}
-              </colgroup>
-              <thead className="bg-surface-muted text-left">
-                {table.getHeaderGroups().map((hg) => (
-                  <tr key={hg.id}>
-                    {hg.headers.map((h) => (
-                      <th key={h.id} scope="col" className={`px-3 py-2 text-2xs font-bold tracking-[0.06em] text-muted uppercase ${right(h.column.columnDef.meta) ? 'text-right' : ''}`}>
-                        {flexRender(h.column.columnDef.header, h.getContext())}
-                      </th>
-                    ))}
-                  </tr>
-                ))}
-              </thead>
-              <tbody>
-                {table.getRowModel().rows.map((row) => (
-                  <tr key={row.id} data-testid="order-row" className="border-t border-border">
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className={`px-3 py-2 align-middle ${right(cell.column.columnDef.meta) ? 'text-right' : ''}`}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-                {query.data.items.length === 0 ? (
-                  <tr>
-                    <td colSpan={columns.length} className="p-6 text-center text-muted">
-                      No pre-orders match.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex items-center justify-between text-sm text-muted">
-            <span aria-live="polite" data-testid="orders-page">{`${total ? cur * PER + 1 : 0}–${Math.min(total, cur * PER + PER)} of ${total}`}</span>
-            <span className="flex gap-1">
-              <button type="button" onClick={() => setPage(Math.max(0, cur - 1))} disabled={cur === 0} className="h-8 cursor-pointer rounded-sm border border-border-strong bg-ink-0 px-3 disabled:opacity-45">
-                Prev
-              </button>
-              <button type="button" onClick={() => setPage(Math.min(pages - 1, cur + 1))} disabled={cur >= pages - 1} className="h-8 cursor-pointer rounded-sm border border-border-strong bg-ink-0 px-3 disabled:opacity-45">
-                Next
-              </button>
-            </span>
-          </div>
-        </>
-      ) : null}
-    </div>
+    <DataTable<PreorderOrder>
+      id="staff.preorder-orders"
+      label="Pre-order orders"
+      columns={columns}
+      data={query.data?.items ?? []}
+      getRowId={(o) => o.orderId}
+      rowLabel={(o) => o.number}
+      rowTestId="order-row"
+      state={state}
+      mode="server"
+      total={query.data?.total ?? null}
+      loading={query.isPending}
+      fetching={query.isFetching}
+      error={query.isError ? <ErrorState error={query.error} onRetry={() => void query.refetch()} /> : undefined}
+      partial={query.data?.partial}
+      searchPlaceholder="Search every column (order, customer, phone, address, channel, total…)"
+      empty="No pre-orders yet."
+      noMatches="No pre-orders match."
+      onExport={canExport ? onExport : undefined}
+      exportsHref="/exports"
+      pageSizes={[12, 25, 50, 100]}
+      toolbar={
+        canExport ? (
+          <button type="button" onClick={() => void pickingList()} disabled={busy} className={exportClass}>
+            <ListChecks aria-hidden />
+            Picking list
+          </button>
+        ) : null
+      }
+      footer={<span className="at-visually-hidden" data-testid="orders-page">{`${total} orders`}</span>}
+    />
   );
 }
