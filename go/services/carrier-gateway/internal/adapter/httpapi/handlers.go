@@ -252,6 +252,16 @@ func (h *handlersImpl) validateAddress(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlersImpl) listLocations(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
+	if q.Get("includeInactive") == "true" {
+		a, ok := auth.FromContext(r.Context())
+		if !ok {
+			writeErr(w, r, problem.New(http.StatusUnauthorized, "carrier-gateway.unauthorized", "Sign in to manage pickup locations"))
+			return
+		}
+		ls, err := h.svc.Pickups.ManagedLocations(r.Context(), a, q.Get("ownerOrg"))
+		respond(w, r, http.StatusOK, map[string]any{"items": ls}, err)
+		return
+	}
 	ls, err := h.svc.Pickups.ListLocations(r.Context(), q.Get("ownerOrg"), q.Get("postalPrefix"))
 	respond(w, r, http.StatusOK, map[string]any{"items": ls}, err)
 }

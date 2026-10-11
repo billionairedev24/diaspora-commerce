@@ -440,26 +440,35 @@ func (s *storeImpl) SaveLocation(ctx context.Context, l domain.PickupLocation) e
 	if err != nil {
 		return fmt.Errorf("encode hours: %w", err)
 	}
+	var lat, lng *float64
+	if l.Position != nil {
+		lat, lng = &l.Position.Lat, &l.Position.Lng
+	}
 	_, err = s.pool.Exec(ctx, `insert into pickup_location
-		(id, kind, owner_org, name, address, postal_code, timezone, hours, ready_hours, active, updated_at)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		(id, kind, owner_org, name, address, postal_code, timezone, hours, ready_hours, active, updated_at, latitude, longitude)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		on conflict (id) do update set kind = excluded.kind, owner_org = excluded.owner_org, name = excluded.name,
 			address = excluded.address, postal_code = excluded.postal_code, timezone = excluded.timezone,
-			hours = excluded.hours, ready_hours = excluded.ready_hours, active = excluded.active, updated_at = excluded.updated_at`,
-		l.ID, string(l.Kind), l.OwnerOrg, l.Name, addr, l.Address.PostalCode, l.Timezone, hours, l.ReadyHours, l.Active, l.UpdatedAt)
+			hours = excluded.hours, ready_hours = excluded.ready_hours, active = excluded.active, updated_at = excluded.updated_at,
+			latitude = excluded.latitude, longitude = excluded.longitude`,
+		l.ID, string(l.Kind), l.OwnerOrg, l.Name, addr, l.Address.PostalCode, l.Timezone, hours, l.ReadyHours, l.Active, l.UpdatedAt, lat, lng)
 	if err != nil {
 		return fmt.Errorf("upsert location: %w", err)
 	}
 	return nil
 }
 
-const locationColumns = `id::text, kind, owner_org, name, address, timezone, hours, ready_hours, active, updated_at`
+const locationColumns = `id::text, kind, owner_org, name, address, timezone, hours, ready_hours, active, updated_at, latitude, longitude`
 
 func scanLocation(row pgx.Row) (domain.PickupLocation, error) {
 	var l domain.PickupLocation
 	var kind string
 	var addr, hours []byte
-	err := row.Scan(&l.ID, &kind, &l.OwnerOrg, &l.Name, &addr, &l.Timezone, &hours, &l.ReadyHours, &l.Active, &l.UpdatedAt)
+	var lat, lng *float64
+	err := row.Scan(&l.ID, &kind, &l.OwnerOrg, &l.Name, &addr, &l.Timezone, &hours, &l.ReadyHours, &l.Active, &l.UpdatedAt, &lat, &lng)
+	if err == nil && lat != nil && lng != nil {
+		l.Position = &domain.Position{Lat: *lat, Lng: *lng}
+	}
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.PickupLocation{}, domain.ErrNotFound
 	}

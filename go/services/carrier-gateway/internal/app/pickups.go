@@ -41,6 +41,9 @@ type PickupService interface {
 	SaveLocation(ctx context.Context, actor auth.Actor, loc domain.PickupLocation) (domain.PickupLocation, error)
 	GetLocation(ctx context.Context, id string) (domain.PickupLocation, error)
 	ListLocations(ctx context.Context, ownerOrg, postalPrefix string) ([]domain.PickupLocation, error)
+	// ManagedLocations lists every location the actor manages, inactive ones too: staff with shipping:admin (all, or
+	// one owner's), a seller its own org's SELLER locations.
+	ManagedLocations(ctx context.Context, actor auth.Actor, ownerOrg string) ([]domain.PickupLocation, error)
 	MarkReady(ctx context.Context, actor auth.Actor, locationID string, req ReadyRequest) error
 }
 
@@ -136,6 +139,29 @@ func (s *pickupServiceImpl) ListLocations(ctx context.Context, ownerOrg, postalP
 		return nil, fmt.Errorf("list locations: %w", err)
 	}
 	return ls, nil
+}
+
+func (s *pickupServiceImpl) ManagedLocations(ctx context.Context, actor auth.Actor, ownerOrg string) ([]domain.PickupLocation, error) {
+	if !actor.Can(PermAdmin) {
+		if actor.OrgID == "" || !actor.Can(PermLabel) || (ownerOrg != "" && ownerOrg != actor.OrgID) {
+			return nil, fmt.Errorf("%w: cannot list these pickup locations", ErrForbidden)
+		}
+		ownerOrg = actor.OrgID
+	}
+	ls, err := s.repo.ListLocations(ctx, ownerOrg, "", false)
+	if err != nil {
+		return nil, fmt.Errorf("list locations: %w", err)
+	}
+	if actor.Can(PermAdmin) {
+		return ls, nil
+	}
+	out := make([]domain.PickupLocation, 0, len(ls))
+	for _, l := range ls {
+		if l.Kind == domain.PickupSeller {
+			out = append(out, l)
+		}
+	}
+	return out, nil
 }
 
 func (s *pickupServiceImpl) MarkReady(ctx context.Context, actor auth.Actor, id string, req ReadyRequest) error {

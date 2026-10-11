@@ -117,7 +117,15 @@ type PickupLocation struct {
 	Hours      []OpeningHours     `json:"hours"`
 	ReadyHours int                `json:"readyHours"` // typical hours from order to ready-for-pickup
 	Active     bool               `json:"active"`
-	UpdatedAt  time.Time          `json:"updatedAt"`
+	// Position is where the location is (optional; checkout shows the distance from the delivery address).
+	Position  *Position `json:"position,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// Position is a WGS84 point.
+type Position struct {
+	Lat float64 `json:"lat"`
+	Lng float64 `json:"lng"`
 }
 
 // Validate checks a pickup location.
@@ -135,6 +143,9 @@ func (p PickupLocation) Validate() error {
 	}
 	if len(p.Hours) == 0 {
 		return fmt.Errorf("%w: opening hours are required", ErrInvalid)
+	}
+	if p.Position != nil && (p.Position.Lat < -90 || p.Position.Lat > 90 || p.Position.Lng < -180 || p.Position.Lng > 180) {
+		return fmt.Errorf("%w: position must be a latitude -90..90 and longitude -180..180", ErrInvalid)
 	}
 	for _, h := range p.Hours {
 		if h.Weekday < time.Sunday || h.Weekday > time.Saturday || !validClock(h.Open) || !validClock(h.Close) || h.Open >= h.Close {

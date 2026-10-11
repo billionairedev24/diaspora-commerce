@@ -261,11 +261,18 @@ paths:
     get:
       tags: [pickups]
       operationId: listPickupLocations
-      summary: Active pickup locations (public)
+      summary: Active pickup locations (public), or with includeInactive every location the caller manages
       security: [{}, {bearer: []}]
       parameters:
         - {name: ownerOrg, in: query, schema: {type: string}}
         - {name: postalPrefix, in: query, schema: {type: string}, description: 'e.g. "770" or "77002"'}
+        - name: includeInactive
+          in: query
+          schema: {type: boolean}
+          description: |
+            true: every location the caller manages, inactive ones too (needs a token; staff with shipping:admin see
+            all or one ownerOrg's, a seller with shipping:label its own org's SELLER locations; 403 otherwise).
+            postalPrefix is ignored then.
       responses:
         '200':
           description: Locations
@@ -573,6 +580,13 @@ components:
               close: {type: string, examples: ['18:00']}
         readyHours: {type: integer, description: Typical hours from order to ready-for-pickup}
         active: {type: boolean}
+        position:
+          type: object
+          description: Where the location is, when known (checkout shows the distance from the delivery address)
+          required: [lat, lng]
+          properties:
+            lat: {type: number, minimum: -90, maximum: 90}
+            lng: {type: number, minimum: -180, maximum: 180}
         updatedAt: {type: string, format: date-time}
     Problem:
       type: object

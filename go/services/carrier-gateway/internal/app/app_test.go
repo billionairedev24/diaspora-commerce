@@ -352,10 +352,52 @@ func (p *memPickups) GetLocation(_ context.Context, id string) (domain.PickupLoc
 	return l, nil
 }
 
-func (p *memPickups) ListLocations(context.Context, string, string, bool) ([]domain.PickupLocation, error) {
+func (p *memPickups) ListLocations(_ context.Context, owner, _ string, activeOnly bool) ([]domain.PickupLocation, error) {
 	out := []domain.PickupLocation{}
 	for _, l := range p.m {
-		out = append(out, l)
+		if (owner == "" || l.OwnerOrg == owner) && (!activeOnly || l.Active) {
+			out = append(out, l)
+		}
 	}
 	return out, nil
+}
+
+func TestManagedLocationsIncludeInactiveOnesOfTheActorOnly(t *testing.T) {
+	hours := []domain.OpeningHours{{Weekday: time.Monday, Open: "09:00", Close: "17:00"}}
+	addr := domain.Address{Line1: "1 Main St", City: "Houston", State: "TX", PostalCode: "77002"}
+	repo := &memPickups{m: map[string]domain.PickupLocation{
+		"a": {ID: "a", Kind: domain.PickupSeller, OwnerOrg: "org_1", Name: "Store", Address: addr, Timezone: "America/Chicago", Hours: hours, Active: false},
+		"b": {ID: "b", Kind: domain.PickupSeller, OwnerOrg: "org_2", Name: "Other", Address: addr, Timezone: "America/Chicago", Hours: hours, Active: true},
+		"c": {ID: "c", Kind: domain.PickupCounter, OwnerOrg: "afrotransact", Name: "Counter", Address: addr, Timezone: "America/Chicago", Hours: hours, Active: false},
+	}}
+	svc := app.NewPickupService(app.Carriers{}, allAccounts(), repo, newMemStore(), time.Now)
+	ctx := context.Background()
+	seller := auth.Actor{Subject: "u1", Type: "SELLER_MEMBER", OrgID: "org_1", Permissions: []string{app.PermLabel}}
+	ls, err := svc.ManagedLocations(ctx, seller, "")
+	if err != nil || len(ls) != 1 || ls[0].ID != "a" {
+		t.Fatalf("seller sees its own inactive location only: %+v %v", ls, err)
+	}
+	if _, err := svc.ManagedLocations(ctx, seller, "org_2"); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("another org's locations: %v", err)
+	}
+	staff := auth.Actor{Type: "STAFF", Permissions: []string{app.PermAdmin}}
+	if ls, err := svc.ManagedLocations(ctx, staff, ""); err != nil || len(ls) != 3 {
+		t.Fatalf("staff see every location: %d %v", len(ls), err)
+	}
+	if _, err := svc.ManagedLocations(ctx, auth.Actor{Type: "CUSTOMER"}, ""); !errors.Is(err, app.ErrForbidden) {
+		t.Fatalf("customers cannot list managed locations: %v", err)
+	}
+}
+
+func TestPickupLocationPositionIsValidated(t *testing.T) {
+	loc := domain.PickupLocation{Kind: domain.PickupCounter, OwnerOrg: "afrotransact", Name: "Counter", Timezone: "America/Chicago",
+		Address: domain.Address{Line1: "1 Main St", PostalCode: "77002"}, Hours: []domain.OpeningHours{{Weekday: time.Monday, Open: "09:00", Close: "17:00"}},
+		Position: &domain.Position{Lat: 29.76, Lng: -95.37}}
+	if err := loc.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	loc.Position = &domain.Position{Lat: 129, Lng: 0}
+	if err := loc.Validate(); !errors.Is(err, domain.ErrInvalid) {
+		t.Fatalf("bad latitude accepted: %v", err)
+	}
 }
