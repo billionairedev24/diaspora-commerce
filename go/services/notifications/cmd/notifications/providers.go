@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -14,6 +17,7 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/apns"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/awssms"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/fcm"
+	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/localguard"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/logsender"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/resend"
 	"github.com/billionairedev24/diaspora-commerce/go/services/notifications/internal/adapter/sendgrid"
@@ -103,8 +107,11 @@ func (f *providerFactory) smsSender(ctx context.Context, name string) (port.SmsS
 			return nil, fmt.Errorf("twilio: TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN are not set")
 		}
 		callback := ""
-		if f.cfg.PublicBaseURL != "" {
+		if reachableFromInternet(f.cfg.PublicBaseURL) {
 			callback = f.cfg.PublicBaseURL + "/v1/webhooks/twilio/status"
+		} else if f.cfg.PublicBaseURL != "" {
+			f.log.Info("twilio: no delivery-status callbacks: Twilio cannot reach this service's PUBLIC_BASE_URL "+
+				"(set it to a tunnel URL, e.g. cloudflared, to receive them)", "publicBaseUrl", f.cfg.PublicBaseURL)
 		}
 		s = twilio.New(twilio.Config{AccountSID: p.Twilio.AccountSID, AuthToken: p.Twilio.AuthToken, From: p.Twilio.From,
 			MessagingServiceSID: p.Twilio.MessagingServiceSID, StatusCallbackURL: callback, BaseURL: p.Twilio.BaseURL}, f.client)
@@ -198,12 +205,17 @@ func (f *providerFactory) chatSender(_ context.Context, name string) (port.ChatS
 func buildRoutes(ctx context.Context, f *providerFactory) app.Routes {
 	r := app.Routes{Email: map[string][]port.EmailSender{}, SMS: map[string][]port.SmsSender{},
 		Push: map[string][]port.PushSender{}, Chat: map[string][]port.ChatSender{}}
-	rc := f.cfg.Routing
+	rc, choices := f.cfg.EffectiveRouting()
+	logChoices(ctx, f, choices)
+	email, sms := f.emailSender, f.smsSender
+	if rc.PreferConfigured {
+		email, sms = f.guardedEmailSender, f.guardedSmsSender
+	}
 	for market, names := range rc.Email {
-		r.Email[market] = resolve(ctx, f.log, "email", market, names, f.emailSender)
+		r.Email[market] = resolve(ctx, f.log, "email", market, names, email)
 	}
 	for market, names := range rc.SMS {
-		r.SMS[market] = resolve(ctx, f.log, "sms", market, names, f.smsSender)
+		r.SMS[market] = resolve(ctx, f.log, "sms", market, names, sms)
 	}
 	for market, names := range rc.Push {
 		r.Push[market] = resolve(ctx, f.log, "push", market, names, f.pushSender)
@@ -212,6 +224,78 @@ func buildRoutes(ctx context.Context, f *providerFactory) app.Routes {
 		r.Chat[market] = resolve(ctx, f.log, "chat", market, names, f.chatSender)
 	}
 	return r
+}
+
+// localFallback names what a channel does locally without a real provider.
+var localFallback = map[string]string{
+	"email": "smtp → Mailpit http://localhost:8025",
+	"sms":   "log (one-time codes from identity are in Mailpit)",
+	"push":  "log",
+	"chat":  "log",
+}
+
+// logChoices prints, once at start-up, which provider each channel uses on the local profile (real or fallback).
+func logChoices(ctx context.Context, f *providerFactory, choices []config.ProviderChoice) {
+	for _, c := range choices {
+		if c.Real == "" {
+			f.log.InfoContext(ctx, "local provider: fallback", "channel", c.Channel, "active", localFallback[c.Channel],
+				"why", c.Reason)
+			continue
+		}
+		f.log.InfoContext(ctx, "local provider: REAL", "channel", c.Channel, "active", c.Real,
+			"order", strings.Join(c.Providers, ","), "why", c.Reason,
+			"note", "test users (@afrotransact.test, 555-01xx phones) still go to Mailpit")
+		if c.Real == "resend" || c.Real == "sendgrid" {
+			if localguard.ReservedEmail(f.cfg.Email.From) {
+				f.log.WarnContext(ctx, "EMAIL_FROM is a local address the real provider will refuse: set EMAIL_FROM to "+
+					"an address on your verified domain (or onboarding@resend.dev, which only delivers to your own "+
+					"Resend account's email)", "from", f.cfg.Email.From)
+			}
+		}
+	}
+}
+
+// guardedEmailSender wraps a real email provider so reserved test domains still go to Mailpit (smtp).
+func (f *providerFactory) guardedEmailSender(ctx context.Context, name string) (port.EmailSender, error) {
+	s, err := f.emailSender(ctx, name)
+	if err != nil || name == smtp.Name || name == logsender.Name {
+		return s, err
+	}
+	mailpit, err := f.emailSender(ctx, smtp.Name)
+	if err != nil {
+		return s, nil //nolint:nilerr // no Mailpit: the real provider alone
+	}
+	return localguard.NewEmail(s, mailpit), nil
+}
+
+// guardedSmsSender wraps a real SMS provider so the test users' fictional numbers become Mailpit emails.
+func (f *providerFactory) guardedSmsSender(ctx context.Context, name string) (port.SmsSender, error) {
+	s, err := f.smsSender(ctx, name)
+	if err != nil || name == logsender.Name {
+		return s, err
+	}
+	mailpit, err := f.emailSender(ctx, smtp.Name)
+	if err != nil {
+		return s, nil //nolint:nilerr // no Mailpit: the real provider alone
+	}
+	return localguard.NewSMS(s, mailpit, f.cfg.Email.From), nil
+}
+
+// reachableFromInternet is false for an empty URL and for localhost / loopback / private addresses, which a
+// provider's webhook (Twilio status callbacks) cannot call.
+func reachableFromInternet(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	h := u.Hostname()
+	if h == "localhost" || strings.HasSuffix(h, ".localhost") || strings.HasSuffix(h, ".local") {
+		return false
+	}
+	if ip := net.ParseIP(h); ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsUnspecified()) {
+		return false
+	}
+	return true
 }
 
 func resolve[S any](ctx context.Context, log *slog.Logger, channel, market string, names []string,

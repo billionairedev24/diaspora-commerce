@@ -1,5 +1,6 @@
 # notifications · local. Secrets (DB_URL in other envs, provider keys, webhook secrets, UNSUBSCRIBE_SIGNING_KEY)
-# come from env vars only. Local sends email to Mailpit (http://localhost:8025) and logs SMS/push/WhatsApp.
+# come from env vars only. Local sends email to Mailpit (http://localhost:8025) and logs SMS/push/WhatsApp, unless a
+# real provider's credentials are set (.local/secrets.env, routing.preferConfigured below).
 port: 8208
 docsEnabled: true
 publicBaseUrl: http://localhost:8208
@@ -70,6 +71,11 @@ dispatcher:
   backoffMax: 5m
 routing:
   sendTimeout: 3s
+  # A real provider whose credentials are set (RESEND_API_KEY, TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN + TWILIO_FROM, …:
+  # infra/local/secrets.env.example) goes in front of the fallback below; test users (@afrotransact.test, 555-01xx
+  # phones) still land in Mailpit. The start-up log says which is active ("local provider: REAL|fallback").
+  # ROUTING_PREFER_CONFIGURED=false keeps the fallbacks. docs/engineering/secrets-and-configuration.md
+  preferConfigured: true
   email: {default: [smtp]}
   sms: {default: [log]}
   push: {default: [log]}
