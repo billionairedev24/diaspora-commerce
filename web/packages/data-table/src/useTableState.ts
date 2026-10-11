@@ -130,7 +130,7 @@ export function useTableState(options: TableStateOptions = {}): TableState {
         setCursors({});
         return { pageIndex: 0, pageSize: next.pageSize };
       }
-      return next;
+      return next.pageIndex === old.pageIndex ? old : next;
     });
   }, []);
   const setCursor = useCallback((pageIndex: number, cursor: string | undefined) => setCursors((c) => ({ ...c, [pageIndex]: cursor })), []);

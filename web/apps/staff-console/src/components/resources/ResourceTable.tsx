@@ -47,7 +47,7 @@ export function ResourceTable({ resource, urlPrefix }: { resource: ResourceKey; 
   const data = query.data;
 
   const setOpen = (id: string | null) => {
-    const next = new URLSearchParams(window.location.search);
+    const next = new URLSearchParams(params.toString());
     if (id) next.set('open', id);
     else next.delete('open');
     const qs = next.toString();

@@ -22,7 +22,8 @@ describe('server-driven tables and detail sheets', () => {
     const user = userEvent.setup();
     await renderScreen(<ResourceTable resource="payouts" />);
     const table = await screen.findByRole('table', { name: 'Payout requests' });
-    await user.click(within(table).getByRole('button', { name: 'pay-700' }));
+    // A row click opens the sheet (the checkbox never does).
+    await user.click(await within(table).findByText('pay-700'));
     expect(nav.search).toBe('open=pay-700');
     const approve = await screen.findByRole('button', { name: 'Approve & pay' });
     await user.click(approve);

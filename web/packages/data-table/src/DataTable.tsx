@@ -272,7 +272,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
   // A page past the end (rows deleted, a narrower search) goes back to the last page.
   const pageCount = client ? table.getPageCount() : total != null ? Math.max(1, Math.ceil(total / pagination.pageSize)) : null;
   useEffect(() => {
-    if (pageCount !== null && pagination.pageIndex > pageCount - 1) state.setPagination((p) => ({ ...p, pageIndex: Math.max(0, pageCount - 1) }));
+    if (pageCount !== null && pageCount > 0 && pagination.pageIndex > pageCount - 1) state.setPagination((p) => ({ ...p, pageIndex: pageCount - 1 }));
   }, [pageCount, pagination.pageIndex, state]);
 
   const toggleRow = (row: Row<T>, index: number, e: MouseEvent<HTMLInputElement>) => {

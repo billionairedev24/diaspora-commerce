@@ -103,7 +103,6 @@ export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport:
     ],
     [w.currency]
   );
-  const total = query.data?.total ?? 0;
   const onExport = async (req: TableExportRequest) => {
     const job = await staffApi().createExport(
       { table: 'preorder-orders', parent: w.id, format: req.format, q: req.q || undefined, sort: req.sort, ids: req.ids.length ? req.ids : undefined, columns: req.columns },
@@ -142,7 +141,6 @@ export function PreorderOrders({ w, canExport }: { w: PreorderWindow; canExport:
           </button>
         ) : null
       }
-      footer={<span className="at-visually-hidden" data-testid="orders-page">{`${total} orders`}</span>}
     />
   );
 }

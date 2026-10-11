@@ -816,7 +816,7 @@ export const staffHandlers = [
   http.get(`*/v1/staff/export-files/:id`, ({ params }) => {
     const job = getStaffDb().exports.find((j) => j.id === params.id);
     if (!job) return problemResponse(notFound('No such export.'));
-    return new HttpResponse(job.body, { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${job.fileName.replace(/\.xlsx$/, '.csv')}"` } });
+    return new HttpResponse(job.body, { status: 200, headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${job.fileName.replace(/\.(xlsx|pdf)$/, '.csv')}"` } });
   }),
   /* ── support ── */
   http.get(

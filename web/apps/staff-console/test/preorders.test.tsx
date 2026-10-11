@@ -98,7 +98,7 @@ describe('Pre-orders back office (S274)', () => {
     expect(screen.getByTestId('role-note')).toHaveTextContent('Analyst: view only, plus exports and analytics.');
   });
 
-  it('shows the overview KPIs and the orders tab with filters', async () => {
+  it('shows the overview KPIs and the orders tab with its one search', async () => {
     const user = userEvent.setup();
     nav.set('/preorders/lbk-7');
     await renderScreen(<PreordersView screen={{ kind: 'detail', id: 'lbk-7' }} />);
@@ -106,8 +106,9 @@ describe('Pre-orders back office (S274)', () => {
     expect(screen.getByRole('tab', { name: 'Orders (142)' })).toHaveAttribute('href', '/preorders/lbk-7?tab=orders');
     nav.set('/preorders/lbk-7?tab=orders');
     await waitFor(() => expect(screen.getAllByTestId('order-row')).toHaveLength(12));
-    expect(screen.getByTestId('orders-page')).toHaveTextContent('1–12 of 142');
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Status' }), 'CANCELLED');
+    expect(screen.getByText('Showing 1–12 of 142')).toBeInTheDocument();
+    // One search over every column: the status is not one of delivery-runs' search fields.
+    await user.type(screen.getByRole('searchbox', { name: 'Search pre-order orders' }), 'cancelled');
     await waitFor(() => expect(screen.getAllByTestId('order-row').every((r) => r.textContent?.includes('Cancelled'))).toBe(true));
   });
 

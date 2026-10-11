@@ -35,9 +35,9 @@ describe('Notifications → Templates (S268)', () => {
     const user = userEvent.setup();
     await renderScreen(<NotificationsView />);
     const table = await screen.findByRole('table', { name: 'Notification templates' });
-    expect(within(table).getByRole('link', { name: 'order.confirmed' })).toHaveAttribute('href', '/notifications?key=order.confirmed');
+    expect(await within(table).findByRole('link', { name: 'order.confirmed' })).toHaveAttribute('href', '/notifications?key=order.confirmed');
     expect(screen.getByText(/can view notifications but not change it/)).toBeInTheDocument();
-    await user.type(screen.getByRole('searchbox', { name: 'Search templates' }), 'security');
+    await user.type(screen.getByRole('searchbox', { name: 'Search notification templates' }), 'identity.verif');
     await waitFor(() => expect(screen.getAllByTestId('template-row')).toHaveLength(1));
     expect(screen.getByRole('link', { name: 'identity.verification' })).toBeInTheDocument();
   });
