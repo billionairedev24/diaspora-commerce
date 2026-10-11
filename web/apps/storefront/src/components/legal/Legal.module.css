@@ -78,7 +78,7 @@ ul.body, ol.body { padding-inline-start: var(--at-space-5); }
 .stack { display: flex; flex-direction: column; gap: var(--at-space-1); }
 
 /* First-visit cookie banner (Shop design) */
-.banner { position: fixed; inset-inline: var(--at-space-4); bottom: var(--at-space-4); z-index: var(--at-z-toast); max-width: 720px; margin-inline: auto; display: flex; flex-direction: column; gap: var(--at-space-3); padding: var(--at-space-5); border-radius: var(--at-radius-md); background: var(--at-color-surface); color: var(--at-color-text); box-shadow: var(--at-shadow-lg); border: 1px solid var(--at-color-border); }
+.banner { position: fixed; inset-inline: var(--at-space-4); bottom: var(--at-space-4); z-index: calc(var(--at-z-drawer) - 1); max-width: 720px; margin-inline: auto; display: flex; flex-direction: column; gap: var(--at-space-3); padding: var(--at-space-5); border-radius: var(--at-radius-md); background: var(--at-color-surface); color: var(--at-color-text); box-shadow: var(--at-shadow-lg); border: 1px solid var(--at-color-border); }
 .bannerTitle { margin: 0; font-size: var(--at-text-lg); }
 .bannerText { margin: 0; font-size: var(--at-text-sm); line-height: var(--at-leading-relaxed); }
 .bannerGpc { margin: 0; font-size: var(--at-text-xs); color: var(--at-color-text-muted); }

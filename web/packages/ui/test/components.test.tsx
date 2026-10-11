@@ -4,7 +4,7 @@ import { type CountryCode } from 'libphonenumber-js/mobile';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { AddressAutocomplete, createFixtureAddressSearch, Dialog, ErrorSummary, fromNominatim, ImagePlaceholder, Menu, MenuItem, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, SocialButton, Stars } from '../src';
+import { AddressAutocomplete, createFixtureAddressSearch, Dialog, ErrorSummary, fromNominatim, ImagePlaceholder, Menu, MenuItem, PasswordField, PhoneInput, ProductCard, type ProductCardData, QuantityStepper, SAMPLE_ADDRESSES, Sheet, SocialButton, Stars } from '../src';
 
 function Phone() {
   const [country, setCountry] = useState<CountryCode>('US');
@@ -194,5 +194,37 @@ describe('ImagePlaceholder', () => {
     expect(img).not.toBeNull();
     img?.dispatchEvent(new Event('error'));
     return waitFor(() => expect(container.querySelector('img')).toBeNull());
+  });
+});
+
+function PageWithSheet({ side }: { side?: 'left' | 'right' }) {
+  const [open, setOpen] = useState(true);
+  const [clicks, setClicks] = useState(0);
+  return (
+    <>
+      <button type="button" onClick={() => setClicks((c) => c + 1)}>Page action {clicks}</button>
+      <Sheet open={open} onOpenChange={setOpen} title="Record" side={side}>
+        <p>Details</p>
+      </Sheet>
+    </>
+  );
+}
+
+describe('Sheet', () => {
+  it('right sheets leave the page usable: no overlay, page clicks work and do not close the sheet', async () => {
+    render(<PageWithSheet />);
+    expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+    expect(document.querySelector('[data-state="open"][class*="overlay"]')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Page action 0' }));
+    expect(screen.getByRole('button', { name: 'Page action 1' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('the left (mobile navigation) sheet stays modal with an overlay', () => {
+    render(<PageWithSheet side="left" />);
+    expect(screen.getByRole('dialog', { name: 'Record' })).toBeInTheDocument();
+    expect(document.querySelector('[class*="overlay"]')).not.toBeNull();
   });
 });

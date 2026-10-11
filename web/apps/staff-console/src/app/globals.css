@@ -8,6 +8,8 @@
 /* Tailwind's preflight (base layer) resets links to inherit; restore the token link style there so utilities still
    override it (see @afrotransact/tokens: element defaults are in the base layer). */
 @layer base {
+  /* The sticky header is h-14: side sheets dock below it, in-page anchors scroll clear of it. */
+  :root { --at-sticky-header-h: 3.5rem; }
   a { color: var(--at-color-link); text-decoration: none; }
   a:hover { color: var(--at-color-link-hover); text-decoration: underline; }
   :where(p, li, label, small, dd, td, figcaption) a:not([class]) { text-decoration: underline; text-underline-offset: 2px; }

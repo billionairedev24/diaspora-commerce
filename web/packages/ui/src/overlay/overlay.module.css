@@ -52,6 +52,9 @@
 
 .sheet:focus { outline: none; }
 .right { right: 0; }
+/* Non-modal sheets start below the app's sticky header (each shell publishes --at-sticky-header-h) and use a border
+   instead of the overlay to separate them from the page. */
+.docked { top: var(--at-sticky-header-h, 0px); border-inline-start: 1px solid var(--at-color-border); }
 .left { left: 0; }
 .sheetHead { display: flex; align-items: center; gap: var(--at-space-3); padding: var(--at-space-3) var(--at-space-4); background: var(--at-color-header-bg); color: var(--at-color-header-text); }
 .sheetHead .close:hover { background: var(--at-color-header-hover-bg); }

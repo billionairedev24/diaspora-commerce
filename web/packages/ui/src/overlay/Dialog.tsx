@@ -65,16 +65,28 @@ export function Dialog({ open, onOpenChange, title, description, children, width
 export interface SheetProps extends Omit<DialogProps, 'width'> {
   side?: 'right' | 'left';
   header?: ReactNode;
+  /**
+   * Modal sheets dim and block the page (focus trap, outside click closes). Default: only left sheets (the mobile
+   * navigation menu) are modal. Right sheets (record details, Lola) sit below the sticky header without an overlay and
+   * leave the page usable: rows, filters and buttons behind them keep working; Esc or the close button closes them.
+   */
+  modal?: boolean;
 }
 
-/** Side sheet / drawer (used for Lola and mobile navigation). */
-export function Sheet({ open, onOpenChange, title, description, header, children, side = 'right', closeLabel = 'Close', className }: SheetProps) {
+const keepOpen = (e: Event) => e.preventDefault();
+
+/** Side sheet / drawer (record details, Lola, mobile navigation). */
+export function Sheet({ open, onOpenChange, title, description, header, children, side = 'right', modal = side === 'left', closeLabel = 'Close', className }: SheetProps) {
   const returnFocus = useReturnFocus(open);
   return (
-    <Root open={open} onOpenChange={onOpenChange}>
+    <Root open={open} onOpenChange={onOpenChange} modal={modal}>
       <Portal>
-        <Overlay className={styles.overlay} />
-        <Content className={cx(styles.sheet, styles[side], className)} onCloseAutoFocus={returnFocus}>
+        {modal ? <Overlay className={styles.overlay} /> : null}
+        <Content
+          className={cx(styles.sheet, styles[side], !modal && styles.docked, className)}
+          onCloseAutoFocus={returnFocus}
+          onInteractOutside={modal ? undefined : keepOpen}
+        >
           <div className={styles.sheetHead}>
             {header}
             <Title className={header ? 'at-visually-hidden' : styles.title}>{title}</Title>
