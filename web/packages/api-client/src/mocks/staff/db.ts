@@ -7,6 +7,7 @@ import { type MockDispatch, seedDispatch } from './dispatch';
 import { feeRecords, type MockFeeSchedule, seedFeeSchedules } from './fees';
 import { type MockMarketsState, seedMarkets } from './markets';
 import { type MockTemplateRow, type MockTemplateSample, seedTemplateRows, seedTemplateSamples } from './notification-templates';
+import { type MockPlansState, seedPlans } from './plans';
 import { type MockPreorderState, seedPreorders } from './preorders';
 
 export type Scalar = string | number | boolean | null;
@@ -47,6 +48,8 @@ export interface MockStaffDb {
   preorders: MockPreorderState;
   /** content's draft markets: countries → states → cities (Markets & locations). */
   markets: MockMarketsState;
+  /** seller's plan catalogue, trial campaigns, reward rules, grants and per-seller billing (S292–S297). */
+  plans: MockPlansState;
   seq: number;
 }
 
@@ -464,6 +467,7 @@ function seed(now: Date): MockStaffDb {
     templates: { rows: seedTemplateRows(), samples: seedTemplateSamples() },
     preorders: seedPreorders(now),
     markets: seedMarkets(),
+    plans: seedPlans(now),
     seq: 1
   };
 }
@@ -474,6 +478,7 @@ export function getStaffDb(): MockStaffDb {
   // A database seeded before pre-orders existed (dev server kept across reloads) gets them on first use.
   g[KEY].preorders ??= seedPreorders(g[KEY].now);
   g[KEY].markets ??= seedMarkets();
+  g[KEY].plans ??= seedPlans(g[KEY].now);
   return g[KEY];
 }
 

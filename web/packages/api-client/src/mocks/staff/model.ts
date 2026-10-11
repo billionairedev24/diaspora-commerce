@@ -23,6 +23,10 @@ export const MODULE_COPY: Record<StaffModuleKey, { label: string; description: s
   rbac: { label: 'Users & roles', description: 'Who can do what in every back office. Role changes are audited.' },
   payouts: { label: 'Payouts & ledger', description: 'Weekly Stripe Connect payouts. Holding or releasing money needs Approve.' },
   fees: { label: 'Fees, commissions & tax', description: 'Fee schedule versions and marketplace-facilitator tax rates. Changes apply to new orders only.' },
+  plans: {
+    label: 'Plans & billing',
+    description: 'Seller and provider plans, trials, rewards and billing adjustments. AfroTransact owns them; Stripe executes the charges.'
+  },
   marketing: { label: 'Ads & announcements', description: 'Announcement bar, hero carousel, display banners and sponsored placements.' },
   disputes: { label: 'Disputes & returns', description: 'A-to-z claims and returns with SLAs.' },
   audit: { label: 'Audit log', description: 'Immutable, hash-chained record of every privileged action.' },
@@ -43,7 +47,7 @@ export const NAV: { key: StaffNavGroupKey; label: string; modules: StaffModuleKe
   { key: 'overview', label: 'Overview', modules: ['dash', 'exports'] },
   { key: 'commerce', label: 'Commerce', modules: ['orders', 'catalog', 'inventory', 'retail', 'dispatch', 'preorders'] },
   { key: 'partners', label: 'Partners', modules: ['apps', 'support', 'rbac'] },
-  { key: 'finance', label: 'Finance', modules: ['payouts', 'fees'] },
+  { key: 'finance', label: 'Finance', modules: ['payouts', 'fees', 'plans'] },
   { key: 'growth', label: 'Growth', modules: ['marketing'] },
   { key: 'trust', label: 'Trust & compliance', modules: ['disputes', 'audit'] },
   { key: 'settings', label: 'Settings', modules: ['markets', 'siteCfg', 'dev', 'notifications'] }
@@ -89,6 +93,12 @@ const PREORDER_GRANTS = ['delivery-runs:read', 'preorders:manage', 'preorders:ex
 PENDING_PERMISSIONS['platform.super_admin']?.push(...PREORDER_GRANTS);
 PENDING_PERMISSIONS['platform.marketing']?.push(...PREORDER_GRANTS);
 
+/* Plans & billing grants (identity migration V25, S292–S297) until rbac-data.ts is regenerated from identity's seeds. */
+PENDING_PERMISSIONS['platform.super_admin']?.push('plans:manage', 'billing:adjust', 'seller:billing');
+PENDING_PERMISSIONS['platform.finance']?.push('plans:manage', 'billing:adjust', 'seller:billing');
+PENDING_PERMISSIONS['platform.product_owner']?.push('seller:billing');
+PENDING_PERMISSIONS['platform.auditor']?.push('seller:billing');
+
 /** The Pre-orders column of the Backoffice matrix (backoffice-config.js): F full · E edit · A act (approve) · V view. */
 export const PREORDER_MATRIX: Record<string, string> = {
   'platform.super_admin': 'F',
@@ -126,6 +136,11 @@ export function levelOf(roles: string[], module: StaffModuleKey): AccessLevel | 
   if (module === 'notifications') {
     const perms = permissionsOf(roles);
     return perms.includes('notifications:templates:write') ? 'EDIT' : perms.includes('notifications:read') ? 'VIEW' : null;
+  }
+  if (module === 'plans') {
+    // Derived from the seller service's permissions, as the BFF does (identity's matrix has no Plans & billing column).
+    const perms = permissionsOf(roles);
+    return perms.includes('plans:manage') || perms.includes('billing:adjust') ? 'EDIT' : perms.includes('seller:billing') || perms.includes('billing:usage') ? 'VIEW' : null;
   }
   return matrixLevel(roles, module);
 }

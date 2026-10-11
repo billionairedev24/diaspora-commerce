@@ -7,6 +7,7 @@ import { type AddressSuggestions, AddressSuggestionsSchema } from './schemas/loc
 import {
   type AcceptedInvitation,
   AcceptedInvitationSchema,
+  type AddBillingPaymentMethodInput,
   type AfrotransactPickupRequest,
   type Asset,
   AssetSchema,
@@ -14,6 +15,10 @@ import {
   AvailabilitySchema,
   type BillingPaymentMethod,
   BillingPaymentMethodSchema,
+  type BillingPlanChangePreview,
+  BillingPlanChangePreviewSchema,
+  type BillingSetupIntent,
+  BillingSetupIntentSchema,
   type BillingView,
   BillingViewSchema,
   type BookingAction,
@@ -90,6 +95,8 @@ import {
   SellerOrderDetailSchema,
   type SellerOrderPage,
   SellerOrderPageSchema,
+  type SellerRewardsView,
+  SellerRewardsViewSchema,
   type SellerSession,
   SellerSessionSchema,
   type SellerStatusAction,
@@ -259,6 +266,16 @@ export function createSellerApiClient(options: ApiClientOptions) {
       request(`/v1/seller/billing/payment-methods/${enc(id)}/default`, z.array(BillingPaymentMethodSchema), { method: 'POST' }),
     removePaymentMethod: (id: string): Promise<BillingPaymentMethod[]> =>
       request(`/v1/seller/billing/payment-methods/${enc(id)}`, z.array(BillingPaymentMethodSchema), { method: 'DELETE' }),
+    /** Rewards the organisation can earn (with progress) and the ones it received (S296). */
+    getBillingRewards: (signal?: AbortSignal): Promise<SellerRewardsView> => request('/v1/seller/billing/rewards', SellerRewardsViewSchema, { signal }),
+    /** What a plan or cadence change would do (an upgrade shows Stripe's proration now); nothing changes. */
+    previewPlanChange: (planCode: string, cadence: Cadence, signal?: AbortSignal): Promise<BillingPlanChangePreview> =>
+      request('/v1/seller/billing/plan/preview', BillingPlanChangePreviewSchema, { query: { planCode, cadence }, signal }),
+    /** Owner only: a SetupIntent to confirm with the Payment Element. */
+    createBillingSetupIntent: (): Promise<BillingSetupIntent> => request('/v1/seller/billing/setup-intents', BillingSetupIntentSchema, { method: 'POST' }),
+    /** Owner only: register the payment method the SetupIntent confirmed. */
+    addBillingPaymentMethod: (body: AddBillingPaymentMethodInput): Promise<BillingPaymentMethod> =>
+      request('/v1/seller/billing/payment-methods', BillingPaymentMethodSchema, { method: 'POST', body }),
 
     /* Team */
     getTeam: (signal?: AbortSignal): Promise<TeamView> => request('/v1/seller/team', TeamViewSchema, { signal }),

@@ -275,6 +275,8 @@ export interface OnboardingPlanInput {
   cardLast4?: string;
   cardExpMonth?: number;
   cardExpYear?: number;
+  /** A trial campaign's promo code (S295); 422 `promoCode` when it isn't valid for this plan. */
+  promoCode?: string;
 }
 
 /** PUT /v1/seller/onboarding/catalog-compliance. */
@@ -946,7 +948,12 @@ export const SubscriptionSchema = z.object({
   nextChargeLabel: z.string(),
   cancelAtPeriodEnd: z.boolean(),
   pendingChange: z.object({ planCode: z.string(), planName: z.string(), cadence: CadenceSchema, effectiveAt: z.string() }).nullable(),
-  dunning: nullableString
+  dunning: nullableString,
+  /** Plan version (prices) the organisation pays (S292). */
+  planVersion: z.number().int().default(1),
+  /** Stripe credit balance the next invoices use (rewards, staff credits). */
+  creditBalanceMinor: z.number().int().default(0),
+  trialSource: z.enum(['PLAN', 'CAMPAIGN', 'OVERRIDE', 'NONE']).nullable().default(null)
 });
 export type Subscription = z.infer<typeof SubscriptionSchema>;
 export const BillingViewSchema = z.object({
@@ -959,6 +966,71 @@ export const BillingViewSchema = z.object({
 export type BillingView = z.infer<typeof BillingViewSchema>;
 export const ChangePlanResultSchema = z.object({ applied: z.enum(['IMMEDIATE_UPGRADE', 'AT_RENEWAL', 'NO_CHANGE']), billing: BillingViewSchema });
 export type ChangePlanResult = z.infer<typeof ChangePlanResultSchema>;
+
+/* Rewards (S296): what the organisation can still earn, with progress, and what it received. */
+export const RewardProgressSchema = z.object({
+  ruleId: z.string(),
+  name: z.string(),
+  description: nullableString.default(null),
+  metric: z.enum(['GROSS_SALES', 'ACTIVE_LISTINGS', 'COMPLETED_ORDERS', 'COMPLETED_BOOKINGS', 'DAYS_SINCE_APPROVAL']),
+  /** Cents for GROSS_SALES, a count otherwise. */
+  value: z.number().int(),
+  threshold: z.number().int(),
+  percent: z.number().int().min(0).max(100),
+  qualifies: z.boolean(),
+  label: z.string(),
+  rewardLabel: z.string(),
+  conditionLabel: z.string(),
+  endsAt: nullableString.default(null)
+});
+export type RewardProgress = z.infer<typeof RewardProgressSchema>;
+export const EarnedRewardSchema = z.object({
+  id: z.string(),
+  source: z.enum(['RULE', 'MANUAL']),
+  type: z.enum(['FREE_DAYS', 'CREDIT', 'PERCENT_OFF', 'WAIVE_INVOICE', 'TRIAL_END']),
+  summary: z.string(),
+  reason: nullableString.default(null),
+  status: z.enum(['PENDING', 'APPLIED', 'FAILED']),
+  creditMinor: z.number().int().nullable().default(null),
+  freeDays: z.number().int().nullable().default(null),
+  createdAt: z.string(),
+  appliedAt: nullableString.default(null)
+});
+export type EarnedReward = z.infer<typeof EarnedRewardSchema>;
+export const SellerRewardsViewSchema = z.object({ available: z.array(RewardProgressSchema), earned: z.array(EarnedRewardSchema) });
+export type SellerRewardsView = z.infer<typeof SellerRewardsViewSchema>;
+
+/** GET /v1/seller/billing/plan/preview: what a plan or cadence change would do; nothing changes. */
+export const BillingPlanChangePreviewSchema = z.object({
+  change: z.enum(['IMMEDIATE_UPGRADE', 'AT_RENEWAL', 'NO_CHANGE']),
+  planCode: z.string(),
+  planName: z.string(),
+  cadence: CadenceSchema,
+  effectiveAt: nullableString.default(null),
+  /** Invoiced now: Stripe's proration of an upgrade (0 in a trial or for a change at renewal). */
+  amountDueNowMinor: z.number().int(),
+  nextChargeMinor: z.number().int(),
+  nextChargeAt: nullableString.default(null),
+  trialing: z.boolean()
+});
+export type BillingPlanChangePreview = z.infer<typeof BillingPlanChangePreviewSchema>;
+
+/** POST /v1/seller/billing/setup-intents: confirm with the Payment Element; `localTest` when no Stripe key is configured. */
+export const BillingSetupIntentSchema = z.object({ setupIntentId: z.string(), clientSecret: z.string(), publishableKey: z.string(), localTest: z.boolean() });
+export type BillingSetupIntent = z.infer<typeof BillingSetupIntentSchema>;
+
+/** POST /v1/seller/billing/payment-methods: the method the SetupIntent confirmed (display fields only). */
+export interface AddBillingPaymentMethodInput {
+  stripePaymentMethodId: string;
+  kind: 'CARD' | 'US_BANK_ACCOUNT';
+  brand?: string;
+  last4: string;
+  expMonth?: number;
+  expYear?: number;
+  bankName?: string;
+  accountType?: string;
+  makeDefault?: boolean;
+}
 
 /* ── Team ──────────────────────────────────────────────── */
 

@@ -12,7 +12,7 @@ const nullableString = z.string().nullable();
 
 export const StaffModuleKeySchema = z.enum([
   'dash', 'exports', 'orders', 'catalog', 'inventory', 'retail', 'dispatch', 'apps', 'support', 'rbac', 'payouts', 'fees', 'marketing', 'disputes',
-  'audit', 'markets', 'siteCfg', 'dev', 'notifications', 'preorders'
+  'audit', 'markets', 'siteCfg', 'dev', 'notifications', 'preorders', 'plans'
 ]);
 export type StaffModuleKey = z.infer<typeof StaffModuleKeySchema>;
 

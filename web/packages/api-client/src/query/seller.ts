@@ -1,5 +1,6 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
+import { type Cadence } from '../schemas/seller';
 import { type ListingsQuery, type SellerApiClient, type SellerOrdersQuery } from '../seller-client';
 
 /* TanStack Query key factories for the Seller Center & Provider Hub. Everything hangs off ['seller', orgId] so
@@ -29,6 +30,8 @@ export const sellerKeys = {
   payouts: (orgId: string) => [...sellerKeys.org(orgId), 'payouts'] as const,
   fees: (orgId: string) => [...sellerKeys.org(orgId), 'fees'] as const,
   billing: (orgId: string) => [...sellerKeys.org(orgId), 'billing'] as const,
+  billingRewards: (orgId: string) => [...sellerKeys.billing(orgId), 'rewards'] as const,
+  planChangePreview: (orgId: string, planCode: string, cadence: string) => [...sellerKeys.billing(orgId), 'preview', planCode, cadence] as const,
   team: (orgId: string) => [...sellerKeys.org(orgId), 'team'] as const,
   calendar: (orgId: string, from: string, to: string) => [...sellerKeys.org(orgId), 'calendar', from, to] as const,
   calendars: (orgId: string) => [...sellerKeys.org(orgId), 'calendar'] as const,
@@ -76,6 +79,15 @@ export const sellerQueries = {
   payouts: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.payouts(orgId), queryFn: ({ signal }) => api.getPayouts(signal), staleTime: MINUTE }),
   fees: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.fees(orgId), queryFn: ({ signal }) => api.getFees(signal), staleTime: 5 * MINUTE }),
   billing: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.billing(orgId), queryFn: ({ signal }) => api.getBilling(signal), staleTime: MINUTE }),
+  billingRewards: (api: SellerApiClient, orgId: string) =>
+    queryOptions({ queryKey: sellerKeys.billingRewards(orgId), queryFn: ({ signal }) => api.getBillingRewards(signal), staleTime: MINUTE }),
+  planChangePreview: (api: SellerApiClient, orgId: string, planCode: string, cadence: Cadence) =>
+    queryOptions({
+      queryKey: sellerKeys.planChangePreview(orgId, planCode, cadence),
+      queryFn: ({ signal }) => api.previewPlanChange(planCode, cadence, signal),
+      enabled: Boolean(planCode),
+      staleTime: 30_000
+    }),
   team: (api: SellerApiClient, orgId: string) => queryOptions({ queryKey: sellerKeys.team(orgId), queryFn: ({ signal }) => api.getTeam(signal), staleTime: MINUTE }),
   calendar: (api: SellerApiClient, orgId: string, from: string, to: string) =>
     queryOptions({ queryKey: sellerKeys.calendar(orgId, from, to), queryFn: ({ signal }) => api.getCalendar(from, to, signal), placeholderData: keepPreviousData, staleTime: 15_000 }),

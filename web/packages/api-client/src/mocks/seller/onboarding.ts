@@ -335,16 +335,25 @@ export function saveOwners(app: MockApplication, owners: OnboardingOwnerInput[])
   return null;
 }
 
+/** Trial campaigns the mock knows (S295): a promo code lengthens the plan's trial for the plans it names. */
+export const MOCK_TRIAL_CAMPAIGNS: Record<string, { trialDays: number; plans: string[] }> = {
+  GROW60: { trialDays: 60, plans: ['seller_growth', 'seller_pro'] }
+};
+
 export function savePlan(app: MockApplication, kind: OrgKind, p: OnboardingPlanInput): FieldErrors | null {
   const plan = plansFor(kind, '').find((x) => x.code === p.planCode);
   if (!plan) return { 'plan.planCode': 'Unknown plan' };
   if (p.stripePaymentMethodId && !p.stripePaymentMethodId.startsWith('pm_')) return { 'plan.stripePaymentMethodId': 'Expected a Stripe payment method id (pm_…)' };
+  const promo = p.promoCode?.trim().toUpperCase();
+  const campaign = promo ? MOCK_TRIAL_CAMPAIGNS[promo] : undefined;
+  if (promo && (!campaign || !campaign.plans.includes(plan.code))) return { 'plan.promoCode': 'This code isn’t valid for this plan' };
+  const trialDays = Math.max(plan.trialDays, campaign?.trialDays ?? 0);
   const price = plan.prices.find((x) => x.cadence === p.cadence);
-  const trialEnd = new Date(Date.now() + plan.trialDays * 86_400_000);
+  const trialEnd = new Date(Date.now() + trialDays * 86_400_000);
   const day = trialEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
   const amount = price?.totalMinor ?? 0;
   const dollars = `$${(amount / 100).toFixed(2)}`;
-  const sentence = amount === 0 ? 'No subscription fee.' : plan.trialDays ? `Free for ${plan.trialDays} days. First charge of ${dollars} on ${day}.` : `First charge of ${dollars} on approval.`;
+  const sentence = amount === 0 ? 'No subscription fee.' : trialDays ? `Free for ${trialDays} days. First charge of ${dollars} on ${day}.` : `First charge of ${dollars} on approval.`;
   update(app, {
     ...app.form,
     plan: {

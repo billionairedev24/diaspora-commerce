@@ -20,6 +20,7 @@ import {
   type PublicPage,
   type SellerOffer,
   type SellerOrderDetail,
+  type SellerRewardsView,
   type ServiceOffer,
   type ShipFromAddress,
   type ShipmentStatus,
@@ -52,6 +53,8 @@ export interface MockSellerDb {
   subscription: Record<OrgKind, Subscription>;
   paymentMethods: Record<OrgKind, BillingPaymentMethod[]>;
   invoices: Invoice[];
+  /** Rewards the organisation can earn and the ones it received (S296). */
+  rewards: Record<OrgKind, SellerRewardsView>;
   team: Record<string, TeamMember[]>;
   bookings: BookingCard[];
   availability: Availability;
@@ -385,10 +388,34 @@ function freshDb(now: Date): MockSellerDb {
     subscription: {
       SELLER: { planCode: 'seller_growth', planName: 'Seller Growth', cadence: 'QUARTERLY', status: 'ACTIVE', priceLabel: '$37.05/mo', billedLabel: 'Billed $111.15 every 3 months',
         trialEndsAt: null, currentPeriodEnd: iso(new Date(now.getTime() + 92 * DAY)), nextChargeAt: iso(new Date(now.getTime() + 92 * DAY)), nextChargeMinor: 11115,
-        nextChargeLabel: `$111.15 on ${new Date(now.getTime() + 92 * DAY).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`, cancelAtPeriodEnd: false, pendingChange: null, dunning: null },
+        nextChargeLabel: `$111.15 on ${new Date(now.getTime() + 92 * DAY).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`, cancelAtPeriodEnd: false, pendingChange: null, dunning: null,
+        planVersion: 1, creditBalanceMinor: 2500, trialSource: 'PLAN' },
       PROVIDER: { planCode: 'provider_studio', planName: 'Provider Studio', cadence: 'MONTHLY', status: 'TRIALING', priceLabel: '$49/mo', billedLabel: 'Billed $49 every month',
         trialEndsAt: iso(new Date(now.getTime() + 10 * DAY)), currentPeriodEnd: iso(new Date(now.getTime() + 10 * DAY)), nextChargeAt: iso(new Date(now.getTime() + 10 * DAY)), nextChargeMinor: 4900,
-        nextChargeLabel: 'Free for 30 days. First charge of $49 when the trial ends', cancelAtPeriodEnd: false, pendingChange: null, dunning: null }
+        nextChargeLabel: 'Free for 30 days. First charge of $49 when the trial ends', cancelAtPeriodEnd: false, pendingChange: null, dunning: null,
+        planVersion: 1, creditBalanceMinor: 0, trialSource: 'CAMPAIGN' }
+    },
+    rewards: {
+      SELLER: {
+        available: [
+          { ruleId: 'rr_sales', name: 'First $1,000 in sales', description: 'Reach $1,000 in delivered sales within 60 days of approval.', metric: 'GROSS_SALES', value: 64000,
+            threshold: 100000, percent: 64, qualifies: false, label: '$640 of $1,000 in sales', rewardLabel: '1 month free', conditionLabel: '$1,000 in sales within 60 days of approval',
+            endsAt: null },
+          { ruleId: 'rr_listings', name: '25 live listings', description: null, metric: 'ACTIVE_LISTINGS', value: 18, threshold: 25, percent: 72, qualifies: false,
+            label: '18 of 25 active listings', rewardLabel: '$25 credit', conditionLabel: '25 active listings', endsAt: iso(new Date(now.getTime() + 45 * DAY)) }
+        ],
+        earned: [
+          { id: 'gr_1', source: 'RULE', type: 'CREDIT', summary: '$25 credit', reason: 'First 10 orders', status: 'APPLIED', creditMinor: 2500, freeDays: null,
+            createdAt: iso(new Date(now.getTime() - 12 * DAY)), appliedAt: iso(new Date(now.getTime() - 12 * DAY)) }
+        ]
+      },
+      PROVIDER: {
+        available: [
+          { ruleId: 'rr_bookings', name: '10 completed bookings', description: null, metric: 'COMPLETED_BOOKINGS', value: 3, threshold: 10, percent: 30, qualifies: false,
+            label: '3 of 10 completed bookings', rewardLabel: '20% off 3 invoices', conditionLabel: '10 completed bookings in 30 days', endsAt: null }
+        ],
+        earned: []
+      }
     },
     paymentMethods: {
       SELLER: [

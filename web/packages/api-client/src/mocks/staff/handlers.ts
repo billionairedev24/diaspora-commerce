@@ -46,6 +46,7 @@ import { createFeeSchedule, feeRecords, feesOverview, feeView, quoteDelivery, se
 import { marketHandlers } from './markets';
 import { allows, levelOf, navigation, permissionsOf, refundLimit, RESOURCE_MODULE, roleLabel } from './model';
 import { type MockTemplateRow } from './notification-templates';
+import { planHandlers } from './plans';
 import { ordersOf, PREORDER_ORDER_COLUMNS, preorderHandlers, preorderOrderRow } from './preorders';
 import { type ActionCtx, detailKind, humanize, type MockAction, RESOURCES, toneOf } from './resources';
 import { staffSettingsHandlers } from './settings';
@@ -1092,6 +1093,8 @@ export const staffHandlers = [
   ...preorderHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Settings → Markets & locations (location tree) and the shared place pickers */
   ...marketHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
+  /* Plans & billing (S292–S297): the seller service's catalogue, trials, rewards and per-seller billing */
+  ...planHandlers(W, { route, json, problem: (status, code, title, detail, errors) => new StaffProblem(status, code, title, detail, errors) }),
   /* Inventory hub and AfroTransact Retail (1P) (S281) */
   ...inventoryHubHandlers(W, hubGate),
   /* Anything else under /v1/staff is not part of the contract. */

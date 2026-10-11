@@ -4,7 +4,10 @@ import { resolve } from 'node:path';
 import { beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
 
 import {
+  type AddBillingPaymentMethodInput,
   type Availability,
+  type BillingPlanChangePreview,
+  type BillingSetupIntent,
   type BillingView,
   type BookingCard,
   type CalendarView,
@@ -35,6 +38,7 @@ import {
   type SellerOfferList,
   type SellerOrderDetail,
   type SellerOrderPage,
+  type SellerRewardsView,
   type SellerSession,
   type ServiceOffer,
   type ShipFromAddress,
@@ -78,6 +82,10 @@ describe('Seller Zod schemas stay aligned with contracts/openapi/gateway-bff-sel
     expectTypeOf<ShipFromAddress>().toExtend<S['ShipFromAddress']>();
     expectTypeOf<SellerOfferList>().toExtend<S['SellerOfferList']>();
     expectTypeOf<BillingView>().toExtend<S['BillingView']>();
+    expectTypeOf<SellerRewardsView>().toExtend<S['SellerRewardsView']>();
+    expectTypeOf<BillingPlanChangePreview>().toExtend<S['BillingPlanChangePreview']>();
+    expectTypeOf<BillingSetupIntent>().toExtend<S['BillingSetupIntent']>();
+    expectTypeOf<AddBillingPaymentMethodInput>().toExtend<S['AddBillingPaymentMethod']>();
     expectTypeOf<TeamView>().toExtend<S['TeamView']>();
     expectTypeOf<CalendarView>().toExtend<S['CalendarView']>();
     expectTypeOf<BookingCard>().toExtend<S['BookingCard']>();
@@ -293,5 +301,37 @@ describe('seller MSW mocks (every answer is parsed by the Zod client)', () => {
     const order = await api.getOrder(localRow.orderNumber);
     expect(order.shipments[0]?.localDelivery?.sellerFeeMinor).toBe(200);
     expect(order.earnings?.deliveryFeesMinor).toBe(200);
+  });
+
+  it('shows Plan & billing: credit balance, rewards with progress, proration preview and a new card via SetupIntent (S292–S297)', async () => {
+    const api = client();
+    const billing = await api.getBilling();
+    expect(billing.subscription).toMatchObject({ planVersion: 1, creditBalanceMinor: 2500, trialSource: 'PLAN' });
+    const rewards = await api.getBillingRewards();
+    expect(rewards.available[0]).toMatchObject({ percent: 64, label: '$640 of $1,000 in sales', rewardLabel: '1 month free' });
+    expect(rewards.earned[0]).toMatchObject({ type: 'CREDIT', summary: '$25 credit' });
+    expect(await api.previewPlanChange('seller_pro', 'QUARTERLY')).toMatchObject({ change: 'IMMEDIATE_UPGRADE', trialing: false });
+    expect((await api.previewPlanChange('seller_pro', 'QUARTERLY')).amountDueNowMinor).toBeGreaterThan(0);
+    expect(await api.previewPlanChange('seller_essentials', 'QUARTERLY')).toMatchObject({ change: 'AT_RENEWAL', amountDueNowMinor: 0 });
+    const si = await api.createBillingSetupIntent();
+    expect(si.localTest).toBe(true);
+    await expect(api.addBillingPaymentMethod({ stripePaymentMethodId: 'card_1', kind: 'CARD', last4: '4242' })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422);
+    const pm = await api.addBillingPaymentMethod({ stripePaymentMethodId: 'pm_new', kind: 'CARD', brand: 'Visa', last4: '1881', expMonth: 4, expYear: 2031, makeDefault: true });
+    expect(pm).toMatchObject({ label: 'Visa ending in 1881', isDefault: true });
+    expect((await api.getBilling()).paymentMethods.filter((m) => m.isDefault).map((m) => m.id)).toEqual(['pm_new']);
+    const finance = client(`${MOCK_ROLE_COOKIE}=seller.finance`);
+    await expect(finance.getBillingRewards()).resolves.toMatchObject({ available: expect.any(Array) });
+    await expect(finance.createBillingSetupIntent()).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+  });
+
+  it('takes a trial campaign promo code on the Plan step (S295)', async () => {
+    const api = client();
+    getSellerDb().orgs = [];
+    await api.startOnboarding('SELLER');
+    await expect(api.saveOnboardingPlan({ planCode: 'seller_essentials', cadence: 'MONTHLY', promoCode: 'GROW60' })).rejects.toSatisfy(
+      (e) => isApiError(e) && !!e.fieldErrors['plan.promoCode']
+    );
+    const saved = await api.saveOnboardingPlan({ planCode: 'seller_growth', cadence: 'MONTHLY', promoCode: 'grow60' });
+    expect(saved.form.plan?.firstCharge?.sentence).toMatch(/^Free for 60 days/);
   });
 });

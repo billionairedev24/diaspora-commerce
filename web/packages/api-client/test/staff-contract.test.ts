@@ -29,8 +29,23 @@ import {
   type ResourceKey,
   type ResourcePage,
   type ShipFromLocation,
+  type StaffBillingGrantPage,
+  type StaffBillingOrgSearch,
+  type StaffBillingPanel,
+  type StaffBillingReasonCode,
+  type StaffCreatePlanInput,
   type StaffDashboard,
+  type StaffPlan,
+  type StaffPlanMigrationPreview,
+  type StaffPlanMigrationResult,
+  type StaffPlanPrices,
+  type StaffPlanSyncReport,
+  type StaffRewardPreview,
+  type StaffRewardRule,
+  type StaffRewardRuleInput,
   type StaffSession,
+  type StaffTrialCampaign,
+  type StaffTrialCampaignInput,
   type SupportActionResult
 } from '../src';
 import { type components } from '../src/generated/gateway-bff-staff';
@@ -73,6 +88,22 @@ describe('Staff Zod schemas stay aligned with contracts/openapi/gateway-bff-staf
     expectTypeOf<NotificationPreview>().toExtend<S['NotificationPreview']>();
     expectTypeOf<NotificationTemplateVersion>().toExtend<S['NotificationTemplateVersion']>();
     expectTypeOf<NotificationTestSendResult>().toExtend<S['NotificationTestSendResult']>();
+    // Plans & billing (S292–S297)
+    expectTypeOf<StaffPlan>().toExtend<S['StaffPlan']>();
+    expectTypeOf<StaffPlanPrices>().toExtend<S['StaffPlanPrices']>();
+    expectTypeOf<StaffCreatePlanInput>().toExtend<S['StaffCreatePlanRequest']>();
+    expectTypeOf<StaffPlanSyncReport>().toExtend<S['StaffPlanSyncReport']>();
+    expectTypeOf<StaffPlanMigrationPreview>().toExtend<S['StaffPlanMigrationPreview']>();
+    expectTypeOf<StaffPlanMigrationResult>().toExtend<S['StaffPlanMigrationResult']>();
+    expectTypeOf<StaffTrialCampaign>().toExtend<S['StaffTrialCampaign']>();
+    expectTypeOf<StaffTrialCampaignInput>().toExtend<S['StaffTrialCampaignRequest']>();
+    expectTypeOf<StaffRewardRule>().toExtend<S['StaffRewardRule']>();
+    expectTypeOf<StaffRewardRuleInput>().toExtend<S['StaffRewardRuleRequest']>();
+    expectTypeOf<StaffRewardPreview>().toExtend<S['StaffRewardPreview']>();
+    expectTypeOf<StaffBillingGrantPage>().toExtend<S['StaffBillingGrantPage']>();
+    expectTypeOf<StaffBillingReasonCode>().toExtend<S['StaffBillingReasonCode']>();
+    expectTypeOf<StaffBillingOrgSearch>().toExtend<S['StaffBillingOrgSearch']>();
+    expectTypeOf<StaffBillingPanel>().toExtend<S['StaffBillingPanel']>();
   });
 
   it('generated file carries the do-not-edit banner', () => {
@@ -362,5 +393,50 @@ describe('staff MSW mocks (every answer is parsed by the Zod client)', () => {
     expect(await editor.testSendNotificationTemplate('order.confirmed', { channel: 'email', data: detail.sample.data })).toMatchObject({ to: 'ifeoma@afrotransact.com', channel: 'email' });
     await expect(editor.testSendNotificationTemplate('order.confirmed', { channel: 'push', data: {} })).rejects.toSatisfy((e) => isApiError(e) && e.status === 422 && !!e.fieldErrors.channel);
     await expect(support.testSendNotificationTemplate('order.confirmed', { channel: 'email', data: detail.sample.data })).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+  });
+
+  it('runs Plans & billing: catalogue versions, campaigns, rule preview, audited idempotent adjustments (S292–S297)', async () => {
+    const finance = client('platform.finance').plans;
+    expect(moduleKeys(await client('platform.finance').getSession())).toContain('plans');
+    const auditorSession = await client('platform.auditor').getSession();
+    expect(auditorSession.navGroups.flatMap((g) => g.modules).find((m) => m.key === 'plans')?.level).toBe('VIEW');
+    expect(moduleKeys(await client('platform.marketing').getSession())).not.toContain('plans');
+
+    const plans = await finance.plans();
+    expect(plans.map((p) => p.code)).toEqual(['seller_essentials', 'seller_growth', 'seller_pro', 'provider_solo', 'provider_studio', 'provider_business']);
+    const growth = plans[1];
+    if (!growth) throw new Error('seeded');
+    await expect(finance.updatePlan('seller_growth', { name: 'Growth', features: [], visibility: 'PUBLIC' }, growth.rowVersion + 1)).rejects.toSatisfy((e) => isApiError(e) && e.status === 409);
+    const draft = await finance.saveDraft('seller_growth', { monthlyCents: 4500, quarterlyCents: 12800, annualCents: 45000, trialDays: 30 });
+    expect(draft.versions[0]).toMatchObject({ version: 2, status: 'DRAFT' });
+    const published = await finance.publish('seller_growth');
+    expect(published).toMatchObject({ currentVersion: 2, monthlyCents: 4500 });
+    expect(published.versions.find((v) => v.version === 1)?.status).toBe('SUPERSEDED');
+    expect((await finance.migrationPreview('seller_growth')).rows[0]).toMatchObject({ fromCents: 3900, toCents: 4500 });
+    expect((await finance.stripeSync()).lines.find((l) => l.planCode === 'seller_essentials')?.state).toBe('FREE');
+
+    await expect(finance.createCampaign({ name: 'No code', trialDays: 30, eligiblePlans: [] })).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.signupFrom);
+    expect(await finance.createCampaign({ name: 'Pro 45', promoCode: 'pro45', trialDays: 45, eligiblePlans: ['seller_pro'] })).toMatchObject({ promoCode: 'PRO45', status: 'ACTIVE' });
+
+    const rule = { name: 'Ten orders', metric: 'COMPLETED_ORDERS' as const, threshold: 10, rewardType: 'CREDIT' as const, creditCents: 2500, eligiblePlans: [] };
+    const preview = await finance.previewRule(rule);
+    expect(preview).toMatchObject({ evaluated: 3, qualifying: 2 });
+    expect((await finance.createRule(rule)).rewardLabel).toBe('$25 credit');
+
+    const org = (await finance.searchOrgs('ade')).items[0]?.orgId ?? '';
+    await expect(finance.credit(org, 2500, { reasonCode: 'OTHER' }, 'k-1')).rejects.toSatisfy((e) => isApiError(e) && !!e.fieldErrors.note);
+    const credit = await finance.credit(org, 2500, { reasonCode: 'GOODWILL' }, 'k-2');
+    expect(await finance.credit(org, 2500, { reasonCode: 'GOODWILL' }, 'k-2')).toMatchObject({ id: credit.id });
+    const panel = await finance.panel(org);
+    expect(panel.billing?.creditBalanceCents).toBe(2500);
+    const open = panel.invoices.find((i) => i.status === 'open');
+    if (!open) throw new Error('seeded open invoice');
+    expect(await finance.waiveInvoice(org, open.id, { reasonCode: 'BILLING_ERROR' }, 'k-3')).toMatchObject({ type: 'WAIVE_INVOICE' });
+    expect((await finance.grants({ orgId: org, type: 'CREDIT', page: 0, size: 25 })).total).toBe(1);
+
+    const auditor = client('platform.auditor').plans;
+    await expect(auditor.panel(org)).resolves.toMatchObject({ orgId: org });
+    await expect(auditor.freeDays(org, 5, { reasonCode: 'GOODWILL' }, 'k-4')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
+    await expect(auditor.publish('seller_pro')).rejects.toSatisfy((e) => isApiError(e) && e.status === 403);
   });
 });

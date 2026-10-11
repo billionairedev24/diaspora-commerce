@@ -458,6 +458,11 @@ const LabelBody = RatesBody.extend({ carrier: CarrierSchema, service: z.string()
 const ActiveBody = z.object({ active: z.boolean() });
 const PayoutBody = z.object({ amountMinor: z.number().int().optional(), all: z.boolean().optional() });
 const PlanBody = z.object({ planCode: z.string().min(1, 'Choose a plan'), cadence: CadenceSchema });
+const AddPaymentMethodBody = z.object({
+  stripePaymentMethodId: z.string().regex(/^pm_/, 'Expected a Stripe payment method id (pm_…)'), kind: z.enum(['CARD', 'US_BANK_ACCOUNT']), brand: z.string().optional(),
+  last4: z.string().regex(/^[0-9]{4}$/, 'Four digits'), expMonth: z.number().int().optional(), expYear: z.number().int().optional(), bankName: z.string().optional(),
+  accountType: z.string().optional(), makeDefault: z.boolean().optional()
+});
 const InviteBody = z.object({ email: z.email('Enter a valid email address'), roleKey: z.string().min(1) });
 const RoleBody = z.object({ roleKey: z.string().min(1) });
 const ActionBody = z.object({ action: BookingActionSchema, reason: z.string().max(500).optional(), proposedStartAt: z.string().optional() });
@@ -610,7 +615,8 @@ const OwnersBody = z.object({
 });
 const OnboardingPlanBody = z.object({
   planCode: z.string(), cadence: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUAL']), paymentMethodKind: z.enum(['CARD']).optional(), stripePaymentMethodId: z.string().optional(),
-  cardBrand: z.string().optional(), cardLast4: z.string().optional(), cardExpMonth: z.number().int().optional(), cardExpYear: z.number().int().optional()
+  cardBrand: z.string().optional(), cardLast4: z.string().optional(), cardExpMonth: z.number().int().optional(), cardExpYear: z.number().int().optional(),
+  promoCode: z.string().optional()
 });
 const ComplianceBody = z.object({
   categories: z.array(z.string()).optional(),
@@ -1185,6 +1191,66 @@ export const sellerHandlers = [
       }
       return { applied, billing: { subscription: sub, plans: plansFor(ctx.org.kind, sub.planCode), paymentMethods: ctx.db.paymentMethods[ctx.org.kind], invoices: ctx.db.invoices, canManage: true } };
     })
+  ),
+  http.get(
+    `${W}/billing/rewards`,
+    route((ctx) => {
+      require(ctx, 'billing', 'VIEW');
+      return ctx.db.rewards[ctx.org.kind];
+    })
+  ),
+  http.get(
+    `${W}/billing/plan/preview`,
+    route((ctx) => {
+      require(ctx, 'billing', 'VIEW');
+      const q = query(ctx);
+      const sub = ctx.db.subscription[ctx.org.kind];
+      const plans = plansFor(ctx.org.kind, '');
+      const plan = plans.find((p) => p.code === q.get('planCode'));
+      if (!plan) throw invalid({ planCode: 'Choose a plan' });
+      const cadence = CadenceSchema.catch(sub.cadence).parse(q.get('cadence') ?? sub.cadence);
+      const cur = plans.find((p) => p.code === sub.planCode);
+      const price = plan.prices.find((p) => p.cadence === cadence);
+      const curPrice = cur?.prices.find((p) => p.cadence === sub.cadence);
+      const trialing = sub.status === 'TRIALING';
+      const same = plan.code === sub.planCode && cadence === sub.cadence;
+      const upgrade = !same && plan.monthlyMinor > (cur?.monthlyMinor ?? 0) && cadence === sub.cadence;
+      // Stripe prorates an upgrade for the rest of the period; the mock takes half the difference.
+      const due = upgrade && !trialing ? Math.max(0, Math.round(((price?.totalMinor ?? 0) - (curPrice?.totalMinor ?? 0)) / 2)) : 0;
+      return {
+        change: same ? 'NO_CHANGE' : upgrade ? 'IMMEDIATE_UPGRADE' : 'AT_RENEWAL', planCode: plan.code, planName: plan.name, cadence,
+        effectiveAt: upgrade ? ctx.now.toISOString() : (sub.currentPeriodEnd ?? null), amountDueNowMinor: due, nextChargeMinor: price?.totalMinor ?? 0,
+        nextChargeAt: sub.currentPeriodEnd ?? null, trialing
+      };
+    })
+  ),
+  http.post(
+    `${W}/billing/setup-intents`,
+    route((ctx) => {
+      require(ctx, 'billing', 'VIEW');
+      if (!ctx.role.endsWith('.owner')) throw forbidden('Only the owner can change billing.');
+      const id = nextId(ctx.db, 'seti');
+      return { setupIntentId: id, clientSecret: `${id}_secret_local`, publishableKey: 'pk_test_local', localTest: true };
+    }, 201)
+  ),
+  http.post(
+    `${W}/billing/payment-methods`,
+    route(async (ctx) => {
+      const b = await body(ctx.request, AddPaymentMethodBody);
+      require(ctx, 'billing', 'VIEW');
+      if (!ctx.role.endsWith('.owner')) throw forbidden('Only the owner can change billing.');
+      const list = ctx.db.paymentMethods[ctx.org.kind];
+      const card = b.kind === 'CARD';
+      const brand = b.brand?.toLowerCase() ?? null;
+      const pm = {
+        id: b.stripePaymentMethodId, kind: card ? ('card' as const) : ('bank' as const), brand, last4: b.last4, expMonth: b.expMonth ?? null, expYear: b.expYear ?? null,
+        bankName: b.bankName ?? null, accountType: b.accountType ?? null, verified: true, receivesPayouts: false, isDefault: Boolean(b.makeDefault) || list.length === 0,
+        label: card ? `${brand ? brand.charAt(0).toUpperCase() + brand.slice(1) : 'Card'} ending in ${b.last4}` : `${b.bankName ?? 'Bank'} ••${b.last4}`
+      };
+      if (pm.isDefault) list.forEach((m) => (m.isDefault = false));
+      ctx.db.paymentMethods[ctx.org.kind] = [...list.filter((m) => m.id !== pm.id), pm];
+      return pm;
+    }, 201)
   ),
   http.post(
     `${W}/billing/payment-methods/:id/default`,
