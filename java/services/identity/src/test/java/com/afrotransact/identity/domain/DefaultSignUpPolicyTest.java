@@ -40,4 +40,11 @@ class DefaultSignUpPolicyTest {
                 .satisfies(ex -> assertThat(((IdentityRuleViolation) ex).fieldErrors()).containsOnlyKeys(
                         "firstName", "lastName", "email", "phone", "password", "confirmPassword", "termsAccepted"));
     }
+
+    @Test
+    void theMobileNumberIsOptional() {
+        ValidatedSignUp v = policy.validate(new SignUpDetails("Ada", "Obi", "ada@example.com", " ", null,
+                "Plantain-Jollof-2026", "Plantain-Jollof-2026", true));
+        assertThat(v.phoneE164()).isNull();
+    }
 }

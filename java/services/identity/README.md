@@ -19,6 +19,7 @@ claims with `JwtActorResolver` (java/libs/platform-security) or `auth.Require` (
 | RBAC | Permissions, roles per portal (account, platform, seller, provider), multiple roles + direct grants per user, enable/disable, module access matrix (none/view/edit/approve/full), append-only change log (DB trigger rejects UPDATE/DELETE). |
 | MFA | TOTP (RFC 6238, otpauth URI for the QR code, replay-protected; secrets encrypted at rest, see [Data protection](#data-protection-s202)), SMS codes (outbox event), 10 hashed recovery codes, "trust this browser" for 30 days. Staff always need a second factor (SMS to the phone on file if nothing is enrolled) and cannot turn MFA off. Passkey sign-ins skip the prompt (phishing-resistant). |
 | Passkeys | Spring Security 7 `webAuthn()` with JDBC repositories (`user_entities`, `user_credentials`): `/webauthn/register/options`, `/webauthn/register`, `/webauthn/authenticate/options`, `/login/webauthn`, management page `/webauthn/register`. The first-party apps and the mobile apps register over the API with the user's bearer token (S016, see [Passkeys over the API](#passkeys-over-the-api-s016)). `PasskeyService` lists, renames and removes them and refuses to remove the last sign-in method. The signature counter is enforced (a counter that does not increase is rejected as a cloned authenticator). |
+| Hosted pages (SSO) | The only place credentials are entered, for every app: `/login` (email + password, passkey, configured social providers), `/signup` (+ `/signup/verify` email code, then the pending authorization continues signed in), `/login/mfa`, `/login/forgot` (support page: no online password reset yet), branded `error` page. Server-rendered Thymeleaf with the AfroTransact design tokens (`static/assets/tokens.css` + self-hosted Figtree, copies of `@afrotransact/tokens`, checked by `DesignTokensSyncTest`). Branded per app from the saved authorization request (client id, or for `gateway-bff` the origin of its redirect URI: storefront, Seller Center, staff console; no self sign-up for staff/drivers). OIDC `prompt=create` opens sign-up, `prompt=login` asks again despite the SSO session, `login_hint` prefills the email, `idp_hint` goes straight to an enabled provider, `invitation` joins an organisation on sign-up. `/connect/logout` (RP-initiated logout) ends the identity session, also for a stale ID token (then only registered post-logout URIs are honoured). |
 | Social login | Google (OIDC) via its own consent page; Apple (OIDC, form_post) and Facebook registrations exist but are disabled by default. A provider is offered only when it has client credentials **and** is enabled in `identity_provider` (`PUT /v1/admin/identity-providers/{id}`). Accounts created from provider-verified emails skip email verification; a verified email matching an existing account links to it; signing in with a provider while already signed in links it. |
 | First-party sign-in | `gateway-bff` only: password, TOTP/SMS/recovery-code and passkey steps as JSON (`/v1/auth/*`), ending in a one-time **login ticket** that the BFF redeems on the normal authorization-code flow (`/oauth2/authorize?…&login_ticket=…`). See [First-party sign-in](#first-party-sign-in-s209). |
 | Brute-force protection | Per account (normalised email, also for unknown emails) and per IP: 5 / 30 failures within 15 min lock for 15 min, doubling per consecutive lockout up to 4 h (`at.identity.sign-in-protection`). Applies to the first-party API **and** the hosted `/login` and `/login/mfa` pages. 429 `identity.sign-in-locked` + `Retry-After`; append-only `sign_in_audit`; `identity.sign-in.locked` events. |
@@ -211,7 +212,8 @@ passwords. Public clients (web apps, mobile) use PKCE; the client setting
 
 ## First-party sign-in (S209)
 
-The storefront keeps its own two-column sign-in, MFA and passkey forms. The browser never talks to identity: the
+The web apps no longer use this API: they sign in on the hosted pages above (single sign-on). It remains for
+first-party clients that cannot use a browser redirect. The browser never talks to identity: the
 storefront posts to gateway-bff, which calls identity server-to-server with its **client-credentials token**
 (`gateway-bff`, scope `auth:first-party`; any other caller gets 403 `identity.first-party-client-required`). When every
 factor is done, identity returns a **login ticket** (256-bit random, SHA-256 stored, single use, 60 s, bound to the
@@ -592,7 +594,7 @@ cd java && ./mvnw -B -f services/identity/pom.xml spring-boot:run       # profil
 The `local` profile generates a signing key, writes one-time codes to the log
 (`[local] EMAIL_VERIFICATION code … : 123456`), and creates `admin@afrotransact.com` / `LocalAdmin2026!`
 (super admin; its SMS sign-in code is logged too). Try it: open
-`http://localhost:8100/oauth2/authorize?response_type=code&client_id=storefront&redirect_uri=http://localhost:3000/auth/callback&scope=openid&code_challenge=…&code_challenge_method=S256`.
+`http://localhost:8100/oauth2/authorize?response_type=code&client_id=customer-app&redirect_uri=http://localhost:8081/auth/callback&scope=openid&code_challenge=…&code_challenge_method=S256`.
 
 ## Tests
 

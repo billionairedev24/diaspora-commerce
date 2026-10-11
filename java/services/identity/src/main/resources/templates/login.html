@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head(#{auth.title.signin})}"></head>
+<body>
+<a class="skip" href="#main" th:text="#{auth.skip}">Skip to the form</a>
+<div class="page" th:attr="data-app=${brand.app}">
+  <div class="card">
+    <aside th:replace="~{layout :: aside}"></aside>
+    <main id="main" tabindex="-1" class="form-col">
+      <a th:replace="~{layout :: logo}"></a>
+      <div class="form" data-page="signin">
+        <h1 class="h1" th:text="${brand.title}">Sign in to AfroTransact</h1>
+        <th:block th:replace="~{layout :: alert('error', ${error})}"></th:block>
+        <th:block th:replace="~{layout :: alert('info', ${notice})}"></th:block>
+        <p id="passkey-status" class="alert alert-error" role="alert" hidden>
+          <th:block th:replace="~{icons :: icon('warning')}"></th:block><span data-message></span>
+        </p>
+        <button type="button" class="btn btn-dark btn-lg" data-passkey data-status="passkey-status"
+                th:attr="data-unsupported=#{auth.passkeyUnsupported},data-cancelled=#{auth.passkeyCancelled},data-failed=#{auth.passkeyFailed}">
+          <th:block th:replace="~{icons :: icon('fingerprint')}"></th:block>
+          <span th:text="#{auth.passkey}">Sign in with a passkey</span>
+        </button>
+        <div class="divider" th:text="#{auth.orEmail}">or use email</div>
+        <form class="form" method="post" th:action="@{/login}" data-once novalidate>
+          <div class="field">
+            <label class="label" for="username" th:text="#{auth.email}">Email</label>
+            <input class="control" id="username" name="username" type="email" autocomplete="username webauthn"
+                   required th:value="${email}" th:attr="aria-invalid=${error != null ? 'true' : null}">
+          </div>
+          <div class="field">
+            <label class="label" for="password" th:text="#{auth.password}">Password</label>
+            <div class="with-addon">
+              <input class="control" id="password" name="password" type="password" autocomplete="current-password" required
+                     th:attr="aria-invalid=${error != null ? 'true' : null}">
+              <button type="button" class="addon" data-toggle-password="password" aria-pressed="false" hidden
+                      th:attr="aria-label=#{auth.showPassword}">
+                <span class="when-hidden"><th:block th:replace="~{icons :: icon('eye')}"></th:block></span>
+                <span class="when-shown"><th:block th:replace="~{icons :: icon('eyeSlash')}"></th:block></span>
+              </button>
+            </div>
+          </div>
+          <div class="links">
+            <a th:href="@{/login/forgot}" th:text="#{auth.forgot}">Forgot password?</a>
+          </div>
+          <button type="submit" class="btn btn-primary" th:text="#{auth.continue}">Continue</button>
+        </form>
+        <th:block th:replace="~{layout :: social('auth.continueWith')}"></th:block>
+        <a th:if="${selfSignUp}" class="toggle" th:href="@{/signup}" th:text="#{auth.toSignup}">New here? Create an account</a>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

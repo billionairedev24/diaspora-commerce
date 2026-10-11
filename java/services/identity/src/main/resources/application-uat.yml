@@ -33,32 +33,12 @@ at:
       - ${PUBLIC_WEB_URL:https://uat.afrotransact.com}
       - ${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}
       - ${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}
+    # Hosted sign-in / sign-up pages: branding per app (by the authorization request) and their links.
+    pages:
+      storefront-url: ${PUBLIC_WEB_URL:https://uat.afrotransact.com}
+      seller-center-url: ${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}
+      staff-console-url: ${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}
     clients:
-      - client-id: storefront
-        name: Storefront (web)
-        type: public
-        grant-types: [authorization_code, refresh_token]
-        public-refresh-tokens: true
-        redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/auth/callback"]
-        post-logout-redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/"]
-        scopes: [openid, profile, email, phone, offline_access]
-      - client-id: seller-center
-        name: Seller Center & Provider Hub
-        type: public
-        grant-types: [authorization_code, refresh_token]
-        public-refresh-tokens: true
-        redirect-uris: ["${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}/auth/callback"]
-        post-logout-redirect-uris: ["${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}/"]
-        scopes: [openid, profile, email, phone, offline_access]
-      - client-id: staff-console
-        name: Staff console
-        type: public
-        grant-types: [authorization_code, refresh_token]
-        public-refresh-tokens: true
-        refresh-token-ttl: 12h
-        redirect-uris: ["${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}/auth/callback"]
-        post-logout-redirect-uris: ["${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}/"]
-        scopes: [openid, profile, email, offline_access]
       - client-id: customer-app
         name: AfroTransact app
         type: public
@@ -75,14 +55,17 @@ at:
         redirect-uris: [com.afrotransact.driver:/oauth2redirect]
         scopes: [openid, profile, email, offline_access]
       - client-id: gateway-bff
-        name: Gateway BFF
+        name: Gateway BFF (storefront, Seller Center, staff console)
         type: confidential
-        # GATEWAY_BFF_CLIENT_SECRET (BFF_CLIENT_SECRET still accepted). Authorization code + PKCE + refresh tokens;
-        # the callback lives on the storefront origin so the session cookie stays first-party. Client credentials with
-        # scope auth:first-party call the first-party sign-in API (/v1/auth/*) and redeem its login tickets.
+        # GATEWAY_BFF_CLIENT_SECRET (BFF_CLIENT_SECRET still accepted). The web apps' only OAuth client: authorization
+        # code + PKCE + refresh tokens through identity's hosted sign-in (single sign-on). Each app has its own callback
+        # on its own origin (<app>/api/bff proxies to the BFF), so its session cookie stays first-party, and its own
+        # post-logout page (RP-initiated logout, /connect/logout). Client credentials with scope auth:first-party call
+        # the first-party sign-in API (/v1/auth/*).
         secret: ${GATEWAY_BFF_CLIENT_SECRET:${BFF_CLIENT_SECRET:}}
         grant-types: [authorization_code, refresh_token, client_credentials]
-        redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/api/bff/v1/auth/oidc/callback", "${API_BASE_URL:https://api.uat.afrotransact.com}/login/oauth2/code/afrotransact"]
+        redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/api/bff/v1/auth/oidc/callback", "${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}/api/bff/v1/auth/oidc/callback", "${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}/api/bff/v1/auth/oidc/callback"]
+        post-logout-redirect-uris: ["${PUBLIC_WEB_URL:https://uat.afrotransact.com}/", "${SELLER_CENTER_URL:https://seller.uat.afrotransact.com}/", "${STAFF_CONSOLE_URL:https://admin.uat.afrotransact.com}/"]
         scopes: [openid, profile, email, phone, offline_access, "auth:first-party", "shipping:rate", "tax:quote", "payments:fees.read", "sellers:ship-from.read"]
       - client-id: seller-service
         name: Seller service

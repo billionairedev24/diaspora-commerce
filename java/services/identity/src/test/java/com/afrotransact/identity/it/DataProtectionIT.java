@@ -64,10 +64,12 @@ class DataProtectionIT {
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
 
-    private static final String STOREFRONT = "storefront";
-    private static final String STOREFRONT_REDIRECT = "http://localhost:3000/auth/callback";
-    private static final String STAFF_CONSOLE = "staff-console";
-    private static final String STAFF_REDIRECT = "http://localhost:3002/auth/callback";
+    /** A public PKCE client with refresh tokens (the customer app); web apps sign in through gateway-bff. */
+    private static final String STOREFRONT = "customer-app";
+    private static final String STOREFRONT_REDIRECT = "http://localhost:8081/auth/callback";
+    /** Public client without the phone scope (the driver app), standing in for a staff-facing app. */
+    private static final String STAFF_CONSOLE = "driver-app";
+    private static final String STAFF_REDIRECT = "http://localhost:8082/auth/callback";
     private static final String ADMIN_EMAIL = "admin@afrotransact.com";
     private static final String ADMIN_PASSWORD = "LocalAdmin2026!";
     private static final String ADMIN_PHONE = "+17132490142";

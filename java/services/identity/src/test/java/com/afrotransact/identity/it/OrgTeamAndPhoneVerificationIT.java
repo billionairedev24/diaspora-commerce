@@ -43,8 +43,9 @@ class OrgTeamAndPhoneVerificationIT {
     @ServiceConnection
     static final PostgreSQLContainer POSTGRES = PostgresTestContainer.create();
 
-    private static final String STOREFRONT = "storefront";
-    private static final String STOREFRONT_REDIRECT = "http://localhost:3000/auth/callback";
+    /** A public PKCE client with refresh tokens (the customer app); web apps sign in through gateway-bff. */
+    private static final String STOREFRONT = "customer-app";
+    private static final String STOREFRONT_REDIRECT = "http://localhost:8081/auth/callback";
     private static final String PASSWORD = "Plantain-Jollof-2026";
 
     @LocalServerPort

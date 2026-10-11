@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<!-- Error page of the authorization server (Spring Boot renders it for any error, including an invalid authorization
+     request). Uses no request-specific model so it renders even when the session is gone. -->
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title th:text="#{auth.title.error} + ' · AfroTransact'">Something went wrong · AfroTransact</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" th:href="@{/assets/fonts.css}">
+  <link rel="stylesheet" th:href="@{/assets/tokens.css}">
+  <link rel="stylesheet" th:href="@{/assets/auth.css}">
+</head>
+<body>
+<div class="page">
+  <div class="card">
+    <main id="main" tabindex="-1" class="form-col">
+      <span class="logo"><span class="wordmark">afrotransact</span></span>
+      <div class="form" data-page="error">
+        <h1 class="h1" th:text="#{auth.error.title}">Something went wrong</h1>
+        <p class="lead" th:text="${status == 404} ? #{auth.error.notFound} : (${status == 400} ? #{auth.error.badRequest} : #{auth.error.lead})"></p>
+        <p class="message" th:if="${status != null}" th:text="#{auth.error.code(${status})}"></p>
+        <a class="btn btn-primary" th:href="@{/}" th:text="#{auth.error.backHome}">Go to AfroTransact</a>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

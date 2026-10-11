@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head(#{auth.title.verify})}"></head>
+<body>
+<a class="skip" href="#main" th:text="#{auth.skip}">Skip to the form</a>
+<div class="page" th:attr="data-app=${brand.app}">
+  <div class="card">
+    <aside th:replace="~{layout :: aside}"></aside>
+    <main id="main" tabindex="-1" class="form-col">
+      <a th:replace="~{layout :: logo}"></a>
+      <div class="form" data-page="signup-verify">
+        <h1 class="h1" th:text="#{auth.verify.title}">Confirm your email</h1>
+        <p class="lead" th:text="#{auth.verify.hint(${destination})}"></p>
+        <th:block th:replace="~{layout :: alert('success', ${notice})}"></th:block>
+        <th:block th:replace="~{layout :: alert('error', ${formError})}"></th:block>
+        <form class="form" method="post" th:action="@{/signup/verify}" data-once novalidate>
+          <div class="field">
+            <label class="label" for="code" th:text="#{auth.verify.code}">Verification code</label>
+            <input class="control code" id="code" name="code" inputmode="numeric" autocomplete="one-time-code"
+                   pattern="[0-9]{6}" maxlength="6" required autofocus
+                   th:attr="aria-invalid=${codeError != null ? 'true' : null},aria-describedby=${codeError != null ? 'code-error' : null}">
+            <p class="message message-error" id="code-error" th:text="${codeError}"></p>
+          </div>
+          <button type="submit" class="btn btn-primary" th:text="#{auth.verify.submit}">Verify and continue</button>
+        </form>
+        <div class="links">
+          <form method="post" th:action="@{/signup/verify/resend}" class="inline-form">
+            <button type="submit" class="btn btn-link" th:text="#{auth.verify.resend}">Resend code</button>
+          </form>
+          <a th:href="@{/signup}" th:text="#{auth.verify.startAgain}">Use a different email</a>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

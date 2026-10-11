@@ -25,6 +25,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param signInProtection  brute-force protection limits (per account and per IP)
  * @param invitations       organisation invitations (Seller Center accept page)
  * @param dataProtection    encryption at rest of MFA secrets (key-encryption key provider and keys)
+ * @param pages             hosted sign-in pages: the apps they brand themselves for and their legal/support links
  */
 @ConfigurationProperties(prefix = "at.identity")
 public record IdentityProperties(
@@ -42,7 +43,8 @@ public record IdentityProperties(
         FirstParty firstParty,
         SignInProtection signInProtection,
         Invitations invitations,
-        DataProtection dataProtection) {
+        DataProtection dataProtection,
+        Pages pages) {
 
     public IdentityProperties {
         homeUrl = homeUrl == null ? "/" : homeUrl;
@@ -59,6 +61,40 @@ public record IdentityProperties(
         signInProtection = signInProtection == null ? new SignInProtection(null, null) : signInProtection;
         invitations = invitations == null ? new Invitations(null) : invitations;
         dataProtection = dataProtection == null ? new DataProtection(null, null, null, null, null) : dataProtection;
+        pages = pages == null ? new Pages(null, null, null, null, null, null, null, null) : pages;
+    }
+
+    /**
+     * Hosted sign-in, sign-up and two-step pages.
+     *
+     * @param storefrontUrl   storefront origin ({@code PUBLIC_WEB_URL}); shopper branding and the default home link
+     * @param sellerCenterUrl Seller Center origin ({@code SELLER_CENTER_URL}): authorization requests returning there
+     *                        get the Seller Center branding
+     * @param staffConsoleUrl staff console origin ({@code STAFF_CONSOLE_URL}): staff branding, no self sign-up
+     * @param supportUrl      help page linked from "Forgot password?" and error pages
+     * @param termsUrl        Conditions of Use (sign-up consent)
+     * @param privacyUrl      Privacy Notice (sign-up consent)
+     * @param smsTermsUrl     SMS terms (text-message consent)
+     * @param smsProgram      name of the text-message programme in the SMS consent copy
+     */
+    public record Pages(String storefrontUrl, String sellerCenterUrl, String staffConsoleUrl, String supportUrl,
+                        String termsUrl, String privacyUrl, String smsTermsUrl, String smsProgram) {
+
+        public Pages {
+            storefrontUrl = trim(storefrontUrl, "http://localhost:3000");
+            sellerCenterUrl = trim(sellerCenterUrl, "http://localhost:3001");
+            staffConsoleUrl = trim(staffConsoleUrl, "http://localhost:3002");
+            supportUrl = supportUrl == null || supportUrl.isBlank() ? storefrontUrl + "/help" : supportUrl;
+            termsUrl = termsUrl == null || termsUrl.isBlank() ? storefrontUrl + "/legal/terms" : termsUrl;
+            privacyUrl = privacyUrl == null || privacyUrl.isBlank() ? storefrontUrl + "/legal/privacy" : privacyUrl;
+            smsTermsUrl = smsTermsUrl == null || smsTermsUrl.isBlank() ? storefrontUrl + "/legal/sms" : smsTermsUrl;
+            smsProgram = smsProgram == null || smsProgram.isBlank() ? "AfroTransact Alerts" : smsProgram;
+        }
+
+        private static String trim(String url, String fallback) {
+            String v = url == null || url.isBlank() ? fallback : url.trim();
+            return v.endsWith("/") ? v.substring(0, v.length() - 1) : v;
+        }
     }
 
     /**

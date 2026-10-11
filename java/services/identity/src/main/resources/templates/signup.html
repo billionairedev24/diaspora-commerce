@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head(#{auth.title.signup})}"></head>
+<body>
+<a class="skip" href="#main" th:text="#{auth.skip}">Skip to the form</a>
+<div class="page" th:attr="data-app=${brand.app}">
+  <div class="card">
+    <aside th:replace="~{layout :: aside}"></aside>
+    <main id="main" tabindex="-1" class="form-col">
+      <a th:replace="~{layout :: logo}"></a>
+
+      <div class="form" th:if="${!selfSignUp}" data-page="signup-closed">
+        <h1 class="h1" th:text="#{auth.noSignup.title}">Accounts are created for you</h1>
+        <p class="lead" th:text="#{'auth.' + ${brand.app} + '.noSignup'}"></p>
+        <a class="btn btn-primary" th:href="@{/login}" th:text="#{auth.toSignin}">Have an account? Sign in</a>
+      </div>
+
+      <div class="form" th:if="${selfSignUp}" data-page="signup">
+        <h1 class="h1" th:text="${brand.title}">Create your AfroTransact account</h1>
+        <p class="lead" th:if="${ctx.invitation != null}" th:text="#{auth.invitationHint}"></p>
+        <div class="summary" th:if="${!errors.isEmpty()}" role="alert" tabindex="-1" data-error-summary
+             aria-labelledby="summary-title">
+          <p id="summary-title" class="summary-title"
+             th:text="${errors.size() == 1} ? #{auth.errorSummary} : #{auth.errorSummaryMany(${errors.size()})}"></p>
+          <ul>
+            <li th:each="e : ${errors}"><a th:href="'#' + ${e.key}" th:text="${e.value}"></a></li>
+          </ul>
+        </div>
+        <th:block th:replace="~{layout :: alert('error', ${formError})}"></th:block>
+        <form class="form" method="post" th:action="@{/signup}" data-once novalidate>
+          <div class="grid2">
+            <div class="field">
+              <label class="label" for="firstName" th:text="#{auth.firstName}">First name</label>
+              <input class="control" id="firstName" name="firstName" autocomplete="given-name" required maxlength="80"
+                     th:value="${values['firstName']}"
+                     th:attr="aria-invalid=${errors.containsKey('firstName') ? 'true' : null},aria-describedby=${errors.containsKey('firstName') ? 'firstName-error' : null}">
+              <p class="message message-error" id="firstName-error" th:text="${errors['firstName']}"></p>
+            </div>
+            <div class="field">
+              <label class="label" for="lastName" th:text="#{auth.lastName}">Last name</label>
+              <input class="control" id="lastName" name="lastName" autocomplete="family-name" required maxlength="80"
+                     th:value="${values['lastName']}"
+                     th:attr="aria-invalid=${errors.containsKey('lastName') ? 'true' : null},aria-describedby=${errors.containsKey('lastName') ? 'lastName-error' : null}">
+              <p class="message message-error" id="lastName-error" th:text="${errors['lastName']}"></p>
+            </div>
+            <div class="field span2">
+              <label class="label" for="email" th:text="#{auth.email}">Email</label>
+              <input class="control" id="email" name="email" type="email" autocomplete="email" required maxlength="254"
+                     placeholder="you@example.com" th:value="${values['email']}"
+                     th:attr="aria-invalid=${errors.containsKey('email') ? 'true' : null},aria-describedby=${errors.containsKey('email') ? 'email-error' : null}">
+              <p class="message message-error" id="email-error" th:text="${errors['email']}"></p>
+            </div>
+            <div class="field span2">
+              <label class="label" for="phone"><span th:text="#{auth.mobile}">Mobile phone</span> <span class="optional" th:text="#{auth.optional}">(optional)</span></label>
+              <div class="phone">
+                <select class="control country" id="phoneRegion" name="phoneRegion" autocomplete="tel-country-code"
+                        th:attr="aria-label=#{auth.country}">
+                  <option th:each="c : ${countries}" th:value="${c.code}" th:text="${c.label}"
+                          th:selected="${c.code == values['phoneRegion']}"></option>
+                </select>
+                <input class="control" id="phone" name="phone" type="tel" autocomplete="tel-national" maxlength="20"
+                       placeholder="(713) 249-0142" th:value="${values['phone']}"
+                       th:attr="aria-invalid=${errors.containsKey('phone') ? 'true' : null},aria-describedby=${errors.containsKey('phone') ? 'phone-error' : 'phone-help'}">
+              </div>
+              <p class="message message-error" id="phone-error" th:if="${errors.containsKey('phone')}" th:text="${errors['phone']}"></p>
+              <p class="message" id="phone-help" th:unless="${errors.containsKey('phone')}" th:text="#{auth.mobileHelp}"></p>
+            </div>
+            <div class="field">
+              <label class="label" for="password" th:text="#{auth.password}">Password</label>
+              <div class="with-addon">
+                <input class="control" id="password" name="password" type="password" autocomplete="new-password" required
+                       maxlength="128" th:attr="aria-invalid=${errors.containsKey('password') ? 'true' : null},aria-describedby=${errors.containsKey('password') ? 'password-error password-rules' : 'password-rules'}">
+                <button type="button" class="addon" data-toggle-password="password" aria-pressed="false" hidden
+                        th:attr="aria-label=#{auth.showPassword}">
+                  <span class="when-hidden"><th:block th:replace="~{icons :: icon('eye')}"></th:block></span>
+                  <span class="when-shown"><th:block th:replace="~{icons :: icon('eyeSlash')}"></th:block></span>
+                </button>
+              </div>
+              <p class="message message-error" id="password-error" th:text="${errors['password']}"></p>
+            </div>
+            <div class="field">
+              <label class="label" for="confirmPassword" th:text="#{auth.confirmPassword}">Confirm password</label>
+              <div class="with-addon">
+                <input class="control" id="confirmPassword" name="confirmPassword" type="password" autocomplete="new-password"
+                       required maxlength="128" th:attr="aria-invalid=${errors.containsKey('confirmPassword') ? 'true' : null},aria-describedby=${errors.containsKey('confirmPassword') ? 'confirmPassword-error' : null}">
+                <button type="button" class="addon" data-toggle-password="confirmPassword" aria-pressed="false" hidden
+                        th:attr="aria-label=#{auth.showPassword}">
+                  <span class="when-hidden"><th:block th:replace="~{icons :: icon('eye')}"></th:block></span>
+                  <span class="when-shown"><th:block th:replace="~{icons :: icon('eyeSlash')}"></th:block></span>
+                </button>
+              </div>
+              <p class="message message-error" id="confirmPassword-error" th:text="${errors['confirmPassword']}"></p>
+            </div>
+          </div>
+          <ul class="rules" id="password-rules" data-password-rules aria-live="polite" th:attr="aria-label=#{auth.passwordRules}">
+            <li class="rule" th:each="r : ${ {'length', 'case', 'number', 'personal', 'match'} }" th:attr="data-rule=${r},data-met=#{auth.rule.met},data-unmet=#{auth.rule.unmet}" data-ok="false">
+              <span th:text="#{'auth.rule.' + ${r}}"></span><span class="visually-hidden"> — <span data-state th:text="#{auth.rule.unmet}"></span></span>
+            </li>
+          </ul>
+          <label class="check" for="termsAccepted">
+            <input type="checkbox" id="termsAccepted" name="termsAccepted" value="true" required th:checked="${values['termsAccepted']}"
+                   th:attr="aria-invalid=${errors.containsKey('termsAccepted') ? 'true' : null},aria-describedby=${errors.containsKey('termsAccepted') ? 'termsAccepted-error' : null}">
+            <span><th:block th:text="#{auth.terms.before}"></th:block>
+              <a th:href="${links.terms}" target="_blank" rel="noopener"><th:block th:text="#{auth.termsLink}"></th:block><span class="visually-hidden" th:text="' ' + #{auth.opensNewTab}"></span></a>
+              <th:block th:text="#{auth.terms.and}"></th:block>
+              <a th:href="${links.privacy}" target="_blank" rel="noopener"><th:block th:text="#{auth.privacyLink}"></th:block><span class="visually-hidden" th:text="' ' + #{auth.opensNewTab}"></span></a><th:block th:text="#{auth.terms.after}"></th:block></span>
+          </label>
+          <p class="message message-error check-error" id="termsAccepted-error" th:if="${errors.containsKey('termsAccepted')}" th:text="${errors['termsAccepted']}"></p>
+          <label class="check" for="smsConsent">
+            <input type="checkbox" id="smsConsent" name="smsConsent" value="true" th:checked="${values['smsConsent']}">
+            <span><strong th:text="#{auth.smsTitle}"></strong>
+              <th:block th:text="#{auth.smsDisclosure(${smsProgram})}"></th:block>
+              <a th:href="${links.sms}" target="_blank" rel="noopener" th:text="#{auth.smsLink}">SMS Terms</a>
+              <th:block th:text="#{auth.terms.and}"></th:block>
+              <a th:href="${links.privacy}" target="_blank" rel="noopener" th:text="#{auth.privacyLink}">Privacy Notice</a>.</span>
+          </label>
+          <button type="submit" class="btn btn-primary" th:text="#{auth.createAccount}">Create account</button>
+        </form>
+        <th:block th:replace="~{layout :: social('auth.signUpWith')}"></th:block>
+        <a class="toggle" th:href="@{/login}" th:text="#{auth.toSignin}">Have an account? Sign in</a>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

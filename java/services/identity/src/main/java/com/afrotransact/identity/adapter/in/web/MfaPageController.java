@@ -17,22 +17,23 @@ import com.afrotransact.identity.domain.RateLimitExceeded;
 import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.MediaType;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
-import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.savedrequest.RequestCache;
 import org.springframework.security.web.savedrequest.SavedRequest;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 /** Two-step verification at sign-in: authenticator code, text-message code or recovery code, "trust this browser". */
 @Hidden
-@RestController
+@Controller
 class MfaPageController {
 
     private final SignInService signIn;
@@ -41,61 +42,44 @@ class MfaPageController {
     private final RequestCache requestCache;
     private final TrustedBrowserCookie trustedBrowser;
     private final String homeUrl;
+    private final HostedPageModel pages;
+    private final MessageSource messages;
 
     MfaPageController(SignInService signIn, SignInProtectionService protection, SecurityContextRepository contexts,
-                      RequestCache requestCache, TrustedBrowserCookie trustedBrowser, LoginPageSettings settings) {
+                      RequestCache requestCache, TrustedBrowserCookie trustedBrowser, LoginPageSettings settings,
+                      HostedPageModel pages, MessageSource messages) {
         this.signIn = signIn;
         this.protection = protection;
         this.contexts = contexts;
         this.requestCache = requestCache;
         this.trustedBrowser = trustedBrowser;
         this.homeUrl = settings.homeUrl();
+        this.pages = pages;
+        this.messages = messages;
     }
 
-    @GetMapping(path = "/login/mfa", produces = MediaType.TEXT_HTML_VALUE)
-    String page(HttpServletRequest request, HttpServletResponse response) throws IOException {
+    @GetMapping("/login/mfa")
+    String page(HttpServletRequest request, HttpServletResponse response, Model model) {
         Optional<MfaPendingAuthentication> pending = pending();
         if (pending.isEmpty()) {
-            response.sendRedirect("/login");
-            return "";
+            return "redirect:/login";
         }
         UUID userId = UUID.fromString(pending.get().getName());
         SecondFactorChallenge c = signIn.challenge(userId, Optional.empty(), false);
-        CsrfToken csrf = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
-        String hidden = "<input type=\"hidden\" name=\"" + HtmlPage.esc(csrf.getParameterName()) + "\" value=\""
-                + HtmlPage.esc(csrf.getToken()) + "\">";
-        StringBuilder body = new StringBuilder("<h1>Two-step verification</h1>");
+        pages.apply(model, request, response, HostedPageModel.SIGN_IN);
+        Locale locale = LocaleContextHolder.getLocale();
         if (request.getParameter("error") != null) {
-            body.append("<p class=\"error\" role=\"alert\">That code isn't right. Try again.</p>");
+            model.addAttribute("formError", messages.getMessage("auth.mfa.wrong", null, locale));
         }
         if (request.getParameter("wait") != null) {
-            body.append("<p class=\"error\" role=\"alert\">Wait a moment before asking for another code.</p>");
+            model.addAttribute("formError", messages.getMessage("auth.mfa.wait", null, locale));
         }
         if (request.getParameter("sent") != null) {
-            body.append("<p class=\"note\">We texted a code to ").append(HtmlPage.esc(c.smsHint())).append(".</p>");
+            model.addAttribute("notice", messages.getMessage("auth.mfa.sent", new Object[] {c.smsHint()}, locale));
         }
-        String defaultFactor = c.totp() ? "TOTP" : c.sms() ? "SMS" : "RECOVERY_CODE";
-        body.append("<form method=\"post\" action=\"/login/mfa\">")
-                .append("<label for=\"factor\">Method</label><select id=\"factor\" name=\"factor\">");
-        if (c.totp()) {
-            body.append(option("TOTP", "Authenticator app", defaultFactor));
-        }
-        if (c.sms()) {
-            body.append(option("SMS", "Text message to " + c.smsHint(), defaultFactor));
-        }
-        if (c.recovery()) {
-            body.append(option("RECOVERY_CODE", "Recovery code", defaultFactor));
-        }
-        body.append("</select><label for=\"code\">Code</label>")
-                .append("<input id=\"code\" name=\"code\" type=\"text\" inputmode=\"numeric\" ")
-                .append("autocomplete=\"one-time-code\" required autofocus>")
-                .append("<label><input type=\"checkbox\" name=\"trust\" value=\"true\"> Trust this browser for 30 days")
-                .append("</label>").append(hidden).append("<button type=\"submit\">Verify</button></form>");
-        if (c.sms()) {
-            body.append("<form method=\"post\" action=\"/login/mfa/sms\">").append(hidden)
-                    .append("<button type=\"submit\" class=\"secondary\">Text me a code</button></form>");
-        }
-        return HtmlPage.render("Two-step verification", body.toString(), "");
+        model.addAttribute("challenge", c);
+        model.addAttribute("defaultFactor", c.totp() ? "TOTP" : c.sms() ? "SMS" : "RECOVERY_CODE");
+        return "mfa";
     }
 
     @PostMapping("/login/mfa/sms")
@@ -177,10 +161,5 @@ class MfaPageController {
     private static Optional<MfaPendingAuthentication> pending() {
         Authentication current = SecurityContextHolder.getContext().getAuthentication();
         return current instanceof MfaPendingAuthentication p ? Optional.of(p) : Optional.empty();
-    }
-
-    private static String option(String value, String label, String selected) {
-        return "<option value=\"" + value + "\"" + (value.equals(selected) ? " selected" : "") + ">"
-                + HtmlPage.esc(label) + "</option>";
     }
 }

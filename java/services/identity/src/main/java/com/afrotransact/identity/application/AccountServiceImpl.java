@@ -72,6 +72,10 @@ class AccountServiceImpl implements AccountService {
                     "Staff accounts are created by an access administrator",
                     Map.of("email", "Use your personal email, or ask your manager for staff access"));
         }
+        if (c.smsConsent() && v.phoneE164() == null) {
+            throw new IdentityRuleViolation("identity.invalid-sign-up", "Check the highlighted fields",
+                    Map.of("phone", "Add a mobile number to get text updates"));
+        }
         // Checked before anything is written (this transaction does not roll back on rule violations).
         OrgInvitation invitation = c.invited() ? invitations.requirePending(c.invitationToken(), v.email()) : null;
         boolean invited = invitation != null;

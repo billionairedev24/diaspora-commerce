@@ -10,11 +10,14 @@ import com.afrotransact.identity.adapter.in.security.AccountUserDetailsService;
 import com.afrotransact.identity.adapter.in.security.EnabledProviderAuthorizationRequestResolver;
 import com.afrotransact.identity.adapter.in.security.FederatedOAuth2UserService;
 import com.afrotransact.identity.adapter.in.security.FederatedOidcUserService;
+import com.afrotransact.identity.adapter.in.security.HostedLoginEntryPoint;
 import com.afrotransact.identity.adapter.in.security.HostedLoginProtection;
+import com.afrotransact.identity.adapter.in.security.LenientLogoutErrorHandler;
 import com.afrotransact.identity.adapter.in.security.LoginTicketAuthenticationFilter;
 import com.afrotransact.identity.adapter.in.security.LoginTicketAuthenticationProvider;
 import com.afrotransact.identity.adapter.in.security.MfaAwareAuthenticationSuccessHandler;
 import com.afrotransact.identity.adapter.in.security.MfaChallengeAccessDeniedHandler;
+import com.afrotransact.identity.adapter.in.security.PromptParameterFilter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationConverter;
 import com.afrotransact.identity.adapter.in.security.PublicClientRefreshTokenAuthenticationProvider;
 import com.afrotransact.identity.adapter.in.security.TrustedBrowserCookie;
@@ -49,7 +52,6 @@ import org.springframework.security.oauth2.server.authorization.settings.Authori
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.context.DelegatingSecurityContextRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
@@ -76,15 +78,17 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  *   <li>Authorization server endpoints (authorize, token, JWKS, discovery, userinfo, revocation, logout). The
  *   authorize endpoint also accepts a first-party {@code login_ticket} from gateway-bff.</li>
  *   <li>{@code /v1/**}: stateless JSON API protected by this server's own access tokens.</li>
- *   <li>Browser sign-in: password form (brute-force protected), social login, passkeys (WebAuthn), two-step
- *   verification.</li>
+ *   <li>Browser sign-in, the only place credentials are entered (single sign-on for every app): the hosted sign-in
+ *   and sign-up pages, password form (brute-force protected), social login, passkeys (WebAuthn), two-step
+ *   verification. OIDC {@code prompt=create|login}, {@code login_hint} and {@code idp_hint} are honoured.</li>
  * </ol>
  */
 @Configuration(proxyBeanMethods = false)
 class SecurityConfiguration {
 
     private static final String[] PUBLIC_BROWSER_PATHS = {
-        "/", "/login", "/login/mfa", "/login/mfa/**", "/error", "/favicon.ico",
+        "/", "/login", "/login/mfa", "/login/mfa/**", "/login/forgot", "/signup", "/signup/**", "/assets/**",
+        "/error", "/favicon.ico",
         "/actuator/health/**", "/actuator/info", "/actuator/prometheus",
         "/v3/api-docs", "/v3/api-docs.yaml", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/docs", "/redoc"
     };
@@ -95,11 +99,14 @@ class SecurityConfiguration {
                                                  RegisteredClientRepository clients,
                                                  SecurityContextRepository contexts, RequestCache requestCache,
                                                  FirstPartySignInService firstParty, UserDetailsService accounts,
-                                                 AuthorizationServerSettings settings)
+                                                 AuthorizationServerSettings settings,
+                                                 IdentityProviderService identityProviders)
             throws Exception {
         http.oauth2AuthorizationServer(as -> {
             http.securityMatcher(as.getEndpointsMatcher());
-            as.oidc(Customizer.withDefaults())
+            // RP-initiated logout (/connect/logout): an ID token that can no longer be matched (expired session,
+            // rotated token) still ends the identity session instead of showing an error.
+            as.oidc(oidc -> oidc.logoutEndpoint(l -> l.errorResponseHandler(new LenientLogoutErrorHandler(clients))))
                     .tokenGenerator(tokenGenerator)
                     .clientAuthentication(c -> c
                             .authenticationConverter(new PublicClientRefreshTokenAuthenticationConverter())
@@ -114,12 +121,14 @@ class SecurityConfiguration {
                 .requestCache(r -> r.requestCache(requestCache))
                 .cors(Customizer.withDefaults())
                 .exceptionHandling(e -> e
-                        .defaultAuthenticationEntryPointFor(new LoginUrlAuthenticationEntryPoint("/login"), html)
+                        .defaultAuthenticationEntryPointFor(new HostedLoginEntryPoint(identityProviders), html)
                         .accessDeniedHandler(new MfaChallengeAccessDeniedHandler(requestCache)));
         // Before the authorization request is pre-validated (it captures the principal), after the context is loaded.
         http.addFilterAfter(new LoginTicketAuthenticationFilter(new ProviderManager(
                 new LoginTicketAuthenticationProvider(firstParty, accounts)), settings.getAuthorizationEndpoint()),
                 SecurityContextHolderFilter.class);
+        http.addFilterAfter(new PromptParameterFilter(settings.getAuthorizationEndpoint(), contexts),
+                LoginTicketAuthenticationFilter.class);
         return http.build();
     }
 

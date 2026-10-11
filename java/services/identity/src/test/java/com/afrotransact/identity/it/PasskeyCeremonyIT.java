@@ -53,8 +53,9 @@ class PasskeyCeremonyIT {
     private static final String STOREFRONT_ORIGIN = "http://localhost:3000";
     private static final String PHISHING_ORIGIN = "https://afrotransact-login.example";
     private static final String RP_ID = "localhost";
-    private static final String STOREFRONT = "storefront";
-    private static final String STOREFRONT_REDIRECT = "http://localhost:3000/auth/callback";
+    /** A public PKCE client with refresh tokens (the customer app); web apps sign in through gateway-bff. */
+    private static final String STOREFRONT = "customer-app";
+    private static final String STOREFRONT_REDIRECT = "http://localhost:8081/auth/callback";
     private static final String BFF = "gateway-bff";
     private static final String BFF_SECRET = "local-bff-secret";
     private static final String BFF_REDIRECT = "http://localhost:3000/api/bff/v1/auth/oidc/callback";

@@ -183,6 +183,16 @@ final class BrowserSession {
         return send(b.build());
     }
 
+    /** Same-origin form POST from the browser session (hosted pages). */
+    HttpResponse<String> form(String path, Map<String, String> form) {
+        return postForm(absolute(path), form);
+    }
+
+    /** The CSRF token rendered in a hosted page's forms. */
+    static String csrfOf(String html) {
+        return csrf(html);
+    }
+
     /** CSRF token of the current browser session (rendered on the sign-in page). */
     String csrfToken() {
         HttpResponse<String> page = get(base + "/login");

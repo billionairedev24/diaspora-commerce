@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head(#{auth.title.forgot})}"></head>
+<body>
+<a class="skip" href="#main" th:text="#{auth.skip}">Skip to the form</a>
+<div class="page" th:attr="data-app=${brand.app}">
+  <div class="card">
+    <aside th:replace="~{layout :: aside}"></aside>
+    <main id="main" tabindex="-1" class="form-col">
+      <a th:replace="~{layout :: logo}"></a>
+      <div class="form" data-page="forgot">
+        <h1 class="h1" th:text="#{auth.forgot.title}">Forgot your password?</h1>
+        <p class="lead" th:text="#{auth.forgot.lead}"></p>
+        <p class="lead" th:text="#{auth.forgot.passkey}"></p>
+        <a class="btn btn-primary" th:href="${links.support}" th:text="#{auth.forgot.support}">Contact support</a>
+        <a class="toggle" th:href="@{/login}" th:text="#{auth.forgot.back}">Back to sign in</a>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

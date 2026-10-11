@@ -5,7 +5,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-/** Default sign-up validation composed from the password and phone policies. */
+/**
+ * Default sign-up validation composed from the password and phone policies. The mobile number is optional (it can be
+ * added later from the account's security settings); when given it must be a valid mobile number.
+ */
 public class DefaultSignUpPolicy implements SignUpPolicy {
 
     private static final Pattern NAME = Pattern.compile("^\\p{L}[\\p{L}\\p{M} '’\\-]{0,79}$");
@@ -34,9 +37,14 @@ public class DefaultSignUpPolicy implements SignUpPolicy {
         if (email == null || email.length() > 254 || !EMAIL.matcher(email).matches()) {
             errors.put("email", "Enter a valid email address");
         }
-        PhoneCheck phone = phones.check(d.phone(), d.phoneRegion());
-        if (!phone.valid()) {
-            errors.put("phone", phone.error());
+        String phoneE164 = null;
+        if (d.phone() != null && !d.phone().isBlank()) {
+            PhoneCheck phone = phones.check(d.phone(), d.phoneRegion());
+            if (phone.valid()) {
+                phoneE164 = phone.e164();
+            } else {
+                errors.put("phone", phone.error());
+            }
         }
         String local = email == null ? "" : email.substring(0, Math.max(0, email.indexOf('@')));
         List<String> pw = passwords.violations(d.password(), List.of(nullToEmpty(first), nullToEmpty(last), local));
@@ -52,7 +60,7 @@ public class DefaultSignUpPolicy implements SignUpPolicy {
         if (!errors.isEmpty()) {
             throw new IdentityRuleViolation("identity.invalid-sign-up", "Check the highlighted fields", errors);
         }
-        return new ValidatedSignUp(first, last, email, phone.e164());
+        return new ValidatedSignUp(first, last, email, phoneE164);
     }
 
     @Override

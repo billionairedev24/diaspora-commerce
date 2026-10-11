@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{layout :: head(#{auth.title.mfa})}"></head>
+<body>
+<a class="skip" href="#main" th:text="#{auth.skip}">Skip to the form</a>
+<div class="page" th:attr="data-app=${brand.app}">
+  <div class="card">
+    <aside th:replace="~{layout :: aside}"></aside>
+    <main id="main" tabindex="-1" class="form-col">
+      <a th:replace="~{layout :: logo}"></a>
+      <div class="form" data-page="mfa">
+        <h1 class="h1" th:text="#{auth.mfa.title}">Two-step verification</h1>
+        <p class="lead" th:text="#{auth.mfa.lead}">Enter a code to finish signing in.</p>
+        <th:block th:replace="~{layout :: alert('error', ${formError})}"></th:block>
+        <th:block th:replace="~{layout :: alert('success', ${notice})}"></th:block>
+        <form class="form" method="post" th:action="@{/login/mfa}" data-once novalidate>
+          <fieldset class="methods">
+            <legend class="label" th:text="#{auth.mfa.method}">Verification method</legend>
+            <label class="method" th:if="${challenge.totp()}">
+              <input type="radio" name="factor" value="TOTP" th:checked="${defaultFactor == 'TOTP'}">
+              <span th:text="#{auth.mfa.totp}">Authenticator app</span>
+            </label>
+            <label class="method" th:if="${challenge.sms()}">
+              <input type="radio" name="factor" value="SMS" th:checked="${defaultFactor == 'SMS'}">
+              <span th:text="#{auth.mfa.sms}">Text message</span>
+            </label>
+            <label class="method" th:if="${challenge.recovery()}">
+              <input type="radio" name="factor" value="RECOVERY_CODE" th:checked="${defaultFactor == 'RECOVERY_CODE'}">
+              <span th:text="#{auth.mfa.recovery}">Recovery code</span>
+            </label>
+          </fieldset>
+          <p class="message" th:if="${challenge.totp()}" th:text="#{auth.mfa.hintTotp}"></p>
+          <p class="message" th:if="${challenge.sms()}" th:text="#{auth.mfa.hintSms(${challenge.smsHint()})}"></p>
+          <div class="field">
+            <label class="label" for="code" th:text="#{auth.mfa.code}">Code</label>
+            <input class="control code" id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+                   maxlength="20" required autofocus
+                   th:attr="aria-invalid=${formError != null ? 'true' : null}">
+          </div>
+          <label class="check" for="trust">
+            <input type="checkbox" id="trust" name="trust" value="true">
+            <span th:text="#{auth.mfa.trust}">Trust this browser for 30 days</span>
+          </label>
+          <button type="submit" class="btn btn-primary" th:text="#{auth.mfa.verify}">Verify</button>
+        </form>
+        <form th:if="${challenge.sms()}" method="post" th:action="@{/login/mfa/sms}" class="form">
+          <button type="submit" class="btn btn-neutral" th:text="#{auth.mfa.textMe}">Text me a code</button>
+        </form>
+        <form method="post" th:action="@{/logout}" class="inline-form">
+          <button type="submit" class="btn btn-link toggle" th:text="#{auth.mfa.cancel}">Cancel and sign in again</button>
+        </form>
+      </div>
+    </main>
+  </div>
+</div>
+</body>
+</html>

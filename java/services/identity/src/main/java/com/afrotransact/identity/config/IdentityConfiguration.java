@@ -106,7 +106,9 @@ class IdentityConfiguration {
 
     @Bean
     LoginPageSettings loginPageSettings(IdentityProperties props) {
-        return new LoginPageSettings(props.homeUrl());
+        IdentityProperties.Pages p = props.pages();
+        return new LoginPageSettings(props.homeUrl(), p.storefrontUrl(), p.sellerCenterUrl(), p.staffConsoleUrl(),
+                p.supportUrl(), p.termsUrl(), p.privacyUrl(), p.smsTermsUrl(), p.smsProgram());
     }
 
     @Bean
