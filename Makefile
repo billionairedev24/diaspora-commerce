@@ -7,6 +7,9 @@ COMPOSE      := docker compose -f infra/local/docker-compose.yml
 HELM         ?= $(shell command -v helm 2>/dev/null || echo $(HOME)/go/bin/helm)
 KUBECONFORM  ?= $(shell command -v kubeconform 2>/dev/null || echo $(HOME)/go/bin/kubeconform)
 GOLANGCI     ?= $(shell command -v golangci-lint 2>/dev/null || echo $(HOME)/go/bin/golangci-lint)
+# Same versions as CI (.github/workflows/_go-service.yml): golangci-lint must be built with the repo's Go toolchain.
+GO_TOOLCHAIN       := go1.27.2
+GOLANGCI_VERSION   := v2.14.0
 GO_MODULES   := $(sort $(wildcard go/services/*/go.mod) go/pkg/go.mod)
 HELM_CHARTS  := $(sort $(dir $(wildcard java/services/*/deploy/helm/Chart.yaml go/services/*/deploy/helm/Chart.yaml)))
 ENVS         := dev uat prod
@@ -16,7 +19,7 @@ TOFU         ?= $(shell command -v tofu 2>/dev/null || echo $(HOME)/go/bin/tofu)
 CONFTEST     ?= $(shell command -v conftest 2>/dev/null || echo $(HOME)/go/bin/conftest)
 
 .PHONY: help up down logs ps reset apps-up apps-down \
-        java-verify go-verify verify \
+        java-verify go-verify verify tools \
         helm-lint gitops-render rules dashboards observability-check \
         env-check render tf-check security coverage smoke-carriers \
         web-dev web-build backlog
@@ -52,12 +55,19 @@ apps-down: ## Stop only the containerised services
 java-verify: ## Java: checkstyle + unit + ArchUnit + Testcontainers ITs for the whole reactor
 	cd java && ./mvnw -B verify
 
+tools: ## Install golangci-lint $(GOLANGCI_VERSION) built with $(GO_TOOLCHAIN) (the version CI uses) into ~/go/bin
+	GOTOOLCHAIN=$(GO_TOOLCHAIN) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
+	@$(HOME)/go/bin/golangci-lint version
+
 go-verify: ## Go: vet, test and golangci-lint for go/pkg and every go/services/* module
-	@set -e; for mod in $(GO_MODULES); do \
+	@set -e; lint=1; \
+	if [ ! -x "$(GOLANGCI)" ]; then lint=0; echo "golangci-lint not found (PATH or ~/go/bin): lint skipped — run 'make tools'"; \
+	elif ! "$(GOLANGCI)" version 2>/dev/null | grep -q "built with $(GO_TOOLCHAIN)"; then lint=0; \
+	  echo "$(GOLANGCI) is not built with $(GO_TOOLCHAIN) ($$("$(GOLANGCI)" version 2>/dev/null | head -1)): lint skipped — run 'make tools'"; fi; \
+	for mod in $(GO_MODULES); do \
 	  dir=$$(dirname $$mod); echo "==> $$dir"; \
 	  ( cd $$dir && go vet ./... && go test ./... ); \
-	  if [ -x "$(GOLANGCI)" ]; then ( cd $$dir && $(GOLANGCI) run --config $(CURDIR)/go/.golangci.yml ./... ); \
-	  else echo "   golangci-lint not found (PATH or ~/go/bin) — lint skipped"; fi; \
+	  if [ $$lint = 1 ]; then ( cd $$dir && "$(GOLANGCI)" run --config $(CURDIR)/go/.golangci.yml ./... ); fi; \
 	done
 
 verify: java-verify go-verify helm-lint ## Everything CI runs for back-end + deploy
