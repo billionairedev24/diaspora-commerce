@@ -28,8 +28,8 @@ help: ## List targets
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # ------------------------------------------------------------------------------------------------ local stack
-up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — same as dev-up
-	tools/dev/local.sh up $(SERVICES)
+up: ## Start EVERYTHING locally (infra, services, web apps, docs portal, mobile apps, MCP) and print all links — PROD=1 runs the web apps as production builds
+	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
 
 up-infra: ## Start only the full Docker infrastructure incl. observability (Grafana, Prometheus, Loki, Tempo, Kibana; ~12 GB)
 	$(COMPOSE) up -d
@@ -147,8 +147,8 @@ smoke-carriers: ## Carrier sandbox smoke against a running carrier-gateway (CARR
 	tools/smoke/carriers.sh
 
 # ------------------------------------------------------------------------------------------------ web / misc
-dev-up: ## Run everything locally: infra, services, the 3 web apps, docs portal and the 2 Expo apps, then print all links (SERVICES=… subset, WEB=0, DOCS=0, STORYBOOK=0, MOBILE=0)
-	tools/dev/local.sh up $(SERVICES)
+dev-up: ## Run everything locally: infra, services, the 3 web apps, docs portal and the 2 Expo apps, then print all links (SERVICES=… subset, PROD=1, WEB=0, DOCS=0, STORYBOOK=0, MOBILE=0)
+	PROD=$(PROD) tools/dev/local.sh up $(SERVICES)
 
 secrets-check: ## Which secrets/provider keys each app needs and which you set in .local/secrets.env (masked; fails only on required-but-missing)
 	python3 tools/dev/secrets_check.py $(if $(SERVICE),--app $(SERVICE),) $(if $(SECRETS_FILE),--file $(SECRETS_FILE),)

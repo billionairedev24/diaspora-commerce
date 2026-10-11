@@ -42,6 +42,7 @@ export default tseslint.config(
       '**/node_modules/**',
       '**/.next/**',
       '**/.next-e2e/**',
+      '**/.next-prod/**',
       '**/.open-next/**',
       '**/.wrangler/**',
       '**/dist/**',

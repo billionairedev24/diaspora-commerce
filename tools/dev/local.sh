@@ -3,6 +3,7 @@
 # profile, fixed ports from infra/local/PORTS.md), the three web apps against them; logs and PIDs under .local/.
 #
 #   tools/dev/local.sh up                      # infra + the default services + web apps, then prints every link
+#   PROD=1 tools/dev/local.sh up               # same, with the web apps as production builds (next build + start)
 #   tools/dev/local.sh up identity catalog     # only these services (plus infra and the web apps; WEB=0 skips them)
 #   tools/dev/local.sh status                  # what is running and healthy
 #   tools/dev/local.sh links                   # print every link again (apps, docs portal, MCP, API docs)
@@ -56,10 +57,10 @@ OVERRIDE="$STATE/compose.external-postgres.yml"
 
 INFRA_BASE="kafka kafka-init elasticsearch elasticsearch-init temporal minio minio-init mailpit openfga-migrate openfga"
 
-# Everything the storefront (incl. services/bookings), checkout, pre-orders, AfroTransact Retail (1P), delivery dispatch
-# and the staff console use. Identity first.
-DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops seller bookings
-  retail fulfilment mcp-server geo media cart notifications search indexer promise gateway-bff"
+# Everything the storefront (incl. services/bookings), checkout, pre-orders, AfroTransact Retail (1P), delivery dispatch,
+# returns and the staff console use. Identity first.
+DEFAULT_SERVICES="identity catalog offers inventory payments orders delivery-runs content trust-ops tax-returns seller
+  bookings retail fulfilment mcp-server geo media cart notifications search indexer promise gateway-bff"
 
 ALL_SERVICES="identity catalog offers inventory orders payments seller retail fulfilment bookings trust-ops tax-returns
   content ai-gateway mcp-server delivery-runs gateway-bff search indexer cart promise geo storefront media
@@ -85,8 +86,8 @@ load_secrets() {
   if [[ "$SECRETS_LOADED" == 1 ]]; then return 0; fi
   SECRETS_LOADED=1
   if [[ ! -f "$SECRETS_FILE" ]]; then
-    echo "==> no ${SECRETS_FILE#"$ROOT"/}: local fallbacks only (Mailpit for email and codes, logged texts; checkout"
-    echo "    needs Stripe test keys). Start one: mkdir -p .local && cp infra/local/secrets.env.example .local/secrets.env"
+    echo "==> no ${SECRETS_FILE#"$ROOT"/}: local fallbacks only (Mailpit for email and codes, logged texts; payments"
+    echo "    authorise like test card 4242, no Stripe). Start one: mkdir -p .local && cp infra/local/secrets.env.example .local/secrets.env"
     return 0
   fi
   names=$(sed -nE 's/^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*)=.*/\2/p' "$SECRETS_FILE")
@@ -248,11 +249,12 @@ external() {
 # your login over the local socket (Homebrew, Postgres.app, or Ubuntu after `sudo -u postgres createuser -s $USER`);
 # your login over TCP; Ubuntu/Debian's packaged server via `sudo -u postgres` (asks for your sudo password once).
 PSQL_MODE=""
+# -w: never prompt for a password (a prompt would hang make up); PGPASSWORD / ~/.pgpass still apply.
 psql_su() {
   case "$PSQL_MODE" in
-    tcp) psql -h localhost -p 5432 -U "${PG_SUPERUSER:-$(whoami)}" -v ON_ERROR_STOP=1 -qtA "$@" ;;
-    socket) psql -U "$(whoami)" -v ON_ERROR_STOP=1 -qtA "$@" ;;
-    sudo) sudo -u postgres psql -p 5432 -v ON_ERROR_STOP=1 -qtA "$@" ;;
+    tcp) psql -w -h localhost -p 5432 -U "${PG_SUPERUSER:-$(whoami)}" -v ON_ERROR_STOP=1 -qtA "$@" ;;
+    socket) psql -w -U "$(whoami)" -v ON_ERROR_STOP=1 -qtA "$@" ;;
+    sudo) sudo -u postgres psql -w -p 5432 -v ON_ERROR_STOP=1 -qtA "$@" ;;
   esac
 }
 
@@ -520,32 +522,67 @@ stop() {
     if running "$svc"; then kill -9 "$pid" 2>/dev/null || true; fi
     echo "  · stopped $svc"
   fi
-  rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig"
+  rm -f "$PIDS/$svc.pid" "$PIDS/$svc.sig" "$PIDS/$svc.mode"
 }
 
+# PROD=1 (make up PROD=1): the web apps run as production builds (next build + next start, output in .next-prod so
+# the dev cache stays) instead of dev servers: real bundles, no dev overlay, production React. Rebuild after a change
+# with make up PROD=1 again: each run rebuilds the three apps, one at a time (a few minutes each).
+web_mode() { if [[ "${PROD:-0}" == 1 || "${WEB_MODE:-dev}" == prod ]]; then echo prod; else echo dev; fi; }
+
 web_up() {
-  local app name url port i
+  local app name url port i mode
   if [[ "${WEB:-1}" == 0 ]]; then return 0; fi
   command -v pnpm >/dev/null || { echo "pnpm not found: web apps skipped (corepack enable; then make up again)." >&2; return 0; }
   if [[ ! -x "$ROOT/web/apps/storefront/node_modules/.bin/next" ]]; then
     echo "==> installing web dependencies (pnpm install)"
     (cd "$ROOT" && pnpm install --frozen-lockfile)
   fi
-  echo "==> starting web apps (Next.js dev against the local BFF on :8200; the first page load compiles for a minute)"
+  mode=$(web_mode)
   mkdir -p "$LOGS" "$PIDS"
+  # A running app in the other mode is replaced.
   for app in $WEB_APPS; do
-    name="web-$app"; port=$(web_port_of "$app")
-    if running "$name"; then echo "  · $app already running"; continue; fi
-    : >"$LOGS/$name.log"
-    (cd "$ROOT/web/apps/$app" || exit 1
-      NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 \
-        nohup ./node_modules/.bin/next dev --port "$port" >>"$LOGS/$name.log" 2>&1 &
-      echo $! >"$PIDS/$name.pid")
+    name="web-$app"
+    if running "$name" && [[ "$(cat "$PIDS/$name.mode" 2>/dev/null || echo dev)" != "$mode" ]]; then
+      echo "  · $app runs in the other mode: restarting it as $mode"; stop "$name"
+    fi
   done
+  if [[ "$mode" == prod ]]; then
+    echo "==> building the web apps for production (next build, one at a time; logs: .local/logs/web-<app>.log)"
+    for app in $WEB_APPS; do
+      name="web-$app"
+      if running "$name"; then stop "$name"; fi
+      : >"$LOGS/$name.log"
+      echo "  … building $app"
+      if ! (cd "$ROOT/web/apps/$app" && NODE_ENV=production NEXT_DIST_DIR=.next-prod NEXT_TELEMETRY_DISABLED=1 \
+        NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 ./node_modules/.bin/next build >>"$LOGS/$name.log" 2>&1); then
+        echo "  ✗ $app build failed; last log lines:" >&2; tail -n 25 "$LOGS/$name.log" >&2; continue
+      fi
+      port=$(web_port_of "$app")
+      (cd "$ROOT/web/apps/$app" || exit 1
+        NODE_ENV=production NEXT_DIST_DIR=.next-prod NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_API_MOCKS=0 \
+          BFF_ORIGIN=http://localhost:8200 nohup ./node_modules/.bin/next start --port "$port" >>"$LOGS/$name.log" 2>&1 &
+        echo $! >"$PIDS/$name.pid")
+      echo prod >"$PIDS/$name.mode"
+    done
+  else
+    echo "==> starting web apps (Next.js dev against the local BFF on :8200; the first page load compiles for a minute)"
+    for app in $WEB_APPS; do
+      name="web-$app"; port=$(web_port_of "$app")
+      if running "$name"; then echo "  · $app already running"; continue; fi
+      : >"$LOGS/$name.log"
+      (cd "$ROOT/web/apps/$app" || exit 1
+        NEXT_PUBLIC_API_MOCKS=0 BFF_ORIGIN=http://localhost:8200 \
+          nohup ./node_modules/.bin/next dev --port "$port" >>"$LOGS/$name.log" 2>&1 &
+        echo $! >"$PIDS/$name.pid")
+      echo dev >"$PIDS/$name.mode"
+    done
+  fi
   for app in $WEB_APPS; do
     name="web-$app"; url="http://localhost:$(web_port_of "$app")"
+    [[ -f "$PIDS/$name.pid" ]] || continue
     for ((i = 0; i < 180; i += 3)); do
-      if grep -qE "Ready in|ready started|Local:" "$LOGS/$name.log" 2>/dev/null; then echo "  ✓ $app  $url"; break; fi
+      if grep -qE "Ready in|ready started|Local:" "$LOGS/$name.log" 2>/dev/null; then echo "  ✓ $app  $url  ($mode)"; break; fi
       if ! running "$name"; then echo "  ✗ $app exited; last log lines:" >&2; tail -n 20 "$LOGS/$name.log" >&2; break; fi
       sleep 3
     done
@@ -636,7 +673,8 @@ links() {
   echo "  make dev-status | make dev-logs SERVICE=orders (or web-storefront) | make dev-links | make down"
   echo "Secrets (.local/secrets.env; make secrets-check; docs/engineering/secrets-and-configuration.md)"
   secrets_summary
-  echo "  Checkout needs Stripe test keys in .local/secrets.env, and for webhooks:"
+  echo "  Payments: without STRIPE_SECRET_KEY a local stand-in authorises every card like test card 4242 (no money moves)."
+  echo "  For Stripe test mode put the keys in .local/secrets.env, and for webhooks:"
   echo "  stripe listen --forward-to localhost:8105/v1/webhooks/stripe   (its whsec_… → STRIPE_WEBHOOK_SECRET)"
   echo "──────────────────────────────────────────────────────────────────────────────────────────────"
 }
@@ -797,11 +835,12 @@ cmd_up() {
   links
 }
 
-# Demo data on a fresh stack: sellers, ~75 products with photos, offers, stock, home content, pre-orders (tools/seed).
+# Demo data on a fresh stack: sellers, ~75 products with photos, offers, stock, home content, pre-orders, and the
+# operations data (purchase orders, inbound shipments, orders in every state, routes, returns) when it is missing.
 seed_if_empty() {
   if [[ "${SEED:-1}" == 0 ]]; then return 0; fi
   command -v python3 >/dev/null || { echo "python3 not found: demo data skipped (make seed later)" >&2; return 0; }
-  echo "==> demo data (tools/seed; only when the catalog is empty, SEED=0 skips it; log: .local/logs/seed.log)"
+  echo "==> demo data (tools/seed; only what is missing, SEED=0 skips it; log: .local/logs/seed.log)"
   mkdir -p "$LOGS"
   python3 "$ROOT/tools/seed/seed.py" --if-empty 2>&1 | tee "$LOGS/seed.log" \
     | grep -E '^(seed:|services up|image sources|  [✗!]|  [a-z ]{3,20} {2,}|  attribution)' || true

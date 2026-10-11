@@ -103,22 +103,28 @@
 .choiceTitle { font-weight: var(--at-weight-semibold); font-size: var(--at-text-md); }
 .choiceSub { font-size: var(--at-text-xs); color: var(--at-color-text-muted); font-variant-numeric: tabular-nums; }
 
-/* Back-office layout: sub-navigation beside the content */
-.shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--at-space-6); align-items: start; }
-.nav { position: sticky; top: calc(56px + var(--at-space-6)); display: flex; flex-direction: column; gap: 2px; }
-.navTitle { margin: 0 0 var(--at-space-2); font-size: var(--at-text-xs); text-transform: uppercase; letter-spacing: var(--at-tracking-caps); color: var(--at-color-text-muted); font-weight: var(--at-weight-bold); }
-.navLink { display: flex; align-items: center; gap: var(--at-space-2); padding: var(--at-space-2) var(--at-space-3); border-radius: var(--at-radius-sm); color: var(--at-color-text); text-decoration: none; font-weight: var(--at-weight-medium); }
-.navLink:hover { background: var(--at-color-surface-hover); color: var(--at-color-text); text-decoration: none; }
-.navLink[aria-current='page'] { background: var(--at-gold-100); font-weight: var(--at-weight-bold); box-shadow: inset 3px 0 0 var(--at-gold-500); }
-.shellHead { grid-column: 1 / -1; display: flex; flex-direction: column; gap: var(--at-space-1); }
-
-@media (max-width: 899px) {
-  .shell { grid-template-columns: minmax(0, 1fr); gap: var(--at-space-4); }
-  .nav { position: static; flex-direction: row; overflow-x: auto; gap: var(--at-space-1); border-bottom: 1px solid var(--at-color-border); padding-bottom: var(--at-space-2); }
-  .navTitle { display: none; }
-  .navLink { white-space: nowrap; }
-  .navLink[aria-current='page'] { box-shadow: inset 0 -3px 0 var(--at-gold-500); }
+/* Back-office layout: title, then the sections as tabs (the same look as the module pages' tabs, e.g. Inventory),
+   then the section, full width. No second sidebar next to the app's own. */
+.shell { display: flex; flex-direction: column; gap: var(--at-space-5); min-width: 0; }
+.shellHead { display: flex; flex-direction: column; gap: var(--at-space-1); }
+.nav { display: flex; gap: var(--at-space-1); border-bottom: 1px solid var(--at-color-border); overflow-x: auto; }
+.navTitle { display: none; }
+.navLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--at-space-2);
+  min-height: var(--at-size-touch);
+  padding: 0 var(--at-space-4);
+  border-bottom: 3px solid transparent;
+  color: var(--at-color-text-muted);
+  font-size: var(--at-text-md);
+  font-weight: var(--at-weight-semibold);
+  text-decoration: none;
+  white-space: nowrap;
 }
+.navLink:hover { color: var(--at-color-text); text-decoration: none; }
+.navLink[aria-current='page'] { color: var(--at-color-text); border-bottom-color: var(--at-color-action-primary); }
+.section { max-width: 1120px; }
 
 @media (max-width: 639px) {
   .h1 { font-size: var(--at-text-2xl); }
