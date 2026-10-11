@@ -48,7 +48,7 @@ func TestEveryEnvironmentLoads(t *testing.T) {
 func TestPlatformURLsPerEnvironment(t *testing.T) {
 	cases := map[string]struct{ web, seller, staff, issuer, redirect string }{
 		"local": {"http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:8100",
-			"http://localhost:8200/login/oauth2/code/afrotransact"},
+			"http://localhost:3000/api/bff/v1/auth/oidc/callback"},
 		"dev": {"https://dev.afrotransact.com", "https://seller.dev.afrotransact.com", "https://admin.dev.afrotransact.com",
 			"https://auth.dev.afrotransact.com", "https://dev.afrotransact.com/api/bff/v1/auth/oidc/callback"},
 		"uat": {"https://uat.afrotransact.com", "https://seller.uat.afrotransact.com", "https://admin.uat.afrotransact.com",
@@ -65,6 +65,13 @@ func TestPlatformURLsPerEnvironment(t *testing.T) {
 		}
 		if got := c.Web.Origins; !slices.Equal(got, []string{want.web, want.seller, want.staff}) {
 			t.Fatalf("%s: origins = %v", env, got)
+		}
+		// Every app signs in through its own origin's callback (registered for gateway-bff at identity).
+		uris := c.RedirectURIs()
+		for _, o := range []string{want.web, want.seller, want.staff} {
+			if uris[o] != o+"/api/bff/v1/auth/oidc/callback" {
+				t.Fatalf("%s: redirect URIs = %v", env, uris)
+			}
 		}
 	}
 }

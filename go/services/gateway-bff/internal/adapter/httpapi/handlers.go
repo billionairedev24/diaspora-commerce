@@ -116,15 +116,6 @@ func (h *handlersImpl) Register(mux *http.ServeMux) {
 	route("GET /v1/auth/login", auth(h.login))
 	route("GET /v1/auth/oidc/{provider}/authorize", auth(h.socialLogin))
 	route("GET /v1/auth/oidc/callback", auth(h.callback))
-	route("GET /login/oauth2/code/afrotransact", auth(h.callback)) // redirect URI registered for gateway-bff at identity
-	route("POST /v1/auth/sign-in", auth(h.signIn))
-	route("POST /v1/auth/mfa/verify", auth(h.verifyMfa))
-	route("POST /v1/auth/mfa/sms", auth(h.sendMfaCode))
-	route("POST /v1/auth/sign-up", auth(h.signUp))
-	route("POST /v1/auth/email-verification/verify", auth(h.verifyEmail))
-	route("POST /v1/auth/email-verification/resend", auth(h.resendEmail))
-	route("POST /v1/auth/passkey/options", auth(h.passkeyOptions))
-	route("POST /v1/auth/passkey/verify", auth(h.passkeyVerify))
 	route("POST /v1/auth/sign-out", h.signOut)
 	// Account
 	route("GET /v1/account/addresses", h.listAddresses)
@@ -197,8 +188,9 @@ func (h *handlersImpl) reply(w http.ResponseWriter, r *http.Request, status int,
 func (h *handlersImpl) redirect(w http.ResponseWriter, r *http.Request, location string) {
 	h.finish(w, callerFrom(r.Context()))
 	w.Header().Set("Cache-Control", "no-store")
-	// Locations are identity's configured authorize URL or the configured storefront origin + a relative returnTo
-	// (domain.SafeReturnTo), never a client-supplied absolute URL.
+	// Locations are identity's configured authorize URL, or a configured web app origin (storefront, Seller Center,
+	// staff console: the origins with a registered callback) + a relative returnTo (domain.SafeReturnTo), never any
+	// other client-supplied absolute URL.
 	http.Redirect(w, r, location, http.StatusFound) //nolint:gosec // see above
 }
 

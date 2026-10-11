@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -123,27 +124,9 @@ func TestContractConformance(t *testing.T) {
 	b.do("GET", "/v1/me", nil)
 	b.do("GET", "/v1/auth/login?returnTo=/cart", nil)
 	b.do("GET", "/v1/auth/oidc/google/authorize", nil)
-	b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "bad", "password": ""})
-	b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "x", "code": "1"})
-	b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "locked@example.com", "password": "whatever"})
-	b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "ada@example.com", "password": testkit.FirstPartyPassword, "returnTo": "/cart"})
-	b.do("POST", "/v1/auth/mfa/sms", map[string]any{"challengeId": "ch-1"})
-	b.do("POST", "/v1/auth/mfa/sms", map[string]any{"challengeId": "unknown"})
-	b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "ch-1", "code": "000000"})
-	b.do("POST", "/v1/auth/passkey/options", map[string]any{})
-	b.do("POST", "/v1/auth/passkey/verify", map[string]any{"challengeId": "pk-0", "id": "cred", "rawId": "cred", "type": "public-key",
-		"response": map[string]any{"clientDataJSON": "e30", "authenticatorData": "AA", "signature": "AA", "userHandle": nil}})
-	b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "ch-1", "code": testkit.FirstPartyCode, "method": "sms"})
+	b.do("GET", "/v1/auth/login?returnTo=/account&prompt=create&login_hint=ada%40example.com&invitation=inv-1", nil)
+	b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(testkit.SellerCenterOrigin+"/orders"), nil)
 	b.do("POST", "/v1/auth/sign-out", nil)
-	b.do("POST", "/v1/auth/email-verification/resend", map[string]any{"challengeId": "unknown"})
-	r := b.do("POST", "/v1/auth/sign-up", map[string]any{"firstName": "Ada", "lastName": "Obi", "email": "ada@example.com",
-		"phone": "+17135550142", "password": "Str0ngPassword!", "termsAccepted": true, "smsConsent": true})
-	ch, _ := r.json(t)["challengeId"].(string)
-	b.do("POST", "/v1/auth/sign-up", map[string]any{"firstName": "Ada", "lastName": "Obi", "email": "taken@example.com",
-		"phone": "+17135550142", "password": "Str0ngPassword!", "termsAccepted": true, "smsConsent": true})
-	b.do("POST", "/v1/auth/email-verification/resend", map[string]any{"challengeId": ch})
-	b.do("POST", "/v1/auth/email-verification/verify", map[string]any{"challengeId": ch, "code": "000000"})
-	b.do("POST", "/v1/auth/email-verification/verify", map[string]any{"challengeId": ch, "code": "123456"})
 	// Account (signed in).
 	b.do("GET", "/v1/account/addresses", nil)
 	mustStatus(t, signIn(t, bff, b, "/"), 302)
@@ -179,9 +162,9 @@ func TestContractConformance(t *testing.T) {
 	for _, op := range []string{"getSiteConfig", "getHome", "subscribeNewsletter", "getDeliveryLocation", "setDeliveryLocation",
 		"suggestAddresses", "search", "suggest", "getProduct", "createStockAlert", "getCart", "addToCart", "updateCartLine",
 		"removeCartLine", "selectAllCartLines", "saveForLater", "moveToCart", "removeSaved", "getMe", "startHostedLogin",
-		"startSocialLogin", "signIn", "verifyMfa", "signUp", "verifyEmail", "resendEmailCode", "signOut", "listAddresses",
+		"startSocialLogin", "signOut", "listAddresses",
 		"createAddress", "deleteAddress", "listPaymentMethods", "createSetupIntent", "getCheckoutSummary", "placeOrder",
-		"listJobs", "applyToJob", "sendMfaCode", "passkeyOptions", "passkeyVerify", "listStockAlerts", "removeStockAlert",
+		"listJobs", "applyToJob", "listStockAlerts", "removeStockAlert",
 		"requestResumeUpload", "completeResumeUpload", "startPhoneVerification", "confirmPhoneVerification"} {
 		if validated[op] == 0 {
 			t.Errorf("operation %s was not validated", op)

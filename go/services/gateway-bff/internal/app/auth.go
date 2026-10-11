@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,55 +15,49 @@ import (
 	"github.com/billionairedev24/diaspora-commerce/go/services/gateway-bff/internal/port"
 )
 
-// AuthService runs the token-mediating backend: OIDC authorization code + PKCE with identity, session rotation
-// on sign-in, guest-cart merge, sign-out with revocation, sign-up and email verification, and /v1/me.
+// AuthService runs the token-mediating backend for the web apps: OIDC authorization code + PKCE with identity's
+// hosted sign-in (the only place credentials are entered, so one identity session signs in every app), session
+// rotation on sign-in, guest-cart merge, sign-out with revocation and RP-initiated logout, and /v1/me.
 type AuthService interface {
 	// AuthorizeURL starts hosted (provider "") or social sign-in and returns identity's /oauth2/authorize URL.
-	AuthorizeURL(ctx context.Context, c *domain.Caller, provider, returnTo, prompt string) (string, error)
+	AuthorizeURL(ctx context.Context, c *domain.Caller, in LoginRequest) (string, error)
 	// Callback exchanges the code, rotates the session and returns where to send the browser.
 	Callback(ctx context.Context, c *domain.Caller, code, state, oauthError string) string
-	SignOut(ctx context.Context, c *domain.Caller) error
+	// SignOut revokes the tokens and ends the session; it returns identity's end-session URL (RP-initiated logout,
+	// back to the origin's home page) for the browser to visit, or "" when there is no identity session to end.
+	SignOut(ctx context.Context, c *domain.Caller, origin string) (string, error)
 	Me(ctx context.Context, c *domain.Caller) (domain.Me, error)
-	SignUp(ctx context.Context, c *domain.Caller, req SignUpRequest) (domain.AuthResult, error)
-	VerifyEmail(ctx context.Context, c *domain.Caller, challengeID, code string) (domain.AuthResult, error)
-	ResendEmailCode(ctx context.Context, challengeID string) (int, error)
-	// SignIn, SendMFACode, VerifyMFA, PasskeyOptions and PasskeyVerify run the storefront's own sign-in forms on
-	// identity's first-party API (auth_firstparty.go).
-	SignIn(ctx context.Context, c *domain.Caller, in SignInInput) (FirstPartyResult, error)
-	SendMFACode(ctx context.Context, c *domain.Caller, challengeID string) (domain.AuthResult, error)
-	VerifyMFA(ctx context.Context, c *domain.Caller, in VerifyMFAInput) (FirstPartyResult, error)
-	PasskeyOptions(ctx context.Context, c *domain.Caller, userAgent string) (domain.PasskeyOptions, error)
-	PasskeyVerify(ctx context.Context, c *domain.Caller, challengeID string, credential json.RawMessage, userAgent string) (FirstPartyResult, error)
 }
 
-// SignUpRequest is the storefront sign-up form.
-type SignUpRequest struct {
-	FirstName     string `json:"firstName"`
-	LastName      string `json:"lastName"`
-	Email         string `json:"email"`
-	Phone         string `json:"phone"`
-	Password      string `json:"password"`
-	TermsAccepted bool   `json:"termsAccepted"`
-	SMSConsent    bool   `json:"smsConsent"`
-	ReturnTo      string `json:"returnTo"`
-	// InvitationToken comes from an organisation invite link: identity starts the account verified (no email code)
-	// and joins the organisation, so the person goes straight to sign-in.
-	InvitationToken string `json:"invitationToken"`
+// LoginRequest starts sign-in on identity's hosted pages.
+type LoginRequest struct {
+	// Provider is "" for identity's own sign-in page, or google | apple | facebook (idp_hint).
+	Provider string
+	// ReturnTo is a path on the storefront, or an absolute URL on one of the web apps' origins (Seller Center, staff
+	// console); anything else becomes "/" on the storefront.
+	ReturnTo string
+	// Prompt is the OIDC prompt: "login" (sign in again) or "create" (identity's sign-up page); others are dropped.
+	Prompt string
+	// LoginHint prefills the email on identity's pages (OIDC login_hint).
+	LoginHint string
+	// Invitation is an organisation invitation token: the account created on identity's sign-up page joins it.
+	Invitation string
 }
 
 // AuthOptions configure sign-in.
 type AuthOptions struct {
-	IdentityPublicURL string // browser-facing identity base (authorize endpoint)
+	IdentityPublicURL string // browser-facing identity base (authorize and end-session endpoints)
 	ClientID          string
-	RedirectURI       string
-	Scopes            []string
-	WebOrigin         string // storefront origin for post-login redirects
-	BFFPath           string // storefront path that proxies to the BFF, e.g. /api/bff
-	StateTTL          time.Duration
-	// FirstParty is identity's first-party sign-in API (password, MFA, passkeys); nil disables those forms (503).
-	FirstParty port.FirstPartyClient
-	Clock      Clock
-	Log        *slog.Logger
+	// RedirectURI is the storefront's callback (the fallback for an origin missing from RedirectURIs).
+	RedirectURI string
+	// RedirectURIs maps each web app origin to its own callback (<origin><BFFPath>/v1/auth/oidc/callback), so the
+	// session cookie is set on the app's own host.
+	RedirectURIs map[string]string
+	Scopes       []string
+	WebOrigin    string // storefront origin: default post-login destination and sign-in error page
+	StateTTL     time.Duration
+	Clock        Clock
+	Log          *slog.Logger
 }
 
 type authServiceImpl struct {
@@ -92,6 +85,12 @@ func NewAuthService(sessions SessionService, store port.SessionStore, ephemeral 
 	if len(o.Scopes) == 0 {
 		o.Scopes = []string{"openid", "email", "profile", "offline_access"}
 	}
+	o.WebOrigin = strings.TrimSuffix(o.WebOrigin, "/")
+	uris := make(map[string]string, len(o.RedirectURIs))
+	for origin, uri := range o.RedirectURIs {
+		uris[strings.ToLower(strings.TrimSuffix(origin, "/"))] = uri
+	}
+	o.RedirectURIs = uris
 	return &authServiceImpl{sessions: sessions, store: store, ephemeral: ephemeral, identity: identity, verifier: verifier,
 		cart: cart, payments: payments, o: o}
 }
@@ -99,7 +98,46 @@ func NewAuthService(sessions SessionService, store port.SessionStore, ephemeral 
 // Social providers the contract allows (IdentityProviderId).
 var socialProviders = map[string]bool{"google": true, "apple": true, "facebook": true}
 
-func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, provider, returnTo, prompt string) (string, error) {
+const (
+	maxLoginHint  = 254
+	maxInvitation = 200
+)
+
+// appOrigin returns the origin of an absolute URL when it is one of the web apps' (an origin with a registered
+// callback), else "".
+func (a *authServiceImpl) appOrigin(raw string) string {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.User != nil {
+		return ""
+	}
+	origin := strings.ToLower(u.Scheme + "://" + u.Host)
+	if _, ok := a.o.RedirectURIs[origin]; ok {
+		return origin
+	}
+	return ""
+}
+
+// destination splits returnTo into the app origin and a safe relative path on it.
+func (a *authServiceImpl) destination(returnTo string) (origin, path string) {
+	if strings.HasPrefix(returnTo, "/") {
+		return a.o.WebOrigin, domain.SafeReturnTo(returnTo)
+	}
+	if origin = a.appOrigin(returnTo); origin == "" {
+		return a.o.WebOrigin, "/"
+	}
+	u, _ := url.Parse(strings.TrimSpace(returnTo)) // parsed by appOrigin
+	return origin, domain.SafeReturnTo(firstNonEmpty(u.RequestURI(), "/"))
+}
+
+func (a *authServiceImpl) redirectURI(origin string) string {
+	if uri, ok := a.o.RedirectURIs[strings.ToLower(origin)]; ok {
+		return uri
+	}
+	return a.o.RedirectURI
+}
+
+func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, in LoginRequest) (string, error) {
+	provider := in.Provider
 	if provider != "" {
 		if !socialProviders[provider] {
 			return "", domain.NewProblem(http.StatusNotFound, domain.CodeProviderDisabled, "Sign-in option unavailable", provider+" sign-in is not enabled.")
@@ -118,8 +156,10 @@ func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, pr
 			return "", domain.NewProblem(http.StatusNotFound, domain.CodeProviderDisabled, "Sign-in option unavailable", provider+" sign-in is not enabled.")
 		}
 	}
+	origin, path := a.destination(in.ReturnTo)
+	redirectURI := a.redirectURI(origin)
 	verifier, state, nonce := randomID(48), randomID(32), randomID(24)
-	req := port.AuthRequest{Verifier: verifier, Nonce: nonce, ReturnTo: domain.SafeReturnTo(returnTo), Provider: provider}
+	req := port.AuthRequest{Verifier: verifier, Nonce: nonce, ReturnTo: path, Provider: provider, Origin: origin, RedirectURI: redirectURI}
 	if c.Session != nil && !c.App {
 		req.SessionID = c.Session.ID
 	}
@@ -130,7 +170,7 @@ func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, pr
 	q := url.Values{
 		"response_type":         {"code"},
 		"client_id":             {a.o.ClientID},
-		"redirect_uri":          {a.o.RedirectURI},
+		"redirect_uri":          {redirectURI},
 		"scope":                 {strings.Join(a.o.Scopes, " ")},
 		"code_challenge":        {base64.RawURLEncoding.EncodeToString(sum[:])},
 		"code_challenge_method": {"S256"},
@@ -140,35 +180,53 @@ func (a *authServiceImpl) AuthorizeURL(ctx context.Context, c *domain.Caller, pr
 	if provider != "" {
 		q.Set("idp_hint", provider)
 	}
-	if prompt == "login" || prompt == "create" {
-		q.Set("prompt", prompt)
+	if in.Prompt == "login" || in.Prompt == "create" {
+		q.Set("prompt", in.Prompt)
+	}
+	if hint := strings.TrimSpace(in.LoginHint); hint != "" && len(hint) <= maxLoginHint && emailLike(hint) {
+		q.Set("login_hint", hint)
+	}
+	if inv := strings.TrimSpace(in.Invitation); inv != "" && len(inv) <= maxInvitation {
+		q.Set("invitation", inv)
 	}
 	return strings.TrimSuffix(a.o.IdentityPublicURL, "/") + "/oauth2/authorize?" + q.Encode(), nil
 }
 
-func (a *authServiceImpl) signinError(reason string) string {
-	return strings.TrimSuffix(a.o.WebOrigin, "/") + "/signin?error=" + url.QueryEscape(reason)
+func emailLike(v string) bool {
+	at := strings.Index(v, "@")
+	return at > 0 && at < len(v)-1 && !strings.ContainsAny(v, " \r\n")
+}
+
+// signinError is the storefront's sign-in error page; it offers to start again towards the original destination.
+func (a *authServiceImpl) signinError(reason string, req *port.AuthRequest) string {
+	q := url.Values{"error": {reason}}
+	if req != nil && req.Origin != "" && !strings.EqualFold(req.Origin, a.o.WebOrigin) {
+		q.Set("returnTo", req.Origin+req.ReturnTo)
+	} else if req != nil && req.ReturnTo != "" && req.ReturnTo != "/" {
+		q.Set("returnTo", req.ReturnTo)
+	}
+	return a.o.WebOrigin + "/signin?" + q.Encode()
 }
 
 func (a *authServiceImpl) Callback(ctx context.Context, c *domain.Caller, code, state, oauthError string) string {
 	req, err := a.ephemeral.TakeAuthRequest(ctx, state)
 	if err != nil || req == nil {
-		return a.signinError("expired")
+		return a.signinError("expired", nil)
 	}
 	if oauthError != "" {
-		return a.signinError(oauthError)
+		return a.signinError(oauthError, req)
 	}
 	// Bind the flow to the browser that started it: a different signed session means a login-CSRF attempt.
 	if req.SessionID != "" && c.Session != nil && !c.App && c.Session.ID != req.SessionID {
-		return a.signinError("state_mismatch")
+		return a.signinError("state_mismatch", req)
 	}
 	if code == "" {
-		return a.signinError("missing_code")
+		return a.signinError("missing_code", req)
 	}
 	if err := a.complete(ctx, c, code, *req); err != nil {
-		return a.signinError(err.Error())
+		return a.signinError(err.Error(), req)
 	}
-	return strings.TrimSuffix(a.o.WebOrigin, "/") + req.ReturnTo
+	return firstNonEmpty(req.Origin, a.o.WebOrigin) + domain.SafeReturnTo(req.ReturnTo)
 }
 
 // signInFailure is a short reason for /signin?error= (never contains tokens).
@@ -177,10 +235,9 @@ type signInFailure string
 func (f signInFailure) Error() string { return string(f) }
 
 // complete exchanges the code (PKCE), verifies the ID token, rotates the session id (carrying guest ZIP and cart
-// over), merges the guest cart and saves the signed-in session. Shared by the hosted callback and first-party
-// sign-in.
+// over), merges the guest cart and saves the signed-in session.
 func (a *authServiceImpl) complete(ctx context.Context, c *domain.Caller, code string, req port.AuthRequest) error {
-	tokens, err := a.identity.ExchangeCode(ctx, code, req.Verifier, a.o.RedirectURI)
+	tokens, err := a.identity.ExchangeCode(ctx, code, req.Verifier, firstNonEmpty(req.RedirectURI, a.o.RedirectURI))
 	if err != nil {
 		a.o.Log.WarnContext(ctx, "authorization code exchange failed", "error", err)
 		return signInFailure("exchange_failed")
@@ -219,8 +276,10 @@ func (a *authServiceImpl) complete(ctx context.Context, c *domain.Caller, code s
 	return nil
 }
 
-func (a *authServiceImpl) SignOut(ctx context.Context, c *domain.Caller) error {
+func (a *authServiceImpl) SignOut(ctx context.Context, c *domain.Caller, origin string) (string, error) {
+	idToken := ""
 	if c.Session != nil && c.Session.Tokens != nil {
+		idToken = c.Session.Tokens.IDToken
 		if rt := c.Session.Tokens.RefreshToken; rt != "" {
 			if err := a.identity.Revoke(ctx, rt, "refresh_token"); err != nil {
 				a.o.Log.WarnContext(ctx, "refresh token revocation failed", "error", err)
@@ -231,15 +290,22 @@ func (a *authServiceImpl) SignOut(ctx context.Context, c *domain.Caller) error {
 		}
 	}
 	if c.App {
-		return nil
+		return "", nil
 	}
 	if err := a.sessions.Delete(ctx, c); err != nil {
-		return fmt.Errorf("sign out: %w", err)
+		return "", fmt.Errorf("sign out: %w", err)
 	}
 	c.Session = nil
 	c.BearerToken, c.Subject = "", ""
 	c.SessionEnded = true
-	return nil
+	if idToken == "" {
+		return "", nil
+	}
+	// RP-initiated logout ends the identity session too (single sign-out), then identity sends the browser back to
+	// the home page of the app that signed out (a post-logout redirect URI registered for gateway-bff).
+	home := firstNonEmpty(a.appOrigin(origin), a.o.WebOrigin) + "/"
+	q := url.Values{"id_token_hint": {idToken}, "client_id": {a.o.ClientID}, "post_logout_redirect_uri": {home}}
+	return strings.TrimSuffix(a.o.IdentityPublicURL, "/") + "/connect/logout?" + q.Encode(), nil
 }
 
 func (a *authServiceImpl) Me(ctx context.Context, c *domain.Caller) (domain.Me, error) {
@@ -280,20 +346,6 @@ func isUnauthorized(err error) bool {
 	return ok && p.Status == http.StatusUnauthorized
 }
 
-// hostedLogin is where the storefront sends the browser after sign-up: identity's hosted login (PKCE via the BFF).
-func (a *authServiceImpl) hostedLogin(returnTo string) string {
-	return strings.TrimSuffix(a.o.BFFPath, "/") + "/v1/auth/login?" + url.Values{"returnTo": {domain.SafeReturnTo(returnTo)}}.Encode()
-}
-
-func maskEmail(e string) string {
-	local, dom, ok := strings.Cut(e, "@")
-	if !ok || local == "" {
-		return e
-	}
-	r := []rune(local)
-	return string(r[0]) + strings.Repeat("•", max(1, min(6, len(r)-1))) + "@" + dom
-}
-
 // maskPhone keeps the last four digits (•••• 0142).
 func maskPhone(p string) string {
 	digits := strings.Map(func(r rune) rune {
@@ -306,62 +358,6 @@ func maskPhone(p string) string {
 		return ""
 	}
 	return "•••• " + digits[len(digits)-4:]
-}
-
-const resendAfterSeconds = 30
-
-func (a *authServiceImpl) SignUp(ctx context.Context, _ *domain.Caller, req SignUpRequest) (domain.AuthResult, error) {
-	email := strings.ToLower(strings.TrimSpace(req.Email))
-	err := a.identity.SignUp(ctx, port.IdentitySignUp{FirstName: strings.TrimSpace(req.FirstName), LastName: strings.TrimSpace(req.LastName),
-		Email: email, Phone: req.Phone, Password: req.Password, ConfirmPassword: req.Password, TermsAccepted: req.TermsAccepted,
-		SMSConsent: req.SMSConsent, Intent: "shop", InvitationToken: strings.TrimSpace(req.InvitationToken)})
-	if err != nil {
-		return domain.AuthResult{}, mapIdentityErr(err)
-	}
-	if strings.TrimSpace(req.InvitationToken) != "" {
-		return domain.AuthResult{Status: "authenticated", RedirectTo: a.hostedLogin(req.ReturnTo)}, nil
-	}
-	id := randomID(18)
-	if err := a.ephemeral.PutChallenge(ctx, id, port.Challenge{Email: email, ReturnTo: domain.SafeReturnTo(req.ReturnTo)}, 15*time.Minute); err != nil {
-		return domain.AuthResult{}, domain.UpstreamUnavailable("valkey").WithCause(err)
-	}
-	return domain.AuthResult{Status: "verification_required", ChallengeID: id, Destination: maskEmail(email), ResendAfterSeconds: ptr(resendAfterSeconds)}, nil
-}
-
-func (a *authServiceImpl) challenge(ctx context.Context, id string) (*port.Challenge, error) {
-	ch, err := a.ephemeral.GetChallenge(ctx, id)
-	if err != nil {
-		return nil, domain.UpstreamUnavailable("valkey").WithCause(err)
-	}
-	if ch == nil {
-		return nil, domain.NewProblem(http.StatusGone, domain.CodeChallengeExpired, "Verification expired", "That code has expired. Start again.")
-	}
-	return ch, nil
-}
-
-// VerifyEmail confirms the address with identity. Identity issues tokens only through its authorization endpoint,
-// so the customer finishes signing in on the hosted login (redirectTo) with the account just verified.
-func (a *authServiceImpl) VerifyEmail(ctx context.Context, _ *domain.Caller, challengeID, code string) (domain.AuthResult, error) {
-	ch, err := a.challenge(ctx, challengeID)
-	if err != nil {
-		return domain.AuthResult{}, err
-	}
-	if err := a.identity.VerifyEmail(ctx, ch.Email, code); err != nil {
-		return domain.AuthResult{}, mapIdentityErr(err)
-	}
-	_ = a.ephemeral.DeleteChallenge(ctx, challengeID)
-	return domain.AuthResult{Status: "authenticated", RedirectTo: a.hostedLogin(ch.ReturnTo)}, nil
-}
-
-func (a *authServiceImpl) ResendEmailCode(ctx context.Context, challengeID string) (int, error) {
-	ch, err := a.challenge(ctx, challengeID)
-	if err != nil {
-		return 0, err
-	}
-	if err := a.identity.ResendCode(ctx, ch.Email); err != nil {
-		return 0, mapIdentityErr(err)
-	}
-	return resendAfterSeconds, nil
 }
 
 // mapIdentityErr maps identity's problem codes onto the contract's.

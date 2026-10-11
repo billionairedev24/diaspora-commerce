@@ -10,12 +10,17 @@ served at `/openapi.yaml`, `/docs`, `/redoc`) and
 
 ## What it does
 
-- **Token-mediating backend (web).** `GET /v1/auth/login` and `/v1/auth/oidc/{provider}/authorize` start the OAuth 2.1
-  authorization-code flow with PKCE (S256), `state` and `nonce` against identity (confidential client `gateway-bff`).
-  The callback (`/v1/auth/oidc/callback`, and `/login/oauth2/code/afrotransact`, the redirect URI registered at identity)
-  exchanges the code, verifies the ID token (JWKS, audience, nonce), **rotates the session id**, carries the guest
-  ZIP over, merges the guest cart (`POST /v1/cart/merge`) and redirects to `WEB_PUBLIC_ORIGIN + returnTo` (relative
-  paths only). Tokens live in Valkey, **AES-256-GCM encrypted at rest** (key derived from `SESSION_SIGNING_KEY`, bound
+- **Token-mediating backend (web), single sign-on.** Credentials are only entered on identity's hosted pages (sign-in,
+  sign-up, two-step, passkeys, social). `GET /v1/auth/login` (`returnTo`, `prompt=create|login`, `login_hint`,
+  `invitation`) and `/v1/auth/oidc/{provider}/authorize` start the OAuth 2.1 authorization-code flow with PKCE (S256),
+  `state` and `nonce` against identity (confidential client `gateway-bff`). Each web app signs in through its **own
+  origin's callback** `<app>/api/bff/v1/auth/oidc/callback` (chosen from `returnTo`: a storefront path, or an absolute
+  URL on Seller Center's or the staff console's origin), so the session cookie is set on that app's host; one identity
+  session then signs the person in to every app without another prompt. The callback exchanges the code, verifies the
+  ID token (JWKS, audience, nonce), **rotates the session id**, carries the guest ZIP over, merges the guest cart
+  (`POST /v1/cart/merge`) and redirects to the app origin + `returnTo` path. `POST /v1/auth/sign-out` revokes the
+  tokens, ends the session and answers `{redirectTo}`: identity's `/connect/logout` (RP-initiated logout, back to the
+  calling app's home page) so the identity session ends too. Tokens live in Valkey, **AES-256-GCM encrypted at rest** (key derived from `SESSION_SIGNING_KEY`, bound
   to the record key); the browser only holds `at_session` = opaque id + HMAC (HttpOnly, Secure, SameSite=Lax).
   Access tokens are refreshed 30 s before expiry under a Valkey lock (identity's refresh tokens are single use);
   `invalid_grant` signs the customer out but keeps guest state. Sign-out revokes refresh and access tokens.
@@ -67,8 +72,7 @@ served at `/openapi.yaml`, `/docs`, `/redoc`) and
 | cart: `GET /v1/cart`, items add/patch/delete, selection, save-for-later, move-to-cart, saved delete | cart service (lines carry `offerId`; cart validates buyable/price via offers) + offers buy box for the default offer, catalog for enrichment, inventory for stock problems, Valkey for selection | live (`409 cart.offer-not-buyable`) |
 | `GET /v1/me` | identity `GET /v1/me` (fallback: ID-token profile), counts from identity addresses + payments | live |
 | `GET /v1/auth/login`, `/v1/auth/oidc/{provider}/authorize`, `/v1/auth/oidc/callback`, `POST /v1/auth/sign-out` | identity `/oauth2/authorize`, `/oauth2/token`, `/oauth2/revoke`, JWKS; cart merge | live |
-| `POST /v1/auth/sign-up`, `/email-verification/verify`, `/email-verification/resend` | identity `POST /v1/accounts`, `/v1/accounts/verification`, `/resend` | live (verify → `redirectTo` hosted login; with `invitationToken` no code: straight to sign-in) |
-| `POST /v1/auth/sign-in`, `/mfa/sms`, `/mfa/verify`, `/passkey/options`, `/passkey/verify` | identity `/v1/auth/password`, `/v1/auth/mfa/sms`, `/mfa/verify`, `/v1/auth/passkey/options`, `/verify` with a client-credentials token (`auth:first-party`); the `login_ticket` is redeemed at `/oauth2/authorize` (PKCE S256, redirect not followed) then `/oauth2/token`. Trusted device: HttpOnly `at_trusted_device` cookie, 30 days. Lockout 429 relays `Retry-After` | live |
+| (removed) `POST /v1/auth/sign-in`, `/mfa/*`, `/passkey/*`, `/sign-up`, `/email-verification/*` | — | The web apps' own credential forms are gone: sign-in and sign-up run on identity's hosted pages (`GET /v1/auth/login?prompt=create`). The mobile apps use identity's hosted OIDC flow directly. |
 | `GET/POST /v1/account/addresses`, `PATCH/DELETE …/{id}`, `POST …/{id}/default` | identity `/v1/me/addresses…` + geo `POST /v1/addresses/validate` | live |
 | `POST /v1/account/phone/verification`, `…/confirm` | identity `POST /v1/me/phone/verification`, `…/confirm` (`GET /v1/me` carries the masked phone and `phoneVerified`) | live |
 | `GET /v1/account/payment-methods`, `POST …/setup-intents`, `POST …/{id}/default`, `DELETE …/{id}` | payments `GET /v1/customers/me/payment-methods` (array of display data → label + MM/YY), `POST /v1/customers/me/setup-intents {types}` (+ `STRIPE_PUBLISHABLE_KEY`), `POST …/{id}/default`, `DELETE …/{id}` (`payments.default-method-required` → 409) | live |
@@ -175,14 +179,15 @@ Shared platform URLs (`docs/engineering/environments.md`): `PUBLIC_WEB_URL`, `SE
 and `AUTH_ISSUER_URL` are injected by the Helm library chart from `global.domain`; `config/<env>.yaml` keeps that
 environment's own hosts under `platform:` as the fallback (`config/local.yaml`: localhost). `Config.Resolve` derives
 the CORS/CSRF origins (storefront, Seller Center, staff console), the storefront origin (`PUBLIC_WEB_URL`), the OIDC
-issuer and browser URL (`AUTH_ISSUER_URL`) and, outside local, the OIDC redirect URI
-`<PUBLIC_WEB_URL>/api/bff/v1/auth/oidc/callback` (so the cookie stays first-party; identity registers it for
-`gateway-bff`). `WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL` and `OIDC_REDIRECT_URI` override
+issuer and browser URL (`AUTH_ISSUER_URL`) and the per-app OIDC redirect URIs
+`<PUBLIC_WEB_URL|SELLER_CENTER_URL|STAFF_CONSOLE_URL>/api/bff/v1/auth/oidc/callback` (`Config.RedirectURIs`; each
+cookie stays first-party on its app's host; identity registers the same three for `gateway-bff`, plus the three home
+pages as post-logout redirect URIs). `WEB_ORIGINS`, `WEB_PUBLIC_ORIGIN`, `OIDC_ISSUER`, `OIDC_PUBLIC_URL` and `OIDC_REDIRECT_URI` override
 the derived values. Problem types are `https://developers.afrotransact.com/problems/bff.<code>` (`go/pkg/problem`).
 
 Local defaults: upstreams on their `infra/local/PORTS.md` ports, storefront `http://localhost:3000`, Seller Center
 `http://localhost:3001` and staff console `http://localhost:3002` allowed for CORS/CSRF, identity `http://localhost:8100`,
-redirect URI `http://localhost:8200/login/oauth2/code/afrotransact`, identity client secret `local-bff-secret`, cookie
+redirect URIs `http://localhost:{3000,3001,3002}/api/bff/v1/auth/oidc/callback`, identity client secret `local-bff-secret`, cookie
 not `Secure` (plain-http localhost).
 
 ## Run and test

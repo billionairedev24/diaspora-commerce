@@ -1,7 +1,6 @@
 package httpapi_test
 
 import (
-	"net/http"
 	"strings"
 	"testing"
 
@@ -75,82 +74,6 @@ func TestStockAlertsWithNotifications(t *testing.T) {
 	mustStatus(t, b.do("DELETE", "/v1/account/stock-alerts/ATGARIV001", nil), 404)
 }
 
-// S209: the storefront's own password, MFA and passkey forms on identity's first-party API.
-func TestFirstPartySignIn(t *testing.T) {
-	bff, b := setup(t, testkit.Options{})
-	r := b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "ada@example.com", "password": testkit.FirstPartyPassword, "returnTo": "/cart"})
-	mustStatus(t, r, 200)
-	step := r.json(t)
-	if step["status"] != "mfa_required" || step["challengeId"] != "ch-1" || step["destination"] != "+1 ••• ••• 0142" || b.cookie != "" {
-		t.Fatalf("step = %v", step)
-	}
-	if got := bff.Upstreams.ServiceTokenRequests; len(got) == 0 || got[0] != "auth:first-party" {
-		t.Fatalf("service token scopes = %v", got)
-	}
-	if bff.Upstreams.LastClientIP == "" {
-		t.Fatal("the end user's IP must reach identity")
-	}
-	mustStatus(t, b.do("POST", "/v1/auth/mfa/sms", map[string]any{"challengeId": "ch-1"}), 202)
-	r = b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "ch-1", "code": "000000"})
-	mustStatus(t, r, 422)
-	if c := problemCode(t, r); c != "INVALID_CODE" {
-		t.Fatalf("code = %s", c)
-	}
-	r = b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "ch-1", "code": testkit.FirstPartyCode, "trustDevice": true})
-	mustStatus(t, r, 200)
-	if got := r.json(t); got["status"] != "authenticated" || got["redirectTo"] != "/cart" || b.cookie == "" {
-		t.Fatalf("signed in = %v (cookie %q)", got, b.cookie)
-	}
-	trusted := ""
-	for _, c := range (&http.Response{Header: r.header}).Cookies() {
-		if c.Name == "at_trusted_device" && c.HttpOnly && c.MaxAge > 0 {
-			trusted = c.Value
-		}
-	}
-	if trusted != testkit.TrustedDeviceToken {
-		t.Fatalf("trusted-device cookie = %q", trusted)
-	}
-	if me := b.do("GET", "/v1/me", nil).json(t); me["authenticated"] != true {
-		t.Fatalf("me = %v", me)
-	}
-	// The challenge is single use.
-	mustStatus(t, b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "ch-1", "code": testkit.FirstPartyCode}), 410)
-
-	// A trusted device skips the second factor.
-	b2 := newBrowser(t, bff.Handler)
-	b2.headers["Cookie"] = "at_trusted_device=" + trusted
-	if got := b2.do("POST", "/v1/auth/sign-in", map[string]any{"email": "ada@example.com", "password": testkit.FirstPartyPassword}).json(t); got["status"] != "authenticated" {
-		t.Fatalf("trusted device sign-in = %v", got)
-	}
-
-	// Lockouts keep Retry-After; wrong passwords are INVALID_CREDENTIALS.
-	b3 := newBrowser(t, bff.Handler)
-	r = b3.do("POST", "/v1/auth/sign-in", map[string]any{"email": "locked@example.com", "password": "anything"})
-	mustStatus(t, r, 429)
-	if r.header.Get("Retry-After") != "120" || problemCode(t, r) != "RATE_LIMITED" {
-		t.Fatalf("lockout = %v %s", r.header, r.body)
-	}
-	if c := problemCode(t, b3.do("POST", "/v1/auth/sign-in", map[string]any{"email": "ada@example.com", "password": "wrong"})); c != "INVALID_CREDENTIALS" {
-		t.Fatalf("code = %s", c)
-	}
-
-	// Passkeys: options, then the assertion signs in.
-	opts := b3.do("POST", "/v1/auth/passkey/options", map[string]any{}).json(t)
-	if opts["challengeId"] != "pk-1" || opts["rpId"] != "localhost" || opts["userVerification"] != "required" {
-		t.Fatalf("passkey options = %v", opts)
-	}
-	assertion := map[string]any{"challengeId": "pk-1", "id": "cred-1", "rawId": "cred-1", "type": "public-key",
-		"response": map[string]any{"clientDataJSON": "e30", "authenticatorData": "AA", "signature": "AA", "userHandle": "dXNlci0x"}}
-	r = b3.do("POST", "/v1/auth/passkey/verify", assertion)
-	mustStatus(t, r, 200)
-	if r.json(t)["status"] != "authenticated" || b3.cookie == "" {
-		t.Fatalf("passkey sign-in = %s", r.body)
-	}
-	assertion["challengeId"] = "pk-0"
-	mustStatus(t, b3.do("POST", "/v1/auth/passkey/verify", assertion), 401)
-}
-
-// S212: résumé uploads go through media with the BFF's own token for guests.
 func TestCareersResumeUpload(t *testing.T) {
 	bff, b := setup(t, testkit.Options{Content: true})
 	r := b.do("POST", "/v1/careers/uploads", map[string]any{"fileName": "Ada Obi CV.pdf", "contentType": "application/pdf", "size": 120000})

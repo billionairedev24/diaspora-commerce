@@ -311,21 +311,6 @@ type PhoneVerification struct {
 	VerifiedAt    *time.Time `json:"verifiedAt"`
 }
 
-// IdentitySignUp is identity's POST /v1/accounts body.
-type IdentitySignUp struct {
-	FirstName       string `json:"firstName"`
-	LastName        string `json:"lastName"`
-	Email           string `json:"email"`
-	Phone           string `json:"phone"`
-	Password        string `json:"password"`
-	ConfirmPassword string `json:"confirmPassword"`
-	TermsAccepted   bool   `json:"termsAccepted"`
-	SMSConsent      bool   `json:"smsConsent"`
-	Intent          string `json:"intent"`
-	// InvitationToken (organisation invite link, same email) starts the account verified and joins the organisation.
-	InvitationToken string `json:"invitationToken,omitempty"`
-}
-
 // IdentityProvider is an enabled social sign-in provider.
 type IdentityProvider struct {
 	ID          string `json:"id"`
@@ -361,9 +346,6 @@ type IdentityClient interface {
 	Refresh(ctx context.Context, refreshToken string) (domain.Tokens, error)
 	Revoke(ctx context.Context, token, hint string) error
 	Me(ctx context.Context, bearer string) (IdentityMe, error)
-	SignUp(ctx context.Context, req IdentitySignUp) error
-	VerifyEmail(ctx context.Context, email, code string) error
-	ResendCode(ctx context.Context, email string) error
 	Providers(ctx context.Context) ([]IdentityProvider, error)
 	Addresses(ctx context.Context, bearer string) ([]IdentityAddress, error)
 	CreateAddress(ctx context.Context, bearer string, a IdentityAddress) (IdentityAddress, error)
@@ -581,9 +563,14 @@ type SessionStore interface {
 type AuthRequest struct {
 	Verifier  string `json:"verifier"`
 	Nonce     string `json:"nonce"`
-	ReturnTo  string `json:"returnTo"`
+	ReturnTo  string `json:"returnTo"` // path on Origin
 	SessionID string `json:"sessionId,omitempty"`
 	Provider  string `json:"provider,omitempty"`
+	// Origin is the web app the sign-in started from (storefront, Seller Center, staff console); the callback returns
+	// there. Empty for requests stored before per-app callbacks (the storefront).
+	Origin string `json:"origin,omitempty"`
+	// RedirectURI is the callback sent to identity, needed again for the code exchange.
+	RedirectURI string `json:"redirectUri,omitempty"`
 }
 
 // Challenge is a pending sign-up verification.

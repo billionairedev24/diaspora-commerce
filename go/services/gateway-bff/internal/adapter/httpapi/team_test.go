@@ -101,18 +101,6 @@ func TestInvitationAcceptPage(t *testing.T) {
 	}
 }
 
-func TestSignUpWithInvitationSkipsTheEmailCode(t *testing.T) {
-	bff, b := setup(t, testkit.Options{})
-	r := b.do("POST", "/v1/auth/sign-up", map[string]any{"firstName": "Kemi", "lastName": "Ade", "email": "kemi@example.com", "phone": "+17135550142",
-		"password": "Str0ngPassword!", "termsAccepted": true, "smsConsent": false, "invitationToken": testkit.InviteTokenValid})
-	if r.status != 201 || r.json(t)["status"] != "authenticated" || r.json(t)["redirectTo"] == nil {
-		t.Fatalf("sign-up = %d %s", r.status, r.body)
-	}
-	if got := bff.Upstreams.LastSignUp["invitationToken"]; got != testkit.InviteTokenValid {
-		t.Fatalf("identity got invitationToken %v", got)
-	}
-}
-
 func TestPhoneVerification(t *testing.T) {
 	bff, b := setup(t, testkit.Options{})
 	mustStatus(t, b.do("POST", "/v1/account/phone/verification", nil), 401)

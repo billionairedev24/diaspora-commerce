@@ -13,7 +13,9 @@ info:
     services (token relay); the browser never sees them. Sign-in with Google/Apple/Facebook and the hosted login
     use the OAuth 2.1 authorization code flow with PKCE (S256), `state` and `nonce`, started at
     `GET /v1/auth/oidc/{provider}/authorize` and `GET /v1/auth/login`, which redirect to identity's
-    `/oauth2/authorize`. Native apps send `Authorization: Bearer <access token>` instead of the cookie.
+    `/oauth2/authorize`. Identity's hosted pages are the only place credentials are entered (single sign-on
+    across the storefront, Seller Center and the staff console); `POST /v1/auth/sign-out` also ends the identity
+    session (RP-initiated logout). Native apps send `Authorization: Bearer <access token>` instead of the cookie.
     Guests get an anonymous session (cart, deliver-to ZIP); on sign-in the guest cart is merged into the
     customer's cart.
 
@@ -417,10 +419,27 @@ paths:
       tags: [Auth]
       operationId: startHostedLogin
       security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Redirect to identity's hosted login (authorization code + PKCE)
+      summary: Redirect to identity's hosted sign-in (authorization code + PKCE)
+      description: |
+        Every web app (storefront, Seller Center, staff console) signs in here: credentials, two-step verification,
+        passkeys, social sign-in and account creation all happen on identity's hosted pages, so one identity
+        session signs the person in to every app (SSO). The callback is the calling app's own
+        `<origin>/api/bff/v1/auth/oidc/callback` (the session cookie stays on that app's host), chosen from
+        `returnTo`.
       parameters:
         - $ref: '#/components/parameters/ReturnTo'
-        - {name: prompt, in: query, schema: {type: string, enum: [login, create]}}
+        - name: prompt
+          in: query
+          description: OIDC prompt. `create` opens identity's sign-up page ("Create account"); `login` asks to sign in again.
+          schema: {type: string, enum: [login, create]}
+        - name: login_hint
+          in: query
+          description: Email to prefill on identity's pages (OIDC login_hint).
+          schema: {type: string, format: email, maxLength: 254}
+        - name: invitation
+          in: query
+          description: Organisation invitation token from an invite link; the account created on identity's sign-up page joins the organisation without an email code.
+          schema: {type: string, maxLength: 200}
       responses:
         '302': {$ref: '#/components/responses/AuthorizeRedirect'}
   /v1/auth/oidc/{provider}/authorize:
@@ -431,7 +450,7 @@ paths:
       summary: Start sign-in with an external identity provider (only providers enabled in site config)
       description: |
         Generates `code_verifier`, `state` and `nonce`, stores them in the session and redirects to
-        `{identity}/oauth2/authorize?response_type=code&client_id=storefront-bff&scope=openid%20email%20profile&code_challenge=…&code_challenge_method=S256&state=…&nonce=…&idp_hint={provider}`.
+        `{identity}/oauth2/authorize?response_type=code&client_id=gateway-bff&scope=openid%20email%20profile&code_challenge=…&code_challenge_method=S256&state=…&nonce=…&idp_hint={provider}`.
       parameters:
         - name: provider
           in: path
@@ -453,183 +472,30 @@ paths:
         - {name: error, in: query, schema: {type: string}}
       responses:
         '302':
-          description: Signed in; redirect to the original returnTo (or /signin?error=… on failure)
+          description: Signed in; redirect to the original returnTo on the app that started sign-in (or the storefront's /signin?error=… on failure)
           headers:
             Location: {schema: {type: string}}
             Set-Cookie: {schema: {type: string}, description: 'at_session=…; HttpOnly; Secure; SameSite=Lax; Path=/'}
-  /v1/auth/sign-in:
-    post:
-      tags: [Auth]
-      operationId: signIn
-      security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Email + password sign-in (step 1); usually continues with two-step verification
-      description: |
-        Runs on identity's first-party sign-in API (the BFF's client-credentials token, the shopper's IP and user
-        agent). `authenticated` means the session is signed in (cookie rotated) — go to `redirectTo`;
-        `mfa_required` continues on the code form. A trusted device (cookie `at_trusted_device`, set after
-        "trust this device") skips the second factor. 401 `INVALID_CREDENTIALS`; 403 when the email is not
-        verified or the account is disabled; 429 `RATE_LIMITED` with `Retry-After` while the account or IP is locked.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/SignInRequest'}
-      responses:
-        '200': {$ref: '#/components/responses/AuthResult'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
-        '410': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-        '429': {$ref: '#/components/responses/TooManyRequests'}
-  /v1/auth/mfa/verify:
-    post:
-      tags: [Auth]
-      operationId: verifyMfa
-      security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Two-step verification code (authenticator app, SMS or a recovery code)
-      description: |
-        `method` picks the factor (default: the authenticator app when enrolled, SMS after a code was texted).
-        `trustDevice` keeps an HttpOnly `at_trusted_device` cookie for 30 days. Wrong code: 422 `INVALID_CODE`;
-        expired challenge: 410 `CHALLENGE_EXPIRED`; lockout: 429 with `Retry-After`.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/VerifyCodeRequest'}
-      responses:
-        '200': {$ref: '#/components/responses/AuthResult'}
-        '403': {$ref: '#/components/responses/Problem'}
-        '410': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-        '429': {$ref: '#/components/responses/TooManyRequests'}
-  /v1/auth/mfa/sms:
-    post:
-      tags: [Auth]
-      operationId: sendMfaCode
-      security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Text the two-step verification code instead (or again)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [challengeId]
-              properties:
-                challengeId: {type: string}
-      responses:
-        '202':
-          description: Code sent; verify it with method sms
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/AuthResult'}
-        '410': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-        '429': {$ref: '#/components/responses/TooManyRequests'}
-  /v1/auth/sign-up:
-    post:
-      tags: [Auth]
-      operationId: signUp
-      security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Create an account (same fields for customers, sellers and providers — role is decided server-side)
-      description: >-
-        Sends a 6-digit code to the email address; the account is created when the code is verified. With
-        `invitationToken` (organisation invite link, same email) identity starts the account verified and joins the
-        organisation: the answer is `authenticated` with `redirectTo` the sign-in page, and no code is sent.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/SignUpRequest'}
-      responses:
-        '201': {$ref: '#/components/responses/AuthResult'}
-        '409': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-        '429': {$ref: '#/components/responses/TooManyRequests'}
-  /v1/auth/email-verification/verify:
-    post:
-      tags: [Auth]
-      operationId: verifyEmail
-      security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Verify the sign-up email code; signs the new customer in
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/VerifyCodeRequest'}
-      responses:
-        '200': {$ref: '#/components/responses/AuthResult'}
-        '410': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-  /v1/auth/email-verification/resend:
-    post:
-      tags: [Auth]
-      operationId: resendEmailCode
-      security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Resend the sign-up code
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [challengeId]
-              properties:
-                challengeId: {type: string}
-      responses:
-        '202':
-          description: Sent
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/ResendResponse'}
-        '410': {$ref: '#/components/responses/Problem'}
-        '429': {$ref: '#/components/responses/TooManyRequests'}
-  /v1/auth/passkey/options:
-    post:
-      tags: [Auth]
-      operationId: passkeyOptions
-      security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: WebAuthn assertion options for "Sign in with a passkey" (discoverable credentials)
-      requestBody:
-        content:
-          application/json:
-            schema: {type: object}
-      responses:
-        '200':
-          description: PublicKeyCredentialRequestOptions (base64url-encoded binary fields)
-          content:
-            application/json:
-              schema: {$ref: '#/components/schemas/PasskeyOptions'}
-        '429': {$ref: '#/components/responses/TooManyRequests'}
-  /v1/auth/passkey/verify:
-    post:
-      tags: [Auth]
-      operationId: passkeyVerify
-      security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: Verify a WebAuthn assertion and sign in
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: {$ref: '#/components/schemas/PasskeyAssertion'}
-      responses:
-        '200': {$ref: '#/components/responses/AuthResult'}
-        '401': {$ref: '#/components/responses/Problem'}
-        '403': {$ref: '#/components/responses/Problem'}
-        '410': {$ref: '#/components/responses/Problem'}
-        '422': {$ref: '#/components/responses/ValidationProblem'}
-        '429': {$ref: '#/components/responses/TooManyRequests'}
   /v1/auth/sign-out:
     post:
       tags: [Auth]
       operationId: signOut
       security: [{}, {sessionCookie: []}, {bearer: []}]
-      summary: End the session (revokes refresh tokens at identity)
+      summary: End the session (revokes the tokens at identity) and get identity's end-session URL
+      description: |
+        Clears the `at_session` cookie and revokes the refresh and access tokens. For a web session `redirectTo` is
+        identity's RP-initiated logout endpoint (`/connect/logout` with `id_token_hint`, `client_id` and a
+        `post_logout_redirect_uri` back to the home page of the calling app, chosen from the request's `Origin`):
+        navigating there ends the identity session too, so every app is signed out (single sign-out). `redirectTo`
+        is null when there was no signed-in web session.
       responses:
-        '204':
+        '200':
           description: Signed out
           headers:
             Set-Cookie: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SignOutResult'}
   /v1/account/addresses:
     get:
       tags: [Account]
@@ -2028,8 +1894,11 @@ components:
     ReturnTo:
       name: returnTo
       in: query
-      schema: {type: string, pattern: '^/(?!/)', default: /}
-      description: Relative storefront path to return to after sign-in (absolute URLs are rejected).
+      schema: {type: string, default: /}
+      description: >-
+        Where to return after sign-in: a path on the storefront, or an absolute URL on Seller Center's or the staff
+        console's origin (sign-in then completes on that app's own callback). Any other absolute or protocol-relative
+        URL is replaced by the storefront home page.
   responses:
     Problem:
       description: RFC 9457 problem
@@ -2075,13 +1944,6 @@ components:
       content:
         application/json:
           schema: {$ref: '#/components/schemas/Cart'}
-    AuthResult:
-      description: Next step of the authentication flow
-      headers:
-        Set-Cookie: {schema: {type: string}, description: Rotated session cookie once authenticated}
-      content:
-        application/json:
-          schema: {$ref: '#/components/schemas/AuthResult'}
     AuthorizeRedirect:
       description: Redirect to identity /oauth2/authorize (authorization code + PKCE S256, state, nonce)
       headers:
@@ -2688,13 +2550,13 @@ components:
             returns: {type: integer}
             addresses: {type: integer}
             paymentMethods: {type: integer}
-    SignInRequest:
+    SignOutResult:
       type: object
-      required: [email, password]
+      required: [redirectTo]
       properties:
-        email: {type: string, format: email}
-        password: {type: string, minLength: 1}
-        returnTo: {type: string}
+        redirectTo:
+          type: [string, 'null']
+          description: Identity's end-session URL to navigate to (ends the identity session, then returns to the calling app's home page); null without a signed-in web session.
     PhoneCodeSent:
       type: object
       required: [sentTo, expiresAt]
@@ -2707,88 +2569,6 @@ components:
       properties:
         phoneVerified: {type: boolean}
         verifiedAt: {type: string, format: date-time}
-    SignUpRequest:
-      type: object
-      required: [firstName, lastName, email, phone, password, termsAccepted, smsConsent]
-      properties:
-        firstName: {type: string, maxLength: 49}
-        lastName: {type: string, maxLength: 49}
-        email: {type: string, format: email}
-        phone: {type: string, pattern: '^\+[1-9]\d{6,14}$', description: E.164 mobile number}
-        password: {type: string, minLength: 12, description: 'Upper and lower case, a number, not containing the name or email'}
-        termsAccepted: {type: boolean, const: true}
-        smsConsent: {type: boolean, description: 'Separate, optional SMS opt-in (AfroTransact Alerts)'}
-        returnTo: {type: string}
-        invitationToken: {type: string, maxLength: 200, description: Token from an organisation invitation link (Seller Center accept page)}
-    VerifyCodeRequest:
-      type: object
-      required: [challengeId, code]
-      properties:
-        challengeId: {type: string}
-        code: {type: string, pattern: '^(\d{6}|[A-Za-z0-9-]{8,20})$', description: '6-digit code, or a recovery code with method recovery'}
-        method: {type: string, enum: [totp, sms, recovery], description: Two-step sign-in only; defaults to the factor offered first}
-        trustDevice: {type: boolean}
-    ResendResponse:
-      type: object
-      required: [resendAfterSeconds]
-      properties:
-        resendAfterSeconds: {type: integer}
-    AuthResult:
-      oneOf:
-        - type: object
-          required: [status, redirectTo]
-          properties:
-            status: {type: string, const: authenticated}
-            redirectTo: {type: string}
-        - type: object
-          required: [status, challengeId, methods, destination]
-          properties:
-            status: {type: string, const: mfa_required}
-            challengeId: {type: string}
-            methods: {type: array, items: {type: string, enum: [totp, sms, email, passkey]}}
-            destination: {type: string, description: Masked phone or email}
-        - type: object
-          required: [status, challengeId, destination, resendAfterSeconds]
-          properties:
-            status: {type: string, const: verification_required}
-            challengeId: {type: string}
-            destination: {type: string}
-            resendAfterSeconds: {type: integer}
-      discriminator:
-        propertyName: status
-    PasskeyOptions:
-      type: object
-      required: [challengeId, challenge, rpId, timeout, userVerification, allowCredentials]
-      properties:
-        challengeId: {type: string}
-        challenge: {type: string, description: base64url}
-        rpId: {type: string}
-        timeout: {type: integer}
-        userVerification: {type: string, enum: [required, preferred, discouraged]}
-        allowCredentials:
-          type: array
-          items:
-            type: object
-            required: [id, type]
-            properties:
-              id: {type: string}
-              type: {type: string, const: public-key}
-    PasskeyAssertion:
-      type: object
-      required: [challengeId, id, rawId, type, response]
-      properties:
-        challengeId: {type: string}
-        id: {type: string}
-        rawId: {type: string, description: base64url}
-        type: {type: string, const: public-key}
-        response:
-          type: object
-          required: [clientDataJSON, authenticatorData, signature, userHandle]
-          properties:
-            clientDataJSON: {type: string}
-            authenticatorData: {type: string}
-            signature: {type: string}
-            userHandle: {type: [string, 'null']}
     AddressInput:
       type: object
       required: [name, phone, line1, city, state, zip]

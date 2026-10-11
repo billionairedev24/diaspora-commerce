@@ -6,7 +6,7 @@ redisUrl: redis://localhost:6379/0
 market: us
 # Shared platform URLs (docs/engineering/environments.md). Helm injects PUBLIC_WEB_URL, SELLER_CENTER_URL,
 # STAFF_CONSOLE_URL and AUTH_ISSUER_URL from global.domain and they override these values. The CORS/CSRF origins,
-# the storefront origin, the OIDC issuer and (outside local) the OIDC redirect URI are derived from them; WEB_ORIGINS,
+# the storefront origin, the OIDC issuer and the per-app OIDC redirect URIs are derived from them; WEB_ORIGINS,
 # WEB_PUBLIC_ORIGIN, OIDC_ISSUER and OIDC_REDIRECT_URI override the derived values.
 platform:
   publicWebUrl: http://localhost:3000
@@ -22,8 +22,6 @@ session:
   idleTtl: 720h
 oidc:
   clientId: gateway-bff
-  # Locally the browser reaches the BFF directly (API_BASE_URL); identity registers this callback too.
-  redirectUri: http://localhost:8200/login/oauth2/code/afrotransact
   scopes: [openid, email, profile, phone, offline_access]
   audience: ""
   verifyBearer: true

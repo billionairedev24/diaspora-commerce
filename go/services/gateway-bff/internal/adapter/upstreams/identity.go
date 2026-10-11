@@ -89,11 +89,6 @@ func (i *identityImpl) Me(ctx context.Context, bearer string) (port.IdentityMe, 
 	return me, err
 }
 
-func (i *identityImpl) SignUp(ctx context.Context, req port.IdentitySignUp) error {
-	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/accounts", JSON: req}, nil)
-	return err
-}
-
 func (i *identityImpl) StartPhoneVerification(ctx context.Context, bearer string) (port.PhoneCodeSent, error) {
 	var out port.PhoneCodeSent
 	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/phone/verification", Bearer: bearer}, &out)
@@ -105,18 +100,6 @@ func (i *identityImpl) ConfirmPhoneVerification(ctx context.Context, bearer, cod
 	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/me/phone/verification/confirm", Bearer: bearer,
 		JSON: map[string]string{"code": code}}, &out)
 	return out, err
-}
-
-func (i *identityImpl) VerifyEmail(ctx context.Context, email, code string) error {
-	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/accounts/verification",
-		JSON: map[string]string{"email": email, "code": code}}, nil)
-	return err
-}
-
-func (i *identityImpl) ResendCode(ctx context.Context, email string) error {
-	_, err := call(ctx, i.c, httpclient.Request{Method: http.MethodPost, Path: "/v1/accounts/verification/resend",
-		JSON: map[string]string{"email": email}}, nil)
-	return err
 }
 
 func (i *identityImpl) Providers(ctx context.Context) ([]port.IdentityProvider, error) {

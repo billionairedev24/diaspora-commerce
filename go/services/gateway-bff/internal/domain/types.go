@@ -332,16 +332,6 @@ type Me struct {
 	Counts        *MeCounts `json:"counts"`
 }
 
-// AuthResult is the next step of an authentication flow (status: authenticated | mfa_required | verification_required).
-type AuthResult struct {
-	Status             string   `json:"status"`
-	RedirectTo         string   `json:"redirectTo,omitempty"`
-	ChallengeID        string   `json:"challengeId,omitempty"`
-	Methods            []string `json:"methods,omitempty"`
-	Destination        string   `json:"destination,omitempty"`
-	ResendAfterSeconds *int     `json:"resendAfterSeconds,omitempty"`
-}
-
 // Address is a saved delivery address.
 type Address struct {
 	ID        string `json:"id"`
@@ -568,16 +558,6 @@ type StockAlertItem struct {
 	Status       string     `json:"status"` // active | notified
 	CreatedAt    time.Time  `json:"createdAt"`
 	NotifiedAt   *time.Time `json:"notifiedAt"`
-}
-
-// PasskeyOptions is the contract's PasskeyOptions (WebAuthn request options, base64url fields).
-type PasskeyOptions struct {
-	ChallengeID      string              `json:"challengeId"`
-	Challenge        string              `json:"challenge"`
-	RPID             string              `json:"rpId"`
-	Timeout          int                 `json:"timeout"`
-	UserVerification string              `json:"userVerification"`
-	AllowCredentials []PasskeyCredential `json:"allowCredentials"`
 }
 
 // PasskeyCredential is an allowed credential.

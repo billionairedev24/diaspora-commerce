@@ -101,7 +101,6 @@ func run() error {
 		ClientID: cfg.OIDC.ClientID, ClientSecret: cfg.OIDC.ClientSecret, ProvidersTTL: cfg.Cache.DefaultTTL})
 	content := upstreams.NewContent(client("content", up.Content), cache, cfg.Cache.DefaultTTL)
 	clientCreds := upstreams.IdentityOptions{ClientID: cfg.OIDC.ClientID, ClientSecret: cfg.OIDC.ClientSecret}
-	firstParty := upstreams.NewFirstParty(identityClient, clientCreds)
 	serviceTokens := upstreams.NewServiceTokens(identityClient, clientCreds)
 	media := upstreams.NewMedia(client("media", up.Media))
 	payments := upstreams.NewPayments(paymentsClient)
@@ -140,7 +139,7 @@ func run() error {
 		Sessions: sessions,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
 			IdentityPublicURL: cfg.OIDC.PublicURL, ClientID: cfg.OIDC.ClientID, RedirectURI: cfg.OIDC.RedirectURI,
-			Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, BFFPath: cfg.Web.BFFPath, FirstParty: firstParty, Log: log}),
+			RedirectURIs: cfg.RedirectURIs(), Scopes: cfg.OIDC.Scopes, WebOrigin: cfg.Web.PublicOrigin, Log: log}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory,
 			Offers: storefrontOffers, Location: location, Estimator: estimator, Sellers: sellers, Market: cfg.Market, Log: log}),
 		Location: location,

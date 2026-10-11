@@ -28,7 +28,7 @@ func signIn(t *testing.T, bff *testkit.BFF, b *browser, returnTo string) resp {
 		t.Fatalf("authorize redirect = %s", loc)
 	}
 	code := bff.Upstreams.IssueCode(q.Get("code_challenge"), q.Get("nonce"), "user-1", testkit.RedirectURI)
-	return b.do("GET", "/login/oauth2/code/afrotransact?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(q.Get("state")), nil)
+	return b.do("GET", "/v1/auth/oidc/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(q.Get("state")), nil)
 }
 
 func TestSignInRotatesSessionMergesCartRefreshesAndSignsOut(t *testing.T) {
@@ -79,11 +79,17 @@ func TestSignInRotatesSessionMergesCartRefreshesAndSignsOut(t *testing.T) {
 		t.Fatal("a fresh token must not be refreshed again")
 	}
 
-	// Sign-out revokes the refresh token and clears the cookie.
+	// Sign-out revokes the refresh token, clears the cookie and hands back identity's end-session URL (single
+	// sign-out) returning to the calling app's home page.
 	r = b.do("POST", "/v1/auth/sign-out", nil)
-	mustStatus(t, r, 204)
+	mustStatus(t, r, 200)
 	if ck := r.header.Get("Set-Cookie"); !strings.Contains(ck, "Max-Age=0") {
 		t.Fatalf("cookie not cleared: %q", ck)
+	}
+	logout, err := url.Parse(r.json(t)["redirectTo"].(string))
+	if err != nil || logout.Path != "/connect/logout" || logout.Query().Get("id_token_hint") == "" ||
+		logout.Query().Get("client_id") != "gateway-bff" || logout.Query().Get("post_logout_redirect_uri") != testkit.WebOrigin+"/" {
+		t.Fatalf("logout redirect = %v (%v)", logout, err)
 	}
 	if rev := bff.Upstreams.Revoked(); len(rev) < 1 || !strings.HasPrefix(rev[0], "rt-") {
 		t.Fatalf("revoked = %v", rev)
@@ -197,52 +203,50 @@ func TestAppBearerTokens(t *testing.T) {
 	}
 }
 
-func TestSignUpAndFirstPartyCredentials(t *testing.T) {
-	_, b := setup(t, testkit.Options{})
-	form := map[string]any{"firstName": "Ada", "lastName": "Obi", "email": "ada@example.com", "phone": "+17135550142",
-		"password": "Str0ngPassword!", "termsAccepted": true, "smsConsent": false, "returnTo": "/cart"}
-	r := b.do("POST", "/v1/auth/sign-up", form)
-	mustStatus(t, r, 201)
-	res := r.json(t)
-	if res["status"] != "verification_required" || res["destination"] != "a••@example.com" || num(res, "resendAfterSeconds") != 30 {
-		t.Fatalf("sign-up = %v", res)
+// Seller Center and the staff console sign in through their own origin's callback, so the session cookie is set on
+// their host, and land back on the absolute returnTo; other origins are never redirect targets.
+func TestSignInFromAnotherAppReturnsThere(t *testing.T) {
+	bff, b := setup(t, testkit.Options{})
+	r := b.do("GET", "/v1/auth/login?returnTo="+url.QueryEscape(testkit.SellerCenterOrigin+"/orders?tab=open"), nil)
+	mustStatus(t, r, 302)
+	loc, _ := url.Parse(r.header.Get("Location"))
+	q := loc.Query()
+	if q.Get("redirect_uri") != testkit.SellerCenterRedirectURI {
+		t.Fatalf("redirect_uri = %s", q.Get("redirect_uri"))
 	}
-	ch := res["challengeId"].(string)
-	r = b.do("POST", "/v1/auth/email-verification/verify", map[string]any{"challengeId": ch, "code": "000000"})
-	mustStatus(t, r, 422)
-	if c := problemCode(t, r); c != "INVALID_CODE" {
-		t.Fatalf("code = %s", c)
+	code := bff.Upstreams.IssueCode(q.Get("code_challenge"), q.Get("nonce"), "user-1", testkit.SellerCenterRedirectURI)
+	r = b.do("GET", "/v1/auth/oidc/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(q.Get("state")), nil)
+	mustStatus(t, r, 302)
+	if to := r.header.Get("Location"); to != testkit.SellerCenterOrigin+"/orders?tab=open" {
+		t.Fatalf("callback redirect = %s", to)
 	}
-	mustStatus(t, b.do("POST", "/v1/auth/email-verification/resend", map[string]any{"challengeId": ch}), 202)
-	r = b.do("POST", "/v1/auth/email-verification/verify", map[string]any{"challengeId": ch, "code": "123456"})
+	b.origin = testkit.SellerCenterOrigin
+	r = b.do("POST", "/v1/auth/sign-out", nil)
 	mustStatus(t, r, 200)
-	if v := r.json(t); v["status"] != "authenticated" || v["redirectTo"] != "/api/bff/v1/auth/login?returnTo=%2Fcart" {
-		t.Fatalf("verify = %v", v)
+	logout, _ := url.Parse(r.json(t)["redirectTo"].(string))
+	if logout.Query().Get("post_logout_redirect_uri") != testkit.SellerCenterOrigin+"/" {
+		t.Fatalf("post-logout = %s", logout)
 	}
-	r = b.do("POST", "/v1/auth/email-verification/resend", map[string]any{"challengeId": ch})
-	mustStatus(t, r, 410)
-	if c := problemCode(t, r); c != "CHALLENGE_EXPIRED" {
-		t.Fatalf("code = %s", c)
+	// Signed out: nothing to end at identity any more.
+	if v := b.do("POST", "/v1/auth/sign-out", nil).json(t); v["redirectTo"] != nil {
+		t.Fatalf("second sign-out = %v", v)
 	}
-	form["email"] = "taken@example.com"
-	r = b.do("POST", "/v1/auth/sign-up", form)
-	mustStatus(t, r, 409)
-	if c := problemCode(t, r); c != "EMAIL_TAKEN" {
-		t.Fatalf("code = %s", c)
+}
+
+// Create account and invitation links go to identity's sign-up page with the hints it honours.
+func TestHostedLoginHints(t *testing.T) {
+	_, b := setup(t, testkit.Options{})
+	r := b.do("GET", "/v1/auth/login?returnTo=%2Fcart&prompt=create&login_hint=ada%40example.com&invitation=inv-123", nil)
+	mustStatus(t, r, 302)
+	q, _ := url.Parse(r.header.Get("Location"))
+	if v := q.Query(); v.Get("prompt") != "create" || v.Get("login_hint") != "ada@example.com" || v.Get("invitation") != "inv-123" {
+		t.Fatalf("authorize = %s", q)
 	}
-	form["password"] = "short"
-	if c := problemCode(t, b.do("POST", "/v1/auth/sign-up", form)); c != "WEAK_PASSWORD" {
-		t.Fatalf("code = %s", c)
+	r = b.do("GET", "/v1/auth/login?prompt=consent&login_hint=not-an-email", nil)
+	q, _ = url.Parse(r.header.Get("Location"))
+	if v := q.Query(); v.Has("prompt") || v.Has("login_hint") || v.Has("invitation") {
+		t.Fatalf("unsupported hints must be dropped: %s", q)
 	}
-	// Password, MFA and passkey steps are validated, then run on identity's first-party API (auth_firstparty_test.go).
-	mustStatus(t, b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "bad"}), 422)
-	r = b.do("POST", "/v1/auth/sign-in", map[string]any{"email": "ada@example.com", "password": "x"})
-	mustStatus(t, r, 401)
-	if c := problemCode(t, r); c != "INVALID_CREDENTIALS" {
-		t.Fatalf("code = %s", c)
-	}
-	mustStatus(t, b.do("POST", "/v1/auth/mfa/verify", map[string]any{"challengeId": "c", "code": "12"}), 422)
-	mustStatus(t, b.do("POST", "/v1/auth/passkey/options", map[string]any{}), 200)
 }
 
 func TestAccountAddresses(t *testing.T) {

@@ -199,7 +199,7 @@ func TestSessionFlowOnValkey(t *testing.T) {
 	if rec := do("GET", "/v1/me", ""); !strings.Contains(rec.Body.String(), `"authenticated":true`) {
 		t.Fatalf("me: %s", rec.Body)
 	}
-	if rec := do("POST", "/v1/auth/sign-out", ""); rec.Code != 204 {
+	if rec := do("POST", "/v1/auth/sign-out", ""); rec.Code != 200 || !strings.Contains(rec.Body.String(), "/connect/logout") {
 		t.Fatalf("sign-out: %d", rec.Code)
 	}
 	if n := len(rdb.Keys(context.Background(), "bff:sess:*").Val()); n != 0 {

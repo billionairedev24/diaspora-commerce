@@ -30,8 +30,11 @@ func chicago() *time.Location {
 	return time.UTC
 }
 
-// RedirectURI is the BFF callback registered at the fake identity.
-const RedirectURI = "http://localhost:8200/login/oauth2/code/afrotransact"
+// RedirectURI is the storefront's BFF callback registered at the fake identity.
+const RedirectURI = WebOrigin + "/api/bff/v1/auth/oidc/callback"
+
+// SellerCenterRedirectURI is Seller Center's own BFF callback (sign-ins started there return there).
+const SellerCenterRedirectURI = SellerCenterOrigin + "/api/bff/v1/auth/oidc/callback"
 
 // BFF is a fully wired BFF against fake upstreams.
 type BFF struct {
@@ -122,8 +125,8 @@ func NewBFF(u *Upstreams, cfg Config) *BFF {
 	services := httpapi.Services{
 		Sessions: sessions,
 		Auth: app.NewAuthService(sessions, store, store, identity, verifier, cart, payments, app.AuthOptions{
-			IdentityPublicURL: base, ClientID: u.ClientID, RedirectURI: RedirectURI, WebOrigin: WebOrigin, BFFPath: "/api/bff",
-			FirstParty: upstreams.NewFirstParty(identityClient, clientCreds), Clock: clock.Now, Log: log}),
+			IdentityPublicURL: base, ClientID: u.ClientID, RedirectURI: RedirectURI, WebOrigin: WebOrigin,
+			RedirectURIs: map[string]string{WebOrigin: RedirectURI, SellerCenterOrigin: SellerCenterRedirectURI}, Clock: clock.Now, Log: log}),
 		Site: app.NewSiteService(app.SiteDeps{Content: content, Identity: identity, Search: search, Catalog: catalog, Inventory: inventory, Offers: storefrontOffers, Location: location,
 			Estimator: estimator, Sellers: sellers, Market: "us", Clock: clock.Now, Log: log}),
 		Location: location,

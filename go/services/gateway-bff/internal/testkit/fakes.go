@@ -151,7 +151,6 @@ func NewUpstreams(o Options) *Upstreams {
 	u.routes(mux)
 	u.preorderRoutes(mux)
 	u.sellerRoutes(mux)
-	u.firstPartyRoutes(mux)
 	u.shopperRoutes(mux)
 	u.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u.mu.Lock()

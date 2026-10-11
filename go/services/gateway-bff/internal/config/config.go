@@ -110,8 +110,9 @@ type Config struct {
 		PublicURL    string `yaml:"publicUrl" env:"OIDC_PUBLIC_URL"`
 		ClientID     string `yaml:"clientId" env:"OIDC_CLIENT_ID"`
 		ClientSecret string `env:"OIDC_CLIENT_SECRET"`
-		// RedirectURI is the BFF callback registered at identity. Default (Resolve):
-		// <PublicOrigin><BFFPath>/v1/auth/oidc/callback, so the session cookie stays first-party.
+		// RedirectURI is the storefront's BFF callback registered at identity. Default (Resolve):
+		// <PublicOrigin><BFFPath>/v1/auth/oidc/callback. Seller Center and the staff console sign in through their own
+		// origin's callback (RedirectURIs), so each app's session cookie stays first-party on its own host.
 		RedirectURI string   `yaml:"redirectUri" env:"OIDC_REDIRECT_URI"`
 		Scopes      []string `yaml:"scopes"`
 		// Audience expected in bearer tokens from the mobile app (empty = not checked).
@@ -177,8 +178,25 @@ func (c *Config) ApplyUpstreamEnv(lookup func(string) (string, bool)) {
 	}
 }
 
-// OIDCCallbackPath is the BFF's browser callback under Web.BFFPath (the storefront proxies <BFFPath> to the BFF).
+// OIDCCallbackPath is the BFF's browser callback under Web.BFFPath (each web app proxies <BFFPath> to the BFF).
 const OIDCCallbackPath = "/v1/auth/oidc/callback"
+
+// RedirectURIs maps each web app origin (Web.Origins) to the callback the BFF sends for sign-ins started there:
+// <origin><BFFPath>/v1/auth/oidc/callback, the storefront's being OIDC.RedirectURI (OIDC_REDIRECT_URI overrides it).
+// Identity registers the same URIs for the gateway-bff client (application-<env>.yml).
+func (c *Config) RedirectURIs() map[string]string {
+	out := make(map[string]string, len(c.Web.Origins)+1)
+	for _, o := range c.Web.Origins {
+		o = strings.TrimRight(strings.TrimSpace(o), "/")
+		if o != "" {
+			out[o] = pkgconfig.JoinURL(o, strings.TrimRight(c.Web.BFFPath, "/")+OIDCCallbackPath)
+		}
+	}
+	if c.Web.PublicOrigin != "" && c.OIDC.RedirectURI != "" {
+		out[c.Web.PublicOrigin] = c.OIDC.RedirectURI
+	}
+	return out
+}
 
 // Resolve fills the web and OIDC settings from the shared platform URLs; call it after Load (and ApplyUpstreamEnv),
 // before Validate. Explicit values (YAML or WEB_ORIGINS, WEB_PUBLIC_ORIGIN, OIDC_ISSUER, OIDC_REDIRECT_URI) win.
